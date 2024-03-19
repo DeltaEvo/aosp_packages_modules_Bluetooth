@@ -18,6 +18,7 @@
 #include "dumpsys/dumpsys.h"
 
 #include <android_bluetooth_flags.h>
+#include <bluetooth/log.h>
 #include <unistd.h>
 
 #include <future>
@@ -52,14 +53,14 @@ struct Dumpsys::impl {
   ~impl() = default;
 
  protected:
-  void FilterAsUser(std::string* dumpsys_data);
-  void FilterAsDeveloper(std::string* dumpsys_data);
+  void FilterAsUser(std::string* dumpsys_data) const;
+  void FilterAsDeveloper(std::string* dumpsys_data) const;
   std::string PrintAsJson(std::string* dumpsys_data) const;
 
   bool IsDebuggable() const;
 
  private:
-  void DumpWithArgsAsync(int fd, const char** args);
+  void DumpWithArgsAsync(int fd, const char** args) const;
 
   const Dumpsys& dumpsys_module_;
   const dumpsys::ReflectionSchema reflection_schema_;
@@ -79,12 +80,12 @@ bool Dumpsys::impl::IsDebuggable() const {
   return (os::GetSystemProperty(kReadOnlyDebuggableProperty) == "1");
 }
 
-void Dumpsys::impl::FilterAsDeveloper(std::string* dumpsys_data) {
+void Dumpsys::impl::FilterAsDeveloper(std::string* dumpsys_data) const {
   ASSERT(dumpsys_data != nullptr);
   dumpsys::FilterInPlace(dumpsys::FilterType::AS_DEVELOPER, reflection_schema_, dumpsys_data);
 }
 
-void Dumpsys::impl::FilterAsUser(std::string* dumpsys_data) {
+void Dumpsys::impl::FilterAsUser(std::string* dumpsys_data) const {
   ASSERT(dumpsys_data != nullptr);
   dumpsys::FilterInPlace(dumpsys::FilterType::AS_USER, reflection_schema_, dumpsys_data);
 }
@@ -96,7 +97,7 @@ std::string Dumpsys::impl::PrintAsJson(std::string* dumpsys_data) const {
   if (root_name.empty()) {
     char buf[255];
     snprintf(buf, sizeof(buf), "ERROR: Unable to find root name in prebundled reflection schema\n");
-    LOG_WARN("%s", buf);
+    log::warn("{}", buf);
     return std::string(buf);
   }
 
@@ -104,7 +105,7 @@ std::string Dumpsys::impl::PrintAsJson(std::string* dumpsys_data) const {
   if (schema == nullptr) {
     char buf[255];
     snprintf(buf, sizeof(buf), "ERROR: Unable to find schema root name:%s\n", root_name.c_str());
-    LOG_WARN("%s", buf);
+    log::warn("{}", buf);
     return std::string(buf);
   }
 
@@ -114,7 +115,7 @@ std::string Dumpsys::impl::PrintAsJson(std::string* dumpsys_data) const {
   if (!parser.Deserialize(schema)) {
     char buf[255];
     snprintf(buf, sizeof(buf), "ERROR: Unable to deserialize bundle root name:%s\n", root_name.c_str());
-    LOG_WARN("%s", buf);
+    log::warn("{}", buf);
     return std::string(buf);
   }
 
@@ -129,13 +130,13 @@ std::string Dumpsys::impl::PrintAsJson(std::string* dumpsys_data) const {
 #else
   const char* error = flatbuffers::GenText(parser, dumpsys_data->data(), &jsongen);
   if (error != nullptr) {
-    LOG_WARN("%s", error);
+    log::warn("{}", error);
   }
 #endif
   return jsongen;
 }
 
-void Dumpsys::impl::DumpWithArgsAsync(int fd, const char** args) {
+void Dumpsys::impl::DumpWithArgsAsync(int fd, const char** args) const {
   ParsedDumpsysArgs parsed_dumpsys_args(args);
   const auto registry = dumpsys_module_.GetModuleRegistry();
 

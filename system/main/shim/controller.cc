@@ -35,8 +35,6 @@ constexpr int kMaxSupportedCodecs = 8;  // MAX_LOCAL_SUPPORTED_CODECS_SIZE
 
 constexpr uint8_t kPhyLe1M = 0x01;
 
-constexpr int kHciDataPreambleSize = 4;  // #define HCI_DATA_PREAMBLE_SIZE 4
-
 // Module lifecycle functions
 static future_t* start_up(void);
 static future_t* shut_down(void);
@@ -114,84 +112,8 @@ static const uint8_t* get_ble_supported_states(void) {
   return (const uint8_t*)&data_.le_supported_states;
 }
 
-#define MAP_TO_GD(legacy, gd) \
-  static bool legacy(void) { return GetController()->gd(); }
-
-MAP_TO_GD(supports_ble, SupportsBle)
-MAP_TO_GD(supports_privacy, SupportsBlePrivacy)
-MAP_TO_GD(supports_packet_extension, SupportsBleDataPacketLengthExtension)
-MAP_TO_GD(supports_connection_parameters_request,
-          SupportsBleConnectionParametersRequest)
-MAP_TO_GD(supports_ble_2m_phy, SupportsBle2mPhy)
-MAP_TO_GD(supports_ble_coded_phy, SupportsBleCodedPhy)
-MAP_TO_GD(supports_extended_advertising, SupportsBleExtendedAdvertising)
-MAP_TO_GD(supports_periodic_advertising, SupportsBlePeriodicAdvertising)
-MAP_TO_GD(supports_peripheral_initiated_feature_exchange,
-          SupportsBlePeripheralInitiatedFeaturesExchange)
-
-MAP_TO_GD(supports_periodic_advertising_sync_transfer_sender,
-          SupportsBlePeriodicAdvertisingSyncTransferSender)
-MAP_TO_GD(supports_periodic_advertising_sync_transfer_recipient,
-          SupportsBlePeriodicAdvertisingSyncTransferRecipient)
-MAP_TO_GD(supports_connected_iso_stream_central,
-          SupportsBleConnectedIsochronousStreamCentral)
-MAP_TO_GD(supports_connected_iso_stream_peripheral,
-          SupportsBleConnectedIsochronousStreamPeripheral)
-MAP_TO_GD(supports_iso_broadcaster, SupportsBleIsochronousBroadcaster)
-MAP_TO_GD(supports_synchronized_receiver, SupportsBleSynchronizedReceiver)
-MAP_TO_GD(supports_ble_connection_subrating, SupportsBleConnectionSubrating)
-MAP_TO_GD(supports_ble_connection_subrating_host,
-          SupportsBleConnectionSubratingHost)
-
-#define FORWARD(legacy, gd) \
-  static bool legacy(void) { return gd; }
-
-FORWARD(
-    supports_configure_data_path,
-    GetController()->IsSupported(bluetooth::hci::OpCode::CONFIGURE_DATA_PATH))
-
-FORWARD(supports_set_min_encryption_key_size,
-        GetController()->IsSupported(
-            bluetooth::hci::OpCode::SET_MIN_ENCRYPTION_KEY_SIZE))
-
-FORWARD(supports_read_encryption_key_size,
-        GetController()->IsSupported(
-            bluetooth::hci::OpCode::READ_ENCRYPTION_KEY_SIZE))
-
-FORWARD(supports_enhanced_setup_synchronous_connection,
-        GetController()->IsSupported(
-            bluetooth::hci::OpCode::ENHANCED_SETUP_SYNCHRONOUS_CONNECTION))
-
-FORWARD(supports_enhanced_accept_synchronous_connection,
-        GetController()->IsSupported(
-            bluetooth::hci::OpCode::ENHANCED_ACCEPT_SYNCHRONOUS_CONNECTION))
-
-FORWARD(
-    supports_ble_set_privacy_mode,
-    GetController()->IsSupported(bluetooth::hci::OpCode::LE_SET_PRIVACY_MODE))
-
 #define FORWARD_GETTER(type, legacy, gd) \
   static type legacy(void) { return gd; }
-
-FORWARD_GETTER(uint16_t, get_acl_buffer_length,
-               GetController()->GetAclPacketLength())
-FORWARD_GETTER(uint16_t, get_le_buffer_length,
-               GetController()->GetLeBufferSize().le_data_packet_length_)
-FORWARD_GETTER(
-    uint16_t, get_iso_buffer_length,
-    GetController()->GetControllerIsoBufferSize().le_data_packet_length_)
-
-static uint16_t get_acl_packet_size_classic(void) {
-  return get_acl_buffer_length() + kHciDataPreambleSize;
-}
-
-static uint16_t get_acl_packet_size_ble(void) {
-  return get_le_buffer_length() + kHciDataPreambleSize;
-}
-
-static uint16_t get_iso_packet_size(void) {
-  return get_iso_buffer_length() + kHciDataPreambleSize;
-}
 
 FORWARD_GETTER(uint16_t, get_le_suggested_default_data_length,
                GetController()->GetLeSuggestedDefaultDataLength())
@@ -214,14 +136,7 @@ FORWARD_GETTER(uint8_t, get_le_supported_advertising_sets,
                GetController()->GetLeNumberOfSupportedAdverisingSets())
 FORWARD_GETTER(uint8_t, get_le_periodic_advertiser_list_size,
                GetController()->GetLePeriodicAdvertiserListSize())
-FORWARD_GETTER(uint16_t, get_acl_buffers,
-               GetController()->GetNumAclPacketBuffers())
-FORWARD_GETTER(uint8_t, get_le_buffers,
-               GetController()->GetLeBufferSize().total_num_le_packets_)
-FORWARD_GETTER(
-    uint8_t, get_iso_buffers,
-    GetController()->GetControllerIsoBufferSize().total_num_le_packets_)
-FORWARD_GETTER(uint8_t, get_le_accept_list_size,
+FORWARD_GETTER(uint8_t, get_le_connect_list_size,
                GetController()->GetLeFilterAcceptListSize())
 
 static void set_ble_resolving_list_max_size(int /* resolving_list_max_size */) {
@@ -244,12 +159,6 @@ static uint8_t controller_clear_event_mask() {
   LOG_VERBOSE("Called!");
   bluetooth::shim::GetController()->SetEventMask(0);
   bluetooth::shim::GetController()->LeSetEventMask(0);
-  return BTM_SUCCESS;
-}
-
-static uint8_t controller_le_rand(LeRandCallback cb) {
-  LOG_VERBOSE("Called!");
-  bluetooth::shim::GetController()->LeRand(std::move(cb));
   return BTM_SUCCESS;
 }
 
@@ -294,49 +203,6 @@ static const controller_t interface = {
 
     .get_ble_supported_states = get_ble_supported_states,
 
-    .supports_enhanced_setup_synchronous_connection =
-        supports_enhanced_setup_synchronous_connection,
-    .supports_enhanced_accept_synchronous_connection =
-        supports_enhanced_accept_synchronous_connection,
-    .supports_configure_data_path = supports_configure_data_path,
-    .supports_set_min_encryption_key_size =
-        supports_set_min_encryption_key_size,
-    .supports_read_encryption_key_size = supports_read_encryption_key_size,
-
-    .SupportsBle = supports_ble,
-    .SupportsBleDataPacketLengthExtension = supports_packet_extension,
-    .SupportsBleConnectionParametersRequest =
-        supports_connection_parameters_request,
-    .SupportsBlePrivacy = supports_privacy,
-    .supports_ble_set_privacy_mode = supports_ble_set_privacy_mode,
-    .SupportsBle2mPhy = supports_ble_2m_phy,
-    .SupportsBleCodedPhy = supports_ble_coded_phy,
-    .SupportsBleExtendedAdvertising = supports_extended_advertising,
-    .SupportsBlePeriodicAdvertising = supports_periodic_advertising,
-    .SupportsBlePeripheralInitiatedFeaturesExchange =
-        supports_peripheral_initiated_feature_exchange,
-    .SupportsBlePeriodicAdvertisingSyncTransferSender =
-        supports_periodic_advertising_sync_transfer_sender,
-    .SupportsBlePeriodicAdvertisingSyncTransferRecipient =
-        supports_periodic_advertising_sync_transfer_recipient,
-    .SupportsBleConnectedIsochronousStreamCentral =
-        supports_connected_iso_stream_central,
-    .SupportsBleConnectedIsochronousStreamPeripheral =
-        supports_connected_iso_stream_peripheral,
-    .SupportsBleIsochronousBroadcaster = supports_iso_broadcaster,
-    .SupportsBleSynchronizedReceiver = supports_synchronized_receiver,
-    .SupportsBleConnectionSubrating = supports_ble_connection_subrating,
-    .SupportsBleConnectionSubratingHost =
-        supports_ble_connection_subrating_host,
-
-    .get_acl_data_size_classic = get_acl_buffer_length,
-    .get_acl_data_size_ble = get_le_buffer_length,
-    .get_iso_data_size = get_iso_buffer_length,
-
-    .get_acl_packet_size_classic = get_acl_packet_size_classic,
-    .get_acl_packet_size_ble = get_acl_packet_size_ble,
-    .get_iso_packet_size = get_iso_packet_size,
-
     .get_ble_default_data_packet_length = get_le_suggested_default_data_length,
     .get_ble_maximum_tx_data_length = get_le_maximum_tx_data_length,
     .get_ble_maximum_tx_time = get_le_maximum_tx_time,
@@ -347,11 +213,7 @@ static const controller_t interface = {
     .get_ble_periodic_advertiser_list_size =
         get_le_periodic_advertiser_list_size,
 
-    .get_acl_buffer_count_classic = get_acl_buffers,
-    .get_acl_buffer_count_ble = get_le_buffers,
-    .get_iso_buffer_count = get_iso_buffers,
-
-    .get_ble_acceptlist_size = get_le_accept_list_size,
+    .get_ble_acceptlist_size = get_le_connect_list_size,
 
     .get_ble_resolving_list_max_size = get_le_resolving_list_size,
     .set_ble_resolving_list_max_size = set_ble_resolving_list_max_size,
@@ -359,7 +221,6 @@ static const controller_t interface = {
     .get_le_all_initiating_phys = get_le_all_initiating_phys,
     .clear_event_filter = controller_clear_event_filter,
     .clear_event_mask = controller_clear_event_mask,
-    .le_rand = controller_le_rand,
     .set_event_filter_connection_setup_all_devices =
         controller_set_event_filter_connection_setup_all_devices,
     .set_event_filter_allow_device_connection =

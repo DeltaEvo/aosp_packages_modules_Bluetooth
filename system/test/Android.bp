@@ -135,6 +135,13 @@ filegroup {
 }
 
 filegroup {
+    name: "TestMockBtaRas",
+    srcs: [
+        "mock/mock_bta_ras*.cc",
+    ],
+}
+
+filegroup {
     name: "TestMockBtaScn",
     srcs: [
         "mock/mock_bta_scn.cc",
@@ -181,6 +188,7 @@ filegroup {
         ":TestMockBtaLeAudio",
         ":TestMockBtaLeAudioHalVerifier",
         ":TestMockBtaPan",
+        ":TestMockBtaRas",
         ":TestMockBtaSdp",
         ":TestMockBtaSys",
         ":TestMockBtaVc",
@@ -330,6 +338,13 @@ filegroup {
     name: "TestMockMainShimEntry",
     srcs: [
         "mock/mock_main_shim_entry.cc",
+    ],
+}
+
+filegroup {
+    name: "TestMockMainShimStack",
+    srcs: [
+        "mock/mock_main_shim_stack.cc",
     ],
 }
 

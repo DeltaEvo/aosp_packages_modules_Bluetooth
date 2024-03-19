@@ -49,14 +49,14 @@ using bluetooth::Uuid;
 using std::vector;
 using namespace bluetooth;
 
+/* TODO: b/329720661 Remove this namespace entirely when
+ * prevent_hogp_reconnect_when_connected flag is shipped */
 namespace {
-
 #ifndef BTA_HH_LE_RECONN
 constexpr bool kBTA_HH_LE_RECONN = true;
 #else
 constexpr bool kBTA_HH_LE_RECONN = false;
 #endif
-
 }  // namespace
 
 #define BTA_HH_APP_ID_LE 0xff
@@ -642,8 +642,11 @@ static void bta_hh_le_open_cmpl(tBTA_HH_DEV_CB* p_cb) {
     bta_hh_le_register_input_notif(p_cb, p_cb->mode, true);
     bta_hh_sm_execute(p_cb, BTA_HH_OPEN_CMPL_EVT, NULL);
 
-    if (kBTA_HH_LE_RECONN && p_cb->status == BTA_HH_OK) {
-      bta_hh_le_add_dev_bg_conn(p_cb);
+    if (!IS_FLAG_ENABLED(prevent_hogp_reconnect_when_connected)) {
+      if (kBTA_HH_LE_RECONN && p_cb->status == BTA_HH_OK) {
+        bta_hh_le_add_dev_bg_conn(p_cb);
+      }
+      return;
     }
   }
 }
@@ -1519,8 +1522,6 @@ static void bta_hh_le_srvc_search_cmpl(tBTA_GATTC_SEARCH_CMPL* p_data) {
   for (const gatt::Service& service : *services) {
     if (service.uuid == Uuid::From16Bit(UUID_SERVCLASS_LE_HID) &&
         service.is_primary && !have_hid) {
-      have_hid = true;
-
       // TODO(b/286413526): The current implementation connects to the first HID
       // service, in the case of multiple HID services being present. As a
       // temporary mitigation, connect to the third HID service for some
@@ -1529,13 +1530,14 @@ static void bta_hh_le_srvc_search_cmpl(tBTA_GATTC_SEARCH_CMPL* p_data) {
       if (interop_match_vendor_product_ids(
               INTEROP_MULTIPLE_HOGP_SERVICE_CHOOSE_THIRD,
               p_dev_cb->dscp_info.vendor_id, p_dev_cb->dscp_info.product_id)) {
-        if (num_hid_service != HID_PREFERRED_SERVICE_INDEX_3) {
-          num_hid_service++;
+        num_hid_service++;
+        if (num_hid_service < HID_PREFERRED_SERVICE_INDEX_3) {
           continue;
         }
       }
 
       /* found HID primamry service */
+      have_hid = true;
       p_dev_cb->hid_srvc.state = BTA_HH_SERVICE_DISCOVERED;
       p_dev_cb->hid_srvc.srvc_inst_id = service.handle;
       p_dev_cb->hid_srvc.proto_mode_handle = 0;

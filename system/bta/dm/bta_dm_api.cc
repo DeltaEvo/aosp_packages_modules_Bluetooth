@@ -31,6 +31,7 @@
 #include "bta/dm/bta_dm_disc.h"
 #include "bta/dm/bta_dm_int.h"
 #include "bta/dm/bta_dm_sec_int.h"
+#include "hci/le_rand_callback.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_client_interface.h"
@@ -68,7 +69,7 @@ void BTA_EnableTestMode(void) {
 /** This function sets the Bluetooth name of local device */
 void BTA_DmSetDeviceName(const char* p_name) {
   std::vector<uint8_t> name(BD_NAME_LEN + 1);
-  bd_name_copy(name.data(), p_name);
+  bd_name_from_char_pointer(name.data(), p_name);
 
   do_in_main_thread(FROM_HERE, base::BindOnce(bta_dm_set_dev_name, name));
 }
@@ -449,7 +450,7 @@ void BTA_DmClearFilterAcceptList(void) {
  * Returns          cb: callback to receive the resulting random number
  *
  ******************************************************************************/
-void BTA_DmLeRand(LeRandCallback cb) {
+void BTA_DmLeRand(bluetooth::hci::LeRandCallback cb) {
   log::verbose("BTA_DmLeRand");
   do_in_main_thread(FROM_HERE, base::BindOnce(bta_dm_le_rand, std::move(cb)));
 }

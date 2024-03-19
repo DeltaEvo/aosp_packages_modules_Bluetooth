@@ -28,7 +28,6 @@
 #include "device/include/controller.h"
 #include "stack/include/btm_api_types.h"
 #include "stack/include/btm_status.h"
-#include "stack/include/hcidefs.h"
 #include "types/raw_address.h"
 
 // Mocked compile conditionals, if any
@@ -51,14 +50,6 @@ bt_device_features_t features_classic[MAX_FEATURES_CLASSIC_PAGE_COUNT] = {{
     .as_array{0},
 }};
 uint8_t last_features_classic_page_index{0};
-
-uint16_t acl_data_size_classic{0};
-uint16_t acl_data_size_ble{0};
-uint16_t iso_data_size{0};
-
-uint16_t acl_buffer_count_classic{0};
-uint8_t acl_buffer_count_ble{0};
-uint8_t iso_buffer_count{0};
 
 uint8_t ble_acceptlist_size{0};
 uint8_t ble_resolving_list_max_size{0};
@@ -101,119 +92,6 @@ uint8_t* get_local_supported_codecs(uint8_t* number_of_codecs) {
 
 const uint8_t* get_ble_supported_states(void) { return ble_supported_states; }
 
-bool supports_enhanced_setup_synchronous_connection(void) {
-  return HCI_ENH_SETUP_SYNCH_CONN_SUPPORTED(supported_commands);
-}
-
-bool supports_enhanced_accept_synchronous_connection(void) {
-  return HCI_ENH_ACCEPT_SYNCH_CONN_SUPPORTED(supported_commands);
-}
-
-bool supports_configure_data_path(void) {
-  return HCI_CONFIGURE_DATA_PATH_SUPPORTED(supported_commands);
-}
-
-#define HCI_SET_MIN_ENCRYPTION_KEY_SIZE_SUPPORTED(x) ((x)[45] & 0x80)
-bool supports_set_min_encryption_key_size(void) {
-  return HCI_SET_MIN_ENCRYPTION_KEY_SIZE_SUPPORTED(supported_commands);
-}
-
-#define HCI_READ_ENCRYPTION_KEY_SIZE_SUPPORTED(x) ((x)[20] & 0x10)
-bool supports_read_encryption_key_size(void) {
-  return HCI_READ_ENCRYPTION_KEY_SIZE_SUPPORTED(supported_commands);
-}
-
-bool supports_ble(void) { return ble_supported; }
-
-bool supports_ble_privacy(void) {
-  return HCI_LE_ENHANCED_PRIVACY_SUPPORTED(features_ble.as_array);
-}
-
-bool supports_ble_set_privacy_mode() {
-  return HCI_LE_ENHANCED_PRIVACY_SUPPORTED(features_ble.as_array) &&
-         HCI_LE_SET_PRIVACY_MODE_SUPPORTED(supported_commands);
-}
-
-bool supports_ble_packet_extension(void) {
-  return HCI_LE_DATA_LEN_EXT_SUPPORTED(features_ble.as_array);
-}
-
-bool supports_ble_connection_parameters_request(void) {
-  return HCI_LE_CONN_PARAM_REQ_SUPPORTED(features_ble.as_array);
-}
-
-bool supports_ble_2m_phy(void) {
-  return HCI_LE_2M_PHY_SUPPORTED(features_ble.as_array);
-}
-
-bool supports_ble_coded_phy(void) {
-  return HCI_LE_CODED_PHY_SUPPORTED(features_ble.as_array);
-}
-
-bool supports_ble_extended_advertising(void) {
-  return HCI_LE_EXTENDED_ADVERTISING_SUPPORTED(features_ble.as_array);
-}
-
-bool supports_ble_periodic_advertising(void) {
-  return HCI_LE_PERIODIC_ADVERTISING_SUPPORTED(features_ble.as_array);
-}
-
-bool supports_ble_peripheral_initiated_feature_exchange(void) {
-  return HCI_LE_PERIPHERAL_INIT_FEAT_EXC_SUPPORTED(features_ble.as_array);
-}
-
-bool supports_ble_periodic_advertising_sync_transfer_sender(void) {
-  return HCI_LE_PERIODIC_ADVERTISING_SYNC_TRANSFER_SENDER(
-      features_ble.as_array);
-}
-
-bool supports_ble_periodic_advertising_sync_transfer_recipient(void) {
-  return HCI_LE_PERIODIC_ADVERTISING_SYNC_TRANSFER_RECIPIENT(
-      features_ble.as_array);
-}
-
-bool supports_ble_connected_isochronous_stream_central(void) {
-  return HCI_LE_CIS_CENTRAL(features_ble.as_array);
-}
-
-bool supports_ble_connected_isochronous_stream_peripheral(void) {
-  return HCI_LE_CIS_PERIPHERAL(features_ble.as_array);
-}
-
-bool supports_ble_isochronous_broadcaster(void) {
-  return HCI_LE_ISO_BROADCASTER(features_ble.as_array);
-}
-
-bool supports_ble_synchronized_receiver(void) {
-  return HCI_LE_SYNCHRONIZED_RECEIVER(features_ble.as_array);
-}
-
-bool supports_ble_connection_subrating(void) {
-  return HCI_LE_CONN_SUBRATING_SUPPORT(features_ble.as_array);
-}
-
-bool supports_ble_connection_subrating_host(void) {
-  return HCI_LE_CONN_SUBRATING_HOST_SUPPORT(features_ble.as_array);
-}
-
-uint16_t get_acl_data_size_classic(void) { return acl_data_size_classic; }
-
-uint16_t get_acl_data_size_ble(void) { return acl_data_size_ble; }
-
-uint16_t get_iso_data_size(void) { return iso_data_size; }
-
-uint16_t get_acl_packet_size_classic(void) {
-  return acl_data_size_classic + HCI_DATA_PREAMBLE_SIZE;
-}
-
-uint16_t get_acl_packet_size_ble(void) {
-  return acl_data_size_ble + HCI_DATA_PREAMBLE_SIZE;
-}
-
-uint16_t get_iso_packet_size(void) {
-  return iso_data_size + HCI_DATA_PREAMBLE_SIZE;
-}
-
 uint16_t get_ble_suggested_default_data_length(void) {
   return ble_suggested_default_data_length;
 }
@@ -236,12 +114,6 @@ uint8_t get_ble_periodic_advertiser_list_size(void) {
   return ble_periodic_advertiser_list_size;
 }
 
-uint16_t get_acl_buffer_count_classic(void) { return acl_buffer_count_classic; }
-
-uint8_t get_acl_buffer_count_ble(void) { return acl_buffer_count_ble; }
-
-uint8_t get_iso_buffer_count(void) { return iso_buffer_count; }
-
 uint8_t get_ble_acceptlist_size(void) { return ble_acceptlist_size; }
 
 uint8_t get_ble_resolving_list_max_size(void) {
@@ -261,7 +133,6 @@ tBTM_STATUS clear_event_filter() { return BTM_SUCCESS; }
 
 tBTM_STATUS clear_event_mask() { return BTM_SUCCESS; }
 
-tBTM_STATUS le_rand(LeRandCallback /* cb */) { return BTM_SUCCESS; }
 tBTM_STATUS set_event_filter_connection_setup_all_devices() {
   return BTM_SUCCESS;
 }
@@ -285,49 +156,12 @@ const controller_t interface = {
 
     get_ble_supported_states,
 
-    supports_enhanced_setup_synchronous_connection,
-    supports_enhanced_accept_synchronous_connection,
-    supports_configure_data_path,
-    supports_set_min_encryption_key_size,
-    supports_read_encryption_key_size,
-
-    supports_ble,
-    supports_ble_packet_extension,
-    supports_ble_connection_parameters_request,
-    supports_ble_privacy,
-    supports_ble_set_privacy_mode,
-    supports_ble_2m_phy,
-    supports_ble_coded_phy,
-    supports_ble_extended_advertising,
-    supports_ble_periodic_advertising,
-    supports_ble_peripheral_initiated_feature_exchange,
-    supports_ble_periodic_advertising_sync_transfer_sender,
-    supports_ble_periodic_advertising_sync_transfer_recipient,
-    supports_ble_connected_isochronous_stream_central,
-    supports_ble_connected_isochronous_stream_peripheral,
-    supports_ble_isochronous_broadcaster,
-    supports_ble_synchronized_receiver,
-    supports_ble_connection_subrating,
-    supports_ble_connection_subrating_host,
-
-    get_acl_data_size_classic,
-    get_acl_data_size_ble,
-    get_iso_data_size,
-
-    get_acl_packet_size_classic,
-    get_acl_packet_size_ble,
-    get_iso_packet_size,
-
     get_ble_suggested_default_data_length,
     get_ble_maximum_tx_data_length,
     get_ble_maximum_tx_time,
     get_ble_maximum_advertising_data_length,
     get_ble_number_of_supported_advertising_sets,
     get_ble_periodic_advertiser_list_size,
-
-    get_acl_buffer_count_classic,
-    get_acl_buffer_count_ble,
-    get_iso_buffer_count,
 
     get_ble_acceptlist_size,
 
@@ -337,7 +171,6 @@ const controller_t interface = {
     get_le_all_initiating_phys,
     clear_event_filter,
     clear_event_mask,
-    le_rand,
     set_event_filter_connection_setup_all_devices,
     set_event_filter_allow_device_connection,
     set_default_event_mask_except,

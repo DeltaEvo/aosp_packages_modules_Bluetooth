@@ -24,29 +24,18 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <chrono>
-#include <iostream>
 #include <memory>
 #include <string>
 
 #include "bta/ag/bta_ag_int.h"
 #include "bta/include/bta_ag_swb_aptx.h"
-#include "bta/include/bta_api.h"
-#include "bta/include/bta_dm_api.h"
-#include "bta/include/bta_hf_client_api.h"
-#include "bta/include/bta_le_audio_api.h"
-#include "common/message_loop_thread.h"
-#include "os/system_properties.h"
-#include "osi/include/compat.h"
-#include "stack/btm/btm_int_types.h"
-#include "stack/include/bt_device_type.h"
-#include "stack/include/bt_name.h"
-#include "stack/include/btm_status.h"
+#include "hci/controller_interface_mock.h"
 #include "test/common/main_handler.h"
 #include "test/common/mock_functions.h"
 #include "test/fake/fake_osi.h"
 #include "test/mock/mock_bta_sys_main.h"
 #include "test/mock/mock_device_esco_parameters.h"
+#include "test/mock/mock_main_shim_entry.h"
 #include "test/mock/mock_osi_alarm.h"
 #include "test/mock/mock_stack_acl.h"
 
@@ -76,6 +65,7 @@ class BtaAgTest : public testing::Test {
   void SetUp() override {
     reset_mock_function_count_map();
     fake_osi_ = std::make_unique<test::fake::FakeOsi>();
+    bluetooth::hci::testing::mock_controller_ = &controller_;
 
     main_thread_start_up();
     post_on_bt_main([]() { log::info("Main thread started up"); });
@@ -95,6 +85,7 @@ class BtaAgTest : public testing::Test {
     bta_sys_deregister(BTA_ID_AG);
     post_on_bt_main([]() { log::info("Main thread shutting down"); });
     main_thread_shut_down();
+    bluetooth::hci::testing::mock_controller_ = nullptr;
   }
 
   std::unique_ptr<test::fake::FakeOsi> fake_osi_;
@@ -103,6 +94,7 @@ class BtaAgTest : public testing::Test {
   uint32_t tmp_num = 0xFFFF;
   RawAddress addr;
   esco_codec_t codec;
+  bluetooth::hci::testing::MockControllerInterface controller_;
 };
 
 TEST_F_WITH_FLAGS(BtaAgTest, nop,

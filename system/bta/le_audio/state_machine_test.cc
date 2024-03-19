@@ -29,6 +29,7 @@
 #include "client_parser.h"
 #include "common/init_flags.h"
 #include "fake_osi.h"
+#include "hci/controller_interface_mock.h"
 #include "internal_include/stack_config.h"
 #include "le_audio_set_configuration_provider.h"
 #include "mock_codec_manager.h"
@@ -36,6 +37,7 @@
 #include "mock_csis_client.h"
 #include "stack/include/bt_types.h"
 #include "test/common/mock_functions.h"
+#include "test/mock/mock_main_shim_entry.h"
 #include "test/mock/mock_stack_btm_iso.h"
 #include "types/bt_transport.h"
 
@@ -266,10 +268,10 @@ class StateMachineTestBase : public Test {
   virtual void SetUp() override {
     bluetooth::common::InitFlags::Load(test_flags);
     reset_mock_function_count_map();
-    controller::SetMockControllerInterface(&mock_controller_);
     bluetooth::manager::SetMockBtmInterface(&btm_interface);
     gatt::SetMockBtaGattInterface(&gatt_interface);
     gatt::SetMockBtaGattQueue(&gatt_queue);
+    bluetooth::hci::testing::mock_controller_ = &controller_;
 
     overwrite_cis_status_idx_ = 0;
     use_cis_retry_cnt_ = false;
@@ -303,7 +305,6 @@ class StateMachineTestBase : public Test {
             Invoke([this](int group_id) { return (int)(addresses_.size()); }));
 
     // Support 2M Phy
-    ON_CALL(mock_controller_, SupportsBle2mPhy()).WillByDefault(Return(true));
     ON_CALL(btm_interface, IsPhy2mSupported(_, _)).WillByDefault(Return(true));
     ON_CALL(btm_interface, GetHCIConnHandle(_, _))
         .WillByDefault(
@@ -640,7 +641,6 @@ class StateMachineTestBase : public Test {
     gatt::SetMockBtaGattQueue(nullptr);
     gatt::SetMockBtaGattInterface(nullptr);
     bluetooth::manager::SetMockBtmInterface(nullptr);
-    controller::SetMockControllerInterface(nullptr);
 
     le_audio_devices_.clear();
     addresses_.clear();
@@ -650,6 +650,7 @@ class StateMachineTestBase : public Test {
     cached_remote_qos_configuration_for_ase_.clear();
     LeAudioGroupStateMachine::Cleanup();
     ::bluetooth::le_audio::AudioSetConfigurationProvider::Cleanup();
+    bluetooth::hci::testing::mock_controller_ = nullptr;
   }
 
   std::shared_ptr<LeAudioDevice> PrepareConnectedDevice(
@@ -886,6 +887,19 @@ class StateMachineTestBase : public Test {
       for (auto& ase : device->ases_) {
         InjectAseStateNotification(&ase, device, group, ascs::kAseStateIdle,
                                    nullptr);
+      }
+    }
+  }
+
+  void InjectInitialConfiguredNotification(LeAudioDeviceGroup* group) {
+    for (auto* device = group->GetFirstDevice(); device != nullptr;
+         device = group->GetNextDevice(device)) {
+      for (auto& ase : device->ases_) {
+        client_parser::ascs::ase_codec_configured_state_params
+            codec_configured_state_params;
+        InjectAseStateNotification(&ase, device, group,
+                                   ascs::kAseStateCodecConfigured,
+                                   &codec_configured_state_params);
       }
     }
   }
@@ -1537,7 +1551,6 @@ class StateMachineTestBase : public Test {
   }
 
   MockCsisClient mock_csis_client_module_;
-  NiceMock<controller::MockControllerInterface> mock_controller_;
   NiceMock<bluetooth::manager::MockBtmInterface> btm_interface;
   gatt::MockBtaGattInterface gatt_interface;
   gatt::MockBtaGattQueue gatt_queue;
@@ -1563,6 +1576,7 @@ class StateMachineTestBase : public Test {
   std::map<uint8_t, std::unique_ptr<LeAudioDeviceGroup>>
       le_audio_device_groups_;
   bool group_create_command_disallowed_ = false;
+  bluetooth::hci::testing::MockControllerInterface controller_;
 };
 
 class StateMachineTest : public StateMachineTestBase {
@@ -4353,6 +4367,167 @@ TEST_F(StateMachineTest, testStateTransitionTimeout) {
   // simulate timeout seconds passed, alarm executing
   fake_osi_alarm_set_on_mloop_.cb(fake_osi_alarm_set_on_mloop_.data);
   ASSERT_EQ(1, get_func_call_count("alarm_set_on_mloop"));
+}
+
+TEST_F(StateMachineTest,
+       testStateTransitionTimeoutAndDisconnectWhenConfigured) {
+  const auto context_type = kContextTypeMedia;
+  const int leaudio_group_id = 4;
+  channel_count_ = kLeAudioCodecChannelCountSingleChannel |
+                   kLeAudioCodecChannelCountTwoChannel;
+
+  // Prepare fake connected device group
+  auto* group = PrepareSingleTestDeviceGroup(leaudio_group_id, context_type);
+
+  auto* leAudioDevice = group->GetFirstDevice();
+  EXPECT_CALL(gatt_queue,
+              WriteCharacteristic(1, leAudioDevice->ctp_hdls_.val_hdl, _,
+                                  GATT_WRITE_NO_RSP, _, _))
+      .Times(1);
+
+  InjectInitialConfiguredNotification(group);
+
+  group->PrintDebugState();
+
+  // Start the configuration and stream Media content
+  ASSERT_TRUE(LeAudioGroupStateMachine::Get()->StartStream(
+      group, context_type,
+      {.sink = types::AudioContexts(context_type),
+       .source = types::AudioContexts(context_type)}));
+
+  group->PrintDebugState();
+
+  // Check if timeout is fired
+  EXPECT_CALL(mock_callbacks_, OnStateTransitionTimeout(leaudio_group_id));
+
+  // simulate timeout seconds passed, alarm executing
+  fake_osi_alarm_set_on_mloop_.cb(fake_osi_alarm_set_on_mloop_.data);
+  ASSERT_EQ(1, get_func_call_count("alarm_set_on_mloop"));
+
+  LOG_INFO("OnStateTransitionTimeout");
+
+  /* Simulate On State timeout */
+  group->SetTargetState(types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
+  group->ClearAllCises();
+  group->PrintDebugState();
+
+  InjectAclDisconnected(group, leAudioDevice);
+
+  /* Verify that all ASEs are inactive and reconfiguration flag is cleared.*/
+  for (const auto& ase : leAudioDevice->ases_) {
+    ASSERT_EQ(ase.state, types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
+    ASSERT_EQ(ase.cis_state, types::CisState::IDLE);
+    ASSERT_EQ(ase.data_path_state, types::DataPathState::IDLE);
+    ASSERT_EQ(ase.reconfigure, 0);
+  }
+}
+
+TEST_F(StateMachineTest,
+       testStateTransitionTimeoutAndDisconnectWhenQoSConfigured) {
+  const auto context_type = kContextTypeMedia;
+  const int leaudio_group_id = 4;
+  channel_count_ = kLeAudioCodecChannelCountSingleChannel |
+                   kLeAudioCodecChannelCountTwoChannel;
+
+  // Prepare fake connected device group
+  auto* group = PrepareSingleTestDeviceGroup(leaudio_group_id, context_type);
+  PrepareConfigureCodecHandler(group, 1);
+
+  auto* leAudioDevice = group->GetFirstDevice();
+  EXPECT_CALL(gatt_queue,
+              WriteCharacteristic(1, leAudioDevice->ctp_hdls_.val_hdl, _,
+                                  GATT_WRITE_NO_RSP, _, _))
+      .Times(2);
+
+  InjectInitialConfiguredNotification(group);
+
+  group->PrintDebugState();
+
+  // Start the configuration and stream Media content
+  ASSERT_TRUE(LeAudioGroupStateMachine::Get()->StartStream(
+      group, context_type,
+      {.sink = types::AudioContexts(context_type),
+       .source = types::AudioContexts(context_type)}));
+
+  group->PrintDebugState();
+
+  // Check if timeout is fired
+  EXPECT_CALL(mock_callbacks_, OnStateTransitionTimeout(leaudio_group_id));
+
+  // simulate timeout seconds passed, alarm executing
+  fake_osi_alarm_set_on_mloop_.cb(fake_osi_alarm_set_on_mloop_.data);
+  ASSERT_EQ(1, get_func_call_count("alarm_set_on_mloop"));
+
+  LOG_INFO("OnStateTransitionTimeout");
+
+  /* Simulate On State timeout */
+  group->SetTargetState(types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
+  group->ClearAllCises();
+  group->PrintDebugState();
+
+  InjectAclDisconnected(group, leAudioDevice);
+
+  /* Verify that all ASEs are inactive and reconfiguration flag is cleared.*/
+  for (const auto& ase : leAudioDevice->ases_) {
+    ASSERT_EQ(ase.state, types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
+    ASSERT_EQ(ase.cis_state, types::CisState::IDLE);
+    ASSERT_EQ(ase.data_path_state, types::DataPathState::IDLE);
+    ASSERT_EQ(ase.reconfigure, 0);
+  }
+}
+
+TEST_F(StateMachineTest, testStateTransitionTimeoutAndDisconnectWhenEnabling) {
+  const auto context_type = kContextTypeMedia;
+  const int leaudio_group_id = 4;
+  channel_count_ = kLeAudioCodecChannelCountSingleChannel |
+                   kLeAudioCodecChannelCountTwoChannel;
+
+  // Prepare fake connected device group
+  auto* group = PrepareSingleTestDeviceGroup(leaudio_group_id, context_type);
+  PrepareConfigureCodecHandler(group, 1);
+  PrepareConfigureQosHandler(group, 1);
+
+  auto* leAudioDevice = group->GetFirstDevice();
+  EXPECT_CALL(gatt_queue,
+              WriteCharacteristic(1, leAudioDevice->ctp_hdls_.val_hdl, _,
+                                  GATT_WRITE_NO_RSP, _, _))
+      .Times(3);
+
+  InjectInitialConfiguredNotification(group);
+
+  group->PrintDebugState();
+
+  // Start the configuration and stream Media content
+  ASSERT_TRUE(LeAudioGroupStateMachine::Get()->StartStream(
+      group, context_type,
+      {.sink = types::AudioContexts(context_type),
+       .source = types::AudioContexts(context_type)}));
+
+  group->PrintDebugState();
+
+  // Check if timeout is fired
+  EXPECT_CALL(mock_callbacks_, OnStateTransitionTimeout(leaudio_group_id));
+
+  // simulate timeout seconds passed, alarm executing
+  fake_osi_alarm_set_on_mloop_.cb(fake_osi_alarm_set_on_mloop_.data);
+  ASSERT_EQ(1, get_func_call_count("alarm_set_on_mloop"));
+
+  LOG_INFO("OnStateTransitionTimeout");
+
+  /* Simulate On State timeout */
+  group->SetTargetState(types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
+  group->ClearAllCises();
+  group->PrintDebugState();
+
+  InjectAclDisconnected(group, leAudioDevice);
+
+  /* Verify that all ASEs are inactive and reconfiguration flag is cleared.*/
+  for (const auto& ase : leAudioDevice->ases_) {
+    ASSERT_EQ(ase.state, types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
+    ASSERT_EQ(ase.cis_state, types::CisState::IDLE);
+    ASSERT_EQ(ase.data_path_state, types::DataPathState::IDLE);
+    ASSERT_EQ(ase.reconfigure, 0);
+  }
 }
 
 MATCHER_P(dataPathIsEq, expected, "") { return (arg.data_path_id == expected); }

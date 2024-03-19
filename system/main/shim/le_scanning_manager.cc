@@ -24,7 +24,6 @@
 #include <hardware/bluetooth.h>
 #include <stdio.h>
 
-#include "advertise_data_parser.h"
 #include "btif/include/btif_common.h"
 #include "hci/address.h"
 #include "hci/le_scanning_manager.h"
@@ -37,6 +36,7 @@
 #include "main/shim/shim.h"
 #include "os/log.h"
 #include "stack/btm/btm_int_types.h"
+#include "stack/include/advertise_data_parser.h"
 #include "stack/include/bt_dev_class.h"
 #include "stack/include/btm_log_history.h"
 #include "storage/device.h"
@@ -127,8 +127,6 @@ class DefaultScanningCallback : public ::ScanningCallbacks {
 ::ScanningCallbacks* bluetooth::shim::default_scanning_callback =
     static_cast<::ScanningCallbacks*>(&default_scanning_callback_);
 extern ::ScanningCallbacks* bluetooth::shim::default_scanning_callback;
-
-extern tBTM_CB btm_cb;
 
 void btm_ble_process_adv_pkt_cont_for_inquiry(
     uint16_t event_type, tBLE_ADDR_TYPE address_type,
@@ -352,7 +350,7 @@ void BleScannerInterfaceImpl::OnMsftAdvMonitorEnable(
 void BleScannerInterfaceImpl::SetScanParameters(int scanner_id,
                                                 uint8_t scan_type,
                                                 int scan_interval,
-                                                int scan_window,
+                                                int scan_window, int scan_phy,
                                                 Callback /* cb */) {
   LOG(INFO) << __func__ << " in shim layer";
   if (BTM_BLE_ISVALID_PARAM(scan_interval, BTM_BLE_SCAN_INT_MIN,
@@ -362,11 +360,12 @@ void BleScannerInterfaceImpl::SetScanParameters(int scanner_id,
     btm_cb.ble_ctr_cb.inq_var.scan_type = BTM_BLE_SCAN_MODE_ACTI;
     btm_cb.ble_ctr_cb.inq_var.scan_interval = scan_interval;
     btm_cb.ble_ctr_cb.inq_var.scan_window = scan_window;
+    btm_cb.ble_ctr_cb.inq_var.scan_phy = scan_phy;
   }
 
   bluetooth::shim::GetScanning()->SetScanParameters(
       scanner_id, static_cast<bluetooth::hci::LeScanType>(scan_type),
-      scan_interval, scan_window);
+      scan_interval, scan_window, scan_phy);
 }
 
 /* Configure the batchscan storage */

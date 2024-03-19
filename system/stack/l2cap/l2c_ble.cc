@@ -36,9 +36,11 @@
 #include "btif/include/core_callbacks.h"
 #include "btif/include/stack_manager_t.h"
 #include "device/include/controller.h"
+#include "hci/controller_interface.h"
 #include "internal_include/bt_target.h"
 #include "internal_include/stack_config.h"
 #include "main/shim/acl_api.h"
+#include "main/shim/entry.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/properties.h"
@@ -193,7 +195,7 @@ bool l2cble_conn_comp(uint16_t handle, uint8_t role, const RawAddress& bda,
                              L2CAP_FIXED_CHNL_SMP_BIT;
 
   if (role == HCI_ROLE_PERIPHERAL) {
-    if (!controller_get_interface()
+    if (!bluetooth::shim::GetController()
              ->SupportsBlePeripheralInitiatedFeaturesExchange()) {
       p_lcb->link_state = LST_CONNECTED;
       l2cu_process_fixed_chnl_resp(p_lcb);
@@ -451,8 +453,9 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
           if (!lead_cid_set) {
             p_ccb = temp_p_ccb;
             p_ccb->local_conn_cfg.mtu = L2CAP_SDU_LENGTH_LE_MAX;
-            p_ccb->local_conn_cfg.mps =
-                controller_get_interface()->get_acl_data_size_ble();
+            p_ccb->local_conn_cfg.mps = bluetooth::shim::GetController()
+                                            ->GetLeBufferSize()
+                                            .le_data_packet_length_;
             p_lcb->pending_lead_cid = p_ccb->local_cid;
             lead_cid_set = true;
           }
@@ -775,8 +778,9 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
       p_ccb->remote_cid = rcid;
 
       p_ccb->local_conn_cfg.mtu = L2CAP_SDU_LENGTH_LE_MAX;
-      p_ccb->local_conn_cfg.mps =
-          controller_get_interface()->get_acl_data_size_ble();
+      p_ccb->local_conn_cfg.mps = bluetooth::shim::GetController()
+                                      ->GetLeBufferSize()
+                                      .le_data_packet_length_;
       p_ccb->local_conn_cfg.credits = L2CA_LeCreditDefault();
       p_ccb->remote_credit_count = L2CA_LeCreditDefault();
 

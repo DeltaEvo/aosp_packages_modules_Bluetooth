@@ -197,13 +197,14 @@ void BTM_reset_complete() {
 
   btm_pm_reset();
 
-  l2c_link_init(controller->get_acl_buffer_count_classic());
+  l2c_link_init(bluetooth::shim::GetController()->GetNumAclPacketBuffers());
 
   // setup the random number generator
   std::srand(std::time(nullptr));
 
   /* Set up the BLE privacy settings */
-  if (controller->SupportsBle() && controller->SupportsBlePrivacy() &&
+  if (bluetooth::shim::GetController()->SupportsBle() &&
+      bluetooth::shim::GetController()->SupportsBlePrivacy() &&
       controller->get_ble_resolving_list_max_size() > 0) {
     btm_ble_resolving_list_init(controller->get_ble_resolving_list_max_size());
     /* set the default random private address timeout */
@@ -214,8 +215,10 @@ void BTM_reset_complete() {
         "Le Address Resolving list disabled due to lack of controller support");
   }
 
-  if (controller->SupportsBle()) {
-    l2c_link_processs_ble_num_bufs(controller->get_acl_buffer_count_ble());
+  if (bluetooth::shim::GetController()->SupportsBle()) {
+    l2c_link_processs_ble_num_bufs(bluetooth::shim::GetController()
+                                       ->GetLeBufferSize()
+                                       .total_num_le_packets_);
   }
 
   BTM_SetPinType(btm_sec_cb.cfg.pin_type, btm_sec_cb.cfg.pin_code,
@@ -331,7 +334,8 @@ tBTM_STATUS BTM_SetLocalDeviceName(const char* p_name) {
   if (!controller_get_interface()->get_is_ready()) return (BTM_DEV_RESET);
   /* Save the device name if local storage is enabled */
   p = (uint8_t*)btm_sec_cb.cfg.bd_name;
-  if (p != (uint8_t*)p_name) bd_name_copy(btm_sec_cb.cfg.bd_name, p_name);
+  if (p != (uint8_t*)p_name)
+    bd_name_from_char_pointer(btm_sec_cb.cfg.bd_name, p_name);
 
   btsnd_hcic_change_name(p);
   return (BTM_CMD_STARTED);
