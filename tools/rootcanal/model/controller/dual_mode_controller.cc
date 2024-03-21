@@ -52,6 +52,14 @@ constexpr uint8_t kTransmitPowerLevel = -20;
 constexpr bool kLeApcfTransportDiscoveryDataFilterSupported = true;
 constexpr bool kLeApcfAdTypeFilterSupported = true;
 
+#define CHECK_PACKET_VIEW(view)                                              \
+  do {                                                                       \
+    if (!CheckPacketView(view, fmt::format("{}:{} - {}() invalid packet",    \
+                                           __FILE__, __LINE__, __func__))) { \
+      return;                                                                \
+    }                                                                        \
+  } while (0)
+
 void DualModeController::SetProperties(ControllerProperties properties) {
   WARNING(id_, "updating the device properties!");
   properties_ = std::move(properties);
@@ -88,6 +96,12 @@ DualModeController::DualModeController(ControllerProperties properties)
   Address public_address{};
   ASSERT(Address::FromString("3C:5A:B4:04:05:06", public_address));
   SetAddress(public_address);
+
+  // Default invalid packet handler will abort the controller
+  // when receiving an invalid packet.
+  invalid_packet_handler_ =
+      [](uint32_t, InvalidPacketReason, std::string message,
+         std::vector<uint8_t> const&) { ERROR ("{}", message); };
 
   link_layer_controller_.RegisterRemoteChannel(
       [this](std::shared_ptr<model::packets::LinkLayerPacketBuilder> packet,
@@ -2842,7 +2856,7 @@ void DualModeController::LeBatchScan(CommandView command) {
 
 void DualModeController::LeApcf(CommandView command) {
   auto command_view = bluetooth::hci::LeApcfView::Create(command);
-  ASSERT(command_view.IsValid());
+  CHECK_PACKET_VIEW(command_view);
 
   if (!properties_.supports_le_apcf_vendor_command) {
     SendCommandCompleteUnknownOpCodeEvent(OpCode::LE_APCF);
@@ -2853,7 +2867,7 @@ void DualModeController::LeApcf(CommandView command) {
     case bluetooth::hci::ApcfOpcode::ENABLE: {
       auto subcommand_view =
           bluetooth::hci::LeApcfEnableView::Create(command_view);
-      ASSERT(subcommand_view.IsValid());
+      CHECK_PACKET_VIEW(subcommand_view);
 
       DEBUG(id_, "<< LE APCF Enable");
       DEBUG(id_, "   enable={}",
@@ -2869,7 +2883,7 @@ void DualModeController::LeApcf(CommandView command) {
       auto subcommand_view =
           bluetooth::hci::LeApcfSetFilteringParametersView::Create(
               command_view);
-      ASSERT(subcommand_view.IsValid());
+      CHECK_PACKET_VIEW(subcommand_view);
 
       DEBUG(id_, "<< LE APCF Set Filtering Parameters");
       DEBUG(id_, "   action={}",
@@ -2883,7 +2897,7 @@ void DualModeController::LeApcf(CommandView command) {
           auto subsubcommand_view =
               bluetooth::hci::LeApcfAddFilteringParametersView::Create(
                   subcommand_view);
-          ASSERT(subsubcommand_view.IsValid());
+          CHECK_PACKET_VIEW(subsubcommand_view);
           status = link_layer_controller_.LeApcfAddFilteringParameters(
               subsubcommand_view.GetApcfFilterIndex(),
               subsubcommand_view.GetApcfFeatureSelection(),
@@ -2903,7 +2917,7 @@ void DualModeController::LeApcf(CommandView command) {
           auto subsubcommand_view =
               bluetooth::hci::LeApcfDeleteFilteringParametersView::Create(
                   subcommand_view);
-          ASSERT(subsubcommand_view.IsValid());
+          CHECK_PACKET_VIEW(subsubcommand_view);
           status = link_layer_controller_.LeApcfDeleteFilteringParameters(
               subsubcommand_view.GetApcfFilterIndex(), &apcf_available_spaces);
           break;
@@ -2912,7 +2926,7 @@ void DualModeController::LeApcf(CommandView command) {
           auto subsubcommand_view =
               bluetooth::hci::LeApcfClearFilteringParametersView::Create(
                   subcommand_view);
-          ASSERT(subsubcommand_view.IsValid());
+          CHECK_PACKET_VIEW(subsubcommand_view);
           status = link_layer_controller_.LeApcfClearFilteringParameters(
               &apcf_available_spaces);
           break;
@@ -2932,7 +2946,7 @@ void DualModeController::LeApcf(CommandView command) {
     case bluetooth::hci::ApcfOpcode::BROADCASTER_ADDRESS: {
       auto subcommand_view =
           bluetooth::hci::LeApcfBroadcasterAddressView::Create(command_view);
-      ASSERT(subcommand_view.IsValid());
+      CHECK_PACKET_VIEW(subcommand_view);
 
       DEBUG(id_, "<< LE APCF Broadcaster Address");
       DEBUG(id_, "   action={}",
@@ -2946,7 +2960,7 @@ void DualModeController::LeApcf(CommandView command) {
           auto subsubcommand_view =
               bluetooth::hci::LeApcfAddBroadcasterAddressView::Create(
                   subcommand_view);
-          ASSERT(subsubcommand_view.IsValid());
+          CHECK_PACKET_VIEW(subsubcommand_view);
           status = link_layer_controller_.LeApcfBroadcasterAddress(
               bluetooth::hci::ApcfAction::ADD,
               subsubcommand_view.GetApcfFilterIndex(),
@@ -2959,7 +2973,7 @@ void DualModeController::LeApcf(CommandView command) {
           auto subsubcommand_view =
               bluetooth::hci::LeApcfDeleteBroadcasterAddressView::Create(
                   subcommand_view);
-          ASSERT(subsubcommand_view.IsValid());
+          CHECK_PACKET_VIEW(subsubcommand_view);
           status = link_layer_controller_.LeApcfBroadcasterAddress(
               bluetooth::hci::ApcfAction::DELETE,
               subsubcommand_view.GetApcfFilterIndex(),
@@ -2972,7 +2986,7 @@ void DualModeController::LeApcf(CommandView command) {
           auto subsubcommand_view =
               bluetooth::hci::LeApcfClearBroadcasterAddressView::Create(
                   subcommand_view);
-          ASSERT(subsubcommand_view.IsValid());
+          CHECK_PACKET_VIEW(subsubcommand_view);
           status = link_layer_controller_.LeApcfBroadcasterAddress(
               bluetooth::hci::ApcfAction::CLEAR,
               subsubcommand_view.GetApcfFilterIndex(), Address(),
@@ -2995,7 +3009,7 @@ void DualModeController::LeApcf(CommandView command) {
     case bluetooth::hci::ApcfOpcode::SERVICE_UUID: {
       auto subcommand_view =
           bluetooth::hci::LeApcfServiceUuidView::Create(command_view);
-      ASSERT(subcommand_view.IsValid());
+      CHECK_PACKET_VIEW(subcommand_view);
 
       DEBUG(id_, "<< LE APCF Service UUID");
       DEBUG(id_, "   action={}",
@@ -3014,7 +3028,7 @@ void DualModeController::LeApcf(CommandView command) {
       auto subcommand_view =
           bluetooth::hci::LeApcfServiceSolicitationUuidView::Create(
               command_view);
-      ASSERT(subcommand_view.IsValid());
+      CHECK_PACKET_VIEW(subcommand_view);
 
       DEBUG(id_, "<< LE APCF Service Solicitation UUID");
       DEBUG(id_, "   action={}",
@@ -3033,7 +3047,7 @@ void DualModeController::LeApcf(CommandView command) {
     case bluetooth::hci::ApcfOpcode::LOCAL_NAME: {
       auto subcommand_view =
           bluetooth::hci::LeApcfLocalNameView::Create(command_view);
-      ASSERT(subcommand_view.IsValid());
+      CHECK_PACKET_VIEW(subcommand_view);
 
       DEBUG(id_, "<< LE APCF Local Name");
       DEBUG(id_, "   action={}",
@@ -3051,7 +3065,7 @@ void DualModeController::LeApcf(CommandView command) {
     case bluetooth::hci::ApcfOpcode::MANUFACTURER_DATA: {
       auto subcommand_view =
           bluetooth::hci::LeApcfManufacturerDataView::Create(command_view);
-      ASSERT(subcommand_view.IsValid());
+      CHECK_PACKET_VIEW(subcommand_view);
 
       DEBUG(id_, "<< LE APCF Manufacturer Data");
       DEBUG(id_, "   action={}",
@@ -3069,7 +3083,7 @@ void DualModeController::LeApcf(CommandView command) {
     case bluetooth::hci::ApcfOpcode::SERVICE_DATA: {
       auto subcommand_view =
           bluetooth::hci::LeApcfServiceDataView::Create(command_view);
-      ASSERT(subcommand_view.IsValid());
+      CHECK_PACKET_VIEW(subcommand_view);
 
       DEBUG(id_, "<< LE APCF Service Data");
       DEBUG(id_, "   action={}",
@@ -3087,7 +3101,7 @@ void DualModeController::LeApcf(CommandView command) {
     case bluetooth::hci::ApcfOpcode::AD_TYPE_FILTER: {
       auto subcommand_view =
           bluetooth::hci::LeApcfAdTypeFilterView::Create(command_view);
-      ASSERT(subcommand_view.IsValid());
+      CHECK_PACKET_VIEW(subcommand_view);
 
       DEBUG(id_, "<< LE APCF AD Type Filter");
       DEBUG(id_, "   action={}",
@@ -3106,7 +3120,7 @@ void DualModeController::LeApcf(CommandView command) {
     case bluetooth::hci::ApcfOpcode::READ_EXTENDED_FEATURES: {
       auto subcommand_view =
           bluetooth::hci::LeApcfReadExtendedFeaturesView::Create(command_view);
-      ASSERT(subcommand_view.IsValid());
+      CHECK_PACKET_VIEW(subcommand_view);
 
       DEBUG(id_, "<< LE APCF Read Extended Features");
 
@@ -3118,8 +3132,12 @@ void DualModeController::LeApcf(CommandView command) {
       break;
     }
     default:
-      FATAL(id_, "unknown APCF opcode {}",
+      ERROR(id_, "unknown APCF opcode {:#x}",
             static_cast<uint8_t>(command_view.GetApcfOpcode()));
+
+      send_event_(bluetooth::hci::LeApcfCompleteBuilder::Create(
+          kNumCommandPackets, ErrorCode::INVALID_HCI_COMMAND_PARAMETERS,
+          command_view.GetApcfOpcode(), std::vector<uint8_t>{}));
   }
 }
 
