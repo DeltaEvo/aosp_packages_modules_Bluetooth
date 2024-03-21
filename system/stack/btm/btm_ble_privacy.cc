@@ -30,7 +30,6 @@
 #include "btm_dev.h"
 #include "btm_sec_cb.h"
 #include "btm_sec_int_types.h"
-#include "device/include/controller.h"
 #include "hci/controller_interface.h"
 #include "main/shim/acl_api.h"
 #include "main/shim/entry.h"
@@ -85,7 +84,7 @@ static void btm_ble_enq_resolving_list_pending(const RawAddress& pseudo_bda,
   p_q->resolve_q_random_pseudo[p_q->q_next] = pseudo_bda;
   p_q->resolve_q_action[p_q->q_next] = op_code;
   p_q->q_next++;
-  p_q->q_next %= controller_get_interface()->get_ble_resolving_list_max_size();
+  p_q->q_next %= bluetooth::shim::GetController()->GetLeResolvingListSize();
 }
 
 /*******************************************************************************
@@ -110,7 +109,7 @@ static bool btm_ble_brcm_find_resolving_pending_entry(
       return true;
 
     i++;
-    i %= controller_get_interface()->get_ble_resolving_list_max_size();
+    i %= bluetooth::shim::GetController()->GetLeResolvingListSize();
   }
   return false;
 }
@@ -135,7 +134,7 @@ static bool btm_ble_deq_resolving_pending(RawAddress& pseudo_addr) {
     p_q->resolve_q_random_pseudo[p_q->q_pending] = RawAddress::kEmpty;
     p_q->q_pending++;
     p_q->q_pending %=
-        controller_get_interface()->get_ble_resolving_list_max_size();
+        bluetooth::shim::GetController()->GetLeResolvingListSize();
     return true;
   }
 
@@ -155,7 +154,7 @@ static void btm_ble_clear_irk_index(uint8_t index) {
   uint8_t byte;
   uint8_t bit;
 
-  if (index < controller_get_interface()->get_ble_resolving_list_max_size()) {
+  if (index < bluetooth::shim::GetController()->GetLeResolvingListSize()) {
     byte = index / 8;
     bit = index % 8;
     btm_cb.ble_ctr_cb.irk_list_mask[byte] &= (~(1 << bit));
@@ -176,7 +175,7 @@ static uint8_t btm_ble_find_irk_index(void) {
   uint8_t byte;
   uint8_t bit;
 
-  while (i < controller_get_interface()->get_ble_resolving_list_max_size()) {
+  while (i < bluetooth::shim::GetController()->GetLeResolvingListSize()) {
     byte = i / 8;
     bit = i % 8;
 
@@ -257,7 +256,7 @@ void btm_ble_clear_resolving_list_complete(uint8_t* p, uint16_t evt_len) {
       uint8_t irk_list_sz_max = 0;
       STREAM_TO_UINT8(irk_list_sz_max, p);
 
-      if (controller_get_interface()->get_ble_resolving_list_max_size() == 0)
+      if (bluetooth::shim::GetController()->GetLeResolvingListSize() == 0)
         btm_ble_resolving_list_init(irk_list_sz_max);
 
       uint8_t irk_mask_size = (irk_list_sz_max % 8) ? (irk_list_sz_max / 8 + 1)
@@ -266,7 +265,7 @@ void btm_ble_clear_resolving_list_complete(uint8_t* p, uint16_t evt_len) {
     }
 
     btm_cb.ble_ctr_cb.resolving_list_avail_size =
-        controller_get_interface()->get_ble_resolving_list_max_size();
+        bluetooth::shim::GetController()->GetLeResolvingListSize();
 
     log::verbose("resolving_list_avail_size={}",
                  btm_cb.ble_ctr_cb.resolving_list_avail_size);
@@ -443,7 +442,7 @@ static void btm_ble_resolving_list_vsc_op_cmpl(tBTM_VSC_CMPL* p_params) {
 static tBTM_STATUS btm_ble_remove_resolving_list_entry(
     tBTM_SEC_DEV_REC* p_dev_rec) {
   /* if controller does not support RPA offloading or privacy 1.2, skip */
-  if (controller_get_interface()->get_ble_resolving_list_max_size() == 0)
+  if (bluetooth::shim::GetController()->GetLeResolvingListSize() == 0)
     return BTM_WRONG_MODE;
 
   if (bluetooth::shim::GetController()->SupportsBlePrivacy()) {
@@ -560,7 +559,7 @@ void btm_ble_resolving_list_load_dev(tBTM_SEC_DEV_REC& dev_rec) {
     log::debug("Privacy 1.2 is not enabled");
     return;
   }
-  if (controller_get_interface()->get_ble_resolving_list_max_size() == 0) {
+  if (bluetooth::shim::GetController()->GetLeResolvingListSize() == 0) {
     log::info("Controller does not support RPA offloading or privacy 1.2");
     return;
   }
@@ -665,7 +664,6 @@ void btm_ble_resolving_list_init(uint8_t max_irk_list_sz) {
     log::verbose("max_irk_list_sz={}", max_irk_list_sz);
   }
 
-  controller_get_interface()->set_ble_resolving_list_max_size(max_irk_list_sz);
   btm_ble_clear_resolving_list();
   btm_cb.ble_ctr_cb.resolving_list_avail_size = max_irk_list_sz;
 }

@@ -49,8 +49,10 @@
 #include "btif_util.h"
 #include "common/init_flags.h"
 #include "core_callbacks.h"
-#include "device/include/controller.h"
+#include "hci/controller_interface.h"
 #include "internal_include/bt_target.h"
+#include "main/shim/entry.h"
+#include "main/shim/helpers.h"
 #include "osi/include/allocator.h"
 #include "stack/include/bt_octets.h"
 #include "stack/include/bt_uuid16.h"
@@ -617,14 +619,14 @@ bt_status_t btif_storage_get_adapter_property(bt_property_t* property) {
   if (property->type == BT_PROPERTY_BDADDR) {
     RawAddress* bd_addr = (RawAddress*)property->val;
     /* Fetch the local BD ADDR */
-    const controller_t* controller = controller_get_interface();
-    if (!controller->get_is_ready()) {
+    if (bluetooth::shim::GetController() == nullptr) {
       log::error("Controller not ready! Unable to return Bluetooth Address");
       *bd_addr = RawAddress::kEmpty;
       return BT_STATUS_FAIL;
     } else {
       log::info("Controller ready!");
-      *bd_addr = *controller->get_address();
+      *bd_addr = bluetooth::ToRawAddress(
+          bluetooth::shim::GetController()->GetMacAddress());
     }
     property->len = RawAddress::kLength;
     return BT_STATUS_SUCCESS;

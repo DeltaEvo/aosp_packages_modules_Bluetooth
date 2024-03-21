@@ -28,7 +28,6 @@
 #include <vector>
 
 #include "btif/include/btif_hh.h"
-#include "device/include/controller.h"
 #include "hal/hci_hal.h"
 #include "hci/acl_manager.h"
 #include "hci/acl_manager/classic_acl_connection.h"
@@ -49,7 +48,6 @@
 #include "main/shim/dumpsys.h"
 #include "main/shim/helpers.h"
 #include "main/shim/le_advertising_manager.h"
-#include "main/shim/utils.h"
 #include "main/shim/le_scanning_manager.h"
 #include "main/shim/utils.h"
 #include "os/handler.h"
@@ -119,14 +117,6 @@ class DevNullOrStdErr {
 }  // namespace
 
 bluetooth::common::TimestamperInMilliseconds timestamper_in_milliseconds;
-
-uint8_t mock_get_ble_acceptlist_size() { return 123; }
-
-struct controller_t mock_controller {
-  .get_ble_acceptlist_size = mock_get_ble_acceptlist_size,
-};
-
-const controller_t* controller_get_interface() { return &mock_controller; }
 
 void mock_on_send_data_upwards(BT_HDR*) {}
 
