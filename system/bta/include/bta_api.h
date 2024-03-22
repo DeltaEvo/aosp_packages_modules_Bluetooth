@@ -33,6 +33,7 @@
 #include <vector>
 
 #include "bta_api_data_types.h"
+#include "hci/le_rand_callback.h"
 #include "internal_include/bt_target.h"
 #include "macros.h"
 #include "os/log.h"
@@ -676,28 +677,9 @@ void BTA_DmSetBlePrefConnParams(const RawAddress& bd_addr,
 
 /*******************************************************************************
  *
- * Function         BTA_DmBleObserve
- *
- * Description      This procedure keep the device listening for advertising
- *                  events from a broadcast device.
- *
- * Parameters       start: start or stop observe.
- *                  duration : Duration of the scan. Continuous scan if 0 is
- *                             passed
- *                  p_results_cb: Callback to be called with scan results
- *
- * Returns          void
- *
- ******************************************************************************/
-void BTA_DmBleObserve(bool start, uint8_t duration,
-                      tBTA_DM_SEARCH_CBACK* p_results_cb);
-
-/*******************************************************************************
- *
  * Function         BTA_DmBleScan
  *
- * Description      Start or stop the scan procedure if it's not already started
- *                  with BTA_DmBleObserve().
+ * Description      Start or stop the scan procedure.
  *
  * Parameters       start: start or stop the scan procedure,
  *                  duration_sec: Duration of the scan. Continuous scan if 0 is
@@ -854,7 +836,6 @@ void BTA_DmDisconnectAllAcls(void);
  ******************************************************************************/
 void BTA_DmClearFilterAcceptList(void);
 
-using LeRandCallback = base::OnceCallback<void(uint64_t)>;
 /*******************************************************************************
  *
  * Function         BTA_DmLeRand
@@ -864,7 +845,7 @@ using LeRandCallback = base::OnceCallback<void(uint64_t)>;
  * Returns          cb: callback to receive the resulting random number
  *
  ******************************************************************************/
-void BTA_DmLeRand(LeRandCallback cb);
+void BTA_DmLeRand(bluetooth::hci::LeRandCallback cb);
 
 /*******************************************************************************
  *

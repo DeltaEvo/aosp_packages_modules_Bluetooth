@@ -49,14 +49,14 @@ using bluetooth::Uuid;
 using std::vector;
 using namespace bluetooth;
 
+/* TODO: b/329720661 Remove this namespace entirely when
+ * prevent_hogp_reconnect_when_connected flag is shipped */
 namespace {
-
 #ifndef BTA_HH_LE_RECONN
 constexpr bool kBTA_HH_LE_RECONN = true;
 #else
 constexpr bool kBTA_HH_LE_RECONN = false;
 #endif
-
 }  // namespace
 
 #define BTA_HH_APP_ID_LE 0xff
@@ -65,6 +65,8 @@ constexpr bool kBTA_HH_LE_RECONN = false;
 #define BTA_HH_LE_PROTO_REPORT_MODE 0x01
 
 #define BTA_LE_HID_RTP_UUID_MAX 5
+
+#define HID_PREFERRED_SERVICE_INDEX_3 3
 
 namespace {
 
@@ -290,9 +292,10 @@ static tBTA_HH_DEV_CB* bta_hh_le_find_dev_cb_by_conn_id(uint16_t conn_id) {
 
 /*******************************************************************************
  *
- * Function         bta_hh_le_find_dev_cb_by_bda
+ * Function         bta_hh_le_find_dev_cb_by_addr_transport
  *
- * Description      Utility function find a device control block by BD address.
+ * Description      Utility function find a device control block by ACL link
+ *                  specification.
  *
  ******************************************************************************/
 static tBTA_HH_DEV_CB* bta_hh_le_find_dev_cb_by_bda(
@@ -302,7 +305,8 @@ static tBTA_HH_DEV_CB* bta_hh_le_find_dev_cb_by_bda(
 
   for (i = 0; i < BTA_HH_MAX_DEVICE; i++, p_dev_cb++) {
     if (p_dev_cb->in_use &&
-        p_dev_cb->link_spec.addrt.bda == link_spec.addrt.bda)
+        p_dev_cb->link_spec.addrt.bda == link_spec.addrt.bda &&
+        p_dev_cb->link_spec.transport == BT_TRANSPORT_LE)
       return p_dev_cb;
   }
   return NULL;
@@ -639,8 +643,11 @@ static void bta_hh_le_open_cmpl(tBTA_HH_DEV_CB* p_cb) {
     bta_hh_le_register_input_notif(p_cb, p_cb->mode, true);
     bta_hh_sm_execute(p_cb, BTA_HH_OPEN_CMPL_EVT, NULL);
 
-    if (kBTA_HH_LE_RECONN && p_cb->status == BTA_HH_OK) {
-      bta_hh_le_add_dev_bg_conn(p_cb);
+    if (!IS_FLAG_ENABLED(prevent_hogp_reconnect_when_connected)) {
+      if (kBTA_HH_LE_RECONN && p_cb->status == BTA_HH_OK) {
+        bta_hh_le_add_dev_bg_conn(p_cb);
+      }
+      return;
     }
   }
 }
@@ -962,7 +969,7 @@ static void bta_hh_le_pri_service_discovery(tBTA_HH_DEV_CB* p_cb) {
  *
  ******************************************************************************/
 static void bta_hh_le_encrypt_cback(const RawAddress* bd_addr,
-                                    UNUSED_ATTR tBT_TRANSPORT transport,
+                                    tBT_TRANSPORT transport,
                                     UNUSED_ATTR void* p_ref_data,
                                     tBTM_STATUS result) {
   tAclLinkSpec link_spec;
@@ -1153,7 +1160,6 @@ void bta_hh_gatt_open(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_buf) {
       bta_hh_le_api_disc_act(p_cb);
       return;
     }
-    p_cb->is_le_device = true;
     p_cb->in_use = true;
     p_cb->conn_id = p_data->conn_id;
 
@@ -1511,13 +1517,27 @@ static void bta_hh_le_srvc_search_cmpl(tBTA_GATTC_SEARCH_CMPL* p_data) {
   const gatt::Service* gap_service = nullptr;
   const gatt::Service* scp_service = nullptr;
 
+  int num_hid_service = 0;
   bool have_hid = false;
   for (const gatt::Service& service : *services) {
     if (service.uuid == Uuid::From16Bit(UUID_SERVCLASS_LE_HID) &&
         service.is_primary && !have_hid) {
-      have_hid = true;
+      // TODO(b/286413526): The current implementation connects to the first HID
+      // service, in the case of multiple HID services being present. As a
+      // temporary mitigation, connect to the third HID service for some
+      // particular devices. The long-term fix should refactor HID stack to
+      // connect to multiple HID services simultaneously.
+      if (interop_match_vendor_product_ids(
+              INTEROP_MULTIPLE_HOGP_SERVICE_CHOOSE_THIRD,
+              p_dev_cb->dscp_info.vendor_id, p_dev_cb->dscp_info.product_id)) {
+        num_hid_service++;
+        if (num_hid_service < HID_PREFERRED_SERVICE_INDEX_3) {
+          continue;
+        }
+      }
 
       /* found HID primamry service */
+      have_hid = true;
       p_dev_cb->hid_srvc.state = BTA_HH_SERVICE_DISCOVERED;
       p_dev_cb->hid_srvc.srvc_inst_id = service.handle;
       p_dev_cb->hid_srvc.proto_mode_handle = 0;
@@ -1647,10 +1667,11 @@ static void bta_hh_le_input_rpt_notify(tBTA_GATTC_NOTIFY* p_data) {
 void bta_hh_le_open_fail(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
   const tBTA_HH_LE_CLOSE* le_close = &p_data->le_close;
 
-  BTM_LogHistory(kBtmLogTag, p_cb->link_spec.addrt.bda, "Open failed",
-                 base::StringPrintf(
-                     "%s reason %s", (p_cb->is_le_device) ? "le" : "classic",
-                     gatt_disconnection_reason_text(le_close->reason).c_str()));
+  BTM_LogHistory(
+      kBtmLogTag, p_cb->link_spec.addrt.bda, "Open failed",
+      base::StringPrintf(
+          "%s reason %s", bt_transport_text(p_cb->link_spec.transport).c_str(),
+          gatt_disconnection_reason_text(le_close->reason).c_str()));
   log::warn("Open failed for device:{}",
             ADDRESS_TO_LOGGABLE_CSTR(p_cb->link_spec.addrt.bda));
 
@@ -1659,7 +1680,7 @@ void bta_hh_le_open_fail(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
     bta_hh_clear_service_cache(p_cb);
   }
 
-  if (p_cb->is_le_device && p_cb->status != BTA_HH_ERR_SDP) {
+  if (p_cb->status != BTA_HH_ERR_SDP) {
     log::debug("gd_acl: Re-adding HID device to acceptlist");
     // gd removes from bg list after failed connection
     // Correct the cached state to allow re-add to acceptlist.
@@ -1675,7 +1696,6 @@ void bta_hh_le_open_fail(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
               .status = (le_close->reason != GATT_CONN_OK) ? BTA_HH_ERR
                                                            : p_cb->status,
               .handle = p_cb->hid_handle,
-              .le_hid = true,
               .scps_supported = p_cb->scps_supported,
           },
   };
@@ -1697,10 +1717,11 @@ void bta_hh_le_open_fail(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
 void bta_hh_gatt_close(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
   const tBTA_HH_LE_CLOSE* le_close = &p_data->le_close;
 
-  BTM_LogHistory(kBtmLogTag, p_cb->link_spec.addrt.bda, "Closed",
-                 base::StringPrintf(
-                     "%s reason %s", (p_cb->is_le_device) ? "le" : "classic",
-                     gatt_disconnection_reason_text(le_close->reason).c_str()));
+  BTM_LogHistory(
+      kBtmLogTag, p_cb->link_spec.addrt.bda, "Closed",
+      base::StringPrintf(
+          "%s reason %s", bt_transport_text(p_cb->link_spec.transport).c_str(),
+          gatt_disconnection_reason_text(le_close->reason).c_str()));
 
   /* deregister all notification */
   bta_hh_le_deregister_input_notif(p_cb);

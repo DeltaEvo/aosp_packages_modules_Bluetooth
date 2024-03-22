@@ -50,12 +50,12 @@
 #include "btif/include/core_callbacks.h"
 #include "btif/include/stack_manager_t.h"
 #include "common/message_loop_thread.h"
-#include "device/include/controller.h"
 #include "device/include/device_iot_config.h"
 #include "hci/controller_interface.h"
 #include "internal_include/bt_target.h"
 #include "internal_include/bt_trace.h"
 #include "main/shim/entry.h"
+#include "main/shim/helpers.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/future.h"
@@ -179,7 +179,8 @@ bt_status_t btif_init_bluetooth() {
 
 void btif_enable_bluetooth_evt() {
   /* Fetch the local BD ADDR */
-  RawAddress local_bd_addr = *controller_get_interface()->get_address();
+  RawAddress local_bd_addr = bluetooth::ToRawAddress(
+      bluetooth::shim::GetController()->GetMacAddress());
 
   std::string bdstr = local_bd_addr.ToString();
 
@@ -500,11 +501,11 @@ void btif_get_adapter_property(bt_property_type_t type) {
         cmn_vsc_cb.extended_scan_support > 0;
     local_le_features.debug_logging_supported =
         cmn_vsc_cb.debug_logging_supported > 0;
-    const controller_t* controller = controller_get_interface();
+    auto controller = bluetooth::shim::GetController();
 
     if (controller->SupportsBleExtendedAdvertising()) {
       local_le_features.max_adv_instance =
-          controller->get_ble_number_of_supported_advertising_sets();
+          controller->GetLeNumberOfSupportedAdverisingSets();
     }
     local_le_features.le_2m_phy_supported = controller->SupportsBle2mPhy();
     local_le_features.le_coded_phy_supported =
@@ -514,7 +515,7 @@ void btif_get_adapter_property(bt_property_type_t type) {
     local_le_features.le_periodic_advertising_supported =
         controller->SupportsBlePeriodicAdvertising();
     local_le_features.le_maximum_advertising_data_length =
-        controller->get_ble_maximum_advertising_data_length();
+        controller->GetLeMaximumAdvertisingDataLength();
 
     local_le_features.dynamic_audio_buffer_supported =
         cmn_vsc_cb.dynamic_audio_buffer_support;

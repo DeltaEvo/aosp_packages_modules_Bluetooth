@@ -18,6 +18,11 @@
 
 package com.android.server.bluetooth
 
+import android.app.AlarmManager
+import android.bluetooth.BluetoothAdapter.ACTION_AUTO_ON_STATE_CHANGED
+import android.bluetooth.BluetoothAdapter.AUTO_ON_STATE_DISABLED
+import android.bluetooth.BluetoothAdapter.AUTO_ON_STATE_ENABLED
+import android.bluetooth.BluetoothAdapter.EXTRA_AUTO_ON_STATE
 import android.bluetooth.BluetoothAdapter.STATE_ON
 import android.content.BroadcastReceiver
 import android.content.ContentResolver
@@ -89,13 +94,13 @@ public fun pause() {
     timer = null
 }
 
-public fun notifyBluetoothOn(resolver: ContentResolver) {
+public fun notifyBluetoothOn(context: Context) {
     timer?.cancel()
     timer = null
 
-    if (!isFeatureSupportedForUser(resolver)) {
+    if (!isFeatureSupportedForUser(context.contentResolver)) {
         val defaultFeatureValue = true
-        if (!setFeatureEnabledForUserUnchecked(resolver, defaultFeatureValue)) {
+        if (!setFeatureEnabledForUserUnchecked(context, defaultFeatureValue)) {
             Log.e(TAG, "Failed to set feature to its default value ${defaultFeatureValue}")
         } else {
             Log.i(TAG, "Feature was set to its default value ${defaultFeatureValue}")
@@ -122,7 +127,7 @@ public fun setUserEnabled(
     if (!isUserSupported(context.contentResolver)) {
         throw IllegalStateException("AutoOnFeature not supported for user: ${context.getUser()}")
     }
-    if (!setFeatureEnabledForUserUnchecked(context.contentResolver, status)) {
+    if (!setFeatureEnabledForUserUnchecked(context, status)) {
         throw IllegalStateException("AutoOnFeature database failure for user: ${context.getUser()}")
     }
     Counter.logIncrement(
@@ -153,24 +158,23 @@ private constructor(
     looper: Looper,
     private val context: Context,
     private val receiver: BroadcastReceiver,
-    callback_on: () -> Unit,
+    private val callback_on: () -> Unit,
     private val now: LocalDateTime,
     private val target: LocalDateTime,
     private val timeToSleep: Duration
-) {
+) : AlarmManager.OnAlarmListener {
+    private val alarmManager: AlarmManager = context.getSystemService(AlarmManager::class.java)!!
+
     private val handler = Handler(looper)
 
     init {
         writeDateToStorage(target, context.contentResolver)
-        handler.postDelayed(
-            {
-                Log.i(TAG, "[${this}]: Bluetooth restarting now")
-                callback_on()
-                cancel()
-                // Set global instance to null to prevent further action. Job is done here
-                timer = null
-            },
-            timeToSleep.inWholeMilliseconds
+        alarmManager.set(
+            AlarmManager.ELAPSED_REALTIME,
+            timeToSleep.inWholeMilliseconds,
+            "Bluetooth AutoOnFeature",
+            this,
+            handler
         )
         Log.i(TAG, "[${this}]: Scheduling next Bluetooth restart")
 
@@ -184,6 +188,13 @@ private constructor(
             null,
             handler
         )
+    }
+
+    override fun onAlarm() {
+        Log.i(TAG, "[${this}]: Bluetooth restarting now")
+        callback_on()
+        cancel()
+        timer = null
     }
 
     companion object {
@@ -232,6 +243,7 @@ private constructor(
     internal fun pause() {
         Log.i(TAG, "[${this}]: Pausing timer")
         context.unregisterReceiver(receiver)
+        alarmManager.cancel(this)
         handler.removeCallbacksAndMessages(null)
     }
 
@@ -240,11 +252,13 @@ private constructor(
     internal fun cancel() {
         Log.i(TAG, "[${this}]: Cancelling timer")
         context.unregisterReceiver(receiver)
+        alarmManager.cancel(this)
         handler.removeCallbacksAndMessages(null)
         resetStorage(context.contentResolver)
     }
 
-    override fun toString() = "Timer scheduled ${now} for target=${target} (=${timeToSleep} delay)."
+    override fun toString() =
+        "Timer was scheduled at ${now} and should expire at ${target}. (sleep for ${timeToSleep})."
 }
 
 @VisibleForTesting internal val USER_SETTINGS_KEY = "bluetooth_automatic_turn_on"
@@ -272,8 +286,21 @@ private fun isFeatureSupportedForUser(resolver: ContentResolver): Boolean {
  *
  * @return whether the auto on feature is enabled for this user
  */
-private fun setFeatureEnabledForUserUnchecked(resolver: ContentResolver, status: Boolean): Boolean {
-    return Settings.Secure.putInt(resolver, USER_SETTINGS_KEY, if (status) 1 else 0)
+private fun setFeatureEnabledForUserUnchecked(context: Context, status: Boolean): Boolean {
+    val ret =
+        Settings.Secure.putInt(context.contentResolver, USER_SETTINGS_KEY, if (status) 1 else 0)
+    if (ret) {
+        context.sendBroadcast(
+            Intent(ACTION_AUTO_ON_STATE_CHANGED)
+                .addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY)
+                .putExtra(
+                    EXTRA_AUTO_ON_STATE,
+                    if (status) AUTO_ON_STATE_ENABLED else AUTO_ON_STATE_DISABLED
+                ),
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+        )
+    }
+    return ret
 }
 
 // Listener is needed because code should be actionable prior to V API release

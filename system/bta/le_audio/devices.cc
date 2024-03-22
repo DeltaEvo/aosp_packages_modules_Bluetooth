@@ -19,12 +19,15 @@
 
 #include <android_bluetooth_flags.h>
 #include <base/strings/string_number_conversions.h>
+#include <bluetooth/log.h>
 
 #include "acl_api.h"
 #include "bta_gatt_queue.h"
 #include "btif/include/btif_storage.h"
+#include "hci/controller_interface.h"
 #include "internal_include/bt_trace.h"
 #include "le_audio_utils.h"
+#include "main/shim/entry.h"
 #include "os/log.h"
 
 using bluetooth::hci::kIsoCigPhy1M;
@@ -157,9 +160,9 @@ static uint32_t GetFirstRight(const AudioLocations& audio_locations) {
 uint32_t PickAudioLocation(types::LeAudioConfigurationStrategy strategy,
                            const AudioLocations& device_locations,
                            AudioLocations& group_locations) {
-  LOG_DEBUG("strategy: %d, locations: 0x%lx, input group locations: 0x%lx",
-            (int)strategy, device_locations.to_ulong(),
-            group_locations.to_ulong());
+  log::debug("strategy: {}, locations: 0x{:x}, input group locations: 0x{:x}",
+             (int)strategy, device_locations.to_ulong(),
+             group_locations.to_ulong());
 
   auto is_left_not_yet_assigned =
       !(group_locations.to_ulong() & codec_spec_conf::kLeAudioLocationAnyLeft);
@@ -169,7 +172,7 @@ uint32_t PickAudioLocation(types::LeAudioConfigurationStrategy strategy,
   uint32_t right_device_loc = GetFirstRight(device_locations);
 
   if (left_device_loc == 0 && right_device_loc == 0) {
-    LOG_WARN("Can't find device able to render left  and right audio channel");
+    log::warn("Can't find device able to render left  and right audio channel");
   }
 
   switch (strategy) {
@@ -193,13 +196,13 @@ uint32_t PickAudioLocation(types::LeAudioConfigurationStrategy strategy,
       }
       break;
     default:
-      LOG_ALWAYS_FATAL("%s: Unknown strategy: %hhu", __func__, strategy);
+      log::fatal("Unknown strategy: {}", strategy);
       return 0;
   }
 
-  LOG_ERROR(
-      "Can't find device for left/right channel. Strategy: %hhu, "
-      "device_locations: %lx, output group_locations: %lx.",
+  log::error(
+      "Can't find device for left/right channel. Strategy: {}, "
+      "device_locations: {:x}, output group_locations: {:x}.",
       strategy, device_locations.to_ulong(), group_locations.to_ulong());
 
   /* Return either any left or any right audio location. It might result with
@@ -219,13 +222,13 @@ bool LeAudioDevice::ConfigureAses(
   /* First try to use the already configured ASE */
   auto ase = GetFirstActiveAseByDirection(direction);
   if (ase) {
-    LOG_INFO("Using an already active ASE id=%d", ase->id);
+    log::info("Using an already active ASE id={}", ase->id);
   } else {
     ase = GetFirstInactiveAse(direction, reuse_cis_id);
   }
 
   if (!ase) {
-    LOG_ERROR("Unable to find an ASE to configure");
+    log::error("Unable to find an ASE to configure");
     return false;
   }
 
@@ -309,9 +312,9 @@ bool LeAudioDevice::ConfigureAses(
       SetMetadataToAse(ase, metadata_context_types, ccid_lists);
     }
 
-    LOG_DEBUG(
-        "device=%s, activated ASE id=%d, direction=%s, max_sdu_size=%d, "
-        "cis_id=%d, target_latency=%d",
+    log::debug(
+        "device={}, activated ASE id={}, direction={}, max_sdu_size={}, "
+        "cis_id={}, target_latency={}",
         ADDRESS_TO_LOGGABLE_CSTR(address_), ase->id,
         (direction == 1 ? "snk" : "src"), ase->qos_config.max_sdu_size,
         ase->cis_id, ents[i].qos.target_latency);
@@ -330,9 +333,9 @@ bool LeAudioDevice::ConfigureAses(
 
 /* LeAudioDevice Class methods implementation */
 void LeAudioDevice::SetConnectionState(DeviceConnectState state) {
-  LOG_DEBUG("%s, %s --> %s", ADDRESS_TO_LOGGABLE_CSTR(address_),
-            bluetooth::common::ToString(connection_state_).c_str(),
-            bluetooth::common::ToString(state).c_str());
+  log::debug("{}, {} --> {}", ADDRESS_TO_LOGGABLE_CSTR(address_),
+             bluetooth::common::ToString(connection_state_),
+             bluetooth::common::ToString(state));
   LeAudioLogHistory::Get()->AddLogHistory(
       kLogConnectionTag, group_id_, address_,
       bluetooth::common::ToString(connection_state_) + " -> ",
@@ -387,11 +390,11 @@ void LeAudioDevice::RegisterPACs(
     }
     debug_str << "\n\tMetadata: "
               << base::HexEncode(pac.metadata.data(), pac.metadata.size());
-    LOG_DEBUG("%s", debug_str.str().c_str());
+    log::debug("{}", debug_str.str());
 
     if (IS_FLAG_ENABLED(leaudio_dynamic_spatial_audio)) {
       if (pac.codec_id == types::kLeAudioCodecHeadtracking) {
-        LOG(INFO) << __func__ << ": Headtracking supported";
+        log::info("Headtracking supported");
         /* Todo: Set DSA modes according to the codec configuration */
         dsa_.modes = {
             DsaMode::DISABLED,
@@ -470,7 +473,7 @@ struct ase* LeAudioDevice::GetNextActiveAseWithDifferentDirection(
 
   /* Invalid ase given */
   if (std::distance(iter, ases_.end()) < 1) {
-    LOG_DEBUG("ASE %d does not use bidirectional CIS", base_ase->id);
+    log::debug("ASE {} does not use bidirectional CIS", base_ase->id);
     return nullptr;
   }
 
@@ -609,8 +612,8 @@ bool LeAudioDevice::HaveAnyUnconfiguredAses(void) {
 bool LeAudioDevice::HaveAllActiveAsesSameState(AseState state) {
   auto iter =
       std::find_if(ases_.begin(), ases_.end(), [&state](const auto& ase) {
-        LOG_VERBOSE("ASE id: %d, active: %d, state: %s", ase.id, ase.active,
-                    bluetooth::common::ToString(ase.state).c_str());
+        log::verbose("ASE id: {}, active: {}, state: {}", ase.id, ase.active,
+                     bluetooth::common::ToString(ase.state));
         return ase.active && (ase.state != state);
       });
 
@@ -621,8 +624,8 @@ bool LeAudioDevice::HaveAllActiveAsesSameDataPathState(
     types::DataPathState state) const {
   auto iter =
       std::find_if(ases_.begin(), ases_.end(), [&state](const auto& ase) {
-        LOG_VERBOSE("ASE id: %d, active: %d, state: %s", ase.id, ase.active,
-                    bluetooth::common::ToString(ase.data_path_state).c_str());
+        log::verbose("ASE id: {}, active: {}, state: {}", ase.id, ase.active,
+                     bluetooth::common::ToString(ase.data_path_state));
         return ase.active && (ase.data_path_state != state);
       });
 
@@ -633,8 +636,8 @@ bool LeAudioDevice::IsReadyToCreateStream(void) {
   auto iter = std::find_if(ases_.begin(), ases_.end(), [](const auto& ase) {
     if (!ase.active) return false;
 
-    LOG_VERBOSE("ASE id: %d, state: %s, direction: %d", ase.id,
-                bluetooth::common::ToString(ase.state).c_str(), ase.direction);
+    log::verbose("ASE id: {}, state: {}, direction: {}", ase.id,
+                 bluetooth::common::ToString(ase.state), ase.direction);
     if (ase.direction == types::kLeAudioDirectionSink &&
         (ase.state != AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING &&
          ase.state != AseState::BTA_LE_AUDIO_ASE_STATE_ENABLING))
@@ -670,7 +673,7 @@ bool LeAudioDevice::IsReadyToSuspendStream(void) {
 
 bool LeAudioDevice::HaveAllActiveAsesCisEst(void) const {
   if (ases_.empty()) {
-    LOG_WARN("No ases for device %s", ADDRESS_TO_LOGGABLE_CSTR(address_));
+    log::warn("No ases for device {}", ADDRESS_TO_LOGGABLE_CSTR(address_));
     /* If there is no ASEs at all, it means we are good here - meaning, it is
      * not waiting for any CIS to be established.
      */
@@ -682,9 +685,8 @@ bool LeAudioDevice::HaveAllActiveAsesCisEst(void) const {
     if (!has_active_ase && ase.active) {
       has_active_ase = true;
     }
-    LOG_VERBOSE("ASE id: %d, cis_state: %s, direction: %d", ase.id,
-                bluetooth::common::ToString(ase.cis_state).c_str(),
-                ase.direction);
+    log::verbose("ASE id: {}, cis_state: {}, direction: {}", ase.id,
+                 bluetooth::common::ToString(ase.cis_state), ase.direction);
 
     return ase.active && (ase.cis_state != CisState::CONNECTED);
   });
@@ -709,7 +711,7 @@ uint8_t LeAudioDevice::GetSupportedAudioChannelCounts(uint8_t direction) const {
       direction == types::kLeAudioDirectionSink ? snk_pacs_ : src_pacs_;
 
   if (pacs.size() == 0) {
-    LOG(ERROR) << __func__ << " missing PAC for direction " << +direction;
+    log::error("missing PAC for direction {}", direction);
     return 0;
   }
 
@@ -748,7 +750,7 @@ LeAudioDevice::GetCodecConfigurationSupportedPac(
       direction == types::kLeAudioDirectionSink ? snk_pacs_ : src_pacs_;
 
   if (pacs.size() == 0) {
-    LOG_ERROR("missing PAC for direction %d", direction);
+    log::error("missing PAC for direction {}", direction);
     return nullptr;
   }
 
@@ -796,9 +798,10 @@ void LeAudioDevice::PrintDebugState(void) {
       debug_str
           << "\n  id: " << +ase.id << ", active: " << ase.active << ", dir: "
           << (ase.direction == types::kLeAudioDirectionSink ? "sink" : "source")
+          << ", state: " << bluetooth::common::ToString(ase.state)
           << ", cis_id: " << +ase.cis_id
           << ", cis_handle: " << +ase.cis_conn_hdl
-          << ", state: " << bluetooth::common::ToString(ase.cis_state)
+          << ", cis_state: " << bluetooth::common::ToString(ase.cis_state)
           << ", data_path_state: "
           << bluetooth::common::ToString(ase.data_path_state)
           << "\n ase max_latency: " << +ase.qos_config.max_transport_latency
@@ -808,19 +811,20 @@ void LeAudioDevice::PrintDebugState(void) {
           << ", presentation_delay: " << +ase.qos_config.presentation_delay
           << ", framing: " << +ase.qos_config.framing
           << ", phy: " << +ase.qos_config.phy
-          << ", target latency: " << +ase.target_latency;
+          << ", target latency: " << +ase.target_latency
+          << ", reconfigure: " << ase.reconfigure << "\n";
     }
   }
 
-  LOG_INFO("%s", debug_str.str().c_str());
+  log::info("{}", debug_str.str());
 }
 
 uint8_t LeAudioDevice::GetPreferredPhyBitmask(uint8_t preferred_phy) const {
   // Start with full local phy support
   uint8_t phy_bitmask = bluetooth::hci::kIsoCigPhy1M;
-  if (controller_get_interface()->SupportsBle2mPhy())
+  if (bluetooth::shim::GetController()->SupportsBle2mPhy())
     phy_bitmask |= bluetooth::hci::kIsoCigPhy2M;
-  if (controller_get_interface()->SupportsBleCodedPhy())
+  if (bluetooth::shim::GetController()->SupportsBleCodedPhy())
     phy_bitmask |= bluetooth::hci::kIsoCigPhyC;
 
   // Check against the remote device support
@@ -945,13 +949,11 @@ void LeAudioDevice::DisconnectAcl(void) {
 
 void LeAudioDevice::SetAvailableContexts(
     BidirectionalPair<AudioContexts> contexts) {
-  LOG_DEBUG(
-      "\n\t previous_contexts_.sink: %s \n\t previous_contexts_.source: %s  "
-      "\n\t "
-      "new_contexts.sink: %s \n\t new_contexts.source: %s \n\t ",
-      avail_contexts_.sink.to_string().c_str(),
-      avail_contexts_.source.to_string().c_str(),
-      contexts.sink.to_string().c_str(), contexts.source.to_string().c_str());
+  log::debug(
+      "\n\t previous_contexts_.sink: {} \n\t previous_contexts_.source: {}  "
+      "\n\t new_contexts.sink: {} \n\t new_contexts.source: {} \n\t",
+      avail_contexts_.sink.to_string(), avail_contexts_.source.to_string(),
+      contexts.sink.to_string(), contexts.source.to_string());
 
   avail_contexts_.sink = contexts.sink;
   avail_contexts_.source = contexts.source;
@@ -978,19 +980,19 @@ bool LeAudioDevice::ActivateConfiguredAses(
     const BidirectionalPair<AudioContexts>& metadata_context_types,
     BidirectionalPair<std::vector<uint8_t>> ccid_lists) {
   if (conn_id_ == GATT_INVALID_CONN_ID) {
-    LOG_WARN(" Device %s is not connected ",
-             ADDRESS_TO_LOGGABLE_CSTR(address_));
+    log::warn("Device {} is not connected", ADDRESS_TO_LOGGABLE_CSTR(address_));
     return false;
   }
 
   bool ret = false;
 
-  LOG_INFO(" Configuring device %s", ADDRESS_TO_LOGGABLE_CSTR(address_));
+  log::info("Configuring device {}", ADDRESS_TO_LOGGABLE_CSTR(address_));
   for (auto& ase : ases_) {
     if (ase.state == AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED &&
         ase.configured_for_context_type == context_type) {
-      LOG_INFO(
-          " conn_id: %d, ase id %d, cis id %d, cis_handle 0x%04x is activated.",
+      log::info(
+          "conn_id: {}, ase id {}, cis id {}, cis_handle 0x{:04x} is "
+          "activated.",
           conn_id_, ase.id, ase.cis_id, ase.cis_conn_hdl);
       ase.active = true;
       ret = true;
@@ -1006,12 +1008,12 @@ void LeAudioDevice::DeactivateAllAses(void) {
   for (auto& ase : ases_) {
     if (ase.active == false && ase.cis_state != CisState::IDLE &&
         ase.data_path_state != DataPathState::IDLE) {
-      LOG_WARN(
-          " %s, ase_id: %d, ase.cis_id: %d, cis_handle: 0x%02x, "
-          "ase.cis_state=%s, ase.data_path_state=%s",
+      log::warn(
+          "{}, ase_id: {}, ase.cis_id: {}, cis_handle: 0x{:02x}, "
+          "ase.cis_state={}, ase.data_path_state={}",
           ADDRESS_TO_LOGGABLE_CSTR(address_), ase.id, ase.cis_id,
-          ase.cis_conn_hdl, bluetooth::common::ToString(ase.cis_state).c_str(),
-          bluetooth::common::ToString(ase.data_path_state).c_str());
+          ase.cis_conn_hdl, bluetooth::common::ToString(ase.cis_state),
+          bluetooth::common::ToString(ase.data_path_state));
     }
     if (alarm_is_scheduled(ase.autonomous_operation_timer_)) {
       alarm_free(ase.autonomous_operation_timer_);
@@ -1022,6 +1024,7 @@ void LeAudioDevice::DeactivateAllAses(void) {
     ase.cis_state = CisState::IDLE;
     ase.data_path_state = DataPathState::IDLE;
     ase.active = false;
+    ase.reconfigure = 0;
     ase.cis_id = bluetooth::le_audio::kInvalidCisId;
     ase.cis_conn_hdl = 0;
   }
@@ -1103,8 +1106,8 @@ void LeAudioDevices::Add(const RawAddress& address, DeviceConnectState state,
                          int group_id) {
   auto device = FindByAddress(address);
   if (device != nullptr) {
-    LOG(ERROR) << __func__ << ", address: " << ADDRESS_TO_LOGGABLE_STR(address)
-               << " is already assigned to group: " << device->group_id_;
+    log::error("address: {} is already assigned to group: {}",
+               ADDRESS_TO_LOGGABLE_STR(address), device->group_id_);
     return;
   }
 
@@ -1119,8 +1122,7 @@ void LeAudioDevices::Remove(const RawAddress& address) {
                            });
 
   if (iter == leAudioDevices_.end()) {
-    LOG(ERROR) << __func__ << ", no such address: "
-               << ADDRESS_TO_LOGGABLE_STR(address);
+    log::error("no such address: {}", ADDRESS_TO_LOGGABLE_STR(address));
     return;
   }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The Android Open Source Project
+ * Copyright 2024 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,17 +16,30 @@
 
 #pragma once
 
-#include "device/include/controller.h"
+#include <cstdint>
+#include <vector>
 
-static const char GD_CONTROLLER_MODULE[] = "gd_controller_module";
+#include "types/raw_address.h"
 
 namespace bluetooth {
-namespace shim {
+namespace ras {
 
-const controller_t* controller_get_interface();
+enum ProcedureDoneStatus : uint8_t {
+  ALL_RESULTS_COMPLETE = 0x0,
+  PARTIAL_RESULTS = 0x1,
+  ABORTED = 0xf,
+};
 
-void controller_clear_event_mask();
-bool controller_is_write_link_supervision_timeout_supported();
+class RasServer {
+ public:
+  virtual ~RasServer() = default;
+  virtual void Initialize() = 0;
+  virtual void PushProcedureData(RawAddress address, uint16_t procedure_count,
+                                 ProcedureDoneStatus procedure_done_status,
+                                 std::vector<uint8_t> data) = 0;
+};
 
-}  // namespace shim
+RasServer* GetRasServer();
+
+}  // namespace ras
 }  // namespace bluetooth

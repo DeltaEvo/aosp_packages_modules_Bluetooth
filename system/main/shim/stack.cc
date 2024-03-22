@@ -18,6 +18,7 @@
 
 #include "main/shim/stack.h"
 
+#include <bluetooth/log.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -26,11 +27,11 @@
 
 #include "common/init_flags.h"
 #include "common/strings.h"
-#include "device/include/controller.h"
 #include "hal/hci_hal.h"
 #include "hci/acl_manager.h"
 #include "hci/acl_manager/acl_scheduler.h"
 #include "hci/controller.h"
+#include "hci/controller_interface.h"
 #include "hci/distance_measurement_manager.h"
 #include "hci/hci_layer.h"
 #include "hci/le_advertising_manager.h"
@@ -40,6 +41,7 @@
 #include "hci/vendor_specific_event_manager.h"
 #include "main/shim/acl_legacy_interface.h"
 #include "main/shim/distance_measurement_manager.h"
+#include "main/shim/entry.h"
 #include "main/shim/hci_layer.h"
 #include "main/shim/le_advertising_manager.h"
 #include "main/shim/le_scanning_manager.h"
@@ -63,7 +65,7 @@ Stack* Stack::GetInstance() {
 void Stack::StartEverything() {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   ASSERT_LOG(!is_running_, "%s Gd stack already running", __func__);
-  LOG_INFO("%s Starting Gd stack", __func__);
+  log::info("Starting Gd stack");
   ModuleList modules;
 
   modules.add<metrics::CounterMetrics>();
@@ -88,12 +90,11 @@ void Stack::StartEverything() {
   ASSERT(stack_manager_.GetInstance<storage::StorageModule>() != nullptr);
   ASSERT(stack_manager_.GetInstance<shim::Dumpsys>() != nullptr);
   if (stack_manager_.IsStarted<hci::Controller>()) {
-    acl_ = new legacy::Acl(
-        stack_handler_, legacy::GetAclInterface(),
-        controller_get_interface()->get_ble_acceptlist_size(),
-        controller_get_interface()->get_ble_resolving_list_max_size());
+    acl_ = new legacy::Acl(stack_handler_, legacy::GetAclInterface(),
+                           GetController()->GetLeFilterAcceptListSize(),
+                           GetController()->GetLeResolvingListSize());
   } else {
-    LOG_ERROR("Unable to create shim ACL layer as Controller has not started");
+    log::error("Unable to create shim ACL layer as Controller has not started");
   }
 
   bluetooth::shim::hci_on_reset_complete();
@@ -107,7 +108,7 @@ void Stack::StartModuleStack(const ModuleList* modules,
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   ASSERT_LOG(!is_running_, "%s Gd stack already running", __func__);
   stack_thread_ = const_cast<os::Thread*>(thread);
-  LOG_INFO("Starting Gd stack");
+  log::info("Starting Gd stack");
 
   stack_manager_.StartUp(const_cast<ModuleList*>(modules), stack_thread_);
   stack_handler_ = new os::Handler(stack_thread_);
@@ -118,7 +119,7 @@ void Stack::StartModuleStack(const ModuleList* modules,
 
 void Stack::Start(ModuleList* modules) {
   ASSERT_LOG(!is_running_, "%s Gd stack already running", __func__);
-  LOG_INFO("%s Starting Gd stack", __func__);
+  log::info("Starting Gd stack");
 
   stack_thread_ =
       new os::Thread("gd_stack_thread", os::Thread::Priority::REAL_TIME);
@@ -126,7 +127,7 @@ void Stack::Start(ModuleList* modules) {
 
   stack_handler_ = new os::Handler(stack_thread_);
 
-  LOG_INFO("%s Successfully toggled Gd stack", __func__);
+  log::info("Successfully toggled Gd stack");
 }
 
 void Stack::Stop() {
@@ -157,7 +158,7 @@ void Stack::Stop() {
   delete stack_thread_;
   stack_thread_ = nullptr;
 
-  LOG_INFO("%s Successfully shut down Gd stack", __func__);
+  log::info("Successfully shut down Gd stack");
 }
 
 bool Stack::IsRunning() {

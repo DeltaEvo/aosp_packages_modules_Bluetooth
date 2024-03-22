@@ -28,10 +28,11 @@
 #include "btm_dev.h"
 #include "btm_iso_api.h"
 #include "common/time_util.h"
-#include "device/include/controller.h"
+#include "hci/controller_interface.h"
 #include "hci/include/hci_layer.h"
 #include "internal_include/bt_trace.h"
 #include "internal_include/stack_config.h"
+#include "main/shim/entry.h"
 #include "main/shim/hci_layer.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
@@ -92,8 +93,12 @@ typedef iso_base iso_bis;
 
 struct iso_impl {
   iso_impl() {
-    iso_credits_ = controller_get_interface()->get_iso_buffer_count();
-    iso_buffer_size_ = controller_get_interface()->get_iso_data_size();
+    iso_credits_ = shim::GetController()
+                       ->GetControllerIsoBufferSize()
+                       .total_num_le_packets_;
+    iso_buffer_size_ = shim::GetController()
+                           ->GetControllerIsoBufferSize()
+                           .le_data_packet_length_;
     log::info("{} created, iso credits: {}, buffer size: {}.", fmt::ptr(this),
               iso_credits_.load(), iso_buffer_size_);
   }

@@ -37,7 +37,6 @@
 #include <vector>
 
 #include "common/bidi_queue.h"
-#include "device/include/controller.h"
 #include "device/include/device_iot_config.h"
 #include "hci/class_of_device.h"
 #include "hci/controller_interface.h"
@@ -268,8 +267,8 @@ static void btm_esco_conn_rsp(uint16_t sco_inx, uint8_t hci_status,
       *p_setup = btm_cb.sco_cb.def_esco_parms;
     }
     /* Use Enhanced Synchronous commands if supported */
-    if (controller_get_interface()
-            ->supports_enhanced_setup_synchronous_connection() &&
+    if (bluetooth::shim::GetController()->IsSupported(
+            bluetooth::hci::OpCode::ENHANCED_SETUP_SYNCHRONOUS_CONNECTION) &&
         !osi_property_get_bool(kPropertyDisableEnhancedConnection,
                                kDefaultDisableEnhancedConnection)) {
       log::verbose(
@@ -598,8 +597,8 @@ static tBTM_STATUS btm_send_connect_request(uint16_t acl_handle,
     p_setup->packet_types = temp_packet_types;
 
     /* Use Enhanced Synchronous commands if supported */
-    if (controller_get_interface()
-            ->supports_enhanced_setup_synchronous_connection() &&
+    if (bluetooth::shim::GetController()->IsSupported(
+            bluetooth::hci::OpCode::ENHANCED_SETUP_SYNCHRONOUS_CONNECTION) &&
         !osi_property_get_bool(kPropertyDisableEnhancedConnection,
                                kDefaultDisableEnhancedConnection)) {
       log::info("Sending enhanced SCO connect request over handle:0x{:04x}",
@@ -743,8 +742,9 @@ tBTM_STATUS BTM_CreateSco(const RawAddress* remote_bda, bool is_orig,
       p_setup->packet_types = pkt_types & BTM_SCO_SUPPORTED_PKTS_MASK &
                               btm_cb.btm_sco_pkt_types_supported;
       /* OR in any exception packet types */
-      if (controller_get_interface()->get_bt_version()->hci_version >=
-          HCI_PROTO_VERSION_2_0) {
+      if (bluetooth::shim::GetController()
+              ->GetLocalVersionInformation()
+              .hci_version_ >= bluetooth::hci::HciVersion::V_2_0) {
         p_setup->packet_types |=
             (pkt_types & BTM_SCO_EXCEPTION_PKTS_MASK) |
             (btm_cb.btm_sco_pkt_types_supported & BTM_SCO_EXCEPTION_PKTS_MASK);
@@ -1493,8 +1493,8 @@ static tBTM_STATUS BTM_ChangeEScoLinkParms(uint16_t sco_inx,
         temp_packet_types);
 
     /* Use Enhanced Synchronous commands if supported */
-    if (controller_get_interface()
-            ->supports_enhanced_setup_synchronous_connection() &&
+    if (bluetooth::shim::GetController()->IsSupported(
+            bluetooth::hci::OpCode::ENHANCED_SETUP_SYNCHRONOUS_CONNECTION) &&
         !osi_property_get_bool(kPropertyDisableEnhancedConnection,
                                kDefaultDisableEnhancedConnection)) {
       btsnd_hcic_enhanced_set_up_synchronous_connection(p_sco->hci_handle,

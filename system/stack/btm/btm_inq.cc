@@ -37,10 +37,10 @@
 #include <mutex>
 
 #include "advertise_data_parser.h"
+#include "bt_name.h"
 #include "btif/include/btif_acl.h"
 #include "btif/include/btif_config.h"
 #include "common/time_util.h"
-#include "device/include/controller.h"
 #include "hci/controller_interface.h"
 #include "hci/event_checkers.h"
 #include "hci/hci_layer.h"
@@ -58,6 +58,7 @@
 #include "packet/bit_inserter.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/btm/btm_sec.h"
+#include "stack/btm/neighbor_inquiry.h"
 #include "stack/include/acl_api_types.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_lap.h"
@@ -285,7 +286,7 @@ tBTM_STATUS BTM_SetDiscoverability(uint16_t inq_mode) {
   bool cod_limited;
 
   log::verbose("");
-  if (controller_get_interface()->SupportsBle()) {
+  if (bluetooth::shim::GetController()->SupportsBle()) {
     if (btm_ble_set_discoverability((uint16_t)(inq_mode)) == BTM_SUCCESS) {
       btm_cb.btm_inq_vars.discoverable_mode &= (~BTM_BLE_DISCOVERABLE_MASK);
       btm_cb.btm_inq_vars.discoverable_mode |=
@@ -296,9 +297,6 @@ tBTM_STATUS BTM_SetDiscoverability(uint16_t inq_mode) {
 
   /*** Check mode parameter ***/
   if (inq_mode > BTM_MAX_DISCOVERABLE) return (BTM_ILLEGAL_VALUE);
-
-  /* Make sure the controller is active */
-  if (!controller_get_interface()->get_is_ready()) return (BTM_DEV_RESET);
 
   /* If the window and/or interval is '0', set to default values */
   log::verbose("mode {} [NonDisc-0, Lim-1, Gen-2]", inq_mode);
@@ -446,7 +444,7 @@ tBTM_STATUS BTM_SetInquiryMode(uint8_t mode) {
 tBTM_STATUS BTM_SetConnectability(uint16_t page_mode) {
   uint8_t scan_mode = 0;
 
-  if (controller_get_interface()->SupportsBle()) {
+  if (bluetooth::shim::GetController()->SupportsBle()) {
     if (btm_ble_set_connectability(page_mode) != BTM_SUCCESS) {
       return BTM_NO_RESOURCES;
     }
@@ -459,9 +457,6 @@ tBTM_STATUS BTM_SetConnectability(uint16_t page_mode) {
   /*** Check mode parameter ***/
   if (page_mode != BTM_NON_CONNECTABLE && page_mode != BTM_CONNECTABLE)
     return (BTM_ILLEGAL_VALUE);
-
-  /* Make sure the controller is active */
-  if (!controller_get_interface()->get_is_ready()) return (BTM_DEV_RESET);
 
   /*** Only check window and duration if mode is connectable ***/
   if (page_mode == BTM_CONNECTABLE) {
@@ -619,7 +614,7 @@ static void btm_classic_inquiry_timeout(UNUSED_ATTR void* data) {
  ******************************************************************************/
 static tBTM_STATUS BTM_StartLeScan() {
   if (!bluetooth::shim::is_classic_discovery_only_enabled()) {
-    if (controller_get_interface()->SupportsBle()) {
+    if (shim::GetController()->SupportsBle()) {
       btm_ble_start_inquiry(btm_cb.btm_inq_vars.inqparms.duration);
       return BTM_CMD_STARTED;
     } else {
@@ -1994,18 +1989,14 @@ void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn,
       /* Copy the name from the data stream into the return structure */
       /* Note that even if it is not being returned, it is used as a  */
       /*      temporary buffer.                                       */
-      rem_name.length = (evt_len < BD_NAME_LEN) ? evt_len : BD_NAME_LEN;
       rem_name.status = BTM_SUCCESS;
       rem_name.hci_status = hci_status;
-
       bd_name_copy(rem_name.remote_bd_name, bdn);
-      rem_name.remote_bd_name[rem_name.length] = 0;
     } else {
       /* If processing a stand alone remote name then report the error in the
          callback */
       rem_name.status = BTM_BAD_VALUE_RET;
       rem_name.hci_status = hci_status;
-      rem_name.length = 0;
       rem_name.remote_bd_name[0] = 0;
     }
     /* Reset the remote BAD to zero and call callback if possible */

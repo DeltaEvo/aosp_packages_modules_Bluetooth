@@ -24,7 +24,6 @@
 #include <string>
 
 #include "common/sync_map_count.h"
-#include "device/include/controller.h"
 #include "hci/acl_manager.h"
 #include "hci/acl_manager/classic_acl_connection.h"
 #include "hci/acl_manager/le_acl_connection.h"
@@ -223,10 +222,6 @@ void shim::legacy::Acl::Shutdown() { inc_func_call_count(__func__); }
 void shim::legacy::Acl::FinalShutdown() { inc_func_call_count(__func__); }
 
 void shim::legacy::Acl::ClearFilterAcceptList() {
-  inc_func_call_count(__func__);
-}
-
-void shim::legacy::Acl::LeRand(LeRandCallback /* cb */) {
   inc_func_call_count(__func__);
 }
 

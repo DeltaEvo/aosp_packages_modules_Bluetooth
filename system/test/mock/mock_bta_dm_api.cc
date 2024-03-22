@@ -25,6 +25,7 @@
 
 #include <cstdint>
 
+#include "hci/le_rand_callback.h"
 #include "test/common/mock_functions.h"
 
 // Original usings
@@ -44,7 +45,6 @@ struct BTA_DmBleConfigLocalPrivacy BTA_DmBleConfigLocalPrivacy;
 struct BTA_DmBleConfirmReply BTA_DmBleConfirmReply;
 struct BTA_DmBleCsisObserve BTA_DmBleCsisObserve;
 struct BTA_DmBleGetEnergyInfo BTA_DmBleGetEnergyInfo;
-struct BTA_DmBleObserve BTA_DmBleObserve;
 struct BTA_DmBlePasskeyReply BTA_DmBlePasskeyReply;
 struct BTA_DmBleRequestMaxTxDataLength BTA_DmBleRequestMaxTxDataLength;
 struct BTA_DmBleResetId BTA_DmBleResetId;
@@ -145,11 +145,6 @@ void BTA_DmBleGetEnergyInfo(tBTA_BLE_ENERGY_INFO_CBACK* p_cmpl_cback) {
   inc_func_call_count(__func__);
   test::mock::bta_dm_api::BTA_DmBleGetEnergyInfo(p_cmpl_cback);
 }
-void BTA_DmBleObserve(bool start, uint8_t duration,
-                      tBTA_DM_SEARCH_CBACK* p_results_cb) {
-  inc_func_call_count(__func__);
-  test::mock::bta_dm_api::BTA_DmBleObserve(start, duration, p_results_cb);
-}
 void BTA_DmBlePasskeyReply(const RawAddress& bd_addr, bool accept,
                            uint32_t passkey) {
   inc_func_call_count(__func__);
@@ -235,7 +230,7 @@ bool BTA_DmGetConnectionState(const RawAddress& bd_addr) {
   inc_func_call_count(__func__);
   return test::mock::bta_dm_api::BTA_DmGetConnectionState(bd_addr);
 }
-void BTA_DmLeRand(LeRandCallback cb) {
+void BTA_DmLeRand(bluetooth::hci::LeRandCallback cb) {
   inc_func_call_count(__func__);
   test::mock::bta_dm_api::BTA_DmLeRand(std::move(cb));
 }

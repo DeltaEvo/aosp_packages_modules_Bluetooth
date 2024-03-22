@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 The Android Open Source Project
+ * Copyright 2024 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,17 @@
  * limitations under the License.
  */
 
-#include "device/include/controller.h"
+#pragma once
+
+#include <cstddef>
 
 namespace bluetooth {
 namespace testing {
 
-extern const controller_t* controller;
+struct raw_packet_t {
+  const unsigned char* data;
+  size_t len;
+};
 
-}
+}  // namespace testing
 }  // namespace bluetooth

@@ -62,6 +62,7 @@ import androidx.annotation.VisibleForTesting;
 import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.RemoteDevices.DeviceProperties;
+import com.android.bluetooth.flags.Flags;
 import com.android.modules.utils.build.SdkLevel;
 
 import com.google.common.collect.EvictingQueue;
@@ -74,8 +75,6 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 class AdapterProperties {
-    private static final boolean DBG = true;
-    private static final boolean VDBG = false;
     private static final String TAG = "AdapterProperties";
 
     private static final String MAX_CONNECTED_AUDIO_DEVICES_PROPERTY =
@@ -671,16 +670,22 @@ class AdapterProperties {
 
     void cleanupPrevBondRecordsFor(BluetoothDevice currentDevice) {
         String currentAddress = currentDevice.getAddress();
-        String currentIdentityAddress = mService.getIdentityAddress(currentAddress);
+        String currentBrEdrAddress =
+                Flags.identityAddressNullIfUnknown()
+                        ? Utils.getBrEdrAddress(currentDevice)
+                        : mService.getIdentityAddress(currentAddress);
         debugLog("cleanupPrevBondRecordsFor: " + currentDevice);
-        if (currentIdentityAddress == null) {
+        if (currentBrEdrAddress == null) {
             return;
         }
 
         for (BluetoothDevice device : mBondedDevices) {
             String address = device.getAddress();
-            String identityAddress = mService.getIdentityAddress(address);
-            if (currentIdentityAddress.equals(identityAddress) && !currentAddress.equals(address)) {
+            String brEdrAddress =
+                    Flags.identityAddressNullIfUnknown()
+                            ? Utils.getBrEdrAddress(device)
+                            : mService.getIdentityAddress(address);
+            if (currentBrEdrAddress.equals(brEdrAddress) && !currentAddress.equals(address)) {
                 if (mService.getNative()
                         .removeBond(Utils.getBytesFromAddress(device.getAddress()))) {
                     mBondedDevices.remove(device);
@@ -756,7 +761,8 @@ class AdapterProperties {
         if (state == BluetoothProfile.STATE_CONNECTING) {
             BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_DEVICE_NAME_REPORTED,
                     metricId, device.getName());
-            MetricsLogger.getInstance().logSanitizedBluetoothDeviceName(metricId, device.getName());
+            MetricsLogger.getInstance()
+                    .logAllowlistedDeviceNameHash(metricId, device.getName(), true);
         }
         BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_CONNECTION_STATE_CHANGED, state,
                 0 /* deprecated */, profile, mService.obfuscateAddress(device),
@@ -1239,15 +1245,25 @@ class AdapterProperties {
         StringBuilder sb = new StringBuilder();
         for (BluetoothDevice device : mBondedDevices) {
             String address = device.getAddress();
-            String identityAddress = mService.getIdentityAddress(address);
-            if (identityAddress.equals(address)) {
+            String brEdrAddress =
+                    Flags.identityAddressNullIfUnknown()
+                            ? Utils.getBrEdrAddress(device)
+                            : mService.getIdentityAddress(address);
+            if (brEdrAddress.equals(address)) {
                 writer.println("    " + address
                             + " [" + dumpDeviceType(device.getType()) + "] "
                             + Utils.getName(device));
             } else {
-                sb.append("    " + address + " => " + identityAddress
-                            + " [" + dumpDeviceType(device.getType()) + "] "
-                            + Utils.getName(device) + "\n");
+                sb.append(
+                        "    "
+                                + address
+                                + " => "
+                                + brEdrAddress
+                                + " ["
+                                + dumpDeviceType(device.getType())
+                                + "] "
+                                + Utils.getName(device)
+                                + "\n");
             }
         }
         writer.println(sb.toString());
@@ -1303,15 +1319,11 @@ class AdapterProperties {
     }
 
     private static void infoLog(String msg) {
-        if (VDBG) {
-            Log.i(TAG, msg);
-        }
+        Log.i(TAG, msg);
     }
 
     private static void debugLog(String msg) {
-        if (DBG) {
-            Log.d(TAG, msg);
-        }
+        Log.d(TAG, msg);
     }
 
     private static void errorLog(String msg) {

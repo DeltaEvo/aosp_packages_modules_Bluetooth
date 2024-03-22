@@ -56,13 +56,13 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
 
 /** Remote device manager. This class is currently mostly used for HF and AG remote devices. */
 public class RemoteDevices {
-    private static final boolean DBG = false;
     private static final String TAG = "BluetoothRemoteDevices";
 
     // Maximum number of device properties to remember
@@ -1032,7 +1032,7 @@ public class RemoteDevices {
         intent.putExtra(BluetoothDevice.EXTRA_IS_COORDINATED_SET_MEMBER,
                 deviceProp.isCoordinatedSetMember());
 
-        final ArrayList<DiscoveringPackage> packages = mAdapterService.getDiscoveringPackages();
+        final List<DiscoveringPackage> packages = mAdapterService.getDiscoveringPackages();
         synchronized (packages) {
             for (DiscoveringPackage pkg : packages) {
                 if (pkg.hasDisavowedLocation()) {
@@ -1551,15 +1551,11 @@ public class RemoteDevices {
     }
 
     private static void debugLog(String msg) {
-        if (DBG) {
-            Log.d(TAG, msg);
-        }
+        Log.d(TAG, msg);
     }
 
     private static void infoLog(String msg) {
-        if (DBG) {
-            Log.i(TAG, msg);
-        }
+        Log.i(TAG, msg);
     }
 
     private static void warnLog(String msg) {

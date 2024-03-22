@@ -38,7 +38,6 @@
 
 #include "bta/include/bta_api.h"
 #include "common/time_util.h"
-#include "device/include/controller.h"
 #include "hci/controller.h"
 #include "hci/controller_interface.h"
 #include "include/check.h"
@@ -469,10 +468,9 @@ const uint8_t btm_le_state_combo_tbl[BTM_BLE_STATE_MAX][BTM_BLE_STATE_MAX] = {
     }};
 
 /* check LE combo state supported */
-inline bool BTM_LE_STATES_SUPPORTED(const uint8_t* x, uint8_t bit_num) {
-  uint8_t mask = 1 << (bit_num % 8);
-  uint8_t offset = bit_num / 8;
-  return ((x)[offset] & mask);
+inline bool BTM_LE_STATES_SUPPORTED(const uint64_t x, uint8_t bit_num) {
+  uint64_t mask = 1 << bit_num;
+  return ((x)&mask);
 }
 
 void BTM_BleOpportunisticObserve(bool enable,
@@ -532,6 +530,10 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration,
                              ? BTM_BLE_GAP_DISC_SCAN_WIN
                              : btm_cb.ble_ctr_cb.inq_var.scan_window;
 
+  uint8_t scan_phy = !btm_cb.ble_ctr_cb.inq_var.scan_phy
+                         ? BTM_BLE_DEFAULT_PHYS
+                         : btm_cb.ble_ctr_cb.inq_var.scan_phy;
+
   // use low latency scanning if the scanning is active
   uint16_t ll_scan_interval, ll_scan_window;
   std::tie(ll_scan_interval, ll_scan_window) = get_low_latency_scan_params();
@@ -543,7 +545,8 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration,
   log::verbose("scan_type:{}, {}, {}", btm_cb.ble_ctr_cb.inq_var.scan_type,
                scan_interval, scan_window);
 
-  if (!controller_get_interface()->SupportsBle()) return BTM_ILLEGAL_VALUE;
+  if (!bluetooth::shim::GetController()->SupportsBle())
+    return BTM_ILLEGAL_VALUE;
 
   if (start) {
     /* shared inquiry database, do not allow observe if any inquiry is active.
@@ -593,8 +596,8 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration,
               : btm_cb.ble_ctr_cb.inq_var.scan_type;
       btm_send_hci_set_scan_params(
           btm_cb.ble_ctr_cb.inq_var.scan_type, (uint16_t)scan_interval,
-          (uint16_t)scan_window, btm_cb.ble_ctr_cb.addr_mgnt_cb.own_addr_type,
-          BTM_BLE_DEFAULT_SFP);
+          (uint8_t)scan_phy, (uint16_t)scan_window,
+          btm_cb.ble_ctr_cb.addr_mgnt_cb.own_addr_type, BTM_BLE_DEFAULT_SFP);
 
       btm_ble_start_scan();
     }
@@ -758,8 +761,9 @@ static void btm_ble_vendor_capability_vsc_cmpl_cback(
   }
 
   if (btm_cb.cmn_ble_vsc_cb.filter_support == 1 &&
-      controller_get_interface()->get_bt_version()->manufacturer ==
-          LMP_COMPID_QTI) {
+      bluetooth::shim::GetController()
+              ->GetLocalVersionInformation()
+              .manufacturer_name_ == LMP_COMPID_QTI) {
     // QTI controller, TDS data filter are supported by default. Check is added
     // to keep backward compatibility.
     btm_cb.cmn_ble_vsc_cb.adv_filter_extended_features_mask = 0x01;
@@ -779,10 +783,10 @@ static void btm_ble_vendor_capability_vsc_cmpl_cback(
   if (btm_cb.cmn_ble_vsc_cb.max_filter > 0) btm_ble_adv_filter_init();
 
   /* VS capability included and non-4.2 device */
-  if (controller_get_interface()->SupportsBle() &&
-      controller_get_interface()->SupportsBlePrivacy() &&
+  if (bluetooth::shim::GetController()->SupportsBle() &&
+      bluetooth::shim::GetController()->SupportsBlePrivacy() &&
       btm_cb.cmn_ble_vsc_cb.max_irk_list_sz > 0 &&
-      controller_get_interface()->get_ble_resolving_list_max_size() == 0)
+      bluetooth::shim::GetController()->GetLeResolvingListSize() == 0)
     btm_ble_resolving_list_init(btm_cb.cmn_ble_vsc_cb.max_irk_list_sz);
 
   if (p_ctrl_le_feature_rd_cmpl_cback != NULL)
@@ -838,8 +842,8 @@ void BTM_BleReadControllerFeatures(tBTM_BLE_CTRL_FEATURES_CBACK* p_vsc_cback) {
 
   if (IS_FLAG_ENABLED(report_vsc_data_from_the_gd_controller)) {
     btm_cb.cmn_ble_vsc_cb.values_read = true;
-    bluetooth::hci::Controller::VendorCapabilities vendor_capabilities =
-        GetController()->GetVendorCapabilities();
+    bluetooth::hci::ControllerInterface::VendorCapabilities
+        vendor_capabilities = GetController()->GetVendorCapabilities();
 
     btm_cb.cmn_ble_vsc_cb.adv_inst_max =
         vendor_capabilities.max_advt_instances_;
@@ -942,7 +946,7 @@ bool BTM_BleConfigPrivacy(bool privacy_mode) {
   log::warn("{}", (int)privacy_mode);
 
   /* if LE is not supported, return error */
-  if (!controller_get_interface()->SupportsBle()) return false;
+  if (!bluetooth::shim::GetController()->SupportsBle()) return false;
 
   tGAP_BLE_ATTR_VALUE gap_ble_attr_value;
   gap_ble_attr_value.addr_resolution = 0;
@@ -955,11 +959,10 @@ bool BTM_BleConfigPrivacy(bool privacy_mode) {
     /* always set host random address, used when privacy 1.1 or priavcy 1.2 is
      * disabled */
     btm_cb.ble_ctr_cb.addr_mgnt_cb.own_addr_type = BLE_ADDR_RANDOM;
-    btm_gen_resolvable_private_addr(base::Bind(&btm_gen_resolve_paddr_low));
 
     /* 4.2 controller only allow privacy 1.2 or mixed mode, resolvable private
      * address in controller */
-    if (controller_get_interface()->SupportsBlePrivacy()) {
+    if (bluetooth::shim::GetController()->SupportsBlePrivacy()) {
       gap_ble_attr_value.addr_resolution = 1;
       btm_cb.ble_ctr_cb.privacy_mode = BTM_PRIVACY_1_2;
     } else /* 4.1/4.0 controller */
@@ -1851,7 +1854,7 @@ tBTM_STATUS btm_ble_set_connectability(uint16_t combined_mode) {
 
 static void btm_send_hci_scan_enable(uint8_t enable,
                                      uint8_t filter_duplicates) {
-  if (controller_get_interface()->SupportsBleExtendedAdvertising()) {
+  if (bluetooth::shim::GetController()->SupportsBleExtendedAdvertising()) {
     btsnd_hcic_ble_set_extended_scan_enable(enable, filter_duplicates, 0x0000,
                                             0x0000);
   } else {
@@ -1860,17 +1863,22 @@ static void btm_send_hci_scan_enable(uint8_t enable,
 }
 
 void btm_send_hci_set_scan_params(uint8_t scan_type, uint16_t scan_int,
-                                  uint16_t scan_win,
+                                  uint16_t scan_win, uint8_t scan_phy,
                                   tBLE_ADDR_TYPE addr_type_own,
                                   uint8_t scan_filter_policy) {
-  if (controller_get_interface()->SupportsBleExtendedAdvertising()) {
+  if (bluetooth::shim::GetController()->SupportsBleExtendedAdvertising()) {
     scanning_phy_cfg phy_cfg;
     phy_cfg.scan_type = scan_type;
     phy_cfg.scan_int = scan_int;
     phy_cfg.scan_win = scan_win;
 
-    btsnd_hcic_ble_set_extended_scan_params(addr_type_own, scan_filter_policy,
-                                            1, &phy_cfg);
+    if (IS_FLAG_ENABLED(phy_to_native)) {
+      btsnd_hcic_ble_set_extended_scan_params(addr_type_own, scan_filter_policy,
+                                              scan_phy, &phy_cfg);
+    } else {
+      btsnd_hcic_ble_set_extended_scan_params(addr_type_own, scan_filter_policy,
+                                              1, &phy_cfg);
+    }
   } else {
     btsnd_hcic_ble_set_scan_params(scan_type, scan_int, scan_win, addr_type_own,
                                    scan_filter_policy);
@@ -1930,12 +1938,14 @@ tBTM_STATUS btm_ble_start_inquiry(uint8_t duration) {
                  std::move(adv_filt_param), base::Bind(btm_ble_scan_filt_param_cfg_evt));
 
   uint16_t scan_interval, scan_window;
+
   std::tie(scan_interval, scan_window) = get_low_latency_scan_params();
+  uint8_t scan_phy = BTM_BLE_DEFAULT_PHYS;
 
   if (!btm_cb.ble_ctr_cb.is_ble_scan_active()) {
     cache.ClearAll();
     btm_send_hci_set_scan_params(
-        BTM_BLE_SCAN_MODE_ACTI, scan_interval, scan_window,
+        BTM_BLE_SCAN_MODE_ACTI, scan_interval, scan_window, scan_phy,
         btm_cb.ble_ctr_cb.addr_mgnt_cb.own_addr_type, SP_ADV_ALL);
     btm_cb.ble_ctr_cb.inq_var.scan_type = BTM_BLE_SCAN_MODE_ACTI;
     btm_ble_start_scan();
@@ -1948,7 +1958,7 @@ tBTM_STATUS btm_ble_start_inquiry(uint8_t duration) {
     }
     btm_send_hci_scan_enable(BTM_BLE_SCAN_DISABLE, BTM_BLE_DUPLICATE_ENABLE);
     btm_send_hci_set_scan_params(
-        BTM_BLE_SCAN_MODE_ACTI, scan_interval, scan_window,
+        BTM_BLE_SCAN_MODE_ACTI, scan_interval, scan_window, scan_phy,
         btm_cb.ble_ctr_cb.addr_mgnt_cb.own_addr_type, SP_ADV_ALL);
     btm_send_hci_scan_enable(BTM_BLE_SCAN_ENABLE, BTM_BLE_DUPLICATE_DISABLE);
   }
@@ -1988,12 +1998,7 @@ void btm_ble_read_remote_name_cmpl(bool status, const RawAddress& bda,
                                    uint16_t length, char* p_name) {
   tHCI_STATUS hci_status = HCI_SUCCESS;
   BD_NAME bd_name;
-
-  memset(bd_name, 0, (BD_NAME_LEN + 1));
-  if (length > BD_NAME_LEN) {
-    length = BD_NAME_LEN;
-  }
-  memcpy((uint8_t*)bd_name, p_name, length);
+  bd_name_from_char_pointer(bd_name, p_name);
 
   if ((!status) || (length == 0)) {
     hci_status = HCI_ERR_HOST_TIMEOUT;
@@ -2017,7 +2022,8 @@ void btm_ble_read_remote_name_cmpl(bool status, const RawAddress& bda,
  ******************************************************************************/
 tBTM_STATUS btm_ble_read_remote_name(const RawAddress& remote_bda,
                                      tBTM_NAME_CMPL_CB* p_cb) {
-  if (!controller_get_interface()->SupportsBle()) return BTM_ERR_PROCESSING;
+  if (!bluetooth::shim::GetController()->SupportsBle())
+    return BTM_ERR_PROCESSING;
 
   tINQ_DB_ENT* p_i = btm_inq_db_find(remote_bda);
   if (p_i && !ble_evt_type_is_connectable(p_i->inq_info.results.ble_evt_type)) {
@@ -3218,8 +3224,8 @@ bool btm_ble_topology_check(tBTM_BLE_STATE_MASK request_state_mask) {
 
   /* check if the requested state is supported or not */
   uint8_t bit_num = btm_le_state_combo_tbl[0][request_state - 1];
-  const uint8_t* ble_supported_states =
-      controller_get_interface()->get_ble_supported_states();
+  uint64_t ble_supported_states =
+      bluetooth::shim::GetController()->GetLeSupportedStates();
 
   if (!BTM_LE_STATES_SUPPORTED(ble_supported_states, bit_num)) {
     log::error("state requested not supported: {}", request_state);

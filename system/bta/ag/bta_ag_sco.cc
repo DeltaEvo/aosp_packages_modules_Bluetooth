@@ -33,11 +33,13 @@
 #include "bta/ag/bta_ag_int.h"
 #include "bta_ag_swb_aptx.h"
 #include "common/init_flags.h"
-#include "device/include/controller.h"
+#include "hci/controller_interface.h"
 #include "internal_include/bt_target.h"
 #include "internal_include/bt_trace.h"
+#include "main/shim/entry.h"
 #include "os/log.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
+#include "osi/include/properties.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/btm/btm_sco.h"
 #include "stack/btm/btm_sco_hfp_hal.h"
@@ -222,8 +224,8 @@ static void bta_ag_sco_disc_cback(uint16_t sco_idx) {
     if (bta_ag_cb.sco.p_curr_scb->inuse_codec == UUID_CODEC_MSBC ||
         bta_ag_cb.sco.p_curr_scb->inuse_codec == UUID_CODEC_LC3 || aptx_voice) {
       /* Bypass vendor specific and voice settings if enhanced eSCO supported */
-      if (!(controller_get_interface()
-                ->supports_enhanced_setup_synchronous_connection())) {
+      if (!(bluetooth::shim::GetController()->IsSupported(
+              bluetooth::hci::OpCode::ENHANCED_SETUP_SYNCHRONOUS_CONNECTION))) {
         BTM_WriteVoiceSettings(BTM_VOICE_SETTING_CVSD);
       }
 
@@ -267,7 +269,7 @@ static void bta_ag_sco_disc_cback(uint16_t sco_idx) {
         log::warn("eSCO/SCO failed to open, retry with retransmission_effort");
       } else {
         log::error("eSCO/SCO failed to open, no more fall back");
-        if (IS_FLAG_ENABLED(is_sco_managed_by_audio)) {
+        if (bta_ag_is_sco_managed_by_audio()) {
           hfp_offload_interface->CancelStreamingRequest();
         }
       }
@@ -551,7 +553,7 @@ void bta_ag_create_sco(tBTA_AG_SCB* p_scb, bool is_orig) {
 
 void updateCodecParametersFromProviderInfo(tBTA_AG_PEER_CODEC esco_codec,
                                            enh_esco_params_t& params) {
-  if (IS_FLAG_ENABLED(is_sco_managed_by_audio) && !sco_config_map.empty()) {
+  if (bta_ag_is_sco_managed_by_audio() && !sco_config_map.empty()) {
     auto sco_config_it = sco_config_map.find(esco_codec);
     if (sco_config_it == sco_config_map.end()) {
       log::error("cannot find sco config for esco_codec index={}", esco_codec);
@@ -631,8 +633,8 @@ void bta_ag_create_pending_sco(tBTA_AG_SCB* p_scb, bool is_local) {
     }
 
     /* Bypass voice settings if enhanced SCO setup command is supported */
-    if (!(controller_get_interface()
-              ->supports_enhanced_setup_synchronous_connection())) {
+    if (!(bluetooth::shim::GetController()->IsSupported(
+            bluetooth::hci::OpCode::ENHANCED_SETUP_SYNCHRONOUS_CONNECTION))) {
       if (esco_codec == UUID_CODEC_MSBC || esco_codec == UUID_CODEC_LC3) {
         BTM_WriteVoiceSettings(BTM_VOICE_SETTING_TRANS);
       } else {
@@ -1462,7 +1464,7 @@ void bta_ag_sco_conn_open(tBTA_AG_SCB* p_scb,
   bta_ag_sco_event(p_scb, BTA_AG_SCO_CONN_OPEN_E);
   bta_sys_sco_open(BTA_ID_AG, p_scb->app_id, p_scb->peer_addr);
 
-  if (IS_FLAG_ENABLED(is_sco_managed_by_audio)) {
+  if (bta_ag_is_sco_managed_by_audio()) {
     // ConfirmStreamingRequest before sends callback to java layer
     hfp_offload_interface->ConfirmStreamingRequest();
 
@@ -1567,10 +1569,11 @@ void bta_ag_sco_conn_rsp(tBTA_AG_SCB* p_scb,
                          tBTM_ESCO_CONN_REQ_EVT_DATA* p_data) {
   bta_ag_cb.sco.is_local = false;
 
-  log::verbose("eSCO {}, state {}",
-               controller_get_interface()
-                   ->supports_enhanced_setup_synchronous_connection(),
-               bta_ag_cb.sco.state);
+  log::verbose(
+      "eSCO {}, state {}",
+      bluetooth::shim::GetController()->IsSupported(
+          bluetooth::hci::OpCode::ENHANCED_SETUP_SYNCHRONOUS_CONNECTION),
+      bta_ag_cb.sco.state);
 
   if (bta_ag_cb.sco.state == BTA_AG_SCO_LISTEN_ST ||
       bta_ag_cb.sco.state == BTA_AG_SCO_CLOSE_XFER_ST ||
@@ -1599,11 +1602,21 @@ void bta_ag_set_sco_allowed(bool value) {
   log::verbose("{}", sco_allowed ? "sco now allowed" : "sco now not allowed");
 }
 
+bool bta_ag_is_sco_managed_by_audio() {
+  bool value = false;
+  if (IS_FLAG_ENABLED(is_sco_managed_by_audio)) {
+    value = osi_property_get_bool("bluetooth.sco.managed_by_audio", false);
+    log::verbose("is_sco_managed_by_audio enabled={}",
+                 value ? "true" : "false");
+  }
+  return value;
+}
+
 const RawAddress& bta_ag_get_active_device() { return active_device_addr; }
 
 void bta_clear_active_device() {
   log::debug("Set bta active device to null");
-  if (IS_FLAG_ENABLED(is_sco_managed_by_audio)) {
+  if (bta_ag_is_sco_managed_by_audio()) {
     if (hfp_offload_interface && !active_device_addr.IsEmpty()) {
       hfp_offload_interface->StopSession();
     }
@@ -1617,7 +1630,7 @@ void bta_ag_api_set_active_device(const RawAddress& new_active_device) {
     return;
   }
 
-  if (IS_FLAG_ENABLED(is_sco_managed_by_audio)) {
+  if (bta_ag_is_sco_managed_by_audio()) {
     if (!hfp_client_interface) {
       hfp_client_interface = std::unique_ptr<HfpInterface>(HfpInterface::Get());
       if (!hfp_client_interface) {

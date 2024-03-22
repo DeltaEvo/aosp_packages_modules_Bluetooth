@@ -15,12 +15,15 @@
  */
 package com.android.server.bluetooth.test
 
+import android.app.AlarmManager
+import android.app.Application
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.content.Intent
 import android.os.Looper
 import android.provider.Settings
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.truth.content.IntentSubject.assertThat
 import com.android.server.bluetooth.BluetoothAdapterState
 import com.android.server.bluetooth.HiddenApiListener
 import com.android.server.bluetooth.Log
@@ -163,7 +166,11 @@ class AutoOnFeatureTest {
     fun setupTimer_whenBtOffAndUserEnabled_triggerCallback() {
         setupTimer()
 
-        shadowOf(looper).runToEndOfTasks()
+        val shadowAlarmManager = shadowOf(context.getSystemService(AlarmManager::class.java))
+        shadowAlarmManager.fireAlarm(shadowAlarmManager.peekNextScheduledAlarm())
+
+        shadowOf(looper).runOneTask()
+
         expect.that(callback_count).isEqualTo(1)
         expect.that(timer).isNull()
     }
@@ -174,14 +181,18 @@ class AutoOnFeatureTest {
         setupTimer()
         setupTimer()
 
-        shadowOf(looper).runToEndOfTasks()
+        val shadowAlarmManager = shadowOf(context.getSystemService(AlarmManager::class.java))
+        shadowAlarmManager.fireAlarm(shadowAlarmManager.peekNextScheduledAlarm())
+
+        shadowOf(looper).runOneTask()
+
         expect.that(callback_count).isEqualTo(1)
         expect.that(timer).isNull()
     }
 
     @Test
     fun notifyBluetoothOn_whenNoTimer_noCrash() {
-        notifyBluetoothOn(resolver)
+        notifyBluetoothOn(context)
 
         assertThat(timer).isNull()
     }
@@ -189,7 +200,7 @@ class AutoOnFeatureTest {
     @Test
     fun notifyBluetoothOn_whenTimer_isNotScheduled() {
         setupTimer()
-        notifyBluetoothOn(resolver)
+        notifyBluetoothOn(context)
 
         shadowOf(looper).runToEndOfTasks()
         expect.that(callback_count).isEqualTo(0)
@@ -200,7 +211,7 @@ class AutoOnFeatureTest {
     fun notifyBluetoothOn_whenItWasNeverUsed_enableSettings() {
         restoreSettings()
 
-        notifyBluetoothOn(resolver)
+        notifyBluetoothOn(context)
 
         assertThat(isUserSupported(resolver)).isTrue()
     }
@@ -258,6 +269,33 @@ class AutoOnFeatureTest {
         setupTimer()
 
         assertThat(timer).isNotNull()
+    }
+
+    @Test
+    fun apiSetUserEnableToFalse_whenEnabled_broadcastIntent() {
+        setUserEnabled(false)
+
+        assertThat(shadowOf(context as Application).getBroadcastIntents().get(0)).run {
+            hasAction(BluetoothAdapter.ACTION_AUTO_ON_STATE_CHANGED)
+            hasFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY)
+            extras()
+                .integer(BluetoothAdapter.EXTRA_AUTO_ON_STATE)
+                .isEqualTo(BluetoothAdapter.AUTO_ON_STATE_DISABLED)
+        }
+    }
+
+    @Test
+    fun apiSetUserEnableToTrue_whenDisabled_broadcastIntent() {
+        disableUserSettings()
+        setUserEnabled(true)
+
+        assertThat(shadowOf(context as Application).getBroadcastIntents().get(0)).run {
+            hasAction(BluetoothAdapter.ACTION_AUTO_ON_STATE_CHANGED)
+            hasFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY)
+            extras()
+                .integer(BluetoothAdapter.EXTRA_AUTO_ON_STATE)
+                .isEqualTo(BluetoothAdapter.AUTO_ON_STATE_ENABLED)
+        }
     }
 
     @Test

@@ -16,13 +16,12 @@
 
 #include "os/handler.h"
 
-#include <cstring>
+#include <bluetooth/log.h>
 
 #include "common/bind.h"
 #include "common/callback.h"
 #include "os/log.h"
 #include "os/reactor.h"
-#include "os/utils.h"
 
 namespace bluetooth {
 namespace os {
@@ -46,7 +45,7 @@ void Handler::Post(OnceClosure closure) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
     if (was_cleared()) {
-      LOG_WARN("Posting to a handler which has been cleared");
+      log::warn("Posting to a handler which has been cleared");
       return;
     }
     tasks_->emplace(std::move(closure));

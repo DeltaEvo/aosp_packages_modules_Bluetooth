@@ -116,6 +116,7 @@ struct btm_acl_connected btm_acl_connected;
 struct btm_acl_created btm_acl_created;
 struct btm_acl_device_down btm_acl_device_down;
 struct btm_acl_disconnected btm_acl_disconnected;
+struct btm_acl_flush btm_acl_flush;
 struct btm_acl_encrypt_change btm_acl_encrypt_change;
 struct btm_acl_notif_conn_collision btm_acl_notif_conn_collision;
 struct btm_acl_process_sca_cmpl_pkt btm_acl_process_sca_cmpl_pkt;
@@ -401,9 +402,9 @@ void BTM_RequestPeerSCA(const RawAddress& remote_bda, tBT_TRANSPORT transport) {
   inc_func_call_count(__func__);
   test::mock::stack_acl::BTM_RequestPeerSCA(remote_bda, transport);
 }
-void BTM_acl_after_controller_started(const controller_t* controller) {
+void BTM_acl_after_controller_started() {
   inc_func_call_count(__func__);
-  test::mock::stack_acl::BTM_acl_after_controller_started(controller);
+  test::mock::stack_acl::BTM_acl_after_controller_started();
 }
 void BTM_block_role_switch_for(const RawAddress& peer_addr) {
   inc_func_call_count(__func__);
@@ -507,6 +508,10 @@ void btm_acl_process_sca_cmpl_pkt(uint8_t len, uint8_t* data) {
 void btm_acl_removed(uint16_t handle) {
   inc_func_call_count(__func__);
   test::mock::stack_acl::btm_acl_removed(handle);
+}
+void btm_acl_flush(uint16_t handle) {
+  inc_func_call_count(__func__);
+  test::mock::stack_acl::btm_acl_flush(handle);
 }
 void btm_acl_role_changed(tHCI_STATUS hci_status, const RawAddress& bd_addr,
                           tHCI_ROLE new_role) {
