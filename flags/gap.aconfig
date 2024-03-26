@@ -44,13 +44,6 @@ flag {
 }
 
 flag {
-    name: "scan_timeout_reset"
-    namespace: "bluetooth"
-    description: "Ensure scan timeout is reset if new scan started"
-    bug: "316266556"
-}
-
-flag {
     name: "le_scan_fix_remote_exception"
     namespace: "bluetooth"
     description: "Fix handling remote exception for LE scanners"
@@ -59,6 +52,7 @@ flag {
 
 flag {
     name: "enumerate_gatt_errors"
+    is_exported: true
     namespace: "bluetooth"
     description: "Enumerate GATT error situations"
     bug: "320574336"
@@ -155,6 +149,16 @@ flag {
     namespace: "bluetooth"
     description: "Update ADV flag in inquiry result as soon as updated flag received"
     bug: "329872838"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "ble_gatt_server_use_address_type_in_connection"
+    namespace: "bluetooth"
+    description: "Use address type when initiating connection from BluetoothGattServer"
+    bug: "331147673"
     metadata {
         purpose: PURPOSE_BUGFIX
     }

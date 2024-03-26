@@ -40,10 +40,10 @@ import com.android.bluetooth.avrcpcontroller.BluetoothMediaBrowserService.Browse
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.modules.utils.SynchronousResultReceiver;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -380,84 +380,53 @@ public class AvrcpControllerService extends ProfileService {
         }
 
         @Override
-        public void getConnectedDevices(AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                AvrcpControllerService service = getService(source);
-                List<BluetoothDevice> defaultValue = new ArrayList<BluetoothDevice>(0);
-                if (service != null) {
-                    defaultValue = service.getConnectedDevices();
-                }
-                receiver.send(defaultValue);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public List<BluetoothDevice> getConnectedDevices(AttributionSource source) {
+            AvrcpControllerService service = getService(source);
+            if (service == null) {
+                return Collections.emptyList();
             }
+            return service.getConnectedDevices();
         }
 
         @Override
-        public void getDevicesMatchingConnectionStates(int[] states,
-                AttributionSource source, SynchronousResultReceiver receiver) {
-            try {
-                AvrcpControllerService service = getService(source);
-                List<BluetoothDevice> defaultValue = new ArrayList<BluetoothDevice>(0);
-                if (service != null) {
-                    defaultValue = service.getDevicesMatchingConnectionStates(states);
-                }
-                receiver.send(defaultValue);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public List<BluetoothDevice> getDevicesMatchingConnectionStates(
+                int[] states, AttributionSource source) {
+            AvrcpControllerService service = getService(source);
+            if (service == null) {
+                return Collections.emptyList();
             }
+            return service.getDevicesMatchingConnectionStates(states);
         }
 
         @Override
-        public void getConnectionState(BluetoothDevice device, AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                AvrcpControllerService service = getService(source);
-                int defaultValue = BluetoothProfile.STATE_DISCONNECTED;
-                if (service != null) {
-                    defaultValue = service.getConnectionState(device);
-                }
-                receiver.send(defaultValue);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public int getConnectionState(BluetoothDevice device, AttributionSource source) {
+            AvrcpControllerService service = getService(source);
+            if (service == null) {
+                return BluetoothProfile.STATE_DISCONNECTED;
             }
+            return service.getConnectionState(device);
         }
 
         @Override
-        public void sendGroupNavigationCmd(BluetoothDevice device, int keyCode, int keyState,
-                AttributionSource source, SynchronousResultReceiver receiver) {
-            try {
-                getService(source);
-                Log.w(TAG, "sendGroupNavigationCmd not implemented");
-                receiver.send(null);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
-            }
+        public void sendGroupNavigationCmd(
+                BluetoothDevice device, int keyCode, int keyState, AttributionSource source) {
+            getService(source);
+            Log.w(TAG, "sendGroupNavigationCmd not implemented");
         }
 
         @Override
-        public void setPlayerApplicationSetting(BluetoothAvrcpPlayerSettings settings,
-                AttributionSource source, SynchronousResultReceiver receiver) {
-            try {
-                getService(source);
-                Log.w(TAG, "setPlayerApplicationSetting not implemented");
-                receiver.send(null);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
-            }
+        public void setPlayerApplicationSetting(
+                BluetoothAvrcpPlayerSettings settings, AttributionSource source) {
+            getService(source);
+            Log.w(TAG, "setPlayerApplicationSetting not implemented");
         }
 
         @Override
-        public void getPlayerSettings(BluetoothDevice device,
-                AttributionSource source, SynchronousResultReceiver receiver) {
-            try {
-                getService(source);
-                Log.w(TAG, "getPlayerSettings not implemented");
-                receiver.send(null);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
-            }
+        public BluetoothAvrcpPlayerSettings getPlayerSettings(
+                BluetoothDevice device, AttributionSource source) {
+            getService(source);
+            Log.w(TAG, "getPlayerSettings not implemented");
+            return null;
         }
     }
 
@@ -750,7 +719,11 @@ public class AvrcpControllerService extends ProfileService {
 
     protected AvrcpControllerStateMachine getOrCreateStateMachine(BluetoothDevice device) {
         AvrcpControllerStateMachine newStateMachine =
-                new AvrcpControllerStateMachine(device, this, mNativeInterface);
+                new AvrcpControllerStateMachine(
+                        device,
+                        this,
+                        mNativeInterface,
+                        Utils.isAutomotive(getApplicationContext()));
         AvrcpControllerStateMachine existingStateMachine =
                 mDeviceStateMap.putIfAbsent(device, newStateMachine);
         // Given null is not a valid value in our map, ConcurrentHashMap will return null if the

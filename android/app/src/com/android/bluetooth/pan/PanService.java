@@ -50,9 +50,9 @@ import com.android.bluetooth.btservice.storage.DatabaseManager;
 import com.android.bluetooth.flags.Flags;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.modules.utils.HandlerExecutor;
-import com.android.modules.utils.SynchronousResultReceiver;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,8 +63,7 @@ import java.util.Objects;
  * the Bluetooth application.
  */
 public class PanService extends ProfileService {
-    private static final String TAG = "PanService";
-    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
+    private static final String TAG = PanService.class.getSimpleName();
     private static PanService sPanService;
 
     private static final int BLUETOOTH_MAX_PAN_CONNECTIONS = 5;
@@ -138,9 +137,7 @@ public class PanService extends ProfileService {
     }
 
     private static synchronized void setPanService(PanService instance) {
-        if (DBG) {
-            Log.d(TAG, "setPanService(): set to: " + instance);
-        }
+        Log.d(TAG, "setPanService(): set to: " + instance);
         sPanService = instance;
     }
 
@@ -265,14 +262,12 @@ public class PanService extends ProfileService {
                             final BluetoothDevice device =
                                     mAdapterService.getDeviceFromByte(cs.addr);
                             // TBD get iface from the msg
-                            if (DBG) {
-                                Log.d(
-                                        TAG,
-                                        "MESSAGE_CONNECT_STATE_CHANGED: "
-                                                + device
-                                                + " state: "
-                                                + cs.state);
-                            }
+                            Log.d(
+                                    TAG,
+                                    "MESSAGE_CONNECT_STATE_CHANGED: "
+                                            + device
+                                            + " state: "
+                                            + cs.state);
                             // It could be null if the connection up is coming when the
                             // Bluetooth is turning off.
                             if (device == null) {
@@ -320,126 +315,93 @@ public class PanService extends ProfileService {
         }
 
         @Override
-        public void connect(BluetoothDevice device, AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                PanService service = getService(source);
-                boolean defaultValue = false;
-                if (service != null) {
-                    defaultValue = service.connect(device);
-                }
-                receiver.send(defaultValue);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public boolean connect(BluetoothDevice device, AttributionSource source) {
+            PanService service = getService(source);
+            if (service == null) {
+                return false;
             }
+
+            return service.connect(device);
         }
 
         @Override
-        public void disconnect(BluetoothDevice device, AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                PanService service = getService(source);
-                boolean defaultValue = false;
-                if (service != null) {
-                    defaultValue = service.disconnect(device);
-                }
-                receiver.send(defaultValue);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public boolean disconnect(BluetoothDevice device, AttributionSource source) {
+            PanService service = getService(source);
+            if (service == null) {
+                return false;
             }
+
+            return service.disconnect(device);
         }
 
         @Override
-        public void setConnectionPolicy(BluetoothDevice device, int connectionPolicy,
-                AttributionSource source, SynchronousResultReceiver receiver) {
-            try {
-                PanService service = getService(source);
-                boolean defaultValue = false;
-                if (service != null) {
-                    defaultValue = service.setConnectionPolicy(device, connectionPolicy);
-                }
-                receiver.send(defaultValue);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public boolean setConnectionPolicy(
+                BluetoothDevice device, int connectionPolicy, AttributionSource source) {
+            PanService service = getService(source);
+            if (service == null) {
+                return false;
             }
+
+            return service.setConnectionPolicy(device, connectionPolicy);
         }
 
         @Override
-        public void getConnectionState(BluetoothDevice device, AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                PanService service = getService(source);
-                int defaultValue = BluetoothPan.STATE_DISCONNECTED;
-                if (service != null) {
-                    defaultValue = service.getConnectionState(device);
-                }
-                receiver.send(defaultValue);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public int getConnectionState(BluetoothDevice device, AttributionSource source) {
+            PanService service = getService(source);
+            if (service == null) {
+                return BluetoothPan.STATE_DISCONNECTED;
             }
+
+            return service.getConnectionState(device);
         }
 
         @Override
-        public void isTetheringOn(AttributionSource source, SynchronousResultReceiver receiver) {
+        public boolean isTetheringOn(AttributionSource source) {
             // TODO(BT) have a variable marking the on/off state
-            try {
-                PanService service = getService(source);
-                boolean defaultValue = false;
-                if (service != null) {
-                    defaultValue = service.isTetheringOn();
-                }
-                receiver.send(defaultValue);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+            PanService service = getService(source);
+            if (service == null) {
+                return false;
             }
+
+            return service.isTetheringOn();
         }
 
         @Override
-        public void setBluetoothTethering(IBluetoothPanCallback callback, int id,
-                boolean value, AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                PanService service = getService(source);
-                if (service != null) {
-                    Log.d(TAG, "setBluetoothTethering: " + value
-                            + ", pkgName: " + source.getPackageName()
-                            + ", mTetherOn: " + service.mTetherOn);
-                    service.setBluetoothTethering(callback, id, source.getUid(), value);
-                }
-                receiver.send(null);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public void setBluetoothTethering(
+                IBluetoothPanCallback callback, int id, boolean value, AttributionSource source) {
+            PanService service = getService(source);
+            if (service == null) {
+                return;
             }
+
+            Log.d(
+                    TAG,
+                    "setBluetoothTethering:"
+                            + (" value=" + value)
+                            + (" pkgName= " + source.getPackageName())
+                            + (" mTetherOn= " + service.mTetherOn));
+            service.setBluetoothTethering(callback, id, source.getUid(), value);
         }
 
         @Override
-        public void getConnectedDevices(AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                PanService service = getService(source);
-                List<BluetoothDevice> defaultValue = new ArrayList<BluetoothDevice>(0);
-                if (service != null) {
-                    defaultValue = service.getConnectedDevices();
-                }
-                receiver.send(defaultValue);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public List<BluetoothDevice> getConnectedDevices(AttributionSource source) {
+            PanService service = getService(source);
+            if (service == null) {
+                return Collections.emptyList();
             }
+
+            return service.getConnectedDevices();
         }
 
         @Override
-        public void getDevicesMatchingConnectionStates(int[] states,
-                AttributionSource source, SynchronousResultReceiver receiver) {
-            try {
-                PanService service = getService(source);
-                List<BluetoothDevice> defaultValue = new ArrayList<BluetoothDevice>(0);
-                if (service != null) {
-                    defaultValue = service.getDevicesMatchingConnectionStates(states);
-                }
-                receiver.send(defaultValue);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public List<BluetoothDevice> getDevicesMatchingConnectionStates(
+                int[] states, AttributionSource source) {
+            PanService service = getService(source);
+            if (service == null) {
+                return Collections.emptyList();
             }
+
+            return service.getDevicesMatchingConnectionStates(states);
         }
     }
 
@@ -486,9 +448,7 @@ public class PanService extends ProfileService {
     })
     void setBluetoothTethering(IBluetoothPanCallback callback, int id, int callerUid,
             boolean value) {
-        if (DBG) {
-            Log.d(TAG, "setBluetoothTethering: " + value + ", mTetherOn: " + mTetherOn);
-        }
+        Log.d(TAG, "setBluetoothTethering: " + value + ", mTetherOn: " + mTetherOn);
         enforceCallingOrSelfPermission(
                 BLUETOOTH_PRIVILEGED, "Need BLUETOOTH_PRIVILEGED permission");
         enforceCallingOrSelfPermission(
@@ -550,9 +510,7 @@ public class PanService extends ProfileService {
     public boolean setConnectionPolicy(BluetoothDevice device, int connectionPolicy) {
         enforceCallingOrSelfPermission(
                 BLUETOOTH_PRIVILEGED, "Need BLUETOOTH_PRIVILEGED permission");
-        if (DBG) {
-            Log.d(TAG, "Saved connectionPolicy " + device + " = " + connectionPolicy);
-        }
+        Log.d(TAG, "Saved connectionPolicy " + device + " = " + connectionPolicy);
 
         if (!mDatabaseManager.setProfileConnectionPolicy(device, BluetoothProfile.PAN,
                   connectionPolicy)) {
@@ -625,10 +583,8 @@ public class PanService extends ProfileService {
 
     void onConnectStateChanged(byte[] address, int state, int error, int localRole,
             int remoteRole) {
-        if (DBG) {
-            Log.d(TAG, "onConnectStateChanged: " + state + ", local role:" + localRole
-                    + ", remoteRole: " + remoteRole);
-        }
+        Log.d(TAG, "onConnectStateChanged: " + state + ", local role:" + localRole
+                + ", remoteRole: " + remoteRole);
         Message msg = mHandler.obtainMessage(MESSAGE_CONNECT_STATE_CHANGED);
         msg.obj = new ConnectState(address, state, error, localRole, remoteRole);
         mHandler.sendMessage(msg);
@@ -636,10 +592,8 @@ public class PanService extends ProfileService {
 
     @VisibleForTesting
     void onControlStateChanged(int localRole, int state, int error, String ifname) {
-        if (DBG) {
-            Log.d(TAG, "onControlStateChanged: " + state + ", error: " + error + ", ifname: "
-                    + ifname);
-        }
+        Log.d(TAG, "onControlStateChanged: " + state + ", error: " + error + ", ifname: "
+                + ifname);
         if (error == 0) {
             mPanIfName = ifname;
         }
@@ -648,11 +602,9 @@ public class PanService extends ProfileService {
 
     void handlePanDeviceStateChange(BluetoothDevice device, String iface, int state,
             @LocalPanRole int localRole, @RemotePanRole int remoteRole) {
-        if (DBG) {
-            Log.d(TAG, "handlePanDeviceStateChange: device: " + device + ", iface: " + iface
-                    + ", state: " + state + ", localRole:" + localRole + ", remoteRole:"
-                    + remoteRole);
-        }
+        Log.d(TAG, "handlePanDeviceStateChange: device: " + device + ", iface: " + iface
+                + ", state: " + state + ", localRole:" + localRole + ", remoteRole:"
+                + remoteRole);
         int prevState;
 
         BluetoothPanDevice panDevice = mPanDevices.get(device);

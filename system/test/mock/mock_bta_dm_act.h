@@ -180,18 +180,6 @@ struct bta_dm_add_blekey {
 };
 extern struct bta_dm_add_blekey bta_dm_add_blekey;
 
-// Name: bta_dm_add_device
-// Params: std::unique_ptr<tBTA_DM_API_ADD_DEVICE> msg
-// Return: void
-struct bta_dm_add_device {
-  std::function<void(std::unique_ptr<tBTA_DM_API_ADD_DEVICE> msg)> body{
-      [](std::unique_ptr<tBTA_DM_API_ADD_DEVICE> /* msg */) {}};
-  void operator()(std::unique_ptr<tBTA_DM_API_ADD_DEVICE> msg) {
-    body(std::move(msg));
-  };
-};
-extern struct bta_dm_add_device bta_dm_add_device;
-
 // Name: bta_dm_ble_config_local_privacy
 // Params: bool privacy_enable
 // Return: void
@@ -237,20 +225,6 @@ struct bta_dm_ble_get_energy_info {
   };
 };
 extern struct bta_dm_ble_get_energy_info bta_dm_ble_get_energy_info;
-
-// Name: bta_dm_ble_observe
-// Params: bool start, uint8_t duration, tBTA_DM_SEARCH_CBACK* p_cback
-// Return: void
-struct bta_dm_ble_observe {
-  std::function<void(bool start, uint8_t duration,
-                     tBTA_DM_SEARCH_CBACK* p_cback)>
-      body{[](bool /* start */, uint8_t /* duration */,
-              tBTA_DM_SEARCH_CBACK* /* p_cback */) {}};
-  void operator()(bool start, uint8_t duration, tBTA_DM_SEARCH_CBACK* p_cback) {
-    body(start, duration, p_cback);
-  };
-};
-extern struct bta_dm_ble_observe bta_dm_ble_observe;
 
 // Name: bta_dm_clear_event_filter
 // Params: None

@@ -224,6 +224,7 @@ typedef enum : uint8_t {
   BTA_DM_DID_RES_EVT = 6,            /* Vendor/Product ID search result */
   BTA_DM_GATT_OVER_SDP_RES_EVT = 7,  /* GATT services over SDP discovered */
   BTA_DM_NAME_READ_EVT = 8,          /* Name read complete. */
+  BTA_DM_OBSERVE_CMPL_EVT = 9,       /* Observe complete. */
 } tBTA_DM_SEARCH_EVT;
 
 inline std::string bta_dm_search_evt_text(const tBTA_DM_SEARCH_EVT& event) {
@@ -237,6 +238,7 @@ inline std::string bta_dm_search_evt_text(const tBTA_DM_SEARCH_EVT& event) {
     CASE_RETURN_TEXT(BTA_DM_DID_RES_EVT);
     CASE_RETURN_TEXT(BTA_DM_GATT_OVER_SDP_RES_EVT);
     CASE_RETURN_TEXT(BTA_DM_NAME_READ_EVT);
+    CASE_RETURN_TEXT(BTA_DM_OBSERVE_CMPL_EVT);
     default:
       return base::StringPrintf("UNKNOWN[%hhu]", event);
   }
@@ -270,10 +272,10 @@ typedef struct {
   uint16_t clock_offset;
 } tBTA_DM_INQ_RES;
 
-/* Structure associated with BTA_DM_INQ_CMPL_EVT */
+/* Structure associated with BTA_DM_OBSERVE_CMPL_EVT */
 typedef struct {
-  uint8_t num_resps; /* Number of inquiry responses. */
-} tBTA_DM_INQ_CMPL;
+  uint8_t num_resps; /* Number of responses. */
+} tBTA_DM_OBSERVE_CMPL;
 
 /* Structure associated with BTA_DM_DISC_RES_EVT */
 typedef struct {
@@ -307,11 +309,11 @@ typedef struct {
 /* Union of all search callback structures */
 typedef union {
   tBTA_DM_INQ_RES inq_res;   /* Inquiry result for a peer device. */
-  tBTA_DM_INQ_CMPL inq_cmpl; /* Inquiry complete. */
   tBTA_DM_DISC_RES disc_res; /* Discovery result for a peer device. */
   tBTA_DM_DISC_BLE_RES
       disc_ble_res;             /* discovery result for GATT based service */
   tBTA_DM_DID_RES did_res;      /* Vendor and Product ID of peer device */
+  tBTA_DM_OBSERVE_CMPL observe_cmpl; /* Observe complete. */
 } tBTA_DM_SEARCH;
 
 /* Search callback */
@@ -677,28 +679,9 @@ void BTA_DmSetBlePrefConnParams(const RawAddress& bd_addr,
 
 /*******************************************************************************
  *
- * Function         BTA_DmBleObserve
- *
- * Description      This procedure keep the device listening for advertising
- *                  events from a broadcast device.
- *
- * Parameters       start: start or stop observe.
- *                  duration : Duration of the scan. Continuous scan if 0 is
- *                             passed
- *                  p_results_cb: Callback to be called with scan results
- *
- * Returns          void
- *
- ******************************************************************************/
-void BTA_DmBleObserve(bool start, uint8_t duration,
-                      tBTA_DM_SEARCH_CBACK* p_results_cb);
-
-/*******************************************************************************
- *
  * Function         BTA_DmBleScan
  *
- * Description      Start or stop the scan procedure if it's not already started
- *                  with BTA_DmBleObserve().
+ * Description      Start or stop the scan procedure.
  *
  * Parameters       start: start or stop the scan procedure,
  *                  duration_sec: Duration of the scan. Continuous scan if 0 is

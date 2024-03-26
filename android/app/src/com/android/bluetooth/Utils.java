@@ -29,6 +29,8 @@ import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.PowerExemptionManager.TEMPORARY_ALLOW_LIST_TYPE_FOREGROUND_SERVICE_ALLOWED;
 import static android.permission.PermissionManager.PERMISSION_HARD_DENIED;
 
+import static com.android.modules.utils.build.SdkLevel.isAtLeastV;
+
 import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -86,6 +88,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public final class Utils {
@@ -108,6 +112,9 @@ public final class Utils {
 
     static final int BD_ADDR_LEN = 6; // bytes
     static final int BD_UUID_LEN = 16; // bytes
+
+    /** Thread pool to handle background and outgoing blocking task */
+    public static final ExecutorService BackgroundExecutor = Executors.newSingleThreadExecutor();
 
     /*
      * Special character
@@ -164,6 +171,10 @@ public final class Utils {
     public static boolean isScoManagedByAudioEnabled() {
         if (Flags.isScoManagedByAudio()) {
             Log.d(TAG, "isScoManagedByAudioEnabled state is: " + isScoManagedByAudioEnabled);
+            if (isScoManagedByAudioEnabled && !isAtLeastV()) {
+                Log.e(TAG, "isScoManagedByAudio should not be enabled before Android V");
+                return false;
+            }
             return isScoManagedByAudioEnabled;
         }
         return false;

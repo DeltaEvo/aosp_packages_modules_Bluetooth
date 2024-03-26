@@ -48,12 +48,10 @@ struct BTA_dm_report_role_change BTA_dm_report_role_change;
 struct bta_dm_acl_up bta_dm_acl_up;
 struct bta_dm_add_ble_device bta_dm_add_ble_device;
 struct bta_dm_add_blekey bta_dm_add_blekey;
-struct bta_dm_add_device bta_dm_add_device;
 struct bta_dm_ble_config_local_privacy bta_dm_ble_config_local_privacy;
 struct bta_dm_ble_confirm_reply bta_dm_ble_confirm_reply;
 struct bta_dm_ble_csis_observe bta_dm_ble_csis_observe;
 struct bta_dm_ble_get_energy_info bta_dm_ble_get_energy_info;
-struct bta_dm_ble_observe bta_dm_ble_observe;
 struct bta_dm_ble_passkey_reply bta_dm_ble_passkey_reply;
 struct bta_dm_ble_scan bta_dm_ble_scan;
 struct bta_dm_ble_set_conn_params bta_dm_ble_set_conn_params;
@@ -137,10 +135,6 @@ void bta_dm_add_blekey(const RawAddress& bd_addr, tBTA_LE_KEY_VALUE blekey,
   inc_func_call_count(__func__);
   test::mock::bta_dm_act::bta_dm_add_blekey(bd_addr, blekey, key_type);
 }
-void bta_dm_add_device(std::unique_ptr<tBTA_DM_API_ADD_DEVICE> msg) {
-  inc_func_call_count(__func__);
-  test::mock::bta_dm_act::bta_dm_add_device(std::move(msg));
-}
 void bta_dm_ble_config_local_privacy(bool privacy_enable) {
   inc_func_call_count(__func__);
   test::mock::bta_dm_act::bta_dm_ble_config_local_privacy(privacy_enable);
@@ -157,11 +151,6 @@ void bta_dm_ble_get_energy_info(
     tBTA_BLE_ENERGY_INFO_CBACK* p_energy_info_cback) {
   inc_func_call_count(__func__);
   test::mock::bta_dm_act::bta_dm_ble_get_energy_info(p_energy_info_cback);
-}
-void bta_dm_ble_observe(bool start, uint8_t duration,
-                        tBTA_DM_SEARCH_CBACK* p_cback) {
-  inc_func_call_count(__func__);
-  test::mock::bta_dm_act::bta_dm_ble_observe(start, duration, p_cback);
 }
 void bta_dm_ble_passkey_reply(const RawAddress& bd_addr, bool accept,
                               uint32_t passkey) {
