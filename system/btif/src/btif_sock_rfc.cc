@@ -497,6 +497,8 @@ static bool send_app_connect_signal(int fd, const RawAddress* addr, int channel,
   cs.status = status;
   cs.max_rx_packet_size = 0;  // not used for RFCOMM
   cs.max_tx_packet_size = 0;  // not used for RFCOMM
+  cs.conn_uuid_lsb = 0;       // not used for RFCOMM
+  cs.conn_uuid_msb = 0;       // not used for RFCOMM
   if (send_fd == INVALID_FD)
     return sock_send_all(fd, (const uint8_t*)&cs, sizeof(cs)) == sizeof(cs);
 
@@ -678,45 +680,50 @@ static uint32_t rfcomm_cback(tBTA_JV_EVT event, tBTA_JV* p_data,
                              uint32_t rfcomm_slot_id) {
   uint32_t id = 0;
 
-  // Write events are too frequent to log at info level
-  if (event != BTA_JV_RFCOMM_WRITE_EVT) {
-    log::info("handling event:{} id:{}", event, rfcomm_slot_id);
-  } else {
-    log::verbose("handling event:{} id:{}", event, rfcomm_slot_id);
-  }
-
   switch (event) {
     case BTA_JV_RFCOMM_START_EVT:
+      log::info("handling {}, rfcomm_slot_id:{}", bta_jv_event_text(event),
+                rfcomm_slot_id);
       on_srv_rfc_listen_started(&p_data->rfc_start, rfcomm_slot_id);
       break;
 
     case BTA_JV_RFCOMM_CL_INIT_EVT:
+      log::info("handling {}, rfcomm_slot_id:{}", bta_jv_event_text(event),
+                rfcomm_slot_id);
       on_cl_rfc_init(&p_data->rfc_cl_init, rfcomm_slot_id);
       break;
 
     case BTA_JV_RFCOMM_OPEN_EVT:
+      log::info("handling {}, rfcomm_slot_id:{}", bta_jv_event_text(event),
+                rfcomm_slot_id);
       BTA_JvSetPmProfile(p_data->rfc_open.handle, BTA_JV_PM_ID_1,
                          BTA_JV_CONN_OPEN);
       on_cli_rfc_connect(&p_data->rfc_open, rfcomm_slot_id);
       break;
 
     case BTA_JV_RFCOMM_SRV_OPEN_EVT:
+      log::info("handling {}, rfcomm_slot_id:{}", bta_jv_event_text(event),
+                rfcomm_slot_id);
       BTA_JvSetPmProfile(p_data->rfc_srv_open.handle, BTA_JV_PM_ALL,
                          BTA_JV_CONN_OPEN);
       id = on_srv_rfc_connect(&p_data->rfc_srv_open, rfcomm_slot_id);
       break;
 
     case BTA_JV_RFCOMM_CLOSE_EVT:
-      log::verbose("BTA_JV_RFCOMM_CLOSE_EVT: rfcomm_slot_id:{}",
-                   rfcomm_slot_id);
+      log::info("handling {}, rfcomm_slot_id:{}", bta_jv_event_text(event),
+                rfcomm_slot_id);
       on_rfc_close(&p_data->rfc_close, rfcomm_slot_id);
       break;
 
     case BTA_JV_RFCOMM_WRITE_EVT:
+      log::verbose("handling {}, rfcomm_slot_id:{}", bta_jv_event_text(event),
+                   rfcomm_slot_id);
       on_rfc_write_done(&p_data->rfc_write, rfcomm_slot_id);
       break;
 
     case BTA_JV_RFCOMM_CONG_EVT:
+      log::verbose("handling {}, rfcomm_slot_id:{}", bta_jv_event_text(event),
+                   rfcomm_slot_id);
       on_rfc_outgoing_congest(&p_data->rfc_cong, rfcomm_slot_id);
       break;
 
@@ -725,20 +732,22 @@ static uint32_t rfcomm_cback(tBTA_JV_EVT event, tBTA_JV* p_data,
       break;
 
     default:
-      log::error("unhandled event {}, slot id: {}", event, rfcomm_slot_id);
+      log::warn("unhandled event {}, slot id: {}", bta_jv_event_text(event),
+                rfcomm_slot_id);
       break;
   }
   return id;
 }
 
 static void jv_dm_cback(tBTA_JV_EVT event, tBTA_JV* p_data, uint32_t id) {
-  log::info("handling event:{}, id:{}", event, id);
+  log::info("handling event:{}, id:{}", bta_jv_event_text(event), id);
   switch (event) {
     case BTA_JV_GET_SCN_EVT: {
       std::unique_lock<std::recursive_mutex> lock(slot_lock);
       rfc_slot_t* rs = find_rfc_slot_by_id(id);
       if (!rs) {
-        log::error("RFCOMM slot with id {} not found. event:{}", id, event);
+        log::error("RFCOMM slot with id {} not found. event:{}", id,
+                   bta_jv_event_text(event));
         break;
       }
       if (p_data->scn == 0) {
@@ -787,7 +796,8 @@ static void jv_dm_cback(tBTA_JV_EVT event, tBTA_JV* p_data, uint32_t id) {
       rfc_slot_t* slot = find_rfc_slot_by_id(id);
 
       if (!slot) {
-        log::error("RFCOMM slot with id {} not found. event:{}", id, event);
+        log::error("RFCOMM slot with id {} not found. event:{}", id,
+                   bta_jv_event_text(event));
         break;
       }
 
@@ -818,7 +828,8 @@ static void jv_dm_cback(tBTA_JV_EVT event, tBTA_JV* p_data, uint32_t id) {
     }
 
     default:
-      log::debug("unhandled event:{}, slot id:{}", event, id);
+      log::debug("unhandled event:{}, slot id:{}", bta_jv_event_text(event),
+                 id);
       break;
   }
 }

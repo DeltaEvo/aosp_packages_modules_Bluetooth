@@ -154,7 +154,8 @@ inline std::string bta_dm_state_text(const tBTA_DM_STATE& state) {
 
 /* DM search control block */
 typedef struct {
-  tBTA_DM_SEARCH_CBACK* p_search_cback;
+  tBTA_DM_SEARCH_CBACK* p_device_search_cback;
+  tBTA_DM_SEARCH_CBACK* p_service_search_cback;
   tBTM_INQ_INFO* p_btm_inq_info;
   tBTA_SERVICE_MASK services;
   tBTA_SERVICE_MASK services_to_search;
@@ -173,7 +174,6 @@ typedef struct {
   bluetooth::Uuid uuid;
   uint8_t peer_scn;
   tBT_TRANSPORT transport;
-  tBTA_DM_SEARCH_CBACK* p_scan_cback;
   tBTA_DM_SEARCH_CBACK* p_csis_scan_cback;
   tGATT_IF client_if;
   uint8_t uuid_to_search;

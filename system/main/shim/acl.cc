@@ -851,6 +851,13 @@ class LeShimAclConnection
     return connection_->IsInFilterAcceptList();
   }
 
+  void UpdateConnectionParameters(uint16_t conn_int_min, uint16_t conn_int_max,
+                                  uint16_t conn_latency, uint16_t conn_timeout,
+                                  uint16_t min_ce_len, uint16_t max_ce_len) {
+    connection_->LeConnectionUpdate(conn_int_min, conn_int_max, conn_latency,
+                                    conn_timeout, min_ce_len, max_ce_len);
+  }
+
  private:
   OnDisconnect on_disconnect_;
   const shim::legacy::acl_le_link_interface_t interface_;
@@ -893,7 +900,7 @@ struct shim::legacy::Acl::impl {
     if (IsClassicAcl(handle)) {
       handle_to_classic_connection_map_[handle]->Flush();
     } else {
-      LOG_ERROR("handle %d is not a classic connection", handle);
+      log::error("handle {} is not a classic connection", handle);
     }
   }
 
@@ -1093,6 +1100,21 @@ struct shim::legacy::Acl::impl {
       log::warn("Unable to disconnect unknown le connection handle:0x{:04x}",
                 handle);
     }
+  }
+
+  void update_connection_parameters(uint16_t handle, uint16_t conn_int_min,
+                                    uint16_t conn_int_max,
+                                    uint16_t conn_latency,
+                                    uint16_t conn_timeout, uint16_t min_ce_len,
+                                    uint16_t max_ce_len) {
+    auto connection = handle_to_le_connection_map_.find(handle);
+    if (connection == handle_to_le_connection_map_.end()) {
+      log::warn("Unknown le connection handle:0x{:04x}", handle);
+      return;
+    }
+    connection->second->UpdateConnectionParameters(conn_int_min, conn_int_max,
+                                                   conn_latency, conn_timeout,
+                                                   min_ce_len, max_ce_len);
   }
 
   void accept_le_connection_from(const hci::AddressWithType& address_with_type,
@@ -1767,34 +1789,13 @@ void shim::legacy::Acl::DisconnectLe(uint16_t handle, tHCI_STATUS reason,
                    comment);
 }
 
-bool shim::legacy::Acl::HoldMode(uint16_t hci_handle, uint16_t max_interval,
-                                 uint16_t min_interval) {
-  handler_->CallOn(pimpl_.get(), &Acl::impl::HoldMode, hci_handle, max_interval,
-                   min_interval);
-  return false;  // TODO void
-}
-
-bool shim::legacy::Acl::SniffMode(uint16_t hci_handle, uint16_t max_interval,
-                                  uint16_t min_interval, uint16_t attempt,
-                                  uint16_t timeout) {
-  handler_->CallOn(pimpl_.get(), &Acl::impl::SniffMode, hci_handle,
-                   max_interval, min_interval, attempt, timeout);
-  return false;
-}
-
-bool shim::legacy::Acl::ExitSniffMode(uint16_t hci_handle) {
-  handler_->CallOn(pimpl_.get(), &Acl::impl::ExitSniffMode, hci_handle);
-  return false;
-}
-
-bool shim::legacy::Acl::SniffSubrating(uint16_t hci_handle,
-                                       uint16_t maximum_latency,
-                                       uint16_t minimum_remote_timeout,
-                                       uint16_t minimum_local_timeout) {
-  handler_->CallOn(pimpl_.get(), &Acl::impl::SniffSubrating, hci_handle,
-                   maximum_latency, minimum_remote_timeout,
-                   minimum_local_timeout);
-  return false;
+void shim::legacy::Acl::UpdateConnectionParameters(
+    uint16_t handle, uint16_t conn_int_min, uint16_t conn_int_max,
+    uint16_t conn_latency, uint16_t conn_timeout, uint16_t min_ce_len,
+    uint16_t max_ce_len) {
+  handler_->CallOn(pimpl_.get(), &Acl::impl::update_connection_parameters,
+                   handle, conn_int_min, conn_int_max, conn_latency,
+                   conn_timeout, min_ce_len, max_ce_len);
 }
 
 void shim::legacy::Acl::LeSetDefaultSubrate(uint16_t subrate_min,
