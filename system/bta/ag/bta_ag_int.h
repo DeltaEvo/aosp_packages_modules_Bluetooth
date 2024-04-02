@@ -34,6 +34,7 @@
 #include "bta/sys/bta_sys.h"
 #include "internal_include/bt_target.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/btm_api_types.h"
 #include "stack/sdp/sdp_discovery_db.h"
 #include "types/raw_address.h"
 
@@ -92,6 +93,17 @@ enum {
   BTA_AG_SVC_TIMEOUT_EVT,
   BTA_AG_COLLISION_EVT,
   BTA_AG_MAX_EVT,
+};
+
+/* Local events which will not trigger a higher layer callback */
+enum {
+  BTA_AG_LOCAL_EVT_FIRST = 0x100,
+  BTA_AG_LOCAL_EVT_CCWA,
+  BTA_AG_LOCAL_EVT_CLIP,
+  BTA_AG_LOCAL_EVT_CMER,
+  BTA_AG_LOCAL_EVT_BRSF,
+  BTA_AG_LOCAL_EVT_CMEE,
+  BTA_AG_LOCAL_EVT_BCC,
 };
 
 /* Actions to perform after a SCO event */

@@ -30,7 +30,7 @@ import android.os.RemoteException;
 import android.util.CloseGuard;
 import android.util.Log;
 
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -218,7 +218,7 @@ public final class BluetoothPbapClient implements BluetoothProfile, AutoCloseabl
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
             }
         }
-        return true;
+        return false;
     }
 
     /**
@@ -251,7 +251,7 @@ public final class BluetoothPbapClient implements BluetoothProfile, AutoCloseabl
                 throw e.rethrowAsRuntimeException();
             }
         }
-        return new ArrayList<>();
+        return Collections.emptyList();
     }
 
     /**
@@ -286,7 +286,7 @@ public final class BluetoothPbapClient implements BluetoothProfile, AutoCloseabl
                 throw e.rethrowAsRuntimeException();
             }
         }
-        return new ArrayList<>();
+        return Collections.emptyList();
     }
 
     /**

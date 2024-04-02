@@ -371,7 +371,7 @@ class AvrcpControllerStateMachine extends StateMachine {
         if (mCoverArtManager == null) return;
         AvrcpItem currentTrack = getCurrentTrack();
         String currentTrackUuid = currentTrack != null ? currentTrack.getCoverArtUuid() : null;
-        ArrayList<String> unusedArtwork = mBrowseTree.getAndClearUnusedCoverArt();
+        List<String> unusedArtwork = mBrowseTree.getAndClearUnusedCoverArt();
         for (String uuid : unusedArtwork) {
             if (!uuid.equals(currentTrackUuid)) {
                 mCoverArtManager.removeImage(mDevice, uuid);
@@ -1359,8 +1359,8 @@ class AvrcpControllerStateMachine extends StateMachine {
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, mDevice);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
         mMostRecentState = currentState;
-        Utils.sendBroadcast(mService, intent, BLUETOOTH_CONNECT,
-                Utils.getTempAllowlistBroadcastOptions());
+        mService.sendBroadcast(
+                intent, BLUETOOTH_CONNECT, Utils.getTempBroadcastOptions().toBundle());
     }
 
     private boolean shouldRequestFocus() {

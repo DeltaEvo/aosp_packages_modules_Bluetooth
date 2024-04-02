@@ -30,8 +30,6 @@ using namespace bluetooth;
 using namespace ::ras;
 using namespace ::ras::uuid;
 
-using bluetooth::ras::ProcedureDoneStatus;
-
 namespace {
 
 class RasServerImpl;
@@ -76,11 +74,10 @@ class RasServerImpl : public bluetooth::ras::RasServer {
   }
 
   void PushProcedureData(RawAddress address, uint16_t procedure_counter,
-                         ProcedureDoneStatus procedure_done_status,
-                         std::vector<uint8_t> data) {
-    log::info("{}, counter:{}, procedure_done_status:{}, with size {}",
-              ADDRESS_TO_LOGGABLE_STR(address), procedure_counter,
-              (uint16_t)procedure_done_status, data.size());
+                         bool is_last, std::vector<uint8_t> data) {
+    log::info("{}, counter:{}, is_last:{}, with size {}",
+              ADDRESS_TO_LOGGABLE_STR(address), procedure_counter, is_last,
+              data.size());
     tBLE_BD_ADDR ble_bd_addr;
     ResolveAddress(ble_bd_addr, address);
 
@@ -96,8 +93,7 @@ class RasServerImpl : public bluetooth::ras::RasServer {
     data_buffer.segments_.push_back(data);
 
     // Send data ready
-    if (procedure_done_status == ProcedureDoneStatus::ALL_RESULTS_COMPLETE ||
-        procedure_done_status == ProcedureDoneStatus::ABORTED) {
+    if (is_last) {
       uint16_t ccc_value =
           tracker.ccc_values_[kRasRangingDataReadyCharacteristic];
       if (ccc_value == GATT_CLT_CONFIG_NONE) {
@@ -449,12 +445,7 @@ class RasServerImpl : public bluetooth::ras::RasServer {
   }
 
   void OnGetRangingData(ControlPointCommand* command, ClientTracker* tracker) {
-    if (command->operator_ != OPERATOR_NULL) {
-      log::warn("Invalid operator 0x{:02x}", command->operator_);
-      SendResponseCode(ResponseCodeValue::INVALID_OPERATOR, tracker);
-      return;
-    }
-    const uint8_t* value = command->operand_;
+    const uint8_t* value = command->parameter_;
     uint16_t ranging_counter;
     STREAM_TO_UINT16(ranging_counter, value);
     log::info("ranging_counter:{}", ranging_counter);
@@ -499,12 +490,7 @@ class RasServerImpl : public bluetooth::ras::RasServer {
   };
 
   void OnAckRangingData(ControlPointCommand* command, ClientTracker* tracker) {
-    if (command->operator_ != OPERATOR_NULL) {
-      log::warn("Invalid operator 0x{:02x}", command->operator_);
-      SendResponseCode(ResponseCodeValue::INVALID_OPERATOR, tracker);
-      return;
-    }
-    const uint8_t* value = command->operand_;
+    const uint8_t* value = command->parameter_;
     uint16_t ranging_counter;
     STREAM_TO_UINT16(ranging_counter, value);
     log::info("ranging_counter:{}", ranging_counter);

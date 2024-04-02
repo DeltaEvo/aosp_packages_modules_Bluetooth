@@ -65,6 +65,7 @@ import com.android.bluetooth.util.DevicePolicyUtils;
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
@@ -475,7 +476,7 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
         } else {
             Log.d(TAG, "Notification Not Required.");
             if (sNotificationManager != null) {
-                sNotificationManager.cancelAll();
+                sNotificationManager.cancel(android.R.drawable.stat_sys_data_bluetooth);
             }
         }
     }
@@ -514,8 +515,8 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
                     intent.putExtra(BluetoothDevice.EXTRA_DEVICE, stateMachine.getRemoteDevice());
                     intent.putExtra(BluetoothDevice.EXTRA_ACCESS_REQUEST_TYPE,
                             BluetoothDevice.REQUEST_TYPE_PHONEBOOK_ACCESS);
-                    Utils.sendBroadcast(BluetoothPbapService.this, intent, BLUETOOTH_CONNECT,
-                            Utils.getTempAllowlistBroadcastOptions());
+                    BluetoothPbapService.this.sendBroadcast(
+                            intent, BLUETOOTH_CONNECT, Utils.getTempBroadcastOptions().toBundle());
                     stateMachine.sendMessage(PbapStateMachine.REJECTED);
                     break;
                 case MSG_ACQUIRE_WAKE_LOCK:
@@ -849,7 +850,7 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
             Log.d(TAG, "getConnectedDevices");
             BluetoothPbapService service = getService(source);
             if (service == null) {
-                return new ArrayList<>(0);
+                return Collections.emptyList();
             }
             return service.getConnectedDevices();
         }
@@ -860,7 +861,7 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
             Log.d(TAG, "getDevicesMatchingConnectionStates");
             BluetoothPbapService service = getService(source);
             if (service == null) {
-                return new ArrayList<>(0);
+                return Collections.emptyList();
             }
             return service.getDevicesMatchingConnectionStates(states);
         }
@@ -950,10 +951,15 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
                     BluetoothDevice.REQUEST_TYPE_PHONEBOOK_ACCESS);
             intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
             intent.putExtra(BluetoothDevice.EXTRA_PACKAGE_NAME, this.getPackageName());
-            Utils.sendOrderedBroadcast(this, intent, BLUETOOTH_CONNECT,
-                    Utils.getTempAllowlistBroadcastOptions(), null/* resultReceiver */,
-                    null/* scheduler */, Activity.RESULT_OK/* initialCode */, null/* initialData */,
-                    null/* initialExtras */);
+            sendOrderedBroadcast(
+                    intent,
+                    BLUETOOTH_CONNECT,
+                    Utils.getTempBroadcastOptions().toBundle(),
+                    null /* resultReceiver */,
+                    null /* scheduler */,
+                    Activity.RESULT_OK /* initialCode */,
+                    null /* initialData */,
+                    null /* initialExtras */);
             Log.v(TAG, "waiting for authorization for connection from: " + device);
             /* In case car kit time out and try to use HFP for phonebook
              * access, while UI still there waiting for user to confirm */

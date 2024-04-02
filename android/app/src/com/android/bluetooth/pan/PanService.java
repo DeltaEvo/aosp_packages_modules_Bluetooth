@@ -52,6 +52,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.modules.utils.HandlerExecutor;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -386,7 +387,7 @@ public class PanService extends ProfileService {
         public List<BluetoothDevice> getConnectedDevices(AttributionSource source) {
             PanService service = getService(source);
             if (service == null) {
-                return new ArrayList<>();
+                return Collections.emptyList();
             }
 
             return service.getConnectedDevices();
@@ -397,7 +398,7 @@ public class PanService extends ProfileService {
                 int[] states, AttributionSource source) {
             PanService service = getService(source);
             if (service == null) {
-                return new ArrayList<>();
+                return Collections.emptyList();
             }
 
             return service.getDevicesMatchingConnectionStates(states);
@@ -486,7 +487,7 @@ public class PanService extends ProfileService {
             Intent intent = new Intent(BluetoothPan.ACTION_TETHERING_STATE_CHANGED);
             intent.putExtra(BluetoothPan.EXTRA_TETHERING_STATE,
                     mTetherOn ? BluetoothPan.TETHERING_STATE_ON : BluetoothPan.TETHERING_STATE_OFF);
-            Utils.sendBroadcast(this, intent, null, Utils.getTempAllowlistBroadcastOptions());
+            sendBroadcast(intent, null, Utils.getTempBroadcastOptions().toBundle());
         }
     }
 
