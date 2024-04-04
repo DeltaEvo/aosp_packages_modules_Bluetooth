@@ -64,6 +64,7 @@ import com.android.internal.annotations.VisibleForTesting;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
@@ -388,8 +389,10 @@ public class BluetoothMapService extends ProfileService {
                         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, sRemoteDevice);
                         intent.putExtra(BluetoothDevice.EXTRA_ACCESS_REQUEST_TYPE,
                                 BluetoothDevice.REQUEST_TYPE_MESSAGE_ACCESS);
-                        Utils.sendBroadcast(BluetoothMapService.this, intent, BLUETOOTH_CONNECT,
-                                Utils.getTempAllowlistBroadcastOptions());
+                        BluetoothMapService.this.sendBroadcast(
+                                intent,
+                                BLUETOOTH_CONNECT,
+                                Utils.getTempBroadcastOptions().toBundle());
                         cancelUserTimeoutAlarm();
                         mIsWaitingAuthorization = false;
                         stopObexServerSessions(-1);
@@ -536,8 +539,7 @@ public class BluetoothMapService extends ProfileService {
             intent.putExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, prevState);
             intent.putExtra(BluetoothProfile.EXTRA_STATE, mState);
             intent.putExtra(BluetoothDevice.EXTRA_DEVICE, sRemoteDevice);
-            Utils.sendBroadcast(this, intent, BLUETOOTH_CONNECT,
-                    Utils.getTempAllowlistBroadcastOptions());
+            sendBroadcast(intent, BLUETOOTH_CONNECT, Utils.getTempBroadcastOptions().toBundle());
         }
     }
 
@@ -968,9 +970,15 @@ public class BluetoothMapService extends ProfileService {
             intent.putExtra(BluetoothDevice.EXTRA_ACCESS_REQUEST_TYPE,
                     BluetoothDevice.REQUEST_TYPE_MESSAGE_ACCESS);
             intent.putExtra(BluetoothDevice.EXTRA_DEVICE, sRemoteDevice);
-            Utils.sendOrderedBroadcast(this, intent, BLUETOOTH_CONNECT,
-                    Utils.getTempAllowlistBroadcastOptions(), null, null,
-                    Activity.RESULT_OK, null, null);
+            sendOrderedBroadcast(
+                    intent,
+                    BLUETOOTH_CONNECT,
+                    Utils.getTempBroadcastOptions().toBundle(),
+                    null,
+                    null,
+                    Activity.RESULT_OK,
+                    null,
+                    null);
 
             Log.v(TAG, "waiting for authorization for connection from: " + sRemoteDeviceName);
             //Queue USER_TIMEOUT to disconnect MAP OBEX session. If user doesn't
@@ -1350,7 +1358,7 @@ public class BluetoothMapService extends ProfileService {
             try {
                 BluetoothMapService service = getService(source);
                 if (service == null) {
-                    return new ArrayList<>();
+                    return Collections.emptyList();
                 }
 
                 enforceBluetoothPrivilegedPermission(service);
@@ -1372,7 +1380,7 @@ public class BluetoothMapService extends ProfileService {
             try {
                 BluetoothMapService service = getService(source);
                 if (service == null) {
-                    return new ArrayList<>();
+                    return Collections.emptyList();
                 }
 
                 return service.getDevicesMatchingConnectionStates(states);

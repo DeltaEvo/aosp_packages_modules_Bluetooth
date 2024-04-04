@@ -71,6 +71,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -1096,8 +1097,7 @@ public class A2dpService extends ProfileService {
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
                         | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
-        Utils.sendBroadcast(this, intent, BLUETOOTH_CONNECT,
-                Utils.getTempAllowlistBroadcastOptions());
+        sendBroadcast(intent, BLUETOOTH_CONNECT, Utils.getTempBroadcastOptions().toBundle());
     }
 
     private void broadcastCodecConfig(BluetoothDevice device, BluetoothCodecStatus codecStatus) {
@@ -1107,8 +1107,7 @@ public class A2dpService extends ProfileService {
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
                         | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
-        Utils.sendBroadcast(this, intent, BLUETOOTH_CONNECT,
-                Utils.getTempAllowlistBroadcastOptions());
+        sendBroadcast(intent, BLUETOOTH_CONNECT, Utils.getTempBroadcastOptions().toBundle());
     }
 
     public void handleBondStateChanged(BluetoothDevice device, int fromState, int toState) {
@@ -1364,7 +1363,7 @@ public class A2dpService extends ProfileService {
         public List<BluetoothDevice> getConnectedDevices(AttributionSource source) {
             A2dpService service = getService(source);
             if (service == null) {
-                return new ArrayList<>();
+                return Collections.emptyList();
             }
 
             return service.getConnectedDevices();
@@ -1375,7 +1374,7 @@ public class A2dpService extends ProfileService {
                 int[] states, AttributionSource source) {
             A2dpService service = getService(source);
             if (service == null) {
-                return new ArrayList<>();
+                return Collections.emptyList();
             }
 
             return service.getDevicesMatchingConnectionStates(states);
@@ -1399,7 +1398,8 @@ public class A2dpService extends ProfileService {
             }
             if (Flags.audioRoutingCentralization()) {
                 return ((AudioRoutingManager) service.getActiveDeviceManager())
-                        .activateDeviceProfile(device, BluetoothProfile.A2DP);
+                        .activateDeviceProfile(device, BluetoothProfile.A2DP)
+                        .join();
             }
 
             if (device == null) {
@@ -1467,7 +1467,7 @@ public class A2dpService extends ProfileService {
         public List<BluetoothCodecType> getSupportedCodecTypes(AttributionSource source) {
             A2dpService service = getService(source);
             if (service == null) {
-                return new ArrayList<>();
+                return Collections.emptyList();
             }
 
             enforceBluetoothPrivilegedPermission(service);

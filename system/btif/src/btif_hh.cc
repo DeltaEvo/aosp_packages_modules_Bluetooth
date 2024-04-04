@@ -501,13 +501,24 @@ static void hh_open_handler(tBTA_HH_CONN& conn) {
     // Use current state if the device instance already exists
     btif_hh_device_t* p_dev = btif_hh_find_dev_by_link_spec(conn.link_spec);
     if (p_dev != nullptr) {
+      log::debug("Device instance found: {}, state: {}",
+                 p_dev->link_spec.ToRedactedStringForLogging(),
+                 bthh_connection_state_text(p_dev->dev_status));
       dev_status = p_dev->dev_status;
+    }
+
+    if (btif_hh_cb.pending_link_spec == conn.link_spec) {
+      log::verbose("Device connection was pending for: {}, status: {}",
+                   conn.link_spec.ToRedactedStringForLogging(),
+                   btif_hh_status_text(btif_hh_cb.status));
+      dev_status = BTHH_CONN_STATE_CONNECTING;
     }
 
     if (dev_status != BTHH_CONN_STATE_ACCEPTING &&
         dev_status != BTHH_CONN_STATE_CONNECTING) {
       log::warn("Reject Incoming HID Connection, device: {}, state: {}",
-                conn.link_spec.ToRedactedStringForLogging(), dev_status);
+                conn.link_spec.ToRedactedStringForLogging(),
+                bthh_connection_state_text(dev_status));
 
       if (p_dev != nullptr) {
         p_dev->dev_status = BTHH_CONN_STATE_DISCONNECTED;
@@ -629,6 +640,9 @@ void btif_hh_load_bonded_dev(const tAclLinkSpec& link_spec_ref,
   }
 
   if (hh_add_device(link_spec, attr_mask, reconnect_allowed)) {
+    if (IS_FLAG_ENABLED(allow_switching_hid_and_hogp) && reconnect_allowed) {
+      BTHH_STATE_UPDATE(link_spec, BTHH_CONN_STATE_ACCEPTING);
+    }
     BTA_HhAddDev(link_spec, attr_mask, sub_class, app_id, dscp_info);
   }
 }
@@ -1578,17 +1592,10 @@ static bt_status_t connect(RawAddress* bd_addr, tBLE_ADDR_TYPE addr_type,
   }
 
   btif_hh_device_t* p_dev = btif_hh_find_connected_dev_by_link_spec(link_spec);
-  if (p_dev) {
-    if (p_dev->dev_status == BTHH_CONN_STATE_CONNECTED ||
-        p_dev->dev_status == BTHH_CONN_STATE_CONNECTING) {
-      log::warn("device {} already connected",
-                p_dev->link_spec.ToRedactedStringForLogging());
-      return BT_STATUS_DONE;
-    } else if (p_dev->dev_status == BTHH_CONN_STATE_DISCONNECTING) {
-      log::warn("device {} is busy with disconnecting",
-                p_dev->link_spec.ToRedactedStringForLogging());
-      return BT_STATUS_BUSY;
-    }
+  if (p_dev != nullptr) {
+    log::warn("device {} already connected",
+              p_dev->link_spec.ToRedactedStringForLogging());
+    return BT_STATUS_DONE;
   }
 
   if (link_spec.transport == BT_TRANSPORT_AUTO) {
@@ -1653,17 +1660,6 @@ static bt_status_t disconnect(RawAddress* bd_addr, tBLE_ADDR_TYPE addr_type,
 
     BTHH_LOG_UNKNOWN_LINK(link_spec);
     return BT_STATUS_UNHANDLED;
-  }
-
-  if (p_dev->dev_status == BTHH_CONN_STATE_DISCONNECTED ||
-      p_dev->dev_status == BTHH_CONN_STATE_DISCONNECTING) {
-    log::error("device {} already disconnected.",
-               p_dev->link_spec.ToRedactedStringForLogging());
-    return BT_STATUS_DONE;
-  } else if (p_dev->dev_status == BTHH_CONN_STATE_CONNECTING) {
-    log::error("device {} is busy with disconnecting.",
-               p_dev->link_spec.ToRedactedStringForLogging());
-    return BT_STATUS_BUSY;
   }
 
   return btif_transfer_context(btif_hh_handle_evt, BTIF_HH_DISCONNECT_REQ_EVT,

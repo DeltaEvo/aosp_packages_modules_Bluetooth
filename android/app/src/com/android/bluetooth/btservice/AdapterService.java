@@ -165,6 +165,7 @@ import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -249,6 +250,9 @@ public class AdapterService extends Service {
 
     private final DeviceConfigListener mDeviceConfigListener = new DeviceConfigListener();
 
+    private final Looper mLooper;
+    private final AdapterServiceHandler mHandler;
+
     private int mStackReportedState;
     private long mTxTimeTotalMs;
     private long mRxTimeTotalMs;
@@ -281,8 +285,8 @@ public class AdapterService extends Service {
     @Nullable private PhonePolicy mPhonePolicy;
 
     private ActiveDeviceManager mActiveDeviceManager;
-    private DatabaseManager mDatabaseManager;
-    private SilenceDeviceManager mSilenceDeviceManager;
+    private final DatabaseManager mDatabaseManager;
+    private final SilenceDeviceManager mSilenceDeviceManager;
     private CompanionManager mBtCompanionManager;
     private AppOpsManager mAppOps;
 
@@ -315,8 +319,6 @@ public class AdapterService extends Service {
     private volatile boolean mTestModeEnabled = false;
 
     private MetricsLogger mMetricsLogger;
-    private Looper mLooper;
-    private AdapterServiceHandler mHandler;
 
     /** Handlers for incoming service calls */
     private AdapterServiceBinder mBinder;
@@ -354,15 +356,21 @@ public class AdapterService extends Service {
     }
 
     // Keep a constructor for ActivityThread.handleCreateService
-    AdapterService() {}
-
-    @VisibleForTesting
-    AdapterService(Looper looper) {
-        mLooper = looper;
+    AdapterService() {
+        this(Looper.getMainLooper());
     }
 
     @VisibleForTesting
-    AdapterService(Context ctx) {
+    AdapterService(Looper looper) {
+        mLooper = requireNonNull(looper);
+        mHandler = new AdapterServiceHandler(mLooper);
+        mSilenceDeviceManager = new SilenceDeviceManager(this, new ServiceFactory(), mLooper);
+        mDatabaseManager = new DatabaseManager(this);
+    }
+
+    @VisibleForTesting
+    public AdapterService(Context ctx) {
+        this(Looper.getMainLooper());
         attachBaseContext(ctx);
     }
 
@@ -614,10 +622,7 @@ public class AdapterService extends Service {
             return;
         }
         // OnCreate must perform the minimum of infaillible and mandatory initialization
-        if (mLooper == null) {
-            mLooper = Looper.getMainLooper();
-        }
-        mHandler = new AdapterServiceHandler(mLooper);
+        mRemoteDevices = new RemoteDevices(this, mLooper);
         mAdapterProperties = new AdapterProperties(this);
         mAdapterStateMachine = new AdapterState(this, mLooper);
         mBinder = new AdapterServiceBinder(this);
@@ -626,18 +631,12 @@ public class AdapterService extends Service {
         mPowerManager = getNonNullSystemService(PowerManager.class);
         mBatteryStatsManager = getNonNullSystemService(BatteryStatsManager.class);
         mCompanionDeviceManager = getNonNullSystemService(CompanionDeviceManager.class);
+        setAdapterService(this);
     }
 
     private void init() {
         debugLog("init()");
         Config.init(this);
-        if (!Flags.fastBindToApp()) {
-            // Moved to OnCreate
-            if (mLooper == null) {
-                mLooper = Looper.getMainLooper();
-            }
-            mHandler = new AdapterServiceHandler(mLooper);
-        }
         initMetricsLogger();
         mDeviceConfigListener.start();
 
@@ -648,10 +647,9 @@ public class AdapterService extends Service {
             mPowerManager = getNonNullSystemService(PowerManager.class);
             mBatteryStatsManager = getNonNullSystemService(BatteryStatsManager.class);
             mCompanionDeviceManager = getNonNullSystemService(CompanionDeviceManager.class);
+            mRemoteDevices = new RemoteDevices(this, mLooper);
         }
 
-        mRemoteDevices = new RemoteDevices(this, mLooper);
-        mRemoteDevices.init();
         clearDiscoveringPackages();
         if (!Flags.fastBindToApp()) {
             mBinder = new AdapterServiceBinder(this);
@@ -699,9 +697,12 @@ public class AdapterService extends Service {
                         "BluetoothQualityReportNativeInterface cannot be null when BQR starts");
         mBluetoothQualityReportNativeInterface.init();
 
-        mSdpManager = SdpManager.init(this);
+        if (Flags.fastBindToApp()) {
+            mSdpManager = new SdpManager(this, mLooper);
+        } else {
+            mSdpManager = new SdpManager(this);
+        }
 
-        mDatabaseManager = new DatabaseManager(this);
         mDatabaseManager.start(MetadataDatabase.createDatabase(this));
 
         boolean isAutomotiveDevice =
@@ -730,14 +731,15 @@ public class AdapterService extends Service {
         }
         mActiveDeviceManager.start();
 
-        mSilenceDeviceManager = new SilenceDeviceManager(this, new ServiceFactory(), mLooper);
         mSilenceDeviceManager.start();
 
         mBtCompanionManager = new CompanionManager(this, new ServiceFactory());
 
         mBluetoothSocketManagerBinder = new BluetoothSocketManagerBinder(this);
 
-        setAdapterService(this);
+        if (!Flags.fastBindToApp()) {
+            setAdapterService(this);
+        }
 
         invalidateBluetoothCaches();
 
@@ -1354,9 +1356,7 @@ public class AdapterService extends Service {
             }
         }
 
-        if (mDatabaseManager != null) {
-            mDatabaseManager.cleanup();
-        }
+        mDatabaseManager.cleanup();
 
         if (mAdapterStateMachine != null) {
             mAdapterStateMachine.doQuit();
@@ -1367,7 +1367,7 @@ public class AdapterService extends Service {
         }
 
         if (mRemoteDevices != null) {
-            mRemoteDevices.cleanup();
+            mRemoteDevices.reset();
         }
 
         if (mSdpManager != null) {
@@ -1398,9 +1398,7 @@ public class AdapterService extends Service {
             mPhonePolicy.cleanup();
         }
 
-        if (mSilenceDeviceManager != null) {
-            mSilenceDeviceManager.cleanup();
-        }
+        mSilenceDeviceManager.cleanup();
 
         if (mActiveDeviceManager != null) {
             mActiveDeviceManager.cleanup();
@@ -2273,7 +2271,7 @@ public class AdapterService extends Service {
                     || !callerIsSystemOrActiveOrManagedUser(service, TAG, "getUuids")
                     || !Utils.checkConnectPermissionForDataDelivery(
                             service, attributionSource, "AdapterService getUuids")) {
-                return new ArrayList<>();
+                return Collections.emptyList();
             }
 
             ParcelUuid[] parcels = service.mAdapterProperties.getUuids();
@@ -2495,7 +2493,7 @@ public class AdapterService extends Service {
                             service,
                             attributionSource,
                             "AdapterService getMostRecentlyConnectedDevices")) {
-                return new ArrayList<>();
+                return Collections.emptyList();
             }
 
             enforceBluetoothPrivilegedPermission(service);
@@ -2510,7 +2508,7 @@ public class AdapterService extends Service {
             if (service == null
                     || !Utils.checkConnectPermissionForDataDelivery(
                             service, attributionSource, "AdapterService getBondedDevices")) {
-                return new ArrayList<>();
+                return Collections.emptyList();
             }
 
             return Arrays.asList(service.getBondedDevices());
@@ -2697,16 +2695,7 @@ public class AdapterService extends Service {
                 return BluetoothDevice.CONNECTION_STATE_DISCONNECTED;
             }
 
-            if (Flags.apiGetConnectionStateUsingIdentityAddress()) {
-                final long token = Binder.clearCallingIdentity();
-                try {
-                    return service.getConnectionState(device);
-                } finally {
-                    Binder.restoreCallingIdentity(token);
-                }
-            } else {
-                return service.getConnectionState(device);
-            }
+            return service.getConnectionState(device);
         }
 
         @Override
@@ -2784,7 +2773,7 @@ public class AdapterService extends Service {
             if (service == null
                     || !callerIsSystemOrActiveOrManagedUser(service, TAG, "getActiveDevices")
                     || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
-                return new ArrayList<>();
+                return Collections.emptyList();
             }
 
             enforceBluetoothPrivilegedPermission(service);
@@ -2950,7 +2939,7 @@ public class AdapterService extends Service {
                     || !callerIsSystemOrActiveOrManagedUser(service, TAG, "getRemoteUuids")
                     || !Utils.checkConnectPermissionForDataDelivery(
                             service, attributionSource, "AdapterService getRemoteUuids")) {
-                return new ArrayList<>();
+                return Collections.emptyList();
             }
 
             ParcelUuid[] parcels = service.getRemoteUuids(device);
@@ -4818,17 +4807,17 @@ public class AdapterService extends Service {
     }
 
     int getConnectionState(BluetoothDevice device) {
+        final String address = device.getAddress();
         if (Flags.apiGetConnectionStateUsingIdentityAddress()) {
-            int connectionState =
-                    mNativeInterface.getConnectionState(getBytesFromAddress(device.getAddress()));
-            final String identityAddress = device.getIdentityAddress();
+            int connectionState = mNativeInterface.getConnectionState(getBytesFromAddress(address));
+            final String identityAddress = getIdentityAddress(address);
             if (identityAddress != null) {
                 connectionState |=
                         mNativeInterface.getConnectionState(getBytesFromAddress(identityAddress));
             }
             return connectionState;
         }
-        return mNativeInterface.getConnectionState(getBytesFromAddress(device.getAddress()));
+        return mNativeInterface.getConnectionState(getBytesFromAddress(address));
     }
 
     int getConnectionHandle(BluetoothDevice device, int transport) {
@@ -5683,9 +5672,7 @@ public class AdapterService extends Service {
 
     @VisibleForTesting
     boolean factoryReset() {
-        if (mDatabaseManager != null) {
-            mDatabaseManager.factoryReset();
-        }
+        mDatabaseManager.factoryReset();
 
         if (mBluetoothKeystoreService != null) {
             mBluetoothKeystoreService.factoryReset();
@@ -5931,9 +5918,7 @@ public class AdapterService extends Service {
         if (mCsipSetCoordinatorService != null && mCsipSetCoordinatorService.isAvailable()) {
             mCsipSetCoordinatorService.handleBondStateChanged(device, fromState, toState);
         }
-        if (mDatabaseManager != null) {
-            mDatabaseManager.handleBondStateChanged(device, fromState, toState);
-        }
+        mDatabaseManager.handleBondStateChanged(device, fromState, toState);
     }
 
     static int convertScanModeToHal(int mode) {

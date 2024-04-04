@@ -123,6 +123,7 @@ cc_library_static {
         "pan/bta_pan_api.cc",
         "pan/bta_pan_ci.cc",
         "pan/bta_pan_main.cc",
+        "ras/ras_client.cc",
         "ras/ras_server.cc",
         "ras/ras_utils.cc",
         "vc/device.cc",
@@ -636,7 +637,7 @@ cc_test {
     ],
     srcs: [
         ":TestCommonMockFunctions",
-        ":TestMockOsi",
+        ":TestStubOsi",
         "gatt/database.cc",
         "gatt/database_builder.cc",
         "test/common/bta_gatt_api_mock.cc",

@@ -51,6 +51,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -470,7 +471,7 @@ public class HidDeviceService extends ProfileService {
 
             HidDeviceService service = getService(source);
             if (service == null) {
-                return new ArrayList<BluetoothDevice>(0);
+                return Collections.emptyList();
             }
 
             return service.getDevicesMatchingConnectionStates(states);
@@ -875,8 +876,7 @@ public class HidDeviceService extends ProfileService {
         intent.putExtra(BluetoothProfile.EXTRA_STATE, newState);
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
-        Utils.sendBroadcast(this, intent, BLUETOOTH_CONNECT,
-                Utils.getTempAllowlistBroadcastOptions());
+        sendBroadcast(intent, BLUETOOTH_CONNECT, Utils.getTempBroadcastOptions().toBundle());
     }
 
     private static int convertHalState(int halState) {
