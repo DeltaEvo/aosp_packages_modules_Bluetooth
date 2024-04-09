@@ -36,7 +36,6 @@
 #include "facade/grpc_root_server.h"
 #include "hal/hci_hal_host.h"
 #include "hal/snoop_logger.h"
-#include "include/check.h"
 #include "os/log.h"
 #include "os/parameter_provider.h"
 #include "os/system_properties.h"
@@ -146,8 +145,13 @@ int main(int argc, const char** argv) {
     if (arg.find(arg_btsnoop_path) == 0) {
       auto btsnoop_path = arg.substr(arg_btsnoop_path.size());
       ::bluetooth::os::ParameterProvider::OverrideSnoopLogFilePath(btsnoop_path);
-      CHECK(::bluetooth::os::SetSystemProperty(
-          ::bluetooth::hal::SnoopLogger::kBtSnoopLogModeProperty, ::bluetooth::hal::SnoopLogger::kBtSnoopLogModeFull));
+      log::assert_that(
+          ::bluetooth::os::SetSystemProperty(
+              ::bluetooth::hal::SnoopLogger::kBtSnoopLogModeProperty,
+              ::bluetooth::hal::SnoopLogger::kBtSnoopLogModeFull),
+          "assert failed: ::bluetooth::os::SetSystemProperty( "
+          "::bluetooth::hal::SnoopLogger::kBtSnoopLogModeProperty, "
+          "::bluetooth::hal::SnoopLogger::kBtSnoopLogModeFull)");
     }
     if (arg.find(arg_btsnooz_path) == 0) {
       auto btsnooz_path = arg.substr(arg_btsnooz_path.size());

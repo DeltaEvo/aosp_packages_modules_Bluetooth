@@ -25,13 +25,11 @@
 
 #include "a2dp_vendor_opus.h"
 
-#include <base/logging.h>
 #include <bluetooth/log.h>
 #include <string.h>
 
 #include "a2dp_vendor_opus_decoder.h"
 #include "a2dp_vendor_opus_encoder.h"
-#include "include/check.h"
 #include "internal_include/bt_trace.h"
 #include "os/log.h"
 #include "osi/include/osi.h"
@@ -1220,11 +1218,13 @@ bool A2dpCodecConfigOpusBase::setCodecConfig(const uint8_t* p_peer_codec_info,
     status = A2DP_BuildInfoOpus(AVDT_MEDIA_TYPE_AUDIO, &peer_info_cie,
                                 ota_codec_peer_config_);
   }
-  CHECK(status == A2DP_SUCCESS);
+  log::assert_that(status == A2DP_SUCCESS,
+                   "assert failed: status == A2DP_SUCCESS");
 
   status = A2DP_BuildInfoOpus(AVDT_MEDIA_TYPE_AUDIO, &result_config_cie,
                               ota_codec_config_);
-  CHECK(status == A2DP_SUCCESS);
+  log::assert_that(status == A2DP_SUCCESS,
+                   "assert failed: status == A2DP_SUCCESS");
   return true;
 
 fail:
@@ -1290,7 +1290,8 @@ bool A2dpCodecConfigOpusBase::setPeerCodecCapabilities(
   log::info("BuildInfoOpus for peer info cie for ota caps");
   status = A2DP_BuildInfoOpus(AVDT_MEDIA_TYPE_AUDIO, &peer_info_cie,
                               ota_codec_peer_capability_);
-  CHECK(status == A2DP_SUCCESS);
+  log::assert_that(status == A2DP_SUCCESS,
+                   "assert failed: status == A2DP_SUCCESS");
   return true;
 
 fail:

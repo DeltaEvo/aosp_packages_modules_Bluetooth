@@ -16,7 +16,6 @@
  */
 
 #include <base/functional/bind.h>
-#include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
 #include <base/strings/string_util.h>
 #include <bluetooth/log.h>
@@ -33,7 +32,6 @@
 #include "bta_gatt_queue.h"
 #include "bta_vc_api.h"
 #include "devices.h"
-#include "include/check.h"
 #include "internal_include/bt_trace.h"
 #include "os/log.h"
 #include "osi/include/osi.h"
@@ -1300,7 +1298,7 @@ void VolumeControl::Initialize(bluetooth::vc::VolumeControlCallbacks* callbacks,
 bool VolumeControl::IsVolumeControlRunning() { return instance; }
 
 VolumeControl* VolumeControl::Get(void) {
-  CHECK(instance);
+  log::assert_that(instance != nullptr, "assert failed: instance != nullptr");
   return instance;
 };
 

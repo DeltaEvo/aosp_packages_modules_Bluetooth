@@ -21,7 +21,6 @@
 #define ATRACE_TAG ATRACE_TAG_AUDIO
 
 #include <android_bluetooth_flags.h>
-#include <base/logging.h>
 #include <base/run_loop.h>
 #include <bluetooth/log.h>
 #ifdef __ANDROID__
@@ -46,7 +45,6 @@
 #include "common/metrics.h"
 #include "common/repeating_timer.h"
 #include "common/time_util.h"
-#include "include/check.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/fixed_queue.h"
@@ -438,7 +436,8 @@ bool btif_a2dp_source_restart_session(const RawAddress& old_peer_address,
             ADDRESS_TO_LOGGABLE_STR(new_peer_address),
             btif_a2dp_source_cb.StateStr());
 
-  CHECK(!new_peer_address.IsEmpty());
+  log::assert_that(!new_peer_address.IsEmpty(),
+                   "assert failed: !new_peer_address.IsEmpty()");
 
   // Must stop first the audio streaming
   btif_a2dp_source_stop_audio_req();
@@ -564,7 +563,7 @@ static void btif_a2dp_source_setup_codec(const RawAddress& peer_address) {
 
   // Check to make sure the platform has 8 bits/byte since
   // we're using that in frame size calculations now.
-  CHECK(CHAR_BIT == 8);
+  static_assert(CHAR_BIT == 8, "assert failed: CHAR_BIT == 8");
 
   btif_a2dp_source_audio_tx_flush_req();
   btif_a2dp_source_thread.DoInThread(
@@ -768,7 +767,8 @@ void btif_a2dp_source_on_suspended(tBTA_AV_SUSPEND* p_av_suspend) {
 
   if (btif_a2dp_source_cb.State() == BtifA2dpSource::kStateOff) return;
 
-  CHECK(p_av_suspend != nullptr) << "Suspend result could not be nullptr";
+  log::assert_that(p_av_suspend != nullptr,
+                   "Suspend result could not be nullptr");
 
   // check for status failures
   if (p_av_suspend->status != BTA_AV_SUCCESS) {
@@ -811,7 +811,9 @@ static void btif_a2dp_source_audio_tx_start_event(void) {
   if (btif_av_is_a2dp_offload_running()) return;
 
   /* Reset the media feeding state */
-  CHECK(btif_a2dp_source_cb.encoder_interface != nullptr);
+  log::assert_that(
+      btif_a2dp_source_cb.encoder_interface != nullptr,
+      "assert failed: btif_a2dp_source_cb.encoder_interface != nullptr");
   btif_a2dp_source_cb.encoder_interface->feeding_reset();
 
   log::verbose(
@@ -920,7 +922,9 @@ static void btif_a2dp_source_audio_handle_timer(void) {
     log::error("ERROR Media task Scheduled after Suspend");
     return;
   }
-  CHECK(btif_a2dp_source_cb.encoder_interface != nullptr);
+  log::assert_that(
+      btif_a2dp_source_cb.encoder_interface != nullptr,
+      "assert failed: btif_a2dp_source_cb.encoder_interface != nullptr");
   size_t transmit_queue_length =
       fixed_queue_length(btif_a2dp_source_cb.tx_audio_queue);
 #ifdef __ANDROID__
@@ -1050,7 +1054,9 @@ static bool btif_a2dp_source_enqueue_callback(BT_HDR* p_buf, size_t frames_n,
   btif_a2dp_source_cb.stats.tx_queue_total_frames += frames_n;
   btif_a2dp_source_cb.stats.tx_queue_max_frames_per_packet = std::max(
       frames_n, btif_a2dp_source_cb.stats.tx_queue_max_frames_per_packet);
-  CHECK(btif_a2dp_source_cb.encoder_interface != nullptr);
+  log::assert_that(
+      btif_a2dp_source_cb.encoder_interface != nullptr,
+      "assert failed: btif_a2dp_source_cb.encoder_interface != nullptr");
 
   fixed_queue_enqueue(btif_a2dp_source_cb.tx_audio_queue, p_buf);
 

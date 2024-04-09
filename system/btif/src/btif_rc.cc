@@ -26,7 +26,6 @@
 
 #include "btif_rc.h"
 
-#include <base/logging.h>
 #include <bluetooth/log.h>
 #include <fcntl.h>
 #include <hardware/bluetooth.h>
@@ -46,7 +45,6 @@
 #include "btif_common.h"
 #include "btif_util.h"
 #include "device/include/interop.h"
-#include "include/check.h"
 #include "os/log.h"
 #include "osi/include/alarm.h"
 #include "osi/include/allocator.h"
@@ -725,8 +723,8 @@ void handle_rc_ctrl_psm(btif_rc_device_cb_t* p_dev) {
 }
 
 void handle_rc_features(btif_rc_device_cb_t* p_dev) {
-
-  CHECK(bt_rc_callbacks);
+  log::assert_that(bt_rc_callbacks != nullptr,
+                   "assert failed: bt_rc_callbacks != nullptr");
 
   btrc_remote_features_t rc_features = BTRC_FEAT_NONE;
   RawAddress avdtp_source_active_peer_addr = btif_av_source_active_peer();

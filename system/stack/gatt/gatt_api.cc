@@ -26,7 +26,6 @@
 #include "stack/include/gatt_api.h"
 
 #include <android_bluetooth_flags.h>
-#include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
 #include <bluetooth/log.h>
 
@@ -1439,6 +1438,14 @@ bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
     } else {
       log::verbose("Connecting without tcb address: {}",
                    ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+
+      if (p_reg->direct_connect_request.count(bd_addr) == 0) {
+        p_reg->direct_connect_request.insert(bd_addr);
+      } else {
+        log::warn(" {} already added to gatt_if {} direct conn list",
+                  ADDRESS_TO_LOGGABLE_CSTR(bd_addr), gatt_if);
+      }
+
       ret = acl_create_le_connection_with_id(gatt_if, bd_addr, addr_type);
     }
 
@@ -1491,6 +1498,15 @@ bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
   }
 
   return ret;
+}
+
+bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
+                  tBLE_ADDR_TYPE addr_type, tBTM_BLE_CONN_TYPE connection_type,
+                  tBT_TRANSPORT transport, bool opportunistic) {
+  constexpr uint8_t kPhyLe1M = 0x01;  // From the old controller shim.
+  uint8_t phy = kPhyLe1M;
+  return GATT_Connect(gatt_if, bd_addr, addr_type, connection_type, transport,
+                      opportunistic, phy);
 }
 
 bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,

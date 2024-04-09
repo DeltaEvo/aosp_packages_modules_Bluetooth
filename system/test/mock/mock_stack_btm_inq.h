@@ -26,7 +26,7 @@
 #include <functional>
 
 // Original included files, if any
-#include <base/logging.h>
+
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -348,24 +348,6 @@ struct btm_inq_db_find {
   tINQ_DB_ENT* operator()(const RawAddress& p_bda) { return body(p_bda); };
 };
 extern struct btm_inq_db_find btm_inq_db_find;
-
-// Name: btm_inq_db_free
-// Params: void
-// Return: void
-struct btm_inq_db_free {
-  std::function<void(void)> body{[](void) {}};
-  void operator()(void) { body(); };
-};
-extern struct btm_inq_db_free btm_inq_db_free;
-
-// Name: btm_inq_db_init
-// Params: void
-// Return: void
-struct btm_inq_db_init {
-  std::function<void(void)> body{[](void) {}};
-  void operator()(void) { body(); };
-};
-extern struct btm_inq_db_init btm_inq_db_init;
 
 // Name: btm_inq_db_new
 // Params: const RawAddress& p_bda

@@ -24,7 +24,6 @@
 #define LOG_TAG "gatt_utils"
 
 #include <android_bluetooth_flags.h>
-#include <base/logging.h>
 #include <base/strings/stringprintf.h>
 #include <bluetooth/log.h>
 
@@ -811,7 +810,7 @@ void gatt_indication_confirmation_timeout(void* data) {
  ******************************************************************************/
 void gatt_ind_ack_timeout(void* data) {
   tGATT_TCB* p_tcb = (tGATT_TCB*)data;
-  CHECK(p_tcb);
+  log::assert_that(p_tcb != nullptr, "assert failed: p_tcb != nullptr");
 
   log::warn("send ack now");
   p_tcb->ind_count = 0;
@@ -1311,24 +1310,6 @@ tGATT_TCB* gatt_find_tcb_by_cid(uint16_t lcid) {
   return p_tcb;
 }
 
-/*******************************************************************************
- *
- * Function         gatt_num_clcb_by_bd_addr
- *
- * Description      The function searches all LCB with macthing bd address
- *
- * Returns          total number of clcb found.
- *
- ******************************************************************************/
-uint8_t gatt_num_clcb_by_bd_addr(const RawAddress& bda) {
-  uint8_t num = 0;
-
-  for (auto const& clcb : gatt_cb.clcb_queue) {
-    if (clcb.p_tcb->peer_bda == bda) num++;
-  }
-  return num;
-}
-
 void gatt_sr_copy_prep_cnt_to_cback_cnt(tGATT_TCB& tcb) {
   for (uint8_t i = 0; i < GATT_MAX_APPS; i++) {
     if (tcb.prep_cnt[i]) {
@@ -1540,6 +1521,23 @@ void gatt_sr_update_prep_cnt(tGATT_TCB& tcb, tGATT_IF gatt_if, bool is_inc,
 bool gatt_cancel_open(tGATT_IF gatt_if, const RawAddress& bda) {
   tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(bda, BT_TRANSPORT_LE);
   if (!p_tcb) {
+    if (IS_FLAG_ENABLED(gatt_reconnect_on_bt_on_fix)) {
+      /* TCB is not allocated when trying to connect under this flag.
+       * but device address is storred in the tGATT_REG. Make sure to remove
+       * the address from the list when cancel is called.
+       */
+
+      tGATT_REG* p_reg = gatt_get_regcb(gatt_if);
+      if (!p_reg) {
+        log::error("Unable to find registered app gatt_if={}", gatt_if);
+      } else {
+        log::info("Removing {} from direct list",
+                  ADDRESS_TO_LOGGABLE_CSTR(bda));
+        p_reg->direct_connect_request.erase(bda);
+      }
+      return true;
+    }
+
     log::warn("Unable to cancel open for unknown connection gatt_if:{} peer:{}",
               gatt_if, ADDRESS_TO_LOGGABLE_CSTR(bda));
     return true;
@@ -1766,6 +1764,15 @@ static void gatt_le_disconnect_complete_notify_user(const RawAddress& bda,
       (*p_reg->app_cb.p_conn_cb)(p_reg->gatt_if, bda, conn_id,
                                  kGattDisconnected, reason, transport);
     }
+
+    if (IS_FLAG_ENABLED(gatt_reconnect_on_bt_on_fix)) {
+      if (p_reg->direct_connect_request.count(bda) > 0) {
+        log::info(
+            "Removing device {} from the direct connect list of gatt_if {} ",
+            ADDRESS_TO_LOGGABLE_CSTR(bda), p_reg->gatt_if);
+        p_reg->direct_connect_request.erase(bda);
+      }
+    }
   }
 }
 
@@ -1776,14 +1783,18 @@ void gatt_cleanup_upon_disc(const RawAddress& bda, tGATT_DISCONN_REASON reason,
 
   tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(bda, transport);
   if (!p_tcb) {
-    log::error(
-        "Disconnect for unknown connection bd_addr:{} reason:{} transport:{}",
-        ADDRESS_TO_LOGGABLE_CSTR(bda), gatt_disconnection_reason_text(reason),
-        bt_transport_text(transport));
-
     if (!IS_FLAG_ENABLED(gatt_reconnect_on_bt_on_fix)) {
+      log::error(
+          "Disconnect for unknown connection bd_addr:{} reason:{} transport:{}",
+          ADDRESS_TO_LOGGABLE_CSTR(bda), gatt_disconnection_reason_text(reason),
+          bt_transport_text(transport));
       return;
     }
+
+    log::info("Connection timeout bd_addr:{} reason:{} transport:{}",
+              ADDRESS_TO_LOGGABLE_CSTR(bda),
+              gatt_disconnection_reason_text(reason),
+              bt_transport_text(transport));
 
     /* Notify about timeout on direct connect */
     gatt_le_disconnect_complete_notify_user(bda, reason, transport);

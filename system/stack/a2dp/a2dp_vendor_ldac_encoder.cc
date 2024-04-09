@@ -31,7 +31,6 @@
 
 #include "a2dp_vendor_ldac.h"
 #include "common/time_util.h"
-#include "include/check.h"
 #include "internal_include/bt_target.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
@@ -189,7 +188,9 @@ static void a2dp_vendor_ldac_encoder_update(A2dpCodecConfig* a2dp_codec_config,
     }
     a2dp_ldac_encoder_cb.has_ldac_handle = true;
   }
-  CHECK(a2dp_ldac_encoder_cb.ldac_handle != nullptr);
+  log::assert_that(
+      a2dp_ldac_encoder_cb.ldac_handle != nullptr,
+      "assert failed: a2dp_ldac_encoder_cb.ldac_handle != nullptr");
 
   if (!a2dp_codec_config->copyOutOtaCodecConfig(codec_info)) {
     log::error("Cannot update the codec encoder for {}: invalid codec config",

@@ -24,7 +24,7 @@
  ******************************************************************************/
 
 #define LOG_TAG "devctl"
-#include <base/logging.h>
+
 #include <bluetooth/log.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -166,7 +166,7 @@ void BTM_db_reset(void) {
   }
 }
 
-static bool set_sec_state_idle(void* data, void* context) {
+static bool set_sec_state_idle(void* data, void* /* context */) {
   tBTM_SEC_DEV_REC* p_dev_rec = static_cast<tBTM_SEC_DEV_REC*>(data);
   p_dev_rec->sec_rec.sec_state = BTM_SEC_STATE_IDLE;
   return true;
@@ -776,7 +776,7 @@ tBTM_STATUS BTM_BT_Quality_Report_VSE_Register(
 
   if (retval != BTM_SUCCESS) {
     log::warn("Fail to (un)register VSEvents: {}, is_register: {}", retval,
-              logbool(is_register));
+              is_register);
     return retval;
   }
 
@@ -786,7 +786,6 @@ tBTM_STATUS BTM_BT_Quality_Report_VSE_Register(
     btm_cb.p_bqr_report_receiver = nullptr;
   }
 
-  log::info("Success to (un)register VSEvents. is_register: {}",
-            logbool(is_register));
+  log::info("Success to (un)register VSEvents. is_register: {}", is_register);
   return retval;
 }

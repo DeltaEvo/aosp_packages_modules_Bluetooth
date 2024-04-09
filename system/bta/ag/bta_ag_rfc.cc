@@ -24,13 +24,11 @@
  ******************************************************************************/
 
 #include <base/functional/bind.h>
-#include <base/logging.h>
 #include <bluetooth/log.h>
 
 #include "bta/ag/bta_ag_int.h"
 #include "bta/include/bta_sec_api.h"
 #include "internal_include/bt_trace.h"
-#include "osi/include/osi.h"
 #include "stack/include/main_thread.h"
 #include "stack/include/port_api.h"
 #include "types/raw_address.h"
@@ -74,7 +72,7 @@ const tBTA_AG_PORT_CBACK bta_ag_mgmt_cback_tbl[] = {
  * Returns          void
  *
  ******************************************************************************/
-static void bta_ag_port_cback(UNUSED_ATTR uint32_t code, uint16_t port_handle,
+static void bta_ag_port_cback(uint32_t /* code */, uint16_t port_handle,
                               uint16_t handle) {
   tBTA_AG_SCB* p_scb = bta_ag_scb_by_idx(handle);
   if (p_scb != nullptr) {
@@ -221,14 +219,14 @@ void bta_ag_port_cback_6(uint32_t code, uint16_t port_handle) {
  ******************************************************************************/
 void bta_ag_setup_port(tBTA_AG_SCB* p_scb, uint16_t handle) {
   int port_callback_index = bta_ag_scb_to_idx(p_scb) - 1;
-  CHECK_GE(port_callback_index, 0)
-      << "invalid callback index, handle=" << handle << ", bd_addr"
-      << p_scb->peer_addr;
-  CHECK_LT(port_callback_index,
-           static_cast<int>(sizeof(bta_ag_port_cback_tbl) /
-                            sizeof(bta_ag_port_cback_tbl[0])))
-      << "callback index out of bound, handle=" << handle << ", bd_addr"
-      << p_scb->peer_addr;
+  log::assert_that(port_callback_index >= 0,
+                   "invalid callback index, handle={}, bd_addr={}", handle,
+                   ADDRESS_TO_LOGGABLE_STR(p_scb->peer_addr));
+  log::assert_that(
+      port_callback_index < static_cast<int>(sizeof(bta_ag_port_cback_tbl) /
+                                             sizeof(bta_ag_port_cback_tbl[0])),
+      "callback index out of bound, handle={}, bd_addr={}", handle,
+      ADDRESS_TO_LOGGABLE_STR(p_scb->peer_addr));
   PORT_SetEventMask(handle, BTA_AG_PORT_EV_MASK);
   PORT_SetEventCallback(handle, bta_ag_port_cback_tbl[port_callback_index]);
 }
@@ -249,14 +247,15 @@ void bta_ag_start_servers(tBTA_AG_SCB* p_scb, tBTA_SERVICE_MASK services) {
     /* if service is set in mask */
     if (services & 1) {
       int management_callback_index = bta_ag_scb_to_idx(p_scb) - 1;
-      CHECK_GE(management_callback_index, 0)
-          << "invalid callback index, services=" << loghex(services)
-          << ", bd_addr=" << p_scb->peer_addr;
-      CHECK_LT(management_callback_index,
-               static_cast<int>(sizeof(bta_ag_mgmt_cback_tbl) /
-                                sizeof(bta_ag_mgmt_cback_tbl[0])))
-          << "callback index out of bound, services=" << loghex(services)
-          << ", bd_addr" << p_scb->peer_addr;
+      log::assert_that(management_callback_index >= 0,
+                       "invalid callback index, services=0x{:x}, bd_addr={}",
+                       services, ADDRESS_TO_LOGGABLE_STR(p_scb->peer_addr));
+      log::assert_that(
+          management_callback_index <
+              static_cast<int>(sizeof(bta_ag_mgmt_cback_tbl) /
+                               sizeof(bta_ag_mgmt_cback_tbl[0])),
+          "callback index out of bound, services=0x{:x}, bd_addr={}", services,
+          ADDRESS_TO_LOGGABLE_STR(p_scb->peer_addr));
       int status = RFCOMM_CreateConnectionWithSecurity(
           bta_ag_uuid[i], bta_ag_cb.profile[i].scn, true, BTA_AG_MTU,
           RawAddress::kAny, &(p_scb->serv_handle[i]),
@@ -360,8 +359,7 @@ void bta_ag_rfc_do_open(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
  * Returns          void
  *
  ******************************************************************************/
-void bta_ag_rfc_do_close(tBTA_AG_SCB* p_scb,
-                         UNUSED_ATTR const tBTA_AG_DATA& data) {
+void bta_ag_rfc_do_close(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& /* data */) {
   log::info("p_scb->conn_handle: 0x{:04x}", p_scb->conn_handle);
   if (p_scb->conn_handle) {
     RFCOMM_RemoveConnection(p_scb->conn_handle);

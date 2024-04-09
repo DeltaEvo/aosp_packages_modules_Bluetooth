@@ -27,7 +27,6 @@
 
 #include "avdt_api.h"
 #include "avdt_int.h"
-#include "include/check.h"
 #include "internal_include/bt_target.h"
 #include "l2c_api.h"
 #include "l2cdefs.h"
@@ -227,7 +226,7 @@ AvdtpTransportChannel* avdt_ad_tc_tbl_by_type(uint8_t type, AvdtpCcb* p_ccb,
     }
   }
 
-  CHECK(i != AVDT_NUM_TC_TBL);
+  log::assert_that(i != AVDT_NUM_TC_TBL, "assert failed: i != AVDT_NUM_TC_TBL");
 
   return p_tbl;
 }
@@ -254,7 +253,7 @@ AvdtpTransportChannel* avdt_ad_tc_tbl_alloc(AvdtpCcb* p_ccb) {
   }
 
   /* sanity check */
-  CHECK(i != AVDT_NUM_TC_TBL);
+  log::assert_that(i != AVDT_NUM_TC_TBL, "assert failed: i != AVDT_NUM_TC_TBL");
 
   /* initialize entry */
   p_tbl->peer_mtu = L2CAP_DEFAULT_MTU;

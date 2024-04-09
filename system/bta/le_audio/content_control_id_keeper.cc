@@ -16,7 +16,6 @@
 
 #include "content_control_id_keeper.h"
 
-#include <base/logging.h>
 #include <bluetooth/log.h>
 
 #include <bitset>
@@ -97,12 +96,14 @@ struct ContentControlIdKeeper::impl {
   impl(const ContentControlIdKeeper& ccid_keeper) : ccid_keeper_(ccid_keeper) {}
 
   void Start() {
-    LOG_ASSERT(!ccid_keeper_impl_);
+    log::assert_that(ccid_keeper_impl_ == nullptr,
+                     "assert failed: ccid_keeper_impl_ == nullptr");
     ccid_keeper_impl_ = std::make_unique<ccid_keeper>();
   }
 
   void Stop() {
-    LOG_ASSERT(ccid_keeper_impl_);
+    log::assert_that(ccid_keeper_impl_ != nullptr,
+                     "assert failed: ccid_keeper_impl_ != nullptr");
     ccid_keeper_impl_.reset();
   }
 

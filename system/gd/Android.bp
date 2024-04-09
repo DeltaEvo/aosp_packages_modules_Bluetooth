@@ -147,7 +147,6 @@ cc_defaults {
         ":BluetoothSyspropsSources",
         "module.cc",
         "module_dumper.cc",
-        "module_state_dumper.cc",
         "stack_manager.cc",
     ],
     generated_headers: [
@@ -289,6 +288,7 @@ cc_binary {
         ":BluetoothFacade_neighbor",
         ":BluetoothFacade_security_layer",
         ":BluetoothFacade_shim_layer",
+        ":TestMockMainShimStack",
         "facade/facade_main.cc",
         "facade/grpc_root_server.cc",
         "facade/read_only_property_server.cc",
@@ -529,6 +529,7 @@ cc_test {
         ":BluetoothDumpsysTestSources",
         ":BluetoothShimTestSources",
         ":TestCommonMockFunctions",
+        ":TestMockMainShimStack",
         "module_gdx_unittest.cc",
         "module_jniloop_unittest.cc",
         "module_mainloop_unittest.cc",

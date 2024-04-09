@@ -32,11 +32,9 @@
 #include "bta/include/bta_hf_client_api.h"
 #include "bta/include/bta_rfcomm_scn.h"
 #include "bta/sys/bta_sys.h"
-#include "include/check.h"
 #include "internal_include/bt_target.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/osi.h"  // UNUSED_ATTR
 #include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/sdp_api.h"
@@ -63,7 +61,7 @@ using namespace bluetooth;
  * Returns          void
  *
  ******************************************************************************/
-static void bta_hf_client_sdp_cback(UNUSED_ATTR const RawAddress& bd_addr,
+static void bta_hf_client_sdp_cback(const RawAddress& /* bd_addr */,
                                     tSDP_STATUS status, const void* data) {
   uint16_t event;
   tBTA_HF_CLIENT_DISC_RESULT* p_buf = (tBTA_HF_CLIENT_DISC_RESULT*)osi_malloc(
@@ -380,7 +378,7 @@ void bta_hf_client_do_disc(tBTA_HF_CLIENT_CB* client_cb) {
  *
  ******************************************************************************/
 void bta_hf_client_free_db(tBTA_HF_CLIENT_DATA* p_data) {
-  CHECK(p_data != NULL);
+  log::assert_that(p_data != NULL, "assert failed: p_data != NULL");
   tBTA_HF_CLIENT_CB* client_cb =
       bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {

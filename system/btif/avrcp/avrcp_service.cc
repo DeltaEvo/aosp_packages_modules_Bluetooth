@@ -17,7 +17,6 @@
 #include "avrcp_service.h"
 
 #include <base/functional/bind.h>
-#include <base/logging.h>
 #include <base/task/cancelable_task_tracker.h>
 #include <base/threading/thread.h>
 #include <bluetooth/log.h>
@@ -29,7 +28,6 @@
 #include "btif_av.h"
 #include "btif_common.h"
 #include "device.h"
-#include "include/check.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/main_thread.h"
@@ -481,7 +479,7 @@ void AvrcpService::UnregisterBipServer() {
 }
 
 AvrcpService* AvrcpService::Get() {
-  CHECK(instance_);
+  log::assert_that(instance_ != nullptr, "assert failed: instance_ != nullptr");
   return instance_;
 }
 
@@ -596,7 +594,7 @@ void AvrcpService::ServiceInterfaceImpl::Init(
   // that its possible to call Get() on the service immediately after calling
   // init without issues.
 
-  CHECK(instance_ == nullptr);
+  log::assert_that(instance_ == nullptr, "assert failed: instance_ == nullptr");
   instance_ = new AvrcpService();
 
   do_in_main_thread(
@@ -607,7 +605,7 @@ void AvrcpService::ServiceInterfaceImpl::Init(
 
 void AvrcpService::ServiceInterfaceImpl::RegisterBipServer(int psm) {
   std::lock_guard<std::mutex> lock(service_interface_lock_);
-  CHECK(instance_ != nullptr);
+  log::assert_that(instance_ != nullptr, "assert failed: instance_ != nullptr");
   do_in_main_thread(FROM_HERE,
                     base::BindOnce(&AvrcpService::RegisterBipServer,
                                    base::Unretained(instance_), psm));
@@ -615,7 +613,7 @@ void AvrcpService::ServiceInterfaceImpl::RegisterBipServer(int psm) {
 
 void AvrcpService::ServiceInterfaceImpl::UnregisterBipServer() {
   std::lock_guard<std::mutex> lock(service_interface_lock_);
-  CHECK(instance_ != nullptr);
+  log::assert_that(instance_ != nullptr, "assert failed: instance_ != nullptr");
   do_in_main_thread(FROM_HERE,
                     base::BindOnce(&AvrcpService::UnregisterBipServer,
                                    base::Unretained(instance_)));
@@ -624,7 +622,7 @@ void AvrcpService::ServiceInterfaceImpl::UnregisterBipServer() {
 bool AvrcpService::ServiceInterfaceImpl::ConnectDevice(
     const RawAddress& bdaddr) {
   std::lock_guard<std::mutex> lock(service_interface_lock_);
-  CHECK(instance_ != nullptr);
+  log::assert_that(instance_ != nullptr, "assert failed: instance_ != nullptr");
   do_in_main_thread(FROM_HERE,
                     base::BindOnce(&AvrcpService::ConnectDevice,
                                    base::Unretained(instance_), bdaddr));
@@ -634,7 +632,7 @@ bool AvrcpService::ServiceInterfaceImpl::ConnectDevice(
 bool AvrcpService::ServiceInterfaceImpl::DisconnectDevice(
     const RawAddress& bdaddr) {
   std::lock_guard<std::mutex> lock(service_interface_lock_);
-  CHECK(instance_ != nullptr);
+  log::assert_that(instance_ != nullptr, "assert failed: instance_ != nullptr");
   do_in_main_thread(FROM_HERE,
                     base::BindOnce(&AvrcpService::DisconnectDevice,
                                    base::Unretained(instance_), bdaddr));
@@ -644,7 +642,7 @@ bool AvrcpService::ServiceInterfaceImpl::DisconnectDevice(
 void AvrcpService::ServiceInterfaceImpl::SetBipClientStatus(
     const RawAddress& bdaddr, bool connected) {
   std::lock_guard<std::mutex> lock(service_interface_lock_);
-  CHECK(instance_ != nullptr);
+  log::assert_that(instance_ != nullptr, "assert failed: instance_ != nullptr");
   do_in_main_thread(FROM_HERE, base::BindOnce(&AvrcpService::SetBipClientStatus,
                                               base::Unretained(instance_),
                                               bdaddr, connected));

@@ -27,7 +27,6 @@
 #include "stack/include/l2c_api.h"
 
 #include <base/location.h>
-#include <base/logging.h>
 #include <base/strings/stringprintf.h>
 #include <bluetooth/log.h>
 
@@ -37,7 +36,6 @@
 #include "common/init_flags.h"
 #include "hal/snoop_logger.h"
 #include "hci/controller_interface.h"
-#include "include/check.h"
 #include "internal_include/bt_target.h"
 #include "internal_include/bt_trace.h"
 #include "main/shim/dumpsys.h"
@@ -93,8 +91,8 @@ uint16_t L2CA_LeCreditThreshold() {
 }
 
 static bool check_l2cap_credit() {
-  CHECK(L2CA_LeCreditThreshold() < L2CA_LeCreditDefault())
-      << "Threshold must be smaller than default credits";
+  log::assert_that(L2CA_LeCreditThreshold() < L2CA_LeCreditDefault(),
+                   "Threshold must be smaller than default credits");
   return true;
 }
 
@@ -1813,8 +1811,8 @@ void L2CA_Dumpsys(int fd) {
     while (ccb != nullptr) {
       LOG_DUMPSYS(
           fd, "  active channel lcid:0x%04x rcid:0x%04x is_ecoc:%s in_use:%s",
-          ccb->local_cid, ccb->remote_cid, logbool(ccb->ecoc).c_str(),
-          logbool(ccb->in_use).c_str());
+          ccb->local_cid, ccb->remote_cid, ccb->ecoc,
+          ccb->in_use ? "true" : "false");
       ccb = ccb->p_next_ccb;
     }
   }

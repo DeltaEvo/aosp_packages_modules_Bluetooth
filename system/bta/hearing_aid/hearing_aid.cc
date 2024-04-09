@@ -24,7 +24,6 @@
 #include <android_bluetooth_flags.h>
 #include <base/functional/bind.h>
 #include <base/functional/callback.h>
-#include <base/logging.h>
 #include <base/strings/string_number_conversions.h>  // HexEncode
 #include <bluetooth/log.h>
 
@@ -42,7 +41,6 @@
 #include "hal/link_clocker.h"
 #include "hardware/bt_gatt_types.h"
 #include "hci/controller_interface.h"
-#include "include/check.h"
 #include "internal_include/bt_trace.h"
 #include "main/shim/entry.h"
 #include "os/log.h"
@@ -1201,7 +1199,7 @@ class HearingAidImpl : public HearingAid {
   }
 
   void OnAudioSuspend(const std::function<void()>& stop_audio_ticks) {
-    CHECK(stop_audio_ticks) << "stop_audio_ticks is empty";
+    log::assert_that((bool)stop_audio_ticks, "stop_audio_ticks is empty");
 
     if (!audio_running) {
       log::warn("Unexpected audio suspend");
@@ -1235,7 +1233,7 @@ class HearingAidImpl : public HearingAid {
   }
 
   void OnAudioResume(const std::function<void()>& start_audio_ticks) {
-    CHECK(start_audio_ticks) << "start_audio_ticks is empty";
+    log::assert_that((bool)start_audio_ticks, "start_audio_ticks is empty");
 
     if (audio_running) {
       log::error("Unexpected Audio Resume");

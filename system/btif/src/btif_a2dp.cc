@@ -22,7 +22,6 @@
 #include "btif_a2dp.h"
 
 #include <android_bluetooth_flags.h>
-#include <base/logging.h>
 #include <bluetooth/log.h>
 #include <stdbool.h>
 
@@ -93,7 +92,7 @@ bool btif_a2dp_on_started(const RawAddress& peer_addr,
 
   log::info("peer {} status:{} suspending:{} initiator:{}",
             ADDRESS_TO_LOGGABLE_STR(peer_addr), p_av_start->status,
-            logbool(p_av_start->suspending), logbool(p_av_start->initiator));
+            p_av_start->suspending, p_av_start->initiator);
 
   if (p_av_start->status == BTA_AV_SUCCESS) {
     if (p_av_start->suspending) {

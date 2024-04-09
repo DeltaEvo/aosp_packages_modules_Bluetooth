@@ -23,7 +23,6 @@
 #include "avrc_api.h"
 #include "avrc_defs.h"
 #include "avrc_int.h"
-#include "include/check.h"
 #include "internal_include/bt_target.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
@@ -425,7 +424,9 @@ static void avrc_build_attribute_entries(int num_attrs,
   /* Fill in the Attribute ID, Character Set, Length and Values */
   for (int index = 0; index < num_attrs; index++) {
     log::verbose("attr id[{}]: {}", index, p_attrs[index].attr_id);
-    CHECK(AVRC_IS_VALID_MEDIA_ATTRIBUTE(p_attrs[index].attr_id));
+    log::assert_that(
+        AVRC_IS_VALID_MEDIA_ATTRIBUTE(p_attrs[index].attr_id),
+        "assert failed: AVRC_IS_VALID_MEDIA_ATTRIBUTE(p_attrs[index].attr_id)");
     if (!p_attrs[index].name.p_str) {
       p_attrs[index].name.str_len = 0;
     }

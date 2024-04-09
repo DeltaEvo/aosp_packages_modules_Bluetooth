@@ -44,7 +44,6 @@
 #include "content_control_id_keeper.h"
 #include "devices.h"
 #include "hci/controller_interface.h"
-#include "include/check.h"
 #include "internal_include/bt_trace.h"
 #include "internal_include/stack_config.h"
 #include "le_audio_health_status.h"
@@ -170,6 +169,11 @@ std::ostream& operator<<(std::ostream& os, const AudioState& audio_state) {
   }
   return os;
 }
+
+namespace fmt {
+template <>
+struct formatter<AudioState> : ostream_formatter {};
+}  // namespace fmt
 
 namespace {
 void le_audio_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data);
@@ -842,7 +846,7 @@ class LeAudioClientImpl : public LeAudioClient {
     log::debug("configuration_context_type= {}",
                ToString(configuration_context_type));
 
-    DLOG(INFO) << __func__;
+    log::debug("");
     if (configuration_context_type >= LeAudioContextType::RFU) {
       log::error("stream context type is not supported: {}",
                  ToHexString(configuration_context_type));
@@ -1217,6 +1221,7 @@ class LeAudioClientImpl : public LeAudioClient {
 
     if (group_id == bluetooth::groups::kGroupUnknown) {
       if (active_group_id_ == bluetooth::groups::kGroupUnknown) {
+        callbacks_->OnGroupStatus(group_id, GroupStatus::INACTIVE);
         /* Nothing to do */
         return;
       }
@@ -1232,6 +1237,7 @@ class LeAudioClientImpl : public LeAudioClient {
     LeAudioDeviceGroup* group = aseGroups_.FindById(group_id);
     if (!group) {
       log::error("Invalid group: {}", static_cast<int>(group_id));
+      callbacks_->OnGroupStatus(group_id, GroupStatus::INACTIVE);
       return;
     }
 
@@ -1250,6 +1256,7 @@ class LeAudioClientImpl : public LeAudioClient {
           LeAudioSourceAudioHalClient::AcquireUnicast();
       if (!le_audio_source_hal_client_) {
         log::error("could not acquire audio source interface");
+        callbacks_->OnGroupStatus(group_id, GroupStatus::INACTIVE);
         return;
       }
     }
@@ -1258,6 +1265,7 @@ class LeAudioClientImpl : public LeAudioClient {
       le_audio_sink_hal_client_ = LeAudioSinkAudioHalClient::AcquireUnicast();
       if (!le_audio_sink_hal_client_) {
         log::error("could not acquire audio sink interface");
+        callbacks_->OnGroupStatus(group_id, GroupStatus::INACTIVE);
         return;
       }
     }
@@ -1286,6 +1294,7 @@ class LeAudioClientImpl : public LeAudioClient {
     if (current_source_codec_config.IsInvalid() &&
         current_sink_codec_config.IsInvalid()) {
       log::error("Unsupported device configurations");
+      callbacks_->OnGroupStatus(group_id, GroupStatus::INACTIVE);
       return;
     }
 
@@ -1396,6 +1405,12 @@ class LeAudioClientImpl : public LeAudioClient {
 
     LeAudioDevice* leAudioDevice = leAudioDevices_.FindByAddress(address);
     if (!leAudioDevice) {
+      if (!BTM_IsLinkKeyKnown(address, BT_TRANSPORT_LE)) {
+        log::error("Connecting  {} when not bonded",
+                   ADDRESS_TO_LOGGABLE_CSTR(address));
+        callbacks_->OnConnectionState(ConnectionState::DISCONNECTED, address);
+        return;
+      }
       leAudioDevices_.Add(address, DeviceConnectState::CONNECTING_BY_USER);
     } else {
       auto current_connect_state = leAudioDevice->GetConnectionState();
@@ -2638,8 +2653,7 @@ class LeAudioClientImpl : public LeAudioClient {
     LeAudioDevice* leAudioDevice = leAudioDevices_.FindByConnId(conn_id);
 
     if (!leAudioDevice) {
-      DLOG(ERROR) << __func__ << ", skipping unknown leAudioDevice, conn_id: "
-                  << loghex(conn_id);
+      log::error("skipping unknown leAudioDevice, conn_id: 0x{:x}", conn_id);
       return;
     }
 
@@ -3126,8 +3140,7 @@ class LeAudioClientImpl : public LeAudioClient {
 
     if (audio_sender_state_ == AudioState::IDLE &&
         audio_receiver_state_ == AudioState::IDLE) {
-      DLOG(INFO) << __func__
-                 << " Device not streaming but active - nothing to do";
+      log::debug("Device not streaming but active - nothing to do");
       return;
     }
 
@@ -3358,8 +3371,8 @@ class LeAudioClientImpl : public LeAudioClient {
       sw_enc_right->Encode(data.data() + bytes_per_sample, 2, byte_count);
     }
 
-    DLOG(INFO) << __func__ << " left_cis_handle: " << +left_cis_handle
-               << " right_cis_handle: " << right_cis_handle;
+    log::debug("left_cis_handle: {} right_cis_handle: {}", left_cis_handle,
+               right_cis_handle);
     /* Send data to the controller */
     if (left_cis_handle)
       IsoManager::GetInstance()->SendIsoData(
@@ -3621,8 +3634,7 @@ class LeAudioClientImpl : public LeAudioClient {
 
     LeAudioDeviceGroup* group = aseGroups_.FindById(group_id);
     LeAudioDevice* device = group->GetFirstActiveDevice();
-    LOG_ASSERT(device) << __func__
-                       << " Shouldn't be called without an active device.";
+    log::assert_that(device, "Shouldn't be called without an active device.");
 
     /* Assume 2 ases max just for now. */
     auto* stream_conf = GetStreamSinkConfiguration(group);
@@ -4131,12 +4143,12 @@ class LeAudioClientImpl : public LeAudioClient {
       return;
     }
 
-    DLOG(INFO) << __func__ << " active_group_id: " << active_group_id_ << "\n"
-               << " audio_receiver_state: " << audio_receiver_state_ << "\n"
-               << " audio_sender_state: " << audio_sender_state_ << "\n"
-               << " configuration_context_type_: "
-               << ToHexString(configuration_context_type_) << "\n"
-               << " group " << (group ? " exist " : " does not exist ") << "\n";
+    log::debug(
+        "active_group_id: {}\n audio_receiver_state: {}\n audio_sender_state: "
+        "{}\n configuration_context_type_: {}\n group {}\n",
+        active_group_id_, audio_receiver_state_, audio_sender_state_,
+        ToHexString(configuration_context_type_),
+        (group ? " exist " : " does not exist "));
 
     switch (audio_sender_state_) {
       case AudioState::STARTED:
@@ -4406,12 +4418,12 @@ class LeAudioClientImpl : public LeAudioClient {
       return;
     }
 
-    DLOG(INFO) << __func__ << " active_group_id: " << active_group_id_ << "\n"
-               << " audio_receiver_state: " << audio_receiver_state_ << "\n"
-               << " audio_sender_state: " << audio_sender_state_ << "\n"
-               << " configuration_context_type_: "
-               << ToHexString(configuration_context_type_) << "\n"
-               << " group " << (group ? " exist " : " does not exist ") << "\n";
+    log::debug(
+        "active_group_id: {}\n audio_receiver_state: {}\n audio_sender_state: "
+        "{}\n configuration_context_type_: {}\n group {}\n",
+        active_group_id_, audio_receiver_state_, audio_sender_state_,
+        ToHexString(configuration_context_type_),
+        (group ? " exist " : " does not exist "));
 
     switch (audio_receiver_state_) {
       case AudioState::STARTED:
@@ -4639,7 +4651,7 @@ class LeAudioClientImpl : public LeAudioClient {
     }
 
     if (group->GetState() != AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
-      DLOG(INFO) << __func__ << " Group is not streaming ";
+      log::debug("Group is not streaming");
       return false;
     }
 
@@ -6228,7 +6240,7 @@ bool LeAudioClient::IsLeAudioClientInStreaming(void) {
 }
 
 LeAudioClient* LeAudioClient::Get() {
-  CHECK(instance);
+  log::assert_that(instance != nullptr, "assert failed: instance != nullptr");
   return instance;
 }
 
@@ -6253,10 +6265,10 @@ void LeAudioClient::Initialize(
     return;
   }
 
-  LOG_ASSERT(std::move(hal_2_1_verifier).Run())
-      << __func__
-      << ", LE Audio Client requires Bluetooth Audio HAL V2.1 at least. Either "
-         "disable LE Audio Profile, or update your HAL";
+  log::assert_that(
+      std::move(hal_2_1_verifier).Run(),
+      "LE Audio Client requires Bluetooth Audio HAL V2.1 at least. Either "
+      "disable LE Audio Profile, or update your HAL");
 
   IsoManager::GetInstance()->Start();
 

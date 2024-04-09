@@ -23,7 +23,6 @@
  ******************************************************************************/
 
 #include <android_bluetooth_flags.h>
-#include <base/logging.h>
 #include <bluetooth/log.h>
 
 #include <cstdint>
@@ -41,7 +40,6 @@
 
 #include "btif/include/btif_config.h"
 #include "device/include/device_iot_config.h"
-#include "osi/include/osi.h"  // UNUSED_ATTR
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/btm_sec_api_types.h"
 #include "stack/include/l2c_api.h"
@@ -310,8 +308,7 @@ void bta_ag_disc_acp_res(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
  * Returns          void
  *
  ******************************************************************************/
-void bta_ag_disc_fail(tBTA_AG_SCB* p_scb,
-                      UNUSED_ATTR const tBTA_AG_DATA& data) {
+void bta_ag_disc_fail(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& /* data */) {
   /* reopen registered servers */
   bta_ag_start_servers(p_scb, p_scb->reg_services);
 
@@ -351,7 +348,7 @@ void bta_ag_open_fail(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
  * Returns          void
  *
  ******************************************************************************/
-void bta_ag_rfc_fail(tBTA_AG_SCB* p_scb, UNUSED_ATTR const tBTA_AG_DATA& data) {
+void bta_ag_rfc_fail(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& /* data */) {
   log::info("reset p_scb with index={}", bta_ag_scb_to_idx(p_scb));
   RawAddress peer_addr = p_scb->peer_addr;
   /* reinitialize stuff */
@@ -384,8 +381,7 @@ void bta_ag_rfc_fail(tBTA_AG_SCB* p_scb, UNUSED_ATTR const tBTA_AG_DATA& data) {
  * Returns          void
  *
  ******************************************************************************/
-void bta_ag_rfc_close(tBTA_AG_SCB* p_scb,
-                      UNUSED_ATTR const tBTA_AG_DATA& data) {
+void bta_ag_rfc_close(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& /* data */) {
   tBTA_AG_CLOSE close = {};
   tBTA_SERVICE_MASK services;
   int i, num_active_conn = 0;
@@ -656,7 +652,7 @@ void bta_ag_rfc_acp_open(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
  * Returns          void
  *
  ******************************************************************************/
-void bta_ag_rfc_data(tBTA_AG_SCB* p_scb, UNUSED_ATTR const tBTA_AG_DATA& data) {
+void bta_ag_rfc_data(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& /* data */) {
   uint16_t len;
   char buf[BTA_AG_RFC_READ_MAX] = "";
 
@@ -821,8 +817,7 @@ void bta_ag_post_sco_close(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
  * Returns          void
  *
  ******************************************************************************/
-void bta_ag_svc_conn_open(tBTA_AG_SCB* p_scb,
-                          UNUSED_ATTR const tBTA_AG_DATA& data) {
+void bta_ag_svc_conn_open(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& /* data */) {
   tBTA_AG_CONN evt = {};
 
   if (!p_scb->svc_conn) {
@@ -867,8 +862,7 @@ void bta_ag_setcodec(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
   tBTA_AG_VAL val = {};
   const bool aptx_voice = is_hfp_aptx_voice_enabled() &&
                           (codec_type == BTA_AG_SCO_APTX_SWB_SETTINGS_Q0);
-  log::verbose("aptx_voice={}, codec_type={:#x}", logbool(aptx_voice),
-               codec_type);
+  log::verbose("aptx_voice={}, codec_type={:#x}", aptx_voice, codec_type);
 
   val.hdr.handle = bta_ag_scb_to_idx(p_scb);
 
@@ -911,7 +905,7 @@ static void bta_ag_collision_timer_cback(void* data) {
 }
 
 void bta_ag_handle_collision(tBTA_AG_SCB* p_scb,
-                             UNUSED_ATTR const tBTA_AG_DATA& data) {
+                             const tBTA_AG_DATA& /* data */) {
   /* Cancel SDP if it had been started. */
   if (p_scb->p_disc_db) {
     get_legacy_stack_sdp_api()->service.SDP_CancelServiceSearch(

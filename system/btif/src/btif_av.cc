@@ -50,7 +50,6 @@
 #include "common/state_machine.h"
 #include "device/include/device_iot_config.h"
 #include "hardware/bt_av.h"
-#include "include/check.h"
 #include "include/hardware/bt_rc.h"
 #include "internal_include/bt_trace.h"
 #include "osi/include/alarm.h"
@@ -1030,7 +1029,8 @@ void BtifAvEvent::DeepCopy(uint32_t event, const void* p_data,
 
   switch (event) {
     case BTA_AV_META_MSG_EVT: {
-      CHECK(data_length >= sizeof(tBTA_AV));
+      log::assert_that(data_length >= sizeof(tBTA_AV),
+                       "assert failed: data_length >= sizeof(tBTA_AV)");
       const tBTA_AV* av_src = (const tBTA_AV*)p_data;
       tBTA_AV* av_dest = (tBTA_AV*)data_;
       if (av_src->meta_msg.p_data && av_src->meta_msg.len) {
@@ -1781,7 +1781,7 @@ bool BtifAvStateMachine::StateIdle::ProcessEvent(uint32_t event, void* p_data) {
   log::verbose("Peer {} : event={} flags={} active_peer={}",
                ADDRESS_TO_LOGGABLE_CSTR(peer_.PeerAddress()),
                BtifAvEvent::EventName(event), peer_.FlagsToString(),
-               logbool(peer_.IsActivePeer()));
+               peer_.IsActivePeer());
 
   switch (event) {
     case BTA_AV_ENABLE_EVT:
@@ -1984,7 +1984,9 @@ bool BtifAvStateMachine::StateIdle::ProcessEvent(uint32_t event, void* p_data) {
           }
           btif_rc_check_pending_cmd(p_bta_data->open.bd_addr);
         }
-        CHECK(peer_.PeerSep() == p_bta_data->open.sep);
+        log::assert_that(
+            peer_.PeerSep() == p_bta_data->open.sep,
+            "assert failed: peer_.PeerSep() == p_bta_data->open.sep");
 
         can_connect = peer_.IsSink()
                           ? btif_av_source.AllowedToConnect(peer_.PeerAddress())
@@ -2095,7 +2097,7 @@ bool BtifAvStateMachine::StateOpening::ProcessEvent(uint32_t event,
   log::verbose("Peer {} : event={} flags={} active_peer={}",
                ADDRESS_TO_LOGGABLE_CSTR(peer_.PeerAddress()),
                BtifAvEvent::EventName(event), peer_.FlagsToString(),
-               logbool(peer_.IsActivePeer()));
+               peer_.IsActivePeer());
 
   switch (event) {
     case BTIF_AV_STOP_STREAM_REQ_EVT:
@@ -2192,7 +2194,9 @@ bool BtifAvStateMachine::StateOpening::ProcessEvent(uint32_t event,
           }
           btif_rc_check_pending_cmd(p_bta_data->open.bd_addr);
         }
-        CHECK(peer_.PeerSep() == p_bta_data->open.sep);
+        log::assert_that(
+            peer_.PeerSep() == p_bta_data->open.sep,
+            "assert failed: peer_.PeerSep() == p_bta_data->open.sep");
         /** normally it can be checked in IDLE PENDING/CONNECT_REQ, in case:
          * 1 speacker connected to DUT and phone connect DUT, because
          * default
@@ -2400,7 +2404,7 @@ bool BtifAvStateMachine::StateOpened::ProcessEvent(uint32_t event,
   log::verbose("Peer {} : event={} flags={} active_peer={}",
                ADDRESS_TO_LOGGABLE_CSTR(peer_.PeerAddress()),
                BtifAvEvent::EventName(event), peer_.FlagsToString(),
-               logbool(peer_.IsActivePeer()));
+               peer_.IsActivePeer());
 
   if ((event == BTA_AV_REMOTE_CMD_EVT) &&
       peer_.CheckFlags(BtifAvPeer::kFlagRemoteSuspend) &&
@@ -2639,7 +2643,7 @@ bool BtifAvStateMachine::StateStarted::ProcessEvent(uint32_t event,
   log::verbose("Peer {} : event={} flags={} active_peer={}",
                ADDRESS_TO_LOGGABLE_CSTR(peer_.PeerAddress()),
                BtifAvEvent::EventName(event), peer_.FlagsToString(),
-               logbool(peer_.IsActivePeer()));
+               peer_.IsActivePeer());
 
   switch (event) {
     case BTIF_AV_ACL_DISCONNECTED:
@@ -2879,7 +2883,7 @@ bool BtifAvStateMachine::StateClosing::ProcessEvent(uint32_t event,
   log::verbose("Peer {} : event={} flags={} active_peer={}",
                ADDRESS_TO_LOGGABLE_CSTR(peer_.PeerAddress()),
                BtifAvEvent::EventName(event), peer_.FlagsToString(),
-               logbool(peer_.IsActivePeer()));
+               peer_.IsActivePeer());
 
   switch (event) {
     case BTIF_AV_SUSPEND_STREAM_REQ_EVT:

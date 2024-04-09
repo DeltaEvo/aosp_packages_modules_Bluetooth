@@ -365,7 +365,7 @@ class LeAudioClientCallbacksImpl : public LeAudioClientCallbacks {
 
   void OnGroupStreamStatus(int group_id,
                            GroupStreamStatus group_stream_status) override {
-    LOG(INFO) << __func__;
+    log::info("");
 
     std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
@@ -1079,7 +1079,8 @@ jobject prepareBluetoothLeBroadcastMetadataObject(
     env->SetByteArrayRegion(
         code.get(), 0, nativeCodeSize,
         (const jbyte*)broadcast_metadata.broadcast_code->data());
-    CHECK(!env->ExceptionCheck());
+    log::assert_that(!env->ExceptionCheck(),
+                     "assert failed: !env->ExceptionCheck()");
   }
 
   ScopedLocalRef<jstring> broadcast_name(

@@ -25,7 +25,6 @@
 #define LOG_TAG "bluetooth"
 
 #include <android_bluetooth_flags.h>
-#include <base/logging.h>
 #include <bluetooth/log.h>
 
 #include <cstdint>
@@ -39,7 +38,6 @@
 #include "internal_include/bt_trace.h"
 #include "os/logging/log_adapter.h"
 #include "osi/include/allocator.h"
-#include "osi/include/osi.h"  // UNUSED_ATTR
 #include "osi/include/properties.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/avct_api.h"  // AVCT_PSM
@@ -716,7 +714,7 @@ static uint16_t bta_jv_allocate_l2cap_classic_psm() {
 
 /** Obtain a free SCN (Server Channel Number) (RFCOMM channel or L2CAP PSM) */
 void bta_jv_get_channel_id(
-    int32_t type /* One of BTA_JV_CONN_TYPE_ */,
+    tBTA_JV_CONN_TYPE type /* One of BTA_JV_CONN_TYPE_ */,
     int32_t channel /* optionally request a specific channel */,
     uint32_t l2cap_socket_id, uint32_t rfcomm_slot_id) {
   uint16_t psm = 0;
@@ -768,7 +766,7 @@ void bta_jv_get_channel_id(
 }
 
 /** free a SCN */
-void bta_jv_free_scn(int32_t type /* One of BTA_JV_CONN_TYPE_ */,
+void bta_jv_free_scn(tBTA_JV_CONN_TYPE type /* One of BTA_JV_CONN_TYPE_ */,
                      uint16_t scn) {
   switch (type) {
     case BTA_JV_CONN_TYPE_RFCOMM:
@@ -795,7 +793,7 @@ void bta_jv_free_scn(int32_t type /* One of BTA_JV_CONN_TYPE_ */,
  * Returns      void
  *
  ******************************************************************************/
-static void bta_jv_start_discovery_cback(UNUSED_ATTR const RawAddress& bd_addr,
+static void bta_jv_start_discovery_cback(const RawAddress& bd_addr,
                                          tSDP_RESULT result,
                                          const void* user_data) {
   if (!bta_jv_cb.sdp_cb.sdp_active) {
@@ -1032,7 +1030,7 @@ static void bta_jv_l2cap_client_cback(uint16_t gap_handle, uint16_t event,
 }
 
 /* makes an l2cap client connection */
-void bta_jv_l2cap_connect(int32_t type, tBTA_SEC sec_mask,
+void bta_jv_l2cap_connect(tBTA_JV_CONN_TYPE type, tBTA_SEC sec_mask,
                           tBTA_JV_ROLE /* role */, uint16_t remote_psm,
                           uint16_t rx_mtu, const RawAddress& peer_bd_addr,
                           std::unique_ptr<tL2CAP_CFG_INFO> cfg_param,
@@ -1179,7 +1177,7 @@ static void bta_jv_l2cap_server_cback(uint16_t gap_handle, uint16_t event,
 }
 
 /** starts an L2CAP server */
-void bta_jv_l2cap_start_server(int32_t type, tBTA_SEC sec_mask,
+void bta_jv_l2cap_start_server(tBTA_JV_CONN_TYPE type, tBTA_SEC sec_mask,
                                tBTA_JV_ROLE /* role */, uint16_t local_psm,
                                uint16_t rx_mtu,
                                std::unique_ptr<tL2CAP_CFG_INFO> cfg_param,

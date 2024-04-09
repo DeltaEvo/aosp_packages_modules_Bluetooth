@@ -23,7 +23,6 @@
  ******************************************************************************/
 
 #include <android_bluetooth_flags.h>
-#include <base/logging.h>
 #include <bluetooth/log.h>
 
 #include "btif/include/btif_dm.h"
@@ -945,6 +944,16 @@ static void gatt_send_conn_cback(tGATT_TCB* p_tcb) {
 
     if (apps.find(p_reg->gatt_if) != apps.end())
       gatt_update_app_use_link_flag(p_reg->gatt_if, p_tcb, true, true);
+
+    if (IS_FLAG_ENABLED(gatt_reconnect_on_bt_on_fix)) {
+      if (p_reg->direct_connect_request.count(p_tcb->peer_bda) > 0) {
+        gatt_update_app_use_link_flag(p_reg->gatt_if, p_tcb, true, true);
+        log::info(
+            "Removing device {} from the direct connect list of gatt_if {} ",
+            ADDRESS_TO_LOGGABLE_CSTR(p_tcb->peer_bda), p_reg->gatt_if);
+        p_reg->direct_connect_request.erase(p_tcb->peer_bda);
+      }
+    }
 
     if (p_reg->app_cb.p_conn_cb) {
       conn_id = GATT_CREATE_CONN_ID(p_tcb->tcb_idx, p_reg->gatt_if);

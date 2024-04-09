@@ -39,7 +39,6 @@
 #include "btif/include/btif_a2dp_source.h"
 #include "btif/include/btif_av.h"
 #include "device/include/device_iot_config.h"
-#include "include/check.h"
 #include "include/hardware/bt_av.h"
 #include "internal_include/bt_trace.h"
 #include "osi/include/allocator.h"
@@ -820,8 +819,8 @@ void BtaAvCo::GetPeerEncoderParameters(
     const RawAddress& peer_address,
     tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_params) {
   uint16_t min_mtu = 0xFFFF;
-  CHECK(p_peer_params != nullptr) << "Peer address "
-                                  << ADDRESS_TO_LOGGABLE_STR(peer_address);
+  log::assert_that(p_peer_params != nullptr, "Peer address {}",
+                   ADDRESS_TO_LOGGABLE_STR(peer_address));
 
   std::lock_guard<std::recursive_mutex> lock(peer_cache_->codec_lock_);
 
@@ -840,8 +839,7 @@ void BtaAvCo::GetPeerEncoderParameters(
   log::verbose(
       "peer_address={} peer_mtu={} is_peer_edr={} peer_supports_3mbps={}",
       ADDRESS_TO_LOGGABLE_CSTR(peer_address), p_peer_params->peer_mtu,
-      logbool(p_peer_params->is_peer_edr),
-      logbool(p_peer_params->peer_supports_3mbps));
+      p_peer_params->is_peer_edr, p_peer_params->peer_supports_3mbps);
 }
 
 const tA2DP_ENCODER_INTERFACE* BtaAvCo::GetSourceEncoderInterface() {
@@ -1731,7 +1729,7 @@ int bta_av_co_get_encoder_effective_frame_size() {
 btav_a2dp_scmst_info_t bta_av_co_get_scmst_info(
     const RawAddress& peer_address) {
   BtaAvCoPeer* p_peer = bta_av_co_cb.peer_cache_->FindPeer(peer_address);
-  CHECK(p_peer != nullptr);
+  log::assert_that(p_peer != nullptr, "assert failed: p_peer != nullptr");
   btav_a2dp_scmst_info_t scmst_info{};
   scmst_info.enable_status = BTAV_A2DP_SCMST_DISABLED;
 

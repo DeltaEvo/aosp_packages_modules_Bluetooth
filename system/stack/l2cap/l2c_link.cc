@@ -52,7 +52,6 @@ using namespace bluetooth;
 extern tBTM_CB btm_cb;
 
 bool BTM_ReadPowerMode(const RawAddress& remote_bda, tBTM_PM_MODE* p_mode);
-bool btm_dev_support_role_switch(const RawAddress& bd_addr);
 tBTM_STATUS btm_sec_disconnect(uint16_t handle, tHCI_STATUS reason,
                                std::string);
 void btm_acl_created(const RawAddress& bda, uint16_t hci_handle,
@@ -433,7 +432,7 @@ void l2c_link_timeout(tL2C_LCB* p_lcb) {
   tBTM_STATUS rc;
 
   log::debug("L2CAP - l2c_link_timeout() link state:{} is_bonding:{}",
-             link_state_text(p_lcb->link_state), logbool(p_lcb->IsBonding()));
+             link_state_text(p_lcb->link_state), p_lcb->IsBonding());
 
   /* If link was connecting or disconnecting, clear all channels and drop the
    * LCB */
@@ -900,7 +899,8 @@ void l2c_link_check_send_pkts(tL2C_LCB* p_lcb, uint16_t local_cid,
       }
 
       /* See if we can send anything from the Link Queue */
-      if (!list_is_empty(p_lcb->link_xmit_data_q)) {
+      if (p_lcb->link_xmit_data_q != NULL &&
+          !list_is_empty(p_lcb->link_xmit_data_q)) {
         log::verbose("Sending to lower layer");
         p_buf = (BT_HDR*)list_front(p_lcb->link_xmit_data_q);
         list_remove(p_lcb->link_xmit_data_q, p_buf);
@@ -954,7 +954,8 @@ void l2c_link_check_send_pkts(tL2C_LCB* p_lcb, uint16_t local_cid,
             (l2cb.controller_le_xmit_window != 0 &&
              (p_lcb->transport == BT_TRANSPORT_LE))) &&
            (p_lcb->sent_not_acked < p_lcb->link_xmit_quota)) {
-      if (list_is_empty(p_lcb->link_xmit_data_q)) {
+      if ((p_lcb->link_xmit_data_q == NULL) ||
+          list_is_empty(p_lcb->link_xmit_data_q)) {
         log::verbose("No transmit data, skipping");
         break;
       }
@@ -986,7 +987,8 @@ void l2c_link_check_send_pkts(tL2C_LCB* p_lcb, uint16_t local_cid,
     /* There is a special case where we have readjusted the link quotas and  */
     /* this link may have sent anything but some other link sent packets so  */
     /* so we may need a timer to kick off this link's transmissions.         */
-    if ((!list_is_empty(p_lcb->link_xmit_data_q)) &&
+    if ((p_lcb->link_xmit_data_q != NULL) &&
+        (!list_is_empty(p_lcb->link_xmit_data_q)) &&
         (p_lcb->sent_not_acked < p_lcb->link_xmit_quota)) {
       alarm_set_on_mloop(p_lcb->l2c_lcb_timer,
                          L2CAP_LINK_FLOW_CONTROL_TIMEOUT_MS,

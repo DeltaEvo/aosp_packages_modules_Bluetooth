@@ -16,10 +16,8 @@
 
 #include "register_notification_packet.h"
 
-#include <base/logging.h>
 #include <bluetooth/log.h>
 
-#include "include/check.h"
 #include "internal_include/bt_trace.h"
 
 namespace bluetooth {
@@ -35,7 +33,8 @@ Event RegisterNotificationResponse::GetEvent() const {
 }
 
 uint8_t RegisterNotificationResponse::GetVolume() const {
-  CHECK(GetEvent() == Event::VOLUME_CHANGED);
+  log::assert_that(GetEvent() == Event::VOLUME_CHANGED,
+                   "assert failed: GetEvent() == Event::VOLUME_CHANGED");
   auto it = begin() + VendorPacket::kMinSize() + static_cast<size_t>(1);
   return *it;
 }

@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-#include <base/logging.h>
 #include <bluetooth/log.h>
 
 #include <algorithm>
@@ -118,7 +117,7 @@ class DeviceGroupsImpl : public DeviceGroups {
       }
     }
 
-    LOG_ASSERT(group);
+    log::assert_that(group, "assert failed: group");
 
     if (group->Contains(addr)) {
       log::error("device {} already in the group: {}",
