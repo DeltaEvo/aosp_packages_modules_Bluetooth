@@ -20,7 +20,6 @@
 
 #include "osi/semaphore.h"
 
-#include <base/logging.h>
 #include <bluetooth/log.h>
 #include <fcntl.h>
 #include <malloc.h>
@@ -28,7 +27,6 @@
 #include <sys/eventfd.h>
 #include <unistd.h>
 
-#include "check.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"
@@ -62,8 +60,9 @@ void semaphore_free(semaphore_t* semaphore) {
 }
 
 void semaphore_wait(semaphore_t* semaphore) {
-  CHECK(semaphore != NULL);
-  CHECK(semaphore->fd != INVALID_FD);
+  log::assert_that(semaphore != NULL, "assert failed: semaphore != NULL");
+  log::assert_that(semaphore->fd != INVALID_FD,
+                   "assert failed: semaphore->fd != INVALID_FD");
 
   eventfd_t value;
   if (eventfd_read(semaphore->fd, &value) == -1)
@@ -71,8 +70,9 @@ void semaphore_wait(semaphore_t* semaphore) {
 }
 
 bool semaphore_try_wait(semaphore_t* semaphore) {
-  CHECK(semaphore != NULL);
-  CHECK(semaphore->fd != INVALID_FD);
+  log::assert_that(semaphore != NULL, "assert failed: semaphore != NULL");
+  log::assert_that(semaphore->fd != INVALID_FD,
+                   "assert failed: semaphore->fd != INVALID_FD");
 
   int flags = fcntl(semaphore->fd, F_GETFL);
   if (flags == -1) {
@@ -95,15 +95,17 @@ bool semaphore_try_wait(semaphore_t* semaphore) {
 }
 
 void semaphore_post(semaphore_t* semaphore) {
-  CHECK(semaphore != NULL);
-  CHECK(semaphore->fd != INVALID_FD);
+  log::assert_that(semaphore != NULL, "assert failed: semaphore != NULL");
+  log::assert_that(semaphore->fd != INVALID_FD,
+                   "assert failed: semaphore->fd != INVALID_FD");
 
   if (eventfd_write(semaphore->fd, 1ULL) == -1)
     log::error("unable to post to semaphore: {}", strerror(errno));
 }
 
 int semaphore_get_fd(const semaphore_t* semaphore) {
-  CHECK(semaphore != NULL);
-  CHECK(semaphore->fd != INVALID_FD);
+  log::assert_that(semaphore != NULL, "assert failed: semaphore != NULL");
+  log::assert_that(semaphore->fd != INVALID_FD,
+                   "assert failed: semaphore->fd != INVALID_FD");
   return semaphore->fd;
 }

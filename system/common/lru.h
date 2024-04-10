@@ -18,7 +18,6 @@
 
 #pragma once
 
-#include <base/logging.h>
 #include <bluetooth/log.h>
 
 #include <functional>
@@ -28,8 +27,6 @@
 #include <optional>
 #include <thread>
 #include <unordered_map>
-
-#include "check.h"
 
 namespace bluetooth {
 
@@ -96,7 +93,7 @@ class LegacyLruCache {
    * @return true if the cache has the key
    */
   bool Get(const K& key, V* value) {
-    CHECK(value != nullptr);
+    log::assert_that(value != nullptr, "assert failed: value != nullptr");
     std::lock_guard<std::recursive_mutex> lock(lru_mutex_);
     auto value_ptr = Find(key);
     if (value_ptr == nullptr) {

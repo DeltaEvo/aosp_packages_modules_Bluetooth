@@ -494,8 +494,8 @@ uint8_t LeAudioDeviceGroup::GetPacking(void) const {
 
 uint8_t LeAudioDeviceGroup::GetFraming(void) const {
   LeAudioDevice* leAudioDevice = GetFirstActiveDevice();
-  LOG_ASSERT(leAudioDevice)
-      << __func__ << " Shouldn't be called without an active device.";
+  log::assert_that(leAudioDevice,
+                   "Shouldn't be called without an active device.");
 
   do {
     struct ase* ase = leAudioDevice->GetFirstActiveAse();
@@ -598,8 +598,8 @@ void LeAudioDeviceGroup::SetTransportLatency(
 
 uint8_t LeAudioDeviceGroup::GetRtn(uint8_t direction, uint8_t cis_id) const {
   LeAudioDevice* leAudioDevice = GetFirstActiveDevice();
-  LOG_ASSERT(leAudioDevice)
-      << __func__ << " Shouldn't be called without an active device.";
+  log::assert_that(leAudioDevice,
+                   "Shouldn't be called without an active device.");
 
   do {
     auto ases_pair = leAudioDevice->GetAsesByCisId(cis_id);
@@ -618,8 +618,8 @@ uint8_t LeAudioDeviceGroup::GetRtn(uint8_t direction, uint8_t cis_id) const {
 uint16_t LeAudioDeviceGroup::GetMaxSduSize(uint8_t direction,
                                            uint8_t cis_id) const {
   LeAudioDevice* leAudioDevice = GetFirstActiveDevice();
-  LOG_ASSERT(leAudioDevice)
-      << __func__ << " Shouldn't be called without an active device.";
+  log::assert_that(leAudioDevice,
+                   "Shouldn't be called without an active device.");
 
   do {
     auto ases_pair = leAudioDevice->GetAsesByCisId(cis_id);
@@ -637,8 +637,8 @@ uint16_t LeAudioDeviceGroup::GetMaxSduSize(uint8_t direction,
 
 uint8_t LeAudioDeviceGroup::GetPhyBitmask(uint8_t direction) const {
   LeAudioDevice* leAudioDevice = GetFirstActiveDevice();
-  LOG_ASSERT(leAudioDevice)
-      << __func__ << " Shouldn't be called without an active device.";
+  log::assert_that(leAudioDevice,
+                   "Shouldn't be called without an active device.");
 
   // local supported PHY's
   uint8_t phy_bitfield = bluetooth::hci::kIsoCigPhy1M;
@@ -698,8 +698,8 @@ bool LeAudioDeviceGroup::GetPresentationDelay(uint32_t* delay,
   uint32_t preferred_delay_max = delay_max;
 
   LeAudioDevice* leAudioDevice = GetFirstActiveDevice();
-  LOG_ASSERT(leAudioDevice)
-      << __func__ << " Shouldn't be called without an active device.";
+  log::assert_that(leAudioDevice,
+                   "Shouldn't be called without an active device.");
 
   do {
     struct ase* ase = leAudioDevice->GetFirstActiveAseByDirection(direction);
@@ -2160,8 +2160,7 @@ void LeAudioDeviceGroups::Dump(int fd, int active_group_id) const {
 bool LeAudioDeviceGroups::IsAnyInTransition(void) const {
   for (auto& g : groups_) {
     if (g->IsInTransition()) {
-      DLOG(INFO) << __func__ << " group: " << g->group_id_
-                 << " is in transition";
+      log::debug("group: {} is in transition", g->group_id_);
       return true;
     }
   }

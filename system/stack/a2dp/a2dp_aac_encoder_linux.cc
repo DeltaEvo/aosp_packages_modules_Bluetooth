@@ -26,7 +26,6 @@
 #include "a2dp_aac.h"
 #include "a2dp_aac_encoder.h"
 #include "common/time_util.h"
-#include "include/check.h"
 #include "internal_include/bt_target.h"
 #include "mmc/codec_client/codec_client.h"
 #include "mmc/proto/mmc_config.pb.h"
@@ -308,7 +307,9 @@ static void a2dp_aac_encode_frames(uint8_t nb_frame) {
                             a2dp_aac_encoder_cb.feeding_params.channel_count *
                             a2dp_aac_encoder_cb.feeding_params.bits_per_sample /
                             8;
-  CHECK(pcm_bytes_per_frame <= static_cast<int>(sizeof(read_buffer)));
+  log::assert_that(pcm_bytes_per_frame <= static_cast<int>(sizeof(read_buffer)),
+                   "assert failed: pcm_bytes_per_frame <= "
+                   "static_cast<int>(sizeof(read_buffer))");
 
   while (nb_frame) {
     a2dp_aac_encoder_cb.stats.media_read_total_expected_packets++;

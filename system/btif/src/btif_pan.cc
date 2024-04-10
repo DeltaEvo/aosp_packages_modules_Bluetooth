@@ -45,7 +45,6 @@
 #include "btif/include/btif_pan_internal.h"
 #include "btif/include/btif_sock_thread.h"
 #include "hci/controller_interface.h"
-#include "include/check.h"
 #include "include/hardware/bt_pan.h"
 #include "internal_include/bt_target.h"
 #include "main/shim/entry.h"
@@ -738,7 +737,9 @@ static void btif_pan_close_all_conns() {
 
 static void btpan_tap_fd_signaled(int fd, int type, int flags,
                                   uint32_t user_id) {
-  CHECK(btpan_cb.tap_fd == INVALID_FD || btpan_cb.tap_fd == fd);
+  log::assert_that(
+      btpan_cb.tap_fd == INVALID_FD || btpan_cb.tap_fd == fd,
+      "assert failed: btpan_cb.tap_fd == INVALID_FD || btpan_cb.tap_fd == fd");
 
   if (btpan_cb.tap_fd != fd) {
     log::warn("Signaled on mismatched fds exp:{} act:{}", btpan_cb.tap_fd, fd);

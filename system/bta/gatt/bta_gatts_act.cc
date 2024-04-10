@@ -23,7 +23,7 @@
  *
  ******************************************************************************/
 
-#include <base/logging.h>
+#include <android_bluetooth_flags.h>
 #include <bluetooth/log.h>
 
 #include <cstdint>
@@ -236,8 +236,7 @@ void bta_gatts_register(tBTA_GATTS_CB* p_cb, tBTA_GATTS_DATA* p_msg) {
  * Returns          none.
  *
  ******************************************************************************/
-void bta_gatts_start_if(UNUSED_ATTR tBTA_GATTS_CB* p_cb,
-                        tBTA_GATTS_DATA* p_msg) {
+void bta_gatts_start_if(tBTA_GATTS_CB* /* p_cb */, tBTA_GATTS_DATA* p_msg) {
   if (bta_gatts_find_app_rcb_by_app_if(p_msg->int_start_if.server_if)) {
     GATT_StartIf(p_msg->int_start_if.server_if);
   } else {
@@ -324,7 +323,7 @@ void bta_gatts_delete_service(tBTA_GATTS_SRVC_CB* p_srvc_cb,
  *
  ******************************************************************************/
 void bta_gatts_stop_service(tBTA_GATTS_SRVC_CB* p_srvc_cb,
-                            UNUSED_ATTR tBTA_GATTS_DATA* p_msg) {
+                            tBTA_GATTS_DATA* /* p_msg */) {
   tBTA_GATTS_RCB* p_rcb = &bta_gatts_cb.rcb[p_srvc_cb->rcb_idx];
   tBTA_GATTS cb_data;
 
@@ -345,8 +344,7 @@ void bta_gatts_stop_service(tBTA_GATTS_SRVC_CB* p_srvc_cb,
  * Returns          none.
  *
  ******************************************************************************/
-void bta_gatts_send_rsp(UNUSED_ATTR tBTA_GATTS_CB* p_cb,
-                        tBTA_GATTS_DATA* p_msg) {
+void bta_gatts_send_rsp(tBTA_GATTS_CB* /* p_cb */, tBTA_GATTS_DATA* p_msg) {
   if (GATTS_SendRsp(p_msg->api_rsp.hdr.layer_specific, p_msg->api_rsp.trans_id,
                     p_msg->api_rsp.status,
                     (tGATTS_RSP*)p_msg->api_rsp.p_rsp) != GATT_SUCCESS) {
@@ -421,7 +419,7 @@ void bta_gatts_indicate_handle(tBTA_GATTS_CB* p_cb, tBTA_GATTS_DATA* p_msg) {
  * Returns          none.
  *
  ******************************************************************************/
-void bta_gatts_open(UNUSED_ATTR tBTA_GATTS_CB* p_cb, tBTA_GATTS_DATA* p_msg) {
+void bta_gatts_open(tBTA_GATTS_CB* /* p_cb */, tBTA_GATTS_DATA* p_msg) {
   tBTA_GATTS_RCB* p_rcb = NULL;
   tGATT_STATUS status = GATT_ERROR;
   uint16_t conn_id;
@@ -429,11 +427,20 @@ void bta_gatts_open(UNUSED_ATTR tBTA_GATTS_CB* p_cb, tBTA_GATTS_DATA* p_msg) {
   p_rcb = bta_gatts_find_app_rcb_by_app_if(p_msg->api_open.server_if);
   if (p_rcb != NULL) {
     /* should always get the connection ID */
-    if (GATT_Connect(p_rcb->gatt_if, p_msg->api_open.remote_bda,
-                     p_msg->api_open.connection_type, p_msg->api_open.transport,
-                     false)) {
-      status = GATT_SUCCESS;
+    bool success = false;
+    if (IS_FLAG_ENABLED(ble_gatt_server_use_address_type_in_connection)) {
+      success = GATT_Connect(p_rcb->gatt_if, p_msg->api_open.remote_bda,
+                             p_msg->api_open.remote_addr_type,
+                             p_msg->api_open.connection_type,
+                             p_msg->api_open.transport, false);
+    } else {
+      success = GATT_Connect(p_rcb->gatt_if, p_msg->api_open.remote_bda,
+                             p_msg->api_open.connection_type,
+                             p_msg->api_open.transport, false);
+    }
 
+    if (success) {
+      status = GATT_SUCCESS;
       if (GATT_GetConnIdIfConnected(p_rcb->gatt_if, p_msg->api_open.remote_bda,
                                     &conn_id, p_msg->api_open.transport)) {
         status = GATT_ALREADY_OPEN;
@@ -458,8 +465,7 @@ void bta_gatts_open(UNUSED_ATTR tBTA_GATTS_CB* p_cb, tBTA_GATTS_DATA* p_msg) {
  * Returns          none.
  *
  ******************************************************************************/
-void bta_gatts_cancel_open(UNUSED_ATTR tBTA_GATTS_CB* p_cb,
-                           tBTA_GATTS_DATA* p_msg) {
+void bta_gatts_cancel_open(tBTA_GATTS_CB* /* p_cb */, tBTA_GATTS_DATA* p_msg) {
   tBTA_GATTS_RCB* p_rcb;
   tGATT_STATUS status = GATT_ERROR;
 
@@ -490,7 +496,7 @@ void bta_gatts_cancel_open(UNUSED_ATTR tBTA_GATTS_CB* p_cb,
  * Returns          none.
  *
  ******************************************************************************/
-void bta_gatts_close(UNUSED_ATTR tBTA_GATTS_CB* p_cb, tBTA_GATTS_DATA* p_msg) {
+void bta_gatts_close(tBTA_GATTS_CB* /* p_cb */, tBTA_GATTS_DATA* p_msg) {
   tBTA_GATTS_RCB* p_rcb;
   tGATT_STATUS status = GATT_ERROR;
   tGATT_IF gatt_if;

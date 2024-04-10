@@ -15,10 +15,10 @@
  */
 
 #include <base/functional/bind.h>
-#include <base/logging.h>
 #include <base/run_loop.h>
 #include <base/threading/thread.h>
 #include <benchmark/benchmark.h>
+#include <bluetooth/log.h>
 
 #include <future>
 #include <memory>
@@ -26,7 +26,6 @@
 
 #include "abstract_message_loop.h"
 #include "common/message_loop_thread.h"
-#include "include/check.h"
 #include "osi/include/fixed_queue.h"
 #include "osi/include/thread.h"
 
@@ -40,7 +39,8 @@ static std::unique_ptr<std::promise<void>> g_counter_promise = nullptr;
 
 void pthread_callback_batch(void* context) {
   auto queue = static_cast<fixed_queue_t*>(context);
-  CHECK_NE(queue, nullptr);
+  bluetooth::log::assert_that(queue != nullptr,
+                              "assert failed: queue != nullptr");
   fixed_queue_dequeue(queue);
   g_counter++;
   if (g_counter >= NUM_MESSAGES_TO_SEND) {
@@ -51,13 +51,15 @@ void pthread_callback_batch(void* context) {
 void callback_sequential(void* context) { g_counter_promise->set_value(); }
 
 void callback_sequential_queue(fixed_queue_t* queue, void* context) {
-  CHECK_NE(queue, nullptr);
+  bluetooth::log::assert_that(queue != nullptr,
+                              "assert failed: queue != nullptr");
   fixed_queue_dequeue(queue);
   g_counter_promise->set_value();
 }
 
 void callback_batch(fixed_queue_t* queue, void* data) {
-  CHECK_NE(queue, nullptr);
+  bluetooth::log::assert_that(queue != nullptr,
+                              "assert failed: queue != nullptr");
   fixed_queue_dequeue(queue);
   g_counter++;
   if (g_counter >= NUM_MESSAGES_TO_SEND) {
@@ -423,10 +425,6 @@ BENCHMARK_F(BM_LibChromeThread, sequential_execution)(State& state) {
 };
 
 int main(int argc, char** argv) {
-  // Disable LOG() output from libchrome
-  logging::LoggingSettings log_settings;
-  log_settings.logging_dest = logging::LoggingDestination::LOG_NONE;
-  CHECK(logging::InitLogging(log_settings)) << "Failed to set up logging";
   ::benchmark::Initialize(&argc, argv);
   if (::benchmark::ReportUnrecognizedArguments(argc, argv)) {
     return 1;

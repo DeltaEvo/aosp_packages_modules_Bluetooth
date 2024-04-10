@@ -20,7 +20,6 @@
 #define LOG_TAG "device_iot_config"
 #include "device_iot_config_int.h"
 
-#include <base/logging.h>
 #include <bluetooth/log.h>
 #include <stdio.h>
 #include <string.h>
@@ -34,7 +33,6 @@
 #include "btif/include/btif_common.h"
 #include "common/init_flags.h"
 #include "device/include/device_iot_config.h"
-#include "include/check.h"
 #include "os/log.h"
 #include "osi/include/alarm.h"
 #include "osi/include/config.h"
@@ -195,8 +193,8 @@ EXPORT_SYMBOL module_t device_iot_config_module = {
 void device_iot_config_write(uint16_t event, UNUSED_ATTR char* p_param) {
   if (!InitFlags::IsDeviceIotConfigLoggingEnabled()) return;
 
-  CHECK(config != NULL);
-  CHECK(config_timer != NULL);
+  log::assert_that(config != NULL, "assert failed: config != NULL");
+  log::assert_that(config_timer != NULL, "assert failed: config_timer != NULL");
 
   log::info("evt={}", event);
   std::unique_lock<std::mutex> lock(config_lock);
@@ -221,7 +219,7 @@ void device_iot_config_sections_sort_by_entry_key(config_t& config,
 bool device_iot_config_has_key_value(const std::string& section,
                                      const std::string& key,
                                      const std::string& value_str) {
-  CHECK(config != NULL);
+  log::assert_that(config != NULL, "assert failed: config != NULL");
 
   const std::string* stored_value =
       config_get_string(*config, section, key, NULL);
@@ -234,8 +232,8 @@ bool device_iot_config_has_key_value(const std::string& section,
 void device_iot_config_save_async(void) {
   if (!InitFlags::IsDeviceIotConfigLoggingEnabled()) return;
 
-  CHECK(config != NULL);
-  CHECK(config_timer != NULL);
+  log::assert_that(config != NULL, "assert failed: config != NULL");
+  log::assert_that(config_timer != NULL, "assert failed: config_timer != NULL");
 
   log::verbose("");
   alarm_set(config_timer, CONFIG_SETTLE_PERIOD_MS,

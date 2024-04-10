@@ -31,7 +31,6 @@
 #include "internal_include/bt_target.h"
 #include "main/shim/dumpsys.h"
 #include "os/log.h"
-#include "osi/include/osi.h"  // UNUSED_ATTR
 #include "stack/include/btm_api.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
@@ -63,19 +62,6 @@ void bta_sys_rm_register(tBTA_SYS_CONN_CBACK* p_cback) {
  ******************************************************************************/
 void bta_sys_role_chg_register(tBTA_SYS_ROLE_SWITCH_CBACK* p_cback) {
   bta_sys_cb.p_role_cb = p_cback;
-}
-/*******************************************************************************
- *
- * Function         bta_sys_ssr_cfg_register
- *
- * Description      Called by BTA DM to register SSR configuration callback
- *
- *
- * Returns          void
- *
- ******************************************************************************/
-void bta_sys_ssr_cfg_register(tBTA_SYS_SSR_CFG_CBACK* p_cback) {
-  bta_sys_cb.p_ssr_cb = p_cback;
 }
 
 /*******************************************************************************
@@ -339,7 +325,7 @@ void bta_sys_sco_close(tBTA_SYS_ID id, uint8_t app_id,
  * Returns          void
  *
  ******************************************************************************/
-void bta_sys_sco_use(UNUSED_ATTR tBTA_SYS_ID id, uint8_t app_id,
+void bta_sys_sco_use(tBTA_SYS_ID /* id */, uint8_t app_id,
                      const RawAddress& peer_addr) {
   /* AV streaming need to be suspended before SCO is connected. */
   if (bta_sys_cb.p_sco_cb) {
@@ -358,27 +344,11 @@ void bta_sys_sco_use(UNUSED_ATTR tBTA_SYS_ID id, uint8_t app_id,
  * Returns          void
  *
  ******************************************************************************/
-void bta_sys_sco_unuse(UNUSED_ATTR tBTA_SYS_ID id, uint8_t app_id,
+void bta_sys_sco_unuse(tBTA_SYS_ID /* id */, uint8_t app_id,
                        const RawAddress& peer_addr) {
   if ((bta_sys_cb.p_sco_cb)) {
     uint8_t num_sco_links = BTM_GetNumScoLinks();
     bta_sys_cb.p_sco_cb(BTA_SYS_SCO_CLOSE, num_sco_links, app_id, peer_addr);
-  }
-}
-/*******************************************************************************
- *
- * Function         bta_sys_chg_ssr_config
- *
- * Description      Called by BTA subsystems to indicate that the given app SSR
- *                  setting needs to be changed.
- *
- * Returns          void
- *
- ******************************************************************************/
-void bta_sys_chg_ssr_config(uint8_t id, uint8_t app_id, uint16_t max_latency,
-                            uint16_t min_tout) {
-  if (bta_sys_cb.p_ssr_cb) {
-    bta_sys_cb.p_ssr_cb(id, app_id, max_latency, min_tout);
   }
 }
 

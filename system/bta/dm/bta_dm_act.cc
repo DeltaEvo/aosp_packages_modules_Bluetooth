@@ -28,7 +28,6 @@
 #include <android_bluetooth_flags.h>
 #include <android_bluetooth_sysprop.h>
 #include <base/location.h>
-#include <base/logging.h>
 #include <bluetooth/log.h>
 
 #include <cstdint>
@@ -46,14 +45,11 @@
 #include "btif/include/btif_dm.h"
 #include "btif/include/stack_manager_t.h"
 #include "hci/controller_interface.h"
-#include "include/bind_helpers.h"
-#include "include/check.h"
 #include "internal_include/bt_target.h"
 #include "main/shim/acl_api.h"
 #include "main/shim/btm_api.h"
 #include "main/shim/entry.h"
 #include "osi/include/allocator.h"
-#include "osi/include/osi.h"  // UNUSED_ATTR
 #include "osi/include/properties.h"
 #include "stack/gatt/connection_manager.h"
 #include "stack/include/acl_api.h"
@@ -554,42 +550,6 @@ void bta_dm_remove_device(const RawAddress& bd_addr) {
   }
 }
 
-/** This function forces to close the connection to a remote device and
- * optionaly remove the device from security database if required. */
-void bta_dm_close_acl(const RawAddress& bd_addr, bool remove_dev,
-                      tBT_TRANSPORT transport) {
-  uint8_t index;
-
-  log::verbose("bta_dm_close_acl");
-
-  if (BTM_IsAclConnectionUp(bd_addr, transport)) {
-    for (index = 0; index < bta_dm_cb.device_list.count; index++) {
-      if (bta_dm_cb.device_list.peer_device[index].peer_bdaddr == bd_addr)
-        break;
-    }
-    if (index != bta_dm_cb.device_list.count) {
-      if (remove_dev) {
-        log::info("Setting remove_dev_pending for {}",
-                  ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
-        bta_dm_cb.device_list.peer_device[index].remove_dev_pending = true;
-      }
-    } else {
-      log::error("unknown device, remove ACL failed");
-    }
-
-    /* Make sure device is not in acceptlist before we disconnect */
-    GATT_CancelConnect(0, bd_addr, false);
-
-    /* Disconnect the ACL link */
-    btm_remove_acl(bd_addr, transport);
-  }
-  /* if to remove the device from security database ? do it now */
-  else if (remove_dev) {
-    bta_dm_process_remove_device_no_callback(bd_addr);
-  }
-  /* otherwise, no action needed */
-}
-
 /*******************************************************************************
  *
  * Function         bta_dm_local_name_cback
@@ -600,9 +560,7 @@ void bta_dm_close_acl(const RawAddress& bd_addr, bool remove_dev,
  * Returns          void
  *
  ******************************************************************************/
-static void bta_dm_local_name_cback(UNUSED_ATTR void* p_name) {
-  BTIF_dm_enable();
-}
+static void bta_dm_local_name_cback(void* /* p_name */) { BTIF_dm_enable(); }
 
 static void handle_role_change(const RawAddress& bd_addr, tHCI_ROLE new_role,
                                tHCI_STATUS hci_status) {
@@ -892,7 +850,7 @@ static void bta_dm_check_av() {
  * Returns          void
  *
  ******************************************************************************/
-static void bta_dm_disable_conn_down_timer_cback(UNUSED_ATTR void* data) {
+static void bta_dm_disable_conn_down_timer_cback(void* /* data */) {
   /* disable the power managment module */
   bta_dm_disable_pm();
 
@@ -978,7 +936,7 @@ static void bta_dm_rm_cback(tBTA_SYS_CONN_STATUS status, tBTA_SYS_ID id,
  * Returns          void
  *
  ******************************************************************************/
-static void bta_dm_delay_role_switch_cback(UNUSED_ATTR void* data) {
+static void bta_dm_delay_role_switch_cback(void* /* data */) {
   log::verbose("initiating Delayed RS");
   bta_dm_adjust_roles(false);
 }
@@ -1041,8 +999,8 @@ static void bta_dm_adjust_roles(bool delay_role_switch) {
  *
  ******************************************************************************/
 static size_t find_utf8_char_boundary(const char* utf8str, size_t offset) {
-  CHECK(utf8str);
-  CHECK(offset > 0);
+  log::assert_that(utf8str != nullptr, "assert failed: utf8str != nullptr");
+  log::assert_that(offset > 0, "assert failed: offset > 0");
 
   while (--offset) {
     uint8_t ch = (uint8_t)utf8str[offset];
@@ -1379,8 +1337,8 @@ void bta_dm_eir_update_uuid(uint16_t uuid16, bool adding) {
   bta_dm_set_eir(NULL);
 }
 
-tBTA_DM_PEER_DEVICE* find_connected_device(
-    const RawAddress& bd_addr, UNUSED_ATTR tBT_TRANSPORT transport) {
+tBTA_DM_PEER_DEVICE* find_connected_device(const RawAddress& bd_addr,
+                                           tBT_TRANSPORT /* transport */) {
   for (uint8_t i = 0; i < bta_dm_cb.device_list.count; i++) {
     if (bta_dm_cb.device_list.peer_device[i].peer_bdaddr == bd_addr &&
         bta_dm_cb.device_list.peer_device[i].conn_state == BTA_DM_CONNECTED)

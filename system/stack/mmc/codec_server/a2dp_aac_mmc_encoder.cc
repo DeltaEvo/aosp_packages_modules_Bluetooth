@@ -24,7 +24,6 @@ extern "C" {
 #include <libavutil/samplefmt.h>
 }
 
-#include <base/logging.h>
 #include <bluetooth/log.h>
 
 #include "a2dp_aac.h"
@@ -171,8 +170,7 @@ int A2dpAacEncoder::transcode(uint8_t* i_buf, int i_len, uint8_t* o_buf,
         pcm = *((int32_t*)buff);
         break;
       default:
-        LOG_ASSERT(false) << "Attempting to read " << nbits
-                          << " bits as bit depth";
+        log::fatal("Attempting to read {} bits as bit depth", nbits);
     }
 
     return pcm;

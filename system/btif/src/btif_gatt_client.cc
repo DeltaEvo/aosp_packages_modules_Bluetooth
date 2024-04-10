@@ -28,7 +28,6 @@
 
 #include <base/at_exit.h>
 #include <base/functional/bind.h>
-#include <base/logging.h>
 #include <base/threading/thread.h>
 #include <bluetooth/log.h>
 #include <hardware/bluetooth.h>
@@ -422,7 +421,8 @@ void read_char_cb(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
   params->status = status;
   params->handle = handle;
   params->value.len = len;
-  CHECK(len <= GATT_MAX_ATTR_LEN);
+  log::assert_that(len <= GATT_MAX_ATTR_LEN,
+                   "assert failed: len <= GATT_MAX_ATTR_LEN");
   if (len > 0) memcpy(params->value.value, value, len);
 
   // clang-tidy analyzer complains about |params| is leaked.  It doesn't know
@@ -446,7 +446,8 @@ void read_using_char_uuid_cb(uint16_t conn_id, tGATT_STATUS status,
   params->status = status;
   params->handle = handle;
   params->value.len = len;
-  CHECK(len <= GATT_MAX_ATTR_LEN);
+  log::assert_that(len <= GATT_MAX_ATTR_LEN,
+                   "assert failed: len <= GATT_MAX_ATTR_LEN");
   if (len > 0) memcpy(params->value.value, value, len);
 
   // clang-tidy analyzer complains about |params| is leaked.  It doesn't know
@@ -473,7 +474,8 @@ void read_desc_cb(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
   params.status = status;
   params.handle = handle;
   params.value.len = len;
-  CHECK(len <= GATT_MAX_ATTR_LEN);
+  log::assert_that(len <= GATT_MAX_ATTR_LEN,
+                   "assert failed: len <= GATT_MAX_ATTR_LEN");
   if (len > 0) memcpy(params.value.value, value, len);
 
   CLI_CBACK_IN_JNI(read_descriptor_cb, conn_id, status, params);

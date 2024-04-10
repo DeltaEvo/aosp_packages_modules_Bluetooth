@@ -796,15 +796,15 @@ void process_ssr_event(tHCI_STATUS status, uint16_t handle,
   log::debug(
       "Notified sniff subrating registered clients cnt:{} peer:{} use_ssr:{} "
       "status:{}",
-      cnt, ADDRESS_TO_LOGGABLE_CSTR(bd_addr), logbool(use_ssr).c_str(),
+      cnt, ADDRESS_TO_LOGGABLE_CSTR(bd_addr), use_ssr,
       hci_error_code_text(status).c_str());
 }
 
 void btm_pm_on_sniff_subrating(tHCI_STATUS status, uint16_t handle,
                                uint16_t maximum_transmit_latency,
                                uint16_t maximum_receive_latency,
-                               uint16_t minimum_remote_timeout,
-                               uint16_t minimum_local_timeout) {
+                               uint16_t /* minimum_remote_timeout */,
+                               uint16_t /* minimum_local_timeout */) {
   process_ssr_event(status, handle, maximum_transmit_latency,
                     maximum_receive_latency);
 }

@@ -16,15 +16,14 @@
 
 #include "test/headless/get_options.h"
 
-#include <base/logging.h>
 #include <getopt.h>
 #include <stdio.h>
 #include <unistd.h>
 
 #include <list>
+#include <sstream>
 #include <string>
 
-#include "include/check.h"
 #include "os/log.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
@@ -73,7 +72,7 @@ void bluetooth::test::headless::GetOpt::Usage() const {
 
 void bluetooth::test::headless::GetOpt::ParseValue(
     char* optarg, std::list<std::string>& string_list) {
-  CHECK(optarg != nullptr);
+  log::assert_that(optarg != nullptr, "assert failed: optarg != nullptr");
   char* p = optarg;
   char* pp = optarg;
   while (*p != '\0') {

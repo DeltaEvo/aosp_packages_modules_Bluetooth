@@ -27,7 +27,6 @@
 #include "a2dp_vendor.h"
 #include "a2dp_vendor_opus.h"
 #include "common/time_util.h"
-#include "include/check.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"
@@ -201,7 +200,9 @@ static bool a2dp_vendor_opus_encoder_update(uint16_t peer_mtu,
     log::error("Cannot get Opus encoder handle");
     return false;
   }
-  CHECK(a2dp_opus_encoder_cb.opus_handle != nullptr);
+  log::assert_that(
+      a2dp_opus_encoder_cb.opus_handle != nullptr,
+      "assert failed: a2dp_opus_encoder_cb.opus_handle != nullptr");
 
   if (!a2dp_codec_config->copyOutOtaCodecConfig(codec_info)) {
     log::error("Cannot update the codec encoder for {}: invalid codec config",

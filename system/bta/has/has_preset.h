@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <base/logging.h>
+#include <bluetooth/log.h>
 
 #include <optional>
 #include <string>
@@ -61,8 +61,8 @@ class HasPreset {
   bool IsAvailable() const { return properties_ & kPropertyAvailable; }
 
   HasPreset& operator=(const HasPreset& other) {
-    LOG_ASSERT(index_ == other.GetIndex())
-        << "Assigning immutable preset index!";
+    log::assert_that(index_ == other.GetIndex(),
+                     "Assigning immutable preset index!");
 
     if ((this != &other) && (*this != other)) {
       index_ = other.GetIndex();
@@ -113,3 +113,8 @@ class HasPreset {
 
 }  // namespace has
 }  // namespace bluetooth::le_audio
+
+namespace fmt {
+template <>
+struct formatter<bluetooth::le_audio::has::HasPreset> : ostream_formatter {};
+}  // namespace fmt
