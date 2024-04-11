@@ -3740,13 +3740,13 @@ public final class BluetoothAdapter {
 
     private static final IBluetoothManagerCallback sManagerCallback =
             new IBluetoothManagerCallback.Stub() {
-                public void onBluetoothServiceUp(IBluetooth bluetoothService) {
+                public void onBluetoothServiceUp(IBinder bluetoothService) {
                     if (DBG) {
                         Log.d(TAG, "onBluetoothServiceUp: " + bluetoothService);
                     }
 
                     synchronized (sServiceLock) {
-                        sService = bluetoothService;
+                        sService = IBluetooth.Stub.asInterface(bluetoothService);
                         for (IBluetoothManagerCallback cb : sProxyServiceStateCallbacks.keySet()) {
                             try {
                                 if (cb != null) {
@@ -3825,11 +3825,11 @@ public final class BluetoothAdapter {
 
     private final IBluetoothManagerCallback mManagerCallback =
             new IBluetoothManagerCallback.Stub() {
-                public void onBluetoothServiceUp(@NonNull IBluetooth bluetoothService) {
+                public void onBluetoothServiceUp(@NonNull IBinder bluetoothService) {
                     requireNonNull(bluetoothService, "bluetoothService cannot be null");
                     mServiceLock.writeLock().lock();
                     try {
-                        mService = bluetoothService;
+                        mService = IBluetooth.Stub.asInterface(bluetoothService);
                     } finally {
                         // lock downgrade is possible in ReentrantReadWriteLock
                         mServiceLock.readLock().lock();
@@ -4022,7 +4022,7 @@ public final class BluetoothAdapter {
      * @see IBluetoothOobDataCallback for interface definition.
      * @hide
      */
-    public static class WrappedOobDataCallback extends IBluetoothOobDataCallback.Stub {
+    private static class WrappedOobDataCallback extends IBluetoothOobDataCallback.Stub {
         private final OobDataCallback mCallback;
         private final Executor mExecutor;
 
@@ -4038,35 +4038,12 @@ public final class BluetoothAdapter {
             mExecutor = executor;
         }
 
-        /**
-         * Wrapper function to relay to the {@link OobDataCallback#onOobData}
-         *
-         * @param transport - whether the {@link OobData} is generated for LE or Classic.
-         * @param oobData - data generated in the host stack(LE) or controller (Classic)
-         * @hide
-         */
         public void onOobData(@Transport int transport, @NonNull OobData oobData) {
-            mExecutor.execute(
-                    new Runnable() {
-                        public void run() {
-                            mCallback.onOobData(transport, oobData);
-                        }
-                    });
+            mExecutor.execute(() -> mCallback.onOobData(transport, oobData));
         }
 
-        /**
-         * Wrapper function to relay to the {@link OobDataCallback#onError}
-         *
-         * @param errorCode - the code describing the type of error that occurred.
-         * @hide
-         */
         public void onError(@OobError int errorCode) {
-            mExecutor.execute(
-                    new Runnable() {
-                        public void run() {
-                            mCallback.onError(errorCode);
-                        }
-                    });
+            mExecutor.execute(() -> mCallback.onError(errorCode));
         }
     }
 
@@ -4305,7 +4282,9 @@ public final class BluetoothAdapter {
         if (isRegistered != wantRegistered) {
             if (wantRegistered) {
                 try {
-                    sService = mManagerService.registerAdapter(sManagerCallback);
+                    sService =
+                            IBluetooth.Stub.asInterface(
+                                    mManagerService.registerAdapter(sManagerCallback));
                 } catch (RemoteException e) {
                     throw e.rethrowAsRuntimeException();
                 }
