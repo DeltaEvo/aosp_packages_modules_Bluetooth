@@ -17,6 +17,7 @@
 #undef LOG_TAG  // Undefine the LOG_TAG by this compilation unit
 #include "btif/src/btif_rc.cc"
 
+#include <bluetooth/log.h>
 #include <gtest/gtest.h>
 
 #include <cstdint>
@@ -80,19 +81,24 @@ namespace {
 const RawAddress kDeviceAddress({0x11, 0x22, 0x33, 0x44, 0x55, 0x66});
 }  // namespace
 
-void btif_av_clear_remote_suspend_flag(void) {}
-bool btif_av_is_connected(void) { return true; }
+void btif_av_clear_remote_suspend_flag(const A2dpType local_a2dp_type) {}
+bool btif_av_is_connected(const A2dpType local_a2dp_type) { return true; }
 bool btif_av_is_sink_enabled(void) { return true; }
 RawAddress btif_av_sink_active_peer(void) { return RawAddress(); }
 RawAddress btif_av_source_active_peer(void) { return RawAddress(); }
-bool btif_av_stream_started_ready(void) { return false; }
+bool btif_av_stream_started_ready(const A2dpType local_a2dp_type) {
+  return false;
+}
 bt_status_t btif_transfer_context(tBTIF_CBACK* p_cback, uint16_t event,
                                   char* p_params, int param_len,
                                   tBTIF_COPY_CBACK* p_copy_cback) {
   return BT_STATUS_SUCCESS;
 }
 bool btif_av_src_sink_coexist_enabled() { return true; }
-bool btif_av_is_connected_addr(const RawAddress& peer_address) { return true; }
+bool btif_av_is_connected_addr(const RawAddress& peer_address,
+                               const A2dpType local_a2dp_type) {
+  return true;
+}
 bool btif_av_peer_is_connected_sink(const RawAddress& peer_address) {
   return false;
 }
@@ -107,7 +113,7 @@ static bluetooth::common::MessageLoopThread jni_thread("bt_jni_thread");
 bt_status_t do_in_jni_thread(const base::Location& from_here,
                              base::OnceClosure task) {
   if (!jni_thread.DoInThread(from_here, std::move(task))) {
-    LOG(ERROR) << __func__ << ": Post task to task runner failed!";
+    log::error("Post task to task runner failed!");
     return BT_STATUS_FAIL;
   }
   return BT_STATUS_SUCCESS;
@@ -264,7 +270,7 @@ TEST_F(BtifRcWithCallbacksTest, handle_rc_ctrl_features) {
 
   CHECK(std::future_status::ready == future.wait_for(std::chrono::seconds(2)));
   auto res = future.get();
-  LOG_INFO("FEATURES:%d", res.feature);
+  log::info("FEATURES:{}", res.feature);
   CHECK(res.feature == (BTRC_FEAT_ABSOLUTE_VOLUME | BTRC_FEAT_METADATA |
                         BTRC_FEAT_BROWSE | BTRC_FEAT_COVER_ARTWORK));
 }

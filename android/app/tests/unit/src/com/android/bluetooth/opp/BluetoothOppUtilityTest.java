@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
@@ -49,10 +50,12 @@ import com.android.bluetooth.opp.BluetoothOppTestUtils.CursorMockData;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
@@ -67,6 +70,8 @@ public class BluetoothOppUtilityTest {
     private static final Uri INCORRECT_FORMAT_URI = Uri.parse("www.google.com");
 
     Context mContext;
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock
     Cursor mCursor;
 
@@ -76,7 +81,6 @@ public class BluetoothOppUtilityTest {
 
     @Before
     public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
         mContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
         BluetoothMethodProxy.setInstanceForTesting(mCallProxy);
         TestUtils.setUpUiTest();
@@ -160,6 +164,9 @@ public class BluetoothOppUtilityTest {
         doReturn(0).when(mCallProxy).contentResolverDelete(any(), any(), nullable(String.class),
                 nullable(String[].class));
 
+        // Do nothing since we don't need the actual activity to be launched.
+        doNothing().when(spiedContext).startActivity(any());
+
         BluetoothOppUtility.openReceivedFile(spiedContext, "randomFileName.txt",
                 "text/plain", 0L, contentResolverUri);
 
@@ -228,6 +235,9 @@ public class BluetoothOppUtilityTest {
         PackageManager mockManager = mock(PackageManager.class);
         doReturn(mockManager).when(spiedContext).getPackageManager();
         doReturn(List.of()).when(mockManager).queryIntentActivities(any(), anyInt());
+
+        // Do nothing since we don't need the actual activity to be launched.
+        doNothing().when(spiedContext).startActivity(any());
 
         BluetoothOppUtility.openReceivedFile(spiedContext, "randomFileName.txt",
                 "text/plain", 0L, contentResolverUri);

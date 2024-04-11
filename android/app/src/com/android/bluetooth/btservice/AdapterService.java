@@ -1279,6 +1279,7 @@ public class AdapterService extends Service {
             errorLog(
                     "Cannot switch buffer size. The number of A2DP active devices is "
                             + activeDevices.size());
+            return;
         }
 
         // Send intent to fastpair
@@ -3046,7 +3047,16 @@ public class AdapterService extends Service {
                 return BluetoothDevice.CONNECTION_STATE_DISCONNECTED;
             }
 
-            return service.getConnectionState(device);
+            if (Flags.apiGetConnectionStateUsingIdentityAddress()) {
+                final long token = Binder.clearCallingIdentity();
+                try {
+                    return service.getConnectionState(device);
+                } finally {
+                    Binder.restoreCallingIdentity(token);
+                }
+            } else {
+                return service.getConnectionState(device);
+            }
         }
 
         @Override

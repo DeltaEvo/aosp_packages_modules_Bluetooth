@@ -21,7 +21,6 @@ import static android.bluetooth.BluetoothProfile.STATE_CONNECTED;
 import static android.bluetooth.BluetoothProfile.STATE_CONNECTING;
 import static android.bluetooth.BluetoothProfile.STATE_DISCONNECTED;
 import static android.bluetooth.BluetoothProfile.STATE_DISCONNECTING;
-
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -34,8 +33,8 @@ import android.content.Intent;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
-import android.test.suitebuilder.annotation.MediumTest;
 
+import androidx.test.filters.MediumTest;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.TestUtils;
@@ -43,11 +42,13 @@ import com.android.bluetooth.btservice.AdapterService;
 
 import org.hamcrest.core.IsInstanceOf;
 import org.junit.*;
+import org.junit.Rule;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 @MediumTest
 @RunWith(AndroidJUnit4.class)
@@ -60,6 +61,8 @@ public class CsipSetCoordinatorStateMachineTest {
     private CsipSetCoordinatorStateMachineWrapper mStateMachine;
     private static final int TIMEOUT_MS = 1000;
 
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock private AdapterService mAdapterService;
     @Mock private CsipSetCoordinatorService mService;
     @Mock private CsipSetCoordinatorNativeInterface mNativeInterface;
@@ -70,8 +73,6 @@ public class CsipSetCoordinatorStateMachineTest {
             System.setProperty("dexmaker.share_classloader", "true");
         }
 
-        // Set up mocks and test assets
-        MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
 
         mAdapter = BluetoothAdapter.getDefaultAdapter();

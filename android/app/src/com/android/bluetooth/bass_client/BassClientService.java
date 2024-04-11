@@ -54,8 +54,7 @@ import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.btservice.ServiceFactory;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
 import com.android.bluetooth.csip.CsipSetCoordinatorService;
-import com.android.bluetooth.flags.FeatureFlags;
-import com.android.bluetooth.flags.FeatureFlagsImpl;
+import com.android.bluetooth.flags.Flags;
 import com.android.bluetooth.le_audio.LeAudioService;
 import com.android.internal.annotations.VisibleForTesting;
 
@@ -108,7 +107,6 @@ public class BassClientService extends ProfileService {
     private final Map<BluetoothDevice, List<Integer>> mGroupManagedSources =
             new ConcurrentHashMap<>();
     private final Map<BluetoothDevice, List<Integer>> mActiveSourceMap = new ConcurrentHashMap<>();
-    private final FeatureFlags mFeatureFlags;
     private final Map<BluetoothDevice, BluetoothLeBroadcastMetadata> mBroadcastMetadataMap =
             new ConcurrentHashMap<>();
     private final LinkedList<BluetoothDevice> mPausedBroadcastSinks = new LinkedList<>();
@@ -152,13 +150,6 @@ public class BassClientService extends ProfileService {
 
     public BassClientService(Context ctx) {
         super(ctx);
-        mFeatureFlags = new FeatureFlagsImpl();
-    }
-
-    @VisibleForTesting
-    BassClientService(Context ctx, FeatureFlags featureFlags) {
-        super(ctx);
-        mFeatureFlags = featureFlags;
     }
 
     public static boolean isEnabled() {
@@ -876,8 +867,7 @@ public class BassClientService extends ProfileService {
                                     device,
                                     this,
                                     mAdapterService,
-                                    mStateMachinesThread.getLooper(),
-                                    mFeatureFlags);
+                                    mStateMachinesThread.getLooper());
             if (stateMachine != null) {
                 mStateMachines.put(device, stateMachine);
             }
@@ -974,6 +964,20 @@ public class BassClientService extends ProfileService {
                     mDialingOutTimeoutEvent = null;
                     break;
                 }
+            }
+        }
+    }
+
+    private void informConnectedDeviceAboutScanOffloadStop() {
+        for (BluetoothDevice device : getConnectedDevices()) {
+            synchronized (mStateMachines) {
+                BassClientStateMachine stateMachine = getOrCreateStateMachine(device);
+                if (stateMachine == null) {
+                    Log.w(TAG, "informConnectedDeviceAboutScanOffloadStop: Can't get state "
+                            + "machine for device: " + device);
+                    continue;
+                }
+                stateMachine.sendMessage(BassClientStateMachine.STOP_SCAN_OFFLOAD);
             }
         }
     }
@@ -1339,6 +1343,7 @@ public class BassClientService extends ProfileService {
 
                 public void onScanFailed(int errorCode) {
                     Log.e(TAG, "Scan Failure:" + errorCode);
+                    informConnectedDeviceAboutScanOffloadStop();
                 }
             };
             // when starting scan, clear the previously cached broadcast scan results
@@ -1364,6 +1369,19 @@ public class BassClientService extends ProfileService {
                         .setServiceData(BassConstants.BAAS_UUID,
                                 serviceData, serviceDataMask).build());
             }
+
+            for (BluetoothDevice device : getConnectedDevices()) {
+                synchronized (mStateMachines) {
+                    BassClientStateMachine stateMachine = getOrCreateStateMachine(device);
+                    if (stateMachine == null) {
+                        Log.w(TAG, "startSearchingForSources: Can't get state machine for "
+                                + "device: " + device);
+                        continue;
+                    }
+                    stateMachine.sendMessage(BassClientStateMachine.START_SCAN_OFFLOAD);
+                }
+            }
+
             scanner.startScan(filters, settings, mSearchScanCallback);
             sEventLogger.logd(TAG, "startSearchingForSources");
             mCallbacks.notifySearchStarted(BluetoothStatusCodes.REASON_LOCAL_APP_REQUEST);
@@ -1391,6 +1409,7 @@ public class BassClientService extends ProfileService {
                 mCallbacks.notifySearchStopFailed(BluetoothStatusCodes.ERROR_UNKNOWN);
                 return;
             }
+            informConnectedDeviceAboutScanOffloadStop();
             scanner.stopScan(mSearchScanCallback);
             mSearchScanCallback = null;
             sEventLogger.logd(TAG, "stopSearchingForSources");
@@ -1869,7 +1888,7 @@ public class BassClientService extends ProfileService {
     }
 
     private boolean isAllowedToAddSource() {
-        if (mFeatureFlags.leaudioBroadcastAudioHandoverPolicies()) {
+        if (Flags.leaudioBroadcastAudioHandoverPolicies()) {
             /* Check if should wait for status update */
             if (mUnicastSourceStreamStatus.isEmpty()) {
                 /* Assistant was not active, inform about activation */

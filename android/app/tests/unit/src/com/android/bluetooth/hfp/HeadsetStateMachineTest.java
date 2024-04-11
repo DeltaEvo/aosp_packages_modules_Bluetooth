@@ -71,7 +71,8 @@ import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.util.ArrayList;
 
@@ -96,6 +97,8 @@ public class HeadsetStateMachineTest {
     private BluetoothDevice mTestDevice;
     private ArgumentCaptor<Intent> mIntentArgument = ArgumentCaptor.forClass(Intent.class);
 
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock private AdapterService mAdapterService;
     @Mock private ActiveDeviceManager mActiveDeviceManager;
     @Mock private SilenceDeviceManager mSilenceDeviceManager;
@@ -113,7 +116,6 @@ public class HeadsetStateMachineTest {
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
         // Setup mocks and test assets
-        MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
         // Stub system interface
         doReturn(mPhoneState).when(mSystemInterface).getHeadsetPhoneState();
@@ -1722,6 +1724,29 @@ public class HeadsetStateMachineTest {
                         HeadsetHalConstants.AUDIO_STATE_CONNECTED,
                         mTestDevice));
         verifyAudioSystemSetParametersInvocation(false, false);
+    }
+
+    @Test
+    public void testSetAudioParameters_isScoManagedByAudio() {
+        mSetFlagsRule.enableFlags(Flags.FLAG_IS_SCO_MANAGED_BY_AUDIO);
+
+        setUpConnectedState();
+        mHeadsetStateMachine.sendMessage(
+                HeadsetStateMachine.STACK_EVENT,
+                new HeadsetStackEvent(
+                        HeadsetStackEvent.EVENT_TYPE_SWB,
+                        HeadsetHalConstants.BTHF_SWB_CODEC_LC3,
+                        HeadsetHalConstants.BTHF_SWB_YES,
+                        mTestDevice));
+
+        mHeadsetStateMachine.sendMessage(
+                HeadsetStateMachine.STACK_EVENT,
+                new HeadsetStackEvent(
+                        HeadsetStackEvent.EVENT_TYPE_AUDIO_STATE_CHANGED,
+                        HeadsetHalConstants.AUDIO_STATE_CONNECTED,
+                        mTestDevice));
+
+        verify(mAudioManager, times(0)).setParameters(any());
     }
 
     /**
