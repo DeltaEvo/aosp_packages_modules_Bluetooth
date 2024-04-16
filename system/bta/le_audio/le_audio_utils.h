@@ -27,6 +27,7 @@
 #include <bitset>
 #include <vector>
 
+#include "audio_hal_client/audio_hal_client.h"
 #include "le_audio_types.h"
 
 namespace bluetooth::le_audio {
@@ -51,12 +52,17 @@ translateToBtLeAudioCodecConfigChannelCount(uint8_t channel_count);
 bluetooth::le_audio::btle_audio_frame_duration_index_t
 translateToBtLeAudioCodecConfigFrameDuration(int frame_duration);
 void fillStreamParamsToBtLeAudioCodecConfig(
-    types::LeAudioCodecId codec_id, const stream_parameters* stream_params,
+    const std::vector<struct set_configurations::AseConfiguration>& confs,
     bluetooth::le_audio::btle_audio_codec_config_t& out_config);
 
 std::vector<bluetooth::le_audio::btle_audio_codec_config_t>
 GetRemoteBtLeAudioCodecConfigFromPac(
     const types::PublishedAudioCapabilities& group_pacs);
 bool IsCodecUsingLtvFormat(const types::LeAudioCodecId& codec_id);
+::bluetooth::le_audio::LeAudioCodecConfiguration
+GetAudioSessionCodecConfigFromAudioSetConfiguration(
+    const ::bluetooth::le_audio::set_configurations::AudioSetConfiguration&
+        audio_set_conf,
+    uint8_t remote_direction);
 }  // namespace utils
 }  // namespace bluetooth::le_audio

@@ -502,19 +502,14 @@ class LeAudioAseConfigurationTest : public Test {
     // Regardless of the codec location, return all the possible configurations
     ON_CALL(*mock_codec_manager_, GetCodecConfig)
         .WillByDefault(Invoke(
-            [](bluetooth::le_audio::types::LeAudioContextType ctx_type,
-               std::function<
-                   const bluetooth::le_audio::set_configurations::
-                       AudioSetConfiguration*(
-                           bluetooth::le_audio::types::LeAudioContextType
-                               context_type,
-                           const bluetooth::le_audio::set_configurations::
-                               AudioSetConfigurations* confs)>
-                   non_vendor_config_matcher) {
-              auto cfg = non_vendor_config_matcher(
-                  ctx_type,
+            [](const bluetooth::le_audio::CodecManager::
+                   UnicastConfigurationRequirements& requirements,
+               bluetooth::le_audio::CodecManager::UnicastConfigurationVerifier
+                   verifier) {
+              auto configs =
                   bluetooth::le_audio::AudioSetConfigurationProvider::Get()
-                      ->GetConfigurations(ctx_type));
+                      ->GetConfigurations(requirements.audio_context_type);
+              auto cfg = verifier(requirements, configs);
               if (cfg == nullptr) {
                 return std::unique_ptr<AudioSetConfiguration>(nullptr);
               }
@@ -1092,85 +1087,67 @@ TEST_F(LeAudioAseConfigurationTest, test_context_update) {
             left->GetAvailableContexts() | right->GetAvailableContexts());
 
   /* MEDIA Available on remote sink direction only */
-  ASSERT_TRUE(group_
-                  ->GetCodecConfigurationByDirection(
-                      LeAudioContextType::MEDIA,
-                      ::bluetooth::le_audio::types::kLeAudioDirectionSink)
-                  .has_value());
-  ASSERT_FALSE(group_
-                   ->GetCodecConfigurationByDirection(
-                       LeAudioContextType::MEDIA,
-                       ::bluetooth::le_audio::types::kLeAudioDirectionSource)
-                   .has_value());
+  ASSERT_TRUE(group_->GetConfiguration(LeAudioContextType::MEDIA)
+                  ->confs.get(bluetooth::le_audio::types::kLeAudioDirectionSink)
+                  .size());
+  ASSERT_FALSE(
+      group_->GetConfiguration(LeAudioContextType::MEDIA)
+          ->confs.get(bluetooth::le_audio::types::kLeAudioDirectionSource)
+          .size());
 
   /* CONVERSATIONAL Available on both directions */
-  ASSERT_TRUE(group_
-                  ->GetCodecConfigurationByDirection(
-                      LeAudioContextType::CONVERSATIONAL,
-                      ::bluetooth::le_audio::types::kLeAudioDirectionSink)
-                  .has_value());
-  ASSERT_TRUE(group_
-                  ->GetCodecConfigurationByDirection(
-                      LeAudioContextType::CONVERSATIONAL,
-                      ::bluetooth::le_audio::types::kLeAudioDirectionSource)
-                  .has_value());
+  ASSERT_TRUE(group_->GetConfiguration(LeAudioContextType::CONVERSATIONAL)
+                  ->confs.get(bluetooth::le_audio::types::kLeAudioDirectionSink)
+                  .size());
+  ASSERT_TRUE(
+      group_->GetConfiguration(LeAudioContextType::CONVERSATIONAL)
+          ->confs.get(bluetooth::le_audio::types::kLeAudioDirectionSource)
+          .size());
 
   /* UNSPECIFIED Unavailable yet supported */
-  ASSERT_TRUE(group_
-                  ->GetCodecConfigurationByDirection(
-                      LeAudioContextType::UNSPECIFIED,
-                      ::bluetooth::le_audio::types::kLeAudioDirectionSink)
-                  .has_value());
-  ASSERT_FALSE(group_
-                   ->GetCodecConfigurationByDirection(
-                       LeAudioContextType::UNSPECIFIED,
-                       ::bluetooth::le_audio::types::kLeAudioDirectionSource)
-                   .has_value());
+  ASSERT_TRUE(group_->GetConfiguration(LeAudioContextType::UNSPECIFIED)
+                  ->confs.get(bluetooth::le_audio::types::kLeAudioDirectionSink)
+                  .size());
+  ASSERT_FALSE(
+      group_->GetConfiguration(LeAudioContextType::UNSPECIFIED)
+          ->confs.get(bluetooth::le_audio::types::kLeAudioDirectionSource)
+          .size());
 
   /* SOUNDEFFECTS Unavailable yet supported on sink only */
-  ASSERT_TRUE(group_
-                  ->GetCodecConfigurationByDirection(
-                      LeAudioContextType::SOUNDEFFECTS,
-                      ::bluetooth::le_audio::types::kLeAudioDirectionSink)
-                  .has_value());
-  ASSERT_FALSE(group_
-                   ->GetCodecConfigurationByDirection(
-                       LeAudioContextType::SOUNDEFFECTS,
-                       ::bluetooth::le_audio::types::kLeAudioDirectionSource)
-                   .has_value());
+  ASSERT_TRUE(group_->GetConfiguration(LeAudioContextType::SOUNDEFFECTS)
+                  ->confs.get(bluetooth::le_audio::types::kLeAudioDirectionSink)
+                  .size());
+  ASSERT_FALSE(
+      group_->GetConfiguration(LeAudioContextType::SOUNDEFFECTS)
+          ->confs.get(bluetooth::le_audio::types::kLeAudioDirectionSource)
+          .size());
 
   /* INSTRUCTIONAL Unavailable and not supported but scenario is supported */
-  ASSERT_TRUE(group_
-                  ->GetCodecConfigurationByDirection(
-                      LeAudioContextType::INSTRUCTIONAL,
-                      ::bluetooth::le_audio::types::kLeAudioDirectionSink)
-                  .has_value());
-  ASSERT_FALSE(group_
-                   ->GetCodecConfigurationByDirection(
-                       LeAudioContextType::INSTRUCTIONAL,
-                       ::bluetooth::le_audio::types::kLeAudioDirectionSource)
-                   .has_value());
+  ASSERT_TRUE(group_->GetConfiguration(LeAudioContextType::INSTRUCTIONAL)
+                  ->confs.get(bluetooth::le_audio::types::kLeAudioDirectionSink)
+                  .size());
+  ASSERT_FALSE(
+      group_->GetConfiguration(LeAudioContextType::INSTRUCTIONAL)
+          ->confs.get(bluetooth::le_audio::types::kLeAudioDirectionSource)
+          .size());
 
   /* ALERTS on sink only */
-  ASSERT_TRUE(group_
-                  ->GetCodecConfigurationByDirection(
-                      LeAudioContextType::ALERTS,
-                      ::bluetooth::le_audio::types::kLeAudioDirectionSink)
-                  .has_value());
-  ASSERT_FALSE(group_
-                   ->GetCodecConfigurationByDirection(
-                       LeAudioContextType::ALERTS,
-                       ::bluetooth::le_audio::types::kLeAudioDirectionSource)
-                   .has_value());
+  ASSERT_TRUE(group_->GetConfiguration(LeAudioContextType::ALERTS)
+                  ->confs.get(bluetooth::le_audio::types::kLeAudioDirectionSink)
+                  .size());
+  ASSERT_FALSE(
+      group_->GetConfiguration(LeAudioContextType::ALERTS)
+          ->confs.get(bluetooth::le_audio::types::kLeAudioDirectionSource)
+          .size());
 
   /* We should get the config for ALERTS for a single channel as only one earbud
    * has it. */
-  auto config = group_->GetCodecConfigurationByDirection(
-      LeAudioContextType::ALERTS,
-      ::bluetooth::le_audio::types::kLeAudioDirectionSink);
-  ASSERT_TRUE(config.has_value());
+  auto sink_configs =
+      group_->GetConfiguration(LeAudioContextType::ALERTS)
+          ->confs.get(bluetooth::le_audio::types::kLeAudioDirectionSink);
+  ASSERT_EQ(1lu, sink_configs.size());
   ASSERT_EQ(
-      config->num_channels,
+      sink_configs.at(0).codec.GetChannelCountPerIsoStream(),
       ::bluetooth::le_audio::LeAudioCodecConfiguration::kChannelNumberMono);
   ASSERT_TRUE(
       group_->IsAudioSetConfigurationAvailable(LeAudioContextType::ALERTS));
@@ -1188,11 +1165,9 @@ TEST_F(LeAudioAseConfigurationTest, test_context_update) {
   ASSERT_EQ(group_->GetAvailableContexts(),
             left->GetAvailableContexts() | right->GetAvailableContexts());
   ASSERT_FALSE(group_->GetAvailableContexts().test(LeAudioContextType::ALERTS));
-  ASSERT_TRUE(group_
-                  ->GetCodecConfigurationByDirection(
-                      LeAudioContextType::ALERTS,
-                      ::bluetooth::le_audio::types::kLeAudioDirectionSink)
-                  .has_value());
+  ASSERT_TRUE(group_->GetConfiguration(LeAudioContextType::ALERTS)
+                  ->confs.get(bluetooth::le_audio::types::kLeAudioDirectionSink)
+                  .size());
   ASSERT_TRUE(
       group_->IsAudioSetConfigurationAvailable(LeAudioContextType::ALERTS));
 }

@@ -668,39 +668,46 @@ class AdapterProperties {
         }
     }
 
-    void cleanupPrevBondRecordsFor(BluetoothDevice currentDevice) {
-        String currentAddress = currentDevice.getAddress();
-        String currentBrEdrAddress =
+    void cleanupPrevBondRecordsFor(BluetoothDevice device) {
+        String address = device.getAddress();
+        String identityAddress =
                 Flags.identityAddressNullIfUnknown()
-                        ? Utils.getBrEdrAddress(currentDevice)
-                        : mService.getIdentityAddress(currentAddress);
-        debugLog("cleanupPrevBondRecordsFor: " + currentDevice);
-        if (currentBrEdrAddress == null) {
+                        ? Utils.getBrEdrAddress(device, mService)
+                        : mService.getIdentityAddress(address);
+        debugLog("cleanupPrevBondRecordsFor: " + device);
+        if (identityAddress == null) {
             return;
         }
 
-        for (BluetoothDevice device : mBondedDevices) {
-            String address = device.getAddress();
-            String brEdrAddress =
+        for (BluetoothDevice existingDevice : mBondedDevices) {
+            String existingAddress = existingDevice.getAddress();
+            String existingIdentityAddress =
                     Flags.identityAddressNullIfUnknown()
-                            ? Utils.getBrEdrAddress(device)
-                            : mService.getIdentityAddress(address);
-            if (currentBrEdrAddress.equals(brEdrAddress) && !currentAddress.equals(address)) {
-                if (mService.getNative()
-                        .removeBond(Utils.getBytesFromAddress(device.getAddress()))) {
-                    mBondedDevices.remove(device);
-                    infoLog("Removing old bond record: "
-                                    + device
-                                    + " for current device: "
-                                    + currentDevice);
-                } else {
-                    Log.e(TAG, "Unexpected error while removing old bond record:"
-                                    + device
-                                    + " for current device: "
-                                    + currentDevice);
-                }
-                break;
+                            ? Utils.getBrEdrAddress(existingDevice, mService)
+                            : mService.getIdentityAddress(existingAddress);
+
+            if (!identityAddress.equals(existingIdentityAddress) || address.equals(
+                existingAddress)) {
+                continue;
             }
+
+            // Found an existing device with same identity address but different pseudo address
+            if (mService.getNative().removeBond(Utils.getBytesFromAddress(existingAddress))) {
+                mBondedDevices.remove(existingDevice);
+                infoLog(
+                    "Removing old bond record: "
+                        + existingDevice
+                        + " for the device: "
+                        + device);
+            } else {
+                Log.e(
+                    TAG,
+                    "Unexpected error while removing old bond record:"
+                        + existingDevice
+                        + " for the device: "
+                        + device);
+            }
+            break;
         }
     }
 
@@ -758,9 +765,14 @@ class AdapterProperties {
         BluetoothDevice device = connIntent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
         int state = connIntent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1);
         int metricId = mService.getMetricId(device);
+        byte[] remoteDeviceInfoBytes = MetricsLogger.getInstance().getRemoteDeviceInfoProto(device);
         if (state == BluetoothProfile.STATE_CONNECTING) {
             BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_DEVICE_NAME_REPORTED,
                     metricId, device.getName());
+            BluetoothStatsLog.write(
+                    BluetoothStatsLog.REMOTE_DEVICE_INFORMATION_WITH_METRIC_ID,
+                    metricId,
+                    remoteDeviceInfoBytes);
             MetricsLogger.getInstance()
                     .logAllowlistedDeviceNameHash(metricId, device.getName(), true);
         }
