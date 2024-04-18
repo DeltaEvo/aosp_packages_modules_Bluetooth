@@ -54,10 +54,8 @@ from blueberry.facade.hci import le_initiator_address_facade_pb2_grpc
 from blueberry.facade.hci import le_scanning_manager_facade_pb2_grpc
 from blueberry.facade.l2cap.classic import facade_pb2_grpc as l2cap_facade_pb2_grpc
 from blueberry.facade.l2cap.le import facade_pb2_grpc as l2cap_le_facade_pb2_grpc
-from blueberry.facade.iso import facade_pb2_grpc as iso_facade_pb2_grpc
 from blueberry.facade.neighbor import facade_pb2_grpc as neighbor_facade_pb2_grpc
 from blueberry.facade.security import facade_pb2_grpc as security_facade_pb2_grpc
-from blueberry.facade.shim import facade_pb2_grpc as shim_facade_pb2_grpc
 
 from mobly import utils
 from mobly.controllers.android_device_lib.adb import AdbError
@@ -253,7 +251,6 @@ class GdDeviceBase(ABC):
         self.hci = hci_facade_pb2_grpc.HciFacadeStub(self.grpc_channel)
         self.l2cap = l2cap_facade_pb2_grpc.L2capClassicModuleFacadeStub(self.grpc_channel)
         self.l2cap_le = l2cap_le_facade_pb2_grpc.L2capLeModuleFacadeStub(self.grpc_channel)
-        self.iso = iso_facade_pb2_grpc.IsoModuleFacadeStub(self.grpc_channel)
         self.hci_acl_manager = acl_manager_facade_pb2_grpc.AclManagerFacadeStub(self.grpc_channel)
         self.hci_le_acl_manager = le_acl_manager_facade_pb2_grpc.LeAclManagerFacadeStub(self.grpc_channel)
         self.hci_le_initiator_address = le_initiator_address_facade_pb2_grpc.LeInitiatorAddressFacadeStub(
@@ -267,7 +264,6 @@ class GdDeviceBase(ABC):
             self.grpc_channel)
         self.neighbor = neighbor_facade_pb2_grpc.NeighborFacadeStub(self.grpc_channel)
         self.security = security_facade_pb2_grpc.SecurityModuleFacadeStub(self.grpc_channel)
-        self.shim = shim_facade_pb2_grpc.ShimFacadeStub(self.grpc_channel)
 
     def get_crash_snippet_and_log_tail(self):
         if is_subprocess_alive(self.backing_process):

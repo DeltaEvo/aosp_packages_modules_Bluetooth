@@ -564,10 +564,6 @@ TEST_F_WITH_FLAGS(ProviderInfoTest, TestCodecIndexStr,
 
   ASSERT_EQ(provider_info->CodecIndexStr(BTAV_A2DP_CODEC_INDEX_SOURCE_EXT_MIN),
             codecInfoArray[3].name);
-
-  ASSERT_EQ(provider_info->CodecIndexStr(static_cast<btav_a2dp_codec_index_t>(
-                test_unknown_vendor_codec_id.id)),
-            std::nullopt);
 }
 
 TEST_F_WITH_FLAGS(ProviderInfoTest, TestSupportsCodec,
