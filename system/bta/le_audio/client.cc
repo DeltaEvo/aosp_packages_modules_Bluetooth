@@ -1237,6 +1237,13 @@ class LeAudioClientImpl : public LeAudioClient {
       return;
     }
 
+    if (group->NumOfConnected() == 0) {
+      log::error("Group: {} is not connected anymore",
+                 static_cast<int>(group_id));
+      callbacks_->OnGroupStatus(group_id, GroupStatus::INACTIVE);
+      return;
+    }
+
     if (active_group_id_ != bluetooth::groups::kGroupUnknown) {
       if (active_group_id_ == group_id) {
         log::info("Group is already active: {}",
@@ -1313,6 +1320,7 @@ class LeAudioClientImpl : public LeAudioClient {
     sink_monitor_notified_status_ = std::nullopt;
     if (IS_FLAG_ENABLED(leaudio_codec_config_callback_order_fix)) {
       SendAudioGroupSelectableCodecConfigChanged(group);
+      SendAudioGroupCurrentCodecConfigChanged(group);
       callbacks_->OnGroupStatus(active_group_id_, GroupStatus::ACTIVE);
     } else {
       callbacks_->OnGroupStatus(active_group_id_, GroupStatus::ACTIVE);
@@ -3837,9 +3845,9 @@ class LeAudioClientImpl : public LeAudioClient {
             (reconnection_mode_ == BTM_BLE_BKG_CONNECT_ALLOW_LIST
                  ? "Allow List"
                  : "Targeted Announcements"));
-    dprintf(fd, "  configuration: %s  (0x%08hx)\n",
+    dprintf(fd, "  configuration: %s  (0x%08x)\n",
             bluetooth::common::ToString(configuration_context_type_).c_str(),
-            configuration_context_type_);
+            static_cast<uint16_t>(configuration_context_type_));
     dprintf(fd, "  local source metadata context type mask: %s\n",
             local_metadata_context_types_.source.to_string().c_str());
     dprintf(fd, "  local sink metadata context type mask: %s\n",
@@ -3849,7 +3857,7 @@ class LeAudioClientImpl : public LeAudioClient {
             sink_monitor_mode_ ? "true" : "false");
     if (sink_monitor_notified_status_) {
       dprintf(fd, "  Local sink notified state: %d\n",
-              sink_monitor_notified_status_.value());
+              static_cast<int>(sink_monitor_notified_status_.value()));
     }
     dprintf(fd, "  Source monitor mode: %s\n",
             source_monitor_mode_ ? "true" : "false");
