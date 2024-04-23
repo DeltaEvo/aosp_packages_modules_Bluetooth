@@ -137,7 +137,7 @@ typedef uint8_t tBTA_JV_PM_ID;
 #endif
 
 /* JV pm connection states */
-enum {
+typedef enum : uint8_t {
   BTA_JV_CONN_OPEN = 0, /* Connection opened state */
   BTA_JV_CONN_CLOSE,    /* Connection closed state */
   BTA_JV_APP_OPEN,      /* JV Application opened state */
@@ -147,14 +147,51 @@ enum {
   BTA_JV_CONN_IDLE,     /* Connection idle state */
   BTA_JV_CONN_BUSY,     /* Connection busy state */
   BTA_JV_MAX_CONN_STATE /* Max number of connection state */
-};
-typedef uint8_t tBTA_JV_CONN_STATE;
+} tBTA_JV_CONN_STATE;
+
+inline std::string bta_jv_conn_state_text(const tBTA_JV_CONN_STATE& state) {
+  switch (state) {
+    CASE_RETURN_STRING(BTA_JV_CONN_OPEN);
+    CASE_RETURN_STRING(BTA_JV_CONN_CLOSE);
+    CASE_RETURN_STRING(BTA_JV_APP_OPEN);
+    CASE_RETURN_STRING(BTA_JV_APP_CLOSE);
+    CASE_RETURN_STRING(BTA_JV_SCO_OPEN);
+    CASE_RETURN_STRING(BTA_JV_SCO_CLOSE);
+    CASE_RETURN_STRING(BTA_JV_CONN_IDLE);
+    CASE_RETURN_STRING(BTA_JV_CONN_BUSY);
+    CASE_RETURN_STRING(BTA_JV_MAX_CONN_STATE);
+    default:
+      RETURN_UNKNOWN_TYPE_STRING(tBTA_JV_CONN_STATE, state);
+  }
+}
+
+namespace fmt {
+template <>
+struct formatter<tBTA_JV_CONN_STATE> : enum_formatter<tBTA_JV_CONN_STATE> {};
+}  // namespace fmt
 
 /* JV Connection types */
-#define BTA_JV_CONN_TYPE_RFCOMM 0
-#define BTA_JV_CONN_TYPE_L2CAP 1
-#define BTA_JV_CONN_TYPE_L2CAP_LE 2
-typedef int tBTA_JV_CONN_TYPE;
+enum class tBTA_JV_CONN_TYPE {
+  UNKNOWN = -1,
+  RFCOMM = 0,
+  L2CAP = 1,
+  L2CAP_LE = 2,
+};
+
+inline std::string bta_jv_conn_type_text(const tBTA_JV_CONN_TYPE& type) {
+  switch (type) {
+    CASE_RETURN_STRING(tBTA_JV_CONN_TYPE::UNKNOWN);
+    CASE_RETURN_STRING(tBTA_JV_CONN_TYPE::RFCOMM);
+    CASE_RETURN_STRING(tBTA_JV_CONN_TYPE::L2CAP);
+    CASE_RETURN_STRING(tBTA_JV_CONN_TYPE::L2CAP_LE);
+  }
+  RETURN_UNKNOWN_TYPE_STRING(tBTA_JV_CONN_TYPE, type);
+}
+
+namespace fmt {
+template <>
+struct formatter<tBTA_JV_CONN_TYPE> : enum_formatter<tBTA_JV_CONN_TYPE> {};
+}  // namespace fmt
 
 enum tBTA_JV_EVT : uint16_t {
   /* Java I/F callback events */

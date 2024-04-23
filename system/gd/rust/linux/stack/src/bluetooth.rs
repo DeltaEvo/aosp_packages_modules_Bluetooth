@@ -156,7 +156,7 @@ pub trait IBluetooth {
     fn get_discovery_end_millis(&self) -> u64;
 
     /// Initiates pairing to a remote device. Triggers connection if not already started.
-    fn create_bond(&mut self, device: BluetoothDevice, transport: BtTransport) -> bool;
+    fn create_bond(&mut self, device: BluetoothDevice, transport: BtTransport) -> BtStatus;
 
     /// Cancels any pending bond attempt on given device.
     fn cancel_bond_process(&mut self, device: BluetoothDevice) -> bool;
@@ -237,7 +237,7 @@ pub trait IBluetooth {
     fn remove_sdp_record(&self, handle: i32) -> bool;
 
     /// Connect all profiles supported by device and enabled on adapter.
-    fn connect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool;
+    fn connect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> BtStatus;
 
     /// Disconnect all profiles supported by device and enabled on adapter.
     /// Note that it includes all custom profiles enabled by the users e.g. through SocketManager or
@@ -308,6 +308,9 @@ pub enum DelayedActions {
 
     /// Scanner for BLE discovery is reporting a result.
     BleDiscoveryScannerResult(ScanResult),
+
+    /// Update the connectable mode to allow or disallow classic reconnect
+    UpdateConnectableMode(bool),
 }
 
 /// Serializable device used in various apis.
@@ -600,6 +603,35 @@ impl Bluetooth {
             sig_notifier,
             uhid_wakeup_source: UHid::new(),
         }
+    }
+
+    fn update_connectable_mode(&mut self, is_sock_listening: bool) {
+        // Set connectable if
+        // - there is bredr socket listening, or
+        // - there is a classic device bonded and not connected
+        self.set_connectable_internal(
+            is_sock_listening
+                || self.bonded_devices.iter().any(|(_name, ctx)| {
+                    ctx.acl_state == BtAclState::Disconnected
+                        && ctx
+                            .properties
+                            .get(&BtPropertyType::TypeOfDevice)
+                            .and_then(|prop| match prop {
+                                BluetoothProperty::TypeOfDevice(transport) => {
+                                    Some(*transport != BtDeviceType::Ble)
+                                }
+                                _ => None,
+                            })
+                            .unwrap_or(false)
+                }),
+        );
+    }
+
+    fn trigger_update_connectable_mode(&self) {
+        let txl = self.tx.clone();
+        tokio::spawn(async move {
+            let _ = txl.send(Message::TriggerUpdateConnectableMode).await;
+        });
     }
 
     fn disable_profile(&mut self, profile: &Profile) {
@@ -1074,6 +1106,9 @@ impl Bluetooth {
                     self.found_devices.insert(address.clone(), device_with_props);
                 }
             }
+            DelayedActions::UpdateConnectableMode(is_sock_listening) => {
+                self.update_connectable_mode(is_sock_listening);
+            }
         }
     }
 
@@ -1400,8 +1435,8 @@ impl BtifBluetoothCallbacks for Bluetooth {
                 self.ble_scanner_uuid =
                     Some(self.bluetooth_gatt.lock().unwrap().register_scanner(callback_id));
 
-                // Ensure device is connectable so that disconnected device can reconnect
-                self.set_connectable(true);
+                // Update connectable mode so that disconnected bonded classic device can reconnect
+                self.trigger_update_connectable_mode();
 
                 // Spawn a freshness check job in the background.
                 self.freshness_check.take().map(|h| h.abort());
@@ -1487,6 +1522,9 @@ impl BtifBluetoothCallbacks for Bluetooth {
                         self.bonded_devices.entry(address.clone()).or_insert(device).bond_state =
                             BtBondState::Bonded;
                     }
+
+                    // Update the connectable mode since bonded device list might be updated.
+                    self.trigger_update_connectable_mode();
                 }
                 BluetoothProperty::BdName(bdname) => {
                     self.callbacks.for_all_callbacks(|callback| {
@@ -1715,6 +1753,8 @@ impl BtifBluetoothCallbacks for Bluetooth {
         // bond request to avoid ACL connection from interfering with active inquiry.
         if &bond_state == &BtBondState::NotBonded || &bond_state == &BtBondState::Bonded {
             self.resume_discovery();
+            // Update the connectable mode since bonded list is changed.
+            self.trigger_update_connectable_mode();
         }
 
         // Send bond state changed notifications
@@ -1744,6 +1784,7 @@ impl BtifBluetoothCallbacks for Bluetooth {
     ) {
         let address = addr.to_string();
         let txl = self.tx.clone();
+
         let device = match self.get_remote_device_if_found_mut(&address) {
             None => {
                 self.found_devices.insert(
@@ -1785,8 +1826,9 @@ impl BtifBluetoothCallbacks for Bluetooth {
                     d.wait_to_connect = false;
 
                     let sent_info = info.clone();
+                    let tx = txl.clone();
                     tokio::spawn(async move {
-                        let _ = txl
+                        let _ = tx
                             .send(Message::DelayedAdapterActions(
                                 DelayedActions::ConnectAllProfiles(sent_info),
                             ))
@@ -1808,6 +1850,17 @@ impl BtifBluetoothCallbacks for Bluetooth {
                     .on_remote_device_properties_changed(&info, &properties);
             }
             None => (),
+        }
+        // Only care about device type property changed on bonded device.
+        // If the property change happens during bonding, it will be updated after bonding complete anyway.
+        if self.get_bond_state_by_addr(&address) == BtBondState::Bonded
+            && properties.iter().any(|prop| match prop {
+                BluetoothProperty::TypeOfDevice(_) => true,
+                _ => false,
+            })
+        {
+            // Update the connectable mode since the device type is changed.
+            self.trigger_update_connectable_mode();
         }
     }
 
@@ -1843,6 +1896,7 @@ impl BtifBluetoothCallbacks for Bluetooth {
             return;
         }
 
+        let txl = self.tx.clone();
         let address = addr.to_string();
         let device = match self.get_remote_device_if_found_mut(&address) {
             None => {
@@ -1888,12 +1942,12 @@ impl BtifBluetoothCallbacks for Bluetooth {
                             self.connection_callbacks.for_all_callbacks(|callback| {
                                 callback.on_device_connected(device.clone());
                             });
-                            let tx = self.tx.clone();
                             let transport = match self.get_remote_type(bluetooth_device.clone()) {
                                 BtDeviceType::Bredr => BtTransport::Bredr,
                                 BtDeviceType::Ble => BtTransport::Le,
                                 _ => acl_reported_transport,
                             };
+                            let tx = txl.clone();
                             tokio::spawn(async move {
                                 let _ = tx
                                     .send(Message::OnAclConnected(bluetooth_device, transport))
@@ -1904,12 +1958,20 @@ impl BtifBluetoothCallbacks for Bluetooth {
                             self.connection_callbacks.for_all_callbacks(|callback| {
                                 callback.on_device_disconnected(device.clone());
                             });
-                            let tx = self.tx.clone();
+                            let tx = txl.clone();
                             tokio::spawn(async move {
                                 let _ = tx.send(Message::OnAclDisconnected(device.clone())).await;
                             });
                         }
                     };
+                    // If we are bonding, skip the update here as we will update it after bonding complete anyway.
+                    // This is necessary for RTK controllers, which will break RNR after |Write Scan Enable|
+                    // command. Although this is a bug of RTK controllers, but as we could avoid unwanted page
+                    // scan, it makes sense to extend it to all BT controllers here.
+                    if Some(addr) != self.active_pairing_address {
+                        // Update the connectable since the connected state could be changed.
+                        self.trigger_update_connectable_mode();
+                    }
                 }
             }
             None => (),
@@ -2097,13 +2159,13 @@ impl IBluetooth for Bluetooth {
             return false;
         }
 
-        let off_mode =
-            if self.is_connectable { BtScanMode::Connectable } else { BtScanMode::None_ };
-
         let new_mode = match mode {
             BtDiscMode::LimitedDiscoverable => BtScanMode::ConnectableLimitedDiscoverable,
             BtDiscMode::GeneralDiscoverable => BtScanMode::ConnectableDiscoverable,
-            BtDiscMode::NonDiscoverable => off_mode.clone(),
+            BtDiscMode::NonDiscoverable => match self.is_connectable {
+                true => BtScanMode::Connectable,
+                false => BtScanMode::None_,
+            },
         };
 
         // The old timer should be overwritten regardless of what the new mode is.
@@ -2119,13 +2181,10 @@ impl IBluetooth for Bluetooth {
         }
 
         if (mode != BtDiscMode::NonDiscoverable) && (duration != 0) {
-            let intf_clone = self.intf.clone();
+            let txl = self.tx.clone();
             self.discoverable_timeout = Some(tokio::spawn(async move {
                 time::sleep(Duration::from_secs(duration.into())).await;
-                intf_clone
-                    .lock()
-                    .unwrap()
-                    .set_adapter_property(BluetoothProperty::AdapterScanMode(off_mode));
+                let _ = txl.send(Message::TriggerUpdateConnectableMode).await;
             }));
         }
 
@@ -2220,7 +2279,7 @@ impl IBluetooth for Bluetooth {
         }
     }
 
-    fn create_bond(&mut self, device: BluetoothDevice, transport: BtTransport) -> bool {
+    fn create_bond(&mut self, device: BluetoothDevice, transport: BtTransport) -> BtStatus {
         let addr = RawAddress::from_string(device.address.clone());
 
         if addr.is_none() {
@@ -2233,7 +2292,7 @@ impl IBluetooth for Bluetooth {
                 0,
             );
             warn!("Can't create bond. Address {} is not valid", device.address);
-            return false;
+            return BtStatus::InvalidParam;
         }
 
         let address = addr.unwrap();
@@ -2249,7 +2308,7 @@ impl IBluetooth for Bluetooth {
                 DisplayAddress(&address),
                 DisplayAddress(&active_address)
             );
-            return false;
+            return BtStatus::Busy;
         }
 
         // There could be a race between bond complete and bond cancel, which makes
@@ -2276,7 +2335,7 @@ impl IBluetooth for Bluetooth {
                 BtBondState::NotBonded,
                 0,
             );
-            return false;
+            return BtStatus::from(status as u32);
         }
 
         // Creating bond automatically create ACL connection as well, therefore also log metrics
@@ -2288,7 +2347,7 @@ impl IBluetooth for Bluetooth {
             metrics::acl_connect_attempt(address, BtAclState::Connected);
         }
 
-        return true;
+        return BtStatus::Success;
     }
 
     fn cancel_bond_process(&mut self, device: BluetoothDevice) -> bool {
@@ -2632,17 +2691,17 @@ impl IBluetooth for Bluetooth {
         self.sdp.as_ref().unwrap().remove_sdp_record(handle) == BtStatus::Success
     }
 
-    fn connect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool {
+    fn connect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> BtStatus {
         // Profile init must be complete before this api is callable
         if !self.profiles_ready {
-            return false;
+            return BtStatus::NotReady;
         }
 
         let mut addr = match RawAddress::from_string(device.address.clone()) {
             Some(v) => v,
             None => {
                 warn!("Can't connect profiles on invalid address [{}]", &device.address);
-                return false;
+                return BtStatus::InvalidParam;
             }
         };
 
@@ -2714,7 +2773,7 @@ impl IBluetooth for Bluetooth {
                                 let transport =
                                     match self.get_remote_device_if_found(&device.address) {
                                         Some(context) => context.acl_reported_transport,
-                                        None => return false,
+                                        None => return BtStatus::RemoteDeviceDown,
                                     };
                                 let device_to_send = device.clone();
                                 let transport = match self.get_remote_type(device.clone()) {
@@ -2762,7 +2821,7 @@ impl IBluetooth for Bluetooth {
             self.resume_discovery();
         }
 
-        return true;
+        return BtStatus::Success;
     }
 
     fn disconnect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool {

@@ -18,16 +18,15 @@
 
 #define LOG_TAG "bt_btif_gatt"
 
-#include <algorithm>
-
 #include "btif_gatt_util.h"
 
 #include <bluetooth/log.h>
 #include <hardware/bluetooth.h>
 #include <hardware/bt_gatt.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <algorithm>
 
 #include "bta/include/bta_api_data_types.h"
 #include "bta/include/bta_sec_api.h"
@@ -96,8 +95,7 @@ void btif_gatt_check_encrypted_link(RawAddress bd_addr,
            bd_addr, BTM_LE_KEY_PENC, (uint8_t*)&key,
            sizeof(tBTM_LE_PENC_KEYS)) == BT_STATUS_SUCCESS) &&
       !btif_gatt_is_link_encrypted(bd_addr)) {
-    log::debug("Checking gatt link peer:{} transport:{}",
-               ADDRESS_TO_LOGGABLE_CSTR(bd_addr),
+    log::debug("Checking gatt link peer:{} transport:{}", bd_addr,
                bt_transport_text(transport_link));
     BTA_DmSetEncryption(bd_addr, transport_link, &btif_gatt_set_encryption_cb,
                         BTM_BLE_SEC_ENCRYPT);

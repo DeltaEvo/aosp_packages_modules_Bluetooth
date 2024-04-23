@@ -432,6 +432,12 @@ public class BassClientStateMachine extends StateMachine {
                     pbData = PublicBroadcastData.parsePublicBroadcastData(pbAnnouncement);
                 }
             }
+
+            if (broadcastId == BassConstants.INVALID_BROADCAST_ID || pbData == null) {
+                Log.w(TAG, "Invalid broadcast ID or public broadcast data");
+                return false;
+            }
+
             // Check if broadcast name present in scan record and parse
             // null if no name present
             String broadcastName = checkAndParseBroadcastName(scanRecord);
@@ -820,7 +826,7 @@ public class BassClientStateMachine extends StateMachine {
                 offset += BassConstants.BCAST_RCVR_STATE_BIS_SYNC_SIZE;
                 bisSyncState.add((long) Utils.byteArrayToInt(bisSyncIndex));
 
-                byte metaDataLength = receiverState[offset++];
+                int metaDataLength = receiverState[offset++] & 0xFF;
                 if (metaDataLength > 0) {
                     log("metadata of length: " + metaDataLength + "is available");
                     byte[] metaData = new byte[metaDataLength];

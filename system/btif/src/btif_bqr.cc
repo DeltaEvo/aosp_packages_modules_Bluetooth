@@ -19,7 +19,6 @@
 #include <statslog_bt.h>
 #endif
 #include <bluetooth/log.h>
-#include <stdio.h>
 #include <sys/stat.h>
 
 #include <cerrno>
@@ -839,8 +838,7 @@ class BluetoothQualityReportInterfaceImpl
 
     log::info(
         "len: {}, addr: {}, lmp_ver: {}, manufacturer_id: {}, lmp_subver: {}",
-        bqr_raw_data_len, ADDRESS_TO_LOGGABLE_CSTR(bd_addr), lmp_ver,
-        manufacturer_id, lmp_subver);
+        bqr_raw_data_len, bd_addr, lmp_ver, manufacturer_id, lmp_subver);
 
     if (callbacks == nullptr) {
       log::error("callbacks is nullptr");

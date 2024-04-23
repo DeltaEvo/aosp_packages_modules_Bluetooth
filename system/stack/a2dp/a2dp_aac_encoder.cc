@@ -21,7 +21,6 @@
 #include <aacenc_lib.h>
 #include <bluetooth/log.h>
 #include <inttypes.h>
-#include <stdio.h>
 #include <string.h>
 
 #include "a2dp_aac.h"
@@ -177,7 +176,7 @@ static void a2dp_aac_encoder_update(A2dpCodecConfig* a2dp_codec_config,
 
   if (!a2dp_codec_config->copyOutOtaCodecConfig(codec_info)) {
     log::error("Cannot update the codec encoder for {}: invalid codec config",
-               a2dp_codec_config->name().c_str());
+               a2dp_codec_config->name());
     return;
   }
   const uint8_t* p_codec_info = codec_info;
@@ -202,7 +201,7 @@ static void a2dp_aac_encoder_update(A2dpCodecConfig* a2dp_codec_config,
   a2dp_aac_encoder_cb.TxAaMtuSize = adjust_effective_mtu(peer_params);
   log::info("MTU={}, peer_mtu={}", a2dp_aac_encoder_cb.TxAaMtuSize,
             peer_params.peer_mtu);
-  log::info("sample_rate: {} channel_mode: {} ", p_encoder_params->sample_rate,
+  log::info("sample_rate: {} channel_mode: {}", p_encoder_params->sample_rate,
             p_encoder_params->channel_mode);
 
   // Set the encoder's parameters: Audio Object Type - MANDATORY

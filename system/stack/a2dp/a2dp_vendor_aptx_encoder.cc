@@ -21,7 +21,6 @@
 #include <bluetooth/log.h>
 #include <dlfcn.h>
 #include <inttypes.h>
-#include <stdio.h>
 #include <string.h>
 
 #include "a2dp_vendor.h"
@@ -171,7 +170,7 @@ static void a2dp_vendor_aptx_encoder_update(A2dpCodecConfig* a2dp_codec_config,
   *p_config_updated = false;
   if (!a2dp_codec_config->copyOutOtaCodecConfig(codec_info)) {
     log::error("Cannot update the codec encoder for {}: invalid codec config",
-               a2dp_codec_config->name().c_str());
+               a2dp_codec_config->name());
     return;
   }
   const uint8_t* p_codec_info = codec_info;
