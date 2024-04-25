@@ -18,7 +18,6 @@
 
 #include <bluetooth/log.h>
 #include <inttypes.h>
-#include <stdio.h>
 #include <string.h>
 
 #include <string>
@@ -158,7 +157,7 @@ void a2dp_aac_encoder_init(const tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_params,
   uint8_t codec_info[AVDT_CODEC_SIZE];
   if (!a2dp_codec_config->copyOutOtaCodecConfig(codec_info)) {
     log::error("Cannot update the codec encoder for {}: invalid codec config",
-               a2dp_codec_config->name().c_str());
+               a2dp_codec_config->name());
     return;
   }
 

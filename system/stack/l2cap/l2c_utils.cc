@@ -24,7 +24,6 @@
 #define LOG_TAG "l2c_utils"
 
 #include <bluetooth/log.h>
-#include <stdio.h>
 #include <string.h>
 
 #include "hal/snoop_logger.h"
@@ -129,8 +128,7 @@ void l2cu_update_lcb_4_bonding(const RawAddress& p_bd_addr, bool is_bonding) {
   tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(p_bd_addr, BT_TRANSPORT_BR_EDR);
 
   if (p_lcb) {
-    log::verbose("BDA: {} is_bonding: {}", ADDRESS_TO_LOGGABLE_STR(p_bd_addr),
-                 is_bonding);
+    log::verbose("BDA: {} is_bonding: {}", p_bd_addr, is_bonding);
     if (is_bonding) {
       p_lcb->SetBonding();
     } else {
@@ -852,7 +850,7 @@ void l2cu_send_peer_config_rej(tL2C_CCB* p_ccb, uint8_t* p_data,
   p_buf->len = len + 4;
 
   log::verbose("L2CAP - cfg_rej pkt hci_len={}, l2cap_len={}", len,
-               (L2CAP_CMD_OVERHEAD + L2CAP_CONFIG_RSP_LEN + rej_len));
+               L2CAP_CMD_OVERHEAD + L2CAP_CONFIG_RSP_LEN + rej_len);
 
   l2c_link_check_send_pkts(p_ccb->p_lcb, 0, p_buf);
 }
@@ -2687,7 +2685,7 @@ bool l2cu_initialize_fixed_ccb(tL2C_LCB* p_lcb, uint16_t fixed_cid) {
   } else {
     log::warn(
         "Unable to cancel link control block for link connection to device {}",
-        ADDRESS_TO_LOGGABLE_CSTR(p_lcb->remote_bd_addr));
+        p_lcb->remote_bd_addr);
   }
 
   /* Set CID for the connection */
@@ -3061,7 +3059,7 @@ void l2cu_send_peer_credit_based_conn_req(tL2C_CCB* p_ccb) {
 
   for (int i = 0; i < p_lcb->pending_ecoc_conn_cnt; i++) {
     uint16_t cid = p_lcb->pending_ecoc_connection_cids[i];
-    log::verbose("    cid: {}", cid);
+    log::verbose("cid: {}", cid);
     UINT16_TO_STREAM(p, cid);
   }
 

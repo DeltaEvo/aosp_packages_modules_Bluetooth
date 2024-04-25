@@ -27,7 +27,6 @@
 #include <fcntl.h>
 #include <hardware/bluetooth.h>
 #include <pthread.h>
-#include <stdio.h>
 #include <string.h>  // For memcmp
 #include <sys/stat.h>
 #include <unistd.h>
@@ -941,7 +940,7 @@ static bool load_to_database(int feature, const char* key, const char* value,
       log::warn(
           "key {} or Bluetooth Address {} is invalid, not added to interop "
           "list",
-          key, ADDRESS_TO_LOGGABLE_CSTR(addr));
+          key, addr);
       return false;
     }
 
@@ -1049,7 +1048,7 @@ static bool load_to_database(int feature, const char* key, const char* value,
       log::warn(
           "key {} or Bluetooth Address {} is invalid, not added to interop "
           "list",
-          key, ADDRESS_TO_LOGGABLE_CSTR(addr));
+          key, addr);
       return false;
     }
 
@@ -1115,7 +1114,7 @@ static bool load_to_database(int feature, const char* key, const char* value,
       log::warn(
           "key {} or Bluetooth Address {} is invalid, not added to interop "
           "list",
-          key, ADDRESS_TO_LOGGABLE_CSTR(addr));
+          key, addr);
       return false;
     }
 
@@ -1142,8 +1141,7 @@ static bool load_to_database(int feature, const char* key, const char* value,
     if (!get_addr_range(tmp_key, &addr_start, &addr_end)) {
       log::warn(
           "key: {} addr_start {} or addr end  {} is added to interop list", key,
-          ADDRESS_TO_LOGGABLE_CSTR(addr_start),
-          ADDRESS_TO_LOGGABLE_CSTR(addr_end));
+          addr_start, addr_end);
 
       return false;
     }
@@ -1369,8 +1367,7 @@ bool interop_database_match_addr(const interop_feature_t feature,
           &entry, NULL,
           (interop_entry_type)(INTEROP_ENTRY_TYPE_STATIC |
                                INTEROP_ENTRY_TYPE_DYNAMIC))) {
-    log::warn("Device {} is a match for interop workaround {}.",
-              ADDRESS_TO_LOGGABLE_CSTR(*addr),
+    log::warn("Device {} is a match for interop workaround {}.", *addr,
               interop_feature_string_(feature));
     return true;
   }
@@ -1382,8 +1379,7 @@ bool interop_database_match_addr(const interop_feature_t feature,
 
   if (interop_database_match(&entry, NULL,
                              (interop_entry_type)(INTEROP_ENTRY_TYPE_STATIC))) {
-    log::warn("Device {} is a match for interop workaround {}.",
-              ADDRESS_TO_LOGGABLE_CSTR(*addr),
+    log::warn("Device {} is a match for interop workaround {}.", *addr,
               interop_feature_string_(feature));
     return true;
   }
@@ -1429,8 +1425,7 @@ bool interop_database_match_addr_get_max_lat(const interop_feature_t feature,
           &entry, &ret_entry,
           (interop_entry_type)(INTEROP_ENTRY_TYPE_STATIC |
                                INTEROP_ENTRY_TYPE_DYNAMIC))) {
-    log::warn("Device {} is a match for interop workaround {}.",
-              ADDRESS_TO_LOGGABLE_CSTR(*addr),
+    log::warn("Device {} is a match for interop workaround {}.", *addr,
               interop_feature_string_(feature));
     *max_lat = ret_entry->entry_type.ssr_max_lat_entry.max_lat;
     return true;
@@ -1476,8 +1471,7 @@ bool interop_database_match_addr_get_lmp_ver(const interop_feature_t feature,
           &entry, &ret_entry,
           (interop_entry_type)(INTEROP_ENTRY_TYPE_STATIC |
                                INTEROP_ENTRY_TYPE_DYNAMIC))) {
-    log::warn("Device {} is a match for interop workaround {}.",
-              ADDRESS_TO_LOGGABLE_CSTR(*addr),
+    log::warn("Device {} is a match for interop workaround {}.", *addr,
               interop_feature_string_(feature));
     *lmp_ver = ret_entry->entry_type.lmp_version_entry.lmp_ver;
     *lmp_sub_ver = ret_entry->entry_type.lmp_version_entry.lmp_sub_ver;
@@ -1537,8 +1531,7 @@ bool interop_database_remove_addr(const interop_feature_t feature,
   entry.entry_type.addr_entry.feature = (interop_feature_t)feature;
   entry.entry_type.addr_entry.length = sizeof(RawAddress);
   if (interop_database_remove_(&entry)) {
-    log::warn("Device {} is a removed from interop workaround {}.",
-              ADDRESS_TO_LOGGABLE_CSTR(*addr),
+    log::warn("Device {} is a removed from interop workaround {}.", *addr,
               interop_feature_string_(feature));
     return true;
   }
@@ -1653,8 +1646,7 @@ bool interop_database_remove_addr_max_lat(const interop_feature_t feature,
   entry.entry_type.ssr_max_lat_entry.max_lat = max_lat;
 
   if (interop_database_remove_(&entry)) {
-    log::warn("Device {} is a removed from interop workaround {}.",
-              ADDRESS_TO_LOGGABLE_CSTR(*addr),
+    log::warn("Device {} is a removed from interop workaround {}.", *addr,
               interop_feature_string_(feature));
     return true;
   }
@@ -1695,8 +1687,7 @@ bool interop_database_remove_addr_lmp_version(const interop_feature_t feature,
   entry.entry_type.lmp_version_entry.lmp_sub_ver = lmp_sub_ver;
 
   if (interop_database_remove_(&entry)) {
-    log::warn("Device {} is a removed from interop workaround {}.",
-              ADDRESS_TO_LOGGABLE_CSTR(*addr),
+    log::warn("Device {} is a removed from interop workaround {}.", *addr,
               interop_feature_string_(feature));
     return true;
   }

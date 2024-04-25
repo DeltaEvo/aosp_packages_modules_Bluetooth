@@ -86,7 +86,7 @@ static void bta_ag_port_cback(uint32_t /* code */, uint16_t port_handle,
     if (!bta_ag_scb_open(p_scb)) {
       log::error(
           "rfcomm data on an unopened control block {} peer_addr {} state {}",
-          handle, ADDRESS_TO_LOGGABLE_STR(p_scb->peer_addr), p_scb->state);
+          handle, p_scb->peer_addr, p_scb->state);
     }
     do_in_main_thread(
         FROM_HERE, base::BindOnce(&bta_ag_sm_execute_by_handle, handle,
@@ -267,9 +267,8 @@ void bta_ag_start_servers(tBTA_AG_SCB* p_scb, tBTA_SERVICE_MASK services) {
         /* TODO: CR#137125 to handle to error properly */
         log::error(
             "RFCOMM_CreateConnectionWithSecurity ERROR {}, p_scb={}, "
-            "services={}, mgmt_cback_index={}",
-            status, fmt::ptr(p_scb), loghex(services),
-            management_callback_index);
+            "services=0x{:x}, mgmt_cback_index={}",
+            status, fmt::ptr(p_scb), services, management_callback_index);
       }
       log::verbose("p_scb=0x{}, services=0x{:04x}, mgmt_cback_index={}",
                    fmt::ptr(p_scb), services, management_callback_index);
@@ -344,7 +343,7 @@ void bta_ag_rfc_do_open(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
   } else {
     /* RFCOMM create connection failed; send ourselves RFCOMM close event */
     log::error("RFCOMM_CreateConnection ERROR {} for {}", status,
-               ADDRESS_TO_LOGGABLE_STR(p_scb->peer_addr));
+               p_scb->peer_addr);
     bta_ag_sm_execute(p_scb, BTA_AG_RFC_CLOSE_EVT, data);
   }
 }

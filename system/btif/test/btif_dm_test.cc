@@ -55,7 +55,7 @@ void bta_energy_info_cb(tBTM_BLE_TX_TIME_MS tx_time,
                         tBTM_CONTRL_STATE ctrl_state, tBTA_STATUS status);
 
 void btif_on_name_read(RawAddress bd_addr, tHCI_ERROR_CODE hci_status,
-                       const BD_NAME bd_name);
+                       const BD_NAME bd_name, bool during_device_search);
 
 }  // namespace testing
 }  // namespace legacy
@@ -68,18 +68,30 @@ constexpr tBTM_BLE_IDLE_TIME_MS idle_time = 0x2468acd0;
 constexpr tBTM_BLE_ENERGY_USED energy_used = 0x13579bdf;
 }  // namespace
 
-class BtifDmTest : public ::testing::Test {
+class BtifDmWithMocksTest : public ::testing::Test {
+ protected:
+  void SetUp() override { fake_osi_ = std::make_unique<test::fake::FakeOsi>(); }
+
+  void TearDown() override { fake_osi_.reset(); }
+
+  std::unique_ptr<test::fake::FakeOsi> fake_osi_;
+};
+
+class BtifDmTest : public BtifDmWithMocksTest {
  protected:
   void SetUp() override {
-    fake_osi_ = std::make_unique<test::fake::FakeOsi>();
+    BtifDmWithMocksTest::SetUp();
     mock_core_interface_ = std::make_unique<MockCoreInterface>();
     bluetooth::legacy::testing::set_interface_to_profiles(
         mock_core_interface_.get());
   }
 
-  void TearDown() override {}
+  void TearDown() override {
+    bluetooth::legacy::testing::set_interface_to_profiles(nullptr);
+    mock_core_interface_.reset();
+    BtifDmWithMocksTest::TearDown();
+  }
 
-  std::unique_ptr<test::fake::FakeOsi> fake_osi_;
   std::unique_ptr<MockCoreInterface> mock_core_interface_;
 };
 
@@ -106,7 +118,7 @@ class BtifDmWithUidTest : public BtifDmTest {
   }
 
   void TearDown() override {
-    void btif_dm_cleanup();
+    btif_dm_cleanup();
     BtifDmTest::TearDown();
   }
 };
@@ -178,7 +190,7 @@ TEST_F_WITH_FLAGS(BtifDmWithStackTest,
   bd_name_from_char_pointer(bd_name, kBdName);
 
   bluetooth::legacy::testing::btif_on_name_read(kRawAddress, HCI_SUCCESS,
-                                                bd_name);
+                                                bd_name, true);
 
   ASSERT_EQ(BT_STATUS_SUCCESS, invoke_remote_device_properties_cb.status);
   ASSERT_EQ(kRawAddress, invoke_remote_device_properties_cb.bd_addr);

@@ -137,12 +137,6 @@ RobustCachingSupport GetRobustCachingSupport(const tBTA_GATTC_CLCB* p_clcb,
   log::debug("GetRobustCachingSupport {}",
              p_clcb->bda.ToRedactedStringForLogging());
 
-  // If the feature is disabled, then we never support it
-  if (!bta_gattc_is_robust_caching_enabled()) {
-    log::debug("robust caching is disabled, so UNSUPPORTED");
-    return RobustCachingSupport::UNSUPPORTED;
-  }
-
   // An empty database means that discovery hasn't taken place yet, so
   // we can't infer anything from that
   if (!db.IsEmpty()) {
@@ -181,8 +175,7 @@ RobustCachingSupport GetRobustCachingSupport(const tBTA_GATTC_CLCB* p_clcb,
   // support GATT Caching.
   uint8_t lmp_version = 0;
   if (!BTM_ReadRemoteVersion(p_clcb->bda, &lmp_version, nullptr, nullptr)) {
-    log::warn("Could not read remote version for {}",
-              ADDRESS_TO_LOGGABLE_CSTR(p_clcb->bda));
+    log::warn("Could not read remote version for {}", p_clcb->bda);
   }
 
   if (lmp_version < 0x0a) {
@@ -232,7 +225,7 @@ static void bta_gattc_explore_next_service(uint16_t conn_id,
                                            tBTA_GATTC_SERV* p_srvc_cb) {
   tBTA_GATTC_CLCB* p_clcb = bta_gattc_find_clcb_by_conn_id(conn_id);
   if (!p_clcb) {
-    log::error("unknown conn_id={}", loghex(conn_id));
+    log::error("unknown conn_id=0x{:x}", conn_id);
     return;
   }
 
@@ -291,7 +284,7 @@ static void bta_gattc_explore_srvc_finished(uint16_t conn_id,
                                             tBTA_GATTC_SERV* p_srvc_cb) {
   tBTA_GATTC_CLCB* p_clcb = bta_gattc_find_clcb_by_conn_id(conn_id);
   if (!p_clcb) {
-    log::error("unknown conn_id={}", loghex(conn_id));
+    log::error("unknown conn_id=0x{:x}", conn_id);
     return;
   }
 
@@ -306,30 +299,21 @@ static void bta_gattc_explore_srvc_finished(uint16_t conn_id,
   /* save cache to NV */
   p_clcb->p_srcb->state = BTA_GATTC_SERV_SAVE;
 
-  // If robust caching is not enabled, use original design
-  if (!bta_gattc_is_robust_caching_enabled()) {
-    if (btm_sec_is_a_bonded_dev(p_srvc_cb->server_bda)) {
-      bta_gattc_cache_write(p_clcb->p_srcb->server_bda,
-                            p_clcb->p_srcb->gatt_database);
-    }
-  } else {
-    // If robust caching is enabled, do something optimized
-    Octet16 hash = p_clcb->p_srcb->gatt_database.Hash();
-    bool success = bta_gattc_hash_write(hash, p_clcb->p_srcb->gatt_database);
+  // If robust caching is enabled, do something optimized
+  Octet16 hash = p_clcb->p_srcb->gatt_database.Hash();
+  bool success = bta_gattc_hash_write(hash, p_clcb->p_srcb->gatt_database);
 
-    // If the device is trusted, link the addr file to hash file
-    if (success && btm_sec_is_a_bonded_dev(p_srvc_cb->server_bda)) {
-      log::debug("Linking db hash to address {}",
-                 p_clcb->p_srcb->server_bda.ToRedactedStringForLogging());
-      bta_gattc_cache_link(p_clcb->p_srcb->server_bda, hash);
-    }
-
-    // After success, reset the count.
-    log::debug(
-        "service discovery succeed, reset count to zero, conn_id=0x{:04x}",
-        conn_id);
-    p_srvc_cb->srvc_disc_count = 0;
+  // If the device is trusted, link the addr file to hash file
+  if (success && btm_sec_is_a_bonded_dev(p_srvc_cb->server_bda)) {
+    log::debug("Linking db hash to address {}",
+               p_clcb->p_srcb->server_bda.ToRedactedStringForLogging());
+    bta_gattc_cache_link(p_clcb->p_srcb->server_bda, hash);
   }
+
+  // After success, reset the count.
+  log::debug("service discovery succeed, reset count to zero, conn_id=0x{:04x}",
+             conn_id);
+  p_srvc_cb->srvc_disc_count = 0;
 
   bta_gattc_reset_discover_st(p_clcb->p_srcb, GATT_SUCCESS);
 }
@@ -398,14 +382,14 @@ void bta_gattc_sdp_callback(const RawAddress& /* bd_addr */,
     uint16_t end_handle = (uint16_t)pe.params[1];
 
 #if (BTA_GATT_DEBUG == TRUE)
-    log::verbose("Found ATT service uuid={}, s_handle={}, e_handle={}",
-                 service_uuid, loghex(start_handle), loghex(end_handle));
+    log::verbose("Found ATT service uuid={}, s_handle=0x{:x}, e_handle=0x{:x}",
+                 service_uuid, start_handle, end_handle);
 #endif
 
     if (!GATT_HANDLE_IS_VALID(start_handle) ||
         !GATT_HANDLE_IS_VALID(end_handle)) {
-      log::error("invalid start_handle={}, end_handle={}", loghex(start_handle),
-                 loghex(end_handle));
+      log::error("invalid start_handle=0x{:x}, end_handle=0x{:x}", start_handle,
+                 end_handle);
       p_sdp_rec = get_legacy_stack_sdp_api()->db.SDP_FindServiceInDb(
           cb_data->p_sdp_db, 0, p_sdp_rec);
       continue;
@@ -473,16 +457,12 @@ void bta_gattc_op_cmpl_during_discovery(tBTA_GATTC_CLCB* p_clcb,
       bta_gattc_read_ext_prop_desc_cmpl(p_clcb, &p_data->op_cmpl);
       break;
     case BTA_GATTC_DISCOVER_REQ_READ_DB_HASH:
-    case BTA_GATTC_DISCOVER_REQ_READ_DB_HASH_FOR_SVC_CHG:
-      if (bta_gattc_is_robust_caching_enabled()) {
-        bool is_svc_chg = (p_clcb->request_during_discovery ==
-                           BTA_GATTC_DISCOVER_REQ_READ_DB_HASH_FOR_SVC_CHG);
-        bta_gattc_read_db_hash_cmpl(p_clcb, &p_data->op_cmpl, is_svc_chg);
-      } else {
-        // it is not possible here if flag is off, but just in case
-        p_clcb->request_during_discovery = BTA_GATTC_DISCOVER_REQ_NONE;
-      }
+    case BTA_GATTC_DISCOVER_REQ_READ_DB_HASH_FOR_SVC_CHG: {
+      bool is_svc_chg = (p_clcb->request_during_discovery ==
+                         BTA_GATTC_DISCOVER_REQ_READ_DB_HASH_FOR_SVC_CHG);
+      bta_gattc_read_db_hash_cmpl(p_clcb, &p_data->op_cmpl, is_svc_chg);
       break;
+    }
     case BTA_GATTC_DISCOVER_REQ_NONE:
     default:
       break;
@@ -539,8 +519,7 @@ void bta_gattc_disc_cmpl_cback(uint16_t conn_id, tGATT_DISC_TYPE disc_type,
     if (status == GATT_SUCCESS) p_clcb->status = status;
 
     // if db out of sync is received, try to start service discovery if possible
-    if (bta_gattc_is_robust_caching_enabled() &&
-        status == GATT_DATABASE_OUT_OF_SYNC) {
+    if (status == GATT_DATABASE_OUT_OF_SYNC) {
       if (p_srvc_cb &&
           p_srvc_cb->srvc_disc_count < BTA_GATTC_DISCOVER_RETRY_COUNT) {
         p_srvc_cb->srvc_disc_count++;
@@ -853,7 +832,7 @@ static void bta_gattc_read_ext_prop_desc_cmpl(
   }
 
   if (status != GATT_SUCCESS) {
-    log::warn("Discovery on server failed: {}", loghex(status));
+    log::warn("Discovery on server failed: 0x{:x}", status);
     bta_gattc_reset_discover_st(p_clcb->p_srcb, GATT_ERROR);
     return;
   }
@@ -1046,7 +1025,7 @@ void bta_gattc_get_gatt_db(uint16_t conn_id, uint16_t start_handle,
 
   log::info("");
   if (p_clcb == NULL) {
-    log::error("Unknown conn_id={}", loghex(conn_id));
+    log::error("Unknown conn_id=0x{:x}", conn_id);
     return;
   }
 

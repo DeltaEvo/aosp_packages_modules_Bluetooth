@@ -51,10 +51,11 @@ using ::bluetooth::le_audio::set_configurations::AudioSetConfiguration;
 using ::bluetooth::le_audio::types::CodecLocation;
 }  // namespace
 
-std::vector<AudioSetConfiguration> get_offload_capabilities() {
+OffloadCapabilities get_offload_capabilities() {
   if (HalVersionManager::GetHalTransport() ==
       BluetoothAudioHalTransport::HIDL) {
-    return std::vector<AudioSetConfiguration>(0);
+    return {std::vector<AudioSetConfiguration>(0),
+            std::vector<AudioSetConfiguration>(0)};
   }
   return aidl::le_audio::get_offload_capabilities();
 }
@@ -104,8 +105,6 @@ void LeAudioClientInterface::Sink::Cleanup() {
   log::info("HAL transport: 0x{:02x}, is broadcast: {}",
             static_cast<int>(HalVersionManager::GetHalTransport()),
             is_broadcaster_);
-
-  StopSession();
 
   /* Cleanup transport interface and instance according to type and role */
   if (HalVersionManager::GetHalTransport() ==
@@ -465,7 +464,6 @@ size_t LeAudioClientInterface::Sink::Read(uint8_t* p_buf, uint32_t len) {
 
 void LeAudioClientInterface::Source::Cleanup() {
   log::info("source");
-  StopSession();
   if (hidl::le_audio::LeAudioSourceTransport::interface) {
     delete hidl::le_audio::LeAudioSourceTransport::interface;
     hidl::le_audio::LeAudioSourceTransport::interface = nullptr;
@@ -798,7 +796,7 @@ LeAudioClientInterface::Sink* LeAudioClientInterface::GetSink(
     return nullptr;
   }
 
-  Sink* sink = is_broadcasting_session_type ? broadcast_sink_ : unicast_sink_;
+  auto& sink = is_broadcasting_session_type ? broadcast_sink_ : unicast_sink_;
   if (sink == nullptr) {
     sink = new Sink(is_broadcasting_session_type);
   } else {

@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <bluetooth/log.h>
+
 #include <vector>
 
 #include "broadcaster/broadcaster_types.h"
@@ -62,6 +64,12 @@ class CodecManager {
     ::bluetooth::le_audio::types::LeAudioContextType audio_context_type;
   };
 
+  /* The verifier function checks each possible configuration (from the set of
+   * all possible, supported configuration acquired from
+   * AudioSetConfigurationProvider for the given scenario), to select a single
+   * configuration, matching the current streaming audio group requirements.
+   * Note: Used only with the legacy AudioSetConfigurationProvider.
+   */
   typedef std::function<const set_configurations::AudioSetConfiguration*(
       const UnicastConfigurationRequirements& requirements,
       const set_configurations::AudioSetConfigurations* confs)>
@@ -96,8 +104,10 @@ class CodecManager {
       ::bluetooth::le_audio::set_configurations::AudioSetConfiguration>
   GetCodecConfig(const UnicastConfigurationRequirements& requirements,
                  UnicastConfigurationVerifier verifier);
-
   virtual bool CheckCodecConfigIsBiDirSwb(
+      const ::bluetooth::le_audio::set_configurations::AudioSetConfiguration&
+          config) const;
+  virtual bool CheckCodecConfigIsDualBiDirSwb(
       const ::bluetooth::le_audio::set_configurations::AudioSetConfiguration&
           config) const;
   virtual std::unique_ptr<broadcaster::BroadcastConfiguration>
@@ -119,4 +129,15 @@ class CodecManager {
   struct impl;
   std::unique_ptr<impl> pimpl_;
 };
+
+std::ostream& operator<<(
+    std::ostream& os,
+    const CodecManager::UnicastConfigurationRequirements& req);
 }  // namespace bluetooth::le_audio
+
+namespace fmt {
+template <>
+struct formatter<
+    bluetooth::le_audio::CodecManager::UnicastConfigurationRequirements>
+    : ostream_formatter {};
+}  // namespace fmt

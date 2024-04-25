@@ -43,28 +43,6 @@ using types::kLeAudioDirectionSink;
 using types::kLeAudioDirectionSource;
 using types::LeAudioCoreCodecConfig;
 
-static uint8_t min_req_devices_cnt(
-    const AudioSetConfiguration* audio_set_conf) {
-  log::assert_that(
-      audio_set_conf->topology_info.has_value(),
-      "No topology info, which is required to properly configure the ASEs");
-  return std::max(audio_set_conf->topology_info->device_count.sink,
-                  audio_set_conf->topology_info->device_count.source);
-}
-
-static uint8_t min_req_devices_cnt(
-    const AudioSetConfigurations* audio_set_confs) {
-  uint8_t curr_min_req_devices_cnt = 0xff;
-
-  for (auto ent : *audio_set_confs) {
-    uint8_t req_devices_cnt = min_req_devices_cnt(ent);
-    if (req_devices_cnt < curr_min_req_devices_cnt)
-      curr_min_req_devices_cnt = req_devices_cnt;
-  }
-
-  return curr_min_req_devices_cnt;
-}
-
 void get_cis_count(LeAudioContextType context_type, int expected_device_cnt,
                    types::LeAudioConfigurationStrategy strategy,
                    int avail_group_ase_snk_cnt, int avail_group_ase_src_count,
@@ -109,6 +87,9 @@ void get_cis_count(LeAudioContextType context_type, int expected_device_cnt,
       if (is_bidirectional) {
         if ((avail_group_ase_snk_cnt > 0) && (avail_group_ase_src_count) > 0) {
           /* Prepare CIG to enable all microphones per device */
+          /* TODO: Support TWS style device with two source ASEs - two
+           * bidirectional CISes
+           */
           out_cis_count_bidir = expected_device_cnt;
           out_cis_count_unidir_sink = expected_device_cnt;
         } else {
@@ -132,117 +113,6 @@ void get_cis_count(LeAudioContextType context_type, int expected_device_cnt,
       "Uni-Directional Source: {}",
       out_cis_count_bidir, out_cis_count_unidir_sink,
       out_cis_count_unidir_source);
-}
-
-bool check_if_may_cover_scenario(const AudioSetConfigurations* audio_set_confs,
-                                 uint8_t group_size) {
-  if (!audio_set_confs) {
-    log::error("no audio requirements for group");
-    return false;
-  }
-
-  return group_size >= min_req_devices_cnt(audio_set_confs);
-}
-
-bool check_if_may_cover_scenario(const AudioSetConfiguration* audio_set_conf,
-                                 uint8_t group_size) {
-  if (!audio_set_conf) {
-    log::error("no audio requirement for group");
-    return false;
-  }
-
-  return group_size >= min_req_devices_cnt(audio_set_conf);
-}
-
-uint8_t get_num_of_devices_in_configuration(
-    const AudioSetConfiguration* audio_set_conf) {
-  return min_req_devices_cnt(audio_set_conf);
-}
-
-static bool IsCodecConfigCoreSupported(const types::LeAudioLtvMap& pacs,
-                                       const types::LeAudioLtvMap& reqs) {
-  auto caps = pacs.GetAsCoreCodecCapabilities();
-  auto config = reqs.GetAsCoreCodecConfig();
-
-  /* Sampling frequency */
-  if (!caps.HasSupportedSamplingFrequencies() || !config.sampling_frequency) {
-    log::debug("Missing supported sampling frequencies capability");
-    return false;
-  }
-  if (!caps.IsSamplingFrequencyConfigSupported(
-          config.sampling_frequency.value())) {
-    log::debug("Cfg: SamplingFrequency= 0x{:04x}",
-               config.sampling_frequency.value());
-    log::debug("Cap: SupportedSamplingFrequencies= 0x{:04x}",
-               caps.supported_sampling_frequencies.value());
-    log::debug("Sampling frequency not supported");
-    return false;
-  }
-
-  /* Channel counts */
-  if (!caps.IsAudioChannelCountsSupported(
-          config.GetChannelCountPerIsoStream())) {
-    log::debug("Cfg: Allocated channel count= 0x{:04x}",
-               config.GetChannelCountPerIsoStream());
-    log::debug("Cap: Supported channel counts= 0x{:04x}",
-               caps.supported_audio_channel_counts.value_or(1));
-    log::debug("Channel count not supported");
-    return false;
-  }
-
-  /* Frame duration */
-  if (!caps.HasSupportedFrameDurations() || !config.frame_duration) {
-    log::debug("Missing supported frame durations capability");
-    return false;
-  }
-  if (!caps.IsFrameDurationConfigSupported(config.frame_duration.value())) {
-    log::debug("Cfg: FrameDuration= 0x{:04x}", config.frame_duration.value());
-    log::debug("Cap: SupportedFrameDurations= 0x{:04x}",
-               caps.supported_frame_durations.value());
-    log::debug("Frame duration not supported");
-    return false;
-  }
-
-  /* Octets per frame */
-  if (!caps.HasSupportedOctetsPerCodecFrame() ||
-      !config.octets_per_codec_frame) {
-    log::debug("Missing supported octets per codec frame");
-    return false;
-  }
-  if (!caps.IsOctetsPerCodecFrameConfigSupported(
-          config.octets_per_codec_frame.value())) {
-    log::debug("Cfg: Octets per frame={}",
-               config.octets_per_codec_frame.value());
-    log::debug("Cap: Min octets per frame={}",
-               caps.supported_min_octets_per_codec_frame.value());
-    log::debug("Cap: Max octets per frame={}",
-               caps.supported_max_octets_per_codec_frame.value());
-    log::debug("Octets per codec frame outside the capabilities");
-    return false;
-  }
-
-  return true;
-}
-
-bool IsCodecConfigSettingSupported(
-    const acs_ac_record& pac, const CodecConfigSetting& codec_config_setting) {
-  const auto& codec_id = codec_config_setting.id;
-
-  if (codec_id != pac.codec_id) return false;
-
-  log::debug(": Settings for format: 0x{:02x}", codec_id.coding_format);
-
-  if (utils::IsCodecUsingLtvFormat(codec_id)) {
-    log::assert_that(
-        !pac.codec_spec_caps.IsEmpty(),
-        "Codec specific capabilities are not parsed approprietly.");
-    return IsCodecConfigCoreSupported(pac.codec_spec_caps,
-                                      codec_config_setting.params);
-  }
-
-  log::error("Codec {}, seems to be not supported here.",
-             bluetooth::common::ToString(codec_id));
-  return false;
 }
 
 uint16_t CodecConfigSetting::GetOctectsPerFrame() const {

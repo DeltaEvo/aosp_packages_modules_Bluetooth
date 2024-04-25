@@ -69,8 +69,7 @@ uint32_t gatt_sr_enqueue_cmd(tGATT_TCB& tcb, uint16_t cid, uint8_t op_code,
     EattChannel* channel =
         EattExtension::GetInstance()->FindEattChannelByCid(tcb.peer_bda, cid);
     if (channel == nullptr) {
-      log::warn("{}, cid 0x{:02x} already disconnected",
-                ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
+      log::warn("{}, cid 0x{:02x} already disconnected", tcb.peer_bda, cid);
       return 0;
     }
 
@@ -115,8 +114,7 @@ bool gatt_sr_cmd_empty(tGATT_TCB& tcb, uint16_t cid) {
   EattChannel* channel =
       EattExtension::GetInstance()->FindEattChannelByCid(tcb.peer_bda, cid);
   if (channel == nullptr) {
-    log::warn("{}, cid 0x{:02x} already disconnected",
-              ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
+    log::warn("{}, cid 0x{:02x} already disconnected", tcb.peer_bda, cid);
     return false;
   }
 
@@ -141,8 +139,7 @@ void gatt_dequeue_sr_cmd(tGATT_TCB& tcb, uint16_t cid) {
     EattChannel* channel =
         EattExtension::GetInstance()->FindEattChannelByCid(tcb.peer_bda, cid);
     if (channel == nullptr) {
-      log::warn("{}, cid 0x{:02x} already disconnected",
-                ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
+      log::warn("{}, cid 0x{:02x} already disconnected", tcb.peer_bda, cid);
       return;
     }
 
@@ -150,7 +147,7 @@ void gatt_dequeue_sr_cmd(tGATT_TCB& tcb, uint16_t cid) {
   }
 
   /* Double check in case any buffers are queued */
-  log::verbose("gatt_dequeue_sr_cmd cid: {}", loghex(cid));
+  log::verbose("gatt_dequeue_sr_cmd cid: 0x{:x}", cid);
   if (p_cmd->p_rsp_msg)
     log::error("free tcb.sr_cmd.p_rsp_msg = {}", fmt::ptr(p_cmd->p_rsp_msg));
   osi_free_and_reset((void**)&p_cmd->p_rsp_msg);
@@ -447,8 +444,7 @@ void gatt_process_read_multi_req(tGATT_TCB& tcb, uint16_t cid, uint8_t op_code,
 
   tGATT_READ_MULTI* multi_req = gatt_sr_get_read_multi(tcb, cid);
   if (multi_req == nullptr) {
-    log::error("Could not proceed request. {}, 0x{:02x}",
-               ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
+    log::error("Could not proceed request. {}, 0x{:02x}", tcb.peer_bda, cid);
     return;
   }
   multi_req->num_handles = 0;
@@ -505,7 +501,7 @@ void gatt_process_read_multi_req(tGATT_TCB& tcb, uint16_t cid, uint8_t op_code,
       if (sr_cmd_p == nullptr) {
         log::error(
             "Could not send response on CID were request arrived. {}, 0x{:02x}",
-            ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
+            tcb.peer_bda, cid);
         return;
       }
       gatt_sr_reset_cback_cnt(tcb,
@@ -1369,9 +1365,8 @@ static bool gatts_process_db_out_of_sync(tGATT_TCB& tcb, uint16_t cid,
       gatt_send_error_rsp(tcb, cid, GATT_DATABASE_OUT_OF_SYNC, op_code, 0x0000,
                           false);
     }
-    log::info("database out of sync, device={}, op_code={}, should_rsp={}",
-              ADDRESS_TO_LOGGABLE_STR(tcb.peer_bda), loghex((uint16_t)op_code),
-              should_rsp);
+    log::info("database out of sync, device={}, op_code=0x{:x}, should_rsp={}",
+              tcb.peer_bda, (uint16_t)op_code, should_rsp);
     gatt_sr_update_cl_status(tcb, /* chg_aware= */ should_rsp);
   }
 

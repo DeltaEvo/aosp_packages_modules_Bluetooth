@@ -461,7 +461,7 @@ BtaEnqueuedResult_t bta_gattc_enqueue(tBTA_GATTC_CLCB* p_clcb,
   log::info(
       "Already has a pending command to executer. Queuing for later {} conn "
       "id=0x{:04x}",
-      ADDRESS_TO_LOGGABLE_CSTR(p_clcb->bda), p_clcb->bta_conn_id);
+      p_clcb->bda, p_clcb->bta_conn_id);
   p_clcb->p_q_cmd_queue.push_back(p_data);
 
   return ENQUEUED_FOR_LATER;
@@ -574,7 +574,7 @@ bool bta_gattc_mark_bg_conn(tGATT_IF client_if,
   }
   if (!add) {
     log::error("unable to find the bg connection mask for bd_addr={}",
-               ADDRESS_TO_LOGGABLE_STR(remote_bda_ptr));
+               remote_bda_ptr);
     return false;
   } else /* adding a new device mask */
   {
@@ -796,19 +796,6 @@ tBTA_GATTC_CLCB* bta_gattc_find_int_disconn_clcb(tBTA_GATTC_DATA* p_msg) {
                  p_msg->int_conn.hdr.layer_specific);
   }
   return p_clcb;
-}
-
-/*******************************************************************************
- *
- * Function         bta_gattc_is_robust_caching_enabled
- *
- * Description      check if robust caching is enabled
- *
- * Returns          true if enabled; otherwise false
- *
- ******************************************************************************/
-bool bta_gattc_is_robust_caching_enabled() {
-  return bluetooth::common::init_flags::gatt_robust_caching_client_is_enabled();
 }
 
 void bta_gatt_client_dump(int fd) {

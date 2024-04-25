@@ -279,8 +279,7 @@ void PORT_StartInd(tRFC_MCB* p_mcb) {
  ******************************************************************************/
 void PORT_ParNegInd(tRFC_MCB* p_mcb, uint8_t dlci, uint16_t mtu, uint8_t cl,
                     uint8_t k) {
-  log::verbose("bd_addr={}, dlci={}, mtu={}",
-               ADDRESS_TO_LOGGABLE_CSTR(p_mcb->bd_addr), dlci, mtu);
+  log::verbose("bd_addr={}, dlci={}, mtu={}", p_mcb->bd_addr, dlci, mtu);
   tPORT* p_port = port_find_mcb_dlci_port(p_mcb, dlci);
   if (!p_port) {
     /* This can be a first request for this port */
@@ -288,7 +287,7 @@ void PORT_ParNegInd(tRFC_MCB* p_mcb, uint8_t dlci, uint16_t mtu, uint8_t cl,
     if (!p_port) {
       log::error(
           "Disconnect RFCOMM, port not found, dlci={}, p_mcb={}, bd_addr={}",
-          dlci, fmt::ptr(p_mcb), ADDRESS_TO_LOGGABLE_STR(p_mcb->bd_addr));
+          dlci, fmt::ptr(p_mcb), p_mcb->bd_addr);
       /* If the port cannot be opened, send a DM.  Per Errata 1205 */
       rfc_send_dm(p_mcb, dlci, false);
       /* check if this is the last port open, some headsets have
@@ -370,7 +369,7 @@ void PORT_ParNegCnf(tRFC_MCB* p_mcb, uint8_t dlci, uint16_t mtu, uint8_t cl,
   log::verbose("PORT_ParNegCnf dlci:{} mtu:{} cl: {} k: {}", dlci, mtu, cl, k);
   tPORT* p_port = port_find_mcb_dlci_port(p_mcb, dlci);
   if (!p_port) {
-    log::warn("port is null for {}", ADDRESS_TO_LOGGABLE_STR(p_mcb->bd_addr));
+    log::warn("port is null for {}", p_mcb->bd_addr);
     return;
   }
 
@@ -418,8 +417,7 @@ void PORT_DlcEstablishInd(tRFC_MCB* p_mcb, uint8_t dlci, uint16_t mtu) {
   tPORT* p_port = port_find_mcb_dlci_port(p_mcb, dlci);
 
   log::verbose("p_mcb:{}, dlci:{} mtu:{}i, p_port:{}, bd_addr:{}",
-               fmt::ptr(p_mcb), dlci, mtu, fmt::ptr(p_port),
-               ADDRESS_TO_LOGGABLE_CSTR(p_mcb->bd_addr));
+               fmt::ptr(p_mcb), dlci, mtu, fmt::ptr(p_port), p_mcb->bd_addr);
 
   if (!p_port) {
     /* This can be a first request for this port */
@@ -623,10 +621,10 @@ void PORT_ControlInd(tRFC_MCB* p_mcb, uint8_t dlci, tPORT_CTRL* p_pars) {
   if (event && p_port->p_callback) (p_port->p_callback)(event, p_port->handle);
 
   log::verbose("PORT_ControlInd DTR_DSR : {}, RTS_CTS : {}, RI : {}, DCD : {}",
-               ((p_port->peer_ctrl.modem_signal & MODEM_SIGNAL_DTRDSR) ? 1 : 0),
-               ((p_port->peer_ctrl.modem_signal & MODEM_SIGNAL_RTSCTS) ? 1 : 0),
-               ((p_port->peer_ctrl.modem_signal & MODEM_SIGNAL_RI) ? 1 : 0),
-               ((p_port->peer_ctrl.modem_signal & MODEM_SIGNAL_DCD) ? 1 : 0));
+               (p_port->peer_ctrl.modem_signal & MODEM_SIGNAL_DTRDSR) ? 1 : 0,
+               (p_port->peer_ctrl.modem_signal & MODEM_SIGNAL_RTSCTS) ? 1 : 0,
+               (p_port->peer_ctrl.modem_signal & MODEM_SIGNAL_RI) ? 1 : 0,
+               (p_port->peer_ctrl.modem_signal & MODEM_SIGNAL_DCD) ? 1 : 0);
 }
 
 /*******************************************************************************
@@ -698,8 +696,7 @@ void PORT_LineStatusInd(tRFC_MCB* p_mcb, uint8_t dlci, uint8_t line_status) {
  *
  ******************************************************************************/
 void PORT_DlcReleaseInd(tRFC_MCB* p_mcb, uint8_t dlci) {
-  log::verbose("dlci:{}, bd_addr:{}", dlci,
-               ADDRESS_TO_LOGGABLE_CSTR(p_mcb->bd_addr));
+  log::verbose("dlci:{}, bd_addr:{}", dlci, p_mcb->bd_addr);
   tPORT* p_port = port_find_mcb_dlci_port(p_mcb, dlci);
   if (!p_port) return;
   port_rfc_closed(p_port, PORT_CLOSED);
@@ -1022,11 +1019,10 @@ void port_rfc_closed(tPORT* p_port, uint8_t res) {
   p_port->rfc.state = RFC_STATE_CLOSED;
 
   log::info(
-      "RFCOMM connection closed, index={}, state={}, reason={}[{}], UUID={}, "
-      "bd_addr={}, is_server={}",
+      "RFCOMM connection closed, index={}, state={}, reason={}[{}], "
+      "UUID=0x{:x}, bd_addr={}, is_server={}",
       p_port->handle, p_port->state, PORT_GetResultString(res), res,
-      loghex(p_port->uuid), ADDRESS_TO_LOGGABLE_STR(p_port->bd_addr),
-      p_port->is_server);
+      p_port->uuid, p_port->bd_addr, p_port->is_server);
 
   port_release_port(p_port);
 }

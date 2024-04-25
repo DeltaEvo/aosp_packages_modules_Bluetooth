@@ -45,7 +45,6 @@ struct BTA_dm_notify_remote_features_complete
 struct BTA_dm_on_hw_off BTA_dm_on_hw_off;
 struct BTA_dm_on_hw_on BTA_dm_on_hw_on;
 struct BTA_dm_report_role_change BTA_dm_report_role_change;
-struct bta_dm_acl_up bta_dm_acl_up;
 struct bta_dm_add_ble_device bta_dm_add_ble_device;
 struct bta_dm_add_blekey bta_dm_add_blekey;
 struct bta_dm_ble_config_local_privacy bta_dm_ble_config_local_privacy;
@@ -73,7 +72,6 @@ struct bta_dm_process_remove_device bta_dm_process_remove_device;
 struct bta_dm_remove_device bta_dm_remove_device;
 struct bta_dm_remote_key_missing bta_dm_remote_key_missing;
 struct bta_dm_rm_cback bta_dm_rm_cback;
-struct bta_dm_sdp_result bta_dm_sdp_result;
 struct bta_dm_set_dev_name bta_dm_set_dev_name;
 struct bta_dm_set_encryption bta_dm_set_encryption;
 struct handle_remote_features_complete handle_remote_features_complete;
@@ -118,11 +116,6 @@ void BTA_dm_report_role_change(const RawAddress bd_addr, tHCI_ROLE new_role,
   inc_func_call_count(__func__);
   test::mock::bta_dm_act::BTA_dm_report_role_change(bd_addr, new_role,
                                                     hci_status);
-}
-void bta_dm_acl_up(const RawAddress& bd_addr, tBT_TRANSPORT transport,
-                   uint16_t acl_handle) {
-  inc_func_call_count(__func__);
-  test::mock::bta_dm_act::bta_dm_acl_up(bd_addr, transport, acl_handle);
 }
 void bta_dm_add_ble_device(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
                            tBT_DEVICE_TYPE dev_type) {
@@ -249,10 +242,6 @@ void bta_dm_rm_cback(tBTA_SYS_CONN_STATUS status, uint8_t id, uint8_t app_id,
                      const RawAddress& peer_addr) {
   inc_func_call_count(__func__);
   test::mock::bta_dm_act::bta_dm_rm_cback(status, id, app_id, peer_addr);
-}
-void bta_dm_sdp_result(tBTA_DM_SDP_RESULT& sdp_event) {
-  inc_func_call_count(__func__);
-  test::mock::bta_dm_act::bta_dm_sdp_result(sdp_event);
 }
 void bta_dm_set_dev_name(const std::vector<uint8_t>& name) {
   inc_func_call_count(__func__);

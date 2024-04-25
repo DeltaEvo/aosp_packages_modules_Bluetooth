@@ -135,21 +135,6 @@ struct BTA_dm_report_role_change {
 };
 extern struct BTA_dm_report_role_change BTA_dm_report_role_change;
 
-// Name: bta_dm_acl_up
-// Params: const RawAddress& bd_addr, tBT_TRANSPORT transport
-// Return: void
-struct bta_dm_acl_up {
-  std::function<void(const RawAddress& bd_addr, tBT_TRANSPORT transport,
-                     uint16_t acl_handle)>
-      body{[](const RawAddress& /* bd_addr */, tBT_TRANSPORT /* transport */,
-              uint16_t /* acl_handle */) {}};
-  void operator()(const RawAddress& bd_addr, tBT_TRANSPORT transport,
-                  uint16_t acl_handle) {
-    body(bd_addr, transport, acl_handle);
-  };
-};
-extern struct bta_dm_acl_up bta_dm_acl_up;
-
 // Name: bta_dm_add_ble_device
 // Params: const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type, tBT_DEVICE_TYPE
 // dev_type Return: void
@@ -503,16 +488,6 @@ struct bta_dm_rm_cback {
   };
 };
 extern struct bta_dm_rm_cback bta_dm_rm_cback;
-
-// Name: bta_dm_sdp_result
-// Params: tBTA_DM_SDP_RESULT& sdp_event
-// Return: void
-struct bta_dm_sdp_result {
-  std::function<void(tBTA_DM_SDP_RESULT& sdp_event)> body{
-      [](tBTA_DM_SDP_RESULT& /* sdp_event */) {}};
-  void operator()(tBTA_DM_SDP_RESULT& sdp_event) { body(sdp_event); };
-};
-extern struct bta_dm_sdp_result bta_dm_sdp_result;
 
 // Name: bta_dm_search_cancel_cmpl
 // Params:
