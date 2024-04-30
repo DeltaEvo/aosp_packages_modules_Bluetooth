@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 The Android Open Source Project
+ * Copyright (C) 2023 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,21 +16,18 @@
 
 #pragma once
 
-#ifndef TARGET_FLOSS
+#include <string>
 
-#include <com_android_bluetooth_flags.h>
+namespace android {
+namespace base {
 
-#define IS_FLAG_ENABLED(flag_name) com::android::bluetooth::flags::flag_name()
-#define IS_FLAG_ENABLED_P(provider, flag_name) provider.flag_name()
+// Returns the current value of the system property `key`,
+// or `default_value` if the property is empty or doesn't exist.
+std::string GetProperty(const std::string& key,
+                        const std::string& default_value);
 
-#else
+// Sets the system property `key` to `value`.
+bool SetProperty(const std::string& key, const std::string& value);
 
-// FLOSS does not yet support android aconfig flags
-#define IS_FLAG_ENABLED(flag_name) false
-#define IS_FLAG_ENABLED_P(provider, flag_name) false
-
-namespace com::android::bluetooth::flags {
-struct flag_provider_interface {};
-}  // namespace com::android::bluetooth::flags
-
-#endif
+}  // namespace base
+}  // namespace android

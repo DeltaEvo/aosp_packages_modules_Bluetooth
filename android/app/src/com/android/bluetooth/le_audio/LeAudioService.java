@@ -22,6 +22,7 @@ import static android.bluetooth.IBluetoothLeAudio.LE_AUDIO_GROUP_ID_INVALID;
 
 import static com.android.bluetooth.flags.Flags.leaudioBroadcastFeatureSupport;
 import static com.android.bluetooth.flags.Flags.leaudioApiSynchronizedBlockFix;
+import static com.android.bluetooth.flags.Flags.leaudioAllowedContextMask;
 import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
 import static com.android.modules.utils.build.SdkLevel.isAtLeastU;
 
@@ -246,6 +247,8 @@ public class LeAudioService extends ProfileService {
         LeAudioGroupDescriptor(boolean isInbandRingtonEnabled) {
             mIsConnected = false;
             mActiveState = ACTIVE_STATE_INACTIVE;
+            mAllowedSinkContexts = BluetoothLeAudio.CONTEXTS_ALL;
+            mAllowedSourceContexts = BluetoothLeAudio.CONTEXTS_ALL;
             mHasFallbackDeviceWhenGettingInactive = false;
             mDirection = AUDIO_DIRECTION_NONE;
             mCodecStatus = null;
@@ -272,6 +275,8 @@ public class LeAudioService extends ProfileService {
         Boolean mInactivatedDueToContextType;
 
         private Integer mActiveState;
+        private Integer mAllowedSinkContexts;
+        private Integer mAllowedSourceContexts;
 
         boolean isActive() {
             return mActiveState == ACTIVE_STATE_ACTIVE;
@@ -308,6 +313,35 @@ public class LeAudioService extends ProfileService {
                 default:
                     return "INVALID";
             }
+        }
+
+        void updateAllowedContexts(Integer allowedSinkContexts, Integer allowedSourceContexts) {
+            Log.d(
+                    TAG,
+                    "LeAudioGroupDescriptor.mAllowedSinkContexts: "
+                            + mAllowedSinkContexts
+                            + " -> "
+                            + allowedSinkContexts
+                            + ", LeAudioGroupDescriptor.mAllowedSourceContexts: "
+                            + mAllowedSourceContexts
+                            + " -> "
+                            + allowedSourceContexts);
+
+            mAllowedSinkContexts = allowedSinkContexts;
+            mAllowedSourceContexts = allowedSourceContexts;
+        }
+
+        Integer getAllowedSinkContexts() {
+            return mAllowedSinkContexts;
+        }
+
+        Integer getAllowedSourceContexts() {
+            return mAllowedSourceContexts;
+        }
+
+        boolean areAllowedContextsModified() {
+            return (mAllowedSinkContexts != BluetoothLeAudio.CONTEXTS_ALL)
+                    || (mAllowedSourceContexts != BluetoothLeAudio.CONTEXTS_ALL);
         }
     }
 
@@ -1442,6 +1476,22 @@ public class LeAudioService extends ProfileService {
         return true;
     }
 
+    private Integer getFirstGroupIdInGettingActiveState() {
+        mGroupReadLock.lock();
+        try {
+            for (Map.Entry<Integer, LeAudioGroupDescriptor> entry :
+                    mGroupDescriptorsView.entrySet()) {
+                LeAudioGroupDescriptor descriptor = entry.getValue();
+                if (descriptor.isGettingActive()) {
+                    return entry.getKey();
+                }
+            }
+        } finally {
+            mGroupReadLock.unlock();
+        }
+        return LE_AUDIO_GROUP_ID_INVALID;
+    }
+
     private BluetoothDevice getLeadDeviceForTheGroup(Integer groupId) {
         if (groupId == LE_AUDIO_GROUP_ID_INVALID) {
             return null;
@@ -2530,6 +2580,30 @@ public class LeAudioService extends ProfileService {
         }
     }
 
+    private void setGroupAllowedContextMask(
+            int groupId, int sinkContextTypes, int sourceContextTypes) {
+        if (!mLeAudioNativeIsInitialized) {
+            Log.e(TAG, "Le Audio not initialized properly.");
+            return;
+        }
+
+        if (groupId == LE_AUDIO_GROUP_ID_INVALID) {
+            Log.i(TAG, "setActiveGroupAllowedContextMask: no active group");
+            return;
+        }
+
+        LeAudioGroupDescriptor groupDescriptor = getGroupDescriptor(groupId);
+        if (groupDescriptor == null) {
+            Log.e(TAG, "Group " + groupId + " does not exist");
+            return;
+        }
+
+        groupDescriptor.updateAllowedContexts(sinkContextTypes, sourceContextTypes);
+
+        mLeAudioNativeInterface.setGroupAllowedContextMask(
+                groupId, sinkContextTypes, sourceContextTypes);
+    }
+
     @VisibleForTesting
     void handleGroupIdleDuringCall() {
         if (mHfpHandoverDevice == null) {
@@ -3055,8 +3129,32 @@ public class LeAudioService extends ProfileService {
                         descriptor.setActiveState(ACTIVE_STATE_INACTIVE);
 
                         /* In case if group is inactivated due to switch to other */
-                        if (!areAllGroupsInNotGettingActiveState()) {
+                        Integer gettingActiveGroupId = getFirstGroupIdInGettingActiveState();
+                        if (gettingActiveGroupId != LE_AUDIO_GROUP_ID_INVALID) {
+                            if (leaudioAllowedContextMask()) {
+                                /* Context were modified, apply mask to activating group */
+                                if (descriptor.areAllowedContextsModified()) {
+                                    setGroupAllowedContextMask(
+                                            gettingActiveGroupId,
+                                            descriptor.getAllowedSinkContexts(),
+                                            descriptor.getAllowedSourceContexts());
+                                    setGroupAllowedContextMask(
+                                            groupId,
+                                            BluetoothLeAudio.CONTEXTS_ALL,
+                                            BluetoothLeAudio.CONTEXTS_ALL);
+                                }
+                            }
                             break;
+                        }
+
+                        if (leaudioAllowedContextMask()) {
+                            /* Clear allowed context mask if there is no switch of group */
+                            if (descriptor.areAllowedContextsModified()) {
+                                setGroupAllowedContextMask(
+                                        groupId,
+                                        BluetoothLeAudio.CONTEXTS_ALL,
+                                        BluetoothLeAudio.CONTEXTS_ALL);
+                            }
                         }
                     } else {
                         handleGroupTransitToInactive(groupId);
@@ -3747,6 +3845,16 @@ public class LeAudioService extends ProfileService {
         }
         mLeAudioNativeInterface.sendAudioProfilePreferences(groupId, isOutputPreferenceLeAudio,
                 isDuplexPreferenceLeAudio);
+    }
+
+    /**
+     * Set allowed context which should be considered while Audio Framework would request streaming.
+     *
+     * @param sinkContextTypes sink context types that would be allowed to stream
+     * @param sourceContextTypes source context types that would be allowed to stream
+     */
+    public void setActiveGroupAllowedContextMask(int sinkContextTypes, int sourceContextTypes) {
+        setGroupAllowedContextMask(getActiveGroupId(), sinkContextTypes, sourceContextTypes);
     }
 
     /**

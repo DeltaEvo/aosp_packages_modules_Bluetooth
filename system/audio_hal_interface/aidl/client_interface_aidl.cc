@@ -19,8 +19,8 @@
 #include "client_interface_aidl.h"
 
 #include <android/binder_manager.h>
-#include <android_bluetooth_flags.h>
 #include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 
 #include <thread>
 #include <vector>
@@ -101,7 +101,7 @@ BluetoothAudioClientInterface::GetProviderInfo(
     SessionType session_type,
     std::shared_ptr<IBluetoothAudioProviderFactory> provider_factory) {
   if (!is_aidl_available() ||
-      !IS_FLAG_ENABLED(a2dp_offload_codec_extensibility)) {
+      !com::android::bluetooth::flags::a2dp_offload_codec_extensibility()) {
     return std::nullopt;
   }
 
@@ -135,7 +135,7 @@ BluetoothAudioClientInterface::GetA2dpConfiguration(
     std::vector<A2dpRemoteCapabilities> const& remote_capabilities,
     A2dpConfigurationHint const& hint) const {
   if (!is_aidl_available() ||
-      !IS_FLAG_ENABLED(a2dp_offload_codec_extensibility)) {
+      !com::android::bluetooth::flags::a2dp_offload_codec_extensibility()) {
     return std::nullopt;
   }
 
@@ -336,7 +336,18 @@ bool BluetoothAudioClientInterface::UpdateAudioConfig(
 
   auto aidl_retval = provider_->updateAudioConfiguration(audio_config);
   if (!aidl_retval.isOk()) {
-    log::error("BluetoothAudioHal failure: {}", aidl_retval.getDescription());
+    if (audio_config.getTag() != transport_->GetAudioConfiguration().getTag()) {
+      log::warn(
+          "BluetoothAudioHal audio config type: {} doesn't "
+          "match provider's audio config type: {}",
+          ::aidl::android::hardware::bluetooth::audio::toString(
+              audio_config.getTag()),
+          ::aidl::android::hardware::bluetooth::audio::toString(
+              transport_->GetAudioConfiguration().getTag()));
+    } else {
+      log::warn("BluetoothAudioHal is not ready: {} ",
+                aidl_retval.getDescription());
+    }
   }
   return true;
 }

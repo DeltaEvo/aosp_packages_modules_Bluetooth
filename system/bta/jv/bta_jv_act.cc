@@ -24,8 +24,8 @@
 
 #define LOG_TAG "bluetooth"
 
-#include <android_bluetooth_flags.h>
 #include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 
 #include <cstdint>
 #include <unordered_set>
@@ -1025,8 +1025,8 @@ static void bta_jv_l2cap_client_cback(uint16_t gap_handle, uint16_t event,
 
 /* makes an l2cap client connection */
 void bta_jv_l2cap_connect(tBTA_JV_CONN_TYPE type, tBTA_SEC sec_mask,
-                          tBTA_JV_ROLE /* role */, uint16_t remote_psm,
-                          uint16_t rx_mtu, const RawAddress& peer_bd_addr,
+                          uint16_t remote_psm, uint16_t rx_mtu,
+                          const RawAddress& peer_bd_addr,
                           std::unique_ptr<tL2CAP_CFG_INFO> cfg_param,
                           std::unique_ptr<tL2CAP_ERTM_INFO> ertm_info,
                           tBTA_JV_L2CAP_CBACK* p_cback,
@@ -1189,8 +1189,7 @@ static void bta_jv_l2cap_server_cback(uint16_t gap_handle, uint16_t event,
 
 /** starts an L2CAP server */
 void bta_jv_l2cap_start_server(tBTA_JV_CONN_TYPE type, tBTA_SEC sec_mask,
-                               tBTA_JV_ROLE /* role */, uint16_t local_psm,
-                               uint16_t rx_mtu,
+                               uint16_t local_psm, uint16_t rx_mtu,
                                std::unique_ptr<tL2CAP_CFG_INFO> cfg_param,
                                std::unique_ptr<tL2CAP_ERTM_INFO> ertm_info,
                                tBTA_JV_L2CAP_CBACK* p_cback,
@@ -1471,7 +1470,7 @@ void bta_jv_rfcomm_connect(tBTA_SEC sec_mask, uint8_t remote_scn,
 #ifdef TARGET_FLOSS
   if (true)
 #else
-  if (IS_FLAG_ENABLED(rfcomm_always_use_mitm))
+  if (com::android::bluetooth::flags::rfcomm_always_use_mitm())
 #endif
   {
     // Update security service record for RFCOMM client so that

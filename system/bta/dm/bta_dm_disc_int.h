@@ -59,8 +59,9 @@ typedef struct {
 typedef struct {
   RawAddress bd_addr;          /* BD address peer device. */
   tBTA_SERVICE_MASK services;  /* Services found on peer device. */
-  tBT_DEVICE_TYPE device_type; /* device type in case it is BLE device */
+  bool is_gatt_over_ble;
   std::vector<bluetooth::Uuid> uuids;
+  std::vector<bluetooth::Uuid> gatt_uuids;
   tBTA_STATUS result;
   tHCI_STATUS hci_status;
 } tBTA_DM_SVC_RES;
@@ -95,13 +96,9 @@ typedef struct {
   tBTA_SERVICE_MASK services_found;
 
   tSDP_DISCOVERY_DB* p_sdp_db;
-  alarm_t* search_timer;
   uint8_t service_index;
-  bool sdp_results;
-  bool wait_disc;
   uint8_t peer_scn;
 
-  bool gatt_disc_active;
   uint16_t conn_id;
   alarm_t* gatt_close_timer;    /* GATT channel close delay timer */
   RawAddress pending_close_bda; /* pending GATT channel remote device address */
