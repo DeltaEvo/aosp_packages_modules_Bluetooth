@@ -24,8 +24,8 @@
 
 #define LOG_TAG "bluetooth"
 
-#include <android_bluetooth_flags.h>
 #include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 
 #include <cstdint>
 #include <unordered_set>
@@ -1387,8 +1387,14 @@ static void bta_jv_port_mgmt_cl_cback(uint32_t code, uint16_t port_handle) {
   uint16_t lcid;
   tBTA_JV_RFCOMM_CBACK* p_cback; /* the callback function */
 
-  log::verbose("code={}, port_handle={}", code, port_handle);
-  if (NULL == p_cb || NULL == p_cb->p_cback) return;
+  if (p_cb == NULL) {
+    log::warn("p_cb is NULL, code={}, port_handle={}", code, port_handle);
+    return;
+  } else if (p_cb->p_cback == NULL) {
+    log::warn("p_cb->p_cback is null, code={}, port_handle={}", code,
+              port_handle);
+    return;
+  }
 
   log::verbose("code={}, port_handle={}, handle={}", code, port_handle,
                p_cb->handle);
@@ -1470,7 +1476,7 @@ void bta_jv_rfcomm_connect(tBTA_SEC sec_mask, uint8_t remote_scn,
 #ifdef TARGET_FLOSS
   if (true)
 #else
-  if (IS_FLAG_ENABLED(rfcomm_always_use_mitm))
+  if (com::android::bluetooth::flags::rfcomm_always_use_mitm())
 #endif
   {
     // Update security service record for RFCOMM client so that

@@ -27,8 +27,8 @@
 
 #define LOG_TAG "bt_btif"
 
-#include <android_bluetooth_flags.h>
 #include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 #include <hardware/bluetooth.h>
 #include <hardware/bluetooth_headset_interface.h>
 #include <hardware/bt_av.h>
@@ -332,7 +332,7 @@ struct CoreInterfaceImpl : bluetooth::core::CoreInterface {
   }
 
   void onLinkDown(const RawAddress& bd_addr) override {
-    if (IS_FLAG_ENABLED(a2dp_concurrent_source_sink)) {
+    if (com::android::bluetooth::flags::a2dp_concurrent_source_sink()) {
       btif_av_acl_disconnected(bd_addr, A2dpType::kSource);
       btif_av_acl_disconnected(bd_addr, A2dpType::kSink);
     } else {
@@ -1335,17 +1335,16 @@ void invoke_pin_request_cb(RawAddress bd_addr, bt_bdname_t bd_name,
                                   bd_addr, bd_name, cod, min_16_digit));
 }
 
-void invoke_ssp_request_cb(RawAddress bd_addr, bt_bdname_t bd_name,
-                           uint32_t cod, bt_ssp_variant_t pairing_variant,
+void invoke_ssp_request_cb(RawAddress bd_addr, bt_ssp_variant_t pairing_variant,
                            uint32_t pass_key) {
   do_in_jni_thread(FROM_HERE,
                    base::BindOnce(
-                       [](RawAddress bd_addr, bt_bdname_t bd_name, uint32_t cod,
-                          bt_ssp_variant_t pairing_variant, uint32_t pass_key) {
+                       [](RawAddress bd_addr, bt_ssp_variant_t pairing_variant,
+                          uint32_t pass_key) {
                          HAL_CBACK(bt_hal_cbacks, ssp_request_cb, &bd_addr,
-                                   &bd_name, cod, pairing_variant, pass_key);
+                                   pairing_variant, pass_key);
                        },
-                       bd_addr, bd_name, cod, pairing_variant, pass_key));
+                       bd_addr, pairing_variant, pass_key));
 }
 
 void invoke_oob_data_request_cb(tBT_TRANSPORT t, bool valid, Octet16 c,
