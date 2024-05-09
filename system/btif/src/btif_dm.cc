@@ -2105,45 +2105,6 @@ void btif_on_did_received(RawAddress bd_addr, uint8_t vendor_id_src,
       BT_STATUS_SUCCESS, bd_addr, 1, &prop_did);
 }
 
-static void btif_dm_update_allowlisted_media_players() {
-  uint8_t i = 0, buf_len = 0;
-  bt_property_t wlplayers_prop;
-  list_t* wl_players = list_new(nullptr);
-  if (!wl_players) {
-    log::error("Unable to allocate space for allowlist players");
-    return;
-  }
-  log::debug("btif_dm_update_allowlisted_media_players");
-
-  wlplayers_prop.len = 0;
-  if (!interop_get_allowlisted_media_players_list(wl_players)) {
-    log::debug("Allowlisted media players not found");
-    list_free(wl_players);
-    return;
-  }
-
-  /*find the total number of bytes and allocate memory */
-  for (list_node_t* node = list_begin(wl_players); node != list_end(wl_players);
-       node = list_next(node)) {
-    buf_len += (strlen((char*)list_node(node)) + 1);
-  }
-  char* players_list = (char*)osi_malloc(buf_len);
-  for (list_node_t* node = list_begin(wl_players); node != list_end(wl_players);
-       node = list_next(node)) {
-    char* name;
-    name = (char*)list_node(node);
-    memcpy(&players_list[i], list_node(node), strlen(name) + 1);
-    i += (strlen(name) + 1);
-  }
-  wlplayers_prop.type = BT_PROPERTY_WL_MEDIA_PLAYERS_LIST;
-  wlplayers_prop.len = buf_len;
-  wlplayers_prop.val = players_list;
-
-  GetInterfaceToProfiles()->events->invoke_adapter_properties_cb(
-      BT_STATUS_SUCCESS, 1, &wlplayers_prop);
-  list_free(wl_players);
-}
-
 void BTIF_dm_report_inquiry_status_change(tBTM_INQUIRY_STATE status) {
   btif_dm_inquiry_in_progress =
       (status == tBTM_INQUIRY_STATE::BTM_INQUIRY_STARTED);
@@ -2206,8 +2167,7 @@ void BTIF_dm_enable() {
   ** and bonded_devices_info_cb
   */
   btif_storage_load_bonded_devices();
-  bluetooth::bqr::EnableBtQualityReport(true);
-  btif_dm_update_allowlisted_media_players();
+  bluetooth::bqr::EnableBtQualityReport(get_main());
   btif_enable_bluetooth_evt();
 }
 
@@ -2224,7 +2184,7 @@ void BTIF_dm_disable() {
       btif_in_execute_service_request(i, false);
     }
   }
-  bluetooth::bqr::EnableBtQualityReport(false);
+  bluetooth::bqr::EnableBtQualityReport(nullptr);
   log::info("Stack device manager shutdown finished");
   future_ready(stack_manager_get_hack_future(), FUTURE_SUCCESS);
 }
@@ -3558,6 +3518,49 @@ static bool btif_dm_ble_is_temp_pairing(RawAddress& bd_addr, bool ctkd) {
   return false;
 }
 
+static bool btif_model_name_known(const RawAddress& bd_addr) {
+  bt_property_t prop;
+  bt_bdname_t model_name;
+  BTIF_STORAGE_FILL_PROPERTY(&prop, BT_PROPERTY_REMOTE_MODEL_NUM,
+                             sizeof(model_name), &model_name);
+
+  if (btif_storage_get_remote_device_property(&bd_addr, &prop) !=
+          BT_STATUS_SUCCESS ||
+      prop.len == 0) {
+    log::info("Device {} no cached model name", bd_addr);
+    return false;
+  }
+
+  return true;
+}
+
+static void read_dis_cback(const RawAddress& bd_addr, tDIS_VALUE* p_dis_value) {
+  if (p_dis_value == nullptr) {
+    log::warn("received unexpected/error DIS callback");
+    return;
+  }
+
+  if (!(p_dis_value->attr_mask & DIS_ATTR_MODEL_NUM_BIT)) {
+    log::warn("unknown bit, mask: {}", (int)p_dis_value->attr_mask);
+    return;
+  }
+
+  for (int i = 0; i < DIS_MAX_STRING_DATA; i++) {
+    if (p_dis_value->data_string[i] == nullptr) continue;
+
+    bt_property_t prop;
+    prop.type = BT_PROPERTY_REMOTE_MODEL_NUM;
+    prop.val = p_dis_value->data_string[i];
+    prop.len = strlen((char*)prop.val);
+
+    log::info("Device {}, model name: {}", bd_addr, (char*)prop.val);
+
+    btif_storage_set_remote_device_property(&bd_addr, &prop);
+    GetInterfaceToProfiles()->events->invoke_remote_device_properties_cb(
+        BT_STATUS_SUCCESS, bd_addr, 1, &prop);
+  }
+}
+
 /*******************************************************************************
  *
  * Function         btif_dm_ble_auth_cmpl_evt
@@ -3596,6 +3599,16 @@ static void btif_dm_ble_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
       state = BT_BOND_STATE_NONE;
     } else {
       btif_dm_save_ble_bonding_keys(bd_addr);
+
+      if (com::android::bluetooth::flags::read_model_num_fix() &&
+          is_le_audio_capable_during_service_discovery(bd_addr) &&
+          !btif_model_name_known(bd_addr) &&
+          BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
+        log::info("Read model name for le audio capable device");
+        if (!DIS_ReadDISInfo(bd_addr, read_dis_cback, DIS_ATTR_MODEL_NUM_BIT)) {
+          log::warn("Read DIS failed");
+        }
+      }
 
       if (pairing_cb.gatt_over_le ==
           btif_dm_pairing_cb_t::ServiceDiscoveryState::NOT_STARTED) {
@@ -4207,49 +4220,6 @@ void btif_dm_set_event_filter_inquiry_result_all_devices() {
   BTA_DmSetEventFilterInquiryResultAllDevices();
 }
 
-static bool btif_model_name_known(const RawAddress& bd_addr) {
-  bt_property_t prop;
-  bt_bdname_t model_name;
-  BTIF_STORAGE_FILL_PROPERTY(&prop, BT_PROPERTY_REMOTE_MODEL_NUM,
-                             sizeof(model_name), &model_name);
-
-  if (btif_storage_get_remote_device_property(&bd_addr, &prop) !=
-          BT_STATUS_SUCCESS ||
-      prop.len == 0) {
-    log::info("Device {} no cached model name", bd_addr);
-    return false;
-  }
-
-  return true;
-}
-
-static void read_dis_cback(const RawAddress& bd_addr, tDIS_VALUE* p_dis_value) {
-  if (p_dis_value == nullptr) {
-    log::warn("received unexpected/error DIS callback");
-    return;
-  }
-
-  if (!(p_dis_value->attr_mask & DIS_ATTR_MODEL_NUM_BIT)) {
-    log::warn("unknown bit, mask: {}", (int)p_dis_value->attr_mask);
-    return;
-  }
-
-  for (int i = 0; i < DIS_MAX_STRING_DATA; i++) {
-    if (p_dis_value->data_string[i] == nullptr) continue;
-
-    bt_property_t prop;
-    prop.type = BT_PROPERTY_REMOTE_MODEL_NUM;
-    prop.val = p_dis_value->data_string[i];
-    prop.len = strlen((char*)prop.val);
-
-    log::info("Device {}, model name: {}", bd_addr, (char*)prop.val);
-
-    btif_storage_set_remote_device_property(&bd_addr, &prop);
-    GetInterfaceToProfiles()->events->invoke_remote_device_properties_cb(
-        BT_STATUS_SUCCESS, bd_addr, 1, &prop);
-  }
-}
-
 void btif_dm_metadata_changed(const RawAddress& remote_bd_addr, int key,
                               std::vector<uint8_t> value) {
   static const int METADATA_LE_AUDIO = 26;
@@ -4258,8 +4228,10 @@ void btif_dm_metadata_changed(const RawAddress& remote_bd_addr, int key,
     log::info("Device is LE Audio Capable {}", remote_bd_addr);
     metadata_cb.le_audio_cache.insert_or_assign(remote_bd_addr, value);
 
+    // TODO(b/334067583): Remove this DIS read when b/334067583 is fixed
     if (com::android::bluetooth::flags::read_model_num_fix() &&
-        !btif_model_name_known(remote_bd_addr)) {
+        !btif_model_name_known(remote_bd_addr) &&
+        BTM_IsAclConnectionUp(remote_bd_addr, BT_TRANSPORT_LE)) {
       log::info("Read model name for le audio capable device");
       if (!DIS_ReadDISInfo(remote_bd_addr, read_dis_cback,
                            DIS_ATTR_MODEL_NUM_BIT)) {

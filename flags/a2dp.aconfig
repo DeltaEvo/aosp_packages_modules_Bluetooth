@@ -25,3 +25,33 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "avdtp_error_codes"
+    namespace: "bluetooth"
+    description: "Use compliant error codes in AVDTP responses"
+    bug: "338139069"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "bta_av_use_peer_codec"
+    namespace: "bluetooth"
+    description: "Deprecate bta av codec state"
+    bug: "339264791"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "a2dp_async_allow_low_latency"
+    namespace: "bluetooth"
+    description: "Make allow_low_latency run on main thread"
+    bug : "339368380"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}

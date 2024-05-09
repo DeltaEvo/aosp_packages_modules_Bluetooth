@@ -166,7 +166,6 @@ pub enum BtPropertyType {
     Appearance,
     VendorProductInfo,
     // Unimplemented:
-    //  BT_PROPERTY_WL_MEDIA_PLAYERS_LIST,
     //  BT_PROPERTY_REMOTE_ASHA_CAPABILITY,
     //  BT_PROPERTY_REMOTE_ASHA_TRUNCATED_HISYNCID,
     //  BT_PROPERTY_REMOTE_MODEL_NUM,
@@ -421,6 +420,11 @@ pub type BtRemoteVersion = bindings::bt_remote_version_t;
 pub type BtVendorProductInfo = bindings::bt_vendor_product_info_t;
 pub type Uuid = bindings::bluetooth::Uuid;
 pub type Uuid128Bit = bindings::bluetooth::Uuid_UUID128Bit;
+
+unsafe impl ExternType for Uuid {
+    type Id = type_id!("bluetooth::topshim::rust::Uuid");
+    type Kind = cxx::kind::Trivial;
+}
 
 impl TryFrom<Uuid> for Vec<u8> {
     type Error = &'static str;
