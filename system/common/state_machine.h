@@ -16,10 +16,10 @@
 
 #pragma once
 
+#include <bluetooth/log.h>
+
 #include <map>
 #include <utility>
-
-#include <base/logging.h>
 
 namespace bluetooth {
 
@@ -165,7 +165,8 @@ class StateMachine {
   void TransitionTo(int dest_state_id) {
     auto it = states_.find(dest_state_id);
 
-    CHECK(it != states_.end()) << "Unknown State ID: " << dest_state_id;
+    log::assert_that(it != states_.end(), "Unknown State ID: {}",
+                     dest_state_id);
     State* dest_state = it->second;
     TransitionTo(dest_state);
   }

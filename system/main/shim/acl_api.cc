@@ -16,14 +16,16 @@
 
 #include "main/shim/acl_api.h"
 
-#include <cstddef>
+#include <android_bluetooth_sysprop.h>
+#include <base/location.h>
+
 #include <cstdint>
 #include <future>
 #include <optional>
 
-#include "gd/hci/acl_manager.h"
-#include "gd/hci/remote_name_request.h"
-#include "main/shim/dumpsys.h"
+#include "hci/acl_manager.h"
+#include "hci/remote_name_request.h"
+#include "main/shim/acl.h"
 #include "main/shim/entry.h"
 #include "main/shim/helpers.h"
 #include "main/shim/stack.h"
@@ -32,6 +34,7 @@
 #include "stack/btm/security_device_record.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/inq_hci_link_interface.h"
+#include "stack/include/main_thread.h"
 #include "types/ble_address_with_type.h"
 #include "types/raw_address.h"
 
@@ -71,6 +74,19 @@ void bluetooth::shim::ACL_WriteData(uint16_t handle, BT_HDR* p_buf) {
   osi_free(p_buf);
 }
 
+void bluetooth::shim::ACL_Flush(uint16_t handle) {
+  Stack::GetInstance()->GetAcl()->Flush(handle);
+}
+
+void bluetooth::shim::ACL_SendConnectionParameterUpdateRequest(
+    uint16_t handle, uint16_t conn_int_min, uint16_t conn_int_max,
+    uint16_t conn_latency, uint16_t conn_timeout, uint16_t min_ce_len,
+    uint16_t max_ce_len) {
+  Stack::GetInstance()->GetAcl()->UpdateConnectionParameters(
+      handle, conn_int_min, conn_int_max, conn_latency, conn_timeout,
+      min_ce_len, max_ce_len);
+}
+
 void bluetooth::shim::ACL_ConfigureLePrivacy(bool is_le_privacy_enabled) {
   hci::LeAddressManager::AddressPolicy address_policy =
       is_le_privacy_enabled
@@ -78,9 +94,13 @@ void bluetooth::shim::ACL_ConfigureLePrivacy(bool is_le_privacy_enabled) {
           : hci::LeAddressManager::AddressPolicy::USE_PUBLIC_ADDRESS;
   hci::AddressWithType empty_address_with_type(
       hci::Address{}, hci::AddressType::RANDOM_DEVICE_ADDRESS);
-  /* 7 minutes minimum, 15 minutes maximum for random address refreshing */
-  auto minimum_rotation_time = std::chrono::minutes(7);
-  auto maximum_rotation_time = std::chrono::minutes(15);
+
+  /* Default to 7 minutes minimum, 15 minutes maximum for random address refreshing;
+   * device can override. */
+  auto minimum_rotation_time = std::chrono::minutes(
+      GET_SYSPROP(Ble, random_address_rotation_interval_min, 7));
+  auto maximum_rotation_time = std::chrono::minutes(
+      GET_SYSPROP(Ble, random_address_rotation_interval_max, 15));
 
   Stack::GetInstance()
       ->GetStackManager()
@@ -106,13 +126,29 @@ void bluetooth::shim::ACL_IgnoreAllLeConnections() {
   return Stack::GetInstance()->GetAcl()->ClearFilterAcceptList();
 }
 
-void bluetooth::shim::ACL_ReadConnectionAddress(const RawAddress& pseudo_addr,
+void bluetooth::shim::ACL_ReadConnectionAddress(uint16_t handle,
                                                 RawAddress& conn_addr,
-                                                tBLE_ADDR_TYPE* p_addr_type) {
+                                                tBLE_ADDR_TYPE* p_addr_type,
+                                                bool ota_address) {
   auto local_address =
-      Stack::GetInstance()->GetAcl()->GetConnectionLocalAddress(pseudo_addr);
+      Stack::GetInstance()->GetAcl()->GetConnectionLocalAddress(handle,
+                                                                ota_address);
+
   conn_addr = ToRawAddress(local_address.GetAddress());
   *p_addr_type = static_cast<tBLE_ADDR_TYPE>(local_address.GetAddressType());
+}
+
+void bluetooth::shim::ACL_ReadPeerConnectionAddress(uint16_t handle,
+                                                    RawAddress& conn_addr,
+                                                    tBLE_ADDR_TYPE* p_addr_type,
+                                                    bool ota_address) {
+  auto remote_ota_address =
+      Stack::GetInstance()->GetAcl()->GetConnectionPeerAddress(handle,
+                                                               ota_address);
+
+  conn_addr = ToRawAddress(remote_ota_address.GetAddress());
+  *p_addr_type =
+      static_cast<tBLE_ADDR_TYPE>(remote_ota_address.GetAddressType());
 }
 
 std::optional<uint8_t> bluetooth::shim::ACL_GetAdvertisingSetConnectedTo(
@@ -160,7 +196,7 @@ void bluetooth::shim::ACL_LeSubrateRequest(
 
 void bluetooth::shim::ACL_RemoteNameRequest(const RawAddress& addr,
                                             uint8_t page_scan_rep_mode,
-                                            uint8_t page_scan_mode,
+                                            uint8_t /* page_scan_mode */,
                                             uint16_t clock_offset) {
   bluetooth::shim::GetRemoteNameRequest()->StartRemoteNameRequest(
       ToGdAddress(addr),
@@ -172,35 +208,46 @@ void bluetooth::shim::ACL_RemoteNameRequest(const RawAddress& addr,
               : hci::ClockOffsetValid::INVALID),
       GetGdShimHandler()->BindOnce([](hci::ErrorCode status) {
         if (status != hci::ErrorCode::SUCCESS) {
-          btm_process_remote_name(nullptr, nullptr, 0,
-                                  static_cast<tHCI_STATUS>(status));
-          btm_sec_rmt_name_request_complete(nullptr, nullptr,
+          do_in_main_thread(
+              FROM_HERE,
+              base::BindOnce(
+                  [](hci::ErrorCode status) {
+                    // NOTE: we intentionally don't supply the address, to match
+                    // the legacy behavior.
+                    // Callsites that want the address should use
+                    // StartRemoteNameRequest() directly, rather than going
+                    // through this shim.
+                    btm_process_remote_name(nullptr, nullptr, 0,
                                             static_cast<tHCI_STATUS>(status));
+                    btm_sec_rmt_name_request_complete(
+                        nullptr, nullptr, static_cast<tHCI_STATUS>(status));
+                  },
+                  status));
         }
       }),
       GetGdShimHandler()->BindOnce(
           [](RawAddress addr, uint64_t features) {
             static_assert(sizeof(features) == 8);
-            auto addr_array = addr.ToArray();
-            auto p = (uint8_t*)osi_malloc(addr_array.size() + sizeof(features));
-            std::copy(addr_array.begin(), addr_array.end(), p);
-            for (int i = 0; i != sizeof(features); ++i) {
-              p[addr_array.size() + i] = features & ((1 << 8) - 1);
-              features >>= 8;
-            }
-            btm_sec_rmt_host_support_feat_evt(p);
+            do_in_main_thread(
+                FROM_HERE,
+                base::BindOnce(btm_sec_rmt_host_support_feat_evt, addr,
+                               static_cast<uint8_t>(features & 0xff)));
           },
           addr),
       GetGdShimHandler()->BindOnce(
           [](RawAddress addr, hci::ErrorCode status,
              std::array<uint8_t, 248> name) {
-            auto p = (uint8_t*)osi_malloc(name.size());
-            std::copy(name.begin(), name.end(), p);
-
-            btm_process_remote_name(&addr, p, name.size(),
-                                    static_cast<tHCI_STATUS>(status));
-            btm_sec_rmt_name_request_complete(&addr, p,
+            do_in_main_thread(
+                FROM_HERE,
+                base::BindOnce(
+                    [](RawAddress addr, hci::ErrorCode status,
+                       std::array<uint8_t, 248> name) {
+                      btm_process_remote_name(&addr, name.data(), name.size(),
                                               static_cast<tHCI_STATUS>(status));
+                      btm_sec_rmt_name_request_complete(
+                          &addr, name.data(), static_cast<tHCI_STATUS>(status));
+                    },
+                    addr, status, name));
           },
           addr));
 }

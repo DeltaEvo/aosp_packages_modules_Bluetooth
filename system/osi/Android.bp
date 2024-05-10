@@ -14,48 +14,21 @@ cc_defaults {
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/internal_include",
-        "packages/modules/Bluetooth/system/utils/include",
         "packages/modules/Bluetooth/system/stack/include",
     ],
 }
 
-// Static libraries required by other modules
-cc_test_library {
-    name: "libosi-AllocationTestHarness",
-    defaults: ["fluoride_osi_defaults"],
-    srcs: [
-        "test/AllocationTestHarness.cc",
-    ],
-    host_supported: true,
-    shared: {
-        enabled: false,
-    },
-}
-
-cc_test_library {
-    name: "libosi-AlarmTestHarness",
-    defaults: ["fluoride_osi_defaults"],
-    srcs: [
-        "test/AlarmTestHarness.cc",
-    ],
-    host_supported: true,
-    shared: {
-        enabled: false,
-    },
-}
-
 filegroup {
-  name: "OsiCompatSources",
-  srcs: [
-    "src/compat.cc",
-  ],
+    name: "OsiCompatSources",
+    srcs: [
+        "src/compat.cc",
+    ],
 }
 
 // libosi static library for target
 cc_library_static {
     name: "libosi",
-    visibility:[
+    visibility: [
         "//packages/apps/Test/connectivity/sl4n",
         "//packages/modules/Bluetooth:__subpackages__",
     ],
@@ -65,16 +38,19 @@ cc_library_static {
     local_include_dirs: [
         "include_internal",
     ],
-    defaults: ["fluoride_osi_defaults", "fluoride_basic_defaults"],
+    defaults: [
+        "fluoride_defaults",
+        "fluoride_osi_defaults",
+    ],
+    whole_static_libs: [
+        "bluetooth_flags_c_lib",
+    ],
     // TODO(mcchou): Remove socket_utils sources after platform specific
     // dependencies are abstracted.
     srcs: [
         ":OsiCompatSources",
         "src/alarm.cc",
-        "src/allocation_tracker.cc",
         "src/allocator.cc",
-        "src/array.cc",
-        "src/buffer.cc",
         "src/config.cc",
         "src/fixed_queue.cc",
         "src/future.cc",
@@ -88,6 +64,7 @@ cc_library_static {
         "src/socket.cc",
         "src/socket_utils/socket_local_client.cc",
         "src/socket_utils/socket_local_server.cc",
+        "src/stack_power_telemetry.cc",
         "src/thread.cc",
         "src/thread_scheduler.cc",
         "src/wakelock.cc",
@@ -103,7 +80,6 @@ cc_library_static {
         host_linux: {
             cflags: [
                 "-D_GNU_SOURCE",
-                "-DOS_GENERIC",
             ],
         },
     },
@@ -114,24 +90,27 @@ cc_library_static {
     apex_available: [
         "com.android.btservices",
     ],
+    header_libs: ["libbluetooth_headers"],
+    static_libs: [
+        "libbluetooth_log",
+        "libbt-platform-protos-lite",
+        "libbt_shim_bridge",
+        "server_configurable_flags",
+    ],
 }
 
 // libosi unit tests for target and host
 cc_test {
     name: "net_test_osi",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
         "fluoride_osi_defaults",
         "mts_defaults",
     ],
     host_supported: true,
     srcs: [
-        "test/AlarmTestHarness.cc",
-        "test/AllocationTestHarness.cc",
         "test/alarm_test.cc",
-        "test/allocation_tracker_test.cc",
         "test/allocator_test.cc",
-        "test/array_test.cc",
         "test/config_test.cc",
         "test/fixed_queue_test.cc",
         "test/future_test.cc",
@@ -141,41 +120,53 @@ cc_test {
         "test/rand_test.cc",
         "test/reactor_test.cc",
         "test/ringbuffer_test.cc",
+        "test/stack_power_telemetry_test.cc",
         "test/thread_test.cc",
-        "test/wakelock_test.cc",
+        "test/wakelock_test.cc", // test internal sources only used inside the libosi
 
-        // test internal sources only used inside the libosi
         "test/internal/semaphore_test.cc",
     ],
     shared_libs: [
-        "android.hardware.bluetooth@1.0",
-        "android.hardware.bluetooth@1.1",
         "libbase",
-        "liblog",
-        "libcutils",
         "libcrypto",
+        "libcutils",
+        "liblog",
+        "server_configurable_flags",
     ],
     local_include_dirs: [
         "include_internal",
         "test",
     ],
     static_libs: [
+        "libbluetooth-types",
+        "libbluetooth_crypto_toolbox",
+        "libbluetooth_gd",
+        "libbluetooth_log",
         "libbt-common",
-        "libbt-protos-lite",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
+        "libc++fs",
+        "libchrome",
+        "libevent",
         "libgmock",
         "libosi",
         "libprotobuf-cpp-lite",
-        "libc++fs",
+        "libstatslog_bt",
     ],
     target: {
-        host_linux: {
-            cflags: ["-DOS_GENERIC"],
+        android: {
+            shared_libs: [
+                "libstatssocket",
+            ],
         },
     },
     cflags: [
         "-DLIB_OSI_INTERNAL",
+        "-Wno-unused-parameter",
     ],
     sanitize: {
+        address: true,
         cfi: false,
     },
+    header_libs: ["libbluetooth_headers"],
 }

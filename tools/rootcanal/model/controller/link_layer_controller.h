@@ -16,39 +16,43 @@
 
 #pragma once
 
+#include <packet_runtime.h>
+
 #include <algorithm>
+#include <array>
 #include <chrono>
-#include <map>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <optional>
 #include <set>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "hci/address.h"
-#include "hci/hci_packets.h"
-#include "include/phy.h"
+#include "hci/address_with_type.h"
 #include "model/controller/acl_connection_handler.h"
 #include "model/controller/controller_properties.h"
 #include "model/controller/le_advertiser.h"
+#include "model/controller/sco_connection.h"
+#include "model/controller/vendor_commands/le_apcf.h"
+#include "packets/hci_packets.h"
 #include "packets/link_layer_packets.h"
-
-#ifdef ROOTCANAL_LMP
-extern "C" {
-struct LinkManager;
-}
-#include "lmp.h"
-#else
-#include "security_manager.h"
-#endif /* ROOTCANAL_LMP */
+#include "phy.h"
+#include "rust/include/rootcanal_rs.h"
 
 namespace rootcanal {
 
 using ::bluetooth::hci::Address;
 using ::bluetooth::hci::AddressType;
 using ::bluetooth::hci::AuthenticationEnable;
-using ::bluetooth::hci::ClassOfDevice;
 using ::bluetooth::hci::ErrorCode;
 using ::bluetooth::hci::FilterAcceptListAddressType;
 using ::bluetooth::hci::OpCode;
 using ::bluetooth::hci::PageScanRepetitionMode;
+using rootcanal::apcf::ApcfScanner;
 
 // Create an address with type Public Device Address or Random Device Address.
 AddressWithType PeerDeviceAddress(Address address,
@@ -65,66 +69,33 @@ class LinkLayerController {
   static constexpr size_t kLocalNameSize = 248;
   static constexpr size_t kExtendedInquiryResponseSize = 240;
 
+  // Unique instance identifier.
+  const uint32_t id_;
+
   // Generate a resolvable private address using the specified IRK.
   static Address generate_rpa(
       std::array<uint8_t, LinkLayerController::kIrkSize> irk);
 
+  // Return true if the input IRK is all 0s.
+  static bool irk_is_zero(std::array<uint8_t, LinkLayerController::kIrkSize> irk);
+
   LinkLayerController(const Address& address,
-                      const ControllerProperties& properties);
+                      const ControllerProperties& properties, uint32_t id = 0);
   ~LinkLayerController();
 
-  ErrorCode SendCommandToRemoteByAddress(
-      OpCode opcode, bluetooth::packet::PacketView<true> args,
-      const Address& own_address, const Address& peer_address);
+  ErrorCode SendCommandToRemoteByAddress(OpCode opcode, pdl::packet::slice args,
+                                         const Address& own_address,
+                                         const Address& peer_address);
   ErrorCode SendLeCommandToRemoteByAddress(OpCode opcode,
                                            const Address& own_address,
                                            const Address& peer_address);
-  ErrorCode SendCommandToRemoteByHandle(
-      OpCode opcode, bluetooth::packet::PacketView<true> args, uint16_t handle);
+  ErrorCode SendCommandToRemoteByHandle(OpCode opcode, pdl::packet::slice args,
+                                        uint16_t handle);
   ErrorCode SendScoToRemote(bluetooth::hci::ScoView sco_packet);
   ErrorCode SendAclToRemote(bluetooth::hci::AclView acl_packet);
 
-#ifdef ROOTCANAL_LMP
   void ForwardToLm(bluetooth::hci::CommandView command);
-#else
-  void StartSimplePairing(const Address& address);
-  void AuthenticateRemoteStage1(const Address& address,
-                                PairingType pairing_type);
-  void AuthenticateRemoteStage2(const Address& address);
-  void SaveKeyAndAuthenticate(uint8_t key_type, const Address& peer);
-  ErrorCode LinkKeyRequestReply(const Address& address,
-                                const std::array<uint8_t, 16>& key);
-  ErrorCode LinkKeyRequestNegativeReply(const Address& address);
-  ErrorCode IoCapabilityRequestReply(const Address& peer, uint8_t io_capability,
-                                     uint8_t oob_data_present_flag,
-                                     uint8_t authentication_requirements);
-  ErrorCode IoCapabilityRequestNegativeReply(const Address& peer,
-                                             ErrorCode reason);
-  ErrorCode PinCodeRequestReply(const Address& peer, std::vector<uint8_t> pin);
-  ErrorCode PinCodeRequestNegativeReply(const Address& peer);
-  ErrorCode UserConfirmationRequestReply(const Address& peer);
-  ErrorCode UserConfirmationRequestNegativeReply(const Address& peer);
-  ErrorCode UserPasskeyRequestReply(const Address& peer,
-                                    uint32_t numeric_value);
-  ErrorCode UserPasskeyRequestNegativeReply(const Address& peer);
-  ErrorCode RemoteOobDataRequestReply(const Address& peer,
-                                      const std::array<uint8_t, 16>& c,
-                                      const std::array<uint8_t, 16>& r);
-  ErrorCode RemoteOobDataRequestNegativeReply(const Address& peer);
-  ErrorCode RemoteOobExtendedDataRequestReply(
-      const Address& peer, const std::array<uint8_t, 16>& c_192,
-      const std::array<uint8_t, 16>& r_192,
-      const std::array<uint8_t, 16>& c_256,
-      const std::array<uint8_t, 16>& r_256);
-  ErrorCode SendKeypressNotification(
-      const Address& peer,
-      bluetooth::hci::KeypressNotificationType notification_type);
-  void HandleSetConnectionEncryption(const Address& address, uint16_t handle,
-                                     uint8_t encryption_enable);
-  ErrorCode SetConnectionEncryption(uint16_t handle, uint8_t encryption_enable);
-  void HandleAuthenticationRequest(const Address& address, uint16_t handle);
-  ErrorCode AuthenticationRequested(uint16_t handle);
-#endif /* ROOTCANAL_LMP */
+  void ForwardToLl(bluetooth::hci::CommandView command);
 
   std::vector<bluetooth::hci::Lap> const& ReadCurrentIacLap() const;
   void WriteCurrentIacLap(std::vector<bluetooth::hci::Lap> iac_lap);
@@ -133,11 +104,22 @@ class LinkLayerController {
   void MakePeripheralConnection(const Address& addr, bool try_role_switch);
   ErrorCode RejectConnectionRequest(const Address& addr, uint8_t reason);
   void RejectPeripheralConnection(const Address& addr, uint8_t reason);
-  ErrorCode CreateConnection(const Address& addr, uint16_t packet_type,
+
+  // HCI command Create Connection (Vol 4, Part E § 7.1.5).
+  ErrorCode CreateConnection(const Address& bd_addr, uint16_t packet_type,
                              uint8_t page_scan_mode, uint16_t clock_offset,
                              uint8_t allow_role_switch);
-  ErrorCode CreateConnectionCancel(const Address& addr);
-  ErrorCode Disconnect(uint16_t handle, ErrorCode reason);
+
+  // HCI command Disconnect (Vol 4, Part E § 7.1.6).
+  // \p host_reason is taken from the Disconnect command, and sent over
+  // to the remote as disconnect error. \p controller_reason is the code
+  // used in the DisconnectionComplete event.
+  ErrorCode Disconnect(uint16_t handle, ErrorCode host_reason,
+                       ErrorCode controller_reason =
+                           ErrorCode::CONNECTION_TERMINATED_BY_LOCAL_HOST);
+
+  // HCI command Create Connection Cancel (Vol 4, Part E § 7.1.7).
+  ErrorCode CreateConnectionCancel(const Address& bd_addr);
 
   // Internal task scheduler.
   // This scheduler is driven by the tick function only,
@@ -202,8 +184,10 @@ class LinkLayerController {
 
   void Reset();
 
+  void Paging();
   void LeAdvertising();
   void LeScanning();
+  void LeSynchronization();
 
   void LeConnectionUpdateComplete(uint16_t handle, uint16_t interval_min,
                                   uint16_t interval_max, uint16_t latency,
@@ -231,6 +215,10 @@ class LinkLayerController {
       FilterAcceptListAddressType address_type, Address address);
   bool LeFilterAcceptListContainsDevice(AddressWithType address);
 
+  bool LePeriodicAdvertiserListContainsDevice(
+      bluetooth::hci::AdvertiserAddressType advertiser_address_type,
+      Address advertiser_address, uint8_t advertising_sid);
+
   enum IrkSelection {
     Peer,  // Use Peer IRK for RPA resolution or generation.
     Local  // Use Local IRK for RPA resolution or generation.
@@ -240,8 +228,17 @@ class LinkLayerController {
   // resolve the address using the resolving list. If the address cannot
   // be resolved none is returned. If the address is not a Resolvable
   // Private Address, the original address is returned.
-  std::optional<AddressWithType> ResolvePrivateAddress(AddressWithType address,
-                                                       IrkSelection irk);
+  std::optional<AddressWithType> ResolvePrivateAddress(AddressWithType address);
+
+  // Returns true if the input address resolves with the local IRK
+  // associated with the given peer identity address.
+  bool ResolveTargetA(AddressWithType target_a, AddressWithType adv_a);
+
+  // Returns true if either:
+  //  • TargetA is identical to the device address, or
+  //  • TargetA is a resolvable private address, address
+  //    resolution is enabled, and the address is resolved successfully
+  bool ValidateTargetA(AddressWithType target_a, AddressWithType adv_a);
 
   // Generate a Resolvable Private for the selected peer.
   // If the address is not found in the resolving list none is returned.
@@ -262,45 +259,6 @@ class LinkLayerController {
         return false;
     }
   }
-
-  void LeReadIsoTxSync(uint16_t handle);
-  void LeSetCigParameters(
-      uint8_t cig_id, uint32_t sdu_interval_m_to_s,
-      uint32_t sdu_interval_s_to_m,
-      bluetooth::hci::ClockAccuracy clock_accuracy,
-      bluetooth::hci::Packing packing, bluetooth::hci::Enable framing,
-      uint16_t max_transport_latency_m_to_s,
-      uint16_t max_transport_latency_s_to_m,
-      std::vector<bluetooth::hci::CisParametersConfig> cis_config);
-  bluetooth::hci::ErrorCode LeCreateCis(
-      std::vector<bluetooth::hci::CreateCisConfig> cis_config);
-  bluetooth::hci::ErrorCode LeRemoveCig(uint8_t cig_id);
-  bluetooth::hci::ErrorCode LeAcceptCisRequest(uint16_t handle);
-  bluetooth::hci::ErrorCode LeRejectCisRequest(
-      uint16_t handle, bluetooth::hci::ErrorCode reason);
-  bluetooth::hci::ErrorCode LeCreateBig(
-      uint8_t big_handle, uint8_t advertising_handle, uint8_t num_bis,
-      uint32_t sdu_interval, uint16_t max_sdu, uint16_t max_transport_latency,
-      uint8_t rtn, bluetooth::hci::SecondaryPhyType phy,
-      bluetooth::hci::Packing packing, bluetooth::hci::Enable framing,
-      bluetooth::hci::Enable encryption,
-      std::array<uint8_t, 16> broadcast_code);
-  bluetooth::hci::ErrorCode LeTerminateBig(uint8_t big_handle,
-                                           bluetooth::hci::ErrorCode reason);
-  bluetooth::hci::ErrorCode LeBigCreateSync(
-      uint8_t big_handle, uint16_t sync_handle,
-      bluetooth::hci::Enable encryption, std::array<uint8_t, 16> broadcast_code,
-      uint8_t mse, uint16_t big_syunc_timeout, std::vector<uint8_t> bis);
-  void LeBigTerminateSync(uint8_t big_handle);
-  bluetooth::hci::ErrorCode LeRequestPeerSca(uint16_t request_handle);
-  void LeSetupIsoDataPath(uint16_t connection_handle,
-                          bluetooth::hci::DataPathDirection data_path_direction,
-                          uint8_t data_path_id, uint64_t codec_id,
-                          uint32_t controller_Delay,
-                          std::vector<uint8_t> codec_configuration);
-  void LeRemoveIsoDataPath(
-      uint16_t connection_handle,
-      bluetooth::hci::RemoveDataPathDirection remove_data_path_direction);
 
   void HandleLeEnableEncryption(uint16_t handle, std::array<uint8_t, 8> rand,
                                 uint16_t ediv,
@@ -376,9 +334,17 @@ class LinkLayerController {
       uint8_t retransmission_effort, uint16_t packet_types);
   ErrorCode RejectSynchronousConnection(Address bd_addr, uint16_t reason);
 
+  // Returns true if any ACL connection exists.
   bool HasAclConnection();
+  // Returns true if the specified ACL connection handle is valid.
+  bool HasAclConnection(uint16_t connection_handle);
 
   void HandleIso(bluetooth::hci::IsoView iso);
+
+  // BR/EDR Commands
+
+  // HCI Read Rssi command (Vol 4, Part E § 7.5.4).
+  ErrorCode ReadRssi(uint16_t connection_handle, int8_t* rssi);
 
   // LE Commands
 
@@ -388,6 +354,22 @@ class LinkLayerController {
   // HCI LE Set Resolvable Private Address Timeout command
   // (Vol 4, Part E § 7.8.45).
   ErrorCode LeSetResolvablePrivateAddressTimeout(uint16_t rpa_timeout);
+
+  // HCI LE Read Phy command (Vol 4, Part E § 7.8.47).
+  ErrorCode LeReadPhy(uint16_t connection_handle,
+                      bluetooth::hci::PhyType* tx_phy,
+                      bluetooth::hci::PhyType* rx_phy);
+
+  // HCI LE Set Default Phy command (Vol 4, Part E § 7.8.48).
+  ErrorCode LeSetDefaultPhy(bool all_phys_no_transmit_preference,
+                            bool all_phys_no_receive_preference,
+                            uint8_t tx_phys, uint8_t rx_phys);
+
+  // HCI LE Set Phy command (Vol 4, Part E § 7.8.49).
+  ErrorCode LeSetPhy(uint16_t connection_handle,
+                     bool all_phys_no_transmit_preference,
+                     bool all_phys_no_receive_preference, uint8_t tx_phys,
+                     uint8_t rx_phys, bluetooth::hci::PhyOptions phy_options);
 
   // HCI LE Set Host Feature command (Vol 4, Part E § 7.8.115).
   ErrorCode LeSetHostFeature(uint8_t bit_number, uint8_t bit_value);
@@ -421,6 +403,16 @@ class LinkLayerController {
 
   // HCI command LE_Clear_Resolving_List (Vol 4, Part E § 7.8.40).
   ErrorCode LeClearResolvingList();
+
+  // HCI command LE_Read_Peer_Resolvable_Address (Vol 4, Part E § 7.8.42).
+  ErrorCode LeReadPeerResolvableAddress(
+      PeerAddressType peer_identity_address_type, Address peer_identity_address,
+      Address* peer_resolvable_address);
+
+  // HCI command LE_Read_Local_Resolvable_Address (Vol 4, Part E § 7.8.43).
+  ErrorCode LeReadLocalResolvableAddress(
+      PeerAddressType peer_identity_address_type, Address peer_identity_address,
+      Address* local_resolvable_address);
 
   // HCI command LE_Set_Address_Resolution_Enable (Vol 4, Part E § 7.8.44).
   ErrorCode LeSetAddressResolutionEnable(bool enable);
@@ -513,7 +505,8 @@ class LinkLayerController {
       bluetooth::hci::OwnAddressType own_address_type,
       bluetooth::hci::LeScanningFilterPolicy scanning_filter_policy,
       uint8_t scanning_phys,
-      std::vector<bluetooth::hci::PhyScanParameters> scanning_phy_parameters);
+      std::vector<bluetooth::hci::ScanningPhyParameters>
+          scanning_phy_parameters);
 
   // HCI command LE_Set_Extended_Scan_Enable (Vol 4, Part E § 7.8.65).
   ErrorCode LeSetExtendedScanEnable(
@@ -542,8 +535,113 @@ class LinkLayerController {
       bluetooth::hci::InitiatorFilterPolicy initiator_filter_policy,
       bluetooth::hci::OwnAddressType own_address_type,
       AddressWithType peer_address, uint8_t initiating_phys,
-      std::vector<bluetooth::hci::LeCreateConnPhyScanParameters>
+      std::vector<bluetooth::hci::InitiatingPhyParameters>
           initiating_phy_parameters);
+
+  // Periodic Advertising
+
+  // HCI LE Set Periodic Advertising Parameters command (Vol 4, Part E
+  // § 7.8.61).
+  ErrorCode LeSetPeriodicAdvertisingParameters(
+      uint8_t advertising_handle, uint16_t periodic_advertising_interval_min,
+      uint16_t periodic_advertising_interval_max, bool include_tx_power);
+
+  // HCI LE Set Periodic Advertising Data command (Vol 4, Part E § 7.8.62).
+  ErrorCode LeSetPeriodicAdvertisingData(
+      uint8_t advertising_handle, bluetooth::hci::Operation operation,
+      const std::vector<uint8_t>& advertising_data);
+
+  // HCI LE Set Periodic Advertising Enable command (Vol 4, Part E § 7.8.63).
+  ErrorCode LeSetPeriodicAdvertisingEnable(bool enable, bool include_adi,
+                                           uint8_t advertising_handle);
+
+  // Periodic Sync
+
+  // HCI LE Periodic Advertising Create Sync command (Vol 4, Part E § 7.8.67).
+  ErrorCode LePeriodicAdvertisingCreateSync(
+      bluetooth::hci::PeriodicAdvertisingOptions options,
+      uint8_t advertising_sid,
+      bluetooth::hci::AdvertiserAddressType advertiser_address_type,
+      Address advertiser_address, uint16_t skip, uint16_t sync_timeout,
+      uint8_t sync_cte_type);
+
+  // HCI LE Periodic Advertising Create Sync Cancel command (Vol 4, Part E
+  // § 7.8.68).
+  ErrorCode LePeriodicAdvertisingCreateSyncCancel();
+
+  // HCI LE Periodic Advertising Terminate Sync command (Vol 4, Part E
+  // § 7.8.69).
+  ErrorCode LePeriodicAdvertisingTerminateSync(uint16_t sync_handle);
+
+  // Periodic Advertiser List
+
+  // HCI LE Add Device To Periodic Advertiser List command (Vol 4, Part E
+  // § 7.8.70).
+  ErrorCode LeAddDeviceToPeriodicAdvertiserList(
+      bluetooth::hci::AdvertiserAddressType advertiser_address_type,
+      Address advertiser_address, uint8_t advertising_sid);
+
+  // HCI LE Remove Device From Periodic Advertiser List command
+  // (Vol 4, Part E § 7.8.71).
+  ErrorCode LeRemoveDeviceFromPeriodicAdvertiserList(
+      bluetooth::hci::AdvertiserAddressType advertiser_address_type,
+      Address advertiser_address, uint8_t advertising_sid);
+
+  // HCI LE Clear Periodic Advertiser List command (Vol 4, Part E § 7.8.72).
+  ErrorCode LeClearPeriodicAdvertiserList();
+
+  // LE APCF
+
+  ErrorCode LeApcfEnable(bool apcf_enable);
+
+  ErrorCode LeApcfAddFilteringParameters(
+      uint8_t apcf_filter_index, uint16_t apcf_feature_selection,
+      uint16_t apcf_list_logic_type, uint8_t apcf_filter_logic_type,
+      uint8_t rssi_high_thresh, bluetooth::hci::DeliveryMode delivery_mode,
+      uint16_t onfound_timeout, uint8_t onfound_timeout_cnt,
+      uint8_t rssi_low_thresh, uint16_t onlost_timeout,
+      uint16_t num_of_tracking_entries, uint8_t* apcf_available_spaces);
+
+  ErrorCode LeApcfDeleteFilteringParameters(uint8_t apcf_filter_index,
+                                            uint8_t* apcf_available_spaces);
+
+  ErrorCode LeApcfClearFilteringParameters(uint8_t* apcf_available_spaces);
+
+  ErrorCode LeApcfBroadcasterAddress(
+      bluetooth::hci::ApcfAction apcf_action, uint8_t apcf_filter_index,
+      bluetooth::hci::Address apcf_broadcaster_address,
+      bluetooth::hci::ApcfApplicationAddressType apcf_application_address_type,
+      uint8_t* apcf_available_spaces);
+
+  ErrorCode LeApcfServiceUuid(bluetooth::hci::ApcfAction apcf_action,
+                              uint8_t apcf_filter_index,
+                              std::vector<uint8_t> acpf_uuid_data,
+                              uint8_t* apcf_available_spaces);
+
+  ErrorCode LeApcfServiceSolicitationUuid(
+      bluetooth::hci::ApcfAction apcf_action, uint8_t apcf_filter_index,
+      std::vector<uint8_t> acpf_uuid_data, uint8_t* apcf_available_spaces);
+
+  ErrorCode LeApcfLocalName(bluetooth::hci::ApcfAction apcf_action,
+                            uint8_t apcf_filter_index,
+                            std::vector<uint8_t> apcf_local_name,
+                            uint8_t* apcf_available_spaces);
+
+  ErrorCode LeApcfManufacturerData(bluetooth::hci::ApcfAction apcf_action,
+                                   uint8_t apcf_filter_index,
+                                   std::vector<uint8_t> apcf_manufacturer_data,
+                                   uint8_t* apcf_available_spaces);
+
+  ErrorCode LeApcfServiceData(bluetooth::hci::ApcfAction apcf_action,
+                              uint8_t apcf_filter_index,
+                              std::vector<uint8_t> apcf_service_data,
+                              uint8_t* apcf_available_spaces);
+
+  ErrorCode LeApcfAdTypeFilter(bluetooth::hci::ApcfAction apcf_action,
+                               uint8_t apcf_filter_index, uint8_t ad_type,
+                               std::vector<uint8_t> apcf_ad_data,
+                               std::vector<uint8_t> apcf_ad_data_mask,
+                               uint8_t* apcf_available_spaces);
 
  protected:
   void SendLinkLayerPacket(
@@ -553,7 +651,8 @@ class LinkLayerController {
       std::unique_ptr<model::packets::LinkLayerPacketBuilder> packet,
       int8_t tx_power = 0);
 
-  void IncomingAclPacket(model::packets::LinkLayerPacketView incoming);
+  void IncomingAclPacket(model::packets::LinkLayerPacketView incoming,
+                         int8_t rssi);
   void IncomingScoPacket(model::packets::LinkLayerPacketView incoming);
   void IncomingDisconnectPacket(model::packets::LinkLayerPacketView incoming);
   void IncomingEncryptConnection(model::packets::LinkLayerPacketView incoming);
@@ -563,27 +662,9 @@ class LinkLayerController {
                              uint8_t rssi);
   void IncomingInquiryResponsePacket(
       model::packets::LinkLayerPacketView incoming);
-#ifdef ROOTCANAL_LMP
   void IncomingLmpPacket(model::packets::LinkLayerPacketView incoming);
-#else
-  void IncomingIoCapabilityRequestPacket(
-      model::packets::LinkLayerPacketView incoming);
-  void IncomingIoCapabilityResponsePacket(
-      model::packets::LinkLayerPacketView incoming);
-  void IncomingIoCapabilityNegativeResponsePacket(
-      model::packets::LinkLayerPacketView incoming);
-  void IncomingKeypressNotificationPacket(
-      model::packets::LinkLayerPacketView incoming);
-  void IncomingPasskeyPacket(model::packets::LinkLayerPacketView incoming);
-  void IncomingPasskeyFailedPacket(
-      model::packets::LinkLayerPacketView incoming);
-  void IncomingPinRequestPacket(model::packets::LinkLayerPacketView incoming);
-  void IncomingPinResponsePacket(model::packets::LinkLayerPacketView incoming);
-#endif /* ROOTCANAL_LMP */
-  void IncomingIsoPacket(model::packets::LinkLayerPacketView incoming);
-  void IncomingIsoConnectionRequestPacket(
-      model::packets::LinkLayerPacketView incoming);
-  void IncomingIsoConnectionResponsePacket(
+  void IncomingLlcpPacket(model::packets::LinkLayerPacketView incoming);
+  void IncomingLeConnectedIsochronousPdu(
       model::packets::LinkLayerPacketView incoming);
 
   void ScanIncomingLeLegacyAdvertisingPdu(
@@ -598,6 +679,8 @@ class LinkLayerController {
   void IncomingLeLegacyAdvertisingPdu(
       model::packets::LinkLayerPacketView incoming, uint8_t rssi);
   void IncomingLeExtendedAdvertisingPdu(
+      model::packets::LinkLayerPacketView incoming, uint8_t rssi);
+  void IncomingLePeriodicAdvertisingPdu(
       model::packets::LinkLayerPacketView incoming, uint8_t rssi);
 
   void IncomingLeConnectPacket(model::packets::LinkLayerPacketView incoming);
@@ -667,6 +750,12 @@ class LinkLayerController {
   void IncomingScoDisconnect(model::packets::LinkLayerPacketView incoming);
 
   void IncomingPingRequest(model::packets::LinkLayerPacketView incoming);
+  void IncomingRoleSwitchRequest(model::packets::LinkLayerPacketView incoming);
+  void IncomingRoleSwitchResponse(model::packets::LinkLayerPacketView incoming);
+
+  void IncomingLlPhyReq(model::packets::LinkLayerPacketView incoming);
+  void IncomingLlPhyRsp(model::packets::LinkLayerPacketView incoming);
+  void IncomingLlPhyUpdateInd(model::packets::LinkLayerPacketView incoming);
 
  public:
   bool IsEventUnmasked(bluetooth::hci::EventCode event) const;
@@ -708,7 +797,7 @@ class LinkLayerController {
   }
 
   uint16_t GetVoiceSetting() const { return voice_setting_; }
-  const ClassOfDevice& GetClassOfDevice() const { return class_of_device_; }
+  uint32_t GetClassOfDevice() const { return class_of_device_; }
 
   uint8_t GetMaxLmpFeaturesPageNumber() {
     return properties_.lmp_features.size() - 1;
@@ -721,17 +810,14 @@ class LinkLayerController {
 
   void SetLocalName(std::vector<uint8_t> const& local_name);
   void SetLocalName(std::array<uint8_t, kLocalNameSize> const& local_name);
+
+  void SetExtendedInquiryResponse(
+      std::array<uint8_t, 240> const& extended_inquiry_response);
   void SetExtendedInquiryResponse(
       std::vector<uint8_t> const& extended_inquiry_response);
 
-  void SetClassOfDevice(ClassOfDevice class_of_device) {
-    class_of_device_ = class_of_device;
-  }
-
   void SetClassOfDevice(uint32_t class_of_device) {
-    class_of_device_.cod[0] = class_of_device & UINT8_MAX;
-    class_of_device_.cod[1] = (class_of_device >> 8) & UINT8_MAX;
-    class_of_device_.cod[2] = (class_of_device >> 16) & UINT8_MAX;
+    class_of_device_ = class_of_device;
   }
 
   void SetAuthenticationEnable(AuthenticationEnable enable) {
@@ -860,7 +946,7 @@ class LinkLayerController {
       extended_inquiry_response_{};
 
   // Class of Device (Vol 4, Part E § 6.26).
-  ClassOfDevice class_of_device_{{0, 0, 0}};
+  uint32_t class_of_device_{0};
 
   // Other configuration parameters.
 
@@ -918,6 +1004,15 @@ class LinkLayerController {
     std::array<uint8_t, kIrkSize> peer_irk;
     std::array<uint8_t, kIrkSize> local_irk;
     bluetooth::hci::PrivacyMode privacy_mode;
+
+    // Resolvable Private Address being used by the local device.
+    // It is the last resolvable private address generated for
+    // this identity address.
+    std::optional<Address> local_resolvable_address;
+    // Resolvable Private Address being used by the peer device.
+    // It is the last resolvable private address received that resolved
+    // to this identity address.
+    std::optional<Address> peer_resolvable_address;
   };
 
   std::vector<ResolvingListEntry> le_resolving_list_;
@@ -941,6 +1036,20 @@ class LinkLayerController {
   // Extended advertising sets.
   std::unordered_map<uint8_t, ExtendedAdvertiser> extended_advertisers_{};
 
+  // Local phy preferences, defaults to LE 1M Phy.
+  uint8_t default_tx_phys_{0x1};
+  uint8_t default_rx_phys_{0x1};
+  uint8_t requested_tx_phys_{0x1};
+  uint8_t requested_rx_phys_{0x1};
+
+  struct PeriodicAdvertiserListEntry {
+    bluetooth::hci::AdvertiserAddressType advertiser_address_type;
+    Address advertiser_address;
+    uint8_t advertising_sid;
+  };
+
+  std::vector<PeriodicAdvertiserListEntry> le_periodic_advertiser_list_;
+
   struct Scanner {
     bool scan_enable;
     std::chrono::steady_clock::duration period;
@@ -961,27 +1070,29 @@ class LinkLayerController {
 
     // Save information about the advertising PDU being scanned.
     bool connectable_scan_response;
+    bool extended_scan_response;
+    model::packets::PhyType primary_scan_response_phy;
+    model::packets::PhyType secondary_scan_response_phy;
     std::optional<AddressWithType> pending_scan_request{};
+    std::optional<std::chrono::steady_clock::time_point>
+        pending_scan_request_timeout{};
 
     // Time keeping
     std::optional<std::chrono::steady_clock::time_point> timeout;
     std::optional<std::chrono::steady_clock::time_point> periodical_timeout;
 
     // Packet History
-    std::vector<model::packets::LinkLayerPacketView> history;
+    std::vector<pdl::packet::slice> history;
 
     bool IsEnabled() const { return scan_enable; }
 
-    bool IsPacketInHistory(model::packets::LinkLayerPacketView packet) const {
+    bool IsPacketInHistory(pdl::packet::slice const& packet) const {
       return std::any_of(
           history.begin(), history.end(),
-          [packet](model::packets::LinkLayerPacketView const& a) {
-            return a.size() == packet.size() &&
-                   std::equal(a.begin(), a.end(), packet.begin());
-          });
+          [packet](pdl::packet::slice const& a) { return a == packet; });
     }
 
-    void AddPacketToHistory(model::packets::LinkLayerPacketView packet) {
+    void AddPacketToHistory(pdl::packet::slice packet) {
       history.push_back(packet);
     }
   };
@@ -991,6 +1102,9 @@ class LinkLayerController {
   // of legacy_advertising_in_use_ and extended_advertising_in_use_ flags.
   // Only one type of advertising may be used during a controller session.
   Scanner scanner_{};
+
+  // APCF scanning state for Android vendor support.
+  ApcfScanner apcf_scanner_{};
 
   struct Initiator {
     bool connect_enable;
@@ -1028,15 +1142,49 @@ class LinkLayerController {
   // Only one type of advertising may be used during a controller session.
   Initiator initiator_{};
 
-  // Classic state
-#ifdef ROOTCANAL_LMP
-  std::unique_ptr<const LinkManager, void (*)(const LinkManager*)> lm_;
-  struct LinkManagerOps ops_;
-#else
-  SecurityManager security_manager_{10};
-#endif /* ROOTCANAL_LMP */
+  struct Synchronizing {
+    bluetooth::hci::PeriodicAdvertisingOptions options{};
+    bluetooth::hci::AdvertiserAddressType advertiser_address_type{};
+    Address advertiser_address{};
+    uint8_t advertising_sid{};
+    std::chrono::steady_clock::duration sync_timeout{};
+  };
 
-  TaskId page_timeout_task_id_ = kInvalidTaskId;
+  struct Synchronized {
+    bluetooth::hci::AdvertiserAddressType advertiser_address_type;
+    Address advertiser_address;
+    uint8_t advertising_sid;
+    uint16_t sync_handle;
+    std::chrono::steady_clock::duration sync_timeout;
+    std::chrono::steady_clock::time_point timeout;
+  };
+
+  // Periodic advertising synchronizing and synchronized states.
+  // Contains information for the currently established syncs, and the
+  // pending sync.
+  std::optional<Synchronizing> synchronizing_{};
+  std::unordered_map<uint16_t, Synchronized> synchronized_{};
+
+  // Buffer to contain the ISO SDU sent from the host stack over HCI.
+  // The SDU is forwarded to the peer only when complete.
+  std::vector<uint8_t> iso_sdu_{};
+
+  // Rust state.
+  std::unique_ptr<const LinkManager, void (*)(const LinkManager*)> lm_;
+  std::unique_ptr<const LinkLayer, void (*)(const LinkLayer*)> ll_;
+  struct ControllerOps controller_ops_;
+
+  // Classic state.
+  struct Page {
+    Address bd_addr;
+    uint8_t allow_role_switch;
+    std::chrono::steady_clock::time_point next_page_event{};
+    std::chrono::steady_clock::time_point page_timeout{};
+  };
+
+  // Page substate.
+  // RootCanal will allow only one page request running at the same time.
+  std::optional<Page> page_;
 
   std::chrono::steady_clock::time_point last_inquiry_;
   model::packets::InquiryType inquiry_mode_{

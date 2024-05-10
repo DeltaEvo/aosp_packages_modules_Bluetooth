@@ -29,53 +29,32 @@
  * interfaces may be made here
  */
 
-#include "osi/include/future.h"
-
 namespace bluetooth {
 namespace os {
 class Handler;
-}
-namespace activity_attribution {
-class ActivityAttribution;
-}
-namespace neighbor {
-class ConnectabilityModule;
-class DiscoverabilityModule;
-class InquiryModule;
-class PageModule;
 }
 namespace hal {
 class SnoopLogger;
 }
 
 namespace hci {
-class Controller;
-class HciLayer;
+class ControllerInterface;
+class HciInterface;
 class AclManager;
 class RemoteNameRequestModule;
 class DistanceMeasurementManager;
 class LeAdvertisingManager;
 class LeScanningManager;
-class VendorSpecificEventManager;
+class VendorSpecificEventManagerInterface;
+#if TARGET_FLOSS
 class MsftExtensionManager;
+#endif
 }
-
-namespace l2cap {
-namespace classic {
-class L2capClassicModule;
-}  // namespace classic
-namespace le {
-class L2capLeModule;
-}  // namespace le
-}  // namespace l2cap
 
 namespace metrics {
 class CounterMetrics;
 }
 
-namespace security {
-class SecurityModule;
-}
 namespace storage {
 class StorageModule;
 }
@@ -87,26 +66,20 @@ class Dumpsys;
  * within the stack. */
 os::Handler* GetGdShimHandler();
 hci::LeAdvertisingManager* GetAdvertising();
-bluetooth::hci::Controller* GetController();
-neighbor::DiscoverabilityModule* GetDiscoverability();
-neighbor::ConnectabilityModule* GetConnectability();
+bluetooth::hci::ControllerInterface* GetController();
 Dumpsys* GetDumpsys();
-neighbor::InquiryModule* GetInquiry();
-hci::HciLayer* GetHciLayer();
-l2cap::classic::L2capClassicModule* GetL2capClassicModule();
-l2cap::le::L2capLeModule* GetL2capLeModule();
-neighbor::PageModule* GetPage();
+hci::HciInterface* GetHciLayer();
 hci::RemoteNameRequestModule* GetRemoteNameRequest();
 hci::DistanceMeasurementManager* GetDistanceMeasurementManager();
 hci::LeScanningManager* GetScanning();
-bluetooth::security::SecurityModule* GetSecurityModule();
 hal::SnoopLogger* GetSnoopLogger();
 storage::StorageModule* GetStorage();
 hci::AclManager* GetAclManager();
-hci::VendorSpecificEventManager* GetVendorSpecificEventManager();
-activity_attribution::ActivityAttribution* GetActivityAttribution();
+hci::VendorSpecificEventManagerInterface* GetVendorSpecificEventManager();
 metrics::CounterMetrics* GetCounterMetrics();
+#if TARGET_FLOSS
 hci::MsftExtensionManager* GetMsftExtensionManager();
+#endif
 
 }  // namespace shim
 }  // namespace bluetooth

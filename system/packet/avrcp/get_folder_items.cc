@@ -16,6 +16,8 @@
 
 #include "get_folder_items.h"
 
+#include "internal_include/bt_trace.h"
+
 namespace bluetooth {
 namespace avrcp {
 
@@ -94,7 +96,8 @@ bool GetFolderItemsResponseBuilder::Serialize(
 }
 
 bool GetFolderItemsResponseBuilder::AddMediaPlayer(MediaPlayerItem item) {
-  CHECK(scope_ == Scope::MEDIA_PLAYER_LIST);
+  log::assert_that(scope_ == Scope::MEDIA_PLAYER_LIST,
+                   "assert failed: scope_ == Scope::MEDIA_PLAYER_LIST");
 
   if (size() + item.size() > mtu_) return false;
 
@@ -103,7 +106,9 @@ bool GetFolderItemsResponseBuilder::AddMediaPlayer(MediaPlayerItem item) {
 }
 
 bool GetFolderItemsResponseBuilder::AddSong(MediaElementItem item) {
-  CHECK(scope_ == Scope::VFS || scope_ == Scope::NOW_PLAYING);
+  log::assert_that(
+      scope_ == Scope::VFS || scope_ == Scope::NOW_PLAYING,
+      "assert failed: scope_ == Scope::VFS || scope_ == Scope::NOW_PLAYING");
 
   if (size() + item.size() > mtu_) return false;
 
@@ -112,7 +117,7 @@ bool GetFolderItemsResponseBuilder::AddSong(MediaElementItem item) {
 }
 
 bool GetFolderItemsResponseBuilder::AddFolder(FolderItem item) {
-  CHECK(scope_ == Scope::VFS);
+  log::assert_that(scope_ == Scope::VFS, "assert failed: scope_ == Scope::VFS");
 
   if (size() + item.size() > mtu_) return false;
 

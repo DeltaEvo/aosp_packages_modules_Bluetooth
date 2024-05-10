@@ -3,7 +3,7 @@ use btstack::RPCProxy;
 use dbus::arg::RefArg;
 use dbus::strings::Path;
 use dbus_macros::{dbus_method, dbus_propmap, dbus_proxy_obj, generate_dbus_exporter};
-use dbus_projection::{dbus_generated, DisconnectWatcher};
+use dbus_projection::prelude::*;
 
 use crate::dbus_arg::{DBusArg, DBusArgError, RefArgToRust};
 
@@ -26,7 +26,7 @@ struct IBatteryManagerCallbackDBus {}
 #[dbus_proxy_obj(BatteryManagerCallback, "org.chromium.bluetooth.BatteryManagerCallback")]
 impl IBatteryManagerCallback for IBatteryManagerCallbackDBus {
     #[dbus_method("OnBatteryInfoUpdated")]
-    fn on_battery_info_updated(&self, remote_address: String, battery_set: BatterySet) {
+    fn on_battery_info_updated(&mut self, remote_address: String, battery_set: BatterySet) {
         dbus_generated!()
     }
 }
@@ -44,7 +44,7 @@ impl IBatteryManager for IBatteryManagerDBus {
     }
 
     #[dbus_method("UnregisterBatteryCallback")]
-    fn unregister_battery_callback(&mut self, callback_id: u32) {
+    fn unregister_battery_callback(&mut self, callback_id: u32) -> bool {
         dbus_generated!()
     }
 

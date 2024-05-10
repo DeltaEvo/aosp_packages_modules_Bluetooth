@@ -24,25 +24,23 @@
 
 #define LOG_TAG "bluetooth"
 
-#include <cstdint>
+#include <bluetooth/log.h>
 
-// PAN_INCLUDED
-#include "bt_target.h"  // Must be first to define build configuration
-#if (PAN_INCLUDED == TRUE)
+#include <cstdint>
 
 #include "bta/include/bta_pan_co.h"
 #include "bta/pan/bta_pan_int.h"
-#include "main/shim/dumpsys.h"
+#include "internal_include/bt_target.h"  // PAN_INCLUDED
 #include "osi/include/allocator.h"
 #include "osi/include/fixed_queue.h"
-#include "osi/include/log.h"
-#include "osi/include/osi.h"  // UNUSED_ATTR
 #include "stack/include/bt_hdr.h"
-#include "stack/include/bt_types.h"
-#include "stack/include/btu.h"
+#include "stack/include/bt_uuid16.h"
 #include "stack/include/pan_api.h"
 #include "types/raw_address.h"
 
+using namespace bluetooth;
+
+#if (PAN_INCLUDED == TRUE)
 void bta_pan_sm_execute(tBTA_PAN_SCB* p_scb, uint16_t event,
                         tBTA_PAN_DATA* p_data);
 
@@ -182,8 +180,7 @@ static void bta_pan_data_buf_ind_cback(uint16_t handle, const RawAddress& src,
 
   if (sizeof(BT_HDR) + sizeof(tBTA_PAN_DATA_PARAMS) + p_buf->len >
       PAN_BUF_SIZE) {
-    APPL_TRACE_ERROR("%s: received buffer length too large: %d", __func__,
-                     p_buf->len);
+    log::error("received buffer length too large: {}", p_buf->len);
     return;
   }
 
@@ -336,9 +333,9 @@ void bta_pan_set_role(tBTA_PAN_DATA* p_data) {
   tBTA_PAN bta_pan = {
       .set_role =
           {
-              .role = p_data->api_set_role.role,
               .status =
                   (status == PAN_SUCCESS) ? BTA_PAN_SUCCESS : BTA_PAN_FAIL,
+              .role = p_data->api_set_role.role,
           },
   };
 
@@ -382,11 +379,9 @@ void bta_pan_disable(void) {
   /* close all connections */
   PAN_SetRole(0, std::string(), std::string());
 
-#if (BTA_EIR_CANNED_UUID_LIST != TRUE)
   bta_sys_remove_uuid(UUID_SERVCLASS_NAP);
   bta_sys_remove_uuid(UUID_SERVCLASS_GN);
   bta_sys_remove_uuid(UUID_SERVCLASS_PANU);
-#endif  // BTA_EIR_CANNED_UUID_LIST
   /* free all queued up data buffers */
   for (i = 0; i < BTA_PAN_NUM_CONN; i++, p_scb++) {
     if (p_scb->in_use) {
@@ -416,7 +411,7 @@ void bta_pan_open(tBTA_PAN_SCB* p_scb, tBTA_PAN_DATA* p_data) {
 
   status = PAN_Connect(p_data->api_open.bd_addr, p_data->api_open.local_role,
                        p_data->api_open.peer_role, &p_scb->handle);
-  APPL_TRACE_DEBUG("%s pan connect status: %d", __func__, status);
+  log::verbose("pan connect status: {}", status);
 
   if (status == PAN_SUCCESS) {
     p_scb->bd_addr = p_data->api_open.bd_addr;
@@ -447,7 +442,7 @@ void bta_pan_open(tBTA_PAN_SCB* p_scb, tBTA_PAN_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-void bta_pan_api_close(tBTA_PAN_SCB* p_scb, UNUSED_ATTR tBTA_PAN_DATA* p_data) {
+void bta_pan_api_close(tBTA_PAN_SCB* p_scb, tBTA_PAN_DATA* /* p_data */) {
   tBTA_PAN_CONN* p_buf = (tBTA_PAN_CONN*)osi_malloc(sizeof(tBTA_PAN_CONN));
 
   PAN_Disconnect(p_scb->handle);
@@ -474,8 +469,7 @@ void bta_pan_api_close(tBTA_PAN_SCB* p_scb, UNUSED_ATTR tBTA_PAN_DATA* p_data) {
 void bta_pan_conn_open(tBTA_PAN_SCB* p_scb, tBTA_PAN_DATA* p_data) {
   tBTA_PAN bta_pan;
 
-  APPL_TRACE_DEBUG("%s pan connection result: %d", __func__,
-                   p_data->conn.result);
+  log::verbose("pan connection result: {}", p_data->conn.result);
 
   bta_pan.open.bd_addr = p_scb->bd_addr;
   bta_pan.open.handle = p_scb->handle;
@@ -546,7 +540,7 @@ void bta_pan_conn_close(tBTA_PAN_SCB* p_scb, tBTA_PAN_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-void bta_pan_rx_path(tBTA_PAN_SCB* p_scb, UNUSED_ATTR tBTA_PAN_DATA* p_data) {
+void bta_pan_rx_path(tBTA_PAN_SCB* p_scb, tBTA_PAN_DATA* /* p_data */) {
   /* if data path configured for rx pull */
   if ((bta_pan_cb.flow_mask & BTA_PAN_RX_MASK) == BTA_PAN_RX_PULL) {
     /* if we can accept data */
@@ -570,7 +564,7 @@ void bta_pan_rx_path(tBTA_PAN_SCB* p_scb, UNUSED_ATTR tBTA_PAN_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-void bta_pan_tx_path(tBTA_PAN_SCB* p_scb, UNUSED_ATTR tBTA_PAN_DATA* p_data) {
+void bta_pan_tx_path(tBTA_PAN_SCB* p_scb, tBTA_PAN_DATA* /* p_data */) {
   bta_pan_pm_conn_busy(p_scb);
   /* call application callout function for tx path */
   bta_pan_co_tx_path(p_scb->handle, p_scb->app_id);
@@ -632,7 +626,7 @@ void bta_pan_write_buf(tBTA_PAN_SCB* p_scb, tBTA_PAN_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-void bta_pan_free_buf(UNUSED_ATTR tBTA_PAN_SCB* p_scb, tBTA_PAN_DATA* p_data) {
+void bta_pan_free_buf(tBTA_PAN_SCB* /* p_scb */, tBTA_PAN_DATA* p_data) {
   osi_free(p_data);
 }
 

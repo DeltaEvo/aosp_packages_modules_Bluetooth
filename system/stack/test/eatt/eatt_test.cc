@@ -15,21 +15,23 @@
  * limitations under the License.
  */
 
+#include <bluetooth/log.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <vector>
 
 #include "bind_helpers.h"
-#include "btm_api.h"
+#include "hci/controller_interface_mock.h"
 #include "l2c_api.h"
 #include "mock_btif_storage.h"
 #include "mock_btm_api_layer.h"
-#include "mock_controller.h"
 #include "mock_eatt.h"
 #include "mock_gatt_layer.h"
 #include "mock_l2cap_layer.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/bt_psm_types.h"
+#include "test/mock/mock_main_shim_entry.h"
 #include "types/raw_address.h"
 
 using testing::_;
@@ -44,16 +46,18 @@ using testing::StrictMock;
 
 using bluetooth::eatt::EattChannel;
 using bluetooth::eatt::EattChannelState;
+using namespace bluetooth;
 
 #define BLE_GATT_SVR_SUP_FEAT_EATT_BITMASK 0x01
 
 /* Needed for testing context */
 static tGATT_TCB test_tcb;
 void btif_storage_add_eatt_supported(const RawAddress& addr) { return; }
+void gatt_consolidate(const RawAddress& identity_addr, const RawAddress& rpa) {}
 void gatt_data_process(tGATT_TCB& tcb, uint16_t cid, BT_HDR* p_buf) { return; }
 tGATT_TCB* gatt_find_tcb_by_addr(const RawAddress& bda,
                                  tBT_TRANSPORT transport) {
-  LOG(INFO) << __func__;
+  log::info("");
   return &test_tcb;
 }
 
@@ -210,11 +214,15 @@ class EattTest : public testing::Test {
   }
 
   void SetUp() override {
+    le_buffer_size_.le_data_packet_length_ = 128;
+    le_buffer_size_.total_num_le_packets_ = 24;
+    ON_CALL(controller_, GetLeBufferSize)
+        .WillByDefault(Return(le_buffer_size_));
     bluetooth::l2cap::SetMockInterface(&l2cap_interface_);
     bluetooth::manager::SetMockBtmApiInterface(&btm_api_interface_);
     bluetooth::manager::SetMockBtifStorageInterface(&btif_storage_interface_);
     bluetooth::gatt::SetMockGattInterface(&gatt_interface_);
-    controller::SetMockControllerInterface(&controller_interface);
+    bluetooth::hci::testing::mock_controller_ = &controller_;
 
     // Clear the static memory for each test case
     memset(&test_tcb, 0, sizeof(test_tcb));
@@ -230,9 +238,6 @@ class EattTest : public testing::Test {
 
     ON_CALL(l2cap_interface_, GetBleConnRole(_))
         .WillByDefault(DoAll(Return(hci_role_)));
-
-    ON_CALL(controller_interface, GetAclDataSizeBle())
-        .WillByDefault(Return(128));
 
     eatt_instance_ = EattExtension::GetInstance();
     eatt_instance_->Start();
@@ -252,7 +257,7 @@ class EattTest : public testing::Test {
     bluetooth::l2cap::SetMockInterface(nullptr);
     bluetooth::manager::SetMockBtifStorageInterface(nullptr);
     bluetooth::manager::SetMockBtmApiInterface(nullptr);
-    controller::SetMockControllerInterface(nullptr);
+    bluetooth::hci::testing::mock_controller_ = nullptr;
 
     Test::TearDown();
   }
@@ -261,7 +266,8 @@ class EattTest : public testing::Test {
   bluetooth::manager::MockBtmApiInterface btm_api_interface_;
   bluetooth::l2cap::MockL2capInterface l2cap_interface_;
   bluetooth::gatt::MockGattInterface gatt_interface_;
-  controller::MockControllerInterface controller_interface;
+  bluetooth::hci::testing::MockControllerInterface controller_;
+  bluetooth::hci::LeBufferSize le_buffer_size_;
 
   tL2CAP_APPL_INFO l2cap_app_info_;
   EattExtension* eatt_instance_;
@@ -621,6 +627,52 @@ TEST_F(EattTest, DoubleDisconnect) {
 TEST_F(EattTest, TestCollisionHandling) {
   ConnectDeviceEattSupported(0, true /* collision*/);
   ConnectDeviceEattSupported(5, true /* collision*/);
+}
+
+TEST_F(EattTest, ChannelUnavailableWhileOpening) {
+  // arrange
+  ON_CALL(gatt_interface_, ClientReadSupportedFeatures)
+      .WillByDefault(
+          [](const RawAddress& addr,
+             base::OnceCallback<void(const RawAddress&, uint8_t)> cb) {
+            std::move(cb).Run(addr, BLE_GATT_SVR_SUP_FEAT_EATT_BITMASK);
+            return true;
+          });
+  ON_CALL(gatt_interface_, GetEattSupport).WillByDefault(Return(true));
+
+  // expect
+  EXPECT_CALL(l2cap_interface_,
+              ConnectCreditBasedReq(BT_PSM_EATT, test_address, _))
+      .WillOnce(Return(std::vector<uint16_t>{61}));
+
+  // act: start
+  eatt_instance_->Connect(test_address);
+  auto available_channel_for_request =
+      eatt_instance_->GetChannelAvailableForClientRequest(test_address);
+  auto available_channel_for_indication =
+      eatt_instance_->GetChannelAvailableForIndication(test_address);
+
+  // assert
+  ASSERT_EQ(available_channel_for_request, nullptr);
+  ASSERT_EQ(available_channel_for_indication, nullptr);
+}
+
+TEST_F(EattTest, ChannelUnavailableWhileReconfiguring) {
+  // arrange
+  ON_CALL(l2cap_interface_, ReconfigCreditBasedConnsReq(_, _, _))
+      .WillByDefault(Return(true));
+  ConnectDeviceEattSupported(/* num_of_accepted_connections = */ 1);
+
+  // act: reconfigure, then get available channels
+  eatt_instance_->Reconfigure(test_address, connected_cids_[0], 300);
+  auto available_channel_for_request =
+      eatt_instance_->GetChannelAvailableForClientRequest(test_address);
+  auto available_channel_for_indication =
+      eatt_instance_->GetChannelAvailableForIndication(test_address);
+
+  // assert
+  ASSERT_EQ(available_channel_for_request, nullptr);
+  ASSERT_EQ(available_channel_for_indication, nullptr);
 }
 
 }  // namespace

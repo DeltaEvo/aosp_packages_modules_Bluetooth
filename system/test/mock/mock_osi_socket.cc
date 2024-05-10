@@ -20,14 +20,10 @@
  *
  *  mockcify.pl ver 0.3.0
  */
-
-#include <cstdint>
-#include <functional>
-#include <map>
-#include <string>
-
 // Mock include file to share data between tests and mock
 #include "test/mock/mock_osi_socket.h"
+
+#include "test/common/mock_functions.h"
 
 // Mocked internal structures, if any
 
@@ -103,3 +99,8 @@ ssize_t socket_write_and_transfer_fd(const socket_t* socket, const void* buf,
 }
 // Mocked functions complete
 // END mockcify generation
+int osi_socket_local_server_bind(int /* s */, const char* /* name */,
+                                 int /* namespaceId */) {
+  inc_func_call_count(__func__);
+  return 0;
+}

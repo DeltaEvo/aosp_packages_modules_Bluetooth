@@ -21,11 +21,12 @@
 
 #include "btm_iso_api.h"
 #include "btm_iso_api_types.h"
+#include "device_groups.h"
 #include "devices.h"
 #include "hardware/bt_le_audio.h"
 #include "le_audio_types.h"
 
-namespace le_audio {
+namespace bluetooth::le_audio {
 
 /* State machine interface */
 class LeAudioGroupStateMachine {
@@ -37,6 +38,9 @@ class LeAudioGroupStateMachine {
     virtual void StatusReportCb(
         int group_id, bluetooth::le_audio::GroupStreamStatus status) = 0;
     virtual void OnStateTransitionTimeout(int group_id) = 0;
+    virtual void OnUpdatedCisConfiguration(int group_id, uint8_t direction) = 0;
+    virtual void OnDeviceAutonomousStateTransitionTimeout(
+        LeAudioDevice* leAudioDevice) = 0;
   };
 
   virtual ~LeAudioGroupStateMachine() = default;
@@ -45,8 +49,9 @@ class LeAudioGroupStateMachine {
   static void Cleanup(void);
   static LeAudioGroupStateMachine* Get(void);
 
-  virtual bool AttachToStream(LeAudioDeviceGroup* group,
-                              LeAudioDevice* leAudioDevice) = 0;
+  virtual bool AttachToStream(
+      LeAudioDeviceGroup* group, LeAudioDevice* leAudioDevice,
+      types::BidirectionalPair<std::vector<uint8_t>> ccids) = 0;
   virtual bool StartStream(
       LeAudioDeviceGroup* group, types::LeAudioContextType context_type,
       const types::BidirectionalPair<types::AudioContexts>&
@@ -61,6 +66,8 @@ class LeAudioGroupStateMachine {
       types::BidirectionalPair<std::vector<uint8_t>> ccid_lists = {
           .sink = {}, .source = {}}) = 0;
   virtual void StopStream(LeAudioDeviceGroup* group) = 0;
+  virtual void ProcessGattCtpNotification(LeAudioDeviceGroup* group,
+                                          uint8_t* value, uint16_t len) = 0;
   virtual void ProcessGattNotifEvent(uint8_t* value, uint16_t len,
                                      struct types::ase* ase,
                                      LeAudioDevice* leAudioDevice,
@@ -94,4 +101,4 @@ class LeAudioGroupStateMachine {
   virtual void ProcessHciNotifAclDisconnected(LeAudioDeviceGroup* group,
                                               LeAudioDevice* leAudioDevice) = 0;
 };
-}  // namespace le_audio
+}  // namespace bluetooth::le_audio

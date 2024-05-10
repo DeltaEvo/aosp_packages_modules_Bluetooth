@@ -14,10 +14,14 @@
 */
 package com.android.bluetooth.map;
 
+import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothProtoEnums;
 import android.util.Log;
 import android.util.Xml;
 
+import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.content_profiles.ContentProfileErrorReportUtils;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -30,11 +34,8 @@ import java.io.UnsupportedEncodingException;
 import java.util.HashMap;
 import java.util.Locale;
 
-
-/**
- * Class to contain a single folder element representation.
- *
- */
+/** Class to contain a single folder element representation. */
+// Next tag value for ContentProfileErrorReportUtils.report(): 3
 public class BluetoothMapFolderElement implements Comparable<BluetoothMapFolderElement> {
     private String mName;
     private BluetoothMapFolderElement mParent = null;
@@ -47,8 +48,6 @@ public class BluetoothMapFolderElement implements Comparable<BluetoothMapFolderE
 
     private HashMap<String, BluetoothMapFolderElement> mSubFolders;
 
-    private static final boolean D = BluetoothMapService.DEBUG;
-    private static final boolean V = BluetoothMapService.VERBOSE;
 
     private static final String TAG = "BluetoothMapFolderElement";
 
@@ -189,15 +188,11 @@ public class BluetoothMapFolderElement implements Comparable<BluetoothMapFolderE
         name = name.toLowerCase(Locale.US);
         BluetoothMapFolderElement newFolder = mSubFolders.get(name);
         if (newFolder == null) {
-            if (D) {
-                Log.i(TAG, "addFolder():" + name);
-            }
+            Log.d(TAG, "addFolder():" + name);
             newFolder = new BluetoothMapFolderElement(name, this);
             mSubFolders.put(name, newFolder);
         } else {
-            if (D) {
-                Log.i(TAG, "addFolder():" + name + " already added");
-            }
+            Log.d(TAG, "addFolder():" + name + " already added");
         }
         return newFolder;
     }
@@ -208,9 +203,7 @@ public class BluetoothMapFolderElement implements Comparable<BluetoothMapFolderE
      * @return the added folder element.
      */
     public BluetoothMapFolderElement addSmsMmsFolder(String name) {
-        if (D) {
-            Log.i(TAG, "addSmsMmsFolder()");
-        }
+        Log.d(TAG, "addSmsMmsFolder()");
         BluetoothMapFolderElement newFolder = addFolder(name);
         newFolder.setHasSmsMmsContent(true);
         return newFolder;
@@ -222,9 +215,7 @@ public class BluetoothMapFolderElement implements Comparable<BluetoothMapFolderE
      * @return the added folder element.
      */
     public BluetoothMapFolderElement addImFolder(String name, long idFolder) {
-        if (D) {
-            Log.i(TAG, "addImFolder() id = " + idFolder);
-        }
+        Log.d(TAG, "addImFolder() id = " + idFolder);
         BluetoothMapFolderElement newFolder = addFolder(name);
         newFolder.setHasImContent(true);
         newFolder.setFolderId(idFolder);
@@ -237,9 +228,7 @@ public class BluetoothMapFolderElement implements Comparable<BluetoothMapFolderE
      * @return the added folder element.
      */
     public BluetoothMapFolderElement addEmailFolder(String name, long emailFolderId) {
-        if (V) {
-            Log.v(TAG, "addEmailFolder() id = " + emailFolderId);
-        }
+        Log.v(TAG, "addEmailFolder() id = " + emailFolderId);
         BluetoothMapFolderElement newFolder = addFolder(name);
         newFolder.setFolderId(emailFolderId);
         newFolder.setHasEmailContent(true);
@@ -294,19 +283,28 @@ public class BluetoothMapFolderElement implements Comparable<BluetoothMapFolderE
             xmlMsgElement.endTag(null, "folder-listing");
             xmlMsgElement.endDocument();
         } catch (IllegalArgumentException e) {
-            if (D) {
-                Log.w(TAG, e);
-            }
+            ContentProfileErrorReportUtils.report(
+                    BluetoothProfile.MAP,
+                    BluetoothProtoEnums.BLUETOOTH_MAP_FOLDER_ELEMENT,
+                    BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
+                    0);
+            Log.w(TAG, e);
             throw new IllegalArgumentException("error encoding folderElement");
         } catch (IllegalStateException e) {
-            if (D) {
-                Log.w(TAG, e);
-            }
+            ContentProfileErrorReportUtils.report(
+                    BluetoothProfile.MAP,
+                    BluetoothProtoEnums.BLUETOOTH_MAP_FOLDER_ELEMENT,
+                    BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
+                    1);
+            Log.w(TAG, e);
             throw new IllegalArgumentException("error encoding folderElement");
         } catch (IOException e) {
-            if (D) {
-                Log.w(TAG, e);
-            }
+            ContentProfileErrorReportUtils.report(
+                    BluetoothProfile.MAP,
+                    BluetoothProtoEnums.BLUETOOTH_MAP_FOLDER_ELEMENT,
+                    BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
+                    2);
+            Log.w(TAG, e);
             throw new IllegalArgumentException("error encoding folderElement");
         }
         return sw.toString().getBytes("UTF-8");
@@ -342,9 +340,7 @@ public class BluetoothMapFolderElement implements Comparable<BluetoothMapFolderE
                 // Skip until we get a folder-listing tag
                 String name = parser.getName();
                 if (!name.equalsIgnoreCase("folder-listing")) {
-                    if (D) {
-                        Log.i(TAG, "Unknown XML tag: " + name);
-                    }
+                    Log.w(TAG, "Unknown XML tag: " + name);
                     Utils.skipCurrentTag(parser);
                 }
                 readFolders(parser);
@@ -362,9 +358,7 @@ public class BluetoothMapFolderElement implements Comparable<BluetoothMapFolderE
      */
     public void readFolders(XmlPullParser parser) throws XmlPullParserException, IOException {
         int type;
-        if (D) {
-            Log.i(TAG, "readFolders(): ");
-        }
+        Log.d(TAG, "readFolders(): ");
         while ((type = parser.next()) != XmlPullParser.END_TAG
                 && type != XmlPullParser.END_DOCUMENT) {
             // Skip until we get a start tag
@@ -374,9 +368,7 @@ public class BluetoothMapFolderElement implements Comparable<BluetoothMapFolderE
             // Skip until we get a folder-listing tag
             String name = parser.getName();
             if (!name.trim().equalsIgnoreCase("folder")) {
-                if (D) {
-                    Log.i(TAG, "Unknown XML tag: " + name);
-                }
+                Log.w(TAG, "Unknown XML tag: " + name);
                 Utils.skipCurrentTag(parser);
                 continue;
             }
@@ -390,9 +382,7 @@ public class BluetoothMapFolderElement implements Comparable<BluetoothMapFolderE
                     element.setHasImContent(mHasImContent);
                     element.setHasSmsMmsContent(mHasSmsMmsContent);
                 } else {
-                    if (D) {
-                        Log.i(TAG, "Unknown XML attribute: " + parser.getAttributeName(i));
-                    }
+                    Log.w(TAG, "Unknown XML attribute: " + parser.getAttributeName(i));
                 }
             }
             parser.nextTag();
@@ -417,30 +407,27 @@ public class BluetoothMapFolderElement implements Comparable<BluetoothMapFolderE
                     BluetoothMapFolderElement subfolderAnother =
                             another.mSubFolders.get(subfolder.getName());
                     if (subfolderAnother == null) {
-                        if (D) {
-                            Log.i(TAG, subfolder.getFullPath() + " not in another");
-                        }
+                        Log.d(TAG, subfolder.getFullPath() + " not in another");
                         return 1;
                     }
                     ret = subfolder.compareTo(subfolderAnother);
                     if (ret != 0) {
-                        if (D) {
-                            Log.i(TAG, subfolder.getFullPath() + " filed compareTo()");
-                        }
+                        Log.d(TAG, subfolder.getFullPath() + " filed compareTo()");
                         return ret;
                     }
                 }
             } else {
-                if (D) {
-                    Log.i(TAG, "mSubFolders.size(): " + mSubFolders.size()
-                            + " another.mSubFolders.size(): " + another.mSubFolders.size());
-                }
+                Log.d(TAG, "mSubFolders.size(): " + mSubFolders.size()
+                        + " another.mSubFolders.size(): " + another.mSubFolders.size());
             }
         } else {
-            if (D) {
-                Log.i(TAG, "mName: " + mName + " another.mName: " + another.mName);
-            }
+            Log.d(TAG, "mName: " + mName + " another.mName: " + another.mName);
         }
         return ret;
+    }
+
+    @Override
+    public String toString() {
+        return mName;
     }
 }

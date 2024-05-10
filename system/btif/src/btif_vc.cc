@@ -19,13 +19,14 @@
 
 #include <base/functional/bind.h>
 #include <base/location.h>
-#include <base/logging.h>
+#include <bluetooth/log.h>
 #include <hardware/bluetooth.h>
 #include <hardware/bt_vc.h>
 
 #include "bta_vc_api.h"
 #include "btif_common.h"
-#include "stack/include/btu.h"
+#include "btif_profile_storage.h"
+#include "stack/include/main_thread.h"
 #include "types/raw_address.h"
 
 using base::Bind;
@@ -33,6 +34,7 @@ using base::Unretained;
 using bluetooth::vc::ConnectionState;
 using bluetooth::vc::VolumeControlCallbacks;
 using bluetooth::vc::VolumeControlInterface;
+using namespace bluetooth;
 
 namespace {
 std::unique_ptr<VolumeControlInterface> vc_instance;
@@ -43,9 +45,13 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
   ~VolumeControlInterfaceImpl() override = default;
 
   void Init(VolumeControlCallbacks* callbacks) override {
-    DVLOG(2) << __func__;
     this->callbacks_ = callbacks;
-    do_in_main_thread(FROM_HERE, Bind(&VolumeControl::Initialize, this));
+    do_in_main_thread(
+        FROM_HERE,
+        Bind(&VolumeControl::Initialize, this,
+             jni_thread_wrapper(
+                 FROM_HERE,
+                 Bind(&btif_storage_load_bonded_volume_control_devices))));
 
     /* It might be not yet initialized, but setting this flag here is safe,
      * because other calls will check this and the native instance
@@ -55,15 +61,12 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
 
   void OnConnectionState(ConnectionState state,
                          const RawAddress& address) override {
-    DVLOG(2) << __func__ << " address: " << address;
     do_in_jni_thread(FROM_HERE, Bind(&VolumeControlCallbacks::OnConnectionState,
                                      Unretained(callbacks_), state, address));
   }
 
   void OnVolumeStateChanged(const RawAddress& address, uint8_t volume,
                             bool mute, bool isAutonomous) override {
-    DVLOG(2) << __func__ << " address: " << address << " volume: " << volume
-             << " mute: " << mute << " isAutonomous: " << isAutonomous;
     do_in_jni_thread(
         FROM_HERE,
         Bind(&VolumeControlCallbacks::OnVolumeStateChanged,
@@ -72,8 +75,6 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
 
   void OnGroupVolumeStateChanged(int group_id, uint8_t volume, bool mute,
                                  bool isAutonomous) override {
-    DVLOG(2) << __func__ << " group_id: " << group_id << " volume: " << volume
-             << " mute: " << mute << " isAutonomous: " << isAutonomous;
     do_in_jni_thread(
         FROM_HERE,
         Bind(&VolumeControlCallbacks::OnGroupVolumeStateChanged,
@@ -82,7 +83,6 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
 
   void OnDeviceAvailable(const RawAddress& address,
                          uint8_t num_offset) override {
-    DVLOG(2) << __func__ << " address: " << address;
     do_in_jni_thread(FROM_HERE,
                      Bind(&VolumeControlCallbacks::OnDeviceAvailable,
                           Unretained(callbacks_), address, num_offset));
@@ -94,9 +94,6 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
   void OnExtAudioOutVolumeOffsetChanged(const RawAddress& address,
                                         uint8_t ext_output_id,
                                         int16_t offset) override {
-    DVLOG(2) << __func__ << " address: " << address
-             << "ext_output_id: " << ext_output_id << "offset:" << offset;
-
     do_in_jni_thread(
         FROM_HERE,
         Bind(&VolumeControlCallbacks::OnExtAudioOutVolumeOffsetChanged,
@@ -106,10 +103,6 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
   void OnExtAudioOutLocationChanged(const RawAddress& address,
                                     uint8_t ext_output_id,
                                     uint32_t location) override {
-    DVLOG(2) << __func__ << " address: " << address
-             << "ext_output_id: " << ext_output_id
-             << "location:" << loghex(location);
-
     do_in_jni_thread(
         FROM_HERE,
         Bind(&VolumeControlCallbacks::OnExtAudioOutLocationChanged,
@@ -119,8 +112,6 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
   void OnExtAudioOutDescriptionChanged(const RawAddress& address,
                                        uint8_t ext_output_id,
                                        std::string descr) override {
-    DVLOG(2) << __func__ << " address: " << address
-             << "ext_output_id: " << ext_output_id << "descr:" << descr;
     do_in_jni_thread(
         FROM_HERE,
         Bind(&VolumeControlCallbacks::OnExtAudioOutDescriptionChanged,
@@ -128,12 +119,10 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
   }
 
   void Connect(const RawAddress& address) override {
-    DVLOG(2) << __func__ << " address: " << address;
-
     if (!initialized || !VolumeControl::IsVolumeControlRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
@@ -143,12 +132,10 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
   }
 
   void Disconnect(const RawAddress& address) override {
-    DVLOG(2) << __func__ << " address: " << address;
-
     if (!initialized || !VolumeControl::IsVolumeControlRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
     do_in_main_thread(FROM_HERE,
@@ -158,12 +145,10 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
 
   void SetVolume(std::variant<RawAddress, int> addr_or_group_id,
                  uint8_t volume) override {
-    DVLOG(2) << __func__ << " volume: " << volume;
-
     if (!initialized || !VolumeControl::IsVolumeControlRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
@@ -173,12 +158,10 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
   }
 
   void Mute(std::variant<RawAddress, int> addr_or_group_id) override {
-    DVLOG(2) << __func__;
-
     if (!initialized || !VolumeControl::IsVolumeControlRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
@@ -188,12 +171,10 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
   }
 
   void Unmute(std::variant<RawAddress, int> addr_or_group_id) override {
-    DVLOG(2) << __func__;
-
     if (!initialized || !VolumeControl::IsVolumeControlRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
@@ -203,34 +184,27 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
   }
 
   void RemoveDevice(const RawAddress& address) override {
-    DVLOG(2) << __func__ << " address: " << address;
-
     if (!initialized || !VolumeControl::IsVolumeControlRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
     /* RemoveDevice can be called on devices that don't have HA enabled */
     if (VolumeControl::IsVolumeControlRunning()) {
       do_in_main_thread(FROM_HERE,
-                        Bind(&VolumeControl::Disconnect,
+                        Bind(&VolumeControl::Remove,
                              Unretained(VolumeControl::Get()), address));
     }
-
-    /* Placeholder: Remove things from storage here */
   }
 
   void GetExtAudioOutVolumeOffset(const RawAddress& address,
                                   uint8_t ext_output_id) override {
-    DVLOG(2) << __func__ << " address: " << address
-             << "ext_output_id:" << ext_output_id;
-
     if (!initialized || !VolumeControl::IsVolumeControlRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
@@ -243,14 +217,10 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
   void SetExtAudioOutVolumeOffset(const RawAddress& address,
                                   uint8_t ext_output_id,
                                   int16_t offset_val) override {
-    DVLOG(2) << __func__ << " address: " << address
-             << "ext_output_id:" << ext_output_id
-             << "ext_output_id:" << offset_val;
-
     if (!initialized || !VolumeControl::IsVolumeControlRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
@@ -262,13 +232,10 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
 
   void GetExtAudioOutLocation(const RawAddress& address,
                               uint8_t ext_output_id) override {
-    DVLOG(2) << __func__ << " address: " << address
-             << "ext_output_id:" << ext_output_id;
-
     if (!initialized || !VolumeControl::IsVolumeControlRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
@@ -279,14 +246,10 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
 
   void SetExtAudioOutLocation(const RawAddress& address, uint8_t ext_output_id,
                               uint32_t location) override {
-    DVLOG(2) << __func__ << " address: " << address
-             << "ext_output_id:" << ext_output_id
-             << "location:" << loghex(location);
-
     if (!initialized || !VolumeControl::IsVolumeControlRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
@@ -297,13 +260,10 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
 
   void GetExtAudioOutDescription(const RawAddress& address,
                                  uint8_t ext_output_id) override {
-    DVLOG(2) << __func__ << " address: " << address
-             << "ext_output_id:" << ext_output_id;
-
     if (!initialized || !VolumeControl::IsVolumeControlRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
@@ -315,13 +275,10 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
   void SetExtAudioOutDescription(const RawAddress& address,
                                  uint8_t ext_output_id,
                                  std::string descr) override {
-    DVLOG(2) << __func__ << " address: " << address
-             << "ext_output_id:" << ext_output_id << "description:" << descr;
-
     if (!initialized || !VolumeControl::IsVolumeControlRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
@@ -331,11 +288,10 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface,
   }
 
   void Cleanup(void) override {
-    DVLOG(2) << __func__;
     if (!initialized || !VolumeControl::IsVolumeControlRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 

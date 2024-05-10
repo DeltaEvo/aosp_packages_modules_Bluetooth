@@ -20,11 +20,11 @@ import android.bluetooth.BluetoothLeAudioCodecConfig;
 import android.content.Context;
 import android.media.AudioManager;
 import android.util.Log;
+
 /*
  * LeAudio Codec Configuration setup.
  */
 class LeAudioCodecConfig {
-    private static final boolean DBG = true;
     private static final String TAG = "LeAudioCodecConfig";
 
     private Context mContext;
@@ -44,13 +44,11 @@ class LeAudioCodecConfig {
         mCodecConfigOffloading = audioManager.getHwOffloadFormatsSupportedForLeAudio()
                                              .toArray(mCodecConfigOffloading);
 
-        if (DBG) {
-            Log.i(TAG, "mCodecConfigOffloading size for le -> " + mCodecConfigOffloading.length);
+        Log.i(TAG, "mCodecConfigOffloading size for le -> " + mCodecConfigOffloading.length);
 
-            for (int idx = 0; idx < mCodecConfigOffloading.length; idx++) {
-                Log.i(TAG, String.format("mCodecConfigOffloading[%d] -> %s",
-                        idx, mCodecConfigOffloading[idx].toString()));
-            }
+        for (int idx = 0; idx < mCodecConfigOffloading.length; idx++) {
+            Log.i(TAG, String.format("mCodecConfigOffloading[%d] -> %s",
+                    idx, mCodecConfigOffloading[idx].toString()));
         }
     }
 

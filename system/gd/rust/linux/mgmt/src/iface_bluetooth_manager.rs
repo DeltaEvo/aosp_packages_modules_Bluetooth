@@ -47,20 +47,28 @@ pub trait IBluetoothManager {
 
     /// Set the preferred default adapter.
     fn set_desired_default_adapter(&mut self, hci_interface: i32);
+
+    /// Returns Floss API verion.The MSB 16-bit is the major version and
+    /// LSB 16-bit is the minor version
+    fn get_floss_api_version(&mut self) -> u32;
+
+    /// Set the tablet mode of the device. The device that is in tablet mode does not allow
+    /// wakeup by the HID devices.
+    fn set_tablet_mode(&mut self, tablet_mode: bool);
 }
 
 /// Interface of Bluetooth Manager callbacks.
 pub trait IBluetoothManagerCallback: RPCProxy {
     /// HCI device presence has changed.
-    fn on_hci_device_changed(&self, hci_interface: i32, present: bool);
+    fn on_hci_device_changed(&mut self, hci_interface: i32, present: bool);
 
     /// HCI device is enabled or disabled.
-    fn on_hci_enabled_changed(&self, hci_interface: i32, enabled: bool);
+    fn on_hci_enabled_changed(&mut self, hci_interface: i32, enabled: bool);
 
     /// The default adapter has changed. At start-up, if the default adapter is
     /// already available, this won't be sent out. This will only be sent in two
     /// cases:
     ///   * Default adapter is no longer available and we need to use a backup.
     ///   * Desired default adapter re-appears and we should switch back.
-    fn on_default_adapter_changed(&self, hci_interface: i32);
+    fn on_default_adapter_changed(&mut self, hci_interface: i32);
 }

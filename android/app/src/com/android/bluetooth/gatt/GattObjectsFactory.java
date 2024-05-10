@@ -16,9 +16,18 @@
 
 package com.android.bluetooth.gatt;
 
+import android.content.Context;
+import android.os.Looper;
 import android.util.Log;
 
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.btservice.BluetoothAdapterProxy;
+import com.android.bluetooth.le_scan.PeriodicScanManager;
+import com.android.bluetooth.le_scan.ScanManager;
+import com.android.bluetooth.le_scan.ScanNativeInterface;
+import com.android.bluetooth.le_scan.TransitionalScanHelper;
+
 /**
  * Factory class for object initialization to help with unit testing
  */
@@ -49,7 +58,7 @@ public class GattObjectsFactory {
      *
      * @param objectsFactory a test instance of the GattObjectsFactory
      */
-    static void setInstanceForTesting(GattObjectsFactory objectsFactory) {
+    public static void setInstanceForTesting(GattObjectsFactory objectsFactory) {
         Utils.enforceInstrumentationTestMode();
         synchronized (INSTANCE_LOCK) {
             Log.d(TAG, "setInstanceForTesting(), set to " + objectsFactory);
@@ -63,5 +72,33 @@ public class GattObjectsFactory {
 
     public ScanNativeInterface getScanNativeInterface() {
         return ScanNativeInterface.getInstance();
+    }
+
+    /**
+     * Create an instance of ScanManager
+     *
+     * @param context a Context instance
+     * @param scanHelper a TransitionalScanHelper instance
+     * @param adapterService an AdapterService instance
+     * @param bluetoothAdapterProxy a bluetoothAdapterProxy instance
+     * @param looper the looper to be used for processing messages
+     * @return the created ScanManager instance
+     */
+    public ScanManager createScanManager(
+            Context context,
+            TransitionalScanHelper scanHelper,
+            AdapterService adapterService,
+            BluetoothAdapterProxy bluetoothAdapterProxy,
+            Looper looper) {
+        return new ScanManager(context, scanHelper, adapterService, bluetoothAdapterProxy, looper);
+    }
+
+    public PeriodicScanManager createPeriodicScanManager(AdapterService adapterService) {
+        return new PeriodicScanManager(adapterService);
+    }
+
+    public DistanceMeasurementManager createDistanceMeasurementManager(
+            AdapterService adapterService) {
+        return new DistanceMeasurementManager(adapterService);
     }
 }

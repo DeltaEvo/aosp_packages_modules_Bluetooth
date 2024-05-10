@@ -21,16 +21,18 @@ import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentat
 import static org.mockito.Mockito.*;
 
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothUuid;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.media.session.PlaybackState;
+import android.os.ParcelUuid;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
 import androidx.test.runner.AndroidJUnit4;
 
-import com.android.bluetooth.R;
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.audio_util.MediaData;
 import com.android.bluetooth.audio_util.MediaPlayerList;
@@ -40,19 +42,20 @@ import com.android.bluetooth.btservice.AdapterService;
 
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.Before;
-import org.junit.Ignore;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.UUID;
 
 @MediumTest
 @RunWith(AndroidJUnit4.class)
@@ -69,6 +72,8 @@ public class MediaControlProfileTest {
     private String name = "TestPlayer";
     private CharSequence charSequence = "TestPlayer";
     private MediaControlServiceCallbacks mMcpServiceCallbacks;
+
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
 
     @Mock private AdapterService mAdapterService;
     @Mock private MediaData mMockMediaData;
@@ -93,7 +98,6 @@ public class MediaControlProfileTest {
 
         mTargetContext = InstrumentationRegistry.getTargetContext();
         MediaControlProfile.ListCallback listCallback;
-        MockitoAnnotations.initMocks(this);
 
         TestUtils.setAdapterService(mAdapterService);
         mAdapter = BluetoothAdapter.getDefaultAdapter();
@@ -385,6 +389,26 @@ public class MediaControlProfileTest {
     }
 
     @Test
+    public void testAvrcpCompatibleActionSet() {
+        long actions = PlaybackState.ACTION_SET_RATING;
+        PlaybackState.Builder bob = new PlaybackState.Builder(mMockMediaData.state);
+        bob.setActions(actions);
+        mMockMediaData.state = bob.build();
+
+        // Same base feature set as the player item features defined in `avrcp/get_foder_items.cc`
+        final long baseFeatures =
+                PlaybackState.ACTION_PLAY
+                        | PlaybackState.ACTION_STOP
+                        | PlaybackState.ACTION_PAUSE
+                        | PlaybackState.ACTION_REWIND
+                        | PlaybackState.ACTION_FAST_FORWARD
+                        | PlaybackState.ACTION_SKIP_TO_NEXT
+                        | PlaybackState.ACTION_SKIP_TO_PREVIOUS;
+        Assert.assertEquals(
+                actions | baseFeatures, mMediaControlProfile.getCurrentPlayerSupportedActions());
+    }
+
+    @Test
     public void testPlayerActions2McsSupportedOpcodes() {
         long actions = PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE
                 | PlaybackState.ACTION_STOP | PlaybackState.ACTION_SKIP_TO_PREVIOUS
@@ -486,6 +510,23 @@ public class MediaControlProfileTest {
         testGetSupportedPlayingOrder(true, false);
         testGetSupportedPlayingOrder(false, true);
         testGetSupportedPlayingOrder(false, false);
+    }
+
+    @Test
+    public void testGmcsSetGetNotificationSubscriptionDoesNotCrash() {
+        final ParcelUuid charUuid1 = new ParcelUuid(UUID.randomUUID());
+        final int ccid1 = BluetoothDevice.METADATA_GMCS_CCCD;
+
+        doReturn(ccid1).when(mMockGMcsService).getContentControlId();
+        doReturn(BluetoothUuid.GENERIC_MEDIA_CONTROL.getUuid())
+                .when(mMockGMcsService)
+                .getServiceUuid();
+
+        // BluetoothDevice class is not mockable
+        BluetoothDevice bluetoothDevice = TestUtils.getTestDevice(mAdapter, 0);
+        mMediaControlProfile.setNotificationSubscription(ccid1, bluetoothDevice, charUuid1, true);
+        Assert.assertNotNull(
+                mMediaControlProfile.getNotificationSubscriptions(ccid1, bluetoothDevice));
     }
 
     @Test

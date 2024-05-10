@@ -25,6 +25,7 @@ import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
+import android.bluetooth.BluetoothLeBroadcastMetadata;
 import android.content.Context;
 import android.os.Looper;
 
@@ -32,21 +33,23 @@ import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
 import androidx.test.runner.AndroidJUnit4;
 
-import com.android.bluetooth.R;
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.flags.Flags;
 import com.android.bluetooth.le_audio.LeAudioService;
+import android.platform.test.flag.junit.SetFlagsRule;
 
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -67,7 +70,11 @@ public class MediaControlGattServiceTest {
     private static final UUID UUID_CCCD = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
     public static final int TEST_CCID = 1;
 
+    @Rule public final SetFlagsRule mSetFlagsRule = new SetFlagsRule();
+
     private MediaControlGattService mMcpService;
+
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
 
     @Mock private AdapterService mAdapterService;
     @Mock private MediaControlGattService.BluetoothGattServerProxy mMockGattServer;
@@ -84,7 +91,6 @@ public class MediaControlGattServiceTest {
             Looper.prepare();
         }
 
-        MockitoAnnotations.initMocks(this);
 
         TestUtils.setAdapterService(mAdapterService);
         mAdapter = BluetoothAdapter.getDefaultAdapter();
@@ -114,15 +120,16 @@ public class MediaControlGattServiceTest {
     private void prepareConnectedDevice() {
         if (mCurrentDevice == null) {
             mCurrentDevice = TestUtils.getTestDevice(mAdapter, 0);
+            List<BluetoothDevice> devices = new ArrayList<BluetoothDevice>();
+            devices.add(mCurrentDevice);
+            doReturn(devices).when(mMockGattServer).getConnectedDevices();
+            doReturn(true).when(mMockGattServer).isDeviceConnected(eq(mCurrentDevice));
         }
     }
 
     private void prepareConnectedDevicesCccVal(
             BluetoothGattCharacteristic characteristic, byte[] value) {
         prepareConnectedDevice();
-        List<BluetoothDevice> devices = new ArrayList<BluetoothDevice>();
-        devices.add(mCurrentDevice);
-        doReturn(devices).when(mMockGattServer).getConnectedDevices();
         mMcpService.setCcc(mCurrentDevice, characteristic.getUuid(), 0, value, true);
     }
 
@@ -132,6 +139,7 @@ public class MediaControlGattServiceTest {
 
         doReturn(mMandatoryFeatures).when(mMockMcsCallbacks).onGetFeatureFlags();
         Assert.assertTrue(mMcpService.init(UUID_GMCS));
+        Assert.assertEquals(mMcpService.getServiceUuid(), UUID_GMCS);
         Assert.assertEquals(mMcpService.getContentControlId(), TEST_CCID);
 
         doReturn(true).when(mMockGattServer).removeService(any(BluetoothGattService.class));
@@ -355,8 +363,10 @@ public class MediaControlGattServiceTest {
         Assert.assertEquals(characteristic.getProperties(),
                 BluetoothGattCharacteristic.PROPERTY_READ
                         | BluetoothGattCharacteristic.PROPERTY_NOTIFY);
-        Assert.assertEquals(Request.SupportedOpcodes.NONE,
-                characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT32, 0)
+        Assert.assertEquals(
+                MediaControlGattService.INITIAL_SUPPORTED_OPCODES,
+                characteristic
+                        .getIntValue(BluetoothGattCharacteristic.FORMAT_UINT32, 0)
                         .intValue());
 
         characteristic = service.getCharacteristic(
@@ -938,12 +948,19 @@ public class MediaControlGattServiceTest {
 
     @Test
     public void testMediaControlPointeRequest_OpcodePlayCallLeAudioServiceSetActiveDevice() {
+        mSetFlagsRule.enableFlags(Flags.FLAG_LEAUDIO_BROADCAST_FEATURE_SUPPORT);
         BluetoothGattService service = initAllFeaturesGattService();
         prepareConnectedDevice();
         mMcpService.updateSupportedOpcodesChar(Request.SupportedOpcodes.PLAY, true);
         verifyMediaControlPointRequest(service, Request.Opcodes.PLAY, null,
                 BluetoothGatt.GATT_SUCCESS, 1);
-        verify(mMockLeAudioService).setActiveDevice(any(BluetoothDevice.class));
+        if (!Flags.leaudioBroadcastFeatureSupport()) {
+            verify(mMockLeAudioService).setActiveDevice(any(BluetoothDevice.class));
+        } else {
+            final List<BluetoothLeBroadcastMetadata> metadataList = mock(List.class);
+            when(mMockLeAudioService.getAllBroadcastMetadata()).thenReturn(metadataList);
+            verify(mMockMcsCallbacks, times(1)).onMediaControlRequest(any(Request.class));
+        }
     }
 
     @Test
@@ -1056,7 +1073,7 @@ public class MediaControlGattServiceTest {
     }
 
     @Test
-    public void testCharacteristicReadUnauthorized() {
+    public void testCharacteristicReadRejectedUnauthorized() {
         BluetoothGattService service = initAllFeaturesGattService();
 
         BluetoothGattCharacteristic characteristic =
@@ -1076,7 +1093,79 @@ public class MediaControlGattServiceTest {
     }
 
     @Test
-    public void testCharacteristicWriteUnauthorized() {
+    public void testCharacteristicNotifyOnAuthorization() {
+        BluetoothGattService service = initAllFeaturesGattService();
+        prepareConnectedDevice();
+
+        // Leave it as unauthorized yet
+        doReturn(BluetoothDevice.ACCESS_REJECTED)
+                .when(mMockMcpService)
+                .getDeviceAuthorization(any(BluetoothDevice.class));
+
+        BluetoothGattCharacteristic characteristic =
+                service.getCharacteristic(MediaControlGattService.UUID_PLAYING_ORDER_SUPPORTED);
+        prepareConnectedDevicesCccVal(
+                characteristic, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE.clone());
+
+        // Assume no update on some of the characteristics
+        BluetoothGattCharacteristic characteristic2 =
+                service.getCharacteristic(MediaControlGattService.UUID_MEDIA_STATE);
+        prepareConnectedDevicesCccVal(
+                characteristic2, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE.clone());
+        characteristic2.setValue((byte[]) null);
+
+        BluetoothGattCharacteristic characteristic3 =
+                service.getCharacteristic(MediaControlGattService.UUID_TRACK_CHANGED);
+        prepareConnectedDevicesCccVal(
+                characteristic3, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE.clone());
+        characteristic3.setValue((byte[]) null);
+
+        // Call it once but expect no notification for the unauthorized device
+        int playing_order_supported =
+                SupportedPlayingOrder.IN_ORDER_REPEAT | SupportedPlayingOrder.NEWEST_ONCE;
+        mMcpService.updatePlayingOrderSupportedChar(playing_order_supported);
+        verify(mMockGattServer, times(0))
+                .notifyCharacteristicChanged(eq(mCurrentDevice), any(), eq(false));
+
+        // Expect a single notification for the just authorized device
+        doReturn(BluetoothDevice.ACCESS_ALLOWED)
+                .when(mMockMcpService)
+                .getDeviceAuthorization(any(BluetoothDevice.class));
+        mMcpService.onDeviceAuthorizationSet(mCurrentDevice);
+        verify(mMockGattServer, times(0))
+                .notifyCharacteristicChanged(eq(mCurrentDevice), eq(characteristic2), eq(false));
+        verify(mMockGattServer, times(0))
+                .notifyCharacteristicChanged(eq(mCurrentDevice), eq(characteristic3), eq(false));
+        verify(mMockGattServer, times(1))
+                .notifyCharacteristicChanged(eq(mCurrentDevice), eq(characteristic), eq(false));
+    }
+
+    @Test
+    public void testCharacteristicReadUnknownUnauthorized() {
+        BluetoothGattService service = initAllFeaturesGattService();
+
+        BluetoothGattCharacteristic characteristic =
+                service.getCharacteristic(MediaControlGattService.UUID_TRACK_POSITION);
+
+        prepareConnectedDevice();
+        doReturn(BluetoothDevice.ACCESS_UNKNOWN)
+                .when(mMockMcpService)
+                .getDeviceAuthorization(any(BluetoothDevice.class));
+
+        mMcpService.mServerCallback.onCharacteristicReadRequest(
+                mCurrentDevice, 1, 0, characteristic);
+        verify(mMockMcpService, times(0)).onDeviceUnauthorized(eq(mCurrentDevice));
+        verify(mMockGattServer, times(0))
+                .sendResponse(
+                        eq(mCurrentDevice),
+                        eq(1),
+                        eq(BluetoothGatt.GATT_INSUFFICIENT_AUTHORIZATION),
+                        eq(0),
+                        any());
+    }
+
+    @Test
+    public void testCharacteristicWriteRejectedUnauthorized() {
         BluetoothGattService service = initAllFeaturesGattService();
         int track_position = 100;
 
@@ -1101,7 +1190,29 @@ public class MediaControlGattServiceTest {
     }
 
     @Test
-    public void testDescriptorReadUnauthorized() {
+    public void testCharacteristicWriteUnknownUnauthorized() {
+        BluetoothGattService service = initAllFeaturesGattService();
+        int track_position = 100;
+
+        BluetoothGattCharacteristic characteristic =
+                service.getCharacteristic(MediaControlGattService.UUID_TRACK_POSITION);
+
+        ByteBuffer bb = ByteBuffer.allocate(Integer.BYTES + 1).order(ByteOrder.LITTLE_ENDIAN);
+        bb.putInt((int) track_position);
+        bb.put((byte) 0);
+
+        prepareConnectedDevice();
+        doReturn(BluetoothDevice.ACCESS_UNKNOWN)
+                .when(mMockMcpService)
+                .getDeviceAuthorization(any(BluetoothDevice.class));
+
+        mMcpService.mServerCallback.onCharacteristicWriteRequest(
+                mCurrentDevice, 1, characteristic, false, true, 0, bb.array());
+        verify(mMockMcpService).onDeviceUnauthorized(eq(mCurrentDevice));
+    }
+
+    @Test
+    public void testDescriptorReadRejectedUnauthorized() {
         BluetoothGattService service = initAllFeaturesGattService();
 
         BluetoothGattDescriptor descriptor =
@@ -1122,7 +1233,32 @@ public class MediaControlGattServiceTest {
     }
 
     @Test
-    public void testDescriptorWriteUnauthorized() {
+    public void testDescriptorReadUnknownUnauthorized() {
+        BluetoothGattService service = initAllFeaturesGattService();
+
+        BluetoothGattDescriptor descriptor =
+                service.getCharacteristic(MediaControlGattService.UUID_TRACK_POSITION)
+                        .getDescriptor(UUID_CCCD);
+        Assert.assertNotNull(descriptor);
+
+        prepareConnectedDevice();
+        doReturn(BluetoothDevice.ACCESS_UNKNOWN)
+                .when(mMockMcpService)
+                .getDeviceAuthorization(any(BluetoothDevice.class));
+
+        mMcpService.mServerCallback.onDescriptorReadRequest(mCurrentDevice, 1, 0, descriptor);
+        verify(mMockMcpService, times(0)).onDeviceUnauthorized(eq(mCurrentDevice));
+        verify(mMockGattServer, times(0))
+                .sendResponse(
+                        eq(mCurrentDevice),
+                        eq(1),
+                        eq(BluetoothGatt.GATT_INSUFFICIENT_AUTHORIZATION),
+                        eq(0),
+                        any());
+    }
+
+    @Test
+    public void testDescriptorWriteRejectedUnauthorized() {
         BluetoothGattService service = initAllFeaturesGattService();
 
         BluetoothGattDescriptor descriptor =
@@ -1145,6 +1281,36 @@ public class MediaControlGattServiceTest {
         verify(mMockGattServer)
                 .sendResponse(eq(mCurrentDevice), eq(1),
                         eq(BluetoothGatt.GATT_INSUFFICIENT_AUTHORIZATION), eq(0), any());
+    }
+
+    @Test
+    public void testDescriptorWriteUnknownUnauthorized() {
+        BluetoothGattService service = initAllFeaturesGattService();
+
+        BluetoothGattDescriptor descriptor =
+                service.getCharacteristic(MediaControlGattService.UUID_TRACK_POSITION)
+                        .getDescriptor(UUID_CCCD);
+        Assert.assertNotNull(descriptor);
+
+        prepareConnectedDevice();
+        doReturn(BluetoothDevice.ACCESS_UNKNOWN)
+                .when(mMockMcpService)
+                .getDeviceAuthorization(any(BluetoothDevice.class));
+
+        ByteBuffer bb = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN);
+        bb.put((byte) 0);
+        bb.put((byte) 1);
+
+        mMcpService.mServerCallback.onDescriptorWriteRequest(
+                mCurrentDevice, 1, descriptor, false, true, 0, bb.array());
+        verify(mMockMcpService, times(0)).onDeviceUnauthorized(eq(mCurrentDevice));
+        verify(mMockGattServer, times(0))
+                .sendResponse(
+                        eq(mCurrentDevice),
+                        eq(1),
+                        eq(BluetoothGatt.GATT_INSUFFICIENT_AUTHORIZATION),
+                        eq(0),
+                        any());
     }
 
     @Test
@@ -1187,5 +1353,12 @@ public class MediaControlGattServiceTest {
         MediaState playback_state = MediaState.SEEKING;
         state_map.put(PlayerStateField.PLAYBACK_STATE, playback_state);
         mMcpService.updatePlayerState(state_map);
+    }
+
+    @Test
+    public void testDumpDoesNotCrash() {
+        mMcpService.dump(new StringBuilder());
+        BluetoothGattService service = initAllFeaturesGattService();
+        mMcpService.dump(new StringBuilder());
     }
 }

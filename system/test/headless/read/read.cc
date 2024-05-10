@@ -17,8 +17,8 @@
 #define LOG_TAG "bt_headless"
 
 #include "test/headless/read/read.h"
-#include "base/logging.h"     // LOG() stdout and android log
-#include "osi/include/log.h"  // android log only
+
+#include "os/log.h"        // android log only
 #include "test/headless/get_options.h"
 #include "test/headless/headless.h"
 #include "test/headless/read/name.h"

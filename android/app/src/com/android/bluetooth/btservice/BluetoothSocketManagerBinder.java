@@ -19,16 +19,20 @@ package com.android.bluetooth.btservice;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.bluetooth.IBluetoothSocketManager;
+import android.content.AttributionSource;
 import android.os.Binder;
 import android.os.ParcelFileDescriptor;
 import android.os.ParcelUuid;
 
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.flags.Flags;
 
 class BluetoothSocketManagerBinder extends IBluetoothSocketManager.Stub {
     private static final String TAG = "BluetoothSocketManagerBinder";
 
     private static final int INVALID_FD = -1;
+
+    private static final int INVALID_CID = -1;
 
     private AdapterService mService;
 
@@ -50,17 +54,23 @@ class BluetoothSocketManagerBinder extends IBluetoothSocketManager.Stub {
             return null;
         }
 
+        String brEdrAddress =
+                Flags.identityAddressNullIfUnknown()
+                        ? Utils.getBrEdrAddress(device)
+                        : mService.getIdentityAddress(device.getAddress());
+
         return marshalFd(
-                mService.connectSocketNative(
-                        Utils.getBytesFromAddress(
-                                type == BluetoothSocket.TYPE_L2CAP_LE
-                                        ? device.getAddress()
-                                        : mService.getIdentityAddress(device.getAddress())),
-                        type,
-                        Utils.uuidToByteArray(uuid),
-                        port,
-                        flag,
-                        Binder.getCallingUid()));
+                mService.getNative()
+                        .connectSocket(
+                                Utils.getBytesFromAddress(
+                                        type == BluetoothSocket.TYPE_L2CAP_LE
+                                                ? device.getAddress()
+                                                : brEdrAddress),
+                                type,
+                                Utils.uuidToByteArray(uuid),
+                                port,
+                                flag,
+                                Binder.getCallingUid()));
     }
 
     @Override
@@ -73,14 +83,15 @@ class BluetoothSocketManagerBinder extends IBluetoothSocketManager.Stub {
             return null;
         }
 
-        return marshalFd(mService.createSocketChannelNative(
-            type,
-            serviceName,
-            Utils.uuidToByteArray(uuid),
-            port,
-            flag,
-            Binder.getCallingUid()));
-
+        return marshalFd(
+                mService.getNative()
+                        .createSocketChannel(
+                                type,
+                                serviceName,
+                                Utils.uuidToByteArray(uuid),
+                                port,
+                                flag,
+                                Binder.getCallingUid()));
     }
 
     @Override
@@ -91,7 +102,36 @@ class BluetoothSocketManagerBinder extends IBluetoothSocketManager.Stub {
             return;
         }
 
-        mService.requestMaximumTxDataLengthNative(Utils.getBytesFromAddress(device.getAddress()));
+        mService.getNative()
+                .requestMaximumTxDataLength(Utils.getBytesFromAddress(device.getAddress()));
+    }
+
+    @Override
+    public int getL2capLocalChannelId(ParcelUuid connectionUuid, AttributionSource source) {
+        AdapterService service = mService;
+        if (service == null
+                || !Utils.callerIsSystemOrActiveOrManagedUser(
+                        service, TAG, "getL2capLocalChannelId")
+                || !Utils.checkConnectPermissionForDataDelivery(
+                        service, source, "BluetoothSocketManagerBinder getL2capLocalChannelId")) {
+            return INVALID_CID;
+        }
+        Utils.enforceBluetoothPrivilegedPermission(service);
+        return service.getNative().getSocketL2capLocalChannelId(connectionUuid);
+    }
+
+    @Override
+    public int getL2capRemoteChannelId(ParcelUuid connectionUuid, AttributionSource source) {
+        AdapterService service = mService;
+        if (service == null
+                || !Utils.callerIsSystemOrActiveOrManagedUser(
+                        service, TAG, "getL2capRemoteChannelId")
+                || !Utils.checkConnectPermissionForDataDelivery(
+                        service, source, "BluetoothSocketManagerBinder getL2capRemoteChannelId")) {
+            return INVALID_CID;
+        }
+        Utils.enforceBluetoothPrivilegedPermission(service);
+        return service.getNative().getSocketL2capRemoteChannelId(connectionUuid);
     }
 
     private void enforceActiveUser() {

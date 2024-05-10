@@ -19,7 +19,6 @@ package com.android.bluetooth.hfpclient;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import android.bluetooth.BluetoothDevice;
@@ -32,10 +31,12 @@ import androidx.test.runner.AndroidJUnit4;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.util.List;
 import java.util.Set;
@@ -59,12 +60,13 @@ public class HeadsetClientServiceInterfaceTest {
         TEST_BUNDLE.putInt("test_int", 0);
     }
 
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock private HeadsetClientService mMockHeadsetClientService;
     private HeadsetClientServiceInterface mServiceInterface;
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
         HeadsetClientService.setHeadsetClientService(mMockHeadsetClientService);
         mServiceInterface = new HeadsetClientServiceInterface();
     }

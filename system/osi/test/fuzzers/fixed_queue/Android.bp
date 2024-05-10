@@ -15,10 +15,14 @@ cc_fuzz {
         "fuzz_fixed_queue.cc",
     ],
     shared_libs: [
-        "liblog",
+        "libbase",
         "libcutils",
+        "liblog",
     ],
     static_libs: [
+        "libbluetooth_log",
+        "libchrome",
         "libosi",
     ],
+    cflags: ["-Wno-unused-parameter"],
 }

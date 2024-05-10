@@ -15,12 +15,13 @@
  */
 
 #include <base/functional/bind.h>
-#include <base/logging.h>
 #include <base/run_loop.h>
 #include <base/threading/thread.h>
+#include <bluetooth/log.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <unistd.h>
+
 #include <chrono>
 #include <future>
 #include <iostream>
@@ -32,6 +33,7 @@
 #include "osi/include/thread.h"
 
 using bluetooth::common::MessageLoopThread;
+using namespace bluetooth;
 
 #define NUM_MESSAGES_TO_SEND 100000
 
@@ -135,8 +137,8 @@ TEST_F(OsiThreadMessageLoopPerformanceTest, message_loop_speed_test) {
       std::chrono::duration_cast<std::chrono::milliseconds>(end_time -
                                                             start_time);
 
-  LOG(INFO) << "OsiThreadMessageLoopPerformanceTest, " << duration.count()
-            << " ms, " << NUM_MESSAGES_TO_SEND << " messages";
+  log::info("OsiThreadMessageLoopPerformanceTest, {} ms, {} messages",
+            duration.count(), NUM_MESSAGES_TO_SEND);
 }
 
 class StlThreadMessageLoopPerformanceTest : public MessageLoopPerformanceTest {
@@ -180,8 +182,8 @@ TEST_F(StlThreadMessageLoopPerformanceTest, stl_thread_speed_test) {
       std::chrono::duration_cast<std::chrono::milliseconds>(end_time -
                                                             start_time);
 
-  LOG(INFO) << "StlThreadMessageLoopPerformanceTest, " << duration.count()
-            << " ms, " << NUM_MESSAGES_TO_SEND << " messages";
+  log::info("StlThreadMessageLoopPerformanceTest, {} ms, {} messages",
+            duration.count(), NUM_MESSAGES_TO_SEND);
 }
 
 class PosixThreadMessageLoopPerformanceTest
@@ -226,8 +228,8 @@ TEST_F(PosixThreadMessageLoopPerformanceTest, stl_thread_speed_test) {
       std::chrono::duration_cast<std::chrono::milliseconds>(end_time -
                                                             start_time);
 
-  LOG(INFO) << "PosixThreadMessageLoopPerformanceTest, " << duration.count()
-            << " ms, " << NUM_MESSAGES_TO_SEND << " messages";
+  log::info("PosixThreadMessageLoopPerformanceTest, {} ms, {} messages",
+            duration.count(), NUM_MESSAGES_TO_SEND);
 }
 
 class ReactorPerformanceTest : public PerformanceTest {
@@ -268,8 +270,8 @@ TEST_F(ReactorPerformanceTest, reactor_thread_speed_test) {
                                                             start_time);
   fixed_queue_unregister_dequeue(bt_msg_queue_);
 
-  LOG(INFO) << "ReactorPerformanceTest, " << duration.count() << " ms, "
-            << NUM_MESSAGES_TO_SEND << " messages";
+  log::info("ReactorPerformanceTest, {} ms, {} messages", duration.count(),
+            NUM_MESSAGES_TO_SEND);
 }
 
 class WorkerThreadPerformanceTest : public PerformanceTest {
@@ -281,8 +283,8 @@ class WorkerThreadPerformanceTest : public PerformanceTest {
         new MessageLoopThread("WorkerThreadPerformanceTest thread");
     worker_thread_->StartUp();
     worker_thread_->DoInThread(
-        FROM_HERE, base::Bind(&std::promise<void>::set_value,
-                              base::Unretained(set_up_promise_.get())));
+        FROM_HERE, base::BindOnce(&std::promise<void>::set_value,
+                                  base::Unretained(set_up_promise_.get())));
     set_up_future.wait();
   }
 
@@ -307,7 +309,7 @@ TEST_F(WorkerThreadPerformanceTest, worker_thread_speed_test) {
   for (int i = 0; i < NUM_MESSAGES_TO_SEND; i++) {
     fixed_queue_enqueue(bt_msg_queue_, (void*)&g_counter);
     worker_thread_->DoInThread(
-        FROM_HERE, base::Bind(&callback_batch, bt_msg_queue_, nullptr));
+        FROM_HERE, base::BindOnce(&callback_batch, bt_msg_queue_, nullptr));
   }
   counter_future.wait();
 
@@ -317,8 +319,8 @@ TEST_F(WorkerThreadPerformanceTest, worker_thread_speed_test) {
       std::chrono::duration_cast<std::chrono::milliseconds>(end_time -
                                                             start_time);
 
-  LOG(INFO) << "WorkerThreadPerformanceTest, " << duration.count() << " ms, "
-            << NUM_MESSAGES_TO_SEND << " messages";
+  log::info("WorkerThreadPerformanceTest, {} ms, {} messages", duration.count(),
+            NUM_MESSAGES_TO_SEND);
 }
 
 class LibChromeThreadPerformanceTest : public PerformanceTest {
@@ -365,6 +367,6 @@ TEST_F(LibChromeThreadPerformanceTest, worker_thread_speed_test) {
       std::chrono::duration_cast<std::chrono::milliseconds>(end_time -
                                                             start_time);
 
-  LOG(INFO) << "LibChromeThreadPerformanceTest, " << duration.count() << " ms, "
-            << NUM_MESSAGES_TO_SEND << " messages";
+  log::info("LibChromeThreadPerformanceTest, {} ms, {} messages",
+            duration.count(), NUM_MESSAGES_TO_SEND);
 }

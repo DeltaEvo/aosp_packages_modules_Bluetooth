@@ -18,7 +18,6 @@ package com.android.bluetooth.avrcp;
 
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
-import android.content.Context;
 import android.util.Log;
 
 import com.android.bluetooth.BluetoothObexTransport;
@@ -38,8 +37,7 @@ import java.util.HashMap;
  * BIP OBEX server that handles requests to get AVRCP cover artwork.
  */
 public class AvrcpCoverArtService {
-    private static final String TAG = "AvrcpCoverArtService";
-    private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
+    private static final String TAG = AvrcpCoverArtService.class.getSimpleName();
 
     private static final int COVER_ART_STORAGE_MAX_ITEMS = 32;
 
@@ -48,8 +46,6 @@ public class AvrcpCoverArtService {
      * AVRCP Cover Art OBEX packet size exceed 1024 bytes.
      */
     private static final int MAX_TRANSMIT_PACKET_SIZE = 1024;
-
-    private final Context mContext;
 
     // Cover Art and Image Handle objects
     private final AvrcpCoverArtStorage mStorage;
@@ -66,9 +62,8 @@ public class AvrcpCoverArtService {
     // Native interface
     private AvrcpNativeInterface mNativeInterface;
 
-    public AvrcpCoverArtService(Context context) {
-        mContext = context;
-        mNativeInterface = AvrcpNativeInterface.getInterface();
+    public AvrcpCoverArtService() {
+        mNativeInterface = AvrcpNativeInterface.getInstance();
         mAcceptThread = new SocketAcceptor();
         mStorage = new AvrcpCoverArtStorage(COVER_ART_STORAGE_MAX_ITEMS);
     }
@@ -199,19 +194,22 @@ public class AvrcpCoverArtService {
             if (mClients.containsKey(device)) return false;
 
             // Create a BIP OBEX Server session for the client and connect
-            AvrcpBipObexServer s = new AvrcpBipObexServer(this, new AvrcpBipObexServer.Callback() {
-                public void onConnected() {
-                    mNativeInterface.setBipClientStatus(device.getAddress(), true);
-                }
+            AvrcpBipObexServer s =
+                    new AvrcpBipObexServer(
+                            this,
+                            new AvrcpBipObexServer.Callback() {
+                                public void onConnected() {
+                                    mNativeInterface.setBipClientStatus(device, true);
+                                }
 
-                public void onDisconnected() {
-                    mNativeInterface.setBipClientStatus(device.getAddress(), false);
-                }
+                                public void onDisconnected() {
+                                    mNativeInterface.setBipClientStatus(device, false);
+                                }
 
-                public void onClose() {
-                    disconnect(device);
-                }
-            });
+                                public void onClose() {
+                                    disconnect(device);
+                                }
+                            });
             BluetoothObexTransport transport = new BluetoothObexTransport(socket,
                     MAX_TRANSMIT_PACKET_SIZE,
                     BluetoothObexTransport.PACKET_SIZE_UNSPECIFIED);
@@ -236,7 +234,7 @@ public class AvrcpCoverArtService {
         // socket as well. No need to maintain and close anything else.
         synchronized (mClientsLock) {
             if (mClients.containsKey(device)) {
-                mNativeInterface.setBipClientStatus(device.getAddress(), false);
+                mNativeInterface.setBipClientStatus(device, false);
                 ServerSession session = mClients.get(device);
                 mClients.remove(device);
                 session.close();
@@ -289,9 +287,7 @@ public class AvrcpCoverArtService {
      * Print a message to DEBUG if debug output is enabled
      */
     private void debug(String msg) {
-        if (DEBUG) {
-            Log.d(TAG, msg);
-        }
+        Log.d(TAG, msg);
     }
 
     /**

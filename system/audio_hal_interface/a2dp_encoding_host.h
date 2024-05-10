@@ -44,6 +44,9 @@ bool StartRequest();
 // Invoked by audio server when audio streaming is done.
 bool StopRequest();
 
+// Invoked by audio server when audio streaming is suspended.
+bool SuspendRequest();
+
 struct PresentationPosition {
   uint64_t remote_delay_report_ns;
   uint64_t total_bytes_read;
@@ -52,6 +55,8 @@ struct PresentationPosition {
 
 // Invoked by audio server to check audio presentation position periodically.
 PresentationPosition GetPresentationPosition();
+
+bool is_opus_supported();
 
 }  // namespace a2dp
 }  // namespace audio

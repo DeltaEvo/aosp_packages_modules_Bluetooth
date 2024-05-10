@@ -27,7 +27,6 @@
 #include <cstdint>
 
 #include "stack/include/bt_hdr.h"
-#include "stack/include/bt_types.h"
 
 /*****************************************************************************
  *  Function Declarations
@@ -44,9 +43,9 @@
  *
  ******************************************************************************/
 
-extern int bta_co_rfc_data_incoming(uint32_t rfcomm_slot_id, BT_HDR* p_buf);
-extern int bta_co_rfc_data_outgoing_size(uint32_t rfcomm_slot_id, int* size);
-extern int bta_co_rfc_data_outgoing(uint32_t rfcomm_slot_id, uint8_t* buf,
-                                    uint16_t size);
+int bta_co_rfc_data_incoming(uint32_t rfcomm_slot_id, BT_HDR* p_buf);
+int bta_co_rfc_data_outgoing_size(uint32_t rfcomm_slot_id, int* size);
+int bta_co_rfc_data_outgoing(uint32_t rfcomm_slot_id, uint8_t* buf,
+                             uint16_t size);
 
 #endif /* BTA_DG_CO_H */

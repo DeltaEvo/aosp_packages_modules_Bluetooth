@@ -22,39 +22,39 @@ import static com.google.common.truth.Truth.assertWithMessage;
 import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.doReturn;
 
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.ContextWrapper;
 import android.content.pm.ProviderInfo;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 
-import android.content.ContextWrapper;
-
-import org.mockito.Mockito;
-
 import androidx.test.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.MockitoAnnotations;
+import org.mockito.Mockito;
 import org.mockito.Spy;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.time.Instant;
-import java.util.Set;
-import java.util.Map;
+import java.util.AbstractMap;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.AbstractMap;
+import java.util.Map;
+import java.util.Set;
 
 @RunWith(AndroidJUnit4.class)
 public class BluetoothMapIMProviderTest {
@@ -68,12 +68,13 @@ public class BluetoothMapIMProviderTest {
 
     private Context mContext;
 
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Spy
     private BluetoothMapIMProvider mProvider = new TestBluetoothMapIMProvider();
 
     @Before
     public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
         mContext = InstrumentationRegistry.getTargetContext();
     }
 

@@ -1,33 +1,17 @@
 /*
- * Copyright (c) 2008-2009, Motorola, Inc.
+ * Copyright (C) 2024 The Android Open Source Project
  *
- * All rights reserved.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * - Redistributions of source code must retain the above copyright notice,
- * this list of conditions and the following disclaimer.
- *
- * - Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * - Neither the name of the Motorola, Inc. nor the names of its contributors
- * may be used to endorse or promote products derived from this software
- * without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package com.android.bluetooth.pbap;
@@ -36,6 +20,8 @@ import static android.view.WindowManager.LayoutParams.SYSTEM_FLAG_HIDE_NON_SYSTE
 
 import android.bluetooth.AlertActivity;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothProtoEnums;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -53,19 +39,21 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.TextView;
 
+import com.android.bluetooth.BluetoothMethodProxy;
+import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.R;
+import com.android.bluetooth.content_profiles.ContentProfileErrorReportUtils;
 import com.android.internal.annotations.VisibleForTesting;
 
 /**
- * PbapActivity shows two dialogues: One for accepting incoming pbap request and
- * the other prompts the user to enter a session key for authentication with a
- * remote Bluetooth device.
+ * PbapActivity shows two dialogues: One for accepting incoming pbap request and the other prompts
+ * the user to enter a session key for authentication with a remote Bluetooth device.
  */
+// Next tag value for ContentProfileErrorReportUtils.report(): 1
 public class BluetoothPbapActivity extends AlertActivity
         implements Preference.OnPreferenceChangeListener, TextWatcher {
     private static final String TAG = "BluetoothPbapActivity";
 
-    private static final boolean V = BluetoothPbapService.VERBOSE;
 
     private static final int BLUETOOTH_OBEX_AUTHKEY_MAX_LENGTH = 16;
 
@@ -87,9 +75,9 @@ public class BluetoothPbapActivity extends AlertActivity
 
     private boolean mTimeout = false;
 
-    private static final int DISMISS_TIMEOUT_DIALOG = 0;
+    @VisibleForTesting static final int DISMISS_TIMEOUT_DIALOG = 0;
 
-    private static final int DISMISS_TIMEOUT_DIALOG_VALUE = 2000;
+    @VisibleForTesting static final long DISMISS_TIMEOUT_DIALOG_DELAY_MS = 2_000;
 
     private BluetoothDevice mDevice;
 
@@ -116,12 +104,20 @@ public class BluetoothPbapActivity extends AlertActivity
             showPbapDialog(DIALOG_YES_NO_AUTH);
             mCurrentDialog = DIALOG_YES_NO_AUTH;
         } else {
-            Log.e(TAG, "Error: this activity may be started only with intent "
-                    + "PBAP_ACCESS_REQUEST or PBAP_AUTH_CHALL ");
+            Log.e(
+                    TAG,
+                    "Error: this activity may be started only with intent "
+                            + "PBAP_ACCESS_REQUEST or PBAP_AUTH_CHALL ");
+            ContentProfileErrorReportUtils.report(
+                    BluetoothProfile.PBAP,
+                    BluetoothProtoEnums.BLUETOOTH_PBAP_ACTIVITY,
+                    BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__LOG_ERROR,
+                    0);
             finish();
         }
-        registerReceiver(mReceiver,
-                new IntentFilter(BluetoothPbapService.USER_CONFIRM_TIMEOUT_ACTION));
+        IntentFilter filter = new IntentFilter(BluetoothPbapService.USER_CONFIRM_TIMEOUT_ACTION);
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
+        registerReceiver(mReceiver, filter);
     }
 
     private void showPbapDialog(int id) {
@@ -217,17 +213,16 @@ public class BluetoothPbapActivity extends AlertActivity
             changeButtonVisibility(DialogInterface.BUTTON_NEGATIVE, View.GONE);
         }
 
-        mTimeoutHandler.sendMessageDelayed(mTimeoutHandler.obtainMessage(DISMISS_TIMEOUT_DIALOG),
-                DISMISS_TIMEOUT_DIALOG_VALUE);
+        BluetoothMethodProxy.getInstance()
+                .handlerSendMessageDelayed(
+                        mTimeoutHandler, DISMISS_TIMEOUT_DIALOG, DISMISS_TIMEOUT_DIALOG_DELAY_MS);
     }
 
     @Override
     protected void onRestoreInstanceState(Bundle savedInstanceState) {
         super.onRestoreInstanceState(savedInstanceState);
         mTimeout = savedInstanceState.getBoolean(KEY_USER_TIMEOUT);
-        if (V) {
-            Log.v(TAG, "onRestoreInstanceState() mTimeout: " + mTimeout);
-        }
+        Log.v(TAG, "onRestoreInstanceState() mTimeout: " + mTimeout);
         if (mTimeout) {
             onTimeout();
         }
@@ -270,9 +265,7 @@ public class BluetoothPbapActivity extends AlertActivity
         public void handleMessage(Message msg) {
             switch (msg.what) {
                 case DISMISS_TIMEOUT_DIALOG:
-                    if (V) {
-                        Log.v(TAG, "Received DISMISS_TIMEOUT_DIALOG msg.");
-                    }
+                    Log.v(TAG, "Received DISMISS_TIMEOUT_DIALOG msg.");
                     finish();
                     break;
                 default:

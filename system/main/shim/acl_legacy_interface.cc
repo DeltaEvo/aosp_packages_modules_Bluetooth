@@ -18,12 +18,10 @@
 
 #include "stack/include/acl_hci_link_interface.h"
 #include "stack/include/ble_acl_interface.h"
-#include "stack/include/gatt_api.h"
-#include "stack/include/sco_hci_link_interface.h"
 #include "stack/include/sec_hci_link_interface.h"
 
 struct tBTM_ESCO_DATA;
-void gatt_notify_phy_updated(tGATT_STATUS status, uint16_t handle,
+void gatt_notify_phy_updated(tHCI_STATUS status, uint16_t handle,
                              uint8_t tx_phy, uint8_t rx_phy);
 void gatt_notify_subrate_change(uint16_t handle, uint16_t subrate_factor,
                                 uint16_t latency, uint16_t cont_num,
@@ -52,6 +50,7 @@ const acl_interface_t& GetAclInterface() {
       .on_packets_completed = acl_packets_completed,
 
       .connection.classic.on_connected = on_acl_br_edr_connected,
+      .connection.classic.on_connect_request = btm_connection_request,
       .connection.classic.on_failed = on_acl_br_edr_failed,
       .connection.classic.on_disconnected = btm_acl_disconnected,
 
@@ -59,11 +58,6 @@ const acl_interface_t& GetAclInterface() {
           acl_ble_enhanced_connection_complete_from_shim,
       .connection.le.on_failed = acl_ble_connection_fail,
       .connection.le.on_disconnected = btm_acl_disconnected,
-      .connection.le.on_iso_disconnected = btm_acl_iso_disconnected,
-
-      .connection.sco.on_esco_connect_request = btm_sco_on_esco_connect_request,
-      .connection.sco.on_sco_connect_request = btm_sco_on_sco_connect_request,
-      .connection.sco.on_disconnected = btm_sco_on_disconnected,
 
       .link.classic.on_authentication_complete = btm_sec_auth_complete,
       .link.classic.on_central_link_key_complete = nullptr,

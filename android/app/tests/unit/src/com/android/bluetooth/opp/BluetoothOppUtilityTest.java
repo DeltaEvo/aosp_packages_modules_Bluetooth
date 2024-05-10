@@ -24,12 +24,15 @@ import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
@@ -37,26 +40,28 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.ParcelFileDescriptor;
 
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.android.bluetooth.BluetoothMethodProxy;
+import com.android.bluetooth.R;
+import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.opp.BluetoothOppTestUtils.CursorMockData;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
-import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import com.android.bluetooth.R;
 
 public class BluetoothOppUtilityTest {
 
@@ -65,6 +70,8 @@ public class BluetoothOppUtilityTest {
     private static final Uri INCORRECT_FORMAT_URI = Uri.parse("www.google.com");
 
     Context mContext;
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock
     Cursor mCursor;
 
@@ -73,16 +80,16 @@ public class BluetoothOppUtilityTest {
 
 
     @Before
-    public void setUp() {
-        MockitoAnnotations.initMocks(this);
+    public void setUp() throws Exception {
         mContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
         BluetoothMethodProxy.setInstanceForTesting(mCallProxy);
-        BluetoothOppTestUtils.enableOppActivities(true, mContext);
+        TestUtils.setUpUiTest();
     }
 
     @After
-    public void tearDown() {
-        BluetoothOppTestUtils.enableOppActivities(false, mContext);
+    public void tearDown() throws Exception {
+        TestUtils.tearDownUiTest();
+
         BluetoothMethodProxy.setInstanceForTesting(null);
     }
 
@@ -157,6 +164,9 @@ public class BluetoothOppUtilityTest {
         doReturn(0).when(mCallProxy).contentResolverDelete(any(), any(), nullable(String.class),
                 nullable(String[].class));
 
+        // Do nothing since we don't need the actual activity to be launched.
+        doNothing().when(spiedContext).startActivity(any());
+
         BluetoothOppUtility.openReceivedFile(spiedContext, "randomFileName.txt",
                 "text/plain", 0L, contentResolverUri);
 
@@ -167,9 +177,11 @@ public class BluetoothOppUtilityTest {
     }
 
     @Test
-    public void openReceivedFile_fileExist_HandlingApplicationExist() throws FileNotFoundException {
+    public void openReceivedFile_fileExist_HandlingApplicationExist() throws Exception {
         Uri contentResolverUri = Uri.parse("content://com.android.bluetooth.opp/btopp/0123");
         Uri fileUri = Uri.parse("content:///tmp/randomFileName.txt");
+
+        ParcelFileDescriptor pfd = mock(ParcelFileDescriptor.class);
 
         Context spiedContext = spy(new ContextWrapper(mContext));
         // Control BluetoothOppUtility#fileExists flow
@@ -181,8 +193,7 @@ public class BluetoothOppUtilityTest {
         doReturn(fileUri.toString()).when(mCursor).getString(anyInt());
 
         doReturn(0).when(mCallProxy).contentResolverDelete(any(), any(), any(), any());
-        doReturn(null).when(mCallProxy).contentResolverOpenFileDescriptor(any(),
-                eq(fileUri), any());
+        doReturn(pfd).when(mCallProxy).contentResolverOpenFileDescriptor(any(), eq(fileUri), any());
 
         // Control BluetoothOppUtility#isRecognizedFileType flow
         PackageManager mockManager = mock(PackageManager.class);
@@ -198,14 +209,15 @@ public class BluetoothOppUtilityTest {
                         argument.getData(), Uri.parse("content:///tmp/randomFileName.txt")
                 ) && Objects.equals(argument.getAction(), Intent.ACTION_VIEW)
         ));
+
+        verify(pfd).close();
     }
 
     @Test
-    public void openReceivedFile_fileExist_HandlingApplicationNotExist()
-            throws FileNotFoundException {
-
+    public void openReceivedFile_fileExist_HandlingApplicationNotExist() throws Exception {
         Uri contentResolverUri = Uri.parse("content://com.android.bluetooth.opp/btopp/0123");
         Uri fileUri = Uri.parse("content:///tmp/randomFileName.txt");
+        ParcelFileDescriptor pfd = mock(ParcelFileDescriptor.class);
 
         Context spiedContext = spy(new ContextWrapper(mContext));
         // Control BluetoothOppUtility#fileExists flow
@@ -218,13 +230,15 @@ public class BluetoothOppUtilityTest {
 
 
         doReturn(0).when(mCallProxy).contentResolverDelete(any(), any(), any(), any());
-        doReturn(null).when(mCallProxy).contentResolverOpenFileDescriptor(any(),
-                eq(fileUri), any());
+        doReturn(pfd).when(mCallProxy).contentResolverOpenFileDescriptor(any(), eq(fileUri), any());
 
         // Control BluetoothOppUtility#isRecognizedFileType flow
         PackageManager mockManager = mock(PackageManager.class);
         doReturn(mockManager).when(spiedContext).getPackageManager();
         doReturn(List.of()).when(mockManager).queryIntentActivities(any(), anyInt());
+
+        // Do nothing since we don't need the actual activity to be launched.
+        doNothing().when(spiedContext).startActivity(any());
 
         BluetoothOppUtility.openReceivedFile(spiedContext, "randomFileName.txt",
                 "text/plain", 0L, contentResolverUri);
@@ -233,11 +247,12 @@ public class BluetoothOppUtilityTest {
                 argThat(argument -> argument.getComponent().getClassName().equals(
                         BluetoothOppBtErrorActivity.class.getName())
                 ));
+        verify(pfd).close();
     }
-
 
     @Test
     public void fillRecord_filledAllProperties() {
+        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
         int idValue = 1234;
         int directionValue = BluetoothShare.DIRECTION_OUTBOUND;
         long totalBytesValue = 10;
@@ -246,8 +261,10 @@ public class BluetoothOppUtilityTest {
         Long timestampValue = 123456789L;
         String destinationValue = "AA:BB:CC:00:11:22";
         String fileNameValue = mContext.getString(R.string.unknown_file);
-        String deviceNameValue = mContext.getString(R.string.unknown_device); // bt device name
         String fileTypeValue = "text/plain";
+        BluetoothDevice remoteDevice = adapter.getRemoteDevice(destinationValue);
+        String deviceNameValue =
+                BluetoothOppManager.getInstance(mContext).getDeviceName(remoteDevice);
 
         List<CursorMockData> cursorMockDataList = List.of(
                 new CursorMockData(BluetoothShare._ID, 0, idValue),

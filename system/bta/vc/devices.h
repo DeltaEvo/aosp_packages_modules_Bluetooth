@@ -25,7 +25,7 @@
 #include "bta/include/bta_gatt_api.h"
 #include "bta/vc/types.h"
 #include "common/interfaces/ILoggable.h"
-#include "include/hardware/bt_vc.h"
+#include "os/logging/log_adapter.h"
 #include "types/raw_address.h"
 
 namespace bluetooth {
@@ -104,7 +104,8 @@ class VolumeControlDevice : public bluetooth::common::IRedactableLoggable {
            << "    mute: " << +mute << "\n"
            << "    flags: " << +flags << "\n"
            << "    device read: " << device_ready << "\n"
-           << "    connecting_actively_: " << connecting_actively << "\n";
+           << "    connecting_actively: " << connecting_actively << "\n"
+           << "    change_counter: " << +change_counter << "\n";
 
     dprintf(fd, "%s", stream.str().c_str());
     audio_offsets.Dump(fd);
@@ -137,7 +138,7 @@ class VolumeControlDevice : public bluetooth::common::IRedactableLoggable {
                                         GATT_WRITE_OP_CB cb, void* cb_data);
   bool IsEncryptionEnabled();
 
-  void EnableEncryption();
+  bool EnableEncryption();
 
   bool EnqueueInitialRequests(tGATT_IF gatt_if, GATT_READ_OP_CB chrc_read_cb,
                               GATT_WRITE_OP_CB cccd_write_cb);

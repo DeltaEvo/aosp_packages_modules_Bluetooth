@@ -7,10 +7,10 @@ use crate::bluetooth_gatt::{
     BluetoothGatt, BluetoothGattService, IBluetoothGatt, IBluetoothGattCallback,
 };
 use crate::callbacks::Callbacks;
-use crate::uuid;
 use crate::uuid::UuidHelper;
 use crate::Message;
 use crate::RPCProxy;
+use crate::{uuid, APIMessage, BluetoothAPI};
 use bt_topshim::btif::BtTransport;
 use bt_topshim::profiles::gatt::{GattStatus, LePhy};
 use log::debug;
@@ -31,6 +31,8 @@ pub struct BatteryService {
     battery_provider_id: u32,
     /// Sender for callback communication with the main thread.
     tx: Sender<Message>,
+    /// Sender for callback communication with the api message thread.
+    api_tx: Sender<APIMessage>,
     callbacks: Callbacks<dyn IBatteryServiceCallback + Send>,
     /// The GATT client ID needed for GATT calls.
     client_id: Option<i32>,
@@ -83,13 +85,13 @@ pub trait IBatteryServiceCallback: RPCProxy {
     /// Called when the status of BatteryService has changed. Trying to read from devices that do
     /// not support BAS will result in this method being called with BatteryServiceNotSupported.
     fn on_battery_service_status_updated(
-        &self,
+        &mut self,
         remote_address: String,
         status: BatteryServiceStatus,
     );
 
     /// Invoked when battery level for a device has been changed due to notification.
-    fn on_battery_info_updated(&self, remote_address: String, battery_info: BatterySet);
+    fn on_battery_info_updated(&mut self, remote_address: String, battery_info: BatterySet);
 }
 
 impl BatteryService {
@@ -98,6 +100,7 @@ impl BatteryService {
         gatt: Arc<Mutex<Box<BluetoothGatt>>>,
         battery_provider_manager: Arc<Mutex<Box<BatteryProviderManager>>>,
         tx: Sender<Message>,
+        api_tx: Sender<APIMessage>,
     ) -> BatteryService {
         let tx = tx.clone();
         let callbacks = Callbacks::new(tx.clone(), Message::BatteryServiceCallbackDisconnected);
@@ -113,6 +116,7 @@ impl BatteryService {
             battery_provider_manager,
             battery_provider_id,
             tx,
+            api_tx,
             callbacks,
             client_id,
             battery_sets,
@@ -126,7 +130,7 @@ impl BatteryService {
         self.gatt.lock().unwrap().register_client(
             // TODO(b/233101174): make dynamic or decide on a static UUID
             String::from("e4d2acffcfaa42198f494606b7412117"),
-            Box::new(GattCallback::new(self.tx.clone())),
+            Box::new(GattCallback::new(self.tx.clone(), self.api_tx.clone())),
             false,
         );
     }
@@ -243,7 +247,7 @@ impl BatteryService {
     fn set_battery_info(&mut self, remote_address: &String, value: &Vec<u8>) -> BatterySet {
         let level: Vec<_> = value.iter().cloned().chain(iter::repeat(0 as u8)).take(4).collect();
         let level = u32::from_le_bytes(level.try_into().unwrap());
-        debug!("Received battery level for {}: {}", remote_address.clone(), level);
+        debug!("BAS received battery level for {}: {}", remote_address.clone(), level);
         let battery_set = self.battery_sets.entry(remote_address.clone()).or_insert_with(|| {
             BatterySet::new(
                 remote_address.clone(),
@@ -284,14 +288,10 @@ impl BatteryService {
             None => return,
         }
         // Let BatteryProviderManager know that BAS no longer has a battery for this device.
-        self.battery_provider_manager.lock().unwrap().set_battery_info(
+        self.battery_provider_manager.lock().unwrap().remove_battery_info(
             self.battery_provider_id,
-            BatterySet::new(
-                remote_address.clone(),
-                uuid::BAS.to_string(),
-                "BAS".to_string(),
-                vec![],
-            ),
+            remote_address.clone(),
+            uuid::BAS.to_string(),
         );
         self.battery_sets.remove(&remote_address);
     }
@@ -357,7 +357,7 @@ impl BatteryProviderCallback {
 }
 
 impl IBatteryProviderCallback for BatteryProviderCallback {
-    fn refresh_battery_info(&self) {
+    fn refresh_battery_info(&mut self) {
         let tx = self.tx.clone();
         tokio::spawn(async move {
             let _ = tx.send(Message::BatteryServiceRefresh).await;
@@ -373,11 +373,12 @@ impl RPCProxy for BatteryProviderCallback {
 
 struct GattCallback {
     tx: Sender<Message>,
+    api_tx: Sender<APIMessage>,
 }
 
 impl GattCallback {
-    fn new(tx: Sender<Message>) -> Self {
-        Self { tx }
+    fn new(tx: Sender<Message>, api_tx: Sender<APIMessage>) -> Self {
+        Self { tx, api_tx }
     }
 }
 
@@ -386,19 +387,21 @@ impl IBluetoothGattCallback for GattCallback {
     // requests serially. This reduces overall complexity including removing the need to share state
     // data with callbacks.
 
-    fn on_client_registered(&self, status: GattStatus, client_id: i32) {
+    fn on_client_registered(&mut self, status: GattStatus, client_id: i32) {
         let tx = self.tx.clone();
+        let api_tx = self.api_tx.clone();
         tokio::spawn(async move {
             let _ = tx
                 .send(Message::BatteryService(BatteryServiceActions::OnClientRegistered(
                     status, client_id,
                 )))
                 .await;
+            let _ = api_tx.send(APIMessage::IsReady(BluetoothAPI::Battery)).await;
         });
     }
 
     fn on_client_connection_state(
-        &self,
+        &mut self,
         status: GattStatus,
         client_id: i32,
         connected: bool,
@@ -415,7 +418,7 @@ impl IBluetoothGattCallback for GattCallback {
     }
 
     fn on_search_complete(
-        &self,
+        &mut self,
         addr: String,
         services: Vec<BluetoothGattService>,
         status: GattStatus,
@@ -431,7 +434,7 @@ impl IBluetoothGattCallback for GattCallback {
     }
 
     fn on_characteristic_read(
-        &self,
+        &mut self,
         addr: String,
         status: GattStatus,
         handle: i32,
@@ -447,7 +450,7 @@ impl IBluetoothGattCallback for GattCallback {
         });
     }
 
-    fn on_notify(&self, addr: String, handle: i32, value: Vec<u8>) {
+    fn on_notify(&mut self, addr: String, handle: i32, value: Vec<u8>) {
         let tx = self.tx.clone();
         tokio::spawn(async move {
             let _ = tx
@@ -456,16 +459,23 @@ impl IBluetoothGattCallback for GattCallback {
         });
     }
 
-    fn on_phy_update(&self, _addr: String, _tx_phy: LePhy, _rx_phy: LePhy, _status: GattStatus) {}
+    fn on_phy_update(
+        &mut self,
+        _addr: String,
+        _tx_phy: LePhy,
+        _rx_phy: LePhy,
+        _status: GattStatus,
+    ) {
+    }
 
-    fn on_phy_read(&self, _addr: String, _tx_phy: LePhy, _rx_phy: LePhy, _status: GattStatus) {}
+    fn on_phy_read(&mut self, _addr: String, _tx_phy: LePhy, _rx_phy: LePhy, _status: GattStatus) {}
 
-    fn on_characteristic_write(&self, _addr: String, _status: GattStatus, _handle: i32) {}
+    fn on_characteristic_write(&mut self, _addr: String, _status: GattStatus, _handle: i32) {}
 
-    fn on_execute_write(&self, _addr: String, _status: GattStatus) {}
+    fn on_execute_write(&mut self, _addr: String, _status: GattStatus) {}
 
     fn on_descriptor_read(
-        &self,
+        &mut self,
         _addr: String,
         _status: GattStatus,
         _handle: i32,
@@ -473,14 +483,14 @@ impl IBluetoothGattCallback for GattCallback {
     ) {
     }
 
-    fn on_descriptor_write(&self, _addr: String, _status: GattStatus, _handle: i32) {}
+    fn on_descriptor_write(&mut self, _addr: String, _status: GattStatus, _handle: i32) {}
 
-    fn on_read_remote_rssi(&self, _addr: String, _rssi: i32, _status: GattStatus) {}
+    fn on_read_remote_rssi(&mut self, _addr: String, _rssi: i32, _status: GattStatus) {}
 
-    fn on_configure_mtu(&self, _addr: String, _mtu: i32, _status: GattStatus) {}
+    fn on_configure_mtu(&mut self, _addr: String, _mtu: i32, _status: GattStatus) {}
 
     fn on_connection_updated(
-        &self,
+        &mut self,
         _addr: String,
         _interval: i32,
         _latency: i32,
@@ -489,7 +499,7 @@ impl IBluetoothGattCallback for GattCallback {
     ) {
     }
 
-    fn on_service_changed(&self, _addr: String) {}
+    fn on_service_changed(&mut self, _addr: String) {}
 }
 
 impl RPCProxy for GattCallback {

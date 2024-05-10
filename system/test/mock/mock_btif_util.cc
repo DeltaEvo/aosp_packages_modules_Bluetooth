@@ -19,14 +19,12 @@
  *
  *  mockcify.pl ver 0.6.0
  */
-
-#include <cstdint>
-#include <functional>
-#include <map>
-#include <string>
-
 // Mock include file to share data between tests and mock
 #include "test/mock/mock_btif_util.h"
+
+#include <cstdint>
+
+#include "test/common/mock_functions.h"
 
 // Original usings
 
@@ -48,7 +46,6 @@ struct dump_dm_search_event dump_dm_search_event;
 struct dump_hd_event dump_hd_event;
 struct dump_hf_client_event dump_hf_client_event;
 struct dump_hf_event dump_hf_event;
-struct dump_hh_event dump_hh_event;
 struct dump_property_type dump_property_type;
 struct dump_rc_event dump_rc_event;
 struct dump_rc_notification_event_id dump_rc_notification_event_id;
@@ -76,7 +73,6 @@ const char* dump_dm_search_event::return_value = nullptr;
 const char* dump_hd_event::return_value = nullptr;
 const char* dump_hf_client_event::return_value = nullptr;
 const char* dump_hf_event::return_value = nullptr;
-const char* dump_hh_event::return_value = nullptr;
 const char* dump_property_type::return_value = nullptr;
 const char* dump_rc_event::return_value = nullptr;
 const char* dump_rc_notification_event_id::return_value = nullptr;
@@ -92,7 +88,7 @@ int ascii_2_hex(const char* p_ascii, int len, uint8_t* p_hex) {
   inc_func_call_count(__func__);
   return test::mock::btif_util::ascii_2_hex(p_ascii, len, p_hex);
 }
-uint32_t devclass2uint(DEV_CLASS dev_class) {
+uint32_t devclass2uint(const DEV_CLASS dev_class) {
   inc_func_call_count(__func__);
   return test::mock::btif_util::devclass2uint(dev_class);
 }
@@ -132,10 +128,6 @@ const char* dump_hf_event(uint16_t event) {
   inc_func_call_count(__func__);
   return test::mock::btif_util::dump_hf_event(event);
 }
-const char* dump_hh_event(uint16_t event) {
-  inc_func_call_count(__func__);
-  return test::mock::btif_util::dump_hh_event(event);
-}
 const char* dump_property_type(bt_property_type_t type) {
   inc_func_call_count(__func__);
   return test::mock::btif_util::dump_property_type(type);
@@ -156,9 +148,9 @@ const char* dump_thread_evt(bt_cb_thread_evt evt) {
   inc_func_call_count(__func__);
   return test::mock::btif_util::dump_thread_evt(evt);
 }
-void uint2devclass(uint32_t cod, DEV_CLASS dev_class) {
+DEV_CLASS uint2devclass(uint32_t cod) {
   inc_func_call_count(__func__);
-  test::mock::btif_util::uint2devclass(cod, dev_class);
+  return test::mock::btif_util::uint2devclass(cod);
 }
 // Mocked functions complete
 // END mockcify generation

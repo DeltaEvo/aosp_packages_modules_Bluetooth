@@ -25,9 +25,8 @@
 #define BT_TRANSPORT_LE 2
 typedef uint8_t tBT_TRANSPORT;
 
-#define CASE_RETURN_TEXT(code) \
-  case code:                   \
-    return #code
+#if __has_include(<bluetooth/log.h>)
+#include "macros.h"
 
 inline std::string bt_transport_text(const tBT_TRANSPORT& transport) {
   switch (transport) {
@@ -38,4 +37,4 @@ inline std::string bt_transport_text(const tBT_TRANSPORT& transport) {
       return base::StringPrintf("UNKNOWN[%hhu]", transport);
   }
 }
-#undef CASE_RETURN_TEXT
+#endif

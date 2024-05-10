@@ -21,13 +21,16 @@
  *  Interface to AVRCP optional commands
  *
  ******************************************************************************/
-#include <base/logging.h>
+#include <bluetooth/log.h>
 #include <string.h>
 
 #include "avrc_api.h"
 #include "avrc_int.h"
+#include "internal_include/bt_target.h"
 #include "osi/include/allocator.h"
 #include "stack/include/bt_hdr.h"
+
+using namespace bluetooth;
 
 /******************************************************************************
  *
@@ -39,7 +42,7 @@
  *                      p_msg: Pointer to VENDOR DEPENDENT message structure.
  *
  *                  Output Parameters:
-*                      None.
+ *                      None.
  *
  * Returns          pointer to a valid GKI buffer if successful.
  *                  NULL if p_msg is NULL.
@@ -49,9 +52,20 @@ static BT_HDR* avrc_vendor_msg(tAVRC_MSG_VENDOR* p_msg) {
   BT_HDR* p_cmd;
   uint8_t* p_data;
 
-  CHECK(p_msg != NULL);
+  /*
+    An AVRC cmd consists of at least of:
+    - A BT_HDR, plus
+    - AVCT_MSG_OFFSET, plus
+    - 3 bytes for ctype, subunit_type and op_vendor, plus
+    - 3 bytes for company_id
+  */
+  #define AVRC_MIN_VENDOR_CMD_LEN (sizeof(BT_HDR) + AVCT_MSG_OFFSET + 3 + 3)
 
-  CHECK(AVRC_META_CMD_BUF_SIZE > (AVRC_MIN_CMD_LEN + p_msg->vendor_len));
+  if (p_msg == nullptr ||
+      AVRC_META_CMD_BUF_SIZE < AVRC_MIN_VENDOR_CMD_LEN + p_msg->vendor_len) {
+    return nullptr;
+  }
+
   p_cmd = (BT_HDR*)osi_calloc(AVRC_META_CMD_BUF_SIZE);
 
   p_cmd->offset = AVCT_MSG_OFFSET;

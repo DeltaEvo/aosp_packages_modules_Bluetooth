@@ -26,7 +26,6 @@ import android.content.IntentFilter;
 import android.os.ParcelUuid;
 import android.util.Log;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.util.Pair;
 import androidx.lifecycle.LiveData;
@@ -95,7 +94,7 @@ public class BluetoothProxy {
         }
         @Override
         public void onGroupNodeAdded(BluetoothDevice device, int groupId) {
-            Log.d("LeCB:", device.getAddress() + " group added " + groupId);
+            Log.d("LeCB:", device + " group added " + groupId);
             if (device == null || groupId == BluetoothLeAudio.GROUP_ID_INVALID) {
                 Log.d("LeCB:", "invalid parameter");
                 return;
@@ -123,7 +122,7 @@ public class BluetoothProxy {
                 return;
             }
 
-            Log.d("LeCB:", device.getAddress() + " group added " + groupId);
+            Log.d("LeCB:", device + " group added " + groupId);
             if (device == null || groupId == BluetoothLeAudio.GROUP_ID_INVALID) {
                 Log.d("LeCB:", "invalid parameter");
                 return;
@@ -510,12 +509,16 @@ public class BluetoothProxy {
         mExecutor = Executors.newSingleThreadExecutor();
 
         adapterIntentFilter = new IntentFilter();
+        adapterIntentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         adapterIntentFilter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
-        application.registerReceiver(adapterIntentReceiver, adapterIntentFilter);
+        application.registerReceiver(adapterIntentReceiver, adapterIntentFilter,
+                Context.RECEIVER_EXPORTED);
 
         bassIntentFilter = new IntentFilter();
+        bassIntentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         bassIntentFilter.addAction(BluetoothLeBroadcastAssistant.ACTION_CONNECTION_STATE_CHANGED);
-        application.registerReceiver(bassIntentReceiver, bassIntentFilter);
+        application.registerReceiver(bassIntentReceiver, bassIntentFilter,
+                Context.RECEIVER_EXPORTED);
     }
 
     // Lazy constructing Singleton acquire method
@@ -741,8 +744,10 @@ public class BluetoothProxy {
         }
 
         intentFilter = new IntentFilter();
+        intentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         intentFilter.addAction(BluetoothLeAudio.ACTION_LE_AUDIO_CONNECTION_STATE_CHANGED);
-        application.registerReceiver(leAudioIntentReceiver, intentFilter);
+        application.registerReceiver(leAudioIntentReceiver, intentFilter,
+                Context.RECEIVER_EXPORTED);
     }
 
     private void cleanupLeAudioProxy() {
@@ -759,8 +764,10 @@ public class BluetoothProxy {
                 BluetoothProfile.VOLUME_CONTROL);
 
         intentFilter = new IntentFilter();
+        intentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         intentFilter.addAction(BluetoothVolumeControl.ACTION_CONNECTION_STATE_CHANGED);
-        application.registerReceiver(volumeControlIntentReceiver, intentFilter);
+        application.registerReceiver(volumeControlIntentReceiver, intentFilter,
+                Context.RECEIVER_EXPORTED);
     }
 
     private void cleanupVolumeControlProxy() {
@@ -778,9 +785,11 @@ public class BluetoothProxy {
                 BluetoothProfile.HAP_CLIENT);
 
         intentFilter = new IntentFilter();
+        intentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         intentFilter.addAction(BluetoothHapClient.ACTION_HAP_CONNECTION_STATE_CHANGED);
         intentFilter.addAction("android.bluetooth.action.HAP_DEVICE_AVAILABLE");
-        application.registerReceiver(hapClientIntentReceiver, intentFilter);
+        application.registerReceiver(hapClientIntentReceiver, intentFilter,
+                Context.RECEIVER_EXPORTED);
     }
 
     private void cleanupHapProxy() {
@@ -1065,7 +1074,11 @@ public class BluetoothProxy {
                 if (scanDelegator != null) {
                     mBroadcastScanDelegatorDevices.add(scanDelegator);
                 }
-                mBluetoothLeBroadcastAssistant.startSearchingForSources(new ArrayList<>());
+                try {
+                    mBluetoothLeBroadcastAssistant.startSearchingForSources(new ArrayList<>());
+                } catch (IllegalArgumentException e) {
+                    Log.e("BluetoothProxy", " Unexpected " + e);
+                }
                 if (mBassEventListener != null) {
                     mBassEventListener.onScanningStateChanged(true);
                 }
@@ -1074,9 +1087,13 @@ public class BluetoothProxy {
                     mBroadcastScanDelegatorDevices.remove(scanDelegator);
                 }
                 if (mBroadcastScanDelegatorDevices.isEmpty()) {
-                    mBluetoothLeBroadcastAssistant.stopSearchingForSources();
-                    if (mBassEventListener != null) {
-                        mBassEventListener.onScanningStateChanged(false);
+                    try {
+                        mBluetoothLeBroadcastAssistant.stopSearchingForSources();
+                        if (mBassEventListener != null) {
+                            mBassEventListener.onScanningStateChanged(false);
+                        }
+                    } catch (IllegalArgumentException e) {
+                        Log.e("BluetoothProxy", " Unexpected " + e);
                     }
                 }
             }
@@ -1088,7 +1105,12 @@ public class BluetoothProxy {
     public boolean stopBroadcastObserving() {
         if (mBluetoothLeBroadcastAssistant != null) {
             mBroadcastScanDelegatorDevices.clear();
-            mBluetoothLeBroadcastAssistant.stopSearchingForSources();
+            try {
+                mBluetoothLeBroadcastAssistant.stopSearchingForSources();
+            } catch (IllegalArgumentException e) {
+                Log.e("BluetoothProxy", " Unexpected " + e);
+            }
+
             if (mBassEventListener != null) {
                 mBassEventListener.onScanningStateChanged(false);
             }
@@ -1356,10 +1378,10 @@ public class BluetoothProxy {
         return mBroadcastStatusMutableLive;
     }
 
-    public boolean startBroadcast(BluetoothLeAudioContentMetadata meta, byte[] code) {
+    public boolean startBroadcast(BluetoothLeBroadcastSettings settings) {
         if (mBluetoothLeBroadcast == null)
             return false;
-        mBluetoothLeBroadcast.startBroadcast(meta, code);
+        mBluetoothLeBroadcast.startBroadcast(settings);
         return true;
     }
 
@@ -1374,14 +1396,10 @@ public class BluetoothProxy {
         return mBluetoothLeBroadcast.getAllBroadcastMetadata();
     }
 
-    public boolean updateBroadcast(int broadcastId, String programInfo) {
+    public boolean updateBroadcast(int broadcastId, BluetoothLeBroadcastSettings settings) {
         if (mBluetoothLeBroadcast == null) return false;
 
-        BluetoothLeAudioContentMetadata.Builder contentBuilder =
-                new BluetoothLeAudioContentMetadata.Builder();
-        contentBuilder.setProgramInfo(programInfo);
-
-        mBluetoothLeBroadcast.updateBroadcast(broadcastId, contentBuilder.build());
+        mBluetoothLeBroadcast.updateBroadcast(broadcastId, settings);
         return true;
     }
 

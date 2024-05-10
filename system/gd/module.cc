@@ -16,13 +16,13 @@
 #define LOG_TAG "BtGdModule"
 
 #include "module.h"
+
+#include <bluetooth/log.h>
+
 #include "common/init_flags.h"
-#include "dumpsys/init_flags.h"
-#include "os/wakelock_manager.h"
 
 using ::bluetooth::os::Handler;
 using ::bluetooth::os::Thread;
-using ::bluetooth::os::WakelockManager;
 
 namespace bluetooth {
 
@@ -32,13 +32,8 @@ ModuleFactory::ModuleFactory(std::function<Module*()> ctor) : ctor_(ctor) {
 }
 
 Handler* Module::GetHandler() const {
-  ASSERT_LOG(handler_ != nullptr, "Can't get handler when it's not started");
+  log::assert_that(handler_ != nullptr, "Can't get handler when it's not started");
   return handler_;
-}
-
-DumpsysDataFinisher EmptyDumpsysDataFinisher = [](DumpsysDataBuilder* dumpsys_data_builder) {};
-DumpsysDataFinisher Module::GetDumpsysData(flatbuffers::FlatBufferBuilder* builder) const {
-  return EmptyDumpsysDataFinisher;
 }
 
 const ModuleRegistry* Module::GetModuleRegistry() const {
@@ -52,12 +47,21 @@ Module* Module::GetDependency(const ModuleFactory* module) const {
     }
   }
 
-  ASSERT_LOG(false, "Module was not listed as a dependency in ListDependencies");
+  log::fatal("Module was not listed as a dependency in ListDependencies");
+}
+
+bluetooth::DumpsysDataFinisher EmptyDumpsysDataFinisher =
+    [](bluetooth::DumpsysDataBuilder* /* dumpsys_data_builder */) {};
+
+DumpsysDataFinisher Module::GetDumpsysData(flatbuffers::FlatBufferBuilder* /* builder */) const {
+  return EmptyDumpsysDataFinisher;
 }
 
 Module* ModuleRegistry::Get(const ModuleFactory* module) const {
   auto instance = started_modules_.find(module);
-  ASSERT_LOG(instance != started_modules_.end(), "Request for module not started up, maybe not in Start(ModuleList)?");
+  log::assert_that(
+      instance != started_modules_.end(),
+      "Request for module not started up, maybe not in Start(ModuleList)?");
   return instance->second;
 }
 
@@ -82,21 +86,21 @@ Module* ModuleRegistry::Start(const ModuleFactory* module, Thread* thread) {
     return started_instance->second;
   }
 
-  LOG_INFO("Constructing next module");
+  log::info("Constructing next module");
   Module* instance = module->ctor_();
   set_registry_and_handler(instance, thread);
 
-  LOG_INFO("Starting dependencies of %s", instance->ToString().c_str());
+  log::info("Starting dependencies of {}", instance->ToString());
   instance->ListDependencies(&instance->dependencies_);
   Start(&instance->dependencies_, thread);
 
-  LOG_INFO("Finished starting dependencies and calling Start() of %s", instance->ToString().c_str());
+  log::info("Finished starting dependencies and calling Start() of {}", instance->ToString());
 
   last_instance_ = "starting " + instance->ToString();
   instance->Start();
   start_order_.push_back(module);
   started_modules_[module] = instance;
-  LOG_INFO("Started %s", instance->ToString().c_str());
+  log::info("Started {}", instance->ToString());
   return instance;
 }
 
@@ -104,25 +108,27 @@ void ModuleRegistry::StopAll() {
   // Since modules were brought up in dependency order, it is safe to tear down by going in reverse order.
   for (auto it = start_order_.rbegin(); it != start_order_.rend(); it++) {
     auto instance = started_modules_.find(*it);
-    ASSERT(instance != started_modules_.end());
+    log::assert_that(
+        instance != started_modules_.end(), "assert failed: instance != started_modules_.end()");
     last_instance_ = "stopping " + instance->second->ToString();
 
     // Clear the handler before stopping the module to allow it to shut down gracefully.
-    LOG_INFO("Stopping Handler of Module %s", instance->second->ToString().c_str());
+    log::info("Stopping Handler of Module {}", instance->second->ToString());
     instance->second->handler_->Clear();
     instance->second->handler_->WaitUntilStopped(kModuleStopTimeout);
-    LOG_INFO("Stopping Module %s", instance->second->ToString().c_str());
+    log::info("Stopping Module {}", instance->second->ToString());
     instance->second->Stop();
   }
   for (auto it = start_order_.rbegin(); it != start_order_.rend(); it++) {
     auto instance = started_modules_.find(*it);
-    ASSERT(instance != started_modules_.end());
+    log::assert_that(
+        instance != started_modules_.end(), "assert failed: instance != started_modules_.end()");
     delete instance->second->handler_;
     delete instance->second;
     started_modules_.erase(instance);
   }
 
-  ASSERT(started_modules_.empty());
+  log::assert_that(started_modules_.empty(), "assert failed: started_modules_.empty()");
   start_order_.clear();
 }
 
@@ -132,36 +138,6 @@ os::Handler* ModuleRegistry::GetModuleHandler(const ModuleFactory* module) const
     return started_instance->second->GetHandler();
   }
   return nullptr;
-}
-
-void ModuleDumper::DumpState(std::string* output) const {
-  ASSERT(output != nullptr);
-
-  flatbuffers::FlatBufferBuilder builder(1024);
-  auto title = builder.CreateString(title_);
-
-  auto init_flags_offset = dumpsys::InitFlags::Dump(&builder);
-  auto wakelock_offset = WakelockManager::Get().GetDumpsysData(&builder);
-
-  std::queue<DumpsysDataFinisher> queue;
-  for (auto it = module_registry_.start_order_.rbegin(); it != module_registry_.start_order_.rend(); it++) {
-    auto instance = module_registry_.started_modules_.find(*it);
-    ASSERT(instance != module_registry_.started_modules_.end());
-    queue.push(instance->second->GetDumpsysData(&builder));
-  }
-
-  DumpsysDataBuilder data_builder(builder);
-  data_builder.add_title(title);
-  data_builder.add_init_flags(init_flags_offset);
-  data_builder.add_wakelock_manager_data(wakelock_offset);
-
-  while (!queue.empty()) {
-    queue.front()(&data_builder);
-    queue.pop();
-  }
-
-  builder.Finish(data_builder.Finish());
-  *output = std::string(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
 }
 
 }  // namespace bluetooth

@@ -16,6 +16,8 @@
 
 #include "l2cap/le/internal/link.h"
 
+#include <bluetooth/log.h>
+
 #include <chrono>
 #include <memory>
 
@@ -35,19 +37,28 @@ namespace internal {
 static constexpr uint16_t kDefaultMinimumCeLength = 0x0002;
 static constexpr uint16_t kDefaultMaximumCeLength = 0x0C00;
 
-Link::Link(os::Handler* l2cap_handler, std::unique_ptr<hci::acl_manager::LeAclConnection> acl_connection,
-           l2cap::internal::ParameterProvider* parameter_provider,
-           DynamicChannelServiceManagerImpl* dynamic_service_manager,
-           FixedChannelServiceManagerImpl* fixed_service_manager, LinkManager* link_manager)
-    : l2cap_handler_(l2cap_handler), acl_connection_(std::move(acl_connection)),
+Link::Link(
+    os::Handler* l2cap_handler,
+    std::unique_ptr<hci::acl_manager::LeAclConnection> acl_connection,
+    l2cap::internal::ParameterProvider* parameter_provider,
+    DynamicChannelServiceManagerImpl* dynamic_service_manager,
+    FixedChannelServiceManagerImpl* /* fixed_service_manager */,
+    LinkManager* link_manager)
+    : l2cap_handler_(l2cap_handler),
+      acl_connection_(std::move(acl_connection)),
       data_pipeline_manager_(l2cap_handler, this, acl_connection_->GetAclQueueEnd()),
-      parameter_provider_(parameter_provider), dynamic_service_manager_(dynamic_service_manager),
-      signalling_manager_(l2cap_handler_, this, &data_pipeline_manager_, dynamic_service_manager_,
-                          &dynamic_channel_allocator_),
+      parameter_provider_(parameter_provider),
+      dynamic_service_manager_(dynamic_service_manager),
+      signalling_manager_(
+          l2cap_handler_,
+          this,
+          &data_pipeline_manager_,
+          dynamic_service_manager_,
+          &dynamic_channel_allocator_),
       link_manager_(link_manager) {
-  ASSERT(l2cap_handler_ != nullptr);
-  ASSERT(acl_connection_ != nullptr);
-  ASSERT(parameter_provider_ != nullptr);
+  log::assert_that(l2cap_handler_ != nullptr, "assert failed: l2cap_handler_ != nullptr");
+  log::assert_that(acl_connection_ != nullptr, "assert failed: acl_connection_ != nullptr");
+  log::assert_that(parameter_provider_ != nullptr, "assert failed: parameter_provider_ != nullptr");
   link_idle_disconnect_alarm_.Schedule(common::BindOnce(&Link::Disconnect, common::Unretained(this)),
                                        parameter_provider_->GetLeLinkIdleDisconnectTimeout());
   acl_connection_->RegisterCallbacks(this, l2cap_handler_);
@@ -65,17 +76,22 @@ void Link::OnDisconnection(hci::ErrorCode status) {
 }
 
 void Link::OnConnectionUpdate(
-    hci::ErrorCode hci_status,
+    hci::ErrorCode /* hci_status */,
     uint16_t connection_interval,
     uint16_t connection_latency,
     uint16_t supervision_timeout) {
-  LOG_INFO(
-      "interval %hx latency %hx supervision_timeout %hx", connection_interval, connection_latency, supervision_timeout);
+  log::info(
+      "interval {:x} latency {:x} supervision_timeout {:x}",
+      connection_interval,
+      connection_latency,
+      supervision_timeout);
   if (update_request_signal_id_ != kInvalidSignalId) {
     hci::ErrorCode result = hci::ErrorCode::SUCCESS;
     if (connection_interval > update_request_interval_max_ || connection_interval < update_request_interval_min_ ||
         connection_latency != update_request_latency_ || supervision_timeout != update_request_supervision_timeout_) {
-      LOG_INFO("Received connection update complete with different parameters that provided by the Host");
+      log::info(
+          "Received connection update complete with different parameters that provided by the "
+          "Host");
     }
 
     if (!CheckConnectionParameters(connection_interval, connection_interval, connection_latency, supervision_timeout)) {
@@ -88,19 +104,30 @@ void Link::OnConnectionUpdate(
 }
 
 void Link::OnDataLengthChange(uint16_t tx_octets, uint16_t tx_time, uint16_t rx_octets, uint16_t rx_time) {
-  LOG_INFO("tx_octets %hx tx_time %hx rx_octets %hx rx_time %hx", tx_octets, tx_time, rx_octets, rx_time);
+  log::info(
+      "tx_octets {:x} tx_time {:x} rx_octets {:x} rx_time {:x}",
+      tx_octets,
+      tx_time,
+      rx_octets,
+      rx_time);
 }
 
 void Link::OnReadRemoteVersionInformationComplete(
     hci::ErrorCode hci_status, uint8_t lmp_version, uint16_t manufacturer_name, uint16_t sub_version) {
-  LOG_INFO("lmp_version:%hhu manufacturer_name:%hu sub_version:%hu", lmp_version, manufacturer_name, sub_version);
+  log::info(
+      "lmp_version:{} manufacturer_name:{} sub_version:{}",
+      lmp_version,
+      manufacturer_name,
+      sub_version);
   link_manager_->OnReadRemoteVersionInformationComplete(
       hci_status, GetDevice(), lmp_version, manufacturer_name, sub_version);
 }
 
-void Link::OnLeReadRemoteFeaturesComplete(hci::ErrorCode hci_status, uint64_t features) {}
+void Link::OnLeReadRemoteFeaturesComplete(hci::ErrorCode /* hci_status*/, uint64_t /* features */) {
+}
 
-void Link::OnPhyUpdate(hci::ErrorCode hci_status, uint8_t tx_phy, uint8_t rx_phy) {}
+void Link::OnPhyUpdate(
+    hci::ErrorCode /* hci_status */, uint8_t /* tx_phy */, uint8_t /* rx_phy */) {}
 
 void Link::OnLeSubrateChange(
     hci::ErrorCode hci_status,
@@ -108,10 +135,10 @@ void Link::OnLeSubrateChange(
     uint16_t peripheral_latency,
     uint16_t continuation_number,
     uint16_t supervision_timeout) {
-  LOG_INFO(
-      "hci_status: %s, subrate_factor: %#hx, peripheral_latency: %#hx, continuation_number: %#hx, "
-      "supervision_timeout: %#hx",
-      ErrorCodeText(hci_status).c_str(),
+  log::info(
+      "hci_status: {}, subrate_factor: {:#x}, peripheral_latency: {:#x}, continuation_number: "
+      "{:#x}, supervision_timeout: {:#x}",
+      ErrorCodeText(hci_status),
       subrate_factor,
       peripheral_latency,
       continuation_number,
@@ -139,7 +166,7 @@ bool Link::CheckConnectionParameters(
   if (conn_interval_min < 0x0006 || conn_interval_min > 0x0C80 || conn_interval_max < 0x0006 ||
       conn_interval_max > 0x0C80 || conn_latency > 0x01F3 || supervision_timeout < 0x000A ||
       supervision_timeout > 0x0C80) {
-    LOG_ERROR("Invalid parameter");
+    log::error("Invalid parameter");
     return false;
   }
 
@@ -149,7 +176,7 @@ bool Link::CheckConnectionParameters(
   // milliseconds.
   uint32_t supervision_timeout_min = (uint32_t)(1 + conn_latency) * conn_interval_max * 2 + 1;
   if (supervision_timeout * 8 < supervision_timeout_min || conn_interval_max < conn_interval_min) {
-    LOG_ERROR("Invalid parameter");
+    log::error("Invalid parameter");
     return false;
   }
 
@@ -169,7 +196,8 @@ void Link::SendConnectionParameterUpdate(uint16_t conn_interval_min, uint16_t co
   update_request_signal_id_ = kInvalidSignalId;
 }
 
-std::shared_ptr<FixedChannelImpl> Link::AllocateFixedChannel(Cid cid, SecurityPolicy security_policy) {
+std::shared_ptr<FixedChannelImpl> Link::AllocateFixedChannel(
+    Cid cid, SecurityPolicy /* security_policy */) {
   auto channel = fixed_channel_allocator_.AllocateChannel(cid);
   data_pipeline_manager_.AttachChannel(cid, channel, l2cap::internal::DataPipelineManager::ChannelMode::BASIC);
   return channel;
@@ -185,7 +213,7 @@ Cid Link::ReserveDynamicChannel() {
 
 void Link::SendConnectionRequest(Psm psm, PendingDynamicChannelConnection pending_dynamic_channel_connection) {
   if (dynamic_channel_allocator_.IsPsmUsed(psm)) {
-    LOG_INFO("Psm %d is already connected", psm);
+    log::info("Psm {} is already connected", psm);
     return;
   }
   auto reserved_cid = ReserveDynamicChannel();
@@ -197,7 +225,7 @@ void Link::SendConnectionRequest(Psm psm, PendingDynamicChannelConnection pendin
 void Link::SendDisconnectionRequest(Cid local_cid, Cid remote_cid) {
   auto channel = dynamic_channel_allocator_.FindChannelByCid(local_cid);
   if (channel == nullptr || channel->GetRemoteCid() != remote_cid) {
-    LOG_ERROR("Invalid cid");
+    log::error("Invalid cid");
   }
   signalling_manager_.SendDisconnectRequest(local_cid, remote_cid);
 }
@@ -253,7 +281,7 @@ void Link::RefreshRefCount() {
   int ref_count = 0;
   ref_count += fixed_channel_allocator_.GetRefCount();
   ref_count += dynamic_channel_allocator_.NumberOfChannels();
-  ASSERT_LOG(ref_count >= 0, "ref_count %d is less than 0", ref_count);
+  log::assert_that(ref_count >= 0, "ref_count {} is less than 0", ref_count);
   if (ref_count > 0) {
     link_idle_disconnect_alarm_.Cancel();
   } else {
@@ -263,8 +291,11 @@ void Link::RefreshRefCount() {
 }
 
 void Link::NotifyChannelCreation(Cid cid, std::unique_ptr<DynamicChannel> user_channel) {
-  ASSERT(local_cid_to_pending_dynamic_channel_connection_map_.find(cid) !=
-         local_cid_to_pending_dynamic_channel_connection_map_.end());
+  log::assert_that(
+      local_cid_to_pending_dynamic_channel_connection_map_.find(cid) !=
+          local_cid_to_pending_dynamic_channel_connection_map_.end(),
+      "assert failed: local_cid_to_pending_dynamic_channel_connection_map_.find(cid) != "
+      "local_cid_to_pending_dynamic_channel_connection_map_.end()");
   auto& pending_dynamic_channel_connection = local_cid_to_pending_dynamic_channel_connection_map_[cid];
   pending_dynamic_channel_connection.handler_->Post(
       common::BindOnce(std::move(pending_dynamic_channel_connection.on_open_callback_), std::move(user_channel)));
@@ -272,8 +303,11 @@ void Link::NotifyChannelCreation(Cid cid, std::unique_ptr<DynamicChannel> user_c
 }
 
 void Link::NotifyChannelFail(Cid cid, DynamicChannelManager::ConnectionResult result) {
-  ASSERT(local_cid_to_pending_dynamic_channel_connection_map_.find(cid) !=
-         local_cid_to_pending_dynamic_channel_connection_map_.end());
+  log::assert_that(
+      local_cid_to_pending_dynamic_channel_connection_map_.find(cid) !=
+          local_cid_to_pending_dynamic_channel_connection_map_.end(),
+      "assert failed: local_cid_to_pending_dynamic_channel_connection_map_.find(cid) != "
+      "local_cid_to_pending_dynamic_channel_connection_map_.end()");
   auto& pending_dynamic_channel_connection = local_cid_to_pending_dynamic_channel_connection_map_[cid];
   // TODO(cmanton) Pass proper connection falure result to user
   pending_dynamic_channel_connection.handler_->Post(
@@ -299,7 +333,7 @@ void Link::ReadRemoteVersionInformation() {
 
 void Link::on_connection_update_complete(SignalId signal_id, hci::ErrorCode error_code) {
   if (!signal_id.IsValid()) {
-    LOG_INFO("Invalid signal_id");
+    log::info("Invalid signal_id");
     return;
   }
   ConnectionParameterUpdateResponseResult result = (error_code == hci::ErrorCode::SUCCESS)
@@ -308,7 +342,7 @@ void Link::on_connection_update_complete(SignalId signal_id, hci::ErrorCode erro
   signalling_manager_.SendConnectionParameterUpdateResponse(SignalId(), result);
 }
 
-void Link::OnPendingPacketChange(Cid local_cid, bool has_packet) {
+void Link::OnPendingPacketChange(Cid /* local_cid */, bool has_packet) {
   if (has_packet) {
     remaining_packets_to_be_sent_++;
   } else {

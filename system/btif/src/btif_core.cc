@@ -28,44 +28,49 @@
 
 #define LOG_TAG "bt_btif_core"
 
+#include <android_bluetooth_sysprop.h>
 #include <base/at_exit.h>
 #include <base/functional/bind.h>
-#include <base/logging.h>
 #include <base/threading/platform_thread.h>
+#include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 #include <signal.h>
 #include <sys/types.h>
 
 #include <cstdint>
 
-#include "bt_target.h"  // Must be first to define build configuration
-#include "btif/include/btif_av.h"
 #include "btif/include/btif_common.h"
 #include "btif/include/btif_config.h"
 #include "btif/include/btif_dm.h"
-#include "btif/include/btif_pan.h"
+#include "btif/include/btif_jni_task.h"
 #include "btif/include/btif_profile_queue.h"
 #include "btif/include/btif_sock.h"
 #include "btif/include/btif_storage.h"
 #include "btif/include/core_callbacks.h"
-#include "btif/include/stack_manager.h"
+#include "btif/include/stack_manager_t.h"
 #include "common/message_loop_thread.h"
-#include "device/include/controller.h"
 #include "device/include/device_iot_config.h"
+#include "hci/controller_interface.h"
+#include "internal_include/bt_target.h"
+#include "internal_include/bt_trace.h"
+#include "main/shim/entry.h"
+#include "main/shim/helpers.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/future.h"
-#include "osi/include/log.h"
 #include "osi/include/properties.h"
 #include "stack/include/a2dp_api.h"
+#include "stack/include/bt_types.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_ble_api.h"
+#include "storage/config_keys.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
 using base::PlatformThread;
 using bluetooth::Uuid;
 using bluetooth::common::MessageLoopThread;
-
-static void bt_jni_msg_ready(void* context);
+using namespace bluetooth;
 
 /*******************************************************************************
  *  Constants & Macros
@@ -75,12 +80,12 @@ static void bt_jni_msg_ready(void* context);
 // TODO(armansito): Find a better way than searching by a hardcoded path.
 #if defined(TARGET_FLOSS)
 #define BTE_DID_CONF_FILE "/var/lib/bluetooth/bt_did.conf"
-#elif defined(OS_GENERIC)
-#define BTE_DID_CONF_FILE "bt_did.conf"
-#else  // !defined(OS_GENERIC)
+#elif defined(__ANDROID__)
 #define BTE_DID_CONF_FILE \
   "/apex/com.android.btservices/etc/bluetooth/bt_did.conf"
-#endif  // defined(OS_GENERIC)
+#else  // !defined(__ANDROID__)
+#define BTE_DID_CONF_FILE "bt_did.conf"
+#endif  // defined(__ANDROID__)
 #endif  // BTE_DID_CONF_FILE
 
 #define CODEC_TYPE_NUMBER 32
@@ -94,7 +99,14 @@ static void bt_jni_msg_ready(void* context);
 
 static tBTA_SERVICE_MASK btif_enabled_services = 0;
 
-static MessageLoopThread jni_thread("bt_jni_thread");
+/*
+ * This variable should be set to 1, if the Bluedroid+BTIF libraries are to
+ * function in DUT mode.
+ *
+ * To set this, the btif_init_bluetooth needs to be called with argument as 1
+ */
+static uint8_t btif_dut_mode = 0;
+
 static base::AtExitManager* exit_manager;
 static uid_set_t* uid_set;
 
@@ -102,85 +114,19 @@ static uid_set_t* uid_set;
  *  Externs
  ******************************************************************************/
 void btif_dm_enable_service(tBTA_SERVICE_ID service_id, bool enable);
-#ifdef BTIF_DM_OOB_TEST
 void btif_dm_load_local_oob(void);
-#endif
 
 /*******************************************************************************
  *
- * Function         btif_transfer_context
+ * Function         btif_is_dut_mode
  *
- * Description      This function switches context to btif task
+ * Description      checks if BTIF is currently in DUT mode
  *
- *                  p_cback   : callback used to process message in btif context
- *                  event     : event id of message
- *                  p_params  : parameter area passed to callback (copied)
- *                  param_len : length of parameter area
- *                  p_copy_cback : If set this function will be invoked for deep
- *                                 copy
- *
- * Returns          void
+ * Returns          true if test mode, otherwise false
  *
  ******************************************************************************/
 
-bt_status_t btif_transfer_context(tBTIF_CBACK* p_cback, uint16_t event,
-                                  char* p_params, int param_len,
-                                  tBTIF_COPY_CBACK* p_copy_cback) {
-  tBTIF_CONTEXT_SWITCH_CBACK* p_msg = (tBTIF_CONTEXT_SWITCH_CBACK*)osi_malloc(
-      sizeof(tBTIF_CONTEXT_SWITCH_CBACK) + param_len);
-
-  BTIF_TRACE_VERBOSE("btif_transfer_context event %d, len %d", event,
-                     param_len);
-
-  /* allocate and send message that will be executed in btif context */
-  p_msg->hdr.event = BT_EVT_CONTEXT_SWITCH_EVT; /* internal event */
-  p_msg->p_cb = p_cback;
-
-  p_msg->event = event; /* callback event */
-
-  /* check if caller has provided a copy callback to do the deep copy */
-  if (p_copy_cback) {
-    p_copy_cback(event, p_msg->p_param, p_params);
-  } else if (p_params) {
-    memcpy(p_msg->p_param, p_params, param_len); /* callback parameter data */
-  }
-
-  do_in_jni_thread(base::Bind(&bt_jni_msg_ready, p_msg));
-  return BT_STATUS_SUCCESS;
-}
-
-/**
- * This function posts a task into the btif message loop, that executes it in
- * the JNI message loop.
- **/
-bt_status_t do_in_jni_thread(const base::Location& from_here,
-                             base::OnceClosure task) {
-  if (!jni_thread.DoInThread(from_here, std::move(task))) {
-    LOG(ERROR) << __func__ << ": Post task to task runner failed!";
-    return BT_STATUS_FAIL;
-  }
-  return BT_STATUS_SUCCESS;
-}
-
-bt_status_t do_in_jni_thread(base::OnceClosure task) {
-  return do_in_jni_thread(FROM_HERE, std::move(task));
-}
-
-bool is_on_jni_thread() {
-  return jni_thread.GetThreadId() == PlatformThread::CurrentId();
-}
-
-btbase::AbstractMessageLoop* get_jni_message_loop() {
-  return jni_thread.message_loop();
-}
-
-static void do_post_on_bt_jni(BtJniClosure closure) { closure(); }
-
-void post_on_bt_jni(BtJniClosure closure) {
-  ASSERT(do_in_jni_thread(FROM_HERE,
-                          base::Bind(do_post_on_bt_jni, std::move(closure))) ==
-         BT_STATUS_SUCCESS);
-}
+bool btif_is_dut_mode() { return btif_dut_mode == 1; }
 
 /*******************************************************************************
  *
@@ -193,27 +139,12 @@ void post_on_bt_jni(BtJniClosure closure) {
  ******************************************************************************/
 
 int btif_is_enabled(void) {
-  return (stack_manager_get_interface()->get_stack_is_running());
+  return ((!btif_is_dut_mode()) &&
+          (stack_manager_get_interface()->get_stack_is_running()));
 }
 
 void btif_init_ok() {
   btif_dm_load_ble_local_keys();
-}
-
-/*******************************************************************************
- *
- * Function         btif_task
- *
- * Description      BTIF task handler managing all messages being passed
- *                  Bluetooth HAL and BTA.
- *
- * Returns          void
- *
- ******************************************************************************/
-static void bt_jni_msg_ready(void* context) {
-  tBTIF_CONTEXT_SWITCH_CBACK* p = (tBTIF_CONTEXT_SWITCH_CBACK*)context;
-  if (p->p_cb) p->p_cb(p->event, p->p_param);
-  osi_free(p);
 }
 
 /*******************************************************************************
@@ -226,11 +157,11 @@ static void bt_jni_msg_ready(void* context) {
  *
  ******************************************************************************/
 bt_status_t btif_init_bluetooth() {
-  LOG_INFO("%s entered", __func__);
+  log::info("entered");
   exit_manager = new base::AtExitManager();
-  jni_thread.StartUp();
+  jni_thread_startup();
   GetInterfaceToProfiles()->events->invoke_thread_evt_cb(ASSOCIATE_JVM);
-  LOG_INFO("%s finished", __func__);
+  log::info("finished");
   return BT_STATUS_SUCCESS;
 }
 
@@ -247,7 +178,8 @@ bt_status_t btif_init_bluetooth() {
 
 void btif_enable_bluetooth_evt() {
   /* Fetch the local BD ADDR */
-  RawAddress local_bd_addr = *controller_get_interface()->get_address();
+  RawAddress local_bd_addr = bluetooth::ToRawAddress(
+      bluetooth::shim::GetController()->GetMacAddress());
 
   std::string bdstr = local_bd_addr.ToString();
 
@@ -257,14 +189,14 @@ void btif_enable_bluetooth_evt() {
 
   char val[PROPERTY_VALUE_MAX] = "";
   int val_size = PROPERTY_VALUE_MAX;
-  if (!btif_config_get_str("Adapter", "Address", val, &val_size) ||
+  if (!btif_config_get_str(BTIF_STORAGE_SECTION_ADAPTER,
+                           BTIF_STORAGE_KEY_ADDRESS, val, &val_size) ||
       strcmp(bdstr.c_str(), val) != 0) {
     // We failed to get an address or the one in the config file does not match
     // the address given by the controller interface. Update the config cache
-    LOG_INFO("%s: Storing '%s' into the config file", __func__,
-            ADDRESS_TO_LOGGABLE_CSTR(local_bd_addr));
-    btif_config_set_str("Adapter", "Address", bdstr.c_str());
-    btif_config_save();
+    log::info("Storing '{}' into the config file", local_bd_addr);
+    btif_config_set_str(BTIF_STORAGE_SECTION_ADAPTER, BTIF_STORAGE_KEY_ADDRESS,
+                        bdstr.c_str());
 
     // fire HAL callback for property change
     bt_property_t prop;
@@ -285,15 +217,30 @@ void btif_enable_bluetooth_evt() {
 
   GetInterfaceToProfiles()->onBluetoothEnabled();
 
-  /* load did configuration */
-  bte_load_did_conf(BTE_DID_CONF_FILE);
+  if (!com::android::bluetooth::flags::load_did_config_from_sysprops()) {
+    bte_load_did_conf(BTE_DID_CONF_FILE);
+  } else {
+    tSDP_DI_RECORD record = {
+        .vendor = uint16_t(
+            GET_SYSPROP(DeviceIDProperties, vendor_id, LMP_COMPID_GOOGLE)),
+        .vendor_id_source = uint16_t(GET_SYSPROP(
+            DeviceIDProperties, vendor_id_source, DI_VENDOR_ID_SOURCE_BTSIG)),
+        .product = uint16_t(GET_SYSPROP(DeviceIDProperties, product_id, 0)),
+        .primary_record = true,
+    };
 
-#ifdef BTIF_DM_OOB_TEST
+    uint32_t record_handle;
+    tBTA_STATUS status = BTA_DmSetLocalDiRecord(&record, &record_handle);
+    if (status != BTA_SUCCESS) {
+      log::error("unable to set device ID record error {}.",
+                 bta_status_text(status));
+    }
+  }
+
   btif_dm_load_local_oob();
-#endif
 
   future_ready(stack_manager_get_hack_future(), FUTURE_SUCCESS);
-  LOG_INFO("Bluetooth enable event completed");
+  log::info("Bluetooth enable event completed");
 }
 
 /*******************************************************************************
@@ -307,15 +254,49 @@ void btif_enable_bluetooth_evt() {
  ******************************************************************************/
 
 bt_status_t btif_cleanup_bluetooth() {
-  LOG_INFO("%s entered", __func__);
+  log::info("entered");
   btif_dm_cleanup();
   GetInterfaceToProfiles()->events->invoke_thread_evt_cb(DISASSOCIATE_JVM);
   btif_queue_release();
-  jni_thread.ShutDown();
+  jni_thread_shutdown();
   delete exit_manager;
   exit_manager = nullptr;
-  LOG_INFO("%s finished", __func__);
+  btif_dut_mode = 0;
+  log::info("finished");
   return BT_STATUS_SUCCESS;
+}
+
+/*******************************************************************************
+ *
+ * Function         btif_dut_mode_configure
+ *
+ * Description      Configure Test Mode - 'enable' to 1 puts the device in test
+ *                       mode and 0 exits test mode
+ *
+ ******************************************************************************/
+void btif_dut_mode_configure(uint8_t enable) {
+  log::verbose("");
+
+  btif_dut_mode = enable;
+  if (enable == 1) {
+    BTA_EnableTestMode();
+  } else {
+    // Can't do in process reset anyways - just quit
+    kill(getpid(), SIGKILL);
+  }
+}
+
+/*******************************************************************************
+ *
+ * Function         btif_dut_mode_send
+ *
+ * Description     Sends a HCI Vendor specific command to the controller
+ *
+ ******************************************************************************/
+void btif_dut_mode_send(uint16_t opcode, uint8_t* buf, uint8_t len) {
+  log::verbose("");
+  /* For now nothing to be done. */
+  BTM_VendorSpecificCommand(opcode, len, buf, [](tBTM_VSC_CMPL*) {});
 }
 
 /*****************************************************************************
@@ -325,7 +306,7 @@ bt_status_t btif_cleanup_bluetooth() {
  ****************************************************************************/
 
 static bt_status_t btif_in_get_adapter_properties(void) {
-  const static uint32_t NUM_ADAPTER_PROPERTIES = 8;
+  const static uint32_t NUM_ADAPTER_PROPERTIES = 7;
   bt_property_t properties[NUM_ADAPTER_PROPERTIES];
   uint32_t num_props = 0;
 
@@ -337,7 +318,6 @@ static bt_status_t btif_in_get_adapter_properties(void) {
   Uuid local_uuids[BT_MAX_NUM_UUIDS];
   bt_status_t status;
   bt_io_cap_t local_bt_io_cap;
-  bt_io_cap_t local_bt_io_cap_ble;
 
   /* RawAddress */
   BTIF_STORAGE_FILL_PROPERTY(&properties[num_props], BT_PROPERTY_BDADDR,
@@ -385,12 +365,6 @@ static bt_status_t btif_in_get_adapter_properties(void) {
   /* LOCAL IO Capabilities */
   BTIF_STORAGE_FILL_PROPERTY(&properties[num_props], BT_PROPERTY_LOCAL_IO_CAPS,
                              sizeof(bt_io_cap_t), &local_bt_io_cap);
-  btif_storage_get_adapter_property(&properties[num_props]);
-  num_props++;
-
-  BTIF_STORAGE_FILL_PROPERTY(&properties[num_props],
-                             BT_PROPERTY_LOCAL_IO_CAPS_BLE, sizeof(bt_io_cap_t),
-                             &local_bt_io_cap_ble);
   btif_storage_get_adapter_property(&properties[num_props]);
   num_props++;
 
@@ -446,13 +420,9 @@ static bt_status_t btif_in_get_remote_device_properties(RawAddress* bd_addr) {
   return BT_STATUS_SUCCESS;
 }
 
-static void btif_core_storage_adapter_notify_empty_success() {
-  GetInterfaceToProfiles()->events->invoke_adapter_properties_cb(
-      BT_STATUS_SUCCESS, 0, NULL);
-}
-
 static void btif_core_storage_adapter_write(bt_property_t* prop) {
-  BTIF_TRACE_EVENT("type: %d, len %d, 0x%x", prop->type, prop->len, prop->val);
+  log::verbose("type: {}, len {}, {}", prop->type, prop->len,
+               fmt::ptr(prop->val));
   bt_status_t status = btif_storage_set_adapter_property(prop);
   GetInterfaceToProfiles()->events->invoke_adapter_properties_cb(status, 1,
                                                                  prop);
@@ -478,7 +448,7 @@ void btif_remote_properties_evt(bt_status_t status, RawAddress* remote_addr,
  ******************************************************************************/
 
 void btif_get_adapter_properties(void) {
-  BTIF_TRACE_EVENT("%s", __func__);
+  log::verbose("");
 
   btif_in_get_adapter_properties();
 }
@@ -492,7 +462,7 @@ void btif_get_adapter_properties(void) {
  ******************************************************************************/
 
 void btif_get_adapter_property(bt_property_type_t type) {
-  BTIF_TRACE_EVENT("%s %d", __func__, type);
+  log::verbose("{}", type);
 
   bt_status_t status = BT_STATUS_SUCCESS;
   char buf[512];
@@ -529,34 +499,34 @@ void btif_get_adapter_property(bt_property_type_t type) {
         cmn_vsc_cb.extended_scan_support > 0;
     local_le_features.debug_logging_supported =
         cmn_vsc_cb.debug_logging_supported > 0;
-    const controller_t* controller = controller_get_interface();
+    auto controller = bluetooth::shim::GetController();
 
-    if (controller->supports_ble_extended_advertising()) {
+    if (controller->SupportsBleExtendedAdvertising()) {
       local_le_features.max_adv_instance =
-          controller->get_ble_number_of_supported_advertising_sets();
+          controller->GetLeNumberOfSupportedAdverisingSets();
     }
-    local_le_features.le_2m_phy_supported = controller->supports_ble_2m_phy();
+    local_le_features.le_2m_phy_supported = controller->SupportsBle2mPhy();
     local_le_features.le_coded_phy_supported =
-        controller->supports_ble_coded_phy();
+        controller->SupportsBleCodedPhy();
     local_le_features.le_extended_advertising_supported =
-        controller->supports_ble_extended_advertising();
+        controller->SupportsBleExtendedAdvertising();
     local_le_features.le_periodic_advertising_supported =
-        controller->supports_ble_periodic_advertising();
+        controller->SupportsBlePeriodicAdvertising();
     local_le_features.le_maximum_advertising_data_length =
-        controller->get_ble_maximum_advertising_data_length();
+        controller->GetLeMaximumAdvertisingDataLength();
 
     local_le_features.dynamic_audio_buffer_supported =
         cmn_vsc_cb.dynamic_audio_buffer_support;
 
     local_le_features.le_periodic_advertising_sync_transfer_sender_supported =
-        controller->supports_ble_periodic_advertising_sync_transfer_sender();
+        controller->SupportsBlePeriodicAdvertisingSyncTransferSender();
     local_le_features.le_connected_isochronous_stream_central_supported =
-        controller->supports_ble_connected_isochronous_stream_central();
+        controller->SupportsBleConnectedIsochronousStreamCentral();
     local_le_features.le_isochronous_broadcast_supported =
-        controller->supports_ble_isochronous_broadcaster();
+        controller->SupportsBleIsochronousBroadcaster();
     local_le_features
         .le_periodic_advertising_sync_transfer_recipient_supported =
-        controller->supports_ble_periodic_advertising_sync_transfer_recipient();
+        controller->SupportsBlePeriodicAdvertisingSyncTransferRecipient();
     local_le_features.adv_filter_extended_features_mask =
         cmn_vsc_cb.adv_filter_extended_features_mask;
 
@@ -569,8 +539,7 @@ void btif_get_adapter_property(bt_property_type_t type) {
 
     prop.len = sizeof(bt_dynamic_audio_buffer_item_t);
     if (GetInterfaceToProfiles()->config->isA2DPOffloadEnabled() == false) {
-      BTIF_TRACE_DEBUG("%s Get buffer millis for A2DP software encoding",
-                       __func__);
+      log::verbose("Get buffer millis for A2DP software encoding");
       for (int i = 0; i < CODEC_TYPE_NUMBER; i++) {
         dynamic_audio_buffer_item.dab_item[i] = {
             .default_buffer_time = DEFAULT_BUFFER_TIME,
@@ -580,7 +549,7 @@ void btif_get_adapter_property(bt_property_type_t type) {
       memcpy(prop.val, &dynamic_audio_buffer_item, prop.len);
     } else {
       if (cmn_vsc_cb.dynamic_audio_buffer_support != 0) {
-        BTIF_TRACE_DEBUG("%s Get buffer millis for A2DP Offload", __func__);
+        log::verbose("Get buffer millis for A2DP Offload");
         tBTM_BT_DYNAMIC_AUDIO_BUFFER_CB
             bt_dynamic_audio_buffer_cb[CODEC_TYPE_NUMBER];
         BTM_BleGetDynamicAudioBuffer(bt_dynamic_audio_buffer_cb);
@@ -596,7 +565,7 @@ void btif_get_adapter_property(bt_property_type_t type) {
         }
         memcpy(prop.val, &dynamic_audio_buffer_item, prop.len);
       } else {
-        BTIF_TRACE_DEBUG("%s Don't support Dynamic Audio Buffer", __func__);
+        log::verbose("Don't support Dynamic Audio Buffer");
       }
     }
   } else {
@@ -628,19 +597,18 @@ bt_property_t* property_deep_copy(const bt_property_t* prop) {
  ******************************************************************************/
 
 void btif_set_adapter_property(bt_property_t* property) {
-  BTIF_TRACE_EVENT("btif_set_adapter_property type: %d, len %d, 0x%x",
-                   property->type, property->len, property->val);
+  log::verbose("btif_set_adapter_property type: {}, len {}, {}", property->type,
+               property->len, fmt::ptr(property->val));
 
   switch (property->type) {
     case BT_PROPERTY_BDNAME: {
-      char bd_name[BTM_MAX_LOC_BD_NAME_LEN + 1];
-      uint16_t name_len = property->len > BTM_MAX_LOC_BD_NAME_LEN
-                              ? BTM_MAX_LOC_BD_NAME_LEN
-                              : property->len;
+      char bd_name[BD_NAME_LEN + 1];
+      uint16_t name_len =
+          property->len > BD_NAME_LEN ? BD_NAME_LEN : property->len;
       memcpy(bd_name, property->val, name_len);
       bd_name[name_len] = '\0';
 
-      BTIF_TRACE_EVENT("set property name : %s", (char*)bd_name);
+      log::verbose("set property name : {}", (char*)bd_name);
 
       BTA_DmSetDeviceName((const char*)bd_name);
 
@@ -649,7 +617,7 @@ void btif_set_adapter_property(bt_property_t* property) {
 
     case BT_PROPERTY_ADAPTER_SCAN_MODE: {
       bt_scan_mode_t mode = *(bt_scan_mode_t*)property->val;
-      BTIF_TRACE_EVENT("set property scan mode : %x", mode);
+      log::verbose("set property scan mode : {:x}", mode);
 
       if (BTA_DmSetVisibility(mode)) {
         btif_core_storage_adapter_write(property);
@@ -661,18 +629,7 @@ void btif_set_adapter_property(bt_property_t* property) {
          if required */
       btif_core_storage_adapter_write(property);
     } break;
-    case BT_PROPERTY_CLASS_OF_DEVICE: {
-      DEV_CLASS dev_class;
-      memcpy(dev_class, property->val, DEV_CLASS_LEN);
-
-      BTIF_TRACE_EVENT("set property dev_class : 0x%02x%02x%02x", dev_class[0],
-                       dev_class[1], dev_class[2]);
-
-      BTM_SetDeviceClass(dev_class);
-      btif_core_storage_adapter_notify_empty_success();
-    } break;
-    case BT_PROPERTY_LOCAL_IO_CAPS:
-    case BT_PROPERTY_LOCAL_IO_CAPS_BLE: {
+    case BT_PROPERTY_LOCAL_IO_CAPS: {
       // Changing IO Capability of stack at run-time is not currently supported.
       // This call changes the stored value which will affect the stack next
       // time it starts up.
@@ -755,8 +712,7 @@ tBTA_SERVICE_MASK btif_get_enabled_services_mask(void) {
 void btif_enable_service(tBTA_SERVICE_ID service_id) {
   btif_enabled_services |= (1 << service_id);
 
-  BTIF_TRACE_DEBUG("%s: current services:0x%x", __func__,
-                   btif_enabled_services);
+  log::verbose("current services:0x{:x}", btif_enabled_services);
 
   if (btif_is_enabled()) {
     btif_dm_enable_service(service_id, true);
@@ -774,84 +730,33 @@ void btif_enable_service(tBTA_SERVICE_ID service_id) {
 void btif_disable_service(tBTA_SERVICE_ID service_id) {
   btif_enabled_services &= (tBTA_SERVICE_MASK)(~(1 << service_id));
 
-  BTIF_TRACE_DEBUG("%s: Current Services:0x%x", __func__,
-                   btif_enabled_services);
+  log::verbose("Current Services:0x{:x}", btif_enabled_services);
 
   if (btif_is_enabled()) {
     btif_dm_enable_service(service_id, false);
   }
 }
 
-void DynamicAudiobufferSizeCompleteCallback(tBTM_VSC_CMPL* p_vsc_cmpl_params) {
-  LOG(INFO) << __func__;
-
-  if (p_vsc_cmpl_params->param_len < 1) {
-    LOG(ERROR) << __func__
-               << ": The length of returned parameters is less than 1";
-    return;
-  }
-  uint8_t* p_event_param_buf = p_vsc_cmpl_params->p_param_buf;
-  uint8_t status = 0xff;
-  uint8_t opcode = 0xff;
-  uint16_t respond_buffer_time = 0xffff;
-
-  // [Return Parameter]         | [Size]   | [Purpose]
-  // Status                     | 1 octet  | Command complete status
-  // Dynamic_Audio_Buffer_opcode| 1 octet  | 0x02 - Set buffer time
-  // Audio_Codec_Buffer_Time    | 2 octet  | Current buffer time
-  STREAM_TO_UINT8(status, p_event_param_buf);
-  if (status != HCI_SUCCESS) {
-    LOG(ERROR) << __func__
-               << ": Fail to configure DFTB. status: " << loghex(status);
-    return;
-  }
-
-  if (p_vsc_cmpl_params->param_len != 4) {
-    LOG(FATAL) << __func__
-               << ": The length of returned parameters is not equal to 4: "
-               << std::to_string(p_vsc_cmpl_params->param_len);
-    return;
-  }
-
-  STREAM_TO_UINT8(opcode, p_event_param_buf);
-  LOG(INFO) << __func__ << ": opcode = " << loghex(opcode);
-
-  if (opcode == 0x02) {
-    STREAM_TO_UINT16(respond_buffer_time, p_event_param_buf);
-    LOG(INFO) << __func__
-              << ": Succeed to configure Media Tx Buffer, used_buffer_time = "
-              << loghex(respond_buffer_time);
-  }
-}
-
 bt_status_t btif_set_dynamic_audio_buffer_size(int codec, int size) {
-  BTIF_TRACE_DEBUG("%s", __func__);
+  log::verbose("");
 
   tBTM_BLE_VSC_CB cmn_vsc_cb;
   BTM_BleGetVendorCapabilities(&cmn_vsc_cb);
 
   if (!GetInterfaceToProfiles()->config->isA2DPOffloadEnabled()) {
-    BTIF_TRACE_DEBUG("%s Set buffer size (%d) for A2DP software encoding",
-                     __func__, size);
+    log::verbose("Set buffer size ({}) for A2DP software encoding", size);
     GetInterfaceToProfiles()
         ->profileSpecific_HACK->btif_av_set_dynamic_audio_buffer_size(
             uint8_t(size));
   } else {
     if (cmn_vsc_cb.dynamic_audio_buffer_support != 0) {
-      BTIF_TRACE_DEBUG("%s Set buffer size (%d) for A2DP offload", __func__,
-                       size);
+      log::verbose("Set buffer size ({}) for A2DP offload", size);
       uint16_t firmware_tx_buffer_length_byte;
-      uint8_t param[3] = {0};
-      uint8_t* p_param = param;
-
       firmware_tx_buffer_length_byte = static_cast<uint16_t>(size);
-      LOG(INFO) << __func__ << "firmware_tx_buffer_length_byte: "
-                << firmware_tx_buffer_length_byte;
-
-      UINT8_TO_STREAM(p_param, HCI_CONTROLLER_DAB_SET_BUFFER_TIME);
-      UINT16_TO_STREAM(p_param, firmware_tx_buffer_length_byte);
-      BTM_VendorSpecificCommand(HCI_CONTROLLER_DAB, p_param - param, param,
-                                DynamicAudiobufferSizeCompleteCallback);
+      log::info("firmware_tx_buffer_length_byte: {}",
+                firmware_tx_buffer_length_byte);
+      bluetooth::shim::GetController()->SetDabAudioBufferTime(
+          firmware_tx_buffer_length_byte);
     }
   }
 

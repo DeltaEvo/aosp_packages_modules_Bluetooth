@@ -52,7 +52,7 @@ class MockLeScanningManager : public LeScanningManager {
   MOCK_METHOD(void, RegisterScanner, (const Uuid));
   MOCK_METHOD(void, Unregister, (ScannerId));
   MOCK_METHOD(void, Scan, (bool));
-  MOCK_METHOD(void, SetScanParameters, (ScannerId, LeScanType, uint16_t, uint16_t));
+  MOCK_METHOD(void, SetScanParameters, (ScannerId, LeScanType, uint16_t, uint16_t, uint8_t));
   MOCK_METHOD(void, ScanFilterEnable, (bool));
   MOCK_METHOD(void, ScanFilterParameterSetup, (ApcfAction, uint8_t, AdvertisingFilterParameter));
   MOCK_METHOD(void, ScanFilterAdd, (uint8_t, std::vector<AdvertisingPacketContentFilterCommand>));
@@ -65,8 +65,18 @@ class MockLeScanningManager : public LeScanningManager {
   MOCK_METHOD(void, StartSync, (uint8_t, const AddressWithType&, uint16_t, uint16_t, int));
   MOCK_METHOD(void, StopSync, (uint16_t));
   MOCK_METHOD(void, CancelCreateSync, (uint8_t, const Address&));
-  MOCK_METHOD(void, TransferSync, (const Address&, uint16_t, uint16_t sync_handle, int pa_source));
-  MOCK_METHOD(void, TransferSetInfo, (const Address&, uint16_t, uint8_t, int));
+  MOCK_METHOD(
+      void,
+      TransferSync,
+      (const Address&,
+       uint16_t connection_handle,
+       uint16_t service_data,
+       uint16_t sync_handle,
+       int pa_source));
+  MOCK_METHOD(
+      void,
+      TransferSetInfo,
+      (const Address&, uint16_t connection_handle, uint16_t service_data, uint8_t, int));
   MOCK_METHOD(void, SyncTxParameters, (const Address&, uint8_t, uint16_t, uint16_t, int));
 };
 

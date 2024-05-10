@@ -19,6 +19,7 @@
 #pragma once
 
 #include <base/functional/callback_forward.h>
+#include <bluetooth/log.h>
 #include <hardware/bt_hearing_aid.h>
 
 #include <cstdint>
@@ -26,10 +27,9 @@
 #include <functional>
 #include <vector>
 
+#include "common/init_flags.h"
 #include "stack/include/gap_api.h"
 #include "types/raw_address.h"
-
-constexpr uint16_t HEARINGAID_MAX_NUM_UUIDS = 1;
 
 constexpr uint16_t HA_INTERVAL_10_MS = 10;
 constexpr uint16_t HA_INTERVAL_20_MS = 20;
@@ -37,7 +37,12 @@ constexpr uint16_t HA_INTERVAL_20_MS = 20;
 // Masks for checking capability support
 constexpr uint8_t CAPABILITY_SIDE = 0x01;
 constexpr uint8_t CAPABILITY_BINAURAL = 0x02;
-constexpr uint8_t CAPABILITY_RESERVED = 0xFC;
+constexpr uint8_t CAPABILITY_CSIS = 0x04;
+constexpr uint8_t CAPABILITY_RESERVED = 0xF8;
+
+// Number of retry for phy update. This targets to reduce phy update collision.
+const static uint8_t PHY_UPDATE_RETRY_LIMIT =
+    bluetooth::common::init_flags::get_asha_phy_update_retry_limit();
 
 /** Implementations of HearingAid will also implement this interface */
 class HearingAidAudioReceiver {
@@ -110,8 +115,10 @@ struct HearingDevice {
   bool service_changed_rcvd;
 
   /* we are making active attempt to connect to this device, 'direct connect'.
-   * This is true only during initial phase of first connection. */
+   */
   bool connecting_actively;
+
+  bool switch_to_background_connection_after_failure;
 
   /* For two hearing aids, you must update their parameters one after another,
    * not simulteanously, to ensure start of connection events for both devices
@@ -160,6 +167,8 @@ struct HearingDevice {
 
   bool gap_opened;
 
+  int phy_update_retry_remain;
+
   HearingDevice(const RawAddress& address, uint8_t capabilities,
                 uint16_t codecs, uint16_t audio_control_point_handle,
                 uint16_t audio_status_handle, uint16_t audio_status_ccc_handle,
@@ -170,6 +179,7 @@ struct HearingDevice {
         first_connection(false),
         service_changed_rcvd(false),
         connecting_actively(false),
+        switch_to_background_connection_after_failure(false),
         connection_update_status(NONE),
         accepting_audio(false),
         conn_id(0),
@@ -188,13 +198,15 @@ struct HearingDevice {
         playback_started(false),
         command_acked(false),
         read_rssi_count(0),
-        gap_opened(false) {}
+        gap_opened(false),
+        phy_update_retry_remain(PHY_UPDATE_RETRY_LIMIT) {}
 
   HearingDevice(const RawAddress& address, bool first_connection)
       : address(address),
         first_connection(first_connection),
         service_changed_rcvd(false),
         connecting_actively(first_connection),
+        switch_to_background_connection_after_failure(false),
         connection_update_status(NONE),
         accepting_audio(false),
         conn_id(0),
@@ -211,7 +223,8 @@ struct HearingDevice {
         playback_started(false),
         command_acked(false),
         read_rssi_count(0),
-        gap_opened(false) {}
+        gap_opened(false),
+        phy_update_retry_remain(PHY_UPDATE_RETRY_LIMIT) {}
 
   HearingDevice() : HearingDevice(RawAddress::kEmpty, false) {}
 
@@ -231,7 +244,7 @@ class HearingAid {
   static void DebugDump(int fd);
 
   static void AddFromStorage(const HearingDevice& dev_info,
-                             uint16_t is_acceptlisted);
+                             bool is_acceptlisted);
 
   static int GetDeviceCount();
 
@@ -274,3 +287,9 @@ class HearingAidAudioSource {
   static void CleanUp();
   static void DebugDump(int fd);
 };
+
+namespace fmt {
+template <>
+struct formatter<connection_update_status_t>
+    : enum_formatter<connection_update_status_t> {};
+}  // namespace fmt

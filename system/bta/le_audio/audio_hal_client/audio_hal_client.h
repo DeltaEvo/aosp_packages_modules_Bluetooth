@@ -17,16 +17,14 @@
  */
 #pragma once
 
-#include <future>
 #include <memory>
+#include <vector>
 
 #include "audio_hal_interface/le_audio_software.h"
-#include "common/repeating_timer.h"
 
-namespace le_audio {
-/* Represents configuration of audio codec, as exchanged between le audio and
- * phone.
- * It can also be passed to the audio source to configure its parameters.
+namespace bluetooth::le_audio {
+/* Represents configuration used to configure the local audio sessions and
+ * the software codecs in case of a software coding sessions.
  */
 struct LeAudioCodecConfiguration {
   static constexpr uint8_t kChannelNumberMono =
@@ -58,13 +56,13 @@ struct LeAudioCodecConfiguration {
   static constexpr uint32_t kInterval10000Us = 10000;
 
   /** number of channels */
-  uint8_t num_channels;
+  uint8_t num_channels = 0;
 
   /** sampling rate that the codec expects to receive from audio framework */
-  uint32_t sample_rate;
+  uint32_t sample_rate = 0;
 
   /** bits per sample that codec expects to receive from audio framework */
-  uint8_t bits_per_sample;
+  uint8_t bits_per_sample = 0;
 
   /** Data interval determines how often we send samples to the remote. This
    * should match how often we grab data from audio source, optionally we can
@@ -72,7 +70,7 @@ struct LeAudioCodecConfiguration {
    *
    * Value is provided in us.
    */
-  uint32_t data_interval_us;
+  uint32_t data_interval_us = 0;
 
   bool operator!=(const LeAudioCodecConfiguration& other) {
     return !((num_channels == other.num_channels) &&
@@ -88,7 +86,7 @@ struct LeAudioCodecConfiguration {
             (data_interval_us == other.data_interval_us));
   }
 
-  bool IsInvalid() {
+  bool IsInvalid() const {
     return (num_channels == 0) || (sample_rate == 0) ||
            (bits_per_sample == 0) || (data_interval_us == 0);
   }
@@ -101,16 +99,19 @@ class LeAudioSinkAudioHalClient {
  public:
   class Callbacks {
    public:
+    Callbacks() = default;
     virtual ~Callbacks() = default;
-    virtual void OnAudioSuspend(std::promise<void> do_suspend_promise) = 0;
+    virtual void OnAudioSuspend(void) = 0;
     virtual void OnAudioResume(void) = 0;
-    virtual void OnAudioMetadataUpdate(
-        std::vector<struct record_track_metadata> sink_metadata) = 0;
+    virtual void OnAudioMetadataUpdate(sink_metadata_v7 sink_metadata) = 0;
+
+    base::WeakPtrFactory<Callbacks> weak_factory_{this};
   };
 
   virtual ~LeAudioSinkAudioHalClient() = default;
   virtual bool Start(const LeAudioCodecConfiguration& codecConfiguration,
-                     Callbacks* audioReceiver) = 0;
+                     Callbacks* audioReceiver,
+                     DsaModes dsa_modes = {DsaMode::DISABLED}) = 0;
   virtual void Stop() = 0;
   virtual size_t SendData(uint8_t* data, uint16_t size) = 0;
 
@@ -119,7 +120,7 @@ class LeAudioSinkAudioHalClient {
 
   virtual void UpdateRemoteDelay(uint16_t remote_delay_ms) = 0;
   virtual void UpdateAudioConfigToHal(
-      const ::le_audio::offload_config& config) = 0;
+      const ::bluetooth::le_audio::offload_config& config) = 0;
   virtual void SuspendedForReconfiguration() = 0;
   virtual void ReconfigurationComplete() = 0;
 
@@ -137,26 +138,30 @@ class LeAudioSourceAudioHalClient {
  public:
   class Callbacks {
    public:
+    Callbacks() = default;
     virtual ~Callbacks() = default;
     virtual void OnAudioDataReady(const std::vector<uint8_t>& data) = 0;
-    virtual void OnAudioSuspend(std::promise<void> do_suspend_promise) = 0;
+    virtual void OnAudioSuspend(void) = 0;
     virtual void OnAudioResume(void) = 0;
-    virtual void OnAudioMetadataUpdate(
-        std::vector<struct playback_track_metadata> source_metadata) = 0;
+    virtual void OnAudioMetadataUpdate(source_metadata_v7 source_metadata,
+                                       DsaMode dsa_mode) = 0;
+
+    base::WeakPtrFactory<Callbacks> weak_factory_{this};
   };
 
   virtual ~LeAudioSourceAudioHalClient() = default;
   virtual bool Start(const LeAudioCodecConfiguration& codecConfiguration,
-                     Callbacks* audioReceiver) = 0;
+                     Callbacks* audioReceiver,
+                     DsaModes dsa_modes = {DsaMode::DISABLED}) = 0;
   virtual void Stop() = 0;
   virtual size_t SendData(uint8_t* data, uint16_t size) { return 0; }
   virtual void ConfirmStreamingRequest() = 0;
   virtual void CancelStreamingRequest() = 0;
   virtual void UpdateRemoteDelay(uint16_t remote_delay_ms) = 0;
   virtual void UpdateAudioConfigToHal(
-      const ::le_audio::offload_config& config) = 0;
+      const ::bluetooth::le_audio::offload_config& config) = 0;
   virtual void UpdateBroadcastAudioConfigToHal(
-      const ::le_audio::broadcast_offload_config& config) = 0;
+      const ::bluetooth::le_audio::broadcast_offload_config& config) = 0;
   virtual void SuspendedForReconfiguration() = 0;
   virtual void ReconfigurationComplete() = 0;
 
@@ -167,4 +172,4 @@ class LeAudioSourceAudioHalClient {
  protected:
   LeAudioSourceAudioHalClient() = default;
 };
-}  // namespace le_audio
+}  // namespace bluetooth::le_audio

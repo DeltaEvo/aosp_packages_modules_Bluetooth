@@ -17,14 +17,17 @@
 
 #pragma once
 
+#include <bluetooth/log.h>
+
 #include <list>
 #include <optional>
+#include <vector>
 
 #include "hardware/bt_has.h"
 #include "has_preset.h"
 #include "osi/include/alarm.h"
 
-namespace le_audio {
+namespace bluetooth::le_audio {
 namespace has {
 /* HAS control point Change Id */
 enum class PresetCtpChangeId : uint8_t {
@@ -176,7 +179,7 @@ struct HasCtpGroupOpCoordinator {
   static void Cleanup() {
     if (operation_timeout_timer != nullptr) {
       if (alarm_is_scheduled(operation_timeout_timer)) {
-        DLOG(INFO) << __func__ << +ref_cnt;
+        log::verbose("{}", ref_cnt);
         alarm_cancel(operation_timeout_timer);
       }
       alarm_free(operation_timeout_timer);
@@ -206,10 +209,12 @@ struct HasCtpGroupOpCoordinator {
   HasCtpGroupOpCoordinator(const std::vector<RawAddress>& targets,
                            HasCtpOp operation)
       : operation(operation) {
-    LOG_ASSERT(targets.size() != 0) << " Empty device list error.";
+    log::assert_that(targets.size() != 0, "Empty device list error.");
     if (targets.size() != 1) {
-      LOG_ASSERT(operation.IsGroupRequest()) << " Must be a group operation!";
-      LOG_ASSERT(operation.GetGroupId() != -1) << " Must set valid group_id!";
+      log::assert_that(operation.IsGroupRequest(),
+                       "Must be a group operation!");
+      log::assert_that(operation.GetGroupId() != -1,
+                       "Must set valid group_id!");
     }
 
     devices = std::list<RawAddress>(targets.cbegin(), targets.cend());
@@ -222,7 +227,7 @@ struct HasCtpGroupOpCoordinator {
     if (alarm_is_scheduled(operation_timeout_timer))
       alarm_cancel(operation_timeout_timer);
 
-    LOG_ASSERT(cb != nullptr) << " Timeout timer callback not set!";
+    log::assert_that(cb != nullptr, "Timeout timer callback not set!");
     alarm_set_on_mloop(operation_timeout_timer, kOperationTimeoutMs, cb,
                        nullptr);
   }
@@ -258,4 +263,11 @@ struct HasCtpGroupOpCoordinator {
 };
 
 }  // namespace has
-}  // namespace le_audio
+}  // namespace bluetooth::le_audio
+
+namespace fmt {
+template <>
+struct formatter<bluetooth::le_audio::has::HasCtpNtf> : ostream_formatter {};
+template <>
+struct formatter<bluetooth::le_audio::has::HasCtpOp> : ostream_formatter {};
+}  // namespace fmt

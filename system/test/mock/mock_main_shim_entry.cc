@@ -14,33 +14,32 @@
  * limitations under the License.
  */
 
-#include "gd/hci/acl_manager_mock.h"
-#include "gd/hci/controller_mock.h"
-#include "gd/hci/distance_measurement_manager_mock.h"
-#include "gd/hci/hci_layer.h"
-#include "gd/hci/le_advertising_manager_mock.h"
-#include "gd/hci/le_scanning_manager_mock.h"
-#include "gd/neighbor/connectability.h"
-#include "gd/neighbor/discoverability.h"
-#include "gd/neighbor/inquiry.h"
-#include "gd/neighbor/inquiry_mock.h"
-#include "gd/neighbor/page.h"
-#include "gd/os/handler.h"
-#include "gd/security/security_module.h"
-#include "gd/storage/storage_module.h"
+#include "hci/acl_manager_mock.h"
+#include "hci/controller_interface_mock.h"
+#include "hci/distance_measurement_manager_mock.h"
+#include "hci/hci_interface.h"
+#include "hci/hci_layer_mock.h"
+#include "hci/le_advertising_manager_mock.h"
+#include "hci/le_scanning_manager_mock.h"
+#include "hci/vendor_specific_event_manager_interface.h"
+#include "hci/vendor_specific_event_manager_mock.h"
 #include "main/shim/entry.h"
-#include "main/shim/stack.h"
+#include "os/handler.h"
+#include "storage/storage_module.h"
 
 namespace bluetooth {
 namespace hci {
 namespace testing {
 
 MockAclManager* mock_acl_manager_{nullptr};
-MockController* mock_controller_{nullptr};
+MockControllerInterface* mock_controller_{nullptr};
+shim::Dumpsys* shim_dumpsys_ = {};
+MockHciLayer* mock_hci_layer_{nullptr};
 os::Handler* mock_gd_shim_handler_{nullptr};
 MockLeAdvertisingManager* mock_le_advertising_manager_{nullptr};
 MockLeScanningManager* mock_le_scanning_manager_{nullptr};
 MockDistanceMeasurementManager* mock_distance_measurement_manager_{nullptr};
+MockVendorSpecificEventManager* mock_vendor_specific_event_manager_{nullptr};
 
 }  // namespace testing
 }  // namespace hci
@@ -49,13 +48,12 @@ class Dumpsys;
 
 namespace shim {
 
-Dumpsys* GetDumpsys() { return nullptr; }
-activity_attribution::ActivityAttribution* GetActivityAttribution() {
-  return nullptr;
-}
+Dumpsys* GetDumpsys() { return hci::testing::shim_dumpsys_; }
 hci::AclManager* GetAclManager() { return hci::testing::mock_acl_manager_; }
-hci::Controller* GetController() { return hci::testing::mock_controller_; }
-hci::HciLayer* GetHciLayer() { return nullptr; }
+hci::ControllerInterface* GetController() {
+  return hci::testing::mock_controller_;
+}
+hci::HciInterface* GetHciLayer() { return hci::testing::mock_hci_layer_; }
 hci::LeAdvertisingManager* GetAdvertising() {
   return hci::testing::mock_le_advertising_manager_;
 }
@@ -65,21 +63,16 @@ hci::LeScanningManager* GetScanning() {
 hci::DistanceMeasurementManager* GetDistanceMeasurementManager() {
   return hci::testing::mock_distance_measurement_manager_;
 }
-hci::VendorSpecificEventManager* GetVendorSpecificEventManager() {
-  return nullptr;
+hci::VendorSpecificEventManagerInterface* GetVendorSpecificEventManager() {
+  return hci::testing::mock_vendor_specific_event_manager_;
 }
-l2cap::classic::L2capClassicModule* GetL2capClassicModule() { return nullptr; }
-l2cap::le::L2capLeModule* GetL2capLeModule() { return nullptr; }
-neighbor::ConnectabilityModule* GetConnectability() { return nullptr; }
-neighbor::DiscoverabilityModule* GetDiscoverability() { return nullptr; }
-neighbor::InquiryModule* GetInquiry() { return nullptr; }
-neighbor::PageModule* GetPage() { return nullptr; }
 os::Handler* GetGdShimHandler() { return hci::testing::mock_gd_shim_handler_; }
-security::SecurityModule* GetSecurityModule() { return nullptr; }
 hal::SnoopLogger* GetSnoopLogger() { return nullptr; }
 storage::StorageModule* GetStorage() { return nullptr; }
 metrics::CounterMetrics* GetCounterMetrics() { return nullptr; }
+#if TARGET_FLOSS
 hci::MsftExtensionManager* GetMsftExtensionManager() { return nullptr; }
+#endif
 hci::RemoteNameRequestModule* GetRemoteNameRequest() { return nullptr; }
 
 }  // namespace shim

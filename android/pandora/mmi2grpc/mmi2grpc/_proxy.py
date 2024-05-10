@@ -1,10 +1,10 @@
-# Copyright 2022 Google LLC
+# Copyright (C) 2024 The Android Open Source Project
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     https://www.apache.org/licenses/LICENSE-2.0
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,14 +16,14 @@
 from mmi2grpc._helpers import format_function
 from mmi2grpc._helpers import assert_description
 
-from pandora_experimental._android_grpc import Android
+from pandora_experimental.os_grpc import Os
 
 
 class ProfileProxy:
     """Profile proxy base class."""
 
     def __init__(self, channel) -> None:
-        self._android = Android(channel)
+        self.os = Os(channel)
 
     def interact(self, test: str, mmi_name: str, mmi_description: str, pts_addr: bytes):
         """Translate a MMI call to its corresponding implementation.
@@ -49,7 +49,7 @@ class ProfileProxy:
             assert False, f'Unhandled mmi {mmi_name}\n{code}'
 
     def log(self, text=""):
-        self._android.Log(text=text)
+        self.os.Log(text=text)
 
     def test_started(self, test: str, description: str, pts_addr: bytes):
         return "OK"

@@ -15,10 +15,13 @@ cc_fuzz {
         "fuzz_compat.cc",
     ],
     shared_libs: [
-        "liblog",
+        "libbase",
         "libcutils",
+        "liblog",
     ],
     static_libs: [
+        "libbluetooth_log",
         "libosi",
     ],
+    cflags: ["-Wno-unused-parameter"],
 }

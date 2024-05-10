@@ -53,7 +53,9 @@ import android.bluetooth.BluetoothUuid;
 import android.bluetooth.SdpMasRecord;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Looper;
 import android.os.Message;
+import android.os.SystemProperties;
 import android.provider.Telephony;
 import android.telecom.PhoneAccount;
 import android.telephony.SmsManager;
@@ -61,17 +63,19 @@ import android.util.Log;
 
 import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
+import com.android.bluetooth.flags.Flags;
 import com.android.bluetooth.map.BluetoothMapbMessageMime;
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.util.IState;
 import com.android.internal.util.State;
 import com.android.internal.util.StateMachine;
 import com.android.vcard.VCardConstants;
 import com.android.vcard.VCardEntry;
 import com.android.vcard.VCardProperty;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
@@ -86,13 +90,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * messages is sent.
  */
 class MceStateMachine extends StateMachine {
+    private static final String TAG = MceStateMachine.class.getSimpleName();
+
     // Messages for events handled by the StateMachine
     static final int MSG_MAS_CONNECTED = 1001;
     static final int MSG_MAS_DISCONNECTED = 1002;
     static final int MSG_MAS_REQUEST_COMPLETED = 1003;
     static final int MSG_MAS_REQUEST_FAILED = 1004;
     static final int MSG_MAS_SDP_DONE = 1005;
-    static final int MSG_MAS_SDP_FAILED = 1006;
+    static final int MSG_MAS_SDP_UNSUCCESSFUL = 1006;
     static final int MSG_OUTBOUND_MESSAGE = 2001;
     static final int MSG_INBOUND_MESSAGE = 2002;
     static final int MSG_NOTIFICATION = 2003;
@@ -102,9 +108,6 @@ class MceStateMachine extends StateMachine {
     static final int MSG_SET_MESSAGE_STATUS = 2006;
     static final int MSG_SEARCH_OWN_NUMBER_TIMEOUT = 2007;
 
-    private static final String TAG = "MceStateMachine";
-    private static final Boolean DBG = MapClientService.DBG;
-    private static final Boolean VDBG = MapClientService.VDBG;
     // SAVE_OUTBOUND_MESSAGES defaults to true to place the responsibility of managing content on
     // Bluetooth, to work with the default Car Messenger.  This may need to be set to false if the
     // messaging app takes that responsibility.
@@ -114,8 +117,14 @@ class MceStateMachine extends StateMachine {
     private static final int MAX_MESSAGES = 20;
     private static final int MSG_CONNECT = 1;
     private static final int MSG_DISCONNECT = 2;
-    private static final int MSG_CONNECTING_TIMEOUT = 3;
+    static final int MSG_CONNECTING_TIMEOUT = 3;
     private static final int MSG_DISCONNECTING_TIMEOUT = 4;
+
+    // Constants for SDP. Note that these values come from the native stack, but no centralized
+    // constants exist for them as part of the various SDP APIs.
+    public static final int SDP_SUCCESS = 0;
+    public static final int SDP_FAILED = 1;
+    public static final int SDP_BUSY = 2;
 
     private static final boolean MESSAGE_SEEN = true;
     private static final boolean MESSAGE_NOT_SEEN = false;
@@ -128,8 +137,17 @@ class MceStateMachine extends StateMachine {
     static final String FOLDER_SENT = "sent";
     private static final String INBOX_PATH = "telecom/msg/inbox";
 
+    // URI Scheme for messages with email contact
+    private static final String SCHEME_MAILTO = "mailto";
+
+    private static final String FETCH_MESSAGE_TYPE =
+            "persist.bluetooth.pts.mapclient.fetchmessagetype";
+    private static final String SEND_MESSAGE_TYPE =
+            "persist.bluetooth.pts.mapclient.sendmessagetype";
+
     // Connectivity States
     private int mPreviousState = BluetoothProfile.STATE_DISCONNECTED;
+    private int mMostRecentState = BluetoothProfile.STATE_DISCONNECTED;
     private State mDisconnected;
     private State mConnecting;
     private State mConnected;
@@ -162,7 +180,8 @@ class MceStateMachine extends StateMachine {
      * Note: In the future it may be best to use the entries from the MessageListing in full instead
      * of this small subset.
      */
-    private class MessageMetadata {
+    @VisibleForTesting
+    static class MessageMetadata {
         private final String mHandle;
         private final Long mTimestamp;
         private boolean mRead;
@@ -198,24 +217,47 @@ class MceStateMachine extends StateMachine {
     }
 
     // Map each message to its metadata via the handle
-    private ConcurrentHashMap<String, MessageMetadata> mMessages =
+    @VisibleForTesting
+    ConcurrentHashMap<String, MessageMetadata> mMessages =
             new ConcurrentHashMap<String, MessageMetadata>();
 
     MceStateMachine(MapClientService service, BluetoothDevice device) {
         this(service, device, null, null);
     }
 
+    MceStateMachine(MapClientService service, BluetoothDevice device, Looper looper) {
+        this(service, device, null, null, looper);
+    }
+
     @VisibleForTesting
     MceStateMachine(MapClientService service, BluetoothDevice device, MasClient masClient,
             MapClientContent database) {
         super(TAG);
-        mMasClient = masClient;
         mService = service;
+        mMasClient = masClient;
+        mDevice = device;
         mDatabase = database;
+        initStateMachine();
+    }
 
+    @VisibleForTesting
+    MceStateMachine(
+            MapClientService service,
+            BluetoothDevice device,
+            MasClient masClient,
+            MapClientContent database,
+            Looper looper) {
+        super(TAG, looper);
+        mService = service;
+        mMasClient = masClient;
+        mDevice = device;
+        mDatabase = database;
+        initStateMachine();
+    }
+
+    private void initStateMachine() {
         mPreviousState = BluetoothProfile.STATE_DISCONNECTED;
 
-        mDevice = device;
         mDisconnected = new Disconnected();
         mConnecting = new Connecting();
         mDisconnecting = new Disconnecting();
@@ -236,7 +278,7 @@ class MceStateMachine extends StateMachine {
     @Override
     protected void onQuitting() {
         if (mService != null) {
-            mService.cleanupDevice(mDevice);
+            mService.cleanupDevice(mDevice, this);
         }
     }
 
@@ -245,17 +287,26 @@ class MceStateMachine extends StateMachine {
     }
 
     private void onConnectionStateChanged(int prevState, int state) {
+        if (mMostRecentState == state) {
+            return;
+        }
         // mDevice == null only at setInitialState
         if (mDevice == null) {
             return;
         }
-        if (DBG) {
-            Log.d(TAG, Utils.getLoggableAddress(mDevice) + ": Connection state changed, prev="
-                    + prevState + ", new=" + state);
-        }
+        Log.d(TAG, Utils.getLoggableAddress(mDevice) + ": Connection state changed, prev="
+                + prevState + ", new=" + state);
         if (prevState != state && state == BluetoothProfile.STATE_CONNECTED) {
             MetricsLogger.logProfileConnectionEvent(BluetoothMetricsProto.ProfileId.MAP_CLIENT);
         }
+        setState(state);
+
+        AdapterService adapterService = AdapterService.getAdapterService();
+        if (adapterService != null) {
+            adapterService.updateProfileConnectionAdapterProperties(
+                    mDevice, BluetoothProfile.MAP_CLIENT, state, prevState);
+        }
+
         Intent intent = new Intent(BluetoothMapClient.ACTION_CONNECTION_STATE_CHANGED);
         intent.putExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, prevState);
         intent.putExtra(BluetoothProfile.EXTRA_STATE, state);
@@ -266,40 +317,40 @@ class MceStateMachine extends StateMachine {
                 Utils.getTempBroadcastOptions());
     }
 
+    private synchronized void setState(int state) {
+        mMostRecentState = state;
+    }
+
     public synchronized int getState() {
-        IState currentState = this.getCurrentState();
-        if (currentState == null || currentState.getClass() == Disconnected.class) {
-            return BluetoothProfile.STATE_DISCONNECTED;
+        return mMostRecentState;
+    }
+
+    /**
+     * Notify of SDP completion.
+     */
+    public void sendSdpResult(int status, SdpMasRecord record) {
+        Log.d(TAG, "Received SDP Result, status=" + status + ", record=" + record);
+        if (status != SDP_SUCCESS || record == null) {
+            Log.w(TAG, "SDP unsuccessful, status: " + status + ", record: " + record);
+            sendMessage(MceStateMachine.MSG_MAS_SDP_UNSUCCESSFUL, status);
+            return;
         }
-        if (currentState.getClass() == Connected.class) {
-            return BluetoothProfile.STATE_CONNECTED;
-        }
-        if (currentState.getClass() == Connecting.class) {
-            return BluetoothProfile.STATE_CONNECTING;
-        }
-        if (currentState.getClass() == Disconnecting.class) {
-            return BluetoothProfile.STATE_DISCONNECTING;
-        }
-        return BluetoothProfile.STATE_DISCONNECTED;
+        sendMessage(MceStateMachine.MSG_MAS_SDP_DONE, record);
     }
 
     public boolean disconnect() {
-        if (DBG) {
-            Log.d(TAG, "Disconnect Request " + mDevice.getAddress());
-        }
+        Log.d(TAG, "Disconnect Request " + mDevice);
         sendMessage(MSG_DISCONNECT, mDevice);
         return true;
     }
 
     public synchronized boolean sendMapMessage(Uri[] contacts, String message,
             PendingIntent sentIntent, PendingIntent deliveredIntent) {
-        if (DBG) {
-            Log.d(TAG, Utils.getLoggableAddress(mDevice) + ": Send, message=" + message);
-        }
+        Log.d(TAG, Utils.getLoggableAddress(mDevice) + ": Send, message=" + message);
         if (contacts == null || contacts.length <= 0) {
             return false;
         }
-        if (this.getCurrentState() == mConnected) {
+        if (mMostRecentState == BluetoothProfile.STATE_CONNECTED) {
             Bmessage bmsg = new Bmessage();
             // Set type and status.
             bmsg.setType(getDefaultMessageType());
@@ -307,9 +358,7 @@ class MceStateMachine extends StateMachine {
 
             for (Uri contact : contacts) {
                 // Who to send the message to.
-                if (VDBG) {
-                    Log.d(TAG, "Scheme " + contact.getScheme());
-                }
+                Log.v(TAG, "Scheme " + contact.getScheme());
                 if (PhoneAccount.SCHEME_TEL.equals(contact.getScheme())) {
                     String path = contact.getPath();
                     if (path != null && path.contains(Telephony.Threads.CONTENT_URI.toString())) {
@@ -321,10 +370,18 @@ class MceStateMachine extends StateMachine {
                         destEntryPhone.addValues(contact.getSchemeSpecificPart());
                         destEntry.addProperty(destEntryPhone);
                         bmsg.addRecipient(destEntry);
-                        if (VDBG) {
-                            Log.d(TAG, "Sending to phone numbers " + destEntryPhone.getValueList());
-                        }
+                        Log.v(TAG, "Sending to phone numbers " + destEntryPhone.getValueList());
                     }
+                } else if (SCHEME_MAILTO.equals(contact.getScheme())) {
+                    VCardEntry destEntry = new VCardEntry();
+                    VCardProperty destEntryContact = new VCardProperty();
+                    destEntryContact.setName(VCardConstants.PROPERTY_EMAIL);
+                    destEntryContact.addValues(contact.getSchemeSpecificPart());
+                    destEntry.addProperty(destEntryContact);
+                    bmsg.addRecipient(destEntry);
+                    Log.d(TAG, "SPECIFIC: " + contact.getSchemeSpecificPart());
+                    Log.d(TAG, "Sending to emails "
+                            + destEntryContact.getValueList());
                 } else {
                     Log.w(TAG, "Scheme " + contact.getScheme() + " not supported.");
                     return false;
@@ -346,10 +403,8 @@ class MceStateMachine extends StateMachine {
     }
 
     synchronized boolean getMessage(String handle) {
-        if (DBG) {
-            Log.d(TAG, "getMessage" + handle);
-        }
-        if (this.getCurrentState() == mConnected) {
+        Log.d(TAG, "getMessage" + handle);
+        if (mMostRecentState == BluetoothProfile.STATE_CONNECTED) {
             sendMessage(MSG_INBOUND_MESSAGE, handle);
             return true;
         }
@@ -357,10 +412,8 @@ class MceStateMachine extends StateMachine {
     }
 
     synchronized boolean getUnreadMessages() {
-        if (DBG) {
-            Log.d(TAG, "getMessage");
-        }
-        if (this.getCurrentState() == mConnected) {
+        Log.d(TAG, "getMessage");
+        if (mMostRecentState == BluetoothProfile.STATE_CONNECTED) {
             sendMessage(MSG_GET_MESSAGE_LISTING, FOLDER_INBOX);
             return true;
         }
@@ -368,19 +421,17 @@ class MceStateMachine extends StateMachine {
     }
 
     synchronized int getSupportedFeatures() {
-        if (this.getCurrentState() == mConnected && mMasClient != null) {
-            if (DBG) Log.d(TAG, "returning getSupportedFeatures from SDP record");
+        if (mMostRecentState == BluetoothProfile.STATE_CONNECTED && mMasClient != null) {
+            Log.d(TAG, "returning getSupportedFeatures from SDP record");
             return mMasClient.getSdpMasRecord().getSupportedFeatures();
         }
-        if (DBG) Log.d(TAG, "in getSupportedFeatures, returning 0");
+        Log.d(TAG, "getSupportedFeatures: no connection, returning 0");
         return 0;
     }
 
     synchronized boolean setMessageStatus(String handle, int status) {
-        if (DBG) {
-            Log.d(TAG, "setMessageStatus(" + handle + ", " + status + ")");
-        }
-        if (this.getCurrentState() == mConnected) {
+        Log.d(TAG, "setMessageStatus(" + handle + ", " + status + ")");
+        if (mMostRecentState == BluetoothProfile.STATE_CONNECTED) {
             RequestSetMessageStatus.StatusIndicator statusIndicator;
             byte value;
             switch (status) {
@@ -419,10 +470,17 @@ class MceStateMachine extends StateMachine {
         return PhoneAccount.SCHEME_TEL + ":" + number;
     }
 
+    private String getContactURIFromEmail(String email) {
+        return SCHEME_MAILTO + "://" + email;
+    }
+
     Bmessage.Type getDefaultMessageType() {
         synchronized (mDefaultMessageType) {
             if (Utils.isPtsTestMode()) {
-                return MapUtils.sendMessageType();
+                int messageType = SystemProperties.getInt(SEND_MESSAGE_TYPE, -1);
+                if (messageType > 0 && messageType < Bmessage.Type.values().length) {
+                    return Bmessage.Type.values()[messageType];
+                }
             }
             return mDefaultMessageType;
         }
@@ -442,7 +500,7 @@ class MceStateMachine extends StateMachine {
     }
 
     public void dump(StringBuilder sb) {
-        ProfileService.println(sb, "mCurrentDevice: " + mDevice.getAddress() + "("
+        ProfileService.println(sb, "mCurrentDevice: " + mDevice + "("
                 + Utils.getName(mDevice) + ") " + this.toString());
         if (mDatabase != null) {
             mDatabase.dump(sb);
@@ -455,10 +513,8 @@ class MceStateMachine extends StateMachine {
     class Disconnected extends State {
         @Override
         public void enter() {
-            if (DBG) {
-                Log.d(TAG, Utils.getLoggableAddress(mDevice) + " [Disconnected]: Entered, message="
-                        + getMessageName(getCurrentMessage().what));
-            }
+            Log.d(TAG, Utils.getLoggableAddress(mDevice) + " [Disconnected]: Entered, message="
+                    + getMessageName(getCurrentMessage().what));
             onConnectionStateChanged(mPreviousState, BluetoothProfile.STATE_DISCONNECTED);
             mPreviousState = BluetoothProfile.STATE_DISCONNECTED;
             quit();
@@ -473,10 +529,8 @@ class MceStateMachine extends StateMachine {
     class Connecting extends State {
         @Override
         public void enter() {
-            if (DBG) {
-                Log.d(TAG, Utils.getLoggableAddress(mDevice) + " [Connecting]: Entered, message="
-                        + getMessageName(getCurrentMessage().what));
-            }
+            Log.d(TAG, Utils.getLoggableAddress(mDevice) + " [Connecting]: Entered, message="
+                    + getMessageName(getCurrentMessage().what));
             onConnectionStateChanged(mPreviousState, BluetoothProfile.STATE_CONNECTING);
 
             // When commanded to connect begin SDP to find the MAS server.
@@ -487,10 +541,8 @@ class MceStateMachine extends StateMachine {
 
         @Override
         public boolean processMessage(Message message) {
-            if (DBG) {
-                Log.d(TAG, Utils.getLoggableAddress(mDevice) + " [Connecting]: Received "
-                        + getMessageName(message.what));
-            }
+            Log.d(TAG, Utils.getLoggableAddress(mDevice) + " [Connecting]: Received "
+                    + getMessageName(message.what));
 
             switch (message.what) {
                 case MSG_MAS_SDP_DONE:
@@ -504,6 +556,24 @@ class MceStateMachine extends StateMachine {
                         }
                         mMasClient = new MasClient(mDevice, MceStateMachine.this, record);
                         setDefaultMessageType(record);
+                    }
+                    break;
+
+                case MSG_MAS_SDP_UNSUCCESSFUL:
+                    int sdpStatus = message.arg1;
+                    Log.i(TAG, Utils.getLoggableAddress(mDevice)
+                            + " [Connecting]: SDP unsuccessful, status=" + sdpStatus);
+                    if (sdpStatus == SDP_BUSY) {
+                        Log.d(TAG, Utils.getLoggableAddress(mDevice)
+                                + " [Connecting]: SDP was busy, try again");
+                        mDevice.sdpSearch(BluetoothUuid.MAS);
+                    } else {
+                        // This means the status is 0 (success, but no record) or 1 (organic
+                        // failure). We historically have never retried SDP in failure cases, so we
+                        // don't need to wait for the timeout anymore.
+                        Log.d(TAG, Utils.getLoggableAddress(mDevice)
+                                + " [Connecting]: SDP failed completely, disconnecting");
+                        transitionTo(mDisconnecting);
                     }
                     break;
 
@@ -545,10 +615,8 @@ class MceStateMachine extends StateMachine {
     class Connected extends State {
         @Override
         public void enter() {
-            if (DBG) {
-                Log.d(TAG, Utils.getLoggableAddress(mDevice) + " [Connected]: Entered, message="
-                        + getMessageName(getCurrentMessage().what));
-            }
+            Log.d(TAG, Utils.getLoggableAddress(mDevice) + " [Connected]: Entered, message="
+                    + getMessageName(getCurrentMessage().what));
 
             MapClientContent.Callbacks callbacks = new MapClientContent.Callbacks(){
                 @Override
@@ -586,10 +654,8 @@ class MceStateMachine extends StateMachine {
 
         @Override
         public boolean processMessage(Message message) {
-            if (DBG) {
-                Log.d(TAG, Utils.getLoggableAddress(mDevice) + " [Connected]: Received "
-                        + getMessageName(message.what));
-            }
+            Log.d(TAG, Utils.getLoggableAddress(mDevice) + " [Connected]: Received "
+                    + getMessageName(message.what));
             switch (message.what) {
                 case MSG_DISCONNECT:
                     if (mDevice.equals(message.obj)) {
@@ -625,13 +691,30 @@ class MceStateMachine extends StateMachine {
 
                 case MSG_GET_MESSAGE_LISTING:
                     // Get latest 50 Unread messages in the last week
-                    MessagesFilter filter = new MessagesFilter();
-                    filter.setMessageType(MapUtils.fetchMessageType());
                     Calendar calendar = Calendar.getInstance();
                     calendar.add(Calendar.DATE, -7);
-                    filter.setPeriod(calendar.getTime(), null);
-                    mMasClient.makeRequest(new RequestGetMessagesListing(
-                            (String) message.obj, 0, filter, 0, 50, 0));
+                    byte messageType;
+                    if (Utils.isPtsTestMode()) {
+                        messageType =
+                                (byte)
+                                        SystemProperties.getInt(
+                                                FETCH_MESSAGE_TYPE,
+                                                MessagesFilter.MESSAGE_TYPE_ALL);
+                    } else {
+                        messageType = MessagesFilter.MESSAGE_TYPE_ALL;
+                    }
+
+                    mMasClient.makeRequest(
+                            new RequestGetMessagesListing(
+                                    (String) message.obj,
+                                    0,
+                                    new MessagesFilter.Builder()
+                                            .setPeriod(calendar.getTime(), null)
+                                            .setMessageType(messageType)
+                                            .build(),
+                                    0,
+                                    50,
+                                    0));
                     break;
 
                 case MSG_SET_MESSAGE_STATUS:
@@ -732,18 +815,29 @@ class MceStateMachine extends StateMachine {
 
             switch (event.getType()) {
                 case NEW_MESSAGE:
-                    // Infer the timestamp for this message as 'now' and read status false
-                    // instead of getting the message listing data for it
                     if (!mMessages.containsKey(event.getHandle())) {
-                        Calendar calendar = Calendar.getInstance();
+                        Long timestamp = event.getTimestamp();
+                        if (timestamp == null) {
+                            // Infer the timestamp for this message as 'now' and read status
+                            // false instead of getting the message listing data for it
+                            timestamp = Instant.now().toEpochMilli();
+                        }
                         MessageMetadata metadata = new MessageMetadata(event.getHandle(),
-                                calendar.getTime().getTime(), false, MESSAGE_NOT_SEEN);
+                                timestamp, false, MESSAGE_NOT_SEEN);
                         mMessages.put(event.getHandle(), metadata);
                     }
                     mMasClient.makeRequest(new RequestGetMessage(event.getHandle(),
                             MasClient.CharsetType.UTF_8, false));
                     break;
+                case DELIVERY_FAILURE:
+                    // fall through
+                case SENDING_FAILURE:
+                    if (!Flags.handleDeliverySendingFailureEvents()) {
+                        break;
+                    }
+                    // fall through
                 case DELIVERY_SUCCESS:
+                    // fall through
                 case SENDING_SUCCESS:
                     notifySentMessageStatus(event.getHandle(), event.getType());
                     break;
@@ -753,23 +847,9 @@ class MceStateMachine extends StateMachine {
                 case MESSAGE_DELETED:
                     mDatabase.deleteMessage(event.getHandle());
                     break;
+                default:
+                    Log.d(TAG, "processNotification: ignoring event type=" + event.getType());
             }
-        }
-
-        // Sets the specified message status to "read" (from "unread" status, mostly)
-        private void markMessageRead(RequestGetMessage request) {
-            if (DBG) Log.d(TAG, "markMessageRead" + request.getHandle());
-            MessageMetadata metadata = mMessages.get(request.getHandle());
-            metadata.setRead(true);
-            mMasClient.makeRequest(new RequestSetMessageStatus(request.getHandle(),
-                    RequestSetMessageStatus.StatusIndicator.READ, RequestSetMessageStatus.STATUS_YES));
-        }
-
-        // Sets the specified message status to "deleted"
-        private void markMessageDeleted(RequestGetMessage request) {
-            if (DBG) Log.d(TAG, "markMessageDeleted");
-            mMasClient.makeRequest(new RequestSetMessageStatus(request.getHandle(),
-                    RequestSetMessageStatus.StatusIndicator.DELETED, RequestSetMessageStatus.STATUS_YES));
         }
 
         /**
@@ -792,11 +872,14 @@ class MceStateMachine extends StateMachine {
                 // oldest first. Iterate in reverse order so we initiate requests oldest first.
                 for (int i = messageListing.size() - 1; i >= 0; i--) {
                     com.android.bluetooth.mapclient.Message msg = messageListing.get(i);
-                    if (DBG) {
-                        Log.d(TAG, Utils.getLoggableAddress(mDevice)
-                                + " [Connected]: fetch message content, handle=" + msg.getHandle());
-                    }
+                    Log.d(TAG, Utils.getLoggableAddress(mDevice)
+                            + " [Connected]: fetch message content, handle=" + msg.getHandle());
                     // A message listing coming from the server should always have up to date data
+                    if (msg.getDateTime() == null) {
+                        Log.w(TAG, "message with handle " + msg.getHandle()
+                                + " has a null datetime, ignoring");
+                        continue;
+                    }
                     mMessages.put(msg.getHandle(), new MessageMetadata(msg.getHandle(),
                             msg.getDateTime().getTime(), msg.isRead(), MESSAGE_SEEN));
                     getMessage(msg.getHandle());
@@ -818,15 +901,11 @@ class MceStateMachine extends StateMachine {
                 RequestGetMessagesListingForOwnNumber request) {
 
             if (request.isSearchCompleted()) {
-                if (DBG) {
-                    Log.d(TAG, "processMessageListingForOwnNumber: search completed");
-                }
+                Log.d(TAG, "processMessageListingForOwnNumber: search completed");
                 if (request.getOwnNumber() != null) {
                     // A phone number was found (should be the remote device's).
-                    if (DBG) {
-                        Log.d(TAG, "processMessageListingForOwnNumber: number found = "
-                                + request.getOwnNumber());
-                    }
+                    Log.d(TAG, "processMessageListingForOwnNumber: number found = "
+                            + request.getOwnNumber());
                     mDatabase.setRemoteDeviceOwnNumber(request.getOwnNumber());
                 }
                 // Remove any outstanding timeouts from state machine queue
@@ -837,9 +916,7 @@ class MceStateMachine extends StateMachine {
             } else {
                 // A phone number wasn't found, but there are still additional messages that can
                 // be requested and searched.
-                if (DBG) {
-                    Log.d(TAG, "processMessageListingForOwnNumber: continuing search");
-                }
+                Log.d(TAG, "processMessageListingForOwnNumber: continuing search");
                 mMasClient.makeRequest(request);
             }
         }
@@ -856,9 +933,7 @@ class MceStateMachine extends StateMachine {
         }
 
         private void processSetMessageStatus(RequestSetMessageStatus request) {
-            if (DBG) {
-                Log.d(TAG, "processSetMessageStatus");
-            }
+            Log.d(TAG, "processSetMessageStatus");
             int result = BluetoothMapClient.RESULT_SUCCESS;
             if (!request.isSuccess()) {
                 Log.e(TAG, "Set message status failed");
@@ -904,9 +979,7 @@ class MceStateMachine extends StateMachine {
          */
         private void processInboundMessage(RequestGetMessage request) {
             Bmessage message = request.getMessage();
-            if (DBG) {
-                Log.d(TAG, "Notify inbound Message" + message);
-            }
+            Log.d(TAG, "Notify inbound Message" + message);
 
             if (message == null) {
                 return;
@@ -915,20 +988,16 @@ class MceStateMachine extends StateMachine {
                     mMessages.get(request.getHandle()).getTimestamp(),
                     mMessages.get(request.getHandle()).getSeen());
             if (!INBOX_PATH.equalsIgnoreCase(message.getFolder())) {
-                if (DBG) {
-                    Log.d(TAG, "Ignoring message received in " + message.getFolder() + ".");
-                }
+                Log.d(TAG, "Ignoring message received in " + message.getFolder() + ".");
                 return;
             }
             switch (message.getType()) {
                 case SMS_CDMA:
                 case SMS_GSM:
                 case MMS:
-                    if (DBG) {
-                        Log.d(TAG, "Body: " + message.getBodyContent());
-                        Log.d(TAG, message.toString());
-                        Log.d(TAG, "Recipients" + message.getRecipients().toString());
-                    }
+                    Log.d(TAG, "Body: " + message.getBodyContent());
+                    Log.d(TAG, message.toString());
+                    Log.d(TAG, "Recipients" + message.getRecipients().toString());
 
                     // Grab the message metadata and update the cached read status from the bMessage
                     MessageMetadata metadata = mMessages.get(request.getHandle());
@@ -945,17 +1014,19 @@ class MceStateMachine extends StateMachine {
                     intent.putExtra(android.content.Intent.EXTRA_TEXT, message.getBodyContent());
                     VCardEntry originator = message.getOriginator();
                     if (originator != null) {
-                        if (DBG) {
-                            Log.d(TAG, originator.toString());
-                        }
+                        Log.d(TAG, originator.toString());
                         List<VCardEntry.PhoneData> phoneData = originator.getPhoneList();
+                        List<VCardEntry.EmailData> emailData = originator.getEmailList();
                         if (phoneData != null && phoneData.size() > 0) {
                             String phoneNumber = phoneData.get(0).getNumber();
-                            if (DBG) {
-                                Log.d(TAG, "Originator number: " + phoneNumber);
-                            }
+                            Log.d(TAG, "Originator number: " + phoneNumber);
                             intent.putExtra(BluetoothMapClient.EXTRA_SENDER_CONTACT_URI,
                                     getContactURIFromPhone(phoneNumber));
+                        } else if (emailData != null && emailData.size() > 0) {
+                            String email = emailData.get(0).getAddress();
+                            Log.d(TAG, "Originator email: " + email);
+                            intent.putExtra(BluetoothMapClient.EXTRA_SENDER_CONTACT_URI,
+                                    getContactURIFromEmail(email));
                         }
                         intent.putExtra(BluetoothMapClient.EXTRA_SENDER_CONTACT_NAME,
                                 originator.getDisplayName());
@@ -971,12 +1042,27 @@ class MceStateMachine extends StateMachine {
                                     getRecipientsUri(recipients));
                         }
                     }
-                    // Only send to the current default SMS app if one exists
                     String defaultMessagingPackage = Telephony.Sms.getDefaultSmsPackage(mService);
-                    if (defaultMessagingPackage != null) {
+                    if (defaultMessagingPackage == null) {
+                        // Broadcast to all RECEIVE_SMS recipients, including the SMS receiver
+                        // package defined in system properties if one exists
+                        mService.sendBroadcast(intent, RECEIVE_SMS);
+                    } else {
+                        String smsReceiverPackageName =
+                                SystemProperties.get(
+                                        "bluetooth.profile.map_client.sms_receiver_package",
+                                        null
+                                );
+                        if (smsReceiverPackageName != null && !smsReceiverPackageName.isEmpty()) {
+                            // Clone intent and broadcast to SMS receiver package if one exists
+                            Intent messageNotificationIntent = (Intent) intent.clone();
+                            messageNotificationIntent.setPackage(smsReceiverPackageName);
+                            mService.sendBroadcast(messageNotificationIntent, RECEIVE_SMS);
+                        }
+                        // Broadcast to default messaging package
                         intent.setPackage(defaultMessagingPackage);
+                        mService.sendBroadcast(intent, RECEIVE_SMS);
                     }
-                    mService.sendBroadcast(intent, RECEIVE_SMS);
                     break;
                 case EMAIL:
                 default:
@@ -998,9 +1084,7 @@ class MceStateMachine extends StateMachine {
                 List<VCardEntry.PhoneData> phoneData = recipient.getPhoneList();
                 if (phoneData != null && phoneData.size() > 0) {
                     String phoneNumber = phoneData.get(0).getNumber();
-                    if (DBG) {
-                        Log.d(TAG, "CC Recipient number: " + phoneNumber);
-                    }
+                    Log.d(TAG, "CC Recipient number: " + phoneNumber);
                     uris.add(getContactURIFromPhone(phoneNumber));
                 }
             }
@@ -1009,9 +1093,7 @@ class MceStateMachine extends StateMachine {
         }
 
         private void notifySentMessageStatus(String handle, EventReport.Type status) {
-            if (DBG) {
-                Log.d(TAG, "got a status for " + handle + " Status = " + status);
-            }
+            Log.d(TAG, "got a status for " + handle + " Status = " + status);
             // some test devices don't populate messageHandle field.
             // in such cases, ignore such messages.
             if (handle == null || handle.length() <= 2) return;
@@ -1028,9 +1110,7 @@ class MceStateMachine extends StateMachine {
 
             if (intentToSend != null) {
                 try {
-                    if (DBG) {
-                        Log.d(TAG, "*******Sending " + intentToSend);
-                    }
+                    Log.d(TAG, "*******Sending " + intentToSend);
                     int result = Activity.RESULT_OK;
                     if (status == EventReport.Type.SENDING_FAILURE
                             || status == EventReport.Type.DELIVERY_FAILURE) {
@@ -1050,10 +1130,8 @@ class MceStateMachine extends StateMachine {
     class Disconnecting extends State {
         @Override
         public void enter() {
-            if (DBG) {
-                Log.d(TAG, Utils.getLoggableAddress(mDevice) + " [Disconnecting]: Entered, message="
-                        + getMessageName(getCurrentMessage().what));
-            }
+            Log.d(TAG, Utils.getLoggableAddress(mDevice) + " [Disconnecting]: Entered, message="
+                    + getMessageName(getCurrentMessage().what));
 
             onConnectionStateChanged(mPreviousState, BluetoothProfile.STATE_DISCONNECTING);
 
@@ -1069,10 +1147,8 @@ class MceStateMachine extends StateMachine {
 
         @Override
         public boolean processMessage(Message message) {
-            if (DBG) {
-                Log.d(TAG, Utils.getLoggableAddress(mDevice) + " [Disconnecting]: Received "
-                        + getMessageName(message.what));
-            }
+            Log.d(TAG, Utils.getLoggableAddress(mDevice) + " [Disconnecting]: Received "
+                    + getMessageName(message.what));
             switch (message.what) {
                 case MSG_DISCONNECTING_TIMEOUT:
                 case MSG_MAS_DISCONNECTED:
@@ -1102,10 +1178,8 @@ class MceStateMachine extends StateMachine {
     }
 
     void receiveEvent(EventReport ev) {
-        if (DBG) {
-            Log.d(TAG, "Message Type = " + ev.getType()
-                    + ", Message handle = " + ev.getHandle());
-        }
+        Log.d(TAG, "Message Type = " + ev.getType()
+                + ", Message handle = " + ev.getHandle());
         sendMessage(MSG_NOTIFICATION, ev);
     }
 
@@ -1121,8 +1195,8 @@ class MceStateMachine extends StateMachine {
                 return "MSG_MAS_REQUEST_FAILED";
             case MSG_MAS_SDP_DONE:
                 return "MSG_MAS_SDP_DONE";
-            case MSG_MAS_SDP_FAILED:
-                return "MSG_MAS_SDP_FAILED";
+            case MSG_MAS_SDP_UNSUCCESSFUL:
+                return "MSG_MAS_SDP_UNSUCCESSFUL";
             case MSG_OUTBOUND_MESSAGE:
                 return "MSG_OUTBOUND_MESSAGE";
             case MSG_INBOUND_MESSAGE:

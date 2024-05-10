@@ -266,13 +266,28 @@ void btif_dm_remove_bond(const RawAddress bd_addr);
 /*******************************************************************************
  *
  * Function         btif_dm_get_connection_state
+ *                  btif_dm_get_connection_state_sync
  *
- * Description      Returns whether the remote device is currently connected
+ * Description      Returns bitmask on remote device connection state indicating
+ *                  connection and encryption.  The `_sync` version properly
+ *                  synchronizes the state and is the preferred mechanism.
+ *                  NOTE: Currently no address resolution is attempted upon
+ *                  LE random addresses.
  *
- * Returns          0 if not connected
+ * Returns          '000 (0x0000) if not connected
+ *                  '001 (0x0001) Connected with no encryption to remote
+ *                                device on BR/EDR or LE ACL
+ *                  '011 (0x0003) Connected with encryption to remote
+ *                                device on BR/EDR ACL
+ *                  '101 (0x0005) Connected with encruption to remote
+ *                                device on LE ACL
+ *                  '111 (0x0007) Connected with encruption to remote
+ *                                device on both BR/EDR and LE ACLs
+ *                  All other values are reserved
  *
  ******************************************************************************/
-uint16_t btif_dm_get_connection_state(const RawAddress* bd_addr);
+uint16_t btif_dm_get_connection_state(const RawAddress& bd_addr);
+uint16_t btif_dm_get_connection_state_sync(const RawAddress& bd_addr);
 
 /*******************************************************************************
  *
@@ -328,6 +343,33 @@ bt_status_t btif_dm_get_adapter_property(bt_property_t* prop);
  *
  ******************************************************************************/
 void btif_dm_get_remote_services(const RawAddress remote_addr, int transport);
+
+/*******************************************************************************
+ *
+ * Function         btif_dut_mode_configure
+ *
+ * Description      Configure Test Mode - 'enable' to 1 puts the device in test
+ *                  mode and 0 exits test mode
+ *
+ ******************************************************************************/
+void btif_dut_mode_configure(uint8_t enable);
+
+bool btif_is_dut_mode();
+
+/*******************************************************************************
+ *
+ * Function         btif_dut_mode_send
+ *
+ * Description     Sends a HCI Vendor specific command to the controller
+ *
+ ******************************************************************************/
+void btif_dut_mode_send(uint16_t opcode, uint8_t* buf, uint8_t len);
+
+void btif_ble_transmitter_test(uint8_t tx_freq, uint8_t test_data_len,
+                               uint8_t packet_payload);
+
+void btif_ble_receiver_test(uint8_t rx_freq);
+void btif_ble_test_end();
 
 /*******************************************************************************
  *

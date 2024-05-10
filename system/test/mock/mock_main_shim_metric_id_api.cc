@@ -19,50 +19,42 @@
  *   Functions generated:7
  */
 
-#include <map>
-#include <string>
-
-#include "gd/common/metric_id_manager.h"
 #include "main/shim/metric_id_api.h"
-#include "main/shim/shim.h"
 #include "test/common/mock_functions.h"
 #include "types/raw_address.h"
-
-#ifndef UNUSED_ATTR
-#define UNUSED_ATTR
-#endif
 
 namespace bluetooth {
 namespace shim {
 
 bool InitMetricIdAllocator(
-    const std::unordered_map<RawAddress, int>& paired_device_map,
-    CallbackLegacy save_id_callback, CallbackLegacy forget_device_callback) {
-  mock_function_count_map[__func__]++;
+    const std::unordered_map<RawAddress, int>& /* paired_device_map */,
+    CallbackLegacy /* save_id_callback */,
+    CallbackLegacy /* forget_device_callback */) {
+  inc_func_call_count(__func__);
   return false;
 }
 bool CloseMetricIdAllocator() {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
   return false;
 }
 bool IsEmptyMetricIdAllocator() {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
   return false;
 }
-bool IsValidIdFromMetricIdAllocator(const int id) {
-  mock_function_count_map[__func__]++;
+bool IsValidIdFromMetricIdAllocator(const int /* id */) {
+  inc_func_call_count(__func__);
   return false;
 }
-bool SaveDeviceOnMetricIdAllocator(const RawAddress& raw_address) {
-  mock_function_count_map[__func__]++;
+bool SaveDeviceOnMetricIdAllocator(const RawAddress& /* raw_address */) {
+  inc_func_call_count(__func__);
   return false;
 }
-int AllocateIdFromMetricIdAllocator(const RawAddress& raw_address) {
-  mock_function_count_map[__func__]++;
+int AllocateIdFromMetricIdAllocator(const RawAddress& /* raw_address */) {
+  inc_func_call_count(__func__);
   return 0;
 }
-void ForgetDeviceFromMetricIdAllocator(const RawAddress& raw_address) {
-  mock_function_count_map[__func__]++;
+void ForgetDeviceFromMetricIdAllocator(const RawAddress& /* raw_address */) {
+  inc_func_call_count(__func__);
 }
 
 }  // namespace shim

@@ -20,16 +20,18 @@ import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.Mockito.when;
 
+import android.util.Xml;
+
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.SignedLongLong;
-import com.android.internal.util.FastXmlSerializer;
 
-import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserFactory;
 import org.xmlpull.v1.XmlSerializer;
@@ -52,13 +54,10 @@ public class BluetoothMapConvoContactElementTest {
 
     private final SimpleDateFormat format = new SimpleDateFormat("yyyyMMdd'T'HHmmss");
 
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock
     private MapContact mMapContact;
-
-    @Before
-    public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
-    }
 
     @Test
     public void constructorWithArguments() {
@@ -124,7 +123,7 @@ public class BluetoothMapConvoContactElementTest {
                 TEST_PRESENCE_STATUS, TEST_PRESENCE_AVAILABILITY, TEST_LAST_ACTIVITY,
                 TEST_CHAT_STATE, TEST_PRIORITY, TEST_BT_UID);
 
-        final XmlSerializer serializer = new FastXmlSerializer();
+        final XmlSerializer serializer = Xml.newSerializer();
         final StringWriter writer = new StringWriter();
 
         serializer.setOutput(writer);

@@ -21,10 +21,11 @@
 #include "btif_sock_util.h"
 
 #include <arpa/inet.h>
-#include <errno.h>
+#include <bluetooth/log.h>
+#include <hardware/bluetooth.h>
+#include <hardware/bt_sock.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
@@ -33,19 +34,15 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#include <hardware/bluetooth.h>
-#include <hardware/bt_sock.h>
-
-#include "bt_target.h"
-#include "btif_util.h"
+#include "os/log.h"
 #include "osi/include/osi.h"
 
-#define asrt(s)                                                              \
-  do {                                                                       \
-    if (!(s))                                                                \
-      BTIF_TRACE_ERROR("## %s assert %s failed at line:%d ##", __func__, #s, \
-                       __LINE__)                                             \
+#define asrt(s)                                         \
+  do {                                                  \
+    if (!(s)) log::error("## assert {} failed ##", #s); \
   } while (0)
+
+using namespace bluetooth;
 
 int sock_send_all(int sock_fd, const uint8_t* buf, int len) {
   int s = len;
@@ -54,7 +51,7 @@ int sock_send_all(int sock_fd, const uint8_t* buf, int len) {
     ssize_t ret;
     OSI_NO_INTR(ret = send(sock_fd, buf, s, 0));
     if (ret <= 0) {
-      BTIF_TRACE_ERROR("sock fd:%d send errno:%d, ret:%d", sock_fd, errno, ret);
+      log::error("sock fd:{} send errno:{}, ret:{}", sock_fd, errno, ret);
       return -1;
     }
     buf += ret;
@@ -69,7 +66,7 @@ int sock_recv_all(int sock_fd, uint8_t* buf, int len) {
     ssize_t ret;
     OSI_NO_INTR(ret = recv(sock_fd, buf, r, MSG_WAITALL));
     if (ret <= 0) {
-      BTIF_TRACE_ERROR("sock fd:%d recv errno:%d, ret:%d", sock_fd, errno, ret);
+      log::error("sock fd:{} recv errno:{}, ret:{}", sock_fd, errno, ret);
       return -1;
     }
     buf += ret;
@@ -112,8 +109,8 @@ int sock_send_fd(int sock_fd, const uint8_t* buf, int len, int send_fd) {
     ssize_t ret;
     OSI_NO_INTR(ret = sendmsg(sock_fd, &msg, MSG_NOSIGNAL));
     if (ret < 0) {
-      BTIF_TRACE_ERROR("fd:%d, send_fd:%d, sendmsg ret:%d, errno:%d, %s",
-                       sock_fd, send_fd, (int)ret, errno, strerror(errno));
+      log::error("fd:{}, send_fd:{}, sendmsg ret:{}, errno:{}, {}", sock_fd,
+                 send_fd, (int)ret, errno, strerror(errno));
       ret_len = -1;
       break;
     }
@@ -124,7 +121,7 @@ int sock_send_fd(int sock_fd, const uint8_t* buf, int len, int send_fd) {
     // Wipes out any msg_control too
     memset(&msg, 0, sizeof(msg));
   }
-  BTIF_TRACE_DEBUG("close fd:%d after sent", send_fd);
+  log::verbose("close fd:{} after sent", send_fd);
   // TODO: This seems wrong - if the FD is not opened in JAVA before this is
   // called
   //       we get a "socket closed" exception in java, when reading from the

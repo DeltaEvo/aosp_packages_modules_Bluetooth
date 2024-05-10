@@ -29,8 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * An abstraction of the cover art image storage mechanism.
  */
 public class AvrcpCoverArtStorage {
-    private static final String TAG = "AvrcpCoverArtStorage";
-    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
+    private static final String TAG = AvrcpCoverArtStorage.class.getSimpleName();
 
     private final Context mContext;
 
@@ -104,7 +103,7 @@ public class AvrcpCoverArtStorage {
 
         Uri uri = AvrcpCoverArtProvider.getImageUri(device, imageUuid);
         mContext.getContentResolver().notifyChange(uri, null);
-        debug("Image '" + imageUuid + "' stored for device '" + device.getAddress() + "'");
+        debug("Image '" + imageUuid + "' stored for device '" + device + "'");
         return uri;
     }
 
@@ -128,7 +127,7 @@ public class AvrcpCoverArtStorage {
             mDeviceImages.remove(device);
         }
 
-        debug("Image '" + imageUuid + "' removed for device '" + device.getAddress() + "'");
+        debug("Image '" + imageUuid + "' removed for device '" + device + "'");
     }
 
     /**
@@ -138,7 +137,7 @@ public class AvrcpCoverArtStorage {
      */
     public void removeImagesForDevice(BluetoothDevice device) {
         if (device == null) return;
-        debug("Remove cover art for device " + device.getAddress());
+        debug("Remove cover art for device " + device);
         mDeviceImages.remove(device);
     }
 
@@ -155,7 +154,7 @@ public class AvrcpCoverArtStorage {
         String s = "CoverArtStorage:\n";
         for (BluetoothDevice device : mDeviceImages.keySet()) {
             Map<String, Bitmap> images = mDeviceImages.get(device);
-            s += "  " + device.getAddress() + " (" + images.size() + "):";
+            s += "  " + device + " (" + images.size() + "):";
             for (String uuid : images.keySet()) {
                 s += "\n    " + uuid;
             }
@@ -165,12 +164,6 @@ public class AvrcpCoverArtStorage {
     }
 
     private void debug(String msg) {
-        if (DBG) {
-            Log.d(TAG, msg);
-        }
-    }
-
-    private void error(String msg) {
-        Log.e(TAG, msg);
+        Log.d(TAG, msg);
     }
 }

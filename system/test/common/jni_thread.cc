@@ -17,16 +17,17 @@
 #include "test/common/jni_thread.h"
 
 #include <base/functional/callback.h>
+#include <bluetooth/log.h>
 
 #include <map>
 
-#include "osi/include/log.h"
+#include "os/log.h"
 
 std::queue<base::OnceClosure> do_in_jni_thread_task_queue;
 
 void run_one_jni_thread_task() {
-  ASSERT_LOG(do_in_jni_thread_task_queue.size(),
-             "JNI thread has no closures to execute");
+  bluetooth::log::assert_that(do_in_jni_thread_task_queue.size(),
+                              "JNI thread has no closures to execute");
   base::OnceCallback callback = std::move(do_in_jni_thread_task_queue.front());
   do_in_jni_thread_task_queue.pop();
   std::move(callback).Run();

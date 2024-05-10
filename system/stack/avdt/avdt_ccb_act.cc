@@ -23,19 +23,19 @@
  *
  ******************************************************************************/
 
+#include <bluetooth/log.h>
 #include <string.h>
 
 #include "avdt_api.h"
 #include "avdt_int.h"
 #include "avdtc_api.h"
-#include "bt_target.h"
-#include "bt_utils.h"
-#include "btm_api.h"
+#include "internal_include/bt_target.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"
-#include "stack/btm/btm_sec.h"
 #include "stack/include/bt_hdr.h"
 #include "types/raw_address.h"
+
+using namespace bluetooth;
 
 /*******************************************************************************
  *
@@ -77,7 +77,7 @@ static void avdt_ccb_clear_ccb(AvdtpCcb* p_ccb) {
  * Returns          void.
  *
  ******************************************************************************/
-void avdt_ccb_chan_open(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
+void avdt_ccb_chan_open(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* /* p_data */) {
   avdt_ad_open_req(AVDT_CHAN_SIG, p_ccb, NULL, AVDT_INT);
 }
 
@@ -92,7 +92,7 @@ void avdt_ccb_chan_open(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
  * Returns          void.
  *
  ******************************************************************************/
-void avdt_ccb_chan_close(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
+void avdt_ccb_chan_close(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* /* p_data */) {
   /* close the transport channel used by this CCB */
   avdt_ad_close_req(AVDT_CHAN_SIG, p_ccb, NULL);
 }
@@ -108,7 +108,7 @@ void avdt_ccb_chan_close(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
  * Returns          void.
  *
  ******************************************************************************/
-void avdt_ccb_chk_close(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
+void avdt_ccb_chk_close(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* /* p_data */) {
   int i;
   AvdtpScb* p_scb = &(p_ccb->scb[0]);
 
@@ -146,7 +146,7 @@ void avdt_ccb_hdl_discover_cmd(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* p_data) {
   tAVDT_SEP_INFO sep_info[AVDT_NUM_SEPS];
   AvdtpScb* p_scb = &(p_ccb->scb[0]);
 
-  AVDT_TRACE_DEBUG("%s: p_ccb index=%d", __func__, avdt_ccb_to_idx(p_ccb));
+  log::verbose("p_ccb index={}", avdt_ccb_to_idx(p_ccb));
 
   p_data->msg.discover_rsp.p_sep_info = sep_info;
   p_data->msg.discover_rsp.num_seps = 0;
@@ -494,7 +494,7 @@ void avdt_ccb_snd_start_cmd(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* p_data) {
   tAVDT_MSG avdt_msg;
   uint8_t seid_list[AVDT_NUM_SEPS];
 
-  AVDT_TRACE_DEBUG("%s", __func__);
+  log::verbose("");
 
   /* make copy of our seid list */
   memcpy(seid_list, p_data->msg.multi.seid_list, p_data->msg.multi.num_seps);
@@ -504,7 +504,7 @@ void avdt_ccb_snd_start_cmd(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* p_data) {
       avdt_scb_verify(p_ccb, AVDT_VERIFY_OPEN, p_data->msg.multi.seid_list,
                       p_data->msg.multi.num_seps, &avdt_msg.hdr.err_code);
   if (avdt_msg.hdr.err_param == 0) {
-    AVDT_TRACE_DEBUG("%s: AVDT_SIG_START", __func__);
+    log::verbose("AVDT_SIG_START");
 
     /* set peer seid list in messsage */
     avdt_scb_peer_seid_list(&p_data->msg.multi);
@@ -516,7 +516,7 @@ void avdt_ccb_snd_start_cmd(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* p_data) {
     for (i = 0; i < p_data->msg.multi.num_seps; i++) {
       p_scb = avdt_scb_by_hdl(seid_list[i]);
       if (p_scb != NULL) {
-        AVDT_TRACE_DEBUG("%s: AVDT_SCB_MSG_START_REJ_EVT: i=%d", __func__, i);
+        log::verbose("AVDT_SCB_MSG_START_REJ_EVT: i={}", i);
         tAVDT_SCB_EVT avdt_scb_evt;
         avdt_scb_evt.msg.hdr = avdt_msg.hdr;
         avdt_scb_event(p_scb, AVDT_SCB_MSG_START_REJ_EVT, &avdt_scb_evt);
@@ -643,7 +643,7 @@ void avdt_ccb_snd_suspend_rsp(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* p_data) {
  * Returns          void.
  *
  ******************************************************************************/
-void avdt_ccb_clear_cmds(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
+void avdt_ccb_clear_cmds(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* /* p_data */) {
   int i;
   AvdtpScb* p_scb = &(p_ccb->scb[0]);
   uint8_t err_code = AVDT_ERR_CONNECT;
@@ -729,7 +729,7 @@ void avdt_ccb_cmd_fail(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* p_data) {
  * Returns          void.
  *
  ******************************************************************************/
-void avdt_ccb_free_cmd(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
+void avdt_ccb_free_cmd(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* /* p_data */) {
   osi_free_and_reset((void**)&p_ccb->p_curr_cmd);
 }
 
@@ -804,7 +804,7 @@ void avdt_ccb_ret_cmd(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* p_data) {
  * Returns          void.
  *
  ******************************************************************************/
-void avdt_ccb_snd_cmd(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
+void avdt_ccb_snd_cmd(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* /* p_data */) {
   BT_HDR* p_msg;
 
   /* do we have commands to send?  send next command;  make sure we're clear;
@@ -833,7 +833,7 @@ void avdt_ccb_snd_cmd(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
  * Returns          void.
  *
  ******************************************************************************/
-void avdt_ccb_snd_msg(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
+void avdt_ccb_snd_msg(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* /* p_data */) {
   BT_HDR* p_msg;
 
   /* if not congested */
@@ -869,7 +869,7 @@ void avdt_ccb_snd_msg(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
  * Returns          void.
  *
  ******************************************************************************/
-void avdt_ccb_set_reconn(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
+void avdt_ccb_set_reconn(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* /* p_data */) {
   p_ccb->reconn = true;
 }
 
@@ -883,7 +883,7 @@ void avdt_ccb_set_reconn(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
  * Returns          void.
  *
  ******************************************************************************/
-void avdt_ccb_clr_reconn(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
+void avdt_ccb_clr_reconn(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* /* p_data */) {
   p_ccb->reconn = false;
 }
 
@@ -899,7 +899,7 @@ void avdt_ccb_clr_reconn(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
  * Returns          void.
  *
  ******************************************************************************/
-void avdt_ccb_chk_reconn(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
+void avdt_ccb_chk_reconn(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* /* p_data */) {
   if (p_ccb->reconn) {
     p_ccb->reconn = false;
 
@@ -930,7 +930,7 @@ void avdt_ccb_chk_reconn(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
  * Returns          void.
  *
  ******************************************************************************/
-void avdt_ccb_chk_timer(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
+void avdt_ccb_chk_timer(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* /* p_data */) {
   alarm_cancel(p_ccb->idle_ccb_timer);
 }
 
@@ -961,8 +961,8 @@ void avdt_ccb_set_conn(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* p_data) {
  ******************************************************************************/
 void avdt_ccb_set_disconn(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* p_data) {
   /*
-  AVDT_TRACE_EVENT("avdt_ccb_set_disconn:conn:x%x, api:x%x",
-      p_ccb->p_conn_cback, p_data->disconnect.p_cback);
+  log::verbose("avdt_ccb_set_disconn:conn:x{:x}, api:x{:x}",
+  p_ccb->p_conn_cback, p_data->disconnect.p_cback);
       */
   /* save callback */
   if (p_data->disconnect.p_cback)
@@ -979,7 +979,7 @@ void avdt_ccb_set_disconn(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* p_data) {
  * Returns          void.
  *
  ******************************************************************************/
-void avdt_ccb_do_disconn(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
+void avdt_ccb_do_disconn(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* /* p_data */) {
   /* clear any pending commands */
   avdt_ccb_clear_cmds(p_ccb, NULL);
 
@@ -997,12 +997,11 @@ void avdt_ccb_do_disconn(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
  * Returns          void.
  *
  ******************************************************************************/
-void avdt_ccb_ll_closed(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
+void avdt_ccb_ll_closed(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* /* p_data */) {
   tAVDT_CTRL_CBACK* p_cback;
   tAVDT_CTRL avdt_ctrl;
 
-  AVDT_TRACE_DEBUG("%s peer %s", __func__,
-                   ADDRESS_TO_LOGGABLE_CSTR(p_ccb->peer_addr));
+  log::verbose("peer {}", p_ccb->peer_addr);
 
   /* clear any pending commands */
   avdt_ccb_clear_cmds(p_ccb, NULL);
@@ -1037,9 +1036,8 @@ void avdt_ccb_ll_closed(AvdtpCcb* p_ccb, UNUSED_ATTR tAVDT_CCB_EVT* p_data) {
 void avdt_ccb_ll_opened(AvdtpCcb* p_ccb, tAVDT_CCB_EVT* p_data) {
   tAVDT_CTRL avdt_ctrl;
 
-  AVDT_TRACE_DEBUG("%s peer %s BtaAvScbIndex=%d p_ccb=%p", __func__,
-                   ADDRESS_TO_LOGGABLE_CSTR(p_ccb->peer_addr),
-                   p_ccb->BtaAvScbIndex(), p_ccb);
+  log::verbose("peer {} BtaAvScbIndex={} p_ccb={}", p_ccb->peer_addr,
+               p_ccb->BtaAvScbIndex(), fmt::ptr(p_ccb));
   p_ccb->ll_opened = true;
 
   if (!p_ccb->p_conn_cback) p_ccb->p_conn_cback = avdtp_cb.p_conn_cback;

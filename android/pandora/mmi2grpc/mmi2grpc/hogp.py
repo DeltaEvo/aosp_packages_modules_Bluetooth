@@ -1,15 +1,31 @@
+# Copyright (C) 2024 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import threading
 import textwrap
 import uuid
 import re
+import sys
 
 from mmi2grpc._helpers import assert_description, match_description
 from mmi2grpc._proxy import ProfileProxy
+from mmi2grpc._rootcanal import Dongle
 
 from pandora.host_grpc import Host
-from pandora.host_pb2 import OwnAddressType
-from pandora.security_grpc import Security, PairingEventAnswer
-from pandora.security_pb2 import LESecurityLevel
+from pandora.host_pb2 import RANDOM
+from pandora.security_grpc import Security
+from pandora.security_pb2 import LE_LEVEL3, PairingEventAnswer
 from pandora_experimental.gatt_grpc import GATT
 
 BASE_UUID = uuid.UUID("00000000-0000-1000-8000-00805F9B34FB")
@@ -21,14 +37,20 @@ def short_uuid(full: uuid.UUID) -> int:
 
 class HOGPProxy(ProfileProxy):
 
-    def __init__(self, channel):
+    def __init__(self, channel, rootcanal):
         super().__init__(channel)
         self.host = Host(channel)
         self.security = Security(channel)
         self.gatt = GATT(channel)
+        self.rootcanal = rootcanal
         self.connection = None
-        self.pairing_stream = None
+        self.pairing_stream = self.security.OnPairing()
         self.characteristic_reads = {}
+
+    def test_started(self, test: str, **kwargs):
+        self.rootcanal.select_pts_dongle(Dongle.CSR_RCK_PTS_DONGLE)
+
+        return "OK"
 
     @assert_description
     def IUT_INITIATE_CONNECTION(self, pts_addr: bytes, **kwargs):
@@ -40,10 +62,11 @@ class HOGPProxy(ProfileProxy):
         to the PTS.
         """
 
-        self.connection = self.host.ConnectLE(own_address_type=OwnAddressType.RANDOM, public=pts_addr).connection
-        self.pairing_stream = self.security.OnPairing()
+        self.connection = self.host.ConnectLE(own_address_type=RANDOM, public=pts_addr).connection
+
         def secure():
-            self.security.Secure(connection=self.connection, le=LESecurityLevel.LE_LEVEL3)
+            self.security.Secure(connection=self.connection, le=LE_LEVEL3)
+
         threading.Thread(target=secure).start()
 
         return "OK"
@@ -166,7 +189,7 @@ class HOGPProxy(ProfileProxy):
         (?P<body>.*)
         """
 
-        PATTERN = re.compile(r"Start Handle: (?P<start_handle>\S*)     End Handle: (?P<end_handle>\S*)")
+        PATTERN = re.compile(r"Start Handle: (?P<start_handle>\S*) End Handle: (?P<end_handle>\S*)")
 
         SERVICE_UUIDS = {
             "Device Information": 0x180A,
@@ -298,3 +321,16 @@ class HOGPProxy(ProfileProxy):
         assert (body.count("Handle:") == num_checks), "safety check that regex is matching something"
 
         return "OK"
+
+    @assert_description
+    def MMI_VERIFY_SECURE_ID(self, pts_addr: bytes, **kwargs):
+        """
+        Please enter the secure ID.
+        """
+
+        for event in self.pairing_stream:
+            if event.address == pts_addr and event.passkey_entry_notification:
+                print(f"Got passkey entry {event.passkey_entry_notification}", file=sys.stderr)
+                return str(event.passkey_entry_notification)
+
+        assert False

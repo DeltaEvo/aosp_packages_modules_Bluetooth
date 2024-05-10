@@ -20,10 +20,8 @@ import static org.mockito.Mockito.*;
 
 import android.bluetooth.BluetoothLeAudio;
 import android.os.ParcelUuid;
-
-import android.os.ParcelUuid;
 import android.util.Pair;
-import androidx.test.InstrumentationRegistry;
+
 import androidx.test.filters.MediumTest;
 import androidx.test.runner.AndroidJUnit4;
 
@@ -32,11 +30,12 @@ import com.android.bluetooth.btservice.ServiceFactory;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.util.Map;
 import java.util.UUID;
@@ -44,6 +43,8 @@ import java.util.UUID;
 @MediumTest
 @RunWith(AndroidJUnit4.class)
 public class ContentControlIdKeeperTest {
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock
     ServiceFactory mServiceFactoryMock;
     @Mock
@@ -51,7 +52,6 @@ public class ContentControlIdKeeperTest {
 
     @Before
     public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
 
         doReturn(mLeAudioServiceMock).when(mServiceFactoryMock).getLeAudioService();
         ContentControlIdKeeper.initForTesting(mServiceFactoryMock);

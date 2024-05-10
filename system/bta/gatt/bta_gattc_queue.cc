@@ -14,23 +14,28 @@
  * limitations under the License.
  */
 
-#include "bta_gatt_queue.h"
+#define LOG_TAG "gatt"
+
+#include <bluetooth/log.h>
 
 #include <list>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
+#include "bta_gatt_queue.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
 
-#include <base/logging.h>
-
 using gatt_operation = BtaGattQueue::gatt_operation;
+using namespace bluetooth;
 
 constexpr uint8_t GATT_READ_CHAR = 1;
 constexpr uint8_t GATT_READ_DESC = 2;
 constexpr uint8_t GATT_WRITE_CHAR = 3;
 constexpr uint8_t GATT_WRITE_DESC = 4;
 constexpr uint8_t GATT_CONFIG_MTU = 5;
+constexpr uint8_t GATT_READ_MULTI = 6;
 
 struct gatt_read_op_data {
   GATT_READ_OP_CB cb;
@@ -109,22 +114,46 @@ void BtaGattQueue::gatt_configure_mtu_op_finished(uint16_t conn_id,
   }
 }
 
+struct gatt_read_multi_op_data {
+  GATT_READ_MULTI_OP_CB cb;
+  void* cb_data;
+};
+
+void BtaGattQueue::gatt_read_multi_op_finished(uint16_t conn_id,
+                                               tGATT_STATUS status,
+                                               tBTA_GATTC_MULTI& handles,
+                                               uint16_t len, uint8_t* value,
+                                               void* data) {
+  gatt_read_multi_op_data* tmp = (gatt_read_multi_op_data*)data;
+  GATT_READ_MULTI_OP_CB tmp_cb = tmp->cb;
+  void* tmp_cb_data = tmp->cb_data;
+
+  osi_free(data);
+
+  mark_as_not_executing(conn_id);
+  gatt_execute_next_op(conn_id);
+
+  if (tmp_cb) {
+    tmp_cb(conn_id, status, handles, len, value, tmp_cb_data);
+    return;
+  }
+}
+
 void BtaGattQueue::gatt_execute_next_op(uint16_t conn_id) {
-  APPL_TRACE_DEBUG("%s: conn_id=0x%x", __func__, conn_id);
+  log::verbose("conn_id=0x{:x}", conn_id);
   if (gatt_op_queue.empty()) {
-    APPL_TRACE_DEBUG("%s: op queue is empty", __func__);
+    log::verbose("op queue is empty");
     return;
   }
 
   auto map_ptr = gatt_op_queue.find(conn_id);
   if (map_ptr == gatt_op_queue.end() || map_ptr->second.empty()) {
-    APPL_TRACE_DEBUG("%s: no more operations queued for conn_id %d", __func__,
-                     conn_id);
+    log::verbose("no more operations queued for conn_id {}", conn_id);
     return;
   }
 
   if (gatt_op_queue_executing.count(conn_id)) {
-    APPL_TRACE_DEBUG("%s: can't enqueue next op, already executing", __func__);
+    log::verbose("can't enqueue next op, already executing");
     return;
   }
 
@@ -174,6 +203,14 @@ void BtaGattQueue::gatt_execute_next_op(uint16_t conn_id) {
     BTA_GATTC_ConfigureMTU(conn_id, static_cast<uint16_t>(op.value[0] |
                                                           (op.value[1] << 8)),
                            gatt_configure_mtu_op_finished, data);
+  } else if (op.type == GATT_READ_MULTI) {
+    gatt_read_multi_op_data* data =
+        (gatt_read_multi_op_data*)osi_malloc(sizeof(gatt_read_multi_op_data));
+    data->cb = op.read_multi_cb;
+    data->cb_data = op.read_cb_data;
+    BTA_GATTC_ReadMultiple(conn_id, op.handles, op.variable_len,
+                           GATT_AUTH_REQ_NONE, gatt_read_multi_op_finished,
+                           data);
   }
 
   gatt_ops.pop_front();
@@ -229,10 +266,23 @@ void BtaGattQueue::WriteDescriptor(uint16_t conn_id, uint16_t handle,
 }
 
 void BtaGattQueue::ConfigureMtu(uint16_t conn_id, uint16_t mtu) {
-  LOG(INFO) << __func__ << ", mtu: " << static_cast<int>(mtu);
+  log::info("mtu: {}", static_cast<int>(mtu));
   std::vector<uint8_t> value = {static_cast<uint8_t>(mtu & 0xff),
                                 static_cast<uint8_t>(mtu >> 8)};
   gatt_op_queue[conn_id].push_back({.type = GATT_CONFIG_MTU,
                                     .value = std::move(value)});
+  gatt_execute_next_op(conn_id);
+}
+
+void BtaGattQueue::ReadMultiCharacteristic(uint16_t conn_id,
+                                           tBTA_GATTC_MULTI& handles,
+                                           bool variable_len,
+                                           GATT_READ_MULTI_OP_CB cb,
+                                           void* cb_data) {
+  gatt_op_queue[conn_id].push_back({.type = GATT_READ_MULTI,
+                                    .handles = handles,
+                                    .variable_len = variable_len,
+                                    .read_multi_cb = cb,
+                                    .read_cb_data = cb_data});
   gatt_execute_next_op(conn_id);
 }

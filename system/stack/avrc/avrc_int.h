@@ -25,9 +25,9 @@
 #ifndef AVRC_INT_H
 #define AVRC_INT_H
 
+#include "internal_include/bt_target.h"
 #include "osi/include/alarm.h"
 #include "osi/include/fixed_queue.h"
-#include "stack/avct/avct_defs.h"
 #include "stack/include/avrc_api.h"
 #include "stack/include/bt_hdr.h"
 
@@ -151,7 +151,6 @@ typedef struct {
   tAVRC_FIND_CBACK find_cback; /* sdp discovery callback */
   tSDP_DISCOVERY_DB* p_db;   /* pointer to discovery database */
   uint16_t service_uuid;     /* service UUID to search */
-  uint8_t trace_level;
 } tAVRC_CB;
 
 /******************************************************************************
@@ -159,14 +158,14 @@ typedef struct {
  ******************************************************************************/
 extern tAVRC_CB avrc_cb;
 
-extern bool avrc_is_valid_pdu_id(uint8_t pdu_id);
-extern bool avrc_is_valid_player_attrib_value(uint8_t attrib, uint8_t value);
-extern BT_HDR* avrc_alloc_ctrl_pkt(uint8_t pdu);
-extern tAVRC_STS avrc_pars_pass_thru(tAVRC_MSG_PASS* p_msg,
-                                     uint16_t* p_vendor_unique_id);
-extern uint8_t avrc_opcode_from_pdu(uint8_t pdu);
-extern bool avrc_is_valid_opcode(uint8_t opcode);
-extern void avrc_flush_cmd_q(uint8_t handle);
+bool avrc_is_valid_pdu_id(uint8_t pdu_id);
+bool avrc_is_valid_player_attrib_value(uint8_t attrib, uint8_t value);
+BT_HDR* avrc_alloc_ctrl_pkt(uint8_t pdu);
+tAVRC_STS avrc_pars_pass_thru(tAVRC_MSG_PASS* p_msg,
+                              uint16_t* p_vendor_unique_id);
+uint8_t avrc_opcode_from_pdu(uint8_t pdu);
+bool avrc_is_valid_opcode(uint8_t opcode);
+void avrc_flush_cmd_q(uint8_t handle);
 void avrc_start_cmd_timer(uint8_t handle, uint8_t label, uint8_t msg_mask);
 void avrc_send_next_vendor_cmd(uint8_t handle);
 

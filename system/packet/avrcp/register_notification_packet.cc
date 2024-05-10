@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
-#include <base/logging.h>
-
 #include "register_notification_packet.h"
+
+#include <bluetooth/log.h>
+
+#include "internal_include/bt_trace.h"
 
 namespace bluetooth {
 namespace avrcp {
@@ -31,7 +33,8 @@ Event RegisterNotificationResponse::GetEvent() const {
 }
 
 uint8_t RegisterNotificationResponse::GetVolume() const {
-  CHECK(GetEvent() == Event::VOLUME_CHANGED);
+  log::assert_that(GetEvent() == Event::VOLUME_CHANGED,
+                   "assert failed: GetEvent() == Event::VOLUME_CHANGED");
   auto it = begin() + VendorPacket::kMinSize() + static_cast<size_t>(1);
   return *it;
 }
@@ -76,8 +79,7 @@ RegisterNotificationResponseBuilder::MakePlaybackStatusBuilder(
   std::unique_ptr<RegisterNotificationResponseBuilder> builder(
       new RegisterNotificationResponseBuilder(interim,
                                               Event::PLAYBACK_STATUS_CHANGED));
-
-  builder->data_ = play_status;
+  builder->data_union_.play_status = play_status;
   return builder;
 }
 
@@ -86,8 +88,7 @@ RegisterNotificationResponseBuilder::MakeTrackChangedBuilder(
     bool interim, uint64_t track_uid) {
   std::unique_ptr<RegisterNotificationResponseBuilder> builder(
       new RegisterNotificationResponseBuilder(interim, Event::TRACK_CHANGED));
-
-  builder->data_ = track_uid;
+  builder->data_union_.track_uid = track_uid;
   return builder;
 }
 
@@ -97,8 +98,24 @@ RegisterNotificationResponseBuilder::MakePlaybackPositionBuilder(
   std::unique_ptr<RegisterNotificationResponseBuilder> builder(
       new RegisterNotificationResponseBuilder(interim,
                                               Event::PLAYBACK_POS_CHANGED));
+  builder->data_union_.playback_pos = playback_pos;
+  return builder;
+}
 
-  builder->data_ = playback_pos;
+std::unique_ptr<RegisterNotificationResponseBuilder>
+RegisterNotificationResponseBuilder::MakePlayerSettingChangedBuilder(
+    bool interim, std::vector<PlayerAttribute> attributes,
+    std::vector<uint8_t> values) {
+  std::unique_ptr<RegisterNotificationResponseBuilder> builder(
+      new RegisterNotificationResponseBuilder(
+          interim, Event::PLAYER_APPLICATION_SETTING_CHANGED));
+  builder->data_union_.player_settings.number_of_attributes =
+      static_cast<uint8_t>(attributes.size());
+  for (int i = 0; i < builder->data_union_.player_settings.number_of_attributes;
+       i++) {
+    builder->data_union_.player_settings.attributes[i] = attributes.at(i);
+    builder->data_union_.player_settings.values[i] = values.at(i);
+  }
   return builder;
 }
 
@@ -124,8 +141,8 @@ RegisterNotificationResponseBuilder::MakeAddressedPlayerBuilder(
   std::unique_ptr<RegisterNotificationResponseBuilder> builder(
       new RegisterNotificationResponseBuilder(interim,
                                               Event::ADDRESSED_PLAYER_CHANGED));
-  builder->data_ = ((uint32_t)player_id) << 16;
-  builder->data_ |= uid_counter;
+  builder->data_union_.addressed_player.player_id = player_id;
+  builder->data_union_.addressed_player.uid_counter = uid_counter;
   return builder;
 }
 
@@ -134,8 +151,7 @@ RegisterNotificationResponseBuilder::MakeUidsChangedBuilder(
     bool interim, uint16_t uid_counter) {
   std::unique_ptr<RegisterNotificationResponseBuilder> builder(
       new RegisterNotificationResponseBuilder(interim, Event::UIDS_CHANGED));
-
-  builder->data_ = uid_counter;
+  builder->data_union_.uid_counter = uid_counter;
   return builder;
 }
 
@@ -155,7 +171,9 @@ size_t RegisterNotificationResponseBuilder::size() const {
       data_size = 4;
       break;
     case Event::PLAYER_APPLICATION_SETTING_CHANGED:
-      LOG(FATAL) << "Player Application Notification Not Implemented";
+      data_size = sizeof(uint8_t) +
+                  2 * data_union_.player_settings.number_of_attributes *
+                      sizeof(uint8_t);
       break;
     case Event::NOW_PLAYING_CONTENT_CHANGED:
       data_size = 0;
@@ -170,7 +188,7 @@ size_t RegisterNotificationResponseBuilder::size() const {
       data_size = 2;
       break;
     case Event::VOLUME_CHANGED:
-      LOG(FATAL) << "Volume Changed Notification Not Implemented";
+      log::fatal("Volume Changed Notification Not Implemented");
       break;
   }
 
@@ -188,40 +206,45 @@ bool RegisterNotificationResponseBuilder::Serialize(
   AddPayloadOctets1(pkt, static_cast<uint8_t>(event_));
   switch (event_) {
     case Event::PLAYBACK_STATUS_CHANGED: {
-      uint8_t playback_status = data_ & 0xFF;
-      AddPayloadOctets1(pkt, playback_status);
+      AddPayloadOctets1(pkt, data_union_.play_status);
       break;
     }
     case Event::TRACK_CHANGED: {
-      AddPayloadOctets8(pkt, base::ByteSwap(data_));
+      AddPayloadOctets8(pkt, base::ByteSwap(data_union_.track_uid));
       break;
     }
     case Event::PLAYBACK_POS_CHANGED: {
-      uint32_t playback_pos = data_ & 0xFFFFFFFF;
-      AddPayloadOctets4(pkt, base::ByteSwap(playback_pos));
+      AddPayloadOctets4(pkt, base::ByteSwap(data_union_.playback_pos));
       break;
     }
-    case Event::PLAYER_APPLICATION_SETTING_CHANGED:
+    case Event::PLAYER_APPLICATION_SETTING_CHANGED: {
+      AddPayloadOctets1(pkt, data_union_.player_settings.number_of_attributes);
+      for (int i = 0; i < data_union_.player_settings.number_of_attributes;
+           i++) {
+        AddPayloadOctets1(pkt, static_cast<uint8_t>(
+                                   data_union_.player_settings.attributes[i]));
+        AddPayloadOctets1(pkt, data_union_.player_settings.values[i]);
+      }
       break;  // No additional data
+    }
     case Event::NOW_PLAYING_CONTENT_CHANGED:
       break;  // No additional data
     case Event::AVAILABLE_PLAYERS_CHANGED:
       break;  // No additional data
     case Event::ADDRESSED_PLAYER_CHANGED: {
-      uint16_t uid_counter = data_ & 0xFFFF;
-      uint16_t player_id = (data_ >> 16) & 0xFFFF;
-      AddPayloadOctets2(pkt, base::ByteSwap(player_id));
-      AddPayloadOctets2(pkt, base::ByteSwap(uid_counter));
+      AddPayloadOctets2(pkt,
+                        base::ByteSwap(data_union_.addressed_player.player_id));
+      AddPayloadOctets2(
+          pkt, base::ByteSwap(data_union_.addressed_player.uid_counter));
       break;
     }
     case Event::UIDS_CHANGED: {
-      uint16_t uid_counter = data_ & 0xFFFF;
-      AddPayloadOctets2(pkt, base::ByteSwap(uid_counter));
+      AddPayloadOctets2(pkt, base::ByteSwap(data_union_.uid_counter));
       break;
     }
     case Event::VOLUME_CHANGED:
       // TODO (apanicke): Add Volume Changed builder for when we are controller.
-      LOG(FATAL) << "Volume Changed Notification Not Implemented";
+      log::fatal("Volume Changed Notification Not Implemented");
       break;
   }
 

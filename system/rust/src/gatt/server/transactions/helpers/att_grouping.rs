@@ -4,9 +4,9 @@
 
 use crate::core::uuid::Uuid;
 
-use crate::gatt::server::att_database::{
-    AttAttribute, StableAttDatabase, CHARACTERISTIC_UUID, PRIMARY_SERVICE_DECLARATION_UUID,
-    SECONDARY_SERVICE_DECLARATION_UUID,
+use crate::gatt::server::att_database::{AttAttribute, StableAttDatabase};
+use crate::gatt::server::gatt_database::{
+    CHARACTERISTIC_UUID, PRIMARY_SERVICE_DECLARATION_UUID, SECONDARY_SERVICE_DECLARATION_UUID,
 };
 
 const GROUPING_ATTRIBUTES: [Uuid; 3] =
@@ -68,7 +68,7 @@ mod test {
     }
 
     fn attr(handle: AttHandle, type_: Uuid) -> AttAttribute {
-        AttAttribute { handle, type_, permissions: AttPermissions::READONLY }
+        AttAttribute { handle, type_, permissions: AttPermissions::READABLE }
     }
 
     #[test]

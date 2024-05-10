@@ -88,20 +88,26 @@ void A2dpEncodingFuzzer::process(const uint8_t* data, size_t size) {
   std::string name = fdp.ConsumeRandomLengthString(kRandomStringLength);
   bluetooth::common::MessageLoopThread messageLoopThread(name);
   messageLoopThread.StartUp();
-  messageLoopThread.DoInThread(FROM_HERE, base::Bind(&source_init_delayed));
+  messageLoopThread.DoInThread(FROM_HERE, base::BindOnce(&source_init_delayed));
 
   uint16_t delayReport = fdp.ConsumeIntegral<uint16_t>();
   bluetooth::audio::a2dp::set_remote_delay(delayReport);
 
-  (void)bluetooth::audio::a2dp::init(&messageLoopThread);
-  (void)bluetooth::audio::a2dp::setup_codec();
+  if (!bluetooth::audio::a2dp::init(&messageLoopThread)) {
+    return;
+  }
+
+  if (!bluetooth::audio::a2dp::setup_codec()) {
+    return;
+  }
+
   bluetooth::audio::a2dp::start_session();
 
   tA2DP_CTRL_ACK status = fdp.PickValueInArray(kCtrlAckStatus);
   bluetooth::audio::a2dp::ack_stream_started(status);
 
   for (auto offloadingPreference : CodecOffloadingPreferenceGenerator()) {
-    update_codec_offloading_capabilities(offloadingPreference);
+    update_codec_offloading_capabilities(offloadingPreference, false);
   }
   status = fdp.PickValueInArray(kCtrlAckStatus);
   bluetooth::audio::a2dp::ack_stream_suspended(status);

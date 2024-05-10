@@ -32,23 +32,21 @@ import android.os.Looper;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
-import androidx.test.rule.ServiceTestRule;
 import androidx.test.runner.AndroidJUnit4;
 
-import com.android.bluetooth.R;
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
 
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -74,6 +72,8 @@ public class HidDeviceTest {
     private static final int CALLBACK_ON_INTR_DATA = 5;
     private static final int CALLBACK_ON_VIRTUAL_UNPLUG = 6;
 
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock private AdapterService mAdapterService;
     @Mock private DatabaseManager mDatabaseManager;
     @Mock private HidDeviceNativeInterface mHidDeviceNativeInterface;
@@ -87,7 +87,6 @@ public class HidDeviceTest {
     private final BlockingQueue<Intent> mConnectionStateChangedQueue = new LinkedBlockingQueue<>();
     private final BlockingQueue<Integer> mCallbackQueue = new LinkedBlockingQueue<>();
 
-    @Rule public final ServiceTestRule mServiceRule = new ServiceTestRule();
 
     private static void setHidDeviceNativeInterfaceInstance(HidDeviceNativeInterface instance)
             throws Exception {
@@ -105,20 +104,17 @@ public class HidDeviceTest {
         }
         Assert.assertNotNull(Looper.myLooper());
 
-        // Set up mocks and test assets
-        MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
         doReturn(mDatabaseManager).when(mAdapterService).getDatabase();
-        doReturn(true, false).when(mAdapterService).isStartedProfile(anyString());
         setHidDeviceNativeInterfaceInstance(mHidDeviceNativeInterface);
         // This line must be called to make sure relevant objects are initialized properly
         mAdapter = BluetoothAdapter.getDefaultAdapter();
         // Get a device for testing
         mTestDevice = mAdapter.getRemoteDevice("10:11:12:13:14:15");
 
-        TestUtils.startService(mServiceRule, HidDeviceService.class);
-        mHidDeviceService = HidDeviceService.getHidDeviceService();
-        Assert.assertNotNull(mHidDeviceService);
+        mHidDeviceService = new HidDeviceService(mTargetContext);
+        mHidDeviceService.start();
+        mHidDeviceService.setAvailable(true);
 
         // Force unregister app first
         mHidDeviceService.unregisterApp();
@@ -135,6 +131,7 @@ public class HidDeviceTest {
 
         // Set up the Connection State Changed receiver
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothHidDevice.ACTION_CONNECTION_STATE_CHANGED);
         mConnectionStateChangedReceiver = new ConnectionStateChangedReceiver();
         mTargetContext.registerReceiver(mConnectionStateChangedReceiver, filter);
@@ -143,7 +140,7 @@ public class HidDeviceTest {
 
     @After
     public void tearDown() throws Exception {
-        TestUtils.stopService(mServiceRule, HidDeviceService.class);
+        mHidDeviceService.stop();
         mHidDeviceService = HidDeviceService.getHidDeviceService();
         Assert.assertNull(mHidDeviceService);
         mTargetContext.unregisterReceiver(mConnectionStateChangedReceiver);

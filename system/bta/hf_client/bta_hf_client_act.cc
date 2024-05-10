@@ -23,15 +23,17 @@
  *
  ******************************************************************************/
 
-#include "bt_trace.h"  // Legacy trace logging
+#include <bluetooth/log.h>
 
 #include "bta/hf_client/bta_hf_client_int.h"
 #include "bta/include/bta_dm_api.h"
+#include "os/log.h"
 #include "stack/include/l2c_api.h"
 #include "stack/include/port_api.h"
+#include "stack/include/sdp_status.h"
 #include "types/raw_address.h"
 
-#include <base/logging.h>
+using namespace bluetooth;
 
 /*****************************************************************************
  *  Constants
@@ -54,8 +56,7 @@ void bta_hf_client_start_close(tBTA_HF_CLIENT_DATA* p_data) {
   tBTA_HF_CLIENT_CB* client_cb =
       bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
-    APPL_TRACE_ERROR("%s: wrong handle to control block %d", __func__,
-                     p_data->hdr.layer_specific);
+    log::error("wrong handle to control block {}", p_data->hdr.layer_specific);
     return;
   }
 
@@ -88,8 +89,7 @@ void bta_hf_client_start_open(tBTA_HF_CLIENT_DATA* p_data) {
   tBTA_HF_CLIENT_CB* client_cb =
       bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
-    APPL_TRACE_ERROR("%s: wrong handle to control block %d", __func__,
-                     p_data->hdr.layer_specific);
+    log::error("wrong handle to control block {}", p_data->hdr.layer_specific);
     return;
   }
 
@@ -127,12 +127,11 @@ void bta_hf_client_start_open(tBTA_HF_CLIENT_DATA* p_data) {
  *
  ******************************************************************************/
 void bta_hf_client_rfc_open(tBTA_HF_CLIENT_DATA* p_data) {
-  APPL_TRACE_DEBUG("%s", __func__);
+  log::verbose("");
   tBTA_HF_CLIENT_CB* client_cb =
       bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
-    APPL_TRACE_ERROR("%s: cb not found for handle %d", __func__,
-                     p_data->hdr.layer_specific);
+    log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
   }
 
@@ -153,25 +152,24 @@ void bta_hf_client_rfc_open(tBTA_HF_CLIENT_DATA* p_data) {
  *
  ******************************************************************************/
 void bta_hf_client_rfc_acp_open(tBTA_HF_CLIENT_DATA* p_data) {
-  APPL_TRACE_DEBUG("%s", __func__);
+  log::verbose("");
   tBTA_HF_CLIENT_CB* client_cb =
       bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
-    APPL_TRACE_ERROR("%s: cb not found for handle %d", __func__,
-                     p_data->hdr.layer_specific);
+    log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
   }
   /* set role */
   client_cb->role = BTA_HF_CLIENT_ACP;
 
-  APPL_TRACE_DEBUG("%s: conn_handle %d", __func__, client_cb->conn_handle);
+  log::verbose("conn_handle {}", client_cb->conn_handle);
 
   /* get bd addr of peer */
   uint16_t lcid = 0;
   RawAddress dev_addr = RawAddress::kEmpty;
   int status = PORT_CheckConnection(client_cb->conn_handle, &dev_addr, &lcid);
   if (status != PORT_SUCCESS) {
-    LOG(ERROR) << __func__ << ": PORT_CheckConnection returned " << status;
+    log::error("PORT_CheckConnection returned status:{}", status);
   }
 
   /* Collision Handling */
@@ -211,8 +209,7 @@ void bta_hf_client_rfc_fail(tBTA_HF_CLIENT_DATA* p_data) {
   tBTA_HF_CLIENT_CB* client_cb =
       bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
-    APPL_TRACE_ERROR("%s: cb not found for handle %d", __func__,
-                     p_data->hdr.layer_specific);
+    log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
   }
 
@@ -241,8 +238,7 @@ void bta_hf_client_disc_fail(tBTA_HF_CLIENT_DATA* p_data) {
   tBTA_HF_CLIENT_CB* client_cb =
       bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
-    APPL_TRACE_ERROR("%s: cb not found for handle %d", __func__,
-                     p_data->hdr.layer_specific);
+    log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
   }
 }
@@ -261,8 +257,7 @@ void bta_hf_client_open_fail(tBTA_HF_CLIENT_DATA* p_data) {
   tBTA_HF_CLIENT_CB* client_cb =
       bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
-    APPL_TRACE_ERROR("%s: cb not found for handle %d", __func__,
-                     p_data->hdr.layer_specific);
+    log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
   }
 }
@@ -281,8 +276,7 @@ void bta_hf_client_rfc_close(tBTA_HF_CLIENT_DATA* p_data) {
   tBTA_HF_CLIENT_CB* client_cb =
       bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
-    APPL_TRACE_ERROR("%s: cb not found for handle %d", __func__,
-                     p_data->hdr.layer_specific);
+    log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
   }
 
@@ -324,12 +318,11 @@ void bta_hf_client_rfc_close(tBTA_HF_CLIENT_DATA* p_data) {
 void bta_hf_client_disc_int_res(tBTA_HF_CLIENT_DATA* p_data) {
   uint16_t event = BTA_HF_CLIENT_DISC_FAIL_EVT;
 
-  APPL_TRACE_DEBUG("%s: Status: %d", __func__, p_data->disc_result.status);
+  log::verbose("Status: {}", p_data->disc_result.status);
   tBTA_HF_CLIENT_CB* client_cb =
       bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
-    APPL_TRACE_ERROR("%s: cb not found for handle %d", __func__,
-                     p_data->hdr.layer_specific);
+    log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
   }
 
@@ -363,8 +356,7 @@ void bta_hf_client_disc_acp_res(tBTA_HF_CLIENT_DATA* p_data) {
   tBTA_HF_CLIENT_CB* client_cb =
       bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
-    APPL_TRACE_ERROR("%s: cb not found for handle %d", __func__,
-                     p_data->hdr.layer_specific);
+    log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
   }
 
@@ -393,8 +385,7 @@ void bta_hf_client_rfc_data(tBTA_HF_CLIENT_DATA* p_data) {
   tBTA_HF_CLIENT_CB* client_cb =
       bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
-    APPL_TRACE_ERROR("%s: cb not found for handle %d", __func__,
-                     p_data->hdr.layer_specific);
+    log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
   }
 
@@ -429,12 +420,11 @@ void bta_hf_client_rfc_data(tBTA_HF_CLIENT_DATA* p_data) {
  *
  ******************************************************************************/
 void bta_hf_client_svc_conn_open(tBTA_HF_CLIENT_DATA* p_data) {
-  APPL_TRACE_DEBUG("%s", __func__);
+  log::verbose("");
   tBTA_HF_CLIENT_CB* client_cb =
       bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
-    APPL_TRACE_ERROR("%s: cb not found for handle %d", __func__,
-                     p_data->hdr.layer_specific);
+    log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
   }
 

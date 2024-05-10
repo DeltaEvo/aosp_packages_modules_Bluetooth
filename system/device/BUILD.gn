@@ -16,7 +16,6 @@
 
 static_library("device") {
   sources = [
-    "src/controller.cc",
     "src/esco_parameters.cc",
     "src/interop.cc",
     "src/device_iot_config.cc",
@@ -25,27 +24,24 @@ static_library("device") {
 
   include_dirs = [
     "//bt/system/",
-    "//bt/system/internal_include",
     "//bt/system/stack/include",
   ]
 
   configs += [
     "//bt/system:target_defaults",
+    "//bt/system/log:log_defaults",
   ]
 
   deps = [
+    "//bt/flags:bluetooth_flags_c_lib",
     "//bt/system/gd/rust/shim:init_flags_bridge_header",
     "//bt/system/gd/rust/shim:libbluetooth_rust_interop",
-    "//bt/system/gd/rust/shim:message_loop_thread_bridge_header",
+    "//bt/system/pdl:BluetoothGeneratedPackets_h",
   ]
 }
 
 if (use.test) {
   executable("net_test_device") {
-    sources = [
-      "//bt/system/osi/test/AllocationTestHarness.cc",
-    ]
-
     include_dirs = [ "//bt/system" ]
 
     deps = [
@@ -66,10 +62,6 @@ if (use.test) {
     ]
   }
   executable("net_test_device_iot_config") {
-    sources = [
-      "//bt/system/osi/test/AllocationTestHarness.cc",
-    ]
-
     include_dirs = [
       "//bt/system",
       "//bt/system/stack/include",

@@ -47,16 +47,13 @@
 package com.android.bluetooth.le_audio;
 
 import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothLeAudio;
 import android.bluetooth.BluetoothProfile;
-import android.content.Intent;
 import android.os.Looper;
 import android.os.Message;
 import android.util.Log;
-import static android.Manifest.permission.BLUETOOTH_CONNECT;
 
-import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.ProfileService;
+import com.android.bluetooth.flags.Flags;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.State;
 import com.android.internal.util.StateMachine;
@@ -67,7 +64,6 @@ import java.io.StringWriter;
 import java.util.Scanner;
 
 final class LeAudioStateMachine extends StateMachine {
-    private static final boolean DBG = false;
     private static final String TAG = "LeAudioStateMachine";
 
     static final int CONNECT = 1;
@@ -92,8 +88,11 @@ final class LeAudioStateMachine extends StateMachine {
 
     private final BluetoothDevice mDevice;
 
-    LeAudioStateMachine(BluetoothDevice device, LeAudioService svc,
-            LeAudioNativeInterface nativeInterface, Looper looper) {
+    LeAudioStateMachine(
+            BluetoothDevice device,
+            LeAudioService svc,
+            LeAudioNativeInterface nativeInterface,
+            Looper looper) {
         super(TAG, looper);
         mDevice = device;
         mService = svc;
@@ -112,10 +111,14 @@ final class LeAudioStateMachine extends StateMachine {
         setInitialState(mDisconnected);
     }
 
-    static LeAudioStateMachine make(BluetoothDevice device, LeAudioService svc,
-            LeAudioNativeInterface nativeInterface, Looper looper) {
+    static LeAudioStateMachine make(
+            BluetoothDevice device,
+            LeAudioService svc,
+            LeAudioNativeInterface nativeInterface,
+            Looper looper) {
         Log.i(TAG, "make for device");
-        LeAudioStateMachine LeAudioSm = new LeAudioStateMachine(device, svc, nativeInterface, looper);
+        LeAudioStateMachine LeAudioSm =
+                new LeAudioStateMachine(device, svc, nativeInterface, looper);
         LeAudioSm.start();
         return LeAudioSm;
     }
@@ -143,6 +146,9 @@ final class LeAudioStateMachine extends StateMachine {
                 // Don't broadcast during startup
                 broadcastConnectionState(BluetoothProfile.STATE_DISCONNECTED,
                         mLastConnectionState);
+                if (Flags.audioRoutingCentralization()) {
+                    mService.deviceDisconnected(mDevice, false);
+                }
             }
         }
 
@@ -178,9 +184,7 @@ final class LeAudioStateMachine extends StateMachine {
                     break;
                 case STACK_EVENT:
                     LeAudioStackEvent event = (LeAudioStackEvent) message.obj;
-                    if (DBG) {
-                        Log.d(TAG, "Disconnected: stack event: " + event);
-                    }
+                    Log.d(TAG, "Disconnected: stack event: " + event);
                     if (!mDevice.equals(event.device)) {
                         Log.wtf(TAG, "Device(" + mDevice + "): event mismatch: " + event);
                     }
@@ -430,6 +434,9 @@ final class LeAudioStateMachine extends StateMachine {
                     + messageWhatToString(getCurrentMessage().what));
             mConnectionState = BluetoothProfile.STATE_CONNECTED;
             removeDeferredMessages(CONNECT);
+            if (Flags.audioRoutingCentralization()) {
+                mService.deviceConnected(mDevice);
+            }
             broadcastConnectionState(BluetoothProfile.STATE_CONNECTED, mLastConnectionState);
         }
 
@@ -514,15 +521,7 @@ final class LeAudioStateMachine extends StateMachine {
     private void broadcastConnectionState(int newState, int prevState) {
         log("Connection state " + mDevice + ": " + profileStateToString(prevState)
                     + "->" + profileStateToString(newState));
-
-        Intent intent = new Intent(BluetoothLeAudio.ACTION_LE_AUDIO_CONNECTION_STATE_CHANGED);
-        intent.putExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, prevState);
-        intent.putExtra(BluetoothProfile.EXTRA_STATE, newState);
-        intent.putExtra(BluetoothDevice.EXTRA_DEVICE, mDevice);
-        intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
-                        | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
-        Utils.sendBroadcast(mService, intent, BLUETOOTH_CONNECT,
-                Utils.getTempAllowlistBroadcastOptions());
+        mService.notifyConnectionStateChanged(mDevice, newState, prevState);
     }
 
     private static String messageWhatToString(int what) {
@@ -577,8 +576,6 @@ final class LeAudioStateMachine extends StateMachine {
 
     @Override
     protected void log(String msg) {
-        if (DBG) {
-            super.log(msg);
-        }
+        super.log(msg);
     }
 }

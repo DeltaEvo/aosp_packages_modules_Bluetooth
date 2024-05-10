@@ -25,6 +25,7 @@
  * to define the aliases in the topshim namespace.
  */
 
+#include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
 namespace bluetooth {
@@ -32,6 +33,7 @@ namespace topshim {
 namespace rust {
 
 using RawAddress = ::RawAddress;
+using Uuid = ::bluetooth::Uuid;
 
 }  // namespace rust
 }  // namespace topshim

@@ -25,16 +25,18 @@
 
 #include "a2dp_vendor_aptx_hd.h"
 
-#include <base/logging.h>
+#include <bluetooth/log.h>
 #include <string.h>
 
 #include "a2dp_vendor.h"
 #include "a2dp_vendor_aptx_hd_encoder.h"
-#include "bt_utils.h"
-#include "btif_av_co.h"
-#include "osi/include/log.h"
+#include "btif/include/btif_av_co.h"
+#include "internal_include/bt_trace.h"
+#include "os/log.h"
 #include "osi/include/osi.h"
 #include "stack/include/bt_hdr.h"
+
+using namespace bluetooth;
 
 // data type for the aptX-HD Codec Information Element */
 typedef struct {
@@ -87,7 +89,7 @@ static const tA2DP_ENCODER_INTERFACE a2dp_encoder_interface_aptx_hd = {
     nullptr  // set_transmit_queue_length
 };
 
-UNUSED_ATTR static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilityAptxHd(
+static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilityAptxHd(
     const tA2DP_APTX_HD_CIE* p_cap, const uint8_t* p_codec_info,
     bool is_peer_codec_info);
 
@@ -217,7 +219,7 @@ bool A2DP_IsVendorPeerSinkCodecValidAptxHd(const uint8_t* p_codec_info) {
 // is acting as an A2DP source.
 // Returns A2DP_SUCCESS if the codec configuration matches with capabilities,
 // otherwise the corresponding A2DP error status code.
-static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilityAptxHd(
+UNUSED_ATTR static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilityAptxHd(
     const tA2DP_APTX_HD_CIE* p_cap, const uint8_t* p_codec_info,
     bool is_capability) {
   tA2DP_STATUS status;
@@ -226,16 +228,16 @@ static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilityAptxHd(
   /* parse configuration */
   status = A2DP_ParseInfoAptxHd(&cfg_cie, p_codec_info, is_capability);
   if (status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: parsing failed %d", __func__, status);
+    log::error("parsing failed {}", status);
     return status;
   }
 
   /* verify that each parameter is in range */
 
-  LOG_VERBOSE("%s: FREQ peer: 0x%x, capability 0x%x", __func__,
-              cfg_cie.sampleRate, p_cap->sampleRate);
-  LOG_VERBOSE("%s: CH_MODE peer: 0x%x, capability 0x%x", __func__,
-              cfg_cie.channelMode, p_cap->channelMode);
+  log::verbose("FREQ peer: 0x{:x}, capability 0x{:x}", cfg_cie.sampleRate,
+               p_cap->sampleRate);
+  log::verbose("CH_MODE peer: 0x{:x}, capability 0x{:x}", cfg_cie.channelMode,
+               p_cap->channelMode);
 
   /* sampling frequency */
   if ((cfg_cie.sampleRate & p_cap->sampleRate) == 0) return A2DP_NS_SAMP_FREQ;
@@ -246,13 +248,12 @@ static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilityAptxHd(
   return A2DP_SUCCESS;
 }
 
-bool A2DP_VendorUsesRtpHeaderAptxHd(UNUSED_ATTR bool content_protection_enabled,
-                                    UNUSED_ATTR const uint8_t* p_codec_info) {
+bool A2DP_VendorUsesRtpHeaderAptxHd(bool /* content_protection_enabled */,
+                                    const uint8_t* /* p_codec_info */) {
   return true;
 }
 
-const char* A2DP_VendorCodecNameAptxHd(
-    UNUSED_ATTR const uint8_t* p_codec_info) {
+const char* A2DP_VendorCodecNameAptxHd(const uint8_t* /* p_codec_info */) {
   return "aptX-HD";
 }
 
@@ -265,12 +266,12 @@ bool A2DP_VendorCodecTypeEqualsAptxHd(const uint8_t* p_codec_info_a,
   tA2DP_STATUS a2dp_status =
       A2DP_ParseInfoAptxHd(&aptx_hd_cie_a, p_codec_info_a, true);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return false;
   }
   a2dp_status = A2DP_ParseInfoAptxHd(&aptx_hd_cie_b, p_codec_info_b, true);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return false;
   }
 
@@ -286,12 +287,12 @@ bool A2DP_VendorCodecEqualsAptxHd(const uint8_t* p_codec_info_a,
   tA2DP_STATUS a2dp_status =
       A2DP_ParseInfoAptxHd(&aptx_hd_cie_a, p_codec_info_a, true);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return false;
   }
   a2dp_status = A2DP_ParseInfoAptxHd(&aptx_hd_cie_b, p_codec_info_b, true);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return false;
   }
 
@@ -313,7 +314,7 @@ int A2DP_VendorGetTrackSampleRateAptxHd(const uint8_t* p_codec_info) {
   tA2DP_STATUS a2dp_status =
       A2DP_ParseInfoAptxHd(&aptx_hd_cie, p_codec_info, false);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return -1;
   }
 
@@ -330,7 +331,7 @@ int A2DP_VendorGetTrackBitsPerSampleAptxHd(const uint8_t* p_codec_info) {
   tA2DP_STATUS a2dp_status =
       A2DP_ParseInfoAptxHd(&aptx_hd_cie, p_codec_info, false);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return -1;
   }
 
@@ -345,7 +346,7 @@ int A2DP_VendorGetTrackChannelCountAptxHd(const uint8_t* p_codec_info) {
   tA2DP_STATUS a2dp_status =
       A2DP_ParseInfoAptxHd(&aptx_hd_cie, p_codec_info, false);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return -1;
   }
 
@@ -359,17 +360,17 @@ int A2DP_VendorGetTrackChannelCountAptxHd(const uint8_t* p_codec_info) {
   return -1;
 }
 
-bool A2DP_VendorGetPacketTimestampAptxHd(
-    UNUSED_ATTR const uint8_t* p_codec_info, const uint8_t* p_data,
-    uint32_t* p_timestamp) {
+bool A2DP_VendorGetPacketTimestampAptxHd(const uint8_t* /* p_codec_info */,
+                                         const uint8_t* p_data,
+                                         uint32_t* p_timestamp) {
   // TODO: Is this function really codec-specific?
   *p_timestamp = *(const uint32_t*)p_data;
   return true;
 }
 
-bool A2DP_VendorBuildCodecHeaderAptxHd(UNUSED_ATTR const uint8_t* p_codec_info,
-                                       UNUSED_ATTR BT_HDR* p_buf,
-                                       UNUSED_ATTR uint16_t frames_per_packet) {
+bool A2DP_VendorBuildCodecHeaderAptxHd(const uint8_t* /* p_codec_info */,
+                                       BT_HDR* /* p_buf */,
+                                       uint16_t /* frames_per_packet */) {
   // Nothing to do
   return true;
 }
@@ -382,7 +383,8 @@ std::string A2DP_VendorCodecInfoStringAptxHd(const uint8_t* p_codec_info) {
 
   a2dp_status = A2DP_ParseInfoAptxHd(&aptx_hd_cie, p_codec_info, true);
   if (a2dp_status != A2DP_SUCCESS) {
-    res << "A2DP_ParseInfoAptxHd fail: " << loghex(a2dp_status);
+    res << "A2DP_ParseInfoAptxHd fail: "
+        << loghex(static_cast<uint8_t>(a2dp_status));
     return res.str();
   }
 
@@ -441,21 +443,14 @@ bool A2DP_VendorInitCodecConfigAptxHd(AvdtpSepConfig* p_cfg) {
     return false;
   }
 
-#if (BTA_AV_CO_CP_SCMS_T == TRUE)
-  /* Content protection info - support SCMS-T */
-  uint8_t* p = p_cfg->protect_info;
-  *p++ = AVDT_CP_LOSC;
-  UINT16_TO_STREAM(p, AVDT_CP_SCMS_T_ID);
-  p_cfg->num_protect = 1;
-#endif
-
   return true;
 }
 
 A2dpCodecConfigAptxHd::A2dpCodecConfigAptxHd(
     btav_a2dp_codec_priority_t codec_priority)
     : A2dpCodecConfig(BTAV_A2DP_CODEC_INDEX_SOURCE_APTX_HD,
-                      A2DP_VendorCodecIndexStrAptxHd(), codec_priority) {
+                      A2DP_CODEC_ID_APTX_HD, A2DP_VendorCodecIndexStrAptxHd(),
+                      codec_priority) {
   // Compute the local capability
   if (a2dp_aptx_hd_source_caps.sampleRate & A2DP_APTX_HD_SAMPLERATE_44100) {
     codec_local_capability_.sample_rate |= BTAV_A2DP_CODEC_SAMPLE_RATE_44100;
@@ -480,7 +475,7 @@ bool A2dpCodecConfigAptxHd::init() {
 
   // Load the encoder
   if (A2DP_VendorLoadEncoderAptxHd() != LOAD_SUCCESS) {
-    LOG_ERROR("%s: cannot load the encoder", __func__);
+    log::error("cannot load the encoder");
     return false;
   }
 
@@ -657,8 +652,7 @@ bool A2dpCodecConfigAptxHd::setCodecConfig(const uint8_t* p_peer_codec_info,
   tA2DP_STATUS status =
       A2DP_ParseInfoAptxHd(&peer_info_cie, p_peer_codec_info, is_capability);
   if (status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: can't parse peer's capabilities: error = %d", __func__,
-              status);
+    log::error("can't parse peer's capabilities: error = {}", status);
     goto fail;
   }
 
@@ -741,11 +735,9 @@ bool A2dpCodecConfigAptxHd::setCodecConfig(const uint8_t* p_peer_codec_info,
     }
   } while (false);
   if (codec_config_.sample_rate == BTAV_A2DP_CODEC_SAMPLE_RATE_NONE) {
-    LOG_ERROR(
-        "%s: cannot match sample frequency: local caps = 0x%x "
-        "peer info = 0x%x",
-        __func__, a2dp_aptx_hd_source_caps.sampleRate,
-        peer_info_cie.sampleRate);
+    log::error(
+        "cannot match sample frequency: local caps = 0x{:x} peer info = 0x{:x}",
+        a2dp_aptx_hd_source_caps.sampleRate, peer_info_cie.sampleRate);
     goto fail;
   }
 
@@ -797,8 +789,8 @@ bool A2dpCodecConfigAptxHd::setCodecConfig(const uint8_t* p_peer_codec_info,
     }
   } while (false);
   if (codec_config_.bits_per_sample == BTAV_A2DP_CODEC_BITS_PER_SAMPLE_NONE) {
-    LOG_ERROR("%s: cannot match bits per sample: user preference = 0x%x",
-              __func__, codec_user_config_.bits_per_sample);
+    log::error("cannot match bits per sample: user preference = 0x{:x}",
+               codec_user_config_.bits_per_sample);
     goto fail;
   }
 
@@ -869,11 +861,9 @@ bool A2dpCodecConfigAptxHd::setCodecConfig(const uint8_t* p_peer_codec_info,
     }
   } while (false);
   if (codec_config_.channel_mode == BTAV_A2DP_CODEC_CHANNEL_MODE_NONE) {
-    LOG_ERROR(
-        "%s: cannot match channel mode: local caps = 0x%x "
-        "peer info = 0x%x",
-        __func__, a2dp_aptx_hd_source_caps.channelMode,
-        peer_info_cie.channelMode);
+    log::error(
+        "cannot match channel mode: local caps = 0x{:x} peer info = 0x{:x}",
+        a2dp_aptx_hd_source_caps.channelMode, peer_info_cie.channelMode);
     goto fail;
   }
 
@@ -919,10 +909,12 @@ bool A2dpCodecConfigAptxHd::setCodecConfig(const uint8_t* p_peer_codec_info,
     status = A2DP_BuildInfoAptxHd(AVDT_MEDIA_TYPE_AUDIO, &peer_info_cie,
                                   ota_codec_peer_config_);
   }
-  CHECK(status == A2DP_SUCCESS);
+  log::assert_that(status == A2DP_SUCCESS,
+                   "assert failed: status == A2DP_SUCCESS");
   status = A2DP_BuildInfoAptxHd(AVDT_MEDIA_TYPE_AUDIO, &result_config_cie,
                                 ota_codec_config_);
-  CHECK(status == A2DP_SUCCESS);
+  log::assert_that(status == A2DP_SUCCESS,
+                   "assert failed: status == A2DP_SUCCESS");
   return true;
 
 fail:
@@ -957,8 +949,7 @@ bool A2dpCodecConfigAptxHd::setPeerCodecCapabilities(
   tA2DP_STATUS status =
       A2DP_ParseInfoAptxHd(&peer_info_cie, p_peer_codec_capabilities, true);
   if (status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: can't parse peer's capabilities: error = %d", __func__,
-              status);
+    log::error("can't parse peer's capabilities: error = {}", status);
     goto fail;
   }
 
@@ -991,7 +982,8 @@ bool A2dpCodecConfigAptxHd::setPeerCodecCapabilities(
 
   status = A2DP_BuildInfoAptxHd(AVDT_MEDIA_TYPE_AUDIO, &peer_info_cie,
                                 ota_codec_peer_capability_);
-  CHECK(status == A2DP_SUCCESS);
+  log::assert_that(status == A2DP_SUCCESS,
+                   "assert failed: status == A2DP_SUCCESS");
   return true;
 
 fail:

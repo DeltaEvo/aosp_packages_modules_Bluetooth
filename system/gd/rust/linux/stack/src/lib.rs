@@ -13,11 +13,14 @@ pub mod bluetooth_adv;
 pub mod bluetooth_gatt;
 pub mod bluetooth_logging;
 pub mod bluetooth_media;
+pub mod bluetooth_qa;
 pub mod callbacks;
+pub mod dis;
 pub mod socket_manager;
 pub mod suspend;
 pub mod uuid;
 
+use bluetooth_qa::{BluetoothQA, IBluetoothQA};
 use log::debug;
 use num_derive::{FromPrimitive, ToPrimitive};
 use std::sync::{Arc, Mutex};
@@ -32,27 +35,43 @@ use crate::bluetooth::{
     BluetoothDevice, DelayedActions, IBluetooth,
 };
 use crate::bluetooth_admin::{BluetoothAdmin, IBluetoothAdmin};
+use crate::bluetooth_adv::{dispatch_le_adv_callbacks, AdvertiserActions};
 use crate::bluetooth_gatt::{
-    dispatch_gatt_client_callbacks, dispatch_gatt_server_callbacks, dispatch_le_adv_callbacks,
-    dispatch_le_scanner_callbacks, dispatch_le_scanner_inband_callbacks, BluetoothGatt,
+    dispatch_gatt_client_callbacks, dispatch_gatt_server_callbacks, dispatch_le_scanner_callbacks,
+    dispatch_le_scanner_inband_callbacks, BluetoothGatt, GattActions,
 };
 use crate::bluetooth_media::{BluetoothMedia, MediaActions};
+use crate::dis::{DeviceInformation, ServiceCallbacks};
 use crate::socket_manager::{BluetoothSocketManager, SocketActions};
 use crate::suspend::Suspend;
 use bt_topshim::{
     btif::{BaseCallbacks, BtTransport},
     profiles::{
-        a2dp::A2dpCallbacks, avrcp::AvrcpCallbacks, gatt::GattAdvCallbacks,
-        gatt::GattAdvInbandCallbacks, gatt::GattClientCallbacks, gatt::GattScannerCallbacks,
-        gatt::GattScannerInbandCallbacks, gatt::GattServerCallbacks, hfp::HfpCallbacks,
-        hid_host::HHCallbacks, sdp::SdpCallbacks,
+        a2dp::A2dpCallbacks,
+        avrcp::AvrcpCallbacks,
+        gatt::GattAdvCallbacks,
+        gatt::GattAdvInbandCallbacks,
+        gatt::GattClientCallbacks,
+        gatt::GattScannerCallbacks,
+        gatt::GattScannerInbandCallbacks,
+        gatt::GattServerCallbacks,
+        hfp::HfpCallbacks,
+        hid_host::{BthhReportType, HHCallbacks},
+        sdp::SdpCallbacks,
     },
 };
 
 /// Message types that are sent to the stack main dispatch loop.
 pub enum Message {
-    // Shuts down the stack.
-    Shutdown,
+    /// Remove the DBus API. Call it before other AdapterShutdown.
+    InterfaceShutdown,
+    /// Disable the adapter by calling btif disable.
+    AdapterShutdown,
+    /// Clean up the adapter by calling btif cleanup.
+    Cleanup,
+
+    // Adapter is enabled and ready.
+    AdapterReady,
 
     // Callbacks from libbluetooth
     A2dp(A2dpCallbacks),
@@ -71,12 +90,14 @@ pub enum Message {
     // Actions within the stack
     Media(MediaActions),
     MediaCallbackDisconnected(u32),
+    TelephonyCallbackDisconnected(u32),
 
     // Client callback disconnections
     AdapterCallbackDisconnected(u32),
     ConnectionCallbackDisconnected(u32),
 
     // Some delayed actions for the adapter.
+    TriggerUpdateConnectableMode,
     DelayedAdapterActions(DelayedActions),
 
     // Follows IBluetooth's on_device_(dis)connected callback but doesn't require depending on
@@ -96,6 +117,7 @@ pub enum Message {
 
     // Advertising related
     AdvertiserCallbackDisconnected(u32),
+    AdvertiserActions(AdvertiserActions),
 
     SocketManagerActions(SocketActions),
     SocketManagerCallbackDisconnected(u32),
@@ -108,11 +130,51 @@ pub enum Message {
     BatteryServiceRefresh,
     BatteryManagerCallbackDisconnected(u32),
 
+    GattActions(GattActions),
     GattClientCallbackDisconnected(u32),
     GattServerCallbackDisconnected(u32),
 
     // Admin policy related
     AdminCallbackDisconnected(u32),
+    HidHostEnable,
+    AdminPolicyChanged,
+
+    // Dis callbacks
+    Dis(ServiceCallbacks),
+
+    // Device removal
+    DisconnectDevice(BluetoothDevice),
+
+    // Qualification Only
+    QaCallbackDisconnected(u32),
+    QaAddMediaPlayer(String, bool),
+    QaRfcommSendMsc(u8, String),
+    QaFetchDiscoverableMode,
+    QaFetchConnectable,
+    QaSetConnectable(bool),
+    QaFetchAlias,
+    QaGetHidReport(String, BthhReportType, u8),
+    QaSetHidReport(String, BthhReportType, String),
+    QaSendHidData(String, String),
+
+    // UHid callbacks
+    UHidHfpOutputCallback(String, u8, u8),
+    UHidTelephonyUseCallback(String, bool),
+}
+
+pub enum BluetoothAPI {
+    Adapter,
+    Battery,
+    Media,
+    Gatt,
+}
+
+/// Message types that are sent to the InterfaceManager's dispatch loop.
+pub enum APIMessage {
+    /// Indicates a subcomponent is ready to receive DBus messages.
+    IsReady(BluetoothAPI),
+    /// Indicates bluetooth is shutting down, so we remove all DBus endpoints.
+    ShutDown,
 }
 
 /// Represents suspend mode of a module.
@@ -139,6 +201,7 @@ impl Stack {
     /// Runs the main dispatch loop.
     pub async fn dispatch(
         mut rx: Receiver<Message>,
+        api_tx: Sender<APIMessage>,
         bluetooth: Arc<Mutex<Box<Bluetooth>>>,
         bluetooth_gatt: Arc<Mutex<Box<BluetoothGatt>>>,
         battery_service: Arc<Mutex<Box<BatteryService>>>,
@@ -148,6 +211,8 @@ impl Stack {
         suspend: Arc<Mutex<Box<Suspend>>>,
         bluetooth_socketmgr: Arc<Mutex<Box<BluetoothSocketManager>>>,
         bluetooth_admin: Arc<Mutex<Box<BluetoothAdmin>>>,
+        bluetooth_dis: Arc<Mutex<Box<DeviceInformation>>>,
+        bluetooth_qa: Arc<Mutex<Box<BluetoothQA>>>,
     ) {
         loop {
             let m = rx.recv().await;
@@ -158,8 +223,27 @@ impl Stack {
             }
 
             match m.unwrap() {
-                Message::Shutdown => {
+                Message::InterfaceShutdown => {
+                    let tx = api_tx.clone();
+                    tokio::spawn(async move {
+                        let _ = tx.send(APIMessage::ShutDown).await;
+                    });
+                }
+
+                Message::AdapterShutdown => {
                     bluetooth.lock().unwrap().disable();
+                }
+
+                Message::Cleanup => {
+                    bluetooth.lock().unwrap().cleanup();
+                }
+
+                Message::AdapterReady => {
+                    // Initialize objects that need the adapter to be fully
+                    // enabled before running.
+
+                    // Register device information service.
+                    bluetooth_dis.lock().unwrap().initialize();
                 }
 
                 Message::A2dp(a) => {
@@ -222,12 +306,23 @@ impl Stack {
                     bluetooth_media.lock().unwrap().remove_callback(cb_id);
                 }
 
+                Message::TelephonyCallbackDisconnected(cb_id) => {
+                    bluetooth_media.lock().unwrap().remove_telephony_callback(cb_id);
+                }
+
                 Message::AdapterCallbackDisconnected(id) => {
                     bluetooth.lock().unwrap().adapter_callback_disconnected(id);
                 }
 
                 Message::ConnectionCallbackDisconnected(id) => {
                     bluetooth.lock().unwrap().connection_callback_disconnected(id);
+                }
+
+                Message::TriggerUpdateConnectableMode => {
+                    let is_listening = bluetooth_socketmgr.lock().unwrap().is_listening();
+                    bluetooth.lock().unwrap().handle_delayed_actions(
+                        DelayedActions::UpdateConnectableMode(is_listening),
+                    );
                 }
 
                 Message::DelayedAdapterActions(action) => {
@@ -281,6 +376,10 @@ impl Stack {
                     bluetooth_gatt.lock().unwrap().remove_adv_callback(id);
                 }
 
+                Message::AdvertiserActions(action) => {
+                    bluetooth_gatt.lock().unwrap().handle_adv_action(action);
+                }
+
                 Message::SocketManagerActions(action) => {
                     bluetooth_socketmgr.lock().unwrap().handle_actions(action);
                 }
@@ -308,6 +407,9 @@ impl Stack {
                 Message::BatteryManagerCallbackDisconnected(id) => {
                     battery_manager.lock().unwrap().remove_callback(id);
                 }
+                Message::GattActions(action) => {
+                    bluetooth_gatt.lock().unwrap().handle_action(action);
+                }
                 Message::GattClientCallbackDisconnected(id) => {
                     bluetooth_gatt.lock().unwrap().remove_client_callback(id);
                 }
@@ -316,6 +418,79 @@ impl Stack {
                 }
                 Message::AdminCallbackDisconnected(id) => {
                     bluetooth_admin.lock().unwrap().unregister_admin_policy_callback(id);
+                }
+                Message::HidHostEnable => {
+                    bluetooth.lock().unwrap().enable_hidhost();
+                }
+                Message::AdminPolicyChanged => {
+                    bluetooth_socketmgr.lock().unwrap().handle_admin_policy_changed();
+                }
+                Message::Dis(callback) => {
+                    bluetooth_dis.lock().unwrap().handle_callbacks(&callback);
+                }
+                Message::DisconnectDevice(addr) => {
+                    bluetooth.lock().unwrap().disconnect_all_enabled_profiles(addr);
+                }
+                // Qualification Only
+                Message::QaAddMediaPlayer(name, browsing_supported) => {
+                    bluetooth_media.lock().unwrap().add_player(name, browsing_supported);
+                }
+                Message::QaRfcommSendMsc(dlci, addr) => {
+                    bluetooth_socketmgr.lock().unwrap().rfcomm_send_msc(dlci, addr);
+                }
+                Message::QaCallbackDisconnected(id) => {
+                    bluetooth_qa.lock().unwrap().unregister_qa_callback(id);
+                }
+                Message::QaFetchDiscoverableMode => {
+                    let mode = bluetooth.lock().unwrap().get_discoverable_mode_internal();
+                    bluetooth_qa.lock().unwrap().on_fetch_discoverable_mode_completed(mode);
+                }
+                Message::QaFetchConnectable => {
+                    let connectable = bluetooth.lock().unwrap().get_connectable_internal();
+                    bluetooth_qa.lock().unwrap().on_fetch_connectable_completed(connectable);
+                }
+                Message::QaSetConnectable(mode) => {
+                    let succeed = bluetooth.lock().unwrap().set_connectable_internal(mode);
+                    bluetooth_qa.lock().unwrap().on_set_connectable_completed(succeed);
+                }
+                Message::QaFetchAlias => {
+                    let alias = bluetooth.lock().unwrap().get_alias_internal();
+                    bluetooth_qa.lock().unwrap().on_fetch_alias_completed(alias);
+                }
+                Message::QaGetHidReport(addr, report_type, report_id) => {
+                    let status = bluetooth.lock().unwrap().get_hid_report_internal(
+                        addr,
+                        report_type,
+                        report_id,
+                    );
+                    bluetooth_qa.lock().unwrap().on_get_hid_report_completed(status);
+                }
+                Message::QaSetHidReport(addr, report_type, report) => {
+                    let status = bluetooth.lock().unwrap().set_hid_report_internal(
+                        addr,
+                        report_type,
+                        report,
+                    );
+                    bluetooth_qa.lock().unwrap().on_set_hid_report_completed(status);
+                }
+                Message::QaSendHidData(addr, data) => {
+                    let status = bluetooth.lock().unwrap().send_hid_data_internal(addr, data);
+                    bluetooth_qa.lock().unwrap().on_send_hid_data_completed(status);
+                }
+
+                // UHid callbacks
+                Message::UHidHfpOutputCallback(addr, id, data) => {
+                    bluetooth_media
+                        .lock()
+                        .unwrap()
+                        .dispatch_uhid_hfp_output_callback(addr, id, data);
+                }
+
+                Message::UHidTelephonyUseCallback(addr, state) => {
+                    bluetooth_media
+                        .lock()
+                        .unwrap()
+                        .dispatch_uhid_telephony_use_callback(addr, state);
                 }
             }
         }

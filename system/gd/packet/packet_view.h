@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <forward_list>
+#include <vector>
 
 #include "packet/iterator.h"
 #include "packet/view.h"
@@ -34,23 +35,20 @@ template <bool little_endian>
 class PacketView {
  public:
   explicit PacketView(std::forward_list<View> fragments);
-  PacketView(const PacketView& PacketView) = default;
   explicit PacketView(std::shared_ptr<const std::vector<uint8_t>> packet);
+  PacketView(const PacketView& PacketView) = default;
   PacketView<little_endian>() = delete;
   virtual ~PacketView() = default;
 
-  virtual Iterator<little_endian> begin() const;
-
-  virtual Iterator<little_endian> end() const;
+  Iterator<little_endian> begin() const;
+  Iterator<little_endian> end() const;
 
   uint8_t operator[](size_t i) const;
-
   uint8_t at(size_t index) const;
 
   size_t size() const;
 
   PacketView<true> GetLittleEndianSubview(size_t begin, size_t end) const;
-
   PacketView<false> GetBigEndianSubview(size_t begin, size_t end) const;
 
  protected:
@@ -59,6 +57,7 @@ class PacketView {
  private:
   std::forward_list<View> fragments_;
   size_t length_;
+
   std::forward_list<View> GetSubviewList(size_t begin, size_t end) const;
 };
 

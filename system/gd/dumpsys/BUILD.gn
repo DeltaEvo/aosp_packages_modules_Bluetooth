@@ -18,14 +18,16 @@ import("//bt/system/gd/dumpsys/bundler/bundler.gni")
 source_set("BluetoothDumpsysSources") {
   sources = [
     "filter.cc",
-    "init_flags.cc",
     "internal/filter_internal.cc",
     "reflection_schema.cc",
   ]
 
   cflags_cc = [ "-Wno-enum-compare-switch" ]
 
-  configs += [ "//bt/system/gd:gd_defaults" ]
+  configs += [
+    "//bt/system/gd:gd_defaults",
+    "//bt/system/log:log_defaults",
+  ]
   deps = [ "//bt/system/gd:gd_default_deps" ]
 }
 
@@ -34,5 +36,8 @@ bt_flatc_bundler("libbluetooth-dumpsys") {
   filename = "generated_dumpsys_bundled_schema"
   namespace = "bluetooth::dumpsys"
   deps = [ "//bt/system/gd:BluetoothGeneratedDumpsysBinarySchema_bfbs" ]
-  configs = [ "//bt/system/gd:gd_defaults" ]
+  configs = [
+    "//bt/system/gd:gd_defaults",
+    "//bt/system/log:log_defaults",
+  ]
 }

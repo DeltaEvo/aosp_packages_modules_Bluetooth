@@ -20,34 +20,30 @@
  */
 
 #include <cstdint>
-#include <map>
-#include <string>
 
-#include "bta/ar/bta_ar_int.h"
 #include "bta/sys/bta_sys.h"
-#include "stack/include/avct_api.h"
-#include "stack/include/avrc_api.h"
+#include "stack/include/avdt_api.h"
 #include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
-#ifndef UNUSED_ATTR
-#define UNUSED_ATTR
-#endif
-
-void bta_ar_avdt_conn(tBTA_SYS_ID sys_id, const RawAddress& bd_addr,
-                      uint8_t scb_index) {
+void bta_ar_avdt_conn(tBTA_SYS_ID /* sys_id */, const RawAddress& /* bd_addr */,
+                      uint8_t /* scb_index */) {
   inc_func_call_count(__func__);
 }
 void bta_ar_dereg_avct() { inc_func_call_count(__func__); }
 void bta_ar_dereg_avdt() { inc_func_call_count(__func__); }
-void bta_ar_dereg_avrc(uint16_t service_uuid) { inc_func_call_count(__func__); }
-void bta_ar_init(void) { inc_func_call_count(__func__); }
-void bta_ar_reg_avct() { inc_func_call_count(__func__); }
-void bta_ar_reg_avdt(AvdtpRcb* p_reg, tAVDT_CTRL_CBACK* p_cback) {
+void bta_ar_dereg_avrc(uint16_t /* service_uuid */) {
   inc_func_call_count(__func__);
 }
-void bta_ar_reg_avrc(uint16_t service_uuid, const char* service_name,
-                     const char* provider_name, uint16_t categories,
-                     bool browse_supported, uint16_t profile_version) {
+void bta_ar_init(void) { inc_func_call_count(__func__); }
+void bta_ar_reg_avct() { inc_func_call_count(__func__); }
+void bta_ar_reg_avdt(AvdtpRcb* /* p_reg */, tAVDT_CTRL_CBACK* /* p_cback */) {
+  inc_func_call_count(__func__);
+}
+void bta_ar_reg_avrc(uint16_t /* service_uuid */,
+                     const char* /* service_name */,
+                     const char* /* provider_name */, uint16_t /* categories */,
+                     bool /* browse_supported */,
+                     uint16_t /* profile_version */) {
   inc_func_call_count(__func__);
 }

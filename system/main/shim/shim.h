@@ -20,10 +20,8 @@
  * Gabeldorsche related legacy-only-stack-side expansion and support code.
  */
 #include "btcore/include/module.h"
-#include "main/shim/entry.h"
 #include "osi/include/future.h"
 
-static const char GD_IDLE_MODULE[] = "gd_idle_module";
 static const char GD_SHIM_MODULE[] = "gd_shim_module";
 
 constexpr future_t* kReturnImmediate = nullptr;
@@ -32,24 +30,6 @@ constexpr char* kUnusedModuleDependencies = nullptr;
 
 namespace bluetooth {
 namespace shim {
-
-/**
- * Checks if the bluetooth stack is running in legacy or gd mode.
- *
- * This check is used throughout the legacy stack to determine which
- * methods, classes or functions to invoke.  The default (false) mode
- * is the legacy mode which runs the original legacy bluetooth stack.
- * When enabled (true) the core portion of the gd stack is invoked
- * at key points to execute equivalent functionality using the
- * gd core components.
- *
- * @return true if using gd shim core, false if using legacy.
- */
-bool is_gd_security_enabled();
-bool is_gd_link_policy_enabled();
-bool is_gd_l2cap_enabled();
-bool is_gd_shim_enabled();
-bool is_gd_btaa_enabled();
 
 /**
  * Checks if the bluetooth gd stack has been started up.
@@ -61,9 +41,18 @@ bool is_gd_stack_started_up();
 /**
  * Checks if the dumpsys module has been started.
  *
+ * DEPRECATED Flag:dumpsys_acquire_stack_when_executing
+ *
  * @return true if specified module has started, false otherwise.
  */
 bool is_gd_dumpsys_module_started();
+
+/**
+ * Checks whether discovery should be classic only (vs also triggering BLE).
+ *
+ * @return true if discovery should be limited to classic.
+ */
+bool is_classic_discovery_only_enabled();
 
 }  // namespace shim
 }  // namespace bluetooth

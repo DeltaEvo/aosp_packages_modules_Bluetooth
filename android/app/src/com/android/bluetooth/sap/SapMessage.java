@@ -36,8 +36,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class SapMessage {
 
     public static final String TAG = "SapMessage";
-    public static final boolean DEBUG = SapService.DEBUG;
-    public static final boolean VERBOSE = SapService.VERBOSE;
     public static final boolean TEST = false;
 
     /* Message IDs - SAP specification */
@@ -386,9 +384,7 @@ public class SapMessage {
             paramCount = is.read();
             skip(is, 2); // Skip the 2 padding bytes
             if (paramCount > 0) {
-                if (VERBOSE) {
-                    Log.i(TAG, "Parsing message with paramCount: " + paramCount);
-                }
+                Log.v(TAG, "Parsing message with paramCount: " + paramCount);
                 if (!newMessage.parseParameters(paramCount, is)) {
                     return null;
                 }
@@ -397,9 +393,7 @@ public class SapMessage {
             Log.w(TAG, e);
             return null;
         }
-        if (DEBUG) {
-            Log.i(TAG, "readMessage() Read message: " + getMsgTypeName(requestType));
-        }
+        Log.d(TAG, "readMessage() Read message: " + getMsgTypeName(requestType));
 
         /* Validate parameters */
         switch (requestType) {
@@ -499,9 +493,7 @@ public class SapMessage {
                 skipLen = 4 - (paramLength % 4);
             }
 
-            if (VERBOSE) {
-                Log.i(TAG, "parsing paramId: " + paramId + " with length: " + paramLength);
-            }
+            Log.v(TAG, "parsing paramId: " + paramId + " with length: " + paramLength);
             switch (paramId) {
                 case PARAM_MAX_MSG_SIZE_ID:
                     if (paramLength != PARAM_MAX_MSG_SIZE_LENGTH) {
@@ -810,9 +802,7 @@ public class SapMessage {
                 Log.e(TAG, "Unknown request type");
                 throw new IllegalArgumentException();
         }
-        if (VERBOSE) {
-            Log.e(TAG, "callISapReq: done without exceptions");
-        }
+        Log.v(TAG, "callISapReq: done without exceptions");
     }
 
     public static SapMessage newInstance(MsgHeader msg) throws IOException {
@@ -847,52 +837,38 @@ public class SapMessage {
 //            msgType = ID_RIL_UNSOL_CONNECTED;
 //            break;
             case SapApi.RIL_SIM_SAP_STATUS: {
-                if (VERBOSE) {
-                    Log.i(TAG, "RIL_SIM_SAP_STATUS_IND received");
-                }
+                Log.v(TAG, "RIL_SIM_SAP_STATUS_IND received");
                 RIL_SIM_SAP_STATUS_IND indMsg =
                         RIL_SIM_SAP_STATUS_IND.parseFrom(msg.getPayload().toByteArray());
                 mMsgType = ID_STATUS_IND;
                 if (indMsg.hasStatusChange()) {
                     setStatusChange(indMsg.getStatusChange());
-                    if (VERBOSE) {
-                        Log.i(TAG,
-                                "RIL_UNSOL_SIM_SAP_STATUS_IND received value = " + mStatusChange);
-                    }
+                    Log.v(TAG,
+                            "RIL_UNSOL_SIM_SAP_STATUS_IND received value = " + mStatusChange);
                 } else {
-                    if (VERBOSE) {
-                        Log.i(TAG, "Wrong number of parameters in SAP_STATUS_IND, ignoring...");
-                    }
+                    Log.v(TAG, "Wrong number of parameters in SAP_STATUS_IND, ignoring...");
                     mMsgType = ID_RIL_UNKNOWN;
                 }
                 break;
             }
             case SapApi.RIL_SIM_SAP_DISCONNECT: {
-                if (VERBOSE) {
-                    Log.i(TAG, "RIL_SIM_SAP_DISCONNECT_IND received");
-                }
+                Log.v(TAG, "RIL_SIM_SAP_DISCONNECT_IND received");
 
                 RIL_SIM_SAP_DISCONNECT_IND indMsg =
                         RIL_SIM_SAP_DISCONNECT_IND.parseFrom(msg.getPayload().toByteArray());
                 mMsgType = ID_RIL_UNSOL_DISCONNECT_IND; // don't use ID_DISCONNECT_IND;
                 if (indMsg.hasDisconnectType()) {
                     setDisconnectionType(indMsg.getDisconnectType());
-                    if (VERBOSE) {
-                        Log.i(TAG, "RIL_UNSOL_SIM_SAP_STATUS_IND received value = "
-                                + mDisconnectionType);
-                    }
+                    Log.v(TAG, "RIL_UNSOL_SIM_SAP_STATUS_IND received value = "
+                            + mDisconnectionType);
                 } else {
-                    if (VERBOSE) {
-                        Log.i(TAG, "Wrong number of parameters in SAP_STATUS_IND, ignoring...");
-                    }
+                    Log.v(TAG, "Wrong number of parameters in SAP_STATUS_IND, ignoring...");
                     mMsgType = ID_RIL_UNKNOWN;
                 }
                 break;
             }
             default:
-                if (VERBOSE) {
-                    Log.i(TAG, "Unused unsolicited message received, ignoring: " + msg.getId());
-                }
+                Log.v(TAG, "Unused unsolicited message received, ignoring: " + msg.getId());
                 mMsgType = ID_RIL_UNKNOWN;
         }
     }
@@ -908,12 +884,9 @@ public class SapMessage {
         }
         int serial = msg.getToken();
         int error = msg.getError();
-        Integer reqType = null;
-        reqType = sOngoingRequests.remove(serial);
-        if (VERBOSE) {
-            Log.i(TAG, "RIL SOLICITED serial: " + serial + ", error: " + error + " SapReqType: " + (
-                    (reqType == null) ? "null" : getMsgTypeName(reqType)));
-        }
+        Integer reqType = sOngoingRequests.remove(serial);
+        Log.v(TAG, "RIL SOLICITED serial: " + serial + ", error: " + error + " SapReqType: " + (
+                (reqType == null) ? "null" : getMsgTypeName(reqType)));
 
         if (reqType == null) {
             /* This can happen if we get a resp. for a canceled request caused by a power off,
@@ -954,10 +927,8 @@ public class SapMessage {
                         break;
                 }
                 mResultCode = INVALID_VALUE;
-                if (VERBOSE) {
-                    Log.v(TAG, "  ID_CONNECT_REQ: mMaxMsgSize: " + mMaxMsgSize
-                            + "  mConnectionStatus: " + mConnectionStatus);
-                }
+                Log.v(TAG, "  ID_CONNECT_REQ: mMaxMsgSize: " + mMaxMsgSize
+                        + "  mConnectionStatus: " + mConnectionStatus);
                 break;
             }
             case ID_DISCONNECT_REQ:
@@ -1187,67 +1158,63 @@ public class SapMessage {
 
 
     public static String getMsgTypeName(int msgType) {
-        if (DEBUG || VERBOSE) {
-            switch (msgType) {
-                case ID_CONNECT_REQ:
-                    return "ID_CONNECT_REQ";
-                case ID_CONNECT_RESP:
-                    return "ID_CONNECT_RESP";
-                case ID_DISCONNECT_REQ:
-                    return "ID_DISCONNECT_REQ";
-                case ID_DISCONNECT_RESP:
-                    return "ID_DISCONNECT_RESP";
-                case ID_DISCONNECT_IND:
-                    return "ID_DISCONNECT_IND";
-                case ID_TRANSFER_APDU_REQ:
-                    return "ID_TRANSFER_APDU_REQ";
-                case ID_TRANSFER_APDU_RESP:
-                    return "ID_TRANSFER_APDU_RESP";
-                case ID_TRANSFER_ATR_REQ:
-                    return "ID_TRANSFER_ATR_REQ";
-                case ID_TRANSFER_ATR_RESP:
-                    return "ID_TRANSFER_ATR_RESP";
-                case ID_POWER_SIM_OFF_REQ:
-                    return "ID_POWER_SIM_OFF_REQ";
-                case ID_POWER_SIM_OFF_RESP:
-                    return "ID_POWER_SIM_OFF_RESP";
-                case ID_POWER_SIM_ON_REQ:
-                    return "ID_POWER_SIM_ON_REQ";
-                case ID_POWER_SIM_ON_RESP:
-                    return "ID_POWER_SIM_ON_RESP";
-                case ID_RESET_SIM_REQ:
-                    return "ID_RESET_SIM_REQ";
-                case ID_RESET_SIM_RESP:
-                    return "ID_RESET_SIM_RESP";
-                case ID_TRANSFER_CARD_READER_STATUS_REQ:
-                    return "ID_TRANSFER_CARD_READER_STATUS_REQ";
-                case ID_TRANSFER_CARD_READER_STATUS_RESP:
-                    return "ID_TRANSFER_CARD_READER_STATUS_RESP";
-                case ID_STATUS_IND:
-                    return "ID_STATUS_IND";
-                case ID_ERROR_RESP:
-                    return "ID_ERROR_RESP";
-                case ID_SET_TRANSPORT_PROTOCOL_REQ:
-                    return "ID_SET_TRANSPORT_PROTOCOL_REQ";
-                case ID_SET_TRANSPORT_PROTOCOL_RESP:
-                    return "ID_SET_TRANSPORT_PROTOCOL_RESP";
-                case ID_RIL_UNSOL_CONNECTED:
-                    return "ID_RIL_UNSOL_CONNECTED";
-                case ID_RIL_UNSOL_DISCONNECT_IND:
-                    return "ID_RIL_UNSOL_DISCONNECT_IND";
-                case ID_RIL_UNKNOWN:
-                    return "ID_RIL_UNKNOWN";
-                case ID_RIL_GET_SIM_STATUS_REQ:
-                    return "ID_RIL_GET_SIM_STATUS_REQ";
-                case ID_RIL_SIM_ACCESS_TEST_REQ:
-                    return "ID_RIL_SIM_ACCESS_TEST_REQ";
-                case ID_RIL_SIM_ACCESS_TEST_RESP:
-                    return "ID_RIL_SIM_ACCESS_TEST_RESP";
-                default:
-                    return "Unknown Message Type (" + msgType + ")";
-            }
-        } else {
-            return null;
+        switch (msgType) {
+            case ID_CONNECT_REQ:
+                return "ID_CONNECT_REQ";
+            case ID_CONNECT_RESP:
+                return "ID_CONNECT_RESP";
+            case ID_DISCONNECT_REQ:
+                return "ID_DISCONNECT_REQ";
+            case ID_DISCONNECT_RESP:
+                return "ID_DISCONNECT_RESP";
+            case ID_DISCONNECT_IND:
+                return "ID_DISCONNECT_IND";
+            case ID_TRANSFER_APDU_REQ:
+                return "ID_TRANSFER_APDU_REQ";
+            case ID_TRANSFER_APDU_RESP:
+                return "ID_TRANSFER_APDU_RESP";
+            case ID_TRANSFER_ATR_REQ:
+                return "ID_TRANSFER_ATR_REQ";
+            case ID_TRANSFER_ATR_RESP:
+                return "ID_TRANSFER_ATR_RESP";
+            case ID_POWER_SIM_OFF_REQ:
+                return "ID_POWER_SIM_OFF_REQ";
+            case ID_POWER_SIM_OFF_RESP:
+                return "ID_POWER_SIM_OFF_RESP";
+            case ID_POWER_SIM_ON_REQ:
+                return "ID_POWER_SIM_ON_REQ";
+            case ID_POWER_SIM_ON_RESP:
+                return "ID_POWER_SIM_ON_RESP";
+            case ID_RESET_SIM_REQ:
+                return "ID_RESET_SIM_REQ";
+            case ID_RESET_SIM_RESP:
+                return "ID_RESET_SIM_RESP";
+            case ID_TRANSFER_CARD_READER_STATUS_REQ:
+                return "ID_TRANSFER_CARD_READER_STATUS_REQ";
+            case ID_TRANSFER_CARD_READER_STATUS_RESP:
+                return "ID_TRANSFER_CARD_READER_STATUS_RESP";
+            case ID_STATUS_IND:
+                return "ID_STATUS_IND";
+            case ID_ERROR_RESP:
+                return "ID_ERROR_RESP";
+            case ID_SET_TRANSPORT_PROTOCOL_REQ:
+                return "ID_SET_TRANSPORT_PROTOCOL_REQ";
+            case ID_SET_TRANSPORT_PROTOCOL_RESP:
+                return "ID_SET_TRANSPORT_PROTOCOL_RESP";
+            case ID_RIL_UNSOL_CONNECTED:
+                return "ID_RIL_UNSOL_CONNECTED";
+            case ID_RIL_UNSOL_DISCONNECT_IND:
+                return "ID_RIL_UNSOL_DISCONNECT_IND";
+            case ID_RIL_UNKNOWN:
+                return "ID_RIL_UNKNOWN";
+            case ID_RIL_GET_SIM_STATUS_REQ:
+                return "ID_RIL_GET_SIM_STATUS_REQ";
+            case ID_RIL_SIM_ACCESS_TEST_REQ:
+                return "ID_RIL_SIM_ACCESS_TEST_REQ";
+            case ID_RIL_SIM_ACCESS_TEST_RESP:
+                return "ID_RIL_SIM_ACCESS_TEST_RESP";
+            default:
+                return "Unknown Message Type (" + msgType + ")";
         }
     }
 }

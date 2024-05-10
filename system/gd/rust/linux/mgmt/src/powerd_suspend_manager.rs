@@ -114,16 +114,21 @@ fn send_handle_suspend_readiness(
 }
 
 impl ISuspendCallback for SuspendCallback {
-    fn on_callback_registered(&self, callback_id: u32) {
+    fn on_callback_registered(&mut self, callback_id: u32) {
         log::debug!("Suspend callback registered, callback_id = {}", callback_id);
     }
 
-    fn on_suspend_ready(&self, suspend_id: i32) {
+    fn on_suspend_ready(&mut self, suspend_id: i32) {
         // Received when adapter is ready to suspend. Tell powerd that suspend is ready.
         log::debug!("Suspend ready, adapter suspend_id = {}", suspend_id);
 
         {
             let context = self.context.lock().unwrap();
+
+            if context.powerd_session.is_none() {
+                log::warn!("No powerd session!");
+                return;
+            }
 
             if let (Some(pending_suspend_imminent), Some(powerd_session)) =
                 (&context.pending_suspend_imminent, &context.powerd_session)
@@ -133,13 +138,26 @@ impl ISuspendCallback for SuspendCallback {
                     powerd_session.delay_id,
                     pending_suspend_imminent.get_suspend_id(),
                 );
+            } else if let (Some(adapter_suspend_dbus), None) =
+                (&context.adapter_suspend_dbus, &context.pending_suspend_imminent)
+            {
+                log::info!("Suspend was aborted (imminent signal missing), so calling resume");
+                let mut suspend_dbus_rpc = adapter_suspend_dbus.rpc.clone();
+                tokio::spawn(async move {
+                    let result = suspend_dbus_rpc.resume().await;
+                    log::debug!("Adapter resume call, success = {}", result.unwrap_or(false));
+                });
             } else {
-                log::warn!("Suspend ready but no SuspendImminent signal or powerd session");
+                log::warn!(
+                    "Suspend ready but powerd session valid={}, adapter available={}.",
+                    context.powerd_session.is_some(),
+                    context.adapter_suspend_dbus.is_some()
+                );
             }
         }
     }
 
-    fn on_resumed(&self, suspend_id: i32) {
+    fn on_resumed(&mut self, suspend_id: i32) {
         // Received when adapter is ready to suspend. This is just for our information and powerd
         // doesn't need to know about this.
         log::debug!("Suspend resumed, adapter suspend_id = {}", suspend_id);
@@ -168,6 +186,7 @@ pub struct SuspendManagerContext {
     powerd_session: Option<PowerdSession>,
     adapter_suspend_dbus: Option<SuspendDBus>,
     pending_suspend_imminent: Option<SuspendImminent>,
+    pub tablet_mode: bool,
 }
 
 /// Coordinates suspend events of Chromium OS's powerd with btadapter Suspend API.
@@ -191,11 +210,16 @@ impl PowerdSuspendManager {
                 powerd_session: None,
                 adapter_suspend_dbus: None,
                 pending_suspend_imminent: None,
+                tablet_mode: false,
             })),
             conn,
             tx,
             rx,
         }
+    }
+
+    pub fn get_suspend_manager_context(&mut self) -> Arc<Mutex<SuspendManagerContext>> {
+        return self.context.clone();
     }
 
     /// Sets up all required D-Bus listeners.
@@ -445,15 +469,26 @@ impl PowerdSuspendManager {
             // Anonymous block to contain locked `self.context` which needs to be called multiple
             // times in the `if let` block below. Prevent deadlock by locking only once.
             let mut context_locked = self.context.lock().unwrap();
+            let tablet_mode = context_locked.tablet_mode;
+
             if let Some(adapter_suspend_dbus) = &mut context_locked.adapter_suspend_dbus {
                 let mut suspend_dbus_rpc = adapter_suspend_dbus.rpc.clone();
                 tokio::spawn(async move {
                     let result = suspend_dbus_rpc
                         .suspend(
-                            match suspend_imminent.get_reason() {
-                                SuspendImminent_Reason::IDLE => SuspendType::AllowWakeFromHid,
-                                SuspendImminent_Reason::LID_CLOSED => SuspendType::NoWakesAllowed,
-                                SuspendImminent_Reason::OTHER => SuspendType::Other,
+                            match (tablet_mode, suspend_imminent.get_reason()) {
+                                // No wakes allowed on tablet mode.
+                                (true, _) => SuspendType::NoWakesAllowed,
+
+                                // When not in tablet mode, choose wake type based on suspend
+                                // reason.
+                                (false, SuspendImminent_Reason::IDLE) => {
+                                    SuspendType::AllowWakeFromHid
+                                }
+                                (false, SuspendImminent_Reason::LID_CLOSED) => {
+                                    SuspendType::NoWakesAllowed
+                                }
+                                (false, SuspendImminent_Reason::OTHER) => SuspendType::Other,
                             },
                             suspend_imminent.get_suspend_id(),
                         )
@@ -481,11 +516,13 @@ impl PowerdSuspendManager {
     fn on_suspend_done(&mut self, suspend_done: SuspendDone) {
         // powerd is telling us that suspend is done (system has resumed), so we tell btadapterd
         // to resume too.
+        // powerd also sends the suspend done signal when the suspend is aborted. The suspend
+        // imminent signal is cancelled here, so the cleanup is done after the suspend is ready.
 
         log::debug!("SuspendDone received: {:?}", suspend_done);
 
         if self.context.lock().unwrap().pending_suspend_imminent.is_none() {
-            log::warn!("Receveid SuspendDone signal when there is no pending SuspendImminent");
+            log::warn!("Received SuspendDone signal when there is no pending SuspendImminent");
         }
 
         self.context.lock().unwrap().pending_suspend_imminent = None;

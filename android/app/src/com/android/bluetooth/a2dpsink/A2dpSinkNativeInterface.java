@@ -21,7 +21,9 @@ import android.util.Log;
 
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.flags.Flags;
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.Objects;
 
@@ -29,17 +31,13 @@ import java.util.Objects;
  * A2DP Sink Native Interface to/from JNI.
  */
 public class A2dpSinkNativeInterface {
-    private static final String TAG = "A2dpSinkNativeInterface";
-    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
+    private static final String TAG = A2dpSinkNativeInterface.class.getSimpleName();
     private AdapterService mAdapterService;
 
     @GuardedBy("INSTANCE_LOCK")
     private static A2dpSinkNativeInterface sInstance;
-    private static final Object INSTANCE_LOCK = new Object();
 
-    static {
-        classInitNative();
-    }
+    private static final Object INSTANCE_LOCK = new Object();
 
     private A2dpSinkNativeInterface() {
         mAdapterService = Objects.requireNonNull(AdapterService.getAdapterService(),
@@ -55,6 +53,14 @@ public class A2dpSinkNativeInterface {
                 sInstance = new A2dpSinkNativeInterface();
             }
             return sInstance;
+        }
+    }
+
+    /** Set singleton instance. */
+    @VisibleForTesting
+    public static void setInstance(A2dpSinkNativeInterface instance) {
+        synchronized (INSTANCE_LOCK) {
+            sInstance = instance;
         }
     }
 
@@ -79,7 +85,11 @@ public class A2dpSinkNativeInterface {
     }
 
     private byte[] getByteAddress(BluetoothDevice device) {
-        return mAdapterService.getByteIdentityAddress(device);
+        if (Flags.identityAddressNullIfUnknown()) {
+            return Utils.getByteBrEdrAddress(device);
+        } else {
+            return mAdapterService.getByteIdentityAddress(device);
+        }
     }
 
     /**
@@ -160,9 +170,7 @@ public class A2dpSinkNativeInterface {
     public void onConnectionStateChanged(byte[] address, int state) {
         StackEvent event =
                 StackEvent.connectionStateChanged(getDevice(address), state);
-        if (DBG) {
-            Log.d(TAG, "onConnectionStateChanged: " + event);
-        }
+        Log.d(TAG, "onConnectionStateChanged: " + event);
         sendMessageToService(event);
     }
 
@@ -171,9 +179,7 @@ public class A2dpSinkNativeInterface {
      */
     public void onAudioStateChanged(byte[] address, int state) {
         StackEvent event = StackEvent.audioStateChanged(getDevice(address), state);
-        if (DBG) {
-            Log.d(TAG, "onAudioStateChanged: " + event);
-        }
+        Log.d(TAG, "onAudioStateChanged: " + event);
         sendMessageToService(event);
     }
 
@@ -183,14 +189,11 @@ public class A2dpSinkNativeInterface {
     public void onAudioConfigChanged(byte[] address, int sampleRate, int channelCount) {
         StackEvent event = StackEvent.audioConfigChanged(
                 getDevice(address), sampleRate, channelCount);
-        if (DBG) {
-            Log.d(TAG, "onAudioConfigChanged: " + event);
-        }
+        Log.d(TAG, "onAudioConfigChanged: " + event);
         sendMessageToService(event);
     }
 
     // Native methods that call into the JNI interface
-    private static native void classInitNative();
     private native void initNative(int maxConnectedAudioDevices);
     private native void cleanupNative();
     private native boolean connectA2dpNative(byte[] address);

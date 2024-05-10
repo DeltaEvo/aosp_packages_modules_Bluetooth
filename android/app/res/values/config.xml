@@ -63,12 +63,13 @@
     <integer name="gatt_low_power_latency_secondary">15</integer>
     <!-- ============================================================ -->
 
-    <!-- Specifies latency parameters for high priority, balanced and low power
-         GATT configurations. These values represents the number of packets a
-         peripheral device is allowed to skip. -->
+    <!-- Specifies latency parameters for high priority, balanced, low power and
+         Digital Car Key-preferred GATT configurations. These values represent
+         the number of packets a peripheral device is allowed to skip. -->
     <integer name="gatt_high_priority_latency">0</integer>
     <integer name="gatt_balanced_priority_latency">0</integer>
     <integer name="gatt_low_power_latency">2</integer>
+    <integer name="gatt_dck_priority_latency">0</integer>
 
     <!-- Specifies the min/max subrate factor parameters for high priority,
          balanced and low power subrate request configurations. -->
@@ -162,17 +163,6 @@
     <!-- Package that is providing the exposure notification service -->
     <string name="exposure_notification_package">com.google.android.gms</string>
 
-    <!-- Enabling Gabeldorsche up to the scanning layer, including
-            - BLE scanning
-            - BLE advertising
-            - ACL connection management
-            - Controller information management
-            - HCI layer
-            - HAL interface layer
-            - Other required GD components like config storage
-     -->
-    <bool name="enable_gd_up_to_scanning_layer">true</bool>
-
     <!-- Package of fastpair service -->
     <string name="peripheral_link_package">com.google.android.gms</string>
     <!-- Service name of fastpair-->
@@ -190,4 +180,9 @@
 
     <!-- Boolean indicating if current platform supports HFP inband ringing -->
     <bool name="config_bluetooth_hfp_inband_ringing_support">true</bool>
+
+     <!-- Link used in airplane mode notification. -->
+    <string name="config_apmLearnMoreLink" translatable="false">
+            https://support.google.com/pixelphone/answer/12639358
+    </string>
 </resources>

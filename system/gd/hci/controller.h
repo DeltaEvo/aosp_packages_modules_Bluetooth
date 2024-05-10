@@ -16,27 +16,13 @@
 
 #pragma once
 
-#include "common/init_flags.h"
+#include <vector>
+
 #include "hci/address.h"
+#include "hci/controller_interface.h"
 #include "hci/hci_packets.h"
 #include "hci/le_rand_callback.h"
-#include "hci_controller_generated.h"
 #include "module.h"
-#include "os/handler.h"
-
-#define COD_MASK 0x07FF
-
-#define COD_UNCLASSIFIED ((0x1F) << 8)
-#define COD_HID_KEYBOARD 0x0540
-#define COD_HID_POINTING 0x0580
-#define COD_HID_COMBO 0x05C0
-#define COD_HID_MAJOR 0x0500
-#define COD_HID_MASK 0x0700
-#define COD_AV_HEADSETS 0x0404
-#define COD_AV_HANDSFREE 0x0408
-#define COD_AV_HEADPHONES 0x0418
-#define COD_AV_PORTABLE_AUDIO 0x041C
-#define COD_AV_HIFI_AUDIO 0x0428
 
 // TODO Remove this once all QTI specific hacks are removed.
 #define LMP_COMPID_QTI 0x001D
@@ -44,7 +30,7 @@
 namespace bluetooth {
 namespace hci {
 
-class Controller : public Module {
+class Controller : public Module, public ControllerInterface {
  public:
   Controller();
   Controller(const Controller&) = delete;
@@ -52,176 +38,167 @@ class Controller : public Module {
 
   virtual ~Controller();
 
-  using CompletedAclPacketsCallback =
-      common::ContextualCallback<void(uint16_t /* handle */, uint16_t /* num_packets */)>;
-  virtual void RegisterCompletedAclPacketsCallback(CompletedAclPacketsCallback cb);
+  virtual void RegisterCompletedAclPacketsCallback(CompletedAclPacketsCallback cb) override;
 
-  virtual void UnregisterCompletedAclPacketsCallback();
+  virtual void UnregisterCompletedAclPacketsCallback() override;
 
-  virtual void RegisterCompletedMonitorAclPacketsCallback(CompletedAclPacketsCallback cb);
-  virtual void UnregisterCompletedMonitorAclPacketsCallback();
+  virtual void RegisterCompletedMonitorAclPacketsCallback(CompletedAclPacketsCallback cb) override;
+  virtual void UnregisterCompletedMonitorAclPacketsCallback() override;
 
-  virtual std::string GetLocalName() const;
+  virtual std::string GetLocalName() const override;
 
-  virtual LocalVersionInformation GetLocalVersionInformation() const;
+  virtual LocalVersionInformation GetLocalVersionInformation() const override;
 
-  virtual bool SupportsSimplePairing() const;
-  virtual bool SupportsSecureConnections() const;
-  virtual bool SupportsSimultaneousLeBrEdr() const;
-  virtual bool SupportsInterlacedInquiryScan() const;
-  virtual bool SupportsRssiWithInquiryResults() const;
-  virtual bool SupportsExtendedInquiryResponse() const;
-  virtual bool SupportsRoleSwitch() const;
-  virtual bool Supports3SlotPackets() const;
-  virtual bool Supports5SlotPackets() const;
-  virtual bool SupportsClassic2mPhy() const;
-  virtual bool SupportsClassic3mPhy() const;
-  virtual bool Supports3SlotEdrPackets() const;
-  virtual bool Supports5SlotEdrPackets() const;
-  virtual bool SupportsSco() const;
-  virtual bool SupportsHv2Packets() const;
-  virtual bool SupportsHv3Packets() const;
-  virtual bool SupportsEv3Packets() const;
-  virtual bool SupportsEv4Packets() const;
-  virtual bool SupportsEv5Packets() const;
-  virtual bool SupportsEsco2mPhy() const;
-  virtual bool SupportsEsco3mPhy() const;
-  virtual bool Supports3SlotEscoEdrPackets() const;
-  virtual bool SupportsHoldMode() const;
-  virtual bool SupportsSniffMode() const;
-  virtual bool SupportsParkMode() const;
-  virtual bool SupportsNonFlushablePb() const;
-  virtual bool SupportsSniffSubrating() const;
-  virtual bool SupportsEncryptionPause() const;
-  virtual bool SupportsBle() const;
+  virtual bool SupportsSimplePairing() const override;
+  virtual bool SupportsSecureConnections() const override;
+  virtual bool SupportsSimultaneousLeBrEdr() const override;
+  virtual bool SupportsInterlacedInquiryScan() const override;
+  virtual bool SupportsRssiWithInquiryResults() const override;
+  virtual bool SupportsExtendedInquiryResponse() const override;
+  virtual bool SupportsRoleSwitch() const override;
+  virtual bool Supports3SlotPackets() const override;
+  virtual bool Supports5SlotPackets() const override;
+  virtual bool SupportsClassic2mPhy() const override;
+  virtual bool SupportsClassic3mPhy() const override;
+  virtual bool Supports3SlotEdrPackets() const override;
+  virtual bool Supports5SlotEdrPackets() const override;
+  virtual bool SupportsSco() const override;
+  virtual bool SupportsHv2Packets() const override;
+  virtual bool SupportsHv3Packets() const override;
+  virtual bool SupportsEv3Packets() const override;
+  virtual bool SupportsEv4Packets() const override;
+  virtual bool SupportsEv5Packets() const override;
+  virtual bool SupportsEsco2mPhy() const override;
+  virtual bool SupportsEsco3mPhy() const override;
+  virtual bool Supports3SlotEscoEdrPackets() const override;
+  virtual bool SupportsHoldMode() const override;
+  virtual bool SupportsSniffMode() const override;
+  virtual bool SupportsParkMode() const override;
+  virtual bool SupportsNonFlushablePb() const override;
+  virtual bool SupportsSniffSubrating() const override;
+  virtual bool SupportsEncryptionPause() const override;
+  virtual bool SupportsBle() const override;
 
-  virtual bool SupportsBleEncryption() const;
-  virtual bool SupportsBleConnectionParametersRequest() const;
-  virtual bool SupportsBleExtendedReject() const;
-  virtual bool SupportsBlePeripheralInitiatedFeaturesExchange() const;
-  virtual bool SupportsBlePing() const;
-  virtual bool SupportsBleDataPacketLengthExtension() const;
-  virtual bool SupportsBlePrivacy() const;
-  virtual bool SupportsBleExtendedScannerFilterPolicies() const;
-  virtual bool SupportsBle2mPhy() const;
-  virtual bool SupportsBleStableModulationIndexTx() const;
-  virtual bool SupportsBleStableModulationIndexRx() const;
-  virtual bool SupportsBleCodedPhy() const;
-  virtual bool SupportsBleExtendedAdvertising() const;
-  virtual bool SupportsBlePeriodicAdvertising() const;
-  virtual bool SupportsBleChannelSelectionAlgorithm2() const;
-  virtual bool SupportsBlePowerClass1() const;
-  virtual bool SupportsBleMinimumUsedChannels() const;
-  virtual bool SupportsBleConnectionCteRequest() const;
-  virtual bool SupportsBleConnectionCteResponse() const;
-  virtual bool SupportsBleConnectionlessCteTransmitter() const;
-  virtual bool SupportsBleConnectionlessCteReceiver() const;
-  virtual bool SupportsBleAntennaSwitchingDuringCteTx() const;
-  virtual bool SupportsBleAntennaSwitchingDuringCteRx() const;
-  virtual bool SupportsBleReceivingConstantToneExtensions() const;
-  virtual bool SupportsBlePeriodicAdvertisingSyncTransferSender() const;
-  virtual bool SupportsBlePeriodicAdvertisingSyncTransferRecipient() const;
-  virtual bool SupportsBleSleepClockAccuracyUpdates() const;
-  virtual bool SupportsBleRemotePublicKeyValidation() const;
-  virtual bool SupportsBleConnectedIsochronousStreamCentral() const;
-  virtual bool SupportsBleConnectedIsochronousStreamPeripheral() const;
-  virtual bool SupportsBleIsochronousBroadcaster() const;
-  virtual bool SupportsBleSynchronizedReceiver() const;
-  virtual bool SupportsBleIsochronousChannelsHostSupport() const;
-  virtual bool SupportsBlePowerControlRequest() const;
-  virtual bool SupportsBlePowerChangeIndication() const;
-  virtual bool SupportsBlePathLossMonitoring() const;
-  virtual bool SupportsBlePeriodicAdvertisingAdi() const;
-  virtual bool SupportsBleConnectionSubrating() const;
-  virtual bool SupportsBleConnectionSubratingHost() const;
+  virtual bool SupportsBleEncryption() const override;
+  virtual bool SupportsBleConnectionParametersRequest() const override;
+  virtual bool SupportsBleExtendedReject() const override;
+  virtual bool SupportsBlePeripheralInitiatedFeaturesExchange() const override;
+  virtual bool SupportsBlePing() const override;
+  virtual bool SupportsBleDataPacketLengthExtension() const override;
+  virtual bool SupportsBlePrivacy() const override;
+  virtual bool SupportsBleExtendedScannerFilterPolicies() const override;
+  virtual bool SupportsBle2mPhy() const override;
+  virtual bool SupportsBleStableModulationIndexTx() const override;
+  virtual bool SupportsBleStableModulationIndexRx() const override;
+  virtual bool SupportsBleCodedPhy() const override;
+  virtual bool SupportsBleExtendedAdvertising() const override;
+  virtual bool SupportsBlePeriodicAdvertising() const override;
+  virtual bool SupportsBleChannelSelectionAlgorithm2() const override;
+  virtual bool SupportsBlePowerClass1() const override;
+  virtual bool SupportsBleMinimumUsedChannels() const override;
+  virtual bool SupportsBleConnectionCteRequest() const override;
+  virtual bool SupportsBleConnectionCteResponse() const override;
+  virtual bool SupportsBleConnectionlessCteTransmitter() const override;
+  virtual bool SupportsBleConnectionlessCteReceiver() const override;
+  virtual bool SupportsBleAntennaSwitchingDuringCteTx() const override;
+  virtual bool SupportsBleAntennaSwitchingDuringCteRx() const override;
+  virtual bool SupportsBleReceivingConstantToneExtensions() const override;
+  virtual bool SupportsBlePeriodicAdvertisingSyncTransferSender() const override;
+  virtual bool SupportsBlePeriodicAdvertisingSyncTransferRecipient() const override;
+  virtual bool SupportsBleSleepClockAccuracyUpdates() const override;
+  virtual bool SupportsBleRemotePublicKeyValidation() const override;
+  virtual bool SupportsBleConnectedIsochronousStreamCentral() const override;
+  virtual bool SupportsBleConnectedIsochronousStreamPeripheral() const override;
+  virtual bool SupportsBleIsochronousBroadcaster() const override;
+  virtual bool SupportsBleSynchronizedReceiver() const override;
+  virtual bool SupportsBleIsochronousChannelsHostSupport() const override;
+  virtual bool SupportsBlePowerControlRequest() const override;
+  virtual bool SupportsBlePowerChangeIndication() const override;
+  virtual bool SupportsBlePathLossMonitoring() const override;
+  virtual bool SupportsBlePeriodicAdvertisingAdi() const override;
+  virtual bool SupportsBleConnectionSubrating() const override;
+  virtual bool SupportsBleConnectionSubratingHost() const override;
 
-  virtual uint16_t GetAclPacketLength() const;
+  virtual uint16_t GetAclPacketLength() const override;
 
-  virtual uint16_t GetNumAclPacketBuffers() const;
+  virtual uint16_t GetNumAclPacketBuffers() const override;
 
-  virtual uint8_t GetScoPacketLength() const;
+  virtual uint8_t GetScoPacketLength() const override;
 
-  virtual uint16_t GetNumScoPacketBuffers() const;
+  virtual uint16_t GetNumScoPacketBuffers() const override;
 
-  virtual Address GetMacAddress() const;
+  virtual Address GetMacAddress() const override;
 
-  virtual void SetEventMask(uint64_t event_mask);
+  virtual void SetEventMask(uint64_t event_mask) override;
 
-  virtual void Reset();
+  virtual void Reset() override;
 
-  virtual void LeRand(LeRandCallback cb);
+  virtual void LeRand(LeRandCallback cb) override;
 
-  virtual void AllowWakeByHid();
+  virtual void SetEventFilterClearAll() override;
 
-  virtual void SetEventFilterClearAll();
+  virtual void SetEventFilterInquiryResultAllDevices() override;
 
-  virtual void SetEventFilterInquiryResultAllDevices();
+  virtual void SetEventFilterInquiryResultClassOfDevice(
+      ClassOfDevice class_of_device, ClassOfDevice class_of_device_mask) override;
 
-  virtual void SetEventFilterInquiryResultClassOfDevice(ClassOfDevice class_of_device,
-                                                        ClassOfDevice class_of_device_mask);
+  virtual void SetEventFilterInquiryResultAddress(Address address) override;
 
-  virtual void SetEventFilterInquiryResultAddress(Address address);
+  virtual void SetEventFilterConnectionSetupAllDevices(AutoAcceptFlag auto_accept_flag) override;
 
-  virtual void SetEventFilterConnectionSetupAllDevices(AutoAcceptFlag auto_accept_flag);
+  virtual void SetEventFilterConnectionSetupClassOfDevice(
+      ClassOfDevice class_of_device,
+      ClassOfDevice class_of_device_mask,
+      AutoAcceptFlag auto_accept_flag) override;
 
-  virtual void SetEventFilterConnectionSetupClassOfDevice(ClassOfDevice class_of_device,
-                                                          ClassOfDevice class_of_device_mask,
-                                                          AutoAcceptFlag auto_accept_flag);
+  virtual void SetEventFilterConnectionSetupAddress(
+      Address address, AutoAcceptFlag auto_accept_flag) override;
 
-  virtual void SetEventFilterConnectionSetupAddress(Address address, AutoAcceptFlag auto_accept_flag);
+  virtual void WriteLocalName(std::string local_name) override;
 
-  virtual void WriteLocalName(std::string local_name);
-
-  virtual void HostBufferSize(uint16_t host_acl_data_packet_length, uint8_t host_synchronous_data_packet_length,
-                              uint16_t host_total_num_acl_data_packets,
-                              uint16_t host_total_num_synchronous_data_packets);
+  virtual void HostBufferSize(
+      uint16_t host_acl_data_packet_length,
+      uint8_t host_synchronous_data_packet_length,
+      uint16_t host_total_num_acl_data_packets,
+      uint16_t host_total_num_synchronous_data_packets) override;
 
   // LE controller commands
-  virtual void LeSetEventMask(uint64_t le_event_mask);
+  virtual void LeSetEventMask(uint64_t le_event_mask) override;
 
-  virtual LeBufferSize GetLeBufferSize() const;
+  virtual LeBufferSize GetLeBufferSize() const override;
 
-  virtual uint64_t GetLeSupportedStates() const;
+  virtual uint64_t GetLeSupportedStates() const override;
 
-  virtual LeBufferSize GetControllerIsoBufferSize() const;
+  virtual LeBufferSize GetControllerIsoBufferSize() const override;
 
-  virtual uint64_t GetControllerLeLocalSupportedFeatures() const;
+  virtual uint64_t GetControllerLeLocalSupportedFeatures() const override;
 
-  virtual uint8_t GetLeFilterAcceptListSize() const;
+  virtual uint8_t GetLeFilterAcceptListSize() const override;
 
-  virtual uint8_t GetLeResolvingListSize() const;
+  virtual uint8_t GetLeResolvingListSize() const override;
 
-  virtual LeMaximumDataLength GetLeMaximumDataLength() const;
+  virtual LeMaximumDataLength GetLeMaximumDataLength() const override;
 
-  virtual uint16_t GetLeMaximumAdvertisingDataLength() const;
+  virtual uint16_t GetLeMaximumAdvertisingDataLength() const override;
 
-  virtual uint16_t GetLeSuggestedDefaultDataLength() const;
+  virtual uint16_t GetLeSuggestedDefaultDataLength() const override;
 
-  virtual uint8_t GetLeNumberOfSupportedAdverisingSets() const;
+  virtual uint8_t GetLeNumberOfSupportedAdverisingSets() const override;
 
-  virtual uint8_t GetLePeriodicAdvertiserListSize() const;
+  virtual uint8_t GetLePeriodicAdvertiserListSize() const override;
 
-  struct VendorCapabilities {
-    uint8_t is_supported_;
-    uint8_t max_advt_instances_;
-    uint8_t offloaded_resolution_of_private_address_;
-    uint16_t total_scan_results_storage_;
-    uint8_t max_irk_list_sz_;
-    uint8_t filtering_support_;
-    uint8_t max_filter_;
-    uint8_t activity_energy_info_support_;
-    uint16_t version_supported_;
-    uint16_t total_num_of_advt_tracked_;
-    uint8_t extended_scan_support_;
-    uint8_t debug_logging_supported_;
-    uint8_t le_address_generation_offloading_support_;
-    uint32_t a2dp_source_offload_capability_mask_;
-    uint8_t bluetooth_quality_report_support_;
-  };
+  // 7.4.8 Read Local Supported Codecs command v1 only returns codecs on the BR/EDR transport
+  virtual std::vector<uint8_t> GetLocalSupportedBrEdrCodecIds() const override;
 
-  virtual VendorCapabilities GetVendorCapabilities() const;
+  virtual VendorCapabilities GetVendorCapabilities() const override;
 
-  virtual bool IsSupported(OpCode op_code) const;
+  virtual uint32_t GetDabSupportedCodecs() const override;
+  virtual const std::array<DynamicAudioBufferCodecCapability, 32>& GetDabCodecCapabilities()
+      const override;
+
+  virtual void SetDabAudioBufferTime(uint16_t buffer_time_ms) override;
+
+  virtual bool IsSupported(OpCode op_code) const override;
 
   static const ModuleFactory Factory;
 
@@ -231,25 +208,11 @@ class Controller : public Module {
   static constexpr uint64_t kLeEventMask53 = 0x00000007ffffffff;
   static constexpr uint64_t kLeEventMask52 = 0x00000003ffffffff;
   static constexpr uint64_t kLeEventMask51 = 0x0000000000ffffff;
+  static constexpr uint64_t kLeEventMask50 = 0x00000000000fffff;
   static constexpr uint64_t kLeEventMask42 = 0x00000000000003ff;
   static constexpr uint64_t kLeEventMask41 = 0x000000000000003f;
 
-  static uint64_t MaskLeEventMask(HciVersion version, uint64_t mask) {
-    if (!common::init_flags::subrating_is_enabled()) {
-      mask = mask & ~(static_cast<uint64_t>(LLFeaturesBits::CONNECTION_SUBRATING_HOST_SUPPORT));
-    }
-    if (version >= HciVersion::V_5_3) {
-      return mask;
-    } else if (version >= HciVersion::V_5_2) {
-      return mask & kLeEventMask52;
-    } else if (version >= HciVersion::V_5_1) {
-      return mask & kLeEventMask51;
-    } else if (version >= HciVersion::V_4_2) {
-      return mask & kLeEventMask42;
-    } else {
-      return mask & kLeEventMask41;
-    }
-  }
+  static uint64_t MaskLeEventMask(HciVersion version, uint64_t mask);
 
  protected:
   void ListDependencies(ModuleList* list) const override;

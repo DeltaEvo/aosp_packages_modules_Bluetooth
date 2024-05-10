@@ -15,16 +15,22 @@ cc_fuzz {
         "fuzz_alarm.cc",
     ],
     shared_libs: [
+        "libbase",
+        "libcutils",
         "liblog",
         "libprotobuf-cpp-lite",
-        "libcutils",
-        "libcrypto",
+        "libstatssocket",
     ],
     static_libs: [
+        "libbluetooth_log",
         "libbt-common",
-        "libbt-protos-lite",
+        "libchrome",
         "libgmock",
         "libosi",
     ],
-    cflags: [ "-Wno-unused-function" ],
+    cflags: [
+        "-Wno-unused-function",
+        "-Wno-unused-parameter",
+    ],
+    header_libs: ["libbluetooth_headers"],
 }

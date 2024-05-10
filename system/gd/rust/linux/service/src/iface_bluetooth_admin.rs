@@ -4,7 +4,7 @@ use dbus::arg::RefArg;
 use dbus::Path;
 use dbus_macros::{dbus_method, dbus_propmap, dbus_proxy_obj, generate_dbus_exporter};
 
-use dbus_projection::{dbus_generated, DisconnectWatcher};
+use dbus_projection::prelude::*;
 
 use crate::dbus_arg::{DBusArg, DBusArgError, RefArgToRust};
 
@@ -26,13 +26,13 @@ pub struct PolicyEffectDBus {
 #[dbus_proxy_obj(AdminPolicyCallback, "org.chromium.bluetooth.AdminPolicyCallback")]
 impl IBluetoothAdminPolicyCallback for IBluetoothAdminPolicyCallbackDBus {
     #[dbus_method("OnServiceAllowlistChanged")]
-    fn on_service_allowlist_changed(&self, allowlist: Vec<Uuid128Bit>) {
+    fn on_service_allowlist_changed(&mut self, allowlist: Vec<Uuid128Bit>) {
         dbus_generated!()
     }
 
     #[dbus_method("OnDevicePolicyEffectChanged")]
     fn on_device_policy_effect_changed(
-        &self,
+        &mut self,
         device: BluetoothDevice,
         new_policy_effect: Option<PolicyEffect>,
     ) {

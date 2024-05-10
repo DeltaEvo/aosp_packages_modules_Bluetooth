@@ -38,6 +38,16 @@ public class Metadata implements Cloneable {
     public String duration;
     public Image image;
 
+    // Media ID is an implementation detail and doesn't need to be localized
+    public static final String EMPTY_MEDIA_ID = "Not Provided";
+    public static final String EMPTY_TITLE = "Not Provided";
+    public static final String EMPTY_ARTIST = "";
+    public static final String EMPTY_ALBUM = "";
+    public static final String EMPTY_TRACK_NUM = "1";
+    public static final String EMPTY_NUM_TRACKS = "1";
+    public static final String EMPTY_GENRE = "";
+    public static final String EMPTY_DURATION = "0";
+
     @Override
     public Metadata clone() {
         Metadata data = new Metadata();
@@ -64,6 +74,14 @@ public class Metadata implements Cloneable {
         if (!Objects.equals(album, m.album)) return false;
         if (!Objects.equals(trackNum, m.trackNum)) return false;
         if (!Objects.equals(numTracks, m.numTracks)) return false;
+        if (!Objects.equals(genre, m.genre)) return false;
+        if (!Objects.equals(duration, m.duration)) return false;
+        // Actual image comparisons have shown to be very expensive. Since it's rare that
+        // an application changes the cover artwork between multiple images once it's not
+        // null anymore, we just look for changes between "something" and "nothing".
+        if ((image == null && m.image != null) || (image != null && m.image == null)) {
+            return false;
+        }
         return true;
     }
 
@@ -78,6 +96,45 @@ public class Metadata implements Cloneable {
         return "{ mediaId=\"" + mediaId + "\" title=\"" + title + "\" artist=\"" + artist
                 + "\" album=\"" + album + "\" duration=" + duration
                 + " trackPosition=" + trackNum + "/" + numTracks + " image=" + image + " }";
+    }
+
+    /**
+     * Replaces default values by {@code filledMetadata} non default values.
+     */
+    public void replaceDefaults(Metadata filledMetadata) {
+        if (filledMetadata == null) {
+            return;
+        }
+
+        Metadata empty = Util.empty_data();
+
+        if (empty.mediaId.equals(mediaId)) {
+            mediaId = filledMetadata.mediaId;
+        }
+        if (empty.title.equals(title)) {
+            title = filledMetadata.title;
+        }
+        if (empty.artist.equals(artist)) {
+            artist = filledMetadata.artist;
+        }
+        if (empty.album.equals(album)) {
+            album = filledMetadata.album;
+        }
+        if (empty.trackNum.equals(trackNum)) {
+            trackNum = filledMetadata.trackNum;
+        }
+        if (empty.numTracks.equals(numTracks)) {
+            numTracks = filledMetadata.numTracks;
+        }
+        if (empty.genre.equals(genre)) {
+            genre = filledMetadata.genre;
+        }
+        if (empty.duration.equals(duration)) {
+            duration = filledMetadata.duration;
+        }
+        if (image == null) {
+            image = filledMetadata.image;
+        }
     }
 
     /**
@@ -235,21 +292,19 @@ public class Metadata implements Cloneable {
          */
         public Builder useDefaults() {
             if (mMetadata.mediaId == null) {
-                mMetadata.mediaId =
-                        mContext != null ? mContext.getString(R.string.not_provided)
-                                : "Not Provided";
+                mMetadata.mediaId = EMPTY_MEDIA_ID;
             }
             if (mMetadata.title == null) {
                 mMetadata.title =
                         mContext != null ? mContext.getString(R.string.not_provided)
-                                : "Not Provided";
+                                : EMPTY_TITLE;
             }
-            if (mMetadata.artist == null) mMetadata.artist = "";
-            if (mMetadata.album == null) mMetadata.album = "";
-            if (mMetadata.trackNum == null) mMetadata.trackNum = "1";
-            if (mMetadata.numTracks == null) mMetadata.numTracks = "1";
-            if (mMetadata.genre == null) mMetadata.genre = "";
-            if (mMetadata.duration == null) mMetadata.duration = "0";
+            if (mMetadata.artist == null) mMetadata.artist = EMPTY_ARTIST;
+            if (mMetadata.album == null) mMetadata.album = EMPTY_ALBUM;
+            if (mMetadata.trackNum == null) mMetadata.trackNum = EMPTY_TRACK_NUM;
+            if (mMetadata.numTracks == null) mMetadata.numTracks = EMPTY_NUM_TRACKS;
+            if (mMetadata.genre == null) mMetadata.genre = EMPTY_GENRE;
+            if (mMetadata.duration == null) mMetadata.duration = EMPTY_DURATION;
             // The default value chosen for an image is null. Update here if we pick something else
             return this;
         }

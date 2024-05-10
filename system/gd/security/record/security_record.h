@@ -18,13 +18,8 @@
 
 #pragma once
 
-#include <storage/device.h>
-#include <memory>
-#include <utility>
-
-#include "crypto_toolbox/crypto_toolbox.h"
 #include "hci/address_with_type.h"
-#include "storage/device.h"
+#include "hci/octets.h"
 
 namespace bluetooth {
 namespace security {
@@ -59,12 +54,12 @@ class SecurityRecord {
   }
 
   std::array<uint8_t, 16> GetLinkKey() {
-    ASSERT(IsClassicLinkKeyValid());
+    log::assert_that(IsClassicLinkKeyValid(), "assert failed: IsClassicLinkKeyValid()");
     return link_key_;
   }
 
   hci::KeyType GetKeyType() {
-    ASSERT(IsClassicLinkKeyValid());
+    log::assert_that(IsClassicLinkKeyValid(), "assert failed: IsClassicLinkKeyValid()");
     return key_type_;
   }
 
@@ -126,15 +121,15 @@ class SecurityRecord {
   /* Identity Address */
   std::optional<hci::AddressWithType> identity_address_;
 
-  std::optional<crypto_toolbox::Octet16> remote_ltk;
+  std::optional<hci::Octet16> remote_ltk;
   uint8_t key_size;
   uint8_t security_level;
   std::optional<uint16_t> remote_ediv;
   std::optional<std::array<uint8_t, 8>> remote_rand;
-  std::optional<crypto_toolbox::Octet16> remote_irk;
-  std::optional<crypto_toolbox::Octet16> remote_signature_key;
+  std::optional<hci::Octet16> remote_irk;
+  std::optional<hci::Octet16> remote_signature_key;
 
-  std::optional<crypto_toolbox::Octet16> local_ltk;
+  std::optional<hci::Octet16> local_ltk;
   std::optional<uint16_t> local_ediv;
   std::optional<std::array<uint8_t, 8>> local_rand;
 };

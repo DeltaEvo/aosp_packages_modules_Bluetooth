@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -23,6 +24,10 @@
 
 namespace bluetooth {
 namespace os {
+
+/* System Property to indicate if the dual mode audio feature is enabled */
+static const std::string kIsDualModeAudioEnabledProperty =
+    "persist.bluetooth.enable_dual_mode_audio";
 
 // Get |property| keyed system property from supported platform, return std::nullopt if the property does not exist
 // or if the platform does not support system property

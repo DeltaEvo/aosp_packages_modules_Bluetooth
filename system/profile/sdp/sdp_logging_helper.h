@@ -16,23 +16,20 @@
 
 #pragma once
 
+#include <bluetooth/log.h>
+
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <type_traits>
 
-#include "bt_trace.h"
+#include "internal_include/bt_trace.h"
+#include "macros.h"
 #include "sdp_common.h"
 
 namespace bluetooth {
 namespace sdp {
-
-#ifndef CASE_RETURN_TEXT
-#define CASE_RETURN_TEXT(code) \
-  case code:                   \
-    return #code
-#endif
 
 inline std::string PduIdText(const PduId& id) {
   switch (id) {
@@ -121,3 +118,14 @@ inline std::ostream& operator<<(std::ostream& os, const DataElementSize& size) {
 
 }  // namespace sdp
 }  // namespace bluetooth
+
+namespace fmt {
+template <>
+struct formatter<bluetooth::sdp::PduId> : ostream_formatter {};
+template <>
+struct formatter<bluetooth::sdp::AttributeId> : ostream_formatter {};
+template <>
+struct formatter<bluetooth::sdp::DataElementType> : ostream_formatter {};
+template <>
+struct formatter<bluetooth::sdp::DataElementSize> : ostream_formatter {};
+}  // namespace fmt

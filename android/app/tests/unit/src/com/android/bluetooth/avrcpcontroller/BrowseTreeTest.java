@@ -20,10 +20,13 @@ import static com.google.common.truth.Truth.assertThat;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.platform.test.flag.junit.SetFlagsRule;
 
 import com.android.bluetooth.avrcpcontroller.BrowseTree.BrowseNode;
+import com.android.bluetooth.flags.Flags;
 
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 
 import java.util.Set;
@@ -32,6 +35,8 @@ public class BrowseTreeTest {
     private static final String ILLEGAL_ID = "illegal_id";
     private static final String TEST_HANDLE = "test_handle";
     private static final String TEST_NODE_ID = "test_node_id";
+
+    @Rule public final SetFlagsRule mSetFlagsRule = new SetFlagsRule();
 
     private final byte[] mTestAddress = new byte[]{01, 01, 01, 01, 01, 01};
     private BluetoothAdapter mAdapter;
@@ -90,11 +95,43 @@ public class BrowseTreeTest {
     }
 
     @Test
-    public void findBrowseNodeByID() {
-        BrowseTree browseTree = new BrowseTree(mTestDevice);
+    public void sameDeviceDifferentBrowseTrees_uniqueMediaIds() {
+        mSetFlagsRule.enableFlags(Flags.FLAG_RANDOMIZE_DEVICE_LEVEL_MEDIA_IDS);
+        BrowseTree browseTree1 = new BrowseTree(mTestDevice);
+        BrowseTree browseTree2 = new BrowseTree(mTestDevice);
 
-        assertThat(browseTree.findBrowseNodeByID(ILLEGAL_ID)).isNull();
+        String mediaId1 = browseTree1.mRootNode.getID();
+        String mediaId2 = browseTree2.mRootNode.getID();
+
+        assertThat(mediaId1).isNotEqualTo(mediaId2);
+    }
+
+    @Test
+    public void findBrowseNodeByIDForRoot() {
+        BrowseTree browseTree = new BrowseTree(null);
         assertThat(browseTree.findBrowseNodeByID(BrowseTree.ROOT)).isEqualTo(browseTree.mRootNode);
+    }
+
+    @Test
+    public void findBrowseNodeByIDForDevice() {
+        mSetFlagsRule.disableFlags(Flags.FLAG_RANDOMIZE_DEVICE_LEVEL_MEDIA_IDS);
+        BrowseTree browseTree = new BrowseTree(mTestDevice);
+        final String deviceId = BrowseTree.ROOT + mTestDevice.getAddress().toString();
+        assertThat(browseTree.findBrowseNodeByID(deviceId)).isEqualTo(browseTree.mRootNode);
+    }
+
+    @Test
+    public void findBrowseNodeByIDForDevice_flagEnabled() {
+        mSetFlagsRule.enableFlags(Flags.FLAG_RANDOMIZE_DEVICE_LEVEL_MEDIA_IDS);
+        BrowseTree browseTree = new BrowseTree(mTestDevice);
+        final String deviceId = browseTree.mRootNode.getID();
+        assertThat(browseTree.findBrowseNodeByID(deviceId)).isEqualTo(browseTree.mRootNode);
+    }
+
+    @Test
+    public void findBrowseNodeByIDForIllegalId() {
+        BrowseTree browseTree = new BrowseTree(mTestDevice);
+        assertThat(browseTree.findBrowseNodeByID(ILLEGAL_ID)).isNull();
     }
 
     @Test
@@ -104,6 +141,14 @@ public class BrowseTreeTest {
         assertThat(browseTree.setCurrentBrowsedFolder(ILLEGAL_ID)).isFalse();
         assertThat(browseTree.setCurrentBrowsedFolder(BrowseTree.NOW_PLAYING_PREFIX)).isTrue();
         assertThat(browseTree.getCurrentBrowsedFolder()).isEqualTo(browseTree.mNowPlayingNode);
+    }
+
+    @Test
+    public void findBrowseNodeByIDForDevice_withRandomDeviceID_nodeIsFound() {
+        mSetFlagsRule.enableFlags(Flags.FLAG_RANDOMIZE_DEVICE_LEVEL_MEDIA_IDS);
+        BrowseTree browseTree = new BrowseTree(mTestDevice);
+        final String deviceId = browseTree.mRootNode.getID();
+        assertThat(browseTree.findBrowseNodeByID(deviceId)).isEqualTo(browseTree.mRootNode);
     }
 
     @Test
@@ -196,7 +241,7 @@ public class BrowseTreeTest {
     @Test
     public void toString_returnsSizeInfo() {
         BrowseTree browseTree = new BrowseTree(mTestDevice);
-
-        assertThat(browseTree.toString()).isEqualTo("Size: " + browseTree.mBrowseMap.size());
+        assertThat(browseTree.toString()).isEqualTo(
+                "[BrowseTree size=" + browseTree.mBrowseMap.size() + "]");
     }
 }

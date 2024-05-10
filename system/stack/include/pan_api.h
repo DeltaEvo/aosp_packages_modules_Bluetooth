@@ -25,10 +25,12 @@
 #define PAN_API_H
 
 #include <base/strings/stringprintf.h>
+#include <bluetooth/log.h>
 
 #include <cstdint>
 
 #include "bnep_api.h"
+#include "macros.h"
 #include "stack/include/bt_hdr.h"
 #include "types/raw_address.h"
 
@@ -97,10 +99,6 @@ typedef enum : uint8_t {
   PAN_HOTSPOT_DISABLED = 20,              /* Hotspot disabled             */
 } tPAN_RESULT;
 
-#define CASE_RETURN_TEXT(code) \
-  case code:                   \
-    return #code
-
 inline const std::string pan_result_text(const tPAN_RESULT& result) {
   switch (result) {
     CASE_RETURN_TEXT(PAN_SUCCESS);
@@ -128,8 +126,6 @@ inline const std::string pan_result_text(const tPAN_RESULT& result) {
       return base::StringPrintf("UNKNOWN[%hhu]", result);
   }
 }
-
-#undef CASE_RETURN_TEXT
 
 /*****************************************************************
  *       Callback Function Prototypes
@@ -253,7 +249,7 @@ typedef struct {
  * Returns          none
  *
  ******************************************************************************/
-extern void PAN_Register(tPAN_REGISTER* p_register);
+void PAN_Register(tPAN_REGISTER* p_register);
 
 /*******************************************************************************
  *
@@ -267,7 +263,7 @@ extern void PAN_Register(tPAN_REGISTER* p_register);
  * Returns          none
  *
  ******************************************************************************/
-extern void PAN_Deregister(void);
+void PAN_Deregister(void);
 
 /*******************************************************************************
  *
@@ -293,8 +289,8 @@ extern void PAN_Deregister(void);
  *                  PAN_FAILURE     - if the role is not valid
  *
  ******************************************************************************/
-extern tPAN_RESULT PAN_SetRole(uint8_t role, std::string user_name,
-                               std::string nap_name);
+tPAN_RESULT PAN_SetRole(uint8_t role, std::string user_name,
+                        std::string nap_name);
 
 /*******************************************************************************
  *
@@ -318,8 +314,8 @@ extern tPAN_RESULT PAN_SetRole(uint8_t role, std::string user_name,
  *                                     allowed at that point of time
  *
  ******************************************************************************/
-extern tPAN_RESULT PAN_Connect(const RawAddress& rem_bda, tPAN_ROLE src_role,
-                               tPAN_ROLE dst_role, uint16_t* handle);
+tPAN_RESULT PAN_Connect(const RawAddress& rem_bda, tPAN_ROLE src_role,
+                        tPAN_ROLE dst_role, uint16_t* handle);
 
 /*******************************************************************************
  *
@@ -334,7 +330,7 @@ extern tPAN_RESULT PAN_Connect(const RawAddress& rem_bda, tPAN_ROLE src_role,
  *                                           there is an error in disconnecting
  *
  ******************************************************************************/
-extern tPAN_RESULT PAN_Disconnect(uint16_t handle);
+tPAN_RESULT PAN_Disconnect(uint16_t handle);
 
 /*******************************************************************************
  *
@@ -359,9 +355,9 @@ extern tPAN_RESULT PAN_Disconnect(uint16_t handle);
  *                                           there is an error in sending data
  *
  ******************************************************************************/
-extern tPAN_RESULT PAN_Write(uint16_t handle, const RawAddress& dst,
-                             const RawAddress& src, uint16_t protocol,
-                             uint8_t* p_data, uint16_t len, bool ext);
+tPAN_RESULT PAN_Write(uint16_t handle, const RawAddress& dst,
+                      const RawAddress& src, uint16_t protocol, uint8_t* p_data,
+                      uint16_t len, bool ext);
 
 /*******************************************************************************
  *
@@ -385,9 +381,9 @@ extern tPAN_RESULT PAN_Write(uint16_t handle, const RawAddress& dst,
  *                                           there is an error in sending data
  *
  ******************************************************************************/
-extern tPAN_RESULT PAN_WriteBuf(uint16_t handle, const RawAddress& dst,
-                                const RawAddress& src, uint16_t protocol,
-                                BT_HDR* p_buf, bool ext);
+tPAN_RESULT PAN_WriteBuf(uint16_t handle, const RawAddress& dst,
+                         const RawAddress& src, uint16_t protocol,
+                         BT_HDR* p_buf, bool ext);
 
 /*******************************************************************************
  *
@@ -405,9 +401,9 @@ extern tPAN_RESULT PAN_WriteBuf(uint16_t handle, const RawAddress& dst,
  *                  PAN_FAILURE     if connection not found or error in setting
  *
  ******************************************************************************/
-extern tPAN_RESULT PAN_SetProtocolFilters(uint16_t handle, uint16_t num_filters,
-                                          uint16_t* p_start_array,
-                                          uint16_t* p_end_array);
+tPAN_RESULT PAN_SetProtocolFilters(uint16_t handle, uint16_t num_filters,
+                                   uint16_t* p_start_array,
+                                   uint16_t* p_end_array);
 
 /*******************************************************************************
  *
@@ -427,22 +423,9 @@ extern tPAN_RESULT PAN_SetProtocolFilters(uint16_t handle, uint16_t num_filters,
  *                  PAN_FAILURE     if connection not found or error in setting
  *
  ******************************************************************************/
-extern tPAN_RESULT PAN_SetMulticastFilters(uint16_t handle,
-                                           uint16_t num_mcast_filters,
-                                           uint8_t* p_start_array,
-                                           uint8_t* p_end_array);
-
-/*******************************************************************************
- *
- * Function         PAN_SetTraceLevel
- *
- * Description      This function sets the trace level for PAN. If called with
- *                  a value of 0xFF, it simply reads the current trace level.
- *
- * Returns          the new (current) trace level
- *
- ******************************************************************************/
-extern uint8_t PAN_SetTraceLevel(uint8_t new_level);
+tPAN_RESULT PAN_SetMulticastFilters(uint16_t handle, uint16_t num_mcast_filters,
+                                    uint8_t* p_start_array,
+                                    uint8_t* p_end_array);
 
 /*******************************************************************************
  *
@@ -455,8 +438,13 @@ extern uint8_t PAN_SetTraceLevel(uint8_t new_level);
  * Returns          void
  *
  ******************************************************************************/
-extern void PAN_Init(void);
+void PAN_Init(void);
 
-extern void PAN_Dumpsys(int fd);
+void PAN_Dumpsys(int fd);
+
+namespace fmt {
+template <>
+struct formatter<tPAN_RESULT> : enum_formatter<tPAN_RESULT> {};
+}  // namespace fmt
 
 #endif /* PAN_API_H */

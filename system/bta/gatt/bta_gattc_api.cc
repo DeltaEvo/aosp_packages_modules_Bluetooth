@@ -25,25 +25,23 @@
 #define LOG_TAG "bta_gattc_api"
 
 #include <base/functional/bind.h>
-#include <base/logging.h>
+#include <bluetooth/log.h>
 
 #include <ios>
 #include <list>
-#include <memory>
 #include <vector>
 
-#include "bt_target.h"  // Must be first to define build configuration
 #include "bta/gatt/bta_gattc_int.h"
-#include "device/include/controller.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/btu.h"  // do_in_main_thread
+#include "stack/include/main_thread.h"
 #include "types/bluetooth/uuid.h"
 #include "types/bt_transport.h"
 #include "types/raw_address.h"
 
 using bluetooth::Uuid;
+using namespace bluetooth;
 
 /*****************************************************************************
  *  Constants
@@ -65,11 +63,11 @@ static const tBTA_SYS_REG bta_gattc_reg = {bta_gattc_hdl_event,
  ******************************************************************************/
 void BTA_GATTC_Disable(void) {
   if (!bta_sys_is_register(BTA_ID_GATTC)) {
-    LOG(WARNING) << "GATTC Module not enabled/already disabled";
+    log::warn("GATTC Module not enabled/already disabled");
     return;
   }
 
-  do_in_main_thread(FROM_HERE, base::Bind(&bta_gattc_disable));
+  do_in_main_thread(FROM_HERE, base::BindOnce(&bta_gattc_disable));
   bta_sys_deregister(BTA_ID_GATTC);
 }
 
@@ -80,19 +78,25 @@ void BTA_GATTC_Disable(void) {
  */
 void BTA_GATTC_AppRegister(tBTA_GATTC_CBACK* p_client_cb,
                            BtaAppRegisterCallback cb, bool eatt_support) {
-  LOG_DEBUG("eatt_support=%d", eatt_support);
+  log::debug("eatt_support={}", eatt_support);
   if (!bta_sys_is_register(BTA_ID_GATTC)) {
-    LOG_DEBUG("BTA_ID_GATTC not registered in BTA, registering it");
+    log::debug("BTA_ID_GATTC not registered in BTA, registering it");
     bta_sys_register(BTA_ID_GATTC, &bta_gattc_reg);
   }
 
-  do_in_main_thread(
-      FROM_HERE, base::Bind(&bta_gattc_register, Uuid::GetRandom(), p_client_cb,
-                            std::move(cb), eatt_support));
+  do_in_main_thread(FROM_HERE,
+                    base::BindOnce(&bta_gattc_register, Uuid::GetRandom(),
+                                   p_client_cb, std::move(cb), eatt_support));
 }
 
 static void app_deregister_impl(tGATT_IF client_if) {
-  bta_gattc_deregister(bta_gattc_cl_get_regcb(client_if));
+  tBTA_GATTC_RCB* p_clreg = bta_gattc_cl_get_regcb(client_if);
+
+  if (p_clreg != nullptr) {
+    bta_gattc_deregister(p_clreg);
+  } else {
+    log::error("Unknown GATT ID: {}, state: {}", client_if, bta_gattc_cb.state);
+  }
 }
 /*******************************************************************************
  *
@@ -107,7 +111,7 @@ static void app_deregister_impl(tGATT_IF client_if) {
  *
  ******************************************************************************/
 void BTA_GATTC_AppDeregister(tGATT_IF client_if) {
-  do_in_main_thread(FROM_HERE, base::Bind(&app_deregister_impl, client_if));
+  do_in_main_thread(FROM_HERE, base::BindOnce(&app_deregister_impl, client_if));
 }
 
 /*******************************************************************************
@@ -123,13 +127,14 @@ void BTA_GATTC_AppDeregister(tGATT_IF client_if) {
  *                  transport: Transport to be used for GATT connection
  *                             (BREDR/LE)
  *                  initiating_phys: LE PHY to use, optional
- *                  opportunistic: wether the connection shall be opportunistic,
- *                                 and don't impact the disconnection timer
+ *                  opportunistic: whether the connection shall be
+ *                  opportunistic, and don't impact the disconnection timer
  *
  ******************************************************************************/
 void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
                     tBTM_BLE_CONN_TYPE connection_type, bool opportunistic) {
-  uint8_t phy = controller_get_interface()->get_le_all_initiating_phys();
+  constexpr uint8_t kPhyLe1M = 0x01;  // From the old controller shim.
+  uint8_t phy = kPhyLe1M;
   BTA_GATTC_Open(client_if, remote_bda, connection_type, BT_TRANSPORT_LE,
                  opportunistic, phy);
 }
@@ -146,12 +151,12 @@ void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
                       .event = BTA_GATTC_API_OPEN_EVT,
                   },
               .remote_bda = remote_bda,
-              .remote_addr_type = addr_type,
               .client_if = client_if,
               .connection_type = connection_type,
               .transport = transport,
               .initiating_phys = initiating_phys,
               .opportunistic = opportunistic,
+              .remote_addr_type = addr_type,
           },
   };
 
@@ -281,7 +286,7 @@ void BTA_GATTC_ServiceSearchRequest(uint16_t conn_id, const Uuid* p_srvc_uuid) {
 void BTA_GATTC_DiscoverServiceByUuid(uint16_t conn_id, const Uuid& srvc_uuid) {
   do_in_main_thread(
       FROM_HERE,
-      base::Bind(
+      base::BindOnce(
           base::IgnoreResult<tGATT_STATUS (*)(uint16_t, tGATT_DISC_TYPE,
                                               uint16_t, uint16_t, const Uuid&)>(
               &GATTC_Discover),
@@ -392,6 +397,7 @@ void BTA_GATTC_ReadCharacteristic(uint16_t conn_id, uint16_t handle,
 
   p_buf->hdr.event = BTA_GATTC_API_READ_EVT;
   p_buf->hdr.layer_specific = conn_id;
+  p_buf->is_multi_read = false;
   p_buf->auth_req = auth_req;
   p_buf->handle = handle;
   p_buf->read_cb = callback;
@@ -413,6 +419,7 @@ void BTA_GATTC_ReadUsingCharUuid(uint16_t conn_id, const Uuid& uuid,
 
   p_buf->hdr.event = BTA_GATTC_API_READ_EVT;
   p_buf->hdr.layer_specific = conn_id;
+  p_buf->is_multi_read = false;
   p_buf->auth_req = auth_req;
   p_buf->handle = 0;
   p_buf->uuid = uuid;
@@ -444,6 +451,7 @@ void BTA_GATTC_ReadCharDescr(uint16_t conn_id, uint16_t handle,
 
   p_buf->hdr.event = BTA_GATTC_API_READ_EVT;
   p_buf->hdr.layer_specific = conn_id;
+  p_buf->is_multi_read = false;
   p_buf->auth_req = auth_req;
   p_buf->handle = handle;
   p_buf->read_cb = callback;
@@ -460,25 +468,28 @@ void BTA_GATTC_ReadCharDescr(uint16_t conn_id, uint16_t handle,
  *                  characteristic descriptors.
  *
  * Parameters       conn_id - connectino ID.
- *                    p_read_multi - pointer to the read multiple parameter.
+ *                  p_read_multi - pointer to the read multiple parameter.
+ *                  variable_len - whether "read multi variable length" variant
+ *                                 shall be used.
+ *
  *
  * Returns          None
  *
  ******************************************************************************/
-void BTA_GATTC_ReadMultiple(uint16_t conn_id, tBTA_GATTC_MULTI* p_read_multi,
-                            tGATT_AUTH_REQ auth_req) {
+void BTA_GATTC_ReadMultiple(uint16_t conn_id, tBTA_GATTC_MULTI& handles,
+                            bool variable_len, tGATT_AUTH_REQ auth_req,
+                            GATT_READ_MULTI_OP_CB callback, void* cb_data) {
   tBTA_GATTC_API_READ_MULTI* p_buf =
       (tBTA_GATTC_API_READ_MULTI*)osi_calloc(sizeof(tBTA_GATTC_API_READ_MULTI));
 
   p_buf->hdr.event = BTA_GATTC_API_READ_MULTI_EVT;
   p_buf->hdr.layer_specific = conn_id;
+  p_buf->is_multi_read = true;
   p_buf->auth_req = auth_req;
-  p_buf->num_attr = p_read_multi->num_attr;
-
-  if (p_buf->num_attr > 0)
-    memcpy(p_buf->handles, p_read_multi->handles,
-           sizeof(uint16_t) * p_read_multi->num_attr);
-
+  p_buf->handles = handles;
+  p_buf->variable_len = variable_len;
+  p_buf->read_cb = callback;
+  p_buf->read_cb_data = cb_data;
   bta_sys_sendmsg(p_buf);
 }
 
@@ -638,8 +649,7 @@ void BTA_GATTC_SendIndConfirm(uint16_t conn_id, uint16_t cid) {
   tBTA_GATTC_API_CONFIRM* p_buf =
       (tBTA_GATTC_API_CONFIRM*)osi_calloc(sizeof(tBTA_GATTC_API_CONFIRM));
 
-  VLOG(1) << __func__ << ": conn_id=" << +conn_id << " cid=0x" << std::hex
-          << +cid;
+  log::verbose("conn_id={} cid=0x{:x}", conn_id, cid);
 
   p_buf->hdr.event = BTA_GATTC_API_CONFIRM_EVT;
   p_buf->hdr.layer_specific = conn_id;
@@ -670,7 +680,7 @@ tGATT_STATUS BTA_GATTC_RegisterForNotifications(tGATT_IF client_if,
   uint8_t i;
 
   if (!handle) {
-    LOG(ERROR) << __func__ << ": registration failed, handle is 0";
+    log::error("registration failed, handle is 0");
     return status;
   }
 
@@ -680,7 +690,7 @@ tGATT_STATUS BTA_GATTC_RegisterForNotifications(tGATT_IF client_if,
       if (p_clreg->notif_reg[i].in_use &&
           p_clreg->notif_reg[i].remote_bda == bda &&
           p_clreg->notif_reg[i].handle == handle) {
-        LOG(WARNING) << "notification already registered";
+        log::warn("notification already registered");
         status = GATT_SUCCESS;
         break;
       }
@@ -701,11 +711,11 @@ tGATT_STATUS BTA_GATTC_RegisterForNotifications(tGATT_IF client_if,
       }
       if (i == BTA_GATTC_NOTIF_REG_MAX) {
         status = GATT_NO_RESOURCES;
-        LOG(ERROR) << "Max Notification Reached, registration failed.";
+        log::error("Max Notification Reached, registration failed.");
       }
     }
   } else {
-    LOG(ERROR) << "client_if=" << +client_if << " Not Registered";
+    log::error("client_if={} Not Registered", client_if);
   }
 
   return status;
@@ -729,14 +739,13 @@ tGATT_STATUS BTA_GATTC_DeregisterForNotifications(tGATT_IF client_if,
                                                   const RawAddress& bda,
                                                   uint16_t handle) {
   if (!handle) {
-    LOG(ERROR) << __func__ << ": deregistration failed, handle is 0";
+    log::error("deregistration failed, handle is 0");
     return GATT_ILLEGAL_PARAMETER;
   }
 
   tBTA_GATTC_RCB* p_clreg = bta_gattc_cl_get_regcb(client_if);
   if (p_clreg == NULL) {
-    LOG(ERROR) << __func__ << " client_if=" << +client_if
-               << " not registered bd_addr=" << ADDRESS_TO_LOGGABLE_STR(bda);
+    log::error("client_if={} not registered bd_addr={}", client_if, bda);
     return GATT_ILLEGAL_PARAMETER;
   }
 
@@ -744,15 +753,13 @@ tGATT_STATUS BTA_GATTC_DeregisterForNotifications(tGATT_IF client_if,
     if (p_clreg->notif_reg[i].in_use &&
         p_clreg->notif_reg[i].remote_bda == bda &&
         p_clreg->notif_reg[i].handle == handle) {
-      VLOG(1) << __func__ << " deregistered bd_addr="
-              << ADDRESS_TO_LOGGABLE_STR(bda);
+      log::verbose("deregistered bd_addr={}", bda);
       memset(&p_clreg->notif_reg[i], 0, sizeof(tBTA_GATTC_NOTIF_REG));
       return GATT_SUCCESS;
     }
   }
 
-  LOG(ERROR) << __func__ << " registration not found bd_addr="
-             << ADDRESS_TO_LOGGABLE_STR(bda);
+  log::error("registration not found bd_addr={}", bda);
   return GATT_ERROR;
 }
 

@@ -16,7 +16,6 @@
 
 package com.android.bluetooth.pbapclient;
 
-import android.os.Handler;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -30,34 +29,24 @@ import java.util.Arrays;
  * authentication is implementation defined.
  */
 class BluetoothPbapObexAuthenticator implements Authenticator {
-
-    private static final String TAG = "BtPbapObexAuthenticator";
-    private static final boolean DBG = Utils.DBG;
+    private static final String TAG = "PbapClientObexAuth";
 
     //Default session key for legacy devices is 0000
     @VisibleForTesting
     String mSessionKey = "0000";
 
-    private final Handler mCallback;
-
-    BluetoothPbapObexAuthenticator(Handler callback) {
-        mCallback = callback;
-    }
-
     @Override
     public PasswordAuthentication onAuthenticationChallenge(String description,
             boolean isUserIdRequired, boolean isFullAccess) {
         PasswordAuthentication pa = null;
-        if (DBG) Log.v(TAG, "onAuthenticationChallenge: starting");
+        Log.d(TAG, "onAuthenticationChallenge: starting");
 
         if (mSessionKey != null && mSessionKey.length() != 0) {
-            if (DBG) Log.v(TAG, "onAuthenticationChallenge: mSessionKey=" + mSessionKey);
+            Log.d(TAG, "onAuthenticationChallenge: mSessionKey=" + mSessionKey);
             pa = new PasswordAuthentication(null, mSessionKey.getBytes());
         } else {
-            if (DBG) {
-                Log.v(TAG,
-                        "onAuthenticationChallenge: mSessionKey is empty, timeout/cancel occured");
-            }
+            Log.d(TAG,
+                    "onAuthenticationChallenge: mSessionKey is empty, timeout/cancel occurred");
         }
 
         return pa;
@@ -65,7 +54,7 @@ class BluetoothPbapObexAuthenticator implements Authenticator {
 
     @Override
     public byte[] onAuthenticationResponse(byte[] userName) {
-        if (DBG) Log.v(TAG, "onAuthenticationResponse: " + Arrays.toString(userName));
+        Log.v(TAG, "onAuthenticationResponse: " + Arrays.toString(userName));
         /* required only in case PCE challenges PSE which we don't do now */
         return null;
     }

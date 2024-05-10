@@ -1,5 +1,19 @@
+<!-- Copyright (C) 2024 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+-->
 <configuration description="Runs PTS-bot tests in MTS">
-    <target_preparer class="com.android.tradefed.targetprep.TestAppInstallSetup">
+    <target_preparer class="com.android.tradefed.targetprep.suite.SuiteApkInstaller">
         <option name="test-file-name" value="PandoraServer.apk" />
         <option name="install-arg" value="-r" />
         <option name="install-arg" value="-g" />
@@ -24,8 +38,8 @@
         <!-- Creates a randomized temp dir for pts-bot binaries and avoid
              conflicts when running multiple pts-bot on the same machine -->
         <option name="create-bin-temp-dir" value="true"/>
-        <!-- mmi2grpc is contained inside testcases folder -->
-        <option name="mmi2grpc" value="testcases" />
+        <!-- mmi2grpc is contained inside pts-bot-mts folder -->
+        <option name="mmi2grpc" value="pts-bot-mts" />
         <option name="tests-config-file" value="pts_bot_tests_config.json" />
         <option name="max-flaky-tests" value="3" />
         <option name="max-retries-per-test" value="3" />
@@ -49,7 +63,8 @@
         <option name="profile" value="L2CAP/LE" />
         <option name="profile" value="MAP" />
         <option name="profile" value="OPP" />
-        <option name="profile" value="PAN" />
+        <!-- TODO(b/272303629): Reenable -->
+        <!--option name="profile" value="PAN" /-->
         <option name="profile" value="PBAP/PSE" />
         <option name="profile" value="RFCOMM" />
         <option name="profile" value="SDP" />

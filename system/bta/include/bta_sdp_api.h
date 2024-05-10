@@ -29,10 +29,9 @@
 #include <cstdint>
 #include <string>
 
-#include "bt_target.h"  // Must be first to define build configuration
-#include "bta/include/bta_api.h"
-#include "bta/include/bta_sdp_api.h"
 #include "include/hardware/bt_sdp.h"  // bluetooth_sdp_record
+#include "macros.h"
+#include "stack/sdp/sdp_discovery_db.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
@@ -45,12 +44,6 @@ typedef enum : uint8_t {
   BTA_SDP_BUSY = 2,    /* Temporarily can not handle this request. */
 } tBTA_SDP_STATUS;
 
-#ifndef CASE_RETURN_TEXT
-#define CASE_RETURN_TEXT(code) \
-  case code:                   \
-    return #code
-#endif
-
 inline std::string bta_sdp_status_text(const tBTA_SDP_STATUS& status) {
   switch (status) {
     CASE_RETURN_TEXT(BTA_SDP_SUCCESS);
@@ -60,8 +53,6 @@ inline std::string bta_sdp_status_text(const tBTA_SDP_STATUS& status) {
       return base::StringPrintf("UNKNOWN[%d]", status);
   }
 }
-
-#undef CASE_RETURN_TEXT
 
 /* SDP I/F callback events */
 /* events received by tBTA_SDP_DM_CBACK */
@@ -114,7 +105,7 @@ typedef struct {
  *                  BTA_SDP_FAIL if internal failure.
  *
  ******************************************************************************/
-extern tBTA_SDP_STATUS BTA_SdpEnable(tBTA_SDP_DM_CBACK* p_cback);
+tBTA_SDP_STATUS BTA_SdpEnable(tBTA_SDP_DM_CBACK* p_cback);
 
 /*******************************************************************************
  *
@@ -128,8 +119,8 @@ extern tBTA_SDP_STATUS BTA_SdpEnable(tBTA_SDP_DM_CBACK* p_cback);
  *                  BTA_SDP_FAIL if internal failure.
  *
  ******************************************************************************/
-extern tBTA_SDP_STATUS BTA_SdpSearch(const RawAddress& bd_addr,
-                                     const bluetooth::Uuid& uuid);
+tBTA_SDP_STATUS BTA_SdpSearch(const RawAddress& bd_addr,
+                              const bluetooth::Uuid& uuid);
 
 /*******************************************************************************
  *
@@ -143,7 +134,7 @@ extern tBTA_SDP_STATUS BTA_SdpSearch(const RawAddress& bd_addr,
  *                  BTA_SDP_FAILURE, otherwise.
  *
  ******************************************************************************/
-extern tBTA_SDP_STATUS BTA_SdpCreateRecordByUser(void* user_data);
+tBTA_SDP_STATUS BTA_SdpCreateRecordByUser(void* user_data);
 
 /*******************************************************************************
  *
@@ -157,6 +148,6 @@ extern tBTA_SDP_STATUS BTA_SdpCreateRecordByUser(void* user_data);
  *                  BTA_SDP_FAILURE, otherwise.
  *
  ******************************************************************************/
-extern tBTA_SDP_STATUS BTA_SdpRemoveRecordByUser(void* user_data);
+tBTA_SDP_STATUS BTA_SdpRemoveRecordByUser(void* user_data);
 
 #endif /* BTA_SDP_API_H */

@@ -18,22 +18,17 @@ package com.android.bluetooth.hfpclient;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import static org.junit.Assume.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.mockingDetails;
 
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
 import android.content.ComponentName;
 import android.content.Context;
-import android.content.Intent;
 import android.content.res.Resources;
 import android.net.Uri;
 import android.os.Bundle;
@@ -43,28 +38,26 @@ import android.telecom.ConnectionRequest;
 import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
-import android.util.Log;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
-import androidx.test.rule.ServiceTestRule;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.R;
+import com.android.bluetooth.TestUtils;
+import com.android.bluetooth.btservice.AdapterService;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 @MediumTest
 @RunWith(AndroidJUnit4.class)
@@ -76,6 +69,9 @@ public class HfpClientConnectionServiceTest {
             .getAdapter().getRemoteDevice(TEST_DEVICE_ADDRESS);
     private static final String TEST_NUMBER = "000-111-2222";
 
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
+    @Mock private AdapterService mAdapterService;
     @Mock private HeadsetClientService mMockHeadsetClientService;
     @Mock private TelecomManager mMockTelecomManager;
     @Mock private Resources mMockResources;
@@ -85,10 +81,10 @@ public class HfpClientConnectionServiceTest {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
 
         Context targetContext = InstrumentationRegistry.getTargetContext();
 
+        TestUtils.setAdapterService(mAdapterService);
         // Setup a mock TelecomManager so our calls don't start a real instance of this service
         doNothing().when(mMockTelecomManager).addNewIncomingCall(any(), any());
         doNothing().when(mMockTelecomManager).addNewUnknownCall(any(), any());
@@ -122,6 +118,11 @@ public class HfpClientConnectionServiceTest {
                 .getSystemServiceName(BluetoothManager.class);
         doReturn(targetContext.getSystemService(BluetoothManager.class))
                 .when(mHfpClientConnectionService).getSystemService(Context.BLUETOOTH_SERVICE);
+    }
+
+    @After
+    public void tearDown() {
+        TestUtils.clearAdapterService(mAdapterService);
     }
 
     private void createService() {

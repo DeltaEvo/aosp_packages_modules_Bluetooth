@@ -15,13 +15,13 @@
  */
 
 #include <base/functional/bind.h>
-#include <base/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "avrcp_internal.h"
 #include "avrcp_test_helper.h"
 #include "connection_handler.h"
+#include "sdpdefs.h"
 #include "types/raw_address.h"
 
 using ::testing::_;
@@ -33,6 +33,14 @@ using ::testing::SaveArg;
 using ::testing::SaveArgPointee;
 using ::testing::SetArgPointee;
 using ::testing::StrictMock;
+
+bool btif_av_peer_is_connected_sink(const RawAddress& peer_address) {
+  return true;
+}
+bool btif_av_peer_is_connected_source(const RawAddress& peer_address) {
+  return false;
+}
+bool btif_av_both_enable(void) { return false; }
 
 namespace bluetooth {
 namespace avrcp {
@@ -55,7 +63,7 @@ class AvrcpConnectionHandlerTest : public testing::Test {
     fake_features = {
         .p_next_attr = nullptr,
         .attr_id = 0,
-        .attr_len_type = 0,
+        .attr_len_type = (UINT_DESC_TYPE<<12) | 2,
         .attr_value = {.v = {.u16 = 0}},
     };
 
@@ -97,8 +105,8 @@ TEST_F(AvrcpConnectionHandlerTest, initializeTest) {
       .WillOnce(
           DoAll(SetArgPointee<0>(1), SaveArgPointee<1>(&conn_cb), Return(0)));
 
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -121,8 +129,8 @@ TEST_F(AvrcpConnectionHandlerTest, notConnectedDisconnectTest) {
           DoAll(SetArgPointee<0>(1), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -145,8 +153,8 @@ TEST_F(AvrcpConnectionHandlerTest, disconnectAfterCleanupTest) {
           DoAll(SetArgPointee<0>(1), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -158,8 +166,10 @@ TEST_F(AvrcpConnectionHandlerTest, disconnectAfterCleanupTest) {
   conn_cb.ctrl_cback.Run(1, AVRC_CLOSE_IND_EVT, 0, &RawAddress::kAny);
 };
 
-// Check that we can handle having a remote device connect to us, start SDP, and
-// open another acceptor connection
+/**
+ * Check that we can handle having a remote device connect to us, start SDP, and
+ * open another acceptor connection.
+ */
 TEST_F(AvrcpConnectionHandlerTest, remoteDeviceConnectionTest) {
   // Set an Expectation that Open will be called twice as an acceptor and save
   // the connection callback once it is called.
@@ -172,8 +182,8 @@ TEST_F(AvrcpConnectionHandlerTest, remoteDeviceConnectionTest) {
           DoAll(SetArgPointee<0>(2), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -202,8 +212,10 @@ TEST_F(AvrcpConnectionHandlerTest, remoteDeviceConnectionTest) {
   ConnectionHandler::CleanUp();
 }
 
-// Check that when a device does not support absolute volume, that the
-// handler reports that via the volume interface.
+/**
+ *  Check that when a device does not support absolute volume, that the
+ * handler reports that via the volume interface.
+ */
 TEST_F(AvrcpConnectionHandlerTest, noAbsoluteVolumeTest) {
   // Set an Expectation that Open will be called twice as an acceptor and save
   // the connection callback once it is called.
@@ -216,8 +228,8 @@ TEST_F(AvrcpConnectionHandlerTest, noAbsoluteVolumeTest) {
           DoAll(SetArgPointee<0>(2), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -238,8 +250,10 @@ TEST_F(AvrcpConnectionHandlerTest, noAbsoluteVolumeTest) {
   ConnectionHandler::CleanUp();
 }
 
-// Check that when a device does support absolute volume, that the handler
-// doesn't report it. Instead that will be left up to the device.
+/**
+ *  Check that when a device does support absolute volume, that the handler
+ * doesn't report it. Instead that will be left up to the device.
+ */
 TEST_F(AvrcpConnectionHandlerTest, absoluteVolumeTest) {
   // Set an Expectation that Open will be called twice as an acceptor and save
   // the connection callback once it is called.
@@ -252,8 +266,8 @@ TEST_F(AvrcpConnectionHandlerTest, absoluteVolumeTest) {
           DoAll(SetArgPointee<0>(2), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
 
   StrictMock<MockVolumeInterface> strict_volume;
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
@@ -286,8 +300,8 @@ TEST_F(AvrcpConnectionHandlerTest, disconnectTest) {
       .WillOnce(DoAll(SetArgPointee<0>(2), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -306,8 +320,10 @@ TEST_F(AvrcpConnectionHandlerTest, disconnectTest) {
   ConnectionHandler::CleanUp();
 }
 
-// Check that we can handle having a remote device connect to us, start SDP, and
-// open another acceptor connection
+/**
+ * Check that we can handle having a remote device connect to us, start SDP, and
+ * open another acceptor connection.
+ */
 TEST_F(AvrcpConnectionHandlerTest, multipleRemoteDeviceConnectionTest) {
   // Set an Expectation that Open will be called three times as an acceptor and
   // save the connection callback once it is called.
@@ -322,8 +338,8 @@ TEST_F(AvrcpConnectionHandlerTest, multipleRemoteDeviceConnectionTest) {
           DoAll(SetArgPointee<0>(3), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -381,8 +397,8 @@ TEST_F(AvrcpConnectionHandlerTest, cleanupTest) {
           DoAll(SetArgPointee<0>(3), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -403,8 +419,8 @@ TEST_F(AvrcpConnectionHandlerTest, cleanupTest) {
 
 TEST_F(AvrcpConnectionHandlerTest, connectToRemoteDeviceTest) {
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -448,8 +464,8 @@ TEST_F(AvrcpConnectionHandlerTest, connectToRemoteDeviceTest) {
 
 TEST_F(AvrcpConnectionHandlerTest, connectToBrowsableRemoteDeviceTest) {
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -502,8 +518,8 @@ TEST_F(AvrcpConnectionHandlerTest, disconnectWhileDoingSdpTest) {
       .WillOnce(DoAll(SetArgPointee<0>(2), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -521,6 +537,106 @@ TEST_F(AvrcpConnectionHandlerTest, disconnectWhileDoingSdpTest) {
 
   // Signal that SDP has completed
   sdp_cb.Run(0);
+
+  connection_handler_ = nullptr;
+  ConnectionHandler::CleanUp();
+}
+
+/**
+ * Check that when an incoming connection happens at the same time as the
+ * that the SDP search for initiator is running the collision is handled.
+ */
+TEST_F(AvrcpConnectionHandlerTest, connectionCollisionTest) {
+  tAVRC_CONN_CB conn_cb;
+  EXPECT_CALL(mock_avrcp_, Open(_, _, RawAddress::kAny))
+      .Times(2)
+      .WillOnce(
+          DoAll(SetArgPointee<0>(1), SaveArgPointee<1>(&conn_cb), Return(0)))
+      .WillOnce(
+          DoAll(SetArgPointee<0>(2), SaveArgPointee<1>(&conn_cb), Return(0)));
+
+  // Initialize the interface
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
+  ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
+                                            &mock_sdp_, &mock_volume_));
+  connection_handler_ = ConnectionHandler::Get();
+
+  // Check that the callback was sent with us as the acceptor
+  ASSERT_EQ(conn_cb.conn, 1);
+
+  // Set an Expectations that SDP will be performed
+  tAVRC_FIND_CBACK sdp_cb;
+  SetUpSdp(&sdp_cb, false, false);
+
+  connection_handler_->ConnectDevice(RawAddress::kAny);
+
+  // Set an expectation that a device will be created
+  EXPECT_CALL(device_cb, Call(_)).Times(1);
+
+  // Set an Expectations that SDP search will be performed again but will fail
+  EXPECT_CALL(mock_avrcp_, FindService(_, _, _, _))
+      .Times(1)
+      .WillOnce(DoAll(SaveArg<3>(&sdp_cb), Return(1)));
+
+  // Set an expectation that the incoming connection will be closed
+  EXPECT_CALL(mock_avrcp_, Close(1));
+
+  // Call the callback with a message saying that a remote device has connected
+  conn_cb.ctrl_cback.Run(1, AVRC_OPEN_IND_EVT, 0, &RawAddress::kAny);
+
+  // Set an expectation that cleanup will close the last connection
+  EXPECT_CALL(mock_avrcp_, Close(_));
+
+  // Run the SDP callback with status success
+  sdp_cb.Run(0);
+
+  connection_handler_ = nullptr;
+  ConnectionHandler::CleanUp();
+}
+
+/**
+ * Check that we are not proceeding with the connection if the SDP search
+ * failed.
+ */
+TEST_F(AvrcpConnectionHandlerTest, acceptorSdpSearchFailTest) {
+  // Set an Expectation that Open will be called twice as an acceptor and
+  // save the connection callback once it is called.
+  tAVRC_CONN_CB conn_cb;
+  EXPECT_CALL(mock_avrcp_, Open(_, _, RawAddress::kAny))
+      .Times(2)
+      .WillOnce(
+          DoAll(SetArgPointee<0>(1), SaveArgPointee<1>(&conn_cb), Return(0)))
+      .WillOnce(
+          DoAll(SetArgPointee<0>(2), SaveArgPointee<1>(&conn_cb), Return(0)));
+
+  // Initialize the interface
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
+  ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
+                                            &mock_sdp_, &mock_volume_));
+  connection_handler_ = ConnectionHandler::Get();
+
+  // Check that the callback was sent with us as the acceptor
+  ASSERT_EQ(conn_cb.conn, 1);
+
+  // Set an expectation that a device will be created
+  EXPECT_CALL(device_cb, Call(_)).Times(1);
+
+  // Set an expectation that SDP search will be performed but will fail
+  tAVRC_FIND_CBACK sdp_cb;
+  EXPECT_CALL(mock_avrcp_, FindService(_, _, _, _))
+      .Times(1)
+      .WillOnce(DoAll(SaveArg<3>(&sdp_cb), Return(1)));
+
+  // Set an expectation that the incoming connection will be closed
+  EXPECT_CALL(mock_avrcp_, Close(1));
+
+  // Call the callback with a message saying that a remote device has connected
+  conn_cb.ctrl_cback.Run(1, AVRC_OPEN_IND_EVT, 0, &RawAddress::kAny);
+
+  // Set an expectation that cleanup will close the last connection
+  EXPECT_CALL(mock_avrcp_, Close(_));
 
   connection_handler_ = nullptr;
   ConnectionHandler::CleanUp();

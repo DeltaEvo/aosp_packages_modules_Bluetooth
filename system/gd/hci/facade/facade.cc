@@ -16,6 +16,8 @@
 
 #include "hci/facade/facade.h"
 
+#include <bluetooth/log.h>
+
 #include <memory>
 
 #include "blueberry/facade/hci/hci_facade.grpc.pb.h"
@@ -69,9 +71,9 @@ class HciFacadeService : public HciFacade::Service {
   };
 
   ::grpc::Status SendCommand(
-      ::grpc::ServerContext* context,
+      ::grpc::ServerContext* /* context */,
       const ::blueberry::facade::Data* command,
-      ::google::protobuf::Empty* response) override {
+      ::google::protobuf::Empty* /* response */) override {
     auto payload = std::vector<uint8_t>(command->payload().begin(), command->payload().end());
     auto packet = std::make_unique<TestCommandBuilder>(payload);
     auto opcode = static_cast<const bluetooth::hci::OpCode>(payload.at(1) << 8 | payload.at(0));
@@ -84,18 +86,18 @@ class HciFacadeService : public HciFacade::Service {
   }
 
   ::grpc::Status RequestEvent(
-      ::grpc::ServerContext* context,
+      ::grpc::ServerContext* /* context */,
       const ::blueberry::facade::hci::EventRequest* event,
-      ::google::protobuf::Empty* response) override {
+      ::google::protobuf::Empty* /* response */) override {
     hci_layer_->RegisterEventHandler(
         static_cast<EventCode>(event->code()), facade_handler_->BindOn(this, &HciFacadeService::on_event));
     return ::grpc::Status::OK;
   }
 
   ::grpc::Status RequestLeSubevent(
-      ::grpc::ServerContext* context,
+      ::grpc::ServerContext* /* context */,
       const ::blueberry::facade::hci::EventRequest* event,
-      ::google::protobuf::Empty* response) override {
+      ::google::protobuf::Empty* /* response */) override {
     hci_layer_->RegisterLeEventHandler(
         static_cast<SubeventCode>(event->code()), facade_handler_->BindOn(this, &HciFacadeService::on_le_subevent));
     return ::grpc::Status::OK;
@@ -103,14 +105,14 @@ class HciFacadeService : public HciFacade::Service {
 
   ::grpc::Status StreamEvents(
       ::grpc::ServerContext* context,
-      const ::google::protobuf::Empty* request,
+      const ::google::protobuf::Empty* /* request */,
       ::grpc::ServerWriter<::blueberry::facade::Data>* writer) override {
     return pending_events_.RunLoop(context, writer);
   };
 
   ::grpc::Status StreamLeSubevents(
       ::grpc::ServerContext* context,
-      const ::google::protobuf::Empty* request,
+      const ::google::protobuf::Empty* /* request */,
       ::grpc::ServerWriter<::blueberry::facade::Data>* writer) override {
     return pending_le_events_.RunLoop(context, writer);
   };
@@ -135,9 +137,9 @@ class HciFacadeService : public HciFacade::Service {
   };
 
   ::grpc::Status SendAcl(
-      ::grpc::ServerContext* context,
+      ::grpc::ServerContext* /* context */,
       const ::blueberry::facade::Data* acl,
-      ::google::protobuf::Empty* response) override {
+      ::google::protobuf::Empty* /* response */) override {
     waiting_acl_packet_ =
         std::make_unique<TestAclBuilder>(std::vector<uint8_t>(acl->payload().begin(), acl->payload().end()));
     std::promise<void> enqueued;
@@ -151,13 +153,14 @@ class HciFacadeService : public HciFacade::Service {
         facade_handler_,
         common::Bind(&HciFacadeService::handle_enqueue_acl, common::Unretained(this), common::Unretained(&enqueued)));
     auto result = future.wait_for(std::chrono::milliseconds(100));
-    ASSERT(std::future_status::ready == result);
+    log::assert_that(
+        std::future_status::ready == result, "assert failed: std::future_status::ready == result");
     return ::grpc::Status::OK;
   }
 
   ::grpc::Status StreamAcl(
       ::grpc::ServerContext* context,
-      const ::google::protobuf::Empty* request,
+      const ::google::protobuf::Empty* /* request */,
       ::grpc::ServerWriter<::blueberry::facade::Data>* writer) override {
     hci_layer_->GetAclQueueEnd()->RegisterDequeue(
         facade_handler_, common::Bind(&HciFacadeService::on_acl_ready, common::Unretained(this)));
@@ -174,41 +177,41 @@ class HciFacadeService : public HciFacade::Service {
 
   void on_acl_ready() {
     auto acl_ptr = hci_layer_->GetAclQueueEnd()->TryDequeue();
-    ASSERT(acl_ptr != nullptr);
-    ASSERT(acl_ptr->IsValid());
-    LOG_INFO("Got an Acl message for handle 0x%hx", acl_ptr->GetHandle());
+    log::assert_that(acl_ptr != nullptr, "assert failed: acl_ptr != nullptr");
+    log::assert_that(acl_ptr->IsValid(), "assert failed: acl_ptr->IsValid()");
+    log::info("Got an Acl message for handle 0x{:x}", acl_ptr->GetHandle());
     ::blueberry::facade::Data incoming;
     incoming.set_payload(std::string(acl_ptr->begin(), acl_ptr->end()));
     pending_acl_events_.OnIncomingEvent(std::move(incoming));
   }
 
   void on_event(hci::EventView view) {
-    ASSERT(view.IsValid());
-    LOG_INFO("Got an Event %s", EventCodeText(view.GetEventCode()).c_str());
+    log::assert_that(view.IsValid(), "assert failed: view.IsValid()");
+    log::info("Got an Event {}", EventCodeText(view.GetEventCode()));
     ::blueberry::facade::Data response;
     response.set_payload(std::string(view.begin(), view.end()));
     pending_events_.OnIncomingEvent(std::move(response));
   }
 
   void on_le_subevent(hci::LeMetaEventView view) {
-    ASSERT(view.IsValid());
-    LOG_INFO("Got an LE Event %s", SubeventCodeText(view.GetSubeventCode()).c_str());
+    log::assert_that(view.IsValid(), "assert failed: view.IsValid()");
+    log::info("Got an LE Event {}", SubeventCodeText(view.GetSubeventCode()));
     ::blueberry::facade::Data response;
     response.set_payload(std::string(view.begin(), view.end()));
     pending_le_events_.OnIncomingEvent(std::move(response));
   }
 
   void on_complete(hci::CommandCompleteView view) {
-    ASSERT(view.IsValid());
-    LOG_INFO("Got a Command complete %s", OpCodeText(view.GetCommandOpCode()).c_str());
+    log::assert_that(view.IsValid(), "assert failed: view.IsValid()");
+    log::info("Got a Command complete {}", OpCodeText(view.GetCommandOpCode()));
     ::blueberry::facade::Data response;
     response.set_payload(std::string(view.begin(), view.end()));
     pending_events_.OnIncomingEvent(std::move(response));
   }
 
   void on_status(hci::CommandStatusView view) {
-    ASSERT(view.IsValid());
-    LOG_INFO("Got a Command status %s", OpCodeText(view.GetCommandOpCode()).c_str());
+    log::assert_that(view.IsValid(), "assert failed: view.IsValid()");
+    log::info("Got a Command status {}", OpCodeText(view.GetCommandOpCode()));
     ::blueberry::facade::Data response;
     response.set_payload(std::string(view.begin(), view.end()));
     pending_events_.OnIncomingEvent(std::move(response));

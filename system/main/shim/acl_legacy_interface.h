@@ -18,14 +18,11 @@
 
 #include <cstdint>
 
+#include "hci/class_of_device.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/bt_types.h"
-#include "stack/include/gatt_api.h"
 #include "stack/include/hci_error_code.h"
 #include "stack/include/hci_mode.h"
-#include "stack/include/hcidefs.h"
 #include "types/ble_address_with_type.h"
-#include "types/class_of_device.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
 
@@ -36,6 +33,7 @@ namespace legacy {
 typedef struct {
   void (*on_connected)(const RawAddress& bda, uint16_t handle, uint8_t enc_mode,
                        bool locally_initiated);
+  void (*on_connect_request)(const RawAddress& bda, const hci::ClassOfDevice&);
   void (*on_failed)(const RawAddress& bda, tHCI_STATUS status,
                     bool locally_initiated);
   void (*on_disconnected)(tHCI_STATUS status, uint16_t handle,
@@ -50,19 +48,10 @@ typedef struct {
                        tBLE_ADDR_TYPE peer_addr_type,
                        bool can_read_discoverable_characteristics);
   void (*on_failed)(const tBLE_BD_ADDR& address_with_type, uint16_t handle,
-                    bool enhanced, tHCI_STATUS status, bool locally_initiated);
+                    bool enhanced, tHCI_STATUS status);
   void (*on_disconnected)(tHCI_STATUS status, uint16_t handle,
                           tHCI_STATUS reason);
-  void (*on_iso_disconnected)(uint16_t handle, tHCI_STATUS reason);
 } acl_le_connection_interface_t;
-
-typedef struct {
-  void (*on_esco_connect_request)(const RawAddress&,
-                                  const types::ClassOfDevice&);
-  void (*on_sco_connect_request)(const RawAddress&,
-                                 const types::ClassOfDevice&);
-  void (*on_disconnected)(uint16_t handle, tHCI_REASON reason);
-} acl_sco_connection_interface_t;
 
 typedef struct {
   void (*on_authentication_complete)(uint16_t handle, tHCI_STATUS status);
@@ -125,7 +114,7 @@ typedef struct {
   void (*on_read_remote_version_information_complete)(
       tHCI_STATUS status, uint16_t handle, uint8_t lmp_version,
       uint16_t manufacturer_name, uint16_t sub_version);
-  void (*on_phy_update)(tGATT_STATUS status, uint16_t handle, uint8_t tx_phy,
+  void (*on_phy_update)(tHCI_STATUS status, uint16_t handle, uint8_t tx_phy,
                         uint8_t rx_phy);
 
   void (*on_le_subrate_change)(uint16_t handle, uint16_t subrate_factor,
@@ -136,7 +125,6 @@ typedef struct {
 typedef struct {
   acl_classic_connection_interface_t classic;
   acl_le_connection_interface_t le;
-  acl_sco_connection_interface_t sco;
 } acl_connection_interface_t;
 
 typedef struct {

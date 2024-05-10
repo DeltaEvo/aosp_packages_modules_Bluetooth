@@ -1,10 +1,10 @@
-# Copyright 2022 Google LLC
+# Copyright (C) 2024 The Android Open Source Project
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     https://www.apache.org/licenses/LICENSE-2.0
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,11 +19,12 @@ import asyncio
 
 from mmi2grpc._helpers import assert_description, match_description
 from mmi2grpc._proxy import ProfileProxy
+from mmi2grpc._rootcanal import Dongle
 
-from pandora.security_grpc import Security, PairingEventAnswer
-from pandora.security_pb2 import LESecurityLevel
+from pandora.security_grpc import Security
+from pandora.security_pb2 import LE_LEVEL3, PairingEventAnswer
 from pandora.host_grpc import Host
-from pandora.host_pb2 import ConnectabilityMode, OwnAddressType
+from pandora.host_pb2 import PUBLIC, RANDOM
 
 
 def debug(*args, **kwargs):
@@ -32,21 +33,27 @@ def debug(*args, **kwargs):
 
 class SMProxy(ProfileProxy):
 
-    def __init__(self, channel):
+    def __init__(self, channel, rootcanal):
         super().__init__(channel)
         self.security = Security(channel)
         self.host = Host(channel)
+        self.rootcanal = rootcanal
         self.connection = None
         self.pairing_stream = None
         self.passkey_queue = Queue()
         self._handle_pairing_requests()
+
+    def test_started(self, test: str, **kwargs):
+        self.rootcanal.select_pts_dongle(Dongle.CSR_RCK_PTS_DONGLE)
+
+        return "OK"
 
     @assert_description
     def MMI_IUT_ENABLE_CONNECTION_SM(self, pts_addr: bytes, **kwargs):
         """
         Initiate an connection from the IUT to the PTS.
         """
-        self.connection = self.host.ConnectLE(own_address_type=OwnAddressType.RANDOM, public=pts_addr).connection
+        self.connection = self.host.ConnectLE(own_address_type=RANDOM, public=pts_addr).connection
         return "OK"
 
     @assert_description
@@ -54,9 +61,11 @@ class SMProxy(ProfileProxy):
         """
         Please start pairing process.
         """
+
         def secure():
             if self.connection:
-                self.security.Secure(connection=self.connection, le=LESecurityLevel.LE_LEVEL3)
+                self.security.Secure(connection=self.connection, le=LE_LEVEL3)
+
         Thread(target=secure).start()
         return "OK"
 
@@ -93,9 +102,11 @@ class SMProxy(ProfileProxy):
         Action: Place the IUT in connectable mode
         """
         self.advertise = self.host.Advertise(
+            legacy=True,
             connectable=True,
-            own_address_type=OwnAddressType.PUBLIC,
+            own_address_type=PUBLIC,
         )
+
         return "OK"
 
     @assert_description
@@ -138,10 +149,10 @@ class SMProxy(ProfileProxy):
 
         return "OK"
 
-    @assert_description
+    @match_description
     def MMI_IUT_ABORT_PAIRING_PROCESS_DISCONNECT(self, **kwargs):
         """
-        Lower tester expects IUT aborts pairing process, and disconnect.
+        Lower tester expects IUT aborts pairing process(, and disconnect|. Click OK to confirm pairing is aborted).
         """
 
         return "OK"
@@ -163,6 +174,48 @@ class SMProxy(ProfileProxy):
         """
         Please verify the passKey is correct: 000000
         """
+        return "OK"
+
+    @assert_description
+    def MMI_IUT_INITIATE_CONNECTION_BR_EDR_PAIRING(self, test: str, pts_addr: bytes, **kwargs):
+        """
+        Please initiate a connection over BR/EDR to the PTS, and initiate
+        pairing process.
+
+        Description: Verify that the Implementation Under Test
+        (IUT) can initiate a connect request over BR/EDR to PTS, and initiate
+        pairing process.
+        """
+        self.connection = self.host.Connect(address=pts_addr).connection
+
+        return "OK"
+
+    @assert_description
+    def MMI_ASK_IUT_PERFORM_FEATURE_EXCHANGE_OVER_BR(self, **kwargs):
+        """
+        Please start pairing feature exchange over BR/EDR.
+        """
+
+        return "OK"
+
+    @assert_description
+    def MMI_IUT_INITIATES_ENCRYPTION(self, **kwargs):
+        """
+        Initiates encryption with the PTS.
+        """
+
+        return "OK"
+
+    @assert_description
+    def _mmi_20117(self, **kwargs):
+        """
+        Please start encryption using previously distributed key.
+
+        Description:
+        Verify that the Implementation Under Test (IUT) can successfully start
+        and complete encryption with previously distributed key.
+        """
+
         return "OK"
 
     def _handle_pairing_requests(self):

@@ -15,7 +15,11 @@ cc_fuzz {
         "fuzz_list.cc",
     ],
     static_libs: [
-        "libosi",
+        "libbase",
+        "libbluetooth_log",
+        "libchrome",
         "liblog",
+        "libosi",
     ],
+    cflags: ["-Wno-unused-parameter"],
 }

@@ -31,6 +31,7 @@ source_set("BluetoothHciSources") {
     "le_address_manager.cc",
     "le_advertising_manager.cc",
     "le_scanning_manager.cc",
+    "le_scanning_reassembler.cc",
     "link_key.cc",
     "msft.cc",
     "remote_name_request.cc",
@@ -41,10 +42,14 @@ source_set("BluetoothHciSources") {
   include_dirs = [ "//bt/system/gd" ]
 
   deps = [
+    "//bt/flags:bluetooth_flags_c_lib",
     "//bt/system/gd:gd_default_deps",
   ]
 
-  configs += [ "//bt/system:target_defaults" ]
+  configs += [
+    "//bt/system:target_defaults",
+    "//bt/system/log:log_defaults",
+  ]
 }
 
 if (use.test) {

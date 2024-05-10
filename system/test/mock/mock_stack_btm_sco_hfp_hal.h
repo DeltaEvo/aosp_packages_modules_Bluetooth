@@ -24,20 +24,11 @@
 
 #include <cstdint>
 #include <functional>
-#include <map>
-#include <string>
 
 // Original included files, if any
-// NOTE: Since this is a mock file with mock definitions some number of
-//       include files may not be required.  The include-what-you-use
-//       still applies, but crafting proper inclusion is out of scope
-//       for this effort.  This compilation unit may compile as-is, or
-//       may need attention to prune from (or add to ) the inclusion set.
-#include <vector>
 
-#include "btm_sco_hfp_hal.h"
 #include "device/include/esco_parameters.h"
-#include "test/common/mock_functions.h"
+#include "stack/btm/btm_sco_hfp_hal.h"
 
 // Original usings
 
@@ -54,7 +45,7 @@ namespace stack_btm_sco_hfp_hal {
 struct enable_offload {
   static bool return_value;
   std::function<bool(bool enable)> body{
-      [](bool enable) { return return_value; }};
+      [](bool /* enable */) { return return_value; }};
   bool operator()(bool enable) { return body(enable); };
 };
 extern struct enable_offload enable_offload;
@@ -65,7 +56,7 @@ extern struct enable_offload enable_offload;
 struct get_codec_capabilities {
   static hfp_hal_interface::bt_codecs return_value;
   std::function<hfp_hal_interface::bt_codecs(uint64_t codecs)> body{
-      [](uint64_t codecs) { return return_value; }};
+      [](uint64_t /* codecs */) { return return_value; }};
   hfp_hal_interface::bt_codecs operator()(uint64_t codecs) {
     return body(codecs);
   };
@@ -94,11 +85,12 @@ extern struct get_offload_supported get_offload_supported;
 
 // Name: get_packet_size
 // Params: int codec
-// Return: int
+// Return: size_t
 struct get_packet_size {
-  static int return_value;
-  std::function<int(int codec)> body{[](int codec) { return return_value; }};
-  int operator()(int codec) { return body(codec); };
+  static size_t return_value;
+  std::function<size_t(int /* codec */)> body{
+      [](int /* codec */) { return return_value; }};
+  size_t operator()(int codec) { return body(codec); };
 };
 extern struct get_packet_size get_packet_size;
 
@@ -111,6 +103,29 @@ struct get_wbs_supported {
   bool operator()() { return body(); };
 };
 extern struct get_wbs_supported get_wbs_supported;
+
+// Name: get_swb_supported
+// Params:
+// Return: bool
+struct get_swb_supported {
+  static bool return_value;
+  std::function<bool()> body{[]() { return return_value; }};
+  bool operator()() { return body(); };
+};
+extern struct get_swb_supported get_swb_supported;
+
+// Name: is_coding_format_supported
+// Params: esco_coding_format_t coding_format
+// Return: bool
+struct is_coding_format_supported {
+  static bool return_value;
+  std::function<bool(esco_coding_format_t coding_format)> body{
+      [](esco_coding_format_t /* coding_format */) { return return_value; }};
+  bool operator()(esco_coding_format_t coding_format) {
+    return body(coding_format);
+  };
+};
+extern struct is_coding_format_supported is_coding_format_supported;
 
 // Name: init
 // Params:
@@ -126,7 +141,7 @@ extern struct init init;
 // Return: void
 struct notify_sco_connection_change {
   std::function<void(RawAddress device, bool is_connected, int codec)> body{
-      [](RawAddress device, bool is_connected, int codec) {}};
+      [](RawAddress /* device */, bool /* is_connected */, int /* codec */) {}};
   void operator()(RawAddress device, bool is_connected, int codec) {
     body(device, is_connected, codec);
   };
@@ -137,9 +152,8 @@ extern struct notify_sco_connection_change notify_sco_connection_change;
 // Params: esco_coding_format_t coding_format
 // Return: void
 struct set_codec_datapath {
-  std::function<void(esco_coding_format_t coding_format)> body{
-      [](esco_coding_format_t coding_format) {}};
-  void operator()(esco_coding_format_t coding_format) { body(coding_format); };
+  std::function<void(int coding_format)> body{[](int /* coding_format */) {}};
+  void operator()(int coding_format) { body(coding_format); };
 };
 extern struct set_codec_datapath set_codec_datapath;
 
@@ -148,7 +162,7 @@ extern struct set_codec_datapath set_codec_datapath;
 // Return: void
 struct update_esco_parameters {
   std::function<void(enh_esco_params_t* p_parms)> body{
-      [](enh_esco_params_t* p_parms) {}};
+      [](enh_esco_params_t* /* p_parms */) {}};
   void operator()(enh_esco_params_t* p_parms) { body(p_parms); };
 };
 extern struct update_esco_parameters update_esco_parameters;

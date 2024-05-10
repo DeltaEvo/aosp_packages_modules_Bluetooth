@@ -19,11 +19,9 @@
 
 #pragma once
 
-#include <errno.h>
 #include <stdbool.h>
 
 #include "device/include/interop.h"
-#include "device/include/interop_database.h"
 
 typedef uint16_t UINT16;
 
@@ -83,4 +81,3 @@ bool interop_database_match_addr_get_lmp_ver(const interop_feature_t feature,
                                              const RawAddress* addr,
                                              uint8_t* lmp_ver,
                                              uint16_t* lmp_sub_ver);
-bool interop_get_allowlisted_media_players_list(list_t* p_bl_devices);

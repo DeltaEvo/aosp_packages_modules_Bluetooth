@@ -20,40 +20,13 @@
  *
  *  mockcify.pl ver 0.2
  */
-
-#include <map>
-#include <string>
-
-// Original included files, if any
-// NOTE: Since this is a mock file with mock definitions some number of
-//       include files may not be required.  The include-what-you-use
-//       still applies, but crafting proper inclusion is out of scope
-//       for this effort.  This compilation unit may compile as-is, or
-//       may need attention to prune the inclusion set.
-#include <base/logging.h>
-#include <base/strings/stringprintf.h>
-
-#include <cstdint>
-#include <string>
-
-#include "device/include/controller.h"
-#include "main/shim/l2c_api.h"
-#include "main/shim/shim.h"
-#include "osi/include/log.h"
-#include "stack/btm/btm_sec.h"
-#include "stack/include/bt_hdr.h"
-#include "stack/include/l2c_api.h"
-#include "stack/l2cap/l2c_int.h"
-#include "types/raw_address.h"
-
-// Mock include file to share data between tests and mock
 #include "test/mock/mock_stack_l2cap_api.h"
 
-// Mocked compile conditionals, if any
-#ifndef UNUSED_ATTR
-#define UNUSED_ATTR
-#endif
+// Original included files, if any
 
+#include "test/common/mock_functions.h"
+
+// Mocked compile conditionals, if any
 // Mocked internal structures, if any
 
 namespace test {
@@ -80,7 +53,6 @@ struct L2CA_DisconnectReq L2CA_DisconnectReq;
 struct L2CA_DisconnectLECocReq L2CA_DisconnectLECocReq;
 struct L2CA_GetRemoteCid L2CA_GetRemoteCid;
 struct L2CA_SetIdleTimeoutByBdAddr L2CA_SetIdleTimeoutByBdAddr;
-struct L2CA_SetTraceLevel L2CA_SetTraceLevel;
 struct L2CA_UseLatencyMode L2CA_UseLatencyMode;
 struct L2CA_SetAclPriority L2CA_SetAclPriority;
 struct L2CA_SetAclLatency L2CA_SetAclLatency;
@@ -211,10 +183,6 @@ bool L2CA_SetIdleTimeoutByBdAddr(const RawAddress& bd_addr, uint16_t timeout,
   return test::mock::stack_l2cap_api::L2CA_SetIdleTimeoutByBdAddr(
       bd_addr, timeout, transport);
 }
-uint8_t L2CA_SetTraceLevel(uint8_t new_level) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_l2cap_api::L2CA_SetTraceLevel(new_level);
-}
 bool L2CA_UseLatencyMode(const RawAddress& bd_addr, bool use_latency_mode) {
   inc_func_call_count(__func__);
   return test::mock::stack_l2cap_api::L2CA_UseLatencyMode(bd_addr,
@@ -310,3 +278,5 @@ uint16_t L2CA_LeCreditThreshold() {
 }
 
 // END mockcify generation
+
+void L2CA_Dumpsys(int /* fd */) { inc_func_call_count(__func__); }

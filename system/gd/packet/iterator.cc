@@ -16,7 +16,8 @@
 
 #include "packet/iterator.h"
 
-#include "os/log.h"
+#undef NDEBUG
+#include <cassert>
 
 namespace bluetooth {
 namespace packet {
@@ -30,6 +31,14 @@ Iterator<little_endian>::Iterator(const std::forward_list<View>& data, size_t of
   for (auto& view : data) {
     end_ += view.size();
   }
+}
+
+template <bool little_endian>
+Iterator<little_endian>::Iterator(std::shared_ptr<std::vector<uint8_t>> data) {
+  data_.emplace_front(data, 0, data->size());
+  index_ = 0;
+  begin_ = 0;
+  end_ = data_.front().size();
 }
 
 template <bool little_endian>
@@ -122,7 +131,7 @@ bool Iterator<little_endian>::operator>=(const Iterator<little_endian>& itr) con
 
 template <bool little_endian>
 uint8_t Iterator<little_endian>::operator*() const {
-  ASSERT_LOG(index_ < end_ && !(begin_ > index_), "Index %zu out of bounds: [%zu,%zu)", index_, begin_, end_);
+  assert(NumBytesRemaining() > 0);
   size_t index = index_;
 
   for (auto view : data_) {
@@ -131,13 +140,15 @@ uint8_t Iterator<little_endian>::operator*() const {
     }
     index -= view.size();
   }
-  ASSERT_LOG(false, "Out of fragments searching for index %zu", index_);
+
+  // Out of fragments searching for index.
+  std::abort();
   return 0;
 }
 
 template <bool little_endian>
 size_t Iterator<little_endian>::NumBytesRemaining() const {
-  if (end_ > index_ && !(begin_ > index_)) {
+  if (end_ > index_ && index_ >= begin_) {
     return end_ - index_;
   }
   return 0;

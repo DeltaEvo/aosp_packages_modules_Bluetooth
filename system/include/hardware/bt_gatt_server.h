@@ -26,7 +26,7 @@ __BEGIN_DECLS
 
 /** GATT value type used in response to remote read requests */
 typedef struct {
-  uint8_t value[BTGATT_MAX_ATTR_LEN];
+  uint8_t value[GATT_MAX_ATTR_LEN];
   uint16_t handle;
   uint16_t offset;
   uint16_t len;
@@ -154,7 +154,7 @@ typedef struct {
 
   /** Create a connection to a remote peripheral */
   bt_status_t (*connect)(int server_if, const RawAddress& bd_addr,
-                         bool is_direct, int transport);
+                         uint8_t addr_type, bool is_direct, int transport);
 
   /** Disconnect an established connection or cancel a pending one */
   bt_status_t (*disconnect)(int server_if, const RawAddress& bd_addr,

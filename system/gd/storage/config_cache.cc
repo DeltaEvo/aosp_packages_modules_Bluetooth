@@ -16,6 +16,8 @@
 
 #include "storage/config_cache.h"
 
+#include <bluetooth/log.h>
+
 #include <ios>
 #include <sstream>
 #include <utility>
@@ -70,13 +72,14 @@ void ConfigCache::SetPersistentConfigChangedCallback(std::function<void()> persi
 }
 
 ConfigCache::ConfigCache(ConfigCache&& other) noexcept
-    : persistent_config_changed_callback_(std::move(other.persistent_config_changed_callback_)),
+    : persistent_config_changed_callback_(nullptr),
       persistent_property_names_(std::move(other.persistent_property_names_)),
       information_sections_(std::move(other.information_sections_)),
       persistent_devices_(std::move(other.persistent_devices_)),
       temporary_devices_(std::move(other.temporary_devices_)) {
-  // std::function will be in a valid but unspecified state after std::move(), hence resetting it
-  other.persistent_config_changed_callback_ = {};
+  log::assert_that(
+      other.persistent_config_changed_callback_ == nullptr,
+      "Can't assign after setting the callback");
 }
 
 ConfigCache& ConfigCache::operator=(ConfigCache&& other) noexcept {
@@ -85,8 +88,10 @@ ConfigCache& ConfigCache::operator=(ConfigCache&& other) noexcept {
   }
   std::lock_guard<std::recursive_mutex> my_lock(mutex_);
   std::lock_guard<std::recursive_mutex> others_lock(other.mutex_);
-  persistent_config_changed_callback_.swap(other.persistent_config_changed_callback_);
-  other.persistent_config_changed_callback_ = {};
+  log::assert_that(
+      other.persistent_config_changed_callback_ == nullptr,
+      "Can't assign after setting the callback");
+  persistent_config_changed_callback_ = {};
   persistent_property_names_ = std::move(other.persistent_property_names_);
   information_sections_ = std::move(other.information_sections_);
   persistent_devices_ = std::move(other.persistent_devices_);
@@ -179,8 +184,8 @@ void ConfigCache::SetProperty(std::string section, std::string property, std::st
   TrimAfterNewLine(section);
   TrimAfterNewLine(property);
   TrimAfterNewLine(value);
-  ASSERT_LOG(!section.empty(), "Empty section name not allowed");
-  ASSERT_LOG(!property.empty(), "Empty property name not allowed");
+  log::assert_that(!section.empty(), "Empty section name not allowed");
+  log::assert_that(!property.empty(), "Empty property name not allowed");
   if (!IsDeviceSection(section)) {
     auto section_iter = information_sections_.find(section);
     if (section_iter == information_sections_.end()) {
@@ -283,7 +288,7 @@ bool ConfigCache::RemoveProperty(const std::string& section, const std::string& 
 
 void ConfigCache::ConvertEncryptOrDecryptKeyIfNeeded() {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
-  LOG_INFO("%s", __func__);
+  log::info("");
   auto persistent_sections = GetPersistentSections();
   for (const auto& section : persistent_sections) {
     auto section_iter = persistent_devices_.find(section);
@@ -324,7 +329,7 @@ void ConfigCache::RemoveSectionWithProperty(const std::string& property) {
   for (auto* config_section : {&information_sections_, &persistent_devices_}) {
     for (auto it = config_section->begin(); it != config_section->end();) {
       if (it->second.contains(property)) {
-        LOG_INFO("Removing persistent section %s with property %s", it->first.c_str(), property.c_str());
+        log::info("Removing persistent section {} with property {}", it->first, property);
         it = config_section->erase(it);
         num_persistent_removed++;
         continue;
@@ -334,7 +339,7 @@ void ConfigCache::RemoveSectionWithProperty(const std::string& property) {
   }
   for (auto it = temporary_devices_.begin(); it != temporary_devices_.end();) {
     if (it->second.contains(property)) {
-      LOG_INFO("Removing temporary section %s with property %s", it->first.c_str(), property.c_str());
+      log::info("Removing temporary section {} with property {}", it->first, property);
       it = temporary_devices_.erase(it);
       continue;
     }

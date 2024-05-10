@@ -16,11 +16,12 @@
 
 #pragma once
 
+#include <bluetooth/log.h>
 #include <stdint.h>
 
 #include "common/bidi_queue.h"
 #include "common/multi_priority_queue.h"
-#include "hci/acl_manager.h"
+#include "hci/acl_manager/acl_connection.h"
 #include "hci/controller.h"
 #include "hci/hci_packets.h"
 #include "os/handler.h"
@@ -79,3 +80,9 @@ class RoundRobinScheduler {
 }  // namespace acl_manager
 }  // namespace hci
 }  // namespace bluetooth
+
+namespace fmt {
+template <>
+struct formatter<bluetooth::hci::acl_manager::RoundRobinScheduler::ConnectionType>
+    : enum_formatter<bluetooth::hci::acl_manager::RoundRobinScheduler::ConnectionType> {};
+}  // namespace fmt

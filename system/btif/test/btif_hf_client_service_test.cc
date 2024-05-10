@@ -1,5 +1,6 @@
-#include <base/logging.h>
+#include <android_bluetooth_sysprop.h>
 #include <gtest/gtest.h>
+
 #include "bta_hfp_api.h"
 
 #undef LOG_TAG
@@ -7,7 +8,19 @@
 
 static tBTA_HF_CLIENT_FEAT gFeatures;
 
-uint8_t btif_trace_level = BT_TRACE_LEVEL_WARNING;
+int get_default_hfp_version() {
+  return GET_SYSPROP(Hfp, version, HFP_VERSION_1_7);
+}
+
+int get_default_hf_client_features() {
+#define DEFAULT_BTIF_HF_CLIENT_FEATURES                                        \
+  (BTA_HF_CLIENT_FEAT_ECNR | BTA_HF_CLIENT_FEAT_3WAY |                         \
+   BTA_HF_CLIENT_FEAT_CLI | BTA_HF_CLIENT_FEAT_VREC | BTA_HF_CLIENT_FEAT_VOL | \
+   BTA_HF_CLIENT_FEAT_ECS | BTA_HF_CLIENT_FEAT_ECC | BTA_HF_CLIENT_FEAT_CODEC)
+
+  return GET_SYSPROP(Hfp, hf_client_features, DEFAULT_BTIF_HF_CLIENT_FEATURES);
+}
+
 tBTA_STATUS BTA_HfClientEnable(tBTA_HF_CLIENT_CBACK* p_cback,
                                tBTA_HF_CLIENT_FEAT features,
                                const char* p_service_name) {
@@ -21,15 +34,11 @@ bt_status_t btif_transfer_context(tBTIF_CBACK* p_cback, uint16_t event,
   return BT_STATUS_SUCCESS;
 }
 void btif_queue_advance() {}
-const char* dump_hf_client_event(uint16_t event) {
-  return "UNKNOWN MSG ID";
-}
+std::string dump_hf_client_event(uint16_t event) { return "UNKNOWN MSG ID"; }
 
 class BtifHfClientTest : public ::testing::Test {
  protected:
-  void SetUp() override {
-    gFeatures = BTIF_HF_CLIENT_FEATURES;
-  }
+  void SetUp() override { gFeatures = get_default_hf_client_features(); }
 
   void TearDown() override {}
 };
@@ -39,5 +48,8 @@ TEST_F(BtifHfClientTest, test_btif_hf_cleint_service) {
 
   btif_hf_client_execute_service(enable);
   ASSERT_EQ((gFeatures & BTA_HF_CLIENT_FEAT_ESCO_S4) > 0,
-            BTA_HFP_VERSION >= HFP_VERSION_1_7);
+            get_default_hfp_version() >= HFP_VERSION_1_7);
+
+  ASSERT_EQ((gFeatures & BTA_HF_CLIENT_FEAT_SWB) > 0,
+            get_default_hfp_version() >= HFP_VERSION_1_9);
 }

@@ -41,7 +41,6 @@ import java.util.Scanner;
  * CSIP Set Coordinator role device state machine
  */
 public class CsipSetCoordinatorStateMachine extends StateMachine {
-    private static final boolean DBG = false;
     private static final String TAG = "CsipSetCoordinatorStateMachine";
 
     static final int CONNECT = 1;
@@ -156,9 +155,7 @@ public class CsipSetCoordinatorStateMachine extends StateMachine {
                     break;
                 case STACK_EVENT:
                     CsipSetCoordinatorStackEvent event = (CsipSetCoordinatorStackEvent) message.obj;
-                    if (DBG) {
-                        Log.d(TAG, "Disconnected: stack event: " + event);
-                    }
+                    Log.d(TAG, "Disconnected: stack event: " + event);
                     if (!mDevice.equals(event.device)) {
                         Log.wtf(TAG, "Device(" + mDevice + "): event mismatch: " + event);
                     }
@@ -516,6 +513,7 @@ public class CsipSetCoordinatorStateMachine extends StateMachine {
     private void csipConnectionState(int newState, int prevState) {
         log("Connection state " + mDevice + ": " + profileStateToString(prevState) + "->"
                 + profileStateToString(newState));
+        mService.handleConnectionStateChanged(mDevice, prevState, newState);
 
         Intent intent =
                 new Intent(BluetoothCsipSetCoordinator.ACTION_CSIS_CONNECTION_STATE_CHANGED);
@@ -582,8 +580,6 @@ public class CsipSetCoordinatorStateMachine extends StateMachine {
 
     @Override
     protected void log(String msg) {
-        if (DBG) {
-            super.log(msg);
-        }
+        super.log(msg);
     }
 }

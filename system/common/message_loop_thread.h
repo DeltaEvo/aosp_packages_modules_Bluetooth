@@ -16,19 +16,19 @@
 
 #pragma once
 
-#include <unistd.h>
-#include <future>
-#include <memory>
-#include <string>
-#include <thread>
-
 #include <base/functional/bind.h>
 #include <base/location.h>
 #include <base/run_loop.h>
 #include <base/threading/platform_thread.h>
-#include "src/message_loop_thread.rs.h"
+#include <bluetooth/log.h>
+#include <unistd.h>
+
+#include <future>
+#include <string>
+#include <thread>
 
 #include "abstract_message_loop.h"
+#include "common/postable_context.h"
 
 namespace bluetooth {
 
@@ -37,7 +37,7 @@ namespace common {
 /**
  * An interface to various thread related functionality
  */
-class MessageLoopThread final {
+class MessageLoopThread final : public PostableContext {
  public:
   /**
    * Create a message loop thread with name. Thread won't be running until
@@ -46,7 +46,6 @@ class MessageLoopThread final {
    * @param thread_name name of this worker thread
    */
   explicit MessageLoopThread(const std::string& thread_name);
-  explicit MessageLoopThread(const std::string& thread_name, bool is_main);
 
   MessageLoopThread(const MessageLoopThread&) = delete;
   MessageLoopThread& operator=(const MessageLoopThread&) = delete;
@@ -167,7 +166,17 @@ class MessageLoopThread final {
    * scheduled
    */
   bool DoInThreadDelayed(const base::Location& from_here,
-                         base::OnceClosure task, const base::TimeDelta& delay);
+                         base::OnceClosure task,
+                         std::chrono::microseconds delay);
+  /**
+   * Wrapper around DoInThread without a location.
+   */
+  void Post(base::OnceClosure closure) override;
+
+  /**
+   * Returns a postable object
+   */
+  PostableContext* Postable();
 
  private:
   /**
@@ -200,8 +209,6 @@ class MessageLoopThread final {
   pid_t linux_tid_;
   base::WeakPtrFactory<MessageLoopThread> weak_ptr_factory_;
   bool shutting_down_;
-  bool is_main_;
-  ::rust::Box<shim::rust::MessageLoopThread>* rust_thread_ = nullptr;
 };
 
 inline std::ostream& operator<<(std::ostream& os,
@@ -211,5 +218,9 @@ inline std::ostream& operator<<(std::ostream& os,
 }
 
 }  // namespace common
-
 }  // namespace bluetooth
+
+namespace fmt {
+template <>
+struct formatter<bluetooth::common::MessageLoopThread> : ostream_formatter {};
+}  // namespace fmt

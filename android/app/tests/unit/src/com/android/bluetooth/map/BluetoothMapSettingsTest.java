@@ -25,19 +25,26 @@ import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
+import static com.google.common.truth.Truth.assertThat;
+
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 
 import androidx.test.core.app.ActivityScenario;
+import androidx.test.filters.FlakyTest;
 import androidx.test.filters.LargeTest;
 import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
+import androidx.test.uiautomator.By;
+import androidx.test.uiautomator.UiDevice;
+import androidx.test.uiautomator.UiObject2;
+import androidx.test.uiautomator.Until;
 
 import com.android.bluetooth.R;
+import com.android.bluetooth.TestUtils;
 
 import org.junit.After;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -52,8 +59,9 @@ public class BluetoothMapSettingsTest {
     ActivityScenario<BluetoothMapSettings> mActivityScenario;
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         enableActivity(true);
+        TestUtils.setUpUiTest();
         mIntent = new Intent();
         mIntent.setClass(mTargetContext, BluetoothMapSettings.class);
         mActivityScenario = ActivityScenario.launch(mIntent);
@@ -61,16 +69,25 @@ public class BluetoothMapSettingsTest {
 
     @After
     public void tearDown() throws Exception {
+        TestUtils.tearDownUiTest();
         if (mActivityScenario != null) {
-            // Workaround for b/159805732. Without this, test hangs for 45 seconds.
-            Thread.sleep(1_000);
             mActivityScenario.close();
         }
         enableActivity(false);
     }
 
     @Test
+    @FlakyTest
     public void initialize() throws Exception {
+        UiDevice device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
+
+        long timeoutMs = 5_000;
+        String activityLabel = mTargetContext.getString(R.string.bluetooth_map_settings_title);
+        UiObject2 object = device.wait(Until.findObject(By.text(activityLabel)), timeoutMs);
+        assertThat(object).isNotNull();
+
+        object.click();
+
         onView(withId(R.id.bluetooth_map_settings_list_view)).check(matches(isDisplayed()));
     }
 

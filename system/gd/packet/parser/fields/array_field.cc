@@ -113,7 +113,7 @@ std::string ArrayField::GetGetterFunctionName() const {
 }
 
 void ArrayField::GenGetter(std::ostream& s, Size start_offset, Size end_offset) const {
-  s << GetDataType() << " " << GetGetterFunctionName() << "() {";
+  s << GetDataType() << " " << GetGetterFunctionName() << "() const {";
   s << "ASSERT(was_validated_);";
   s << "size_t end_index = size();";
   s << "auto to_bound = begin();";
@@ -194,20 +194,4 @@ void ArrayField::GenStringRepresentation(std::ostream& s, std::string accessor) 
 
   s << ";}";
   s << "ss << \"]\"";
-}
-
-std::string ArrayField::GetRustDataType() const {
-  return "[" + element_field_->GetRustDataType() + "; " + std::to_string(array_size_) + "]";
-}
-
-void ArrayField::GenRustGetter(std::ostream& s, Size start_offset, Size, std::string) const {
-  s << "let " << GetName() << " = ";
-  s << "bytes[" << start_offset.bytes() << "..";
-  s << start_offset.bytes() + GetSize().bytes() << "].try_into()";
-  s << ".map_err(|_| Error::InvalidPacketError)?;";
-}
-
-void ArrayField::GenRustWriter(std::ostream& s, Size start_offset, Size) const {
-  s << "&buffer[" << start_offset.bytes() << ".." << start_offset.bytes() + GetSize().bytes()
-    << "].copy_from_slice(&self." << GetName() << ");";
 }

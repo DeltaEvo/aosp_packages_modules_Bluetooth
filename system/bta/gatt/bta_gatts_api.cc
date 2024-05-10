@@ -24,20 +24,22 @@
 
 #include <base/functional/bind.h>
 #include <base/location.h>
-#include <base/logging.h>
+#include <bluetooth/log.h>
 
 #include <cstdint>
 #include <memory>
 #include <vector>
 
-#include "bt_target.h"  // Must be first to define build configuration
 #include "bta/gatt/bta_gatts_int.h"
+#include "internal_include/bt_target.h"
 #include "osi/include/allocator.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/btu.h"  // do_in_main_thread
+#include "stack/include/main_thread.h"
 #include "types/bluetooth/uuid.h"
 #include "types/bt_transport.h"
 #include "types/raw_address.h"
+
+using namespace bluetooth;
 
 /*****************************************************************************
  *  Constants
@@ -59,7 +61,7 @@ static const tBTA_SYS_REG bta_gatts_reg = {bta_gatts_hdl_event,
  ******************************************************************************/
 void BTA_GATTS_Disable(void) {
   if (!bta_sys_is_register(BTA_ID_GATTS)) {
-    LOG(WARNING) << "GATTS Module not enabled/already disabled";
+    log::warn("GATTS Module not enabled/already disabled");
     return;
   }
 
@@ -126,7 +128,7 @@ void bta_gatts_add_service_impl(tGATT_IF server_if,
   uint8_t rcb_idx =
       bta_gatts_find_app_rcb_idx_by_app_if(&bta_gatts_cb, server_if);
 
-  LOG(INFO) << __func__ << ": rcb_idx=" << +rcb_idx;
+  log::info("rcb_idx={}", rcb_idx);
 
   if (rcb_idx == BTA_GATTS_INVALID_APP) {
     cb.Run(GATT_ERROR, server_if, std::move(service));
@@ -143,7 +145,7 @@ void bta_gatts_add_service_impl(tGATT_IF server_if,
       GATTS_AddService(server_if, service.data(), service.size());
   if (status != GATT_SERVICE_STARTED) {
     memset(&bta_gatts_cb.srvc_cb[srvc_idx], 0, sizeof(tBTA_GATTS_SRVC_CB));
-    LOG(ERROR) << __func__ << ": service creation failed.";
+    log::error("service creation failed.");
     cb.Run(GATT_ERROR, server_if, std::move(service));
     return;
   }
@@ -173,12 +175,12 @@ void bta_gatts_add_service_impl(tGATT_IF server_if,
  *                  service cannot be added.
  *
  ******************************************************************************/
-extern void BTA_GATTS_AddService(tGATT_IF server_if,
-                                 std::vector<btgatt_db_element_t> service,
-                                 BTA_GATTS_AddServiceCb cb) {
+void BTA_GATTS_AddService(tGATT_IF server_if,
+                          std::vector<btgatt_db_element_t> service,
+                          BTA_GATTS_AddServiceCb cb) {
   do_in_main_thread(FROM_HERE,
-                    base::Bind(&bta_gatts_add_service_impl, server_if,
-                               std::move(service), std::move(cb)));
+                    base::BindOnce(&bta_gatts_add_service_impl, server_if,
+                                   std::move(service), std::move(cb)));
 }
 
 /*******************************************************************************
@@ -242,6 +244,12 @@ void BTA_GATTS_StopService(uint16_t service_id) {
 void BTA_GATTS_HandleValueIndication(uint16_t conn_id, uint16_t attr_id,
                                      std::vector<uint8_t> value,
                                      bool need_confirm) {
+
+  if (value.size() > sizeof(tBTA_GATTS_API_INDICATION::value)) {
+    log::error("data to indicate is too long");
+    return;
+  }
+
   tBTA_GATTS_API_INDICATION* p_buf =
       (tBTA_GATTS_API_INDICATION*)osi_calloc(sizeof(tBTA_GATTS_API_INDICATION));
 
@@ -305,7 +313,8 @@ void BTA_GATTS_SendRsp(uint16_t conn_id, uint32_t trans_id, tGATT_STATUS status,
  *
  ******************************************************************************/
 void BTA_GATTS_Open(tGATT_IF server_if, const RawAddress& remote_bda,
-                    bool is_direct, tBT_TRANSPORT transport) {
+                    tBLE_ADDR_TYPE addr_type, bool is_direct,
+                    tBT_TRANSPORT transport) {
   tBTA_GATTS_API_OPEN* p_buf =
       (tBTA_GATTS_API_OPEN*)osi_malloc(sizeof(tBTA_GATTS_API_OPEN));
 
@@ -318,6 +327,7 @@ void BTA_GATTS_Open(tGATT_IF server_if, const RawAddress& remote_bda,
   }
   p_buf->transport = transport;
   p_buf->remote_bda = remote_bda;
+  p_buf->remote_addr_type = addr_type;
 
   bta_sys_sendmsg(p_buf);
 }
@@ -370,7 +380,7 @@ void BTA_GATTS_Close(uint16_t conn_id) {
 }
 
 void BTA_GATTS_InitBonded(void) {
-  LOG(INFO) << __func__;
+  log::info("");
 
   BT_HDR_RIGID* p_buf = (BT_HDR_RIGID*)osi_malloc(sizeof(BT_HDR_RIGID));
   p_buf->event = BTA_GATTS_API_INIT_BONDED_EVT;

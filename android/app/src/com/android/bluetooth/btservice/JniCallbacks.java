@@ -17,8 +17,9 @@
 package com.android.bluetooth.btservice;
 
 import android.bluetooth.OobData;
+import android.bluetooth.UidTraffic;
 
-final class JniCallbacks {
+class JniCallbacks {
 
     private RemoteDevices mRemoteDevices;
     private AdapterProperties mAdapterProperties;
@@ -47,8 +48,8 @@ final class JniCallbacks {
         throw new CloneNotSupportedException();
     }
 
-    void sspRequestCallback(byte[] address, byte[] name, int cod, int pairingVariant, int passkey) {
-        mBondStateMachine.sspRequestCallback(address, name, cod, pairingVariant, passkey);
+    void sspRequestCallback(byte[] address, int pairingVariant, int passkey) {
+        mBondStateMachine.sspRequestCallback(address, pairingVariant, passkey);
     }
 
     void devicePropertyChangedCallback(byte[] address, int[] types, byte[][] val) {
@@ -79,6 +80,10 @@ final class JniCallbacks {
             int transportLinkType, int hciReason, int handle) {
         mRemoteDevices.aclStateChangeCallback(status, address, newState,
                 transportLinkType, hciReason, handle);
+    }
+
+    void keyMissingCallback(byte[] address) {
+        mRemoteDevices.keyMissingCallback(address);
     }
 
     void stateChangeCallback(int status) {
@@ -118,4 +123,23 @@ final class JniCallbacks {
         mAdapterService.switchCodecCallback(is_low_latency_buffer_size);
     }
 
+    boolean acquireWakeLock(String lockName) {
+        return mAdapterService.acquireWakeLock(lockName);
+    }
+
+    boolean releaseWakeLock(String lockName) {
+        return mAdapterService.releaseWakeLock(lockName);
+    }
+
+    void energyInfoCallback(
+            int status,
+            int ctrlState,
+            long txTime,
+            long rxTime,
+            long idleTime,
+            long energyUsed,
+            UidTraffic[] data) {
+        mAdapterService.energyInfoCallback(
+                status, ctrlState, txTime, rxTime, idleTime, energyUsed, data);
+    }
 }

@@ -20,7 +20,6 @@ static_library("common") {
     "message_loop_thread.cc",
     "metric_id_allocator.cc",
     "metrics_linux.cc",
-    "once_timer.cc",
     "os_utils.cc",
     "repeating_timer.cc",
     "stop_watch_legacy.cc",
@@ -31,7 +30,6 @@ static_library("common") {
     "//bt/system/",
     "//bt/system/stack/include",
     "//bt/system/linux_include",
-    "//bt/system/internal_include",
   ]
 
   deps = [
@@ -39,7 +37,10 @@ static_library("common") {
     "//bt/system/gd/rust/shim:init_flags_bridge_header",
   ]
 
-  configs += [ "//bt/system:target_defaults" ]
+  configs += [
+    "//bt/system:target_defaults",
+    "//bt/system/log:log_defaults",
+  ]
 }
 
 if (use.test) {
@@ -61,6 +62,7 @@ if (use.test) {
       "//bt/system:external_gtest_main",
       "//bt/system:external_gmock_main",
       "//bt/system:target_defaults",
+      "//bt/system/log:log_defaults",
     ]
 
     libs = [

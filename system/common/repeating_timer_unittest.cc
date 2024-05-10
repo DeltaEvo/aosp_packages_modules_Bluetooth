@@ -14,14 +14,15 @@
  * limitations under the License.
  */
 
+#include "repeating_timer.h"
+
 #include <base/functional/bind.h>
-#include <base/logging.h>
 #include <gtest/gtest.h>
+
 #include <future>
 
 #include "bind_helpers.h"
 #include "message_loop_thread.h"
-#include "repeating_timer.h"
 
 using bluetooth::common::MessageLoopThread;
 using bluetooth::common::RepeatingTimer;
@@ -86,11 +87,7 @@ class RepeatingTimerTest : public ::testing::Test {
                             base::Unretained(this), start_time,
                             interval_between_tasks_ms, scheduled_tasks,
                             task_length_ms, promise_),
-#if BASE_VER < 931007
-        base::TimeDelta::FromMilliseconds(interval_between_tasks_ms));
-#else
-        base::Milliseconds(interval_between_tasks_ms));
-#endif
+        std::chrono::milliseconds(interval_between_tasks_ms));
     future.get();
     timer_->CancelAndWait();
   }
@@ -147,11 +144,7 @@ TEST_F(RepeatingTimerTest, periodic_run) {
       message_loop_thread.GetWeakPtr(), FROM_HERE,
       base::BindRepeating(&RepeatingTimerTest::IncreaseTaskCounter,
                           base::Unretained(this), num_tasks, promise_),
-#if BASE_VER < 931007
-      base::TimeDelta::FromMilliseconds(delay_ms));
-#else
-      base::Milliseconds(delay_ms));
-#endif
+      std::chrono::milliseconds(delay_ms));
   future.get();
   ASSERT_GE(counter_, num_tasks);
   timer_->CancelAndWait();
@@ -167,11 +160,7 @@ TEST_F(RepeatingTimerTest, schedule_periodic_task_zero_interval) {
       message_loop_thread.GetWeakPtr(), FROM_HERE,
       base::BindRepeating(&RepeatingTimerTest::ShouldNotHappen,
                           base::Unretained(this)),
-#if BASE_VER < 931007
-      base::TimeDelta::FromMilliseconds(interval_ms)));
-#else
-      base::Milliseconds(interval_ms)));
-#endif
+      std::chrono::milliseconds(interval_ms)));
   std::this_thread::sleep_for(std::chrono::milliseconds(delay_error_ms));
 }
 
@@ -185,11 +174,7 @@ TEST_F(RepeatingTimerTest, periodic_delete_without_cancel) {
       message_loop_thread.GetWeakPtr(), FROM_HERE,
       base::BindRepeating(&RepeatingTimerTest::ShouldNotHappen,
                           base::Unretained(this)),
-#if BASE_VER < 931007
-      base::TimeDelta::FromMilliseconds(delay_ms));
-#else
-      base::Milliseconds(delay_ms));
-#endif
+      std::chrono::milliseconds(delay_ms));
   delete timer_;
   timer_ = nullptr;
   std::this_thread::sleep_for(std::chrono::milliseconds(delay_error_ms));
@@ -202,11 +187,7 @@ TEST_F(RepeatingTimerTest, cancel_single_task_near_fire_no_race_condition) {
   uint32_t delay_ms = 5;
   timer_->SchedulePeriodic(message_loop_thread.GetWeakPtr(), FROM_HERE,
                            base::DoNothing(),
-#if BASE_VER < 931007
-                           base::TimeDelta::FromMilliseconds(delay_ms));
-#else
-                           base::Milliseconds(delay_ms));
-#endif
+                           std::chrono::milliseconds(delay_ms));
   std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
   timer_->CancelAndWait();
 }
@@ -223,11 +204,7 @@ TEST_F(RepeatingTimerTest, cancel_periodic_task) {
       message_loop_thread.GetWeakPtr(), FROM_HERE,
       base::BindRepeating(&RepeatingTimerTest::IncreaseTaskCounter,
                           base::Unretained(this), num_tasks, promise_),
-#if BASE_VER < 931007
-      base::TimeDelta::FromMilliseconds(delay_ms));
-#else
-      base::Milliseconds(delay_ms));
-#endif
+      std::chrono::milliseconds(delay_ms));
   future.wait();
   timer_->CancelAndWait();
   std::this_thread::sleep_for(
@@ -264,11 +241,7 @@ TEST_F(RepeatingTimerTest,
       message_loop_thread.GetWeakPtr(), FROM_HERE,
       base::BindRepeating(&RepeatingTimerTest::IncreaseTaskCounter,
                           base::Unretained(this), num_tasks, promise_),
-#if BASE_VER < 931007
-      base::TimeDelta::FromMilliseconds(delay_ms));
-#else
-      base::Milliseconds(delay_ms));
-#endif
+      std::chrono::milliseconds(delay_ms));
   future.wait();
   message_loop_thread.ShutDown();
   std::this_thread::sleep_for(

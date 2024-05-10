@@ -18,19 +18,20 @@
 
 #include "database.h"
 
-#include <base/logging.h>
+#include <bluetooth/log.h>
 
 #include <algorithm>
 #include <list>
-#include <memory>
 #include <sstream>
 
-#include "bt_trace.h"
-#include "stack/crypto_toolbox/crypto_toolbox.h"
+#include "crypto_toolbox/crypto_toolbox.h"
+#include "internal_include/bt_trace.h"
+#include "stack/include/bt_types.h"
 #include "stack/include/gattdefs.h"
 #include "types/bluetooth/uuid.h"
 
 using bluetooth::Uuid;
+using namespace bluetooth;
 
 namespace gatt {
 
@@ -151,6 +152,8 @@ Database Database::Deserialize(const std::vector<StoredAttribute>& nv_attr,
         .uuid = attr.value.service.uuid,
         .is_primary = (attr.type == PRIMARY_SERVICE),
         .end_handle = attr.value.service.end_handle,
+        .included_services = {},
+        .characteristics = {},
     });
   }
 
@@ -167,8 +170,8 @@ Database Database::Deserialize(const std::vector<StoredAttribute>& nv_attr,
 
     if (current_service_it == result.services.end() ||
         !HandleInRange(*current_service_it, attr.handle)) {
-      LOG(ERROR) << "Can't find service for attribute with handle: "
-                 << loghex(attr.handle);
+      log::error("Can't find service for attribute with handle: 0x{:x}",
+                 attr.handle);
       *success = false;
       return result;
     }
@@ -177,7 +180,7 @@ Database Database::Deserialize(const std::vector<StoredAttribute>& nv_attr,
       Service* included_service =
           FindService(result.services, attr.value.included_service.handle);
       if (!included_service) {
-        LOG(ERROR) << __func__ << ": Non-existing included service!";
+        log::error("Non-existing included service!");
         *success = false;
         return result;
       }
@@ -193,6 +196,7 @@ Database Database::Deserialize(const std::vector<StoredAttribute>& nv_attr,
           .uuid = attr.value.characteristic.uuid,
           .value_handle = attr.value.characteristic.value_handle,
           .properties = attr.value.characteristic.properties,
+          .descriptors = {},
       });
 
     } else {
@@ -205,7 +209,11 @@ Database Database::Deserialize(const std::vector<StoredAttribute>& nv_attr,
 
       } else {
         current_service_it->characteristics.back().descriptors.emplace_back(
-            Descriptor{.handle = attr.handle, .uuid = attr.type});
+            Descriptor{
+                .handle = attr.handle,
+                .uuid = attr.type,
+                .characteristic_extended_properties = {},
+            });
       }
     }
   }

@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-#include "gd/rust/topshim/controller/controller_shim.h"
+#include "rust/topshim/controller/controller_shim.h"
 
 #include <memory>
 
+#include "main/shim/helpers.h"
 #include "rust/cxx.h"
 #include "src/controller.rs.h"
 #include "types/raw_address.h"
@@ -40,7 +41,12 @@ std::unique_ptr<ControllerIntf> GetControllerInterface() {
 
 RawAddress ControllerIntf::read_local_addr() const {
   if (!controller_) std::abort();
-  return *controller_->get_address();
+  return ToRawAddress(controller_->GetMacAddress());
+}
+
+uint64_t ControllerIntf::get_ble_supported_states() const {
+  if (!controller_) std::abort();
+  return controller_->GetLeSupportedStates();
 }
 
 }  // namespace rust

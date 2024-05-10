@@ -28,18 +28,20 @@
 
 #define LOG_TAG "bluetooth"
 
+#include <bluetooth/log.h>
 #include <string.h>
 
 #include "avdt_api.h"
 #include "avdt_int.h"
 #include "avdtc_api.h"
-#include "bt_target.h"
-#include "bt_utils.h"
+#include "internal_include/bt_target.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
 #include "osi/include/osi.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_types.h"
+
+using namespace bluetooth;
 
 /*****************************************************************************
  * constants
@@ -330,8 +332,7 @@ static void avdt_msg_bld_cfg(uint8_t** p, AvdtpSepConfig* p_cfg) {
  * Returns          void.
  *
  ******************************************************************************/
-static void avdt_msg_bld_none(UNUSED_ATTR uint8_t** p,
-                              UNUSED_ATTR tAVDT_MSG* p_msg) {
+static void avdt_msg_bld_none(uint8_t** /* p */, tAVDT_MSG* /* p_msg */) {
   return;
 }
 
@@ -532,7 +533,7 @@ static uint8_t avdt_msg_prs_cfg(AvdtpSepConfig* p_cfg, uint8_t* p, uint16_t len,
   uint8_t protect_offset = 0;
 
   if (!p_cfg) {
-    AVDT_TRACE_ERROR("not expecting this cfg");
+    log::error("not expecting this cfg");
     return AVDT_ERR_BAD_STATE;
   }
 
@@ -569,8 +570,8 @@ static uint8_t avdt_msg_prs_cfg(AvdtpSepConfig* p_cfg, uint8_t* p, uint16_t len,
       {
         /* Skip unknown categories. */
         p += elem_len;
-        AVDT_TRACE_DEBUG("skipping unknown service category=%d len: %d", elem,
-                         elem_len);
+        log::verbose("skipping unknown service category={} len: {}", elem,
+                     elem_len);
         continue;
       }
     }
@@ -583,8 +584,8 @@ static uint8_t avdt_msg_prs_cfg(AvdtpSepConfig* p_cfg, uint8_t* p, uint16_t len,
 
     /* add element to psc mask, but mask out codec or protect */
     p_cfg->psc_mask |= (1 << elem);
-    AVDT_TRACE_DEBUG("elem=%d elem_len: %d psc_mask=0x%x", elem, elem_len,
-                     p_cfg->psc_mask);
+    log::verbose("elem={} elem_len: {} psc_mask=0x{:x}", elem, elem_len,
+                 p_cfg->psc_mask);
 
     /* parse individual information elements with additional parameters */
     switch (elem) {
@@ -647,8 +648,7 @@ static uint8_t avdt_msg_prs_cfg(AvdtpSepConfig* p_cfg, uint8_t* p, uint16_t len,
         break;
 
       case AVDT_CAT_DELAY_RPT:
-        AVDT_TRACE_DEBUG("%s: Remote device supports delay reporting",
-                         __func__);
+        log::verbose("Remote device supports delay reporting");
         break;
 
       default:
@@ -657,8 +657,8 @@ static uint8_t avdt_msg_prs_cfg(AvdtpSepConfig* p_cfg, uint8_t* p, uint16_t len,
     } /* switch */
   }   /* while ! err, !end*/
   *p_elem = elem;
-  AVDT_TRACE_DEBUG("err=0x%x, elem:0x%x psc_mask=0x%x", err, elem,
-                   p_cfg->psc_mask);
+  log::verbose("err=0x{:x}, elem:0x{:x} psc_mask=0x{:x}", err, elem,
+               p_cfg->psc_mask);
 
   return err;
 }
@@ -674,9 +674,8 @@ static uint8_t avdt_msg_prs_cfg(AvdtpSepConfig* p_cfg, uint8_t* p, uint16_t len,
  * Returns          Error code or zero if no error.
  *
  ******************************************************************************/
-static uint8_t avdt_msg_prs_none(UNUSED_ATTR tAVDT_MSG* p_msg,
-                                 UNUSED_ATTR uint8_t* p,
-                                 UNUSED_ATTR uint16_t len) {
+static uint8_t avdt_msg_prs_none(tAVDT_MSG* /* p_msg */, uint8_t* /* p */,
+                                 uint16_t /* len */) {
   return 0;
 }
 
@@ -792,8 +791,8 @@ static uint8_t avdt_msg_prs_reconfig_cmd(tAVDT_MSG* p_msg, uint8_t* p,
 
       /* verify no protocol service capabilities in parameters */
       if (!err) {
-        AVDT_TRACE_DEBUG("avdt_msg_prs_reconfig_cmd psc_mask=0x%x/0x%x",
-                         p_msg->config_cmd.p_cfg->psc_mask, AVDT_MSG_PSC_MASK);
+        log::verbose("avdt_msg_prs_reconfig_cmd psc_mask=0x{:x}/0x{:x}",
+                     p_msg->config_cmd.p_cfg->psc_mask, AVDT_MSG_PSC_MASK);
         if ((p_msg->config_cmd.p_cfg->psc_mask != 0) ||
             (p_msg->config_cmd.p_cfg->num_codec == 0 &&
              p_msg->config_cmd.p_cfg->num_protect == 0)) {
@@ -1026,8 +1025,8 @@ static uint8_t avdt_msg_prs_delay_rpt(tAVDT_MSG* p_msg, uint8_t* p,
 
   /* verify len */
   if (len != AVDT_LEN_DELAY_RPT) {
-    AVDT_TRACE_WARNING("avdt_msg_prs_delay_rpt expected len: %u  got: %u",
-                       AVDT_LEN_DELAY_RPT, len);
+    log::warn("avdt_msg_prs_delay_rpt expected len: {}  got: {}",
+              AVDT_LEN_DELAY_RPT, len);
     err = AVDT_ERR_LENGTH;
   } else {
     /* get seid */
@@ -1037,8 +1036,8 @@ static uint8_t avdt_msg_prs_delay_rpt(tAVDT_MSG* p_msg, uint8_t* p,
       err = AVDT_ERR_SEID;
     } else {
       BE_STREAM_TO_UINT16(p_msg->delay_rpt_cmd.delay, p);
-      AVDT_TRACE_DEBUG("avdt_msg_prs_delay_rpt delay: %u",
-                       p_msg->delay_rpt_cmd.delay);
+      log::verbose("avdt_msg_prs_delay_rpt delay: {}",
+                   p_msg->delay_rpt_cmd.delay);
     }
   }
   return err;
@@ -1138,7 +1137,7 @@ bool avdt_msg_send(AvdtpCcb* p_ccb, BT_HDR* p_msg) {
     label = AVDT_LAYERSPEC_LABEL(p_ccb->p_curr_msg->layer_specific);
     msg = AVDT_LAYERSPEC_MSG(p_ccb->p_curr_msg->layer_specific);
     sig = (uint8_t)p_ccb->p_curr_msg->event;
-    AVDT_TRACE_DEBUG("avdt_msg_send label:%d, msg:%d, sig:%d", label, msg, sig);
+    log::verbose("avdt_msg_send label:{}, msg:{}, sig:{}", label, msg, sig);
 
     /* keep track of how much of msg we've sent */
     curr_msg_len -= p_buf->len;
@@ -1221,14 +1220,13 @@ BT_HDR* avdt_msg_asmbl(AvdtpCcb* p_ccb, BT_HDR* p_buf) {
   /* quick sanity check on length */
   if (p_buf->len < avdt_msg_pkt_type_len[pkt_type]) {
     osi_free(p_buf);
-    AVDT_TRACE_WARNING("Bad length during reassembly");
+    log::warn("Bad length during reassembly");
     p_ret = NULL;
   }
   /* single packet */
   else if (pkt_type == AVDT_PKT_TYPE_SINGLE) {
     /* if reassembly in progress drop message and process new single */
-    if (p_ccb->p_rx_msg != NULL)
-      AVDT_TRACE_WARNING("Got single during reassembly");
+    if (p_ccb->p_rx_msg != NULL) log::warn("Got single during reassembly");
 
     osi_free_and_reset((void**)&p_ccb->p_rx_msg);
 
@@ -1237,8 +1235,7 @@ BT_HDR* avdt_msg_asmbl(AvdtpCcb* p_ccb, BT_HDR* p_buf) {
   /* start packet */
   else if (pkt_type == AVDT_PKT_TYPE_START) {
     /* if reassembly in progress drop message and process new single */
-    if (p_ccb->p_rx_msg != NULL)
-      AVDT_TRACE_WARNING("Got start during reassembly");
+    if (p_ccb->p_rx_msg != NULL) log::warn("Got start during reassembly");
 
     osi_free_and_reset((void**)&p_ccb->p_rx_msg);
 
@@ -1253,9 +1250,6 @@ BT_HDR* avdt_msg_asmbl(AvdtpCcb* p_ccb, BT_HDR* p_buf) {
       return p_ret;
     }
     p_ccb->p_rx_msg = (BT_HDR*)osi_malloc(BT_DEFAULT_BUFFER_SIZE);
-    if (sizeof(BT_HDR) + p_buf->offset + p_buf->len > BT_DEFAULT_BUFFER_SIZE) {
-      return NULL;
-    }
     memcpy(p_ccb->p_rx_msg, p_buf, sizeof(BT_HDR) + p_buf->offset + p_buf->len);
 
     /* Free original buffer */
@@ -1280,7 +1274,7 @@ BT_HDR* avdt_msg_asmbl(AvdtpCcb* p_ccb, BT_HDR* p_buf) {
     /* if no reassembly in progress drop message */
     if (p_ccb->p_rx_msg == NULL) {
       osi_free(p_buf);
-      AVDT_TRACE_WARNING("Pkt type=%d out of order", pkt_type);
+      log::warn("Pkt type={} out of order", pkt_type);
       p_ret = NULL;
     } else {
       /* get size of buffer holding assembled message */
@@ -1288,16 +1282,16 @@ BT_HDR* avdt_msg_asmbl(AvdtpCcb* p_ccb, BT_HDR* p_buf) {
        * NOTE: The buffer is allocated above at the beginning of the
        * reassembly, and is always of size BT_DEFAULT_BUFFER_SIZE.
        */
-      uint16_t buf_len = BT_DEFAULT_BUFFER_SIZE - sizeof(BT_HDR);
+      size_t buf_len = BT_DEFAULT_BUFFER_SIZE - sizeof(BT_HDR);
 
       /* adjust offset and len of fragment for header byte */
       p_buf->offset += AVDT_LEN_TYPE_CONT;
       p_buf->len -= AVDT_LEN_TYPE_CONT;
 
       /* verify length */
-      if ((p_ccb->p_rx_msg->offset + p_buf->len) > buf_len) {
+      if (((size_t) p_ccb->p_rx_msg->offset + (size_t) p_buf->len) > buf_len) {
         /* won't fit; free everything */
-        AVDT_TRACE_WARNING("%s: Fragmented message too big!", __func__);
+        log::warn("Fragmented message too big!");
         osi_free_and_reset((void**)&p_ccb->p_rx_msg);
         osi_free(p_buf);
         p_ret = NULL;
@@ -1456,7 +1450,7 @@ void avdt_msg_send_rej(AvdtpCcb* p_ccb, uint8_t sig_id, tAVDT_MSG* p_params) {
     /* add the error code */
     AVDT_MSG_BLD_ERR(p, p_params->hdr.err_code);
   }
-  AVDT_TRACE_DEBUG("avdt_msg_send_rej");
+  log::verbose("avdt_msg_send_rej");
 
   /* calculate length */
   p_buf->len = (uint16_t)(p - p_start);
@@ -1502,7 +1496,7 @@ void avdt_msg_send_grej(AvdtpCcb* p_ccb, uint8_t sig_id, tAVDT_MSG* p_params) {
   p_buf->event = sig_id;
   AVDT_BLD_LAYERSPEC(p_buf->layer_specific, AVDT_MSG_TYPE_GRJ,
                      p_params->hdr.label);
-  AVDT_TRACE_DEBUG(__func__);
+  log::verbose("");
 
   /* queue message and trigger ccb to send it */
   fixed_queue_enqueue(p_ccb->rsp_q, p_buf);
@@ -1550,14 +1544,14 @@ void avdt_msg_ind(AvdtpCcb* p_ccb, BT_HDR* p_buf) {
   /* parse the message header */
   AVDT_MSG_PRS_HDR(p, label, pkt_type, msg_type);
 
-  AVDT_TRACE_DEBUG("msg_type=%d, sig=%d", msg_type, sig);
+  log::verbose("msg_type={}, sig={}", msg_type, sig);
   /* set up label and ccb_idx in message hdr */
   msg.hdr.label = label;
   msg.hdr.ccb_idx = avdt_ccb_to_idx(p_ccb);
 
   /* verify msg type */
   if (msg_type == AVDT_MSG_TYPE_GRJ) {
-    AVDT_TRACE_WARNING("Dropping msg msg_type=%d", msg_type);
+    log::warn("Dropping msg msg_type={}", msg_type);
     ok = false;
   }
   /* check for general reject */
@@ -1576,7 +1570,7 @@ void avdt_msg_ind(AvdtpCcb* p_ccb, BT_HDR* p_buf) {
     AVDT_MSG_PRS_SIG(p, sig);
     msg.hdr.sig_id = sig;
     if ((sig == 0) || (sig > AVDT_SIG_MAX)) {
-      AVDT_TRACE_WARNING("Dropping msg sig=%d msg_type:%d", sig, msg_type);
+      log::warn("Dropping msg sig={} msg_type:{}", sig, msg_type);
       ok = false;
 
       /* send a general reject */
@@ -1627,7 +1621,7 @@ void avdt_msg_ind(AvdtpCcb* p_ccb, BT_HDR* p_buf) {
 
     /* if parsing failed */
     if (err != 0) {
-      AVDT_TRACE_WARNING("Parsing failed sig=%d err=0x%x", sig, err);
+      log::warn("Parsing failed sig={} err=0x{:x}", sig, err);
 
       /* if its a rsp or rej, drop it; if its a cmd, send a rej;
       ** note special case for abort; never send abort reject
@@ -1659,7 +1653,7 @@ void avdt_msg_ind(AvdtpCcb* p_ccb, BT_HDR* p_buf) {
         handle_rsp = true;
       } else {
         ok = false;
-        AVDT_TRACE_WARNING("Cmd not found for rsp sig=%d label=%d", sig, label);
+        log::warn("Cmd not found for rsp sig={} label={}", sig, label);
       }
     }
   }

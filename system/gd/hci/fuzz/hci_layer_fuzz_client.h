@@ -16,16 +16,18 @@
 
 #pragma once
 
+#include <fuzzer/FuzzedDataProvider.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#include <vector>
+
 #include "hci/fuzz/status_vs_complete_commands.h"
 #include "hci/hci_layer.h"
 #include "hci/hci_packets.h"
 #include "module.h"
 #include "os/fuzz/dev_null_queue.h"
 #include "os/fuzz/fuzz_inject_queue.h"
-
-#include <fuzzer/FuzzedDataProvider.h>
 
 namespace bluetooth {
 namespace hci {
@@ -68,11 +70,13 @@ class HciLayerFuzzClient : public Module {
     }
 
     if (uses_command_status(commandPacket.GetOpCode())) {
-      interface->EnqueueCommand(TBUILDER::FromView(commandPacket),
-                                GetHandler()->BindOnce([](CommandStatusView status) {}));
+      interface->EnqueueCommand(
+          TBUILDER::FromView(commandPacket),
+          GetHandler()->BindOnce([](CommandStatusView /* status */) {}));
     } else {
-      interface->EnqueueCommand(TBUILDER::FromView(commandPacket),
-                                GetHandler()->BindOnce([](CommandCompleteView status) {}));
+      interface->EnqueueCommand(
+          TBUILDER::FromView(commandPacket),
+          GetHandler()->BindOnce([](CommandCompleteView /* status */) {}));
     }
   }
 
@@ -86,6 +90,7 @@ class HciLayerFuzzClient : public Module {
   LeAclConnectionInterface* le_acl_connection_interface_;
   LeAdvertisingInterface* le_advertising_interface_;
   LeScanningInterface* le_scanning_interface_;
+  DistanceMeasurementInterface* distance_measurement_interface_;
 };
 
 }  // namespace fuzz

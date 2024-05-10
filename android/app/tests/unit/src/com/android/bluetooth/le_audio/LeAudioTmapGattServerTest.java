@@ -17,7 +17,7 @@
 package com.android.bluetooth.le_audio;
 
 import static android.bluetooth.BluetoothGattCharacteristic.FORMAT_UINT16;
-import static android.bluetooth.BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED;
+import static android.bluetooth.BluetoothGattCharacteristic.PERMISSION_READ;
 import static android.bluetooth.BluetoothGattCharacteristic.PROPERTY_READ;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -37,17 +37,21 @@ import androidx.test.runner.AndroidJUnit4;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 @MediumTest
 @RunWith(AndroidJUnit4.class)
 public class LeAudioTmapGattServerTest {
     private static final int TEST_ROLE_MASK =
             LeAudioTmapGattServer.TMAP_ROLE_FLAG_CG | LeAudioTmapGattServer.TMAP_ROLE_FLAG_UMS;
+
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
 
     @Mock
     private LeAudioTmapGattServer.BluetoothGattServerProxy mGattServerProxy;
@@ -56,7 +60,6 @@ public class LeAudioTmapGattServerTest {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
         doReturn(true).when(mGattServerProxy).open(any());
         doReturn(true).when(mGattServerProxy).addService(any());
         mServer = new LeAudioTmapGattServer(mGattServerProxy);
@@ -86,7 +89,7 @@ public class LeAudioTmapGattServerTest {
                 service.getCharacteristic(LeAudioTmapGattServer.UUID_TMAP_ROLE);
         assertThat(characteristic).isNotNull();
         assertThat(characteristic.getProperties()).isEqualTo(PROPERTY_READ);
-        assertThat(characteristic.getPermissions()).isEqualTo(PERMISSION_READ_ENCRYPTED);
+        assertThat(characteristic.getPermissions()).isEqualTo(PERMISSION_READ);
 
         // verify characteristic value
         int value = characteristic.getIntValue(FORMAT_UINT16, 0);

@@ -20,26 +20,15 @@
  *
  *  mockcify.pl ver 0.2
  */
-
-#include <map>
-#include <string>
-
-// Original included files, if any
-// NOTE: Since this is a mock file with mock definitions some number of
-//       include files may not be required.  The include-what-you-use
-//       still applies, but crafting proper inclusion is out of scope
-//       for this effort.  This compilation unit may compile as-is, or
-//       may need attention to prune the inclusion set.
-
 // Mock include file to share data between tests and mock
 #include "test/mock/mock_stack_l2cap_ble.h"
+
+// Original included files, if any
+
+#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 // Mocked compile conditionals, if any
-#ifndef UNUSED_ATTR
-#define UNUSED_ATTR
-#endif
-
 // Mocked internal structures, if any
 
 namespace test {
@@ -48,18 +37,19 @@ namespace stack_l2cap_ble {
 
 // Function state capture and return values, if needed
 struct L2CA_UpdateBleConnParams L2CA_UpdateBleConnParams;
-struct L2CA_EnableUpdateBleConnParams L2CA_EnableUpdateBleConnParams;
+struct L2CA_LockBleConnParamsForServiceDiscovery
+    L2CA_LockBleConnParamsForServiceDiscovery;
+struct L2CA_LockBleConnParamsForProfileConnection
+    L2CA_LockBleConnParamsForProfileConnection;
+struct L2CA_ConsolidateParams L2CA_ConsolidateParams;
 struct L2CA_GetBleConnRole L2CA_GetBleConnRole;
 struct l2cble_notify_le_connection l2cble_notify_le_connection;
 struct l2cble_conn_comp l2cble_conn_comp;
-struct l2cble_conn_comp_from_address_with_type
-    l2cble_conn_comp_from_address_with_type;
 struct l2cble_process_conn_update_evt l2cble_process_conn_update_evt;
 struct l2cble_process_sig_cmd l2cble_process_sig_cmd;
 struct l2cble_create_conn l2cble_create_conn;
 struct l2c_link_processs_ble_num_bufs l2c_link_processs_ble_num_bufs;
 struct l2c_ble_link_adjust_allocation l2c_ble_link_adjust_allocation;
-struct l2cble_process_rc_param_request_evt l2cble_process_rc_param_request_evt;
 struct l2cble_update_data_length l2cble_update_data_length;
 struct l2cble_process_data_length_change_event
     l2cble_process_data_length_change_event;
@@ -87,10 +77,21 @@ bool L2CA_UpdateBleConnParams(const RawAddress& rem_bda, uint16_t min_int,
   return test::mock::stack_l2cap_ble::L2CA_UpdateBleConnParams(
       rem_bda, min_int, max_int, latency, timeout, min_ce_len, max_ce_len);
 }
-bool L2CA_EnableUpdateBleConnParams(const RawAddress& rem_bda, bool enable) {
+void L2CA_LockBleConnParamsForServiceDiscovery(const RawAddress& rem_bda,
+                                               bool enable) {
   inc_func_call_count(__func__);
-  return test::mock::stack_l2cap_ble::L2CA_EnableUpdateBleConnParams(rem_bda,
-                                                                     enable);
+  return test::mock::stack_l2cap_ble::L2CA_LockBleConnParamsForServiceDiscovery(
+      rem_bda, enable);
+}
+void L2CA_LockBleConnParamsForProfileConnection(const RawAddress& rem_bda,
+                                                bool enable) {
+  inc_func_call_count(__func__);
+  return test::mock::stack_l2cap_ble::
+      L2CA_LockBleConnParamsForProfileConnection(rem_bda, enable);
+}
+void L2CA_Consolidate(const RawAddress& identity_addr, const RawAddress& rpa) {
+  inc_func_call_count(__func__);
+  test::mock::stack_l2cap_ble::L2CA_ConsolidateParams(identity_addr, rpa);
 }
 hci_role_t L2CA_GetBleConnRole(const RawAddress& bd_addr) {
   inc_func_call_count(__func__);
@@ -106,14 +107,6 @@ bool l2cble_conn_comp(uint16_t handle, uint8_t role, const RawAddress& bda,
   inc_func_call_count(__func__);
   return test::mock::stack_l2cap_ble::l2cble_conn_comp(
       handle, role, bda, type, conn_interval, conn_latency, conn_timeout);
-}
-bool l2cble_conn_comp_from_address_with_type(
-    uint16_t handle, uint8_t role, const tBLE_BD_ADDR& address_with_type,
-    uint16_t conn_interval, uint16_t conn_latency, uint16_t conn_timeout) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_l2cap_ble::l2cble_conn_comp_from_address_with_type(
-      handle, role, address_with_type, conn_interval, conn_latency,
-      conn_timeout);
 }
 void l2cble_process_conn_update_evt(uint16_t handle, uint8_t status,
                                     uint16_t interval, uint16_t latency,
@@ -137,13 +130,6 @@ void l2c_link_processs_ble_num_bufs(uint16_t num_lm_ble_bufs) {
 void l2c_ble_link_adjust_allocation(void) {
   inc_func_call_count(__func__);
   test::mock::stack_l2cap_ble::l2c_ble_link_adjust_allocation();
-}
-void l2cble_process_rc_param_request_evt(uint16_t handle, uint16_t int_min,
-                                         uint16_t int_max, uint16_t latency,
-                                         uint16_t timeout) {
-  inc_func_call_count(__func__);
-  test::mock::stack_l2cap_ble::l2cble_process_rc_param_request_evt(
-      handle, int_min, int_max, latency, timeout);
 }
 void l2cble_update_data_length(tL2C_LCB* p_lcb) {
   inc_func_call_count(__func__);
@@ -181,7 +167,7 @@ void l2cble_sec_comp(const RawAddress* bda, tBT_TRANSPORT transport,
 }
 tL2CAP_LE_RESULT_CODE l2ble_sec_access_req(const RawAddress& bd_addr,
                                            uint16_t psm, bool is_originator,
-                                           tL2CAP_SEC_CBACK* p_callback,
+                                           tBTM_SEC_CALLBACK* p_callback,
                                            void* p_ref_data) {
   inc_func_call_count(__func__);
   return test::mock::stack_l2cap_ble::l2ble_sec_access_req(

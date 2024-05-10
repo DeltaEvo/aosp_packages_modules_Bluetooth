@@ -16,18 +16,13 @@
 
 #include "stack/include/a2dp_vendor_ldac_decoder.h"
 
-#include <base/logging.h>
 #include <gtest/gtest.h>
-#include <stdio.h>
 
 #include <cstdint>
 
 #include "osi/include/allocator.h"
-#include "osi/test/AllocationTestHarness.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/ldacBT_bco_for_fluoride.h"
 
-extern void allocation_tracker_uninit(void);
 namespace {
 
 uint8_t* Data(BT_HDR* packet) { return packet->data + packet->offset; }
@@ -37,16 +32,8 @@ uint8_t* Data(BT_HDR* packet) { return packet->data + packet->offset; }
 /**
  * Test class to test selected functionality in stack/a2dp
  */
-class A2dpStackTest : public AllocationTestHarness {
+class A2dpStackTest : public ::testing::Test {
  protected:
-  void SetUp() override {
-    AllocationTestHarness::SetUp();
-    // Disable our allocation tracker to allow ASAN full range
-    allocation_tracker_uninit();
-  }
-
-  void TearDown() override { AllocationTestHarness::TearDown(); }
-
   BT_HDR* AllocateL2capPacket(const std::vector<uint8_t> data) const {
     auto packet = AllocatePacket(data.size());
     std::copy(data.cbegin(), data.cend(), Data(packet));
@@ -65,6 +52,6 @@ class A2dpStackTest : public AllocationTestHarness {
 TEST_F(A2dpStackTest, DecodePacket_ZeroLength) {
   const std::vector<uint8_t> data;
   BT_HDR* p_buf = AllocateL2capPacket(data);
-  CHECK(!a2dp_vendor_ldac_decoder_decode_packet(p_buf));
+  ASSERT_FALSE(a2dp_vendor_ldac_decoder_decode_packet(p_buf));
   osi_free(p_buf);
 }

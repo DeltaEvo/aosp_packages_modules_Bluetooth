@@ -16,7 +16,6 @@
 
 package com.android.bluetooth.gatt;
 
-import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -38,10 +37,12 @@ import com.android.bluetooth.btservice.AdapterService;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Test cases for {@link AdvertiseManager}.
@@ -49,6 +50,8 @@ import org.mockito.MockitoAnnotations;
 @SmallTest
 @RunWith(AndroidJUnit4.class)
 public class AdvertiseManagerTest {
+
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
 
     @Mock
     private AdapterService mAdapterService;
@@ -58,6 +61,8 @@ public class AdvertiseManagerTest {
 
     @Mock
     private GattService.AdvertiserMap mAdvertiserMap;
+
+    @Mock private AdvertiseManagerNativeInterface mNativeInterface;
 
     @Mock
     private IAdvertisingSetCallback mCallback;
@@ -70,11 +75,11 @@ public class AdvertiseManagerTest {
 
     @Before
     public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
 
         TestUtils.setAdapterService(mAdapterService);
 
-        mAdvertiseManager = new AdvertiseManager(mService, mAdapterService, mAdvertiserMap);
+        mAdvertiseManager = new AdvertiseManager(mService, mNativeInterface, mAdvertiserMap);
+
         AdvertisingSetParameters parameters = new AdvertisingSetParameters.Builder().build();
         AdvertiseData advertiseData = new AdvertiseData.Builder().build();
         AdvertiseData scanResponse = new AdvertiseData.Builder().build();

@@ -1,5 +1,6 @@
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::cast::{FromPrimitive, ToPrimitive};
+use std::convert::TryFrom;
 use std::os::raw::c_char;
 use std::sync::{Arc, Mutex};
 use std::vec::Vec;
@@ -24,6 +25,7 @@ pub enum BtSdpType {
     OppServer,
     SapServer,
     Dip,
+    Mps,
 }
 
 impl From<bindings::bluetooth_sdp_types> for BtSdpType {
@@ -32,47 +34,36 @@ impl From<bindings::bluetooth_sdp_types> for BtSdpType {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct BtSdpHeader {
-    sdp_type: BtSdpType,
-    uuid: Uuid,
-    service_name_length: u32,
-    service_name: String,
-    rfcomm_channel_number: i32,
-    l2cap_psm: i32,
-    profile_version: i32,
-}
-
-impl From<bindings::_bluetooth_sdp_hdr> for BtSdpHeader {
-    fn from(item: bindings::_bluetooth_sdp_hdr) -> Self {
-        let service_name = ascii_to_string(
-            unsafe {
-                std::slice::from_raw_parts(
-                    item.service_name as *const u8,
-                    item.service_name_length as usize,
-                )
-            },
-            item.service_name_length as usize,
-        );
-        BtSdpHeader {
-            sdp_type: BtSdpType::from(item.type_),
-            uuid: item.uuid,
-            service_name_length: item.service_name_length,
-            service_name,
-            rfcomm_channel_number: item.rfcomm_channel_number,
-            l2cap_psm: item.l2cap_psm,
-            profile_version: item.profile_version,
+impl From<&BtSdpRecord> for BtSdpType {
+    fn from(record: &BtSdpRecord) -> Self {
+        match record {
+            BtSdpRecord::HeaderOverlay(header) => header.sdp_type.clone(),
+            BtSdpRecord::MapMas(record) => record.hdr.sdp_type.clone(),
+            BtSdpRecord::MapMns(record) => record.hdr.sdp_type.clone(),
+            BtSdpRecord::PbapPse(record) => record.hdr.sdp_type.clone(),
+            BtSdpRecord::PbapPce(record) => record.hdr.sdp_type.clone(),
+            BtSdpRecord::OppServer(record) => record.hdr.sdp_type.clone(),
+            BtSdpRecord::SapServer(record) => record.hdr.sdp_type.clone(),
+            BtSdpRecord::Dip(record) => record.hdr.sdp_type.clone(),
+            BtSdpRecord::Mps(record) => record.hdr.sdp_type.clone(),
         }
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct BtSdpHeaderOverlay {
-    hdr: BtSdpHeader,
-    user1_len: i32,
-    user1_data: Vec<u8>,
-    user2_len: i32,
-    user2_data: Vec<u8>,
+    pub sdp_type: BtSdpType,
+    pub uuid: Uuid,
+    pub service_name_length: u32,
+    pub service_name: String,
+    pub rfcomm_channel_number: i32,
+    pub l2cap_psm: i32,
+    pub profile_version: i32,
+
+    pub user1_len: i32,
+    pub user1_data: Vec<u8>,
+    pub user2_len: i32,
+    pub user2_data: Vec<u8>,
 }
 
 impl From<bindings::_bluetooth_sdp_hdr_overlay> for BtSdpHeaderOverlay {
@@ -86,13 +77,33 @@ impl From<bindings::_bluetooth_sdp_hdr_overlay> for BtSdpHeaderOverlay {
             std::slice::from_raw_parts(item.user2_ptr, item.user2_ptr_len as usize).to_vec()
         };
 
-        BtSdpHeaderOverlay {
-            hdr: unsafe {
-                BtSdpHeader::from(
-                    *((&item as *const bindings::_bluetooth_sdp_hdr_overlay)
-                        as *const bindings::_bluetooth_sdp_hdr),
+        let sdp_hdr = unsafe {
+            *((&item as *const bindings::_bluetooth_sdp_hdr_overlay)
+                as *const bindings::_bluetooth_sdp_hdr)
+        };
+        let sdp_type = BtSdpType::from(sdp_hdr.type_);
+        let uuid = sdp_hdr.uuid;
+        let service_name_length = sdp_hdr.service_name_length;
+        let service_name = ascii_to_string(
+            unsafe {
+                std::slice::from_raw_parts(
+                    sdp_hdr.service_name as *const u8,
+                    sdp_hdr.service_name_length as usize,
                 )
             },
+            sdp_hdr.service_name_length as usize,
+        );
+        let rfcomm_channel_number = sdp_hdr.rfcomm_channel_number;
+        let l2cap_psm = sdp_hdr.l2cap_psm;
+        let profile_version = sdp_hdr.profile_version;
+        BtSdpHeaderOverlay {
+            sdp_type,
+            uuid,
+            service_name_length,
+            service_name,
+            rfcomm_channel_number,
+            l2cap_psm,
+            profile_version,
             user1_len,
             user1_data,
             user2_len,
@@ -103,10 +114,10 @@ impl From<bindings::_bluetooth_sdp_hdr_overlay> for BtSdpHeaderOverlay {
 
 #[derive(Clone, Debug)]
 pub struct BtSdpMasRecord {
-    hdr: BtSdpHeaderOverlay,
-    mas_instance_id: u32,
-    supported_features: u32,
-    supported_message_types: u32,
+    pub hdr: BtSdpHeaderOverlay,
+    pub mas_instance_id: u32,
+    pub supported_features: u32,
+    pub supported_message_types: u32,
 }
 
 impl From<bindings::_bluetooth_sdp_mas_record> for BtSdpMasRecord {
@@ -122,8 +133,8 @@ impl From<bindings::_bluetooth_sdp_mas_record> for BtSdpMasRecord {
 
 #[derive(Clone, Debug)]
 pub struct BtSdpMnsRecord {
-    hdr: BtSdpHeaderOverlay,
-    supported_features: u32,
+    pub hdr: BtSdpHeaderOverlay,
+    pub supported_features: u32,
 }
 
 impl From<bindings::_bluetooth_sdp_mns_record> for BtSdpMnsRecord {
@@ -137,9 +148,9 @@ impl From<bindings::_bluetooth_sdp_mns_record> for BtSdpMnsRecord {
 
 #[derive(Clone, Debug)]
 pub struct BtSdpPseRecord {
-    hdr: BtSdpHeaderOverlay,
-    supported_features: u32,
-    supported_repositories: u32,
+    pub hdr: BtSdpHeaderOverlay,
+    pub supported_features: u32,
+    pub supported_repositories: u32,
 }
 
 impl From<bindings::_bluetooth_sdp_pse_record> for BtSdpPseRecord {
@@ -154,7 +165,7 @@ impl From<bindings::_bluetooth_sdp_pse_record> for BtSdpPseRecord {
 
 #[derive(Clone, Debug)]
 pub struct BtSdpPceRecord {
-    hdr: BtSdpHeaderOverlay,
+    pub hdr: BtSdpHeaderOverlay,
 }
 
 impl From<bindings::_bluetooth_sdp_pce_record> for BtSdpPceRecord {
@@ -163,11 +174,13 @@ impl From<bindings::_bluetooth_sdp_pce_record> for BtSdpPceRecord {
     }
 }
 
+pub type SupportedFormatsList = [u8; 15usize];
+
 #[derive(Clone, Debug)]
 pub struct BtSdpOpsRecord {
-    hdr: BtSdpHeaderOverlay,
-    supported_formats_list_len: i32,
-    supported_formats_list: [u8; 15usize],
+    pub hdr: BtSdpHeaderOverlay,
+    pub supported_formats_list_len: i32,
+    pub supported_formats_list: SupportedFormatsList,
 }
 
 impl From<bindings::_bluetooth_sdp_ops_record> for BtSdpOpsRecord {
@@ -182,7 +195,7 @@ impl From<bindings::_bluetooth_sdp_ops_record> for BtSdpOpsRecord {
 
 #[derive(Clone, Debug)]
 pub struct BtSdpSapRecord {
-    hdr: BtSdpHeaderOverlay,
+    pub hdr: BtSdpHeaderOverlay,
 }
 
 impl From<bindings::_bluetooth_sdp_sap_record> for BtSdpSapRecord {
@@ -193,13 +206,13 @@ impl From<bindings::_bluetooth_sdp_sap_record> for BtSdpSapRecord {
 
 #[derive(Clone, Debug)]
 pub struct BtSdpDipRecord {
-    hdr: BtSdpHeaderOverlay,
-    spec_id: u16,
-    vendor: u16,
-    vendor_id_source: u16,
-    product: u16,
-    version: u16,
-    primary_record: bool,
+    pub hdr: BtSdpHeaderOverlay,
+    pub spec_id: u16,
+    pub vendor: u16,
+    pub vendor_id_source: u16,
+    pub product: u16,
+    pub version: u16,
+    pub primary_record: bool,
 }
 
 impl From<bindings::_bluetooth_sdp_dip_record> for BtSdpDipRecord {
@@ -216,6 +229,63 @@ impl From<bindings::_bluetooth_sdp_dip_record> for BtSdpDipRecord {
     }
 }
 
+pub type SupportedScenarios = [u8; 8usize];
+pub type SupportedDependencies = [u8; 2usize];
+
+#[derive(Clone, Debug)]
+pub struct BtSdpMpsRecord {
+    pub hdr: BtSdpHeaderOverlay,
+    pub supported_scenarios_mpsd: SupportedScenarios, // LibBluetooth expects big endian data
+    pub supported_scenarios_mpmd: SupportedScenarios, // LibBluetooth expects big endian data
+    pub supported_dependencies: SupportedDependencies, // LibBluetooth expects big endian data
+}
+
+impl BtSdpMpsRecord {
+    pub fn default() -> Self {
+        let empty_uuid = Uuid::try_from(vec![0x0, 0x0]).unwrap();
+        BtSdpMpsRecord {
+            hdr: BtSdpHeaderOverlay {
+                sdp_type: BtSdpType::Mps,
+                uuid: empty_uuid,            // Not used
+                service_name_length: 0,      // Not used
+                service_name: String::new(), // Not used
+                rfcomm_channel_number: 0,    // Not used
+                l2cap_psm: 0,                // Not used
+                profile_version: 0x0100,
+                user1_len: 0,       // Not used
+                user1_data: vec![], // Not used
+                user2_len: 0,       // Not used
+                user2_data: vec![], // Not used
+            },
+            // LibBluetooth accepts big endian data. CrOS supports:
+            // - 0 Answer Incoming Call during Audio Streaming (HFP-AG_A2DP-SRC)
+            // - 2 Outgoing Call during Audio Streaming (HFP-AG_A2DP-SRC)
+            // - 4 Reject/Ignore Incoming Call during Audio Streaming (HFP-AG_A2DP-SRC)
+            // - 6 HFP call termination during AVP connection (HFP-AG_A2DP-SRC)
+            // - 8 Press Play on Audio Player during active call (HFP-AG_A2DP-SRC)
+            // - 10 Start Audio Streaming after AVRCP Play Command (HFP-AG_A2DP-SRC)
+            // - 12 Suspend Audio Streaming after AVRCP Pause/Stop (HFP-AG_A2DP-SRC)
+            supported_scenarios_mpsd: [0, 0, 0, 0, 0, 0, 0b_1_0101, 0b_0101_0101],
+            supported_scenarios_mpmd: [0; 8],
+            // LibBluetooth accepts big endian data. CrOS supports:
+            // - 1 Sniff Mode During Streaming
+            // - 3 (Dis-)Connection Order / Behavior
+            supported_dependencies: [0, 0b_1010],
+        }
+    }
+}
+
+impl From<bindings::_bluetooth_sdp_mps_record> for BtSdpMpsRecord {
+    fn from(item: bindings::_bluetooth_sdp_mps_record) -> Self {
+        BtSdpMpsRecord {
+            hdr: BtSdpHeaderOverlay::from(item.hdr),
+            supported_scenarios_mpsd: item.supported_scenarios_mpsd,
+            supported_scenarios_mpmd: item.supported_scenarios_mpmd,
+            supported_dependencies: item.supported_dependencies,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum BtSdpRecord {
     HeaderOverlay(BtSdpHeaderOverlay),
@@ -226,6 +296,7 @@ pub enum BtSdpRecord {
     OppServer(BtSdpOpsRecord),
     SapServer(BtSdpSapRecord),
     Dip(BtSdpDipRecord),
+    Mps(BtSdpMpsRecord),
 }
 
 impl From<bindings::bluetooth_sdp_record> for BtSdpRecord {
@@ -247,23 +318,24 @@ impl From<bindings::bluetooth_sdp_record> for BtSdpRecord {
                 BtSdpRecord::SapServer(BtSdpSapRecord::from(item.sap))
             },
             BtSdpType::Dip => unsafe { BtSdpRecord::Dip(BtSdpDipRecord::from(item.dip)) },
+            BtSdpType::Mps => unsafe { BtSdpRecord::Mps(BtSdpMpsRecord::from(item.mps)) },
         }
     }
 }
 
 impl BtSdpRecord {
     fn convert_header<'a>(hdr: &'a mut BtSdpHeaderOverlay) -> bindings::bluetooth_sdp_hdr_overlay {
-        let srv_name_ptr = LTCheckedPtrMut::from(&mut hdr.hdr.service_name);
+        let srv_name_ptr = LTCheckedPtrMut::from(&mut hdr.service_name);
         let user1_ptr = LTCheckedPtr::from(&hdr.user1_data);
         let user2_ptr = LTCheckedPtr::from(&hdr.user2_data);
         bindings::bluetooth_sdp_hdr_overlay {
-            type_: hdr.hdr.sdp_type.to_u32().unwrap(),
-            uuid: hdr.hdr.uuid,
-            service_name_length: hdr.hdr.service_name_length,
+            type_: hdr.sdp_type.to_u32().unwrap(),
+            uuid: hdr.uuid,
+            service_name_length: hdr.service_name_length,
             service_name: srv_name_ptr.cast_into::<c_char>(),
-            rfcomm_channel_number: hdr.hdr.rfcomm_channel_number,
-            l2cap_psm: hdr.hdr.l2cap_psm,
-            profile_version: hdr.hdr.profile_version,
+            rfcomm_channel_number: hdr.rfcomm_channel_number,
+            l2cap_psm: hdr.l2cap_psm,
+            profile_version: hdr.profile_version,
             user1_ptr_len: hdr.user1_len,
             user1_ptr: user1_ptr.into(),
             user2_ptr_len: hdr.user2_len,
@@ -324,6 +396,14 @@ impl BtSdpRecord {
                     product: dip.product,
                     version: dip.version,
                     primary_record: dip.primary_record,
+                },
+            },
+            BtSdpRecord::Mps(mps) => bindings::bluetooth_sdp_record {
+                mps: bindings::_bluetooth_sdp_mps_record {
+                    hdr: BtSdpRecord::convert_header(&mut mps.hdr),
+                    supported_scenarios_mpsd: mps.supported_scenarios_mpsd,
+                    supported_scenarios_mpmd: mps.supported_scenarios_mpmd,
+                    supported_dependencies: mps.supported_dependencies,
                 },
             },
         }

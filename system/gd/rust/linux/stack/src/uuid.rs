@@ -12,6 +12,7 @@ pub const A2DP_SINK: &str = "0000110B-0000-1000-8000-00805F9B34FB";
 pub const A2DP_SOURCE: &str = "0000110A-0000-1000-8000-00805F9B34FB";
 pub const ADV_AUDIO_DIST: &str = "0000110D-0000-1000-8000-00805F9B34FB";
 pub const BAS: &str = "0000180F-0000-1000-8000-00805F9B34FB";
+pub const DIS: &str = "0000180A-0000-1000-8000-00805F9B34FB";
 pub const HSP: &str = "00001108-0000-1000-8000-00805F9B34FB";
 pub const HSP_AG: &str = "00001112-0000-1000-8000-00805F9B34FB";
 pub const HFP: &str = "0000111E-0000-1000-8000-00805F9B34FB";
@@ -40,6 +41,7 @@ pub const COORDINATED_SET: &str = "00001846-0000-1000-8000-00805F9B34FB";
 pub const BASE_UUID: &str = "00000000-0000-1000-8000-00805F9B34FB";
 
 /// List of profiles that with known uuids.
+/// Append new profiles to the end of the enum. Do not insert it in the middle.
 #[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Eq, Ord, FromPrimitive, ToPrimitive, Copy)]
 #[repr(u32)]
 pub enum Profile {
@@ -47,6 +49,7 @@ pub enum Profile {
     A2dpSource,
     AdvAudioDist,
     Bas,
+    Dis,
     Hsp,
     HspAg,
     Hfp,
@@ -107,10 +110,14 @@ impl<'a> Display for KnownUuidWrapper<'a> {
 pub struct UuidHelper {}
 
 lazy_static! {
-    static ref SUPPORTED_PROFILES: HashSet<Profile> = [
+    // AVRCP fights with A2DP when initializing, so let's initiate profiles in a known good order.
+    // Specifically, A2DP must be initialized before AVRCP.
+    // TODO (b/286991526): remove after issue is resolved
+    static ref ORDERED_SUPPORTED_PROFILES: Vec<Profile> = vec![
         Profile::A2dpSink,
         Profile::A2dpSource,
         Profile::AvrcpController,
+        Profile::AvrcpTarget,
         Profile::Bas,
         Profile::Hsp,
         Profile::Hfp,
@@ -122,10 +129,12 @@ lazy_static! {
         Profile::HearingAid,
         Profile::VolumeControl,
         Profile::CoordinatedSet,
-    ]
-    .iter()
-    .cloned()
-    .collect();
+    ];
+}
+
+lazy_static! {
+    static ref SUPPORTED_PROFILES: HashSet<Profile> =
+        ORDERED_SUPPORTED_PROFILES.iter().cloned().collect();
 }
 
 lazy_static! {
@@ -134,6 +143,7 @@ lazy_static! {
         (UuidHelper::from_string(A2DP_SOURCE).unwrap(), Profile::A2dpSource),
         (UuidHelper::from_string(ADV_AUDIO_DIST).unwrap(), Profile::AdvAudioDist),
         (UuidHelper::from_string(BAS).unwrap(), Profile::Bas),
+        (UuidHelper::from_string(DIS).unwrap(), Profile::Dis),
         (UuidHelper::from_string(HSP).unwrap(), Profile::Hsp),
         (UuidHelper::from_string(HSP_AG).unwrap(), Profile::HspAg),
         (UuidHelper::from_string(HFP).unwrap(), Profile::Hfp),
@@ -179,6 +189,12 @@ impl UuidHelper {
     /// Converts a UUID to a known profile enum.
     pub fn is_known_profile(uuid: &Uuid128Bit) -> Option<Profile> {
         PROFILES.get(uuid).cloned()
+    }
+
+    // AVRCP fights with A2DP when initializing, so let's initiate profiles in a known good order.
+    // TODO (b/286991526): remove after issue is resolved
+    pub fn get_ordered_supported_profiles() -> Vec<Profile> {
+        ORDERED_SUPPORTED_PROFILES.clone()
     }
 
     pub fn get_supported_profiles() -> HashSet<Profile> {

@@ -1,10 +1,10 @@
-# Copyright 2022 Google LLC
+# Copyright (C) 2024 The Android Open Source Project
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     https://www.apache.org/licenses/LICENSE-2.0
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,8 +20,7 @@ from mmi2grpc._proxy import ProfileProxy
 
 from pandora.host_grpc import Host
 from pandora.host_pb2 import Connection
-from pandora_experimental._android_grpc import Android
-from pandora_experimental._android_pb2 import AccessType
+from pandora_experimental.opp_grpc import Opp
 
 
 class OPPProxy(ProfileProxy):
@@ -35,7 +34,7 @@ class OPPProxy(ProfileProxy):
         super().__init__(channel)
 
         self.host = Host(channel)
-        self._android = Android(channel)
+        self.opp = Opp(channel)
 
         self.connection = None
 
@@ -53,7 +52,7 @@ class OPPProxy(ProfileProxy):
     def TSC_OPP_mmi_user_action_remove_object(self, **kwargs):
         """
         If necessary take action to remove any file(s) named 'BC_BV01.bmp' from
-        the IUT.  
+        the IUT.
 
         Press 'OK' to confirm that the file is not present on the
         IUT.
@@ -66,7 +65,7 @@ class OPPProxy(ProfileProxy):
         """
         Please accept the PUT REQUEST.
         """
-        self._android.AcceptIncomingFile()
+        self.opp.AcceptPutOperation()
 
         return "OK"
 
@@ -123,7 +122,7 @@ class OPPProxy(ProfileProxy):
         Take action to create an rfcomm channel for an OBEX connection.
         """
 
-        self._android.SendFile()
+        self.opp.OpenRfcommChannel(address=pts_addr)
 
         return "OK"
 
@@ -133,7 +132,7 @@ class OPPProxy(ProfileProxy):
         Take action to create an l2cap channel for an OBEX connection.
         """
 
-        self._android.SendFile()
+        self.opp.OpenL2capChannel(address=pts_addr)
 
         return "OK"
 

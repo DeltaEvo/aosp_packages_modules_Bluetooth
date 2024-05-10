@@ -17,6 +17,10 @@
  */
 #include "security/record/security_record_storage.h"
 
+#include <bluetooth/log.h>
+
+#include "storage/classic_device.h"
+#include "storage/le_device.h"
 #include "storage/mutation.h"
 
 namespace bluetooth {
@@ -30,7 +34,7 @@ void SetClassicData(
     return;
   }
   if (record->IsClassicLinkKeyValid()) {
-    LOG_WARN("Type: %d", static_cast<int>(*device.GetDeviceType()));
+    log::warn("Type: {}", static_cast<int>(*device.GetDeviceType()));
     mutation.Add(device.Classic().SetLinkKey(record->GetLinkKey()));
     mutation.Add(device.Classic().SetLinkKeyType(record->GetKeyType()));
   }
@@ -91,7 +95,10 @@ void SetLeData(storage::Mutation& mutation, std::shared_ptr<record::SecurityReco
   }
 }
 
-void SetAuthenticationData(storage::Mutation& mutation, std::shared_ptr<record::SecurityRecord> record, storage::Device& device) {
+void SetAuthenticationData(
+    storage::Mutation& /* mutation */,
+    std::shared_ptr<record::SecurityRecord> record,
+    storage::Device& device) {
   device.SetIsAuthenticated((record->IsAuthenticated() ? 1 : 0));
   device.SetIsEncryptionRequired((record->IsEncryptionRequired() ? 1 : 0));
   device.SetRequiresMitmProtection(record->RequiresMitmProtection() ? 1 : 0);
@@ -115,9 +122,9 @@ void SecurityRecordStorage::SaveSecurityRecords(std::set<std::shared_ptr<record:
       mutation.Add(device.SetDeviceType(hci::DeviceType::LE));
     } else {
       mutation.Add(device.SetDeviceType(hci::DeviceType::LE));
-      LOG_WARN(
-          "Cannot determine device type from security record for '%s'; defaulting to LE",
-          ADDRESS_TO_LOGGABLE_CSTR(*record->GetPseudoAddress()));
+      log::warn(
+          "Cannot determine device type from security record for '{}'; defaulting to LE",
+          *record->GetPseudoAddress());
     }
     mutation.Commit();
     SetClassicData(mutation, record, device);

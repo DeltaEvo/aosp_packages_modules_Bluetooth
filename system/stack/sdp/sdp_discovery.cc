@@ -24,20 +24,23 @@
 
 #define LOG_TAG "sdp_discovery"
 
+#include <bluetooth/log.h>
+
 #include <cstdint>
 
-#include "bt_target.h"
+#include "internal_include/bt_target.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_types.h"
-#include "stack/include/sdp_api.h"
 #include "stack/include/sdpdefs.h"
+#include "stack/sdp/sdp_discovery_db.h"
 #include "stack/sdp/sdpint.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
 using bluetooth::Uuid;
+using namespace bluetooth;
 
 /******************************************************************************/
 /*            L O C A L    F U N C T I O N     P R O T O T Y P E S            */
@@ -70,9 +73,14 @@ static uint8_t* add_attr(uint8_t* p, uint8_t* p_end, tSDP_DISCOVERY_DB* p_db,
  *
  ******************************************************************************/
 static uint8_t* sdpu_build_uuid_seq(uint8_t* p_out, uint16_t num_uuids,
-                                    Uuid* p_uuid_list) {
+                                    Uuid* p_uuid_list, uint16_t& bytes_left) {
   uint16_t xx;
   uint8_t* p_len;
+
+  if (bytes_left < 2) {
+    DCHECK(0) << "SDP: No space for data element header";
+    return (p_out);
+  }
 
   /* First thing is the data element header */
   UINT8_TO_BE_STREAM(p_out, (DATA_ELE_SEQ_DESC_TYPE << 3) | SIZE_IN_NEXT_BYTE);
@@ -81,9 +89,20 @@ static uint8_t* sdpu_build_uuid_seq(uint8_t* p_out, uint16_t num_uuids,
   p_len = p_out;
   p_out += 1;
 
+  /* Account for data element header and length */
+  bytes_left -= 2;
+
   /* Now, loop through and put in all the UUID(s) */
   for (xx = 0; xx < num_uuids; xx++, p_uuid_list++) {
     int len = p_uuid_list->GetShortestRepresentationSize();
+
+    if (len + 1 > bytes_left) {
+      DCHECK(0) << "SDP: Too many UUIDs for internal buffer";
+      break;
+    } else {
+      bytes_left -= (len + 1);
+    }
+
     if (len == Uuid::kNumBytes16) {
       UINT8_TO_BE_STREAM(p_out, (UUID_DESC_TYPE << 3) | SIZE_TWO_BYTES);
       UINT16_TO_BE_STREAM(p_out, p_uuid_list->As16Bit());
@@ -120,6 +139,7 @@ static void sdp_snd_service_search_req(tCONN_CB* p_ccb, uint8_t cont_len,
   uint8_t *p, *p_start, *p_param_len;
   BT_HDR* p_cmd = (BT_HDR*)osi_malloc(SDP_DATA_BUF_SIZE);
   uint16_t param_len;
+  uint16_t bytes_left = SDP_DATA_BUF_SIZE;
 
   /* Prepare the buffer for sending the packet to L2CAP */
   p_cmd->offset = L2CAP_MIN_OFFSET;
@@ -134,9 +154,24 @@ static void sdp_snd_service_search_req(tCONN_CB* p_ccb, uint8_t cont_len,
   p_param_len = p;
   p += 2;
 
-/* Build the UID sequence. */
+  /* Account for header size, max service record count and
+   * continuation state */
+  const uint16_t base_bytes = (sizeof(BT_HDR) + L2CAP_MIN_OFFSET +
+                               3u + /* service search request header */
+                               2u + /* param len */
+                               3u + ((p_cont) ? cont_len : 0));
+
+  if (base_bytes > bytes_left) {
+    DCHECK(0) << "SDP: Overran SDP data buffer";
+    osi_free(p_cmd);
+    return;
+  }
+
+  bytes_left -= base_bytes;
+
+  /* Build the UID sequence. */
   p = sdpu_build_uuid_seq(p, p_ccb->p_db->num_uuid_filters,
-                          p_ccb->p_db->uuid_filters);
+                          p_ccb->p_db->uuid_filters, bytes_left);
 
   /* Set max service record count */
   UINT16_TO_BE_STREAM(p, sdp_cb.max_recs_per_search);
@@ -245,8 +280,7 @@ void sdp_disc_server_rsp(tCONN_CB* p_ccb, BT_HDR* p_msg) {
   }
 
   if (invalid_pdu) {
-    SDP_TRACE_WARNING("SDP - Unexp. PDU: %d in state: %d", rsp_pdu,
-                      p_ccb->disc_state);
+    log::warn("SDP - Unexp. PDU: {} in state: {}", rsp_pdu, p_ccb->disc_state);
     sdp_disconnect(p_ccb, SDP_GENERIC_ERROR);
   }
 }
@@ -279,7 +313,7 @@ static void process_service_search_rsp(tCONN_CB* p_ccb, uint8_t* p_reply,
   orig = p_ccb->num_handles;
   p_ccb->num_handles += cur_handles;
   if (p_ccb->num_handles == 0 || p_ccb->num_handles < orig) {
-    SDP_TRACE_WARNING("SDP - Rcvd ServiceSearchRsp, no matches");
+    log::warn("SDP - Rcvd ServiceSearchRsp, no matches");
     sdp_disconnect(p_ccb, SDP_NO_RECS_MATCH);
     return;
   }
@@ -349,11 +383,11 @@ static bool sdp_copy_raw_data(tCONN_CB* p_ccb, bool offset) {
       uint8_t* old_p = p;
       p = sdpu_get_len_from_type(p, p_end, type, &list_len);
       if (p == NULL || (p + list_len) > p_end) {
-        SDP_TRACE_WARNING("%s: bad length", __func__);
+        log::warn("bad length");
         return false;
       }
       if ((int)cpy_len < (p - old_p)) {
-        SDP_TRACE_WARNING("%s: no bytes left for data", __func__);
+        log::warn("no bytes left for data");
         return false;
       }
       cpy_len -= (p - old_p);
@@ -363,7 +397,7 @@ static bool sdp_copy_raw_data(tCONN_CB* p_ccb, bool offset) {
     }
     rem_len = SDP_MAX_LIST_BYTE_COUNT - (unsigned int)(p - &p_ccb->rsp_list[0]);
     if (cpy_len > rem_len) {
-      SDP_TRACE_WARNING("rem_len :%d less than cpy_len:%d", rem_len, cpy_len);
+      log::warn("rem_len :{} less than cpy_len:{}", rem_len, cpy_len);
       cpy_len = rem_len;
     }
     memcpy(&p_ccb->p_db->raw_data[p_ccb->p_db->raw_used], p, cpy_len);
@@ -425,9 +459,9 @@ static void process_service_attr_rsp(tCONN_CB* p_ccb, uint8_t* p_reply,
       }
       cont_request_needed = true;
     } else {
-      SDP_TRACE_WARNING("process_service_attr_rsp");
+      log::warn("process_service_attr_rsp");
       if (!sdp_copy_raw_data(p_ccb, false)) {
-        SDP_TRACE_ERROR("sdp_copy_raw_data failed");
+        log::error("sdp_copy_raw_data failed");
         sdp_disconnect(p_ccb, SDP_ILLEGAL_PARAMETER);
         return;
       }
@@ -562,6 +596,7 @@ static void process_service_search_attr_rsp(tCONN_CB* p_ccb, uint8_t* p_reply,
   if ((cont_request_needed) || (!p_reply)) {
     BT_HDR* p_msg = (BT_HDR*)osi_malloc(SDP_DATA_BUF_SIZE);
     uint8_t* p;
+    uint16_t bytes_left = SDP_DATA_BUF_SIZE;
 
     p_msg->offset = L2CAP_MIN_OFFSET;
     p = p_start = (uint8_t*)(p_msg + 1) + L2CAP_MIN_OFFSET;
@@ -575,9 +610,24 @@ static void process_service_search_attr_rsp(tCONN_CB* p_ccb, uint8_t* p_reply,
     p_param_len = p;
     p += 2;
 
-/* Build the UID sequence. */
+    /* Account for header size, max service record count and
+     * continuation state */
+    const uint16_t base_bytes = (sizeof(BT_HDR) + L2CAP_MIN_OFFSET +
+                                 3u + /* service search request header */
+                                 2u + /* param len */
+                                 3u + /* max service record count */
+                                 ((p_reply) ? (*p_reply) : 0));
+
+    if (base_bytes > bytes_left) {
+      sdp_disconnect(p_ccb, SDP_INVALID_CONT_STATE);
+      return;
+    }
+
+    bytes_left -= base_bytes;
+
+    /* Build the UID sequence. */
     p = sdpu_build_uuid_seq(p, p_ccb->p_db->num_uuid_filters,
-                            p_ccb->p_db->uuid_filters);
+                            p_ccb->p_db->uuid_filters, bytes_left);
 
     /* Max attribute byte count */
     UINT16_TO_BE_STREAM(p, sdp_cb.max_attr_list_size);
@@ -619,7 +669,7 @@ static void process_service_search_attr_rsp(tCONN_CB* p_ccb, uint8_t* p_reply,
 /*******************************************************************/
 
   if (!sdp_copy_raw_data(p_ccb, true)) {
-    LOG_ERROR("sdp_copy_raw_data failed");
+    log::error("sdp_copy_raw_data failed");
     sdp_disconnect(p_ccb, SDP_ILLEGAL_PARAMETER);
     return;
   }
@@ -630,13 +680,13 @@ static void process_service_search_attr_rsp(tCONN_CB* p_ccb, uint8_t* p_reply,
   type = *p++;
 
   if ((type >> 3) != DATA_ELE_SEQ_DESC_TYPE) {
-    LOG_WARN("Wrong element in attr_rsp type:0x%02x", type);
+    log::warn("Wrong element in attr_rsp type:0x{:02x}", type);
     sdp_disconnect(p_ccb, SDP_ILLEGAL_PARAMETER);
     return;
   }
   p = sdpu_get_len_from_type(p, p + p_ccb->list_len, type, &seq_len);
   if (p == NULL || (p + seq_len) > (p + p_ccb->list_len)) {
-    LOG_WARN("Illegal search attribute length");
+    log::warn("Illegal search attribute length");
     sdp_disconnect(p_ccb, SDP_ILLEGAL_PARAMETER);
     return;
   }
@@ -679,19 +729,19 @@ static uint8_t* save_attr_seq(tCONN_CB* p_ccb, uint8_t* p, uint8_t* p_msg_end) {
   type = *p++;
 
   if ((type >> 3) != DATA_ELE_SEQ_DESC_TYPE) {
-    SDP_TRACE_WARNING("SDP - Wrong type: 0x%02x in attr_rsp", type);
+    log::warn("SDP - Wrong type: 0x{:02x} in attr_rsp", type);
     return (NULL);
   }
   p = sdpu_get_len_from_type(p, p_msg_end, type, &seq_len);
   if (p == NULL || (p + seq_len) > p_msg_end) {
-    SDP_TRACE_WARNING("SDP - Bad len in attr_rsp %d", seq_len);
+    log::warn("SDP - Bad len in attr_rsp {}", seq_len);
     return (NULL);
   }
 
   /* Create a record */
   p_rec = add_record(p_ccb->p_db, p_ccb->device_address);
   if (!p_rec) {
-    SDP_TRACE_WARNING("SDP - DB full add_record");
+    log::warn("SDP - DB full add_record");
     return (NULL);
   }
 
@@ -702,12 +752,12 @@ static uint8_t* save_attr_seq(tCONN_CB* p_ccb, uint8_t* p, uint8_t* p_msg_end) {
     type = *p++;
     p = sdpu_get_len_from_type(p, p_msg_end, type, &attr_len);
     if (p == NULL || (p + attr_len) > p_seq_end) {
-      SDP_TRACE_WARNING("%s: Bad len in attr_rsp %d", __func__, attr_len);
+      log::warn("Bad len in attr_rsp {}", attr_len);
       return (NULL);
     }
     if (((type >> 3) != UINT_DESC_TYPE) || (attr_len != 2)) {
-      SDP_TRACE_WARNING("SDP - Bad type: 0x%02x or len: %d in attr_rsp", type,
-                        attr_len);
+      log::warn("SDP - Bad type: 0x{:02x} or len: {} in attr_rsp", type,
+                attr_len);
       return (NULL);
     }
     BE_STREAM_TO_UINT16(attr_id, p);
@@ -716,7 +766,7 @@ static uint8_t* save_attr_seq(tCONN_CB* p_ccb, uint8_t* p, uint8_t* p_msg_end) {
     p = add_attr(p, p_seq_end, p_ccb->p_db, p_rec, attr_id, NULL, 0);
 
     if (!p) {
-      SDP_TRACE_WARNING("SDP - DB full add_attr");
+      log::warn("SDP - DB full add_attr");
       return (NULL);
     }
   }
@@ -790,7 +840,7 @@ static uint8_t* add_attr(uint8_t* p, uint8_t* p_end, tSDP_DISCOVERY_DB* p_db,
   type = *p++;
   p = sdpu_get_len_from_type(p, p_end, type, &attr_len);
   if (p == NULL || (p + attr_len) > p_end) {
-    SDP_TRACE_WARNING("%s: bad length in attr_rsp", __func__);
+    log::warn("bad length in attr_rsp");
     return NULL;
   }
   attr_len &= SDP_DISC_ATTR_LEN_MASK;
@@ -804,7 +854,7 @@ static uint8_t* add_attr(uint8_t* p, uint8_t* p_end, tSDP_DISCOVERY_DB* p_db,
 
   p_attr_end = p + attr_len;
   if (p_attr_end > p_end) {
-    SDP_TRACE_WARNING("%s: SDP - Attribute length beyond p_end", __func__);
+    log::warn("SDP - Attribute length beyond p_end");
     return NULL;
   }
 
@@ -833,9 +883,9 @@ static uint8_t* add_attr(uint8_t* p, uint8_t* p_end, tSDP_DISCOVERY_DB* p_db,
           p_db->mem_free -= sizeof(tSDP_DISC_ATTR);
           total_len = 0;
 
-          /* SDP_TRACE_DEBUG ("SDP - attr nest level:%d(list)", nest_level); */
+          /* LOG_VERBOSE ("SDP - attr nest level:%d(list)", nest_level); */
           if (nest_level >= MAX_NEST_LEVELS) {
-            SDP_TRACE_ERROR("SDP - attr nesting too deep");
+            log::error("SDP - attr nesting too deep");
             return p_attr_end;
           }
 
@@ -899,7 +949,7 @@ static uint8_t* add_attr(uint8_t* p, uint8_t* p_end, tSDP_DISCOVERY_DB* p_db,
           }
           break;
         default:
-          SDP_TRACE_WARNING("SDP - bad len in UUID attr: %d", attr_len);
+          log::warn("SDP - bad len in UUID attr: {}", attr_len);
           return p_attr_end;
       }
       break;
@@ -912,15 +962,15 @@ static uint8_t* add_attr(uint8_t* p, uint8_t* p_end, tSDP_DISCOVERY_DB* p_db,
       p_db->mem_free -= sizeof(tSDP_DISC_ATTR);
       total_len = 0;
 
-      /* SDP_TRACE_DEBUG ("SDP - attr nest level:%d", nest_level); */
+      /* LOG_VERBOSE ("SDP - attr nest level:%d", nest_level); */
       if (nest_level >= MAX_NEST_LEVELS) {
-        SDP_TRACE_ERROR("SDP - attr nesting too deep");
+        log::error("SDP - attr nesting too deep");
         return p_attr_end;
       }
       if (is_additional_list != 0 ||
           attr_id == ATTR_ID_ADDITION_PROTO_DESC_LISTS)
         nest_level |= SDP_ADDITIONAL_LIST_MASK;
-      /* SDP_TRACE_DEBUG ("SDP - attr nest level:0x%x(finish)", nest_level); */
+      /* LOG_VERBOSE ("SDP - attr nest level:0x%x(finish)", nest_level); */
 
       while (p < p_attr_end) {
         /* Now, add the list entry */
@@ -942,7 +992,7 @@ static uint8_t* add_attr(uint8_t* p, uint8_t* p_end, tSDP_DISCOVERY_DB* p_db,
           p_attr->attr_value.v.u8 = *p++;
           break;
         default:
-          SDP_TRACE_WARNING("SDP - bad len in boolean attr: %d", attr_len);
+          log::warn("SDP - bad len in boolean attr: {}", attr_len);
           return p_attr_end;
       }
       break;
@@ -968,17 +1018,17 @@ static uint8_t* add_attr(uint8_t* p, uint8_t* p_end, tSDP_DISCOVERY_DB* p_db,
   } else {
     if (!p_parent_attr->attr_value.v.p_sub_attr) {
       p_parent_attr->attr_value.v.p_sub_attr = p_attr;
-      /* SDP_TRACE_DEBUG ("parent:0x%x(id:%d), ch:0x%x(id:%d)",
+      /* LOG_VERBOSE ("parent:0x%x(id:%d), ch:0x%x(id:%d)",
           p_parent_attr, p_parent_attr->attr_id, p_attr, p_attr->attr_id); */
     } else {
       tSDP_DISC_ATTR* p_attr1 = p_parent_attr->attr_value.v.p_sub_attr;
-      /* SDP_TRACE_DEBUG ("parent:0x%x(id:%d), ch1:0x%x(id:%d)",
+      /* LOG_VERBOSE ("parent:0x%x(id:%d), ch1:0x%x(id:%d)",
           p_parent_attr, p_parent_attr->attr_id, p_attr1, p_attr1->attr_id); */
 
       while (p_attr1->p_next_attr) p_attr1 = p_attr1->p_next_attr;
 
       p_attr1->p_next_attr = p_attr;
-      /* SDP_TRACE_DEBUG ("new ch:0x%x(id:%d)", p_attr, p_attr->attr_id); */
+      /* LOG_VERBOSE ("new ch:0x%x(id:%d)", p_attr, p_attr->attr_id); */
     }
   }
 

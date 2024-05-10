@@ -19,7 +19,8 @@
 #include "metrics.h"
 
 #include <base/base64.h>
-#include <base/logging.h>
+#include <bluetooth/log.h>
+#include <frameworks/proto_logging/stats/enums/bluetooth/le/enums.pb.h>
 #include <include/hardware/bt_av.h>
 #include <statslog_bt.h>
 #include <unistd.h>
@@ -27,7 +28,6 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
-#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -35,15 +35,35 @@
 
 #include "address_obfuscator.h"
 #include "bluetooth/metrics/bluetooth.pb.h"
+#include "hci/address.h"
+#include "internal_include/bt_trace.h"
 #include "leaky_bonded_queue.h"
 #include "metric_id_allocator.h"
+#include "metrics/metrics_state.h"
+#include "os/metrics.h"
 #include "osi/include/osi.h"
-#include "stack/include/btm_api_types.h"
 #include "time_util.h"
 #include "types/raw_address.h"
 
-namespace bluetooth {
+namespace fmt {
+template <>
+struct formatter<android::bluetooth::DirectionEnum>
+    : enum_formatter<android::bluetooth::DirectionEnum> {};
+template <>
+struct formatter<android::bluetooth::SocketConnectionstateEnum>
+    : enum_formatter<android::bluetooth::SocketConnectionstateEnum> {};
+template <>
+struct formatter<android::bluetooth::SocketRoleEnum>
+    : enum_formatter<android::bluetooth::SocketRoleEnum> {};
+template <>
+struct formatter<android::bluetooth::AddressTypeEnum>
+    : enum_formatter<android::bluetooth::AddressTypeEnum> {};
+template <>
+struct formatter<android::bluetooth::DeviceInfoSrcEnum>
+    : enum_formatter<android::bluetooth::DeviceInfoSrcEnum> {};
+}  // namespace fmt
 
+namespace bluetooth {
 namespace common {
 
 using bluetooth::metrics::BluetoothMetricsProto::A2DPSession;
@@ -68,6 +88,7 @@ using bluetooth::metrics::BluetoothMetricsProto::ScanEvent_ScanEventType;
 using bluetooth::metrics::BluetoothMetricsProto::ScanEvent_ScanTechnologyType;
 using bluetooth::metrics::BluetoothMetricsProto::WakeEvent;
 using bluetooth::metrics::BluetoothMetricsProto::WakeEvent_WakeEventType;
+using bluetooth::hci::Address;
 
 static float combine_averages(float avg_a, int64_t ct_a, float avg_b,
                               int64_t ct_b) {
@@ -456,11 +477,11 @@ void BluetoothMetricsLogger::LogHeadsetProfileRfcConnection(
 
 void BluetoothMetricsLogger::WriteString(std::string* serialized) {
   std::lock_guard<std::recursive_mutex> lock(pimpl_->bluetooth_log_lock_);
-  LOG(INFO) << __func__ << ": building metrics";
+  log::info("building metrics");
   Build();
-  LOG(INFO) << __func__ << ": serializing metrics";
+  log::info("serializing metrics");
   if (!pimpl_->bluetooth_log_->SerializeToString(serialized)) {
-    LOG(ERROR) << __func__ << ": error serializing metrics";
+    log::error("error serializing metrics");
   }
   // Always clean up log objects
   pimpl_->bluetooth_log_->Clear();
@@ -477,9 +498,7 @@ void BluetoothMetricsLogger::WriteBase64(int fd) {
   ssize_t ret;
   OSI_NO_INTR(ret = write(fd, protoBase64.c_str(), protoBase64.size()));
   if (ret == -1) {
-    LOG(ERROR) << __func__
-               << ": error writing to dumpsys fd: " << strerror(errno) << " ("
-               << std::to_string(errno) << ")";
+    log::error("error writing to dumpsys fd: {} ({})", strerror(errno), errno);
   }
 }
 
@@ -591,12 +610,11 @@ void LogLinkLayerConnectionEvent(const RawAddress* address,
                   connection_handle, direction, link_type, hci_cmd, hci_event,
                   hci_ble_event, cmd_status, reason_code, metric_id);
   if (ret < 0) {
-    LOG(WARNING) << __func__ << ": failed to log status " << loghex(cmd_status)
-                 << ", reason " << loghex(reason_code) << " from cmd "
-                 << loghex(hci_cmd) << ", event " << loghex(hci_event)
-                 << ", ble_event " << loghex(hci_ble_event) << " for "
-                 << address << ", handle " << connection_handle << ", type "
-                 << loghex(link_type) << ", error " << ret;
+    log::warn(
+        "failed to log status 0x{:x}, reason 0x{:x} from cmd 0x{:x}, event "
+        "0x{:x}, ble_event 0x{:x} for {}, handle {}, type 0x{:x}, error {}",
+        cmd_status, reason_code, hci_cmd, hci_event, hci_ble_event, *address,
+        connection_handle, link_type, ret);
   }
 }
 
@@ -604,8 +622,7 @@ void LogHciTimeoutEvent(uint32_t hci_cmd) {
   int ret = stats_write(BLUETOOTH_HCI_TIMEOUT_REPORTED,
                         static_cast<int64_t>(hci_cmd));
   if (ret < 0) {
-    LOG(WARNING) << __func__ << ": failed for opcode " << loghex(hci_cmd)
-                 << ", error " << ret;
+    log::warn("failed for opcode 0x{:x}, error {}", hci_cmd, ret);
   }
 }
 
@@ -614,10 +631,10 @@ void LogRemoteVersionInfo(uint16_t handle, uint8_t status, uint8_t version,
   int ret = stats_write(BLUETOOTH_REMOTE_VERSION_INFO_REPORTED, handle, status,
                         version, manufacturer_name, subversion);
   if (ret < 0) {
-    LOG(WARNING) << __func__ << ": failed for handle " << handle << ", status "
-                 << loghex(status) << ", version " << loghex(version)
-                 << ", manufacturer_name " << loghex(manufacturer_name)
-                 << ", subversion " << loghex(subversion) << ", error " << ret;
+    log::warn(
+        "failed for handle {}, status 0x{:x}, version 0x{:x}, "
+        "manufacturer_name 0x{:x}, subversion 0x{:x}, error {}",
+        handle, status, version, manufacturer_name, subversion, ret);
   }
 }
 
@@ -638,10 +655,10 @@ void LogA2dpAudioUnderrunEvent(const RawAddress& address,
       stats_write(BLUETOOTH_A2DP_AUDIO_UNDERRUN_REPORTED, bytes_field,
                   encoding_interval_nanos, num_missing_pcm_bytes, metric_id);
   if (ret < 0) {
-    LOG(WARNING) << __func__ << ": failed for " << address
-                 << ", encoding_interval_nanos " << encoding_interval_nanos
-                 << ", num_missing_pcm_bytes " << num_missing_pcm_bytes
-                 << ", error " << ret;
+    log::warn(
+        "failed for {}, encoding_interval_nanos {}, num_missing_pcm_bytes {}, "
+        "error {}",
+        address, encoding_interval_nanos, num_missing_pcm_bytes, ret);
   }
 }
 
@@ -665,12 +682,12 @@ void LogA2dpAudioOverrunEvent(const RawAddress& address,
                         num_dropped_encoded_frames, num_dropped_encoded_bytes,
                         metric_id);
   if (ret < 0) {
-    LOG(WARNING) << __func__ << ": failed to log for " << address
-                 << ", encoding_interval_nanos " << encoding_interval_nanos
-                 << ", num_dropped_buffers " << num_dropped_buffers
-                 << ", num_dropped_encoded_frames "
-                 << num_dropped_encoded_frames << ", num_dropped_encoded_bytes "
-                 << num_dropped_encoded_bytes << ", error " << ret;
+    log::warn(
+        "failed to log for {}, encoding_interval_nanos {}, num_dropped_buffers "
+        "{}, num_dropped_encoded_frames {}, num_dropped_encoded_bytes {}, "
+        "error {}",
+        address, encoding_interval_nanos, num_dropped_buffers,
+        num_dropped_encoded_frames, num_dropped_encoded_bytes, ret);
   }
 }
 
@@ -688,10 +705,10 @@ void LogA2dpPlaybackEvent(const RawAddress& address, int playback_state,
   int ret = stats_write(BLUETOOTH_A2DP_PLAYBACK_STATE_CHANGED, bytes_field,
                         playback_state, audio_coding_mode, metric_id);
   if (ret < 0) {
-    LOG(WARNING) << __func__ << ": failed to log for " << address
-                 << ", playback_state " << playback_state
-                 << ", audio_coding_mode " << audio_coding_mode << ", error "
-                 << ret;
+    log::warn(
+        "failed to log for {}, playback_state {}, audio_coding_mode {}, error "
+        "{}",
+        address, playback_state, audio_coding_mode, ret);
   }
 }
 
@@ -709,9 +726,8 @@ void LogReadRssiResult(const RawAddress& address, uint16_t handle,
   int ret = stats_write(BLUETOOTH_DEVICE_RSSI_REPORTED, bytes_field, handle,
                         cmd_status, rssi, metric_id);
   if (ret < 0) {
-    LOG(WARNING) << __func__ << ": failed for " << address << ", handle "
-                 << handle << ", status " << loghex(cmd_status) << ", rssi "
-                 << rssi << " dBm, error " << ret;
+    log::warn("failed for {}, handle {}, status 0x{:x}, rssi {} dBm, error {}",
+              address, handle, cmd_status, rssi, ret);
   }
 }
 
@@ -731,10 +747,10 @@ void LogReadFailedContactCounterResult(const RawAddress& address,
       stats_write(BLUETOOTH_DEVICE_FAILED_CONTACT_COUNTER_REPORTED, bytes_field,
                   handle, cmd_status, failed_contact_counter, metric_id);
   if (ret < 0) {
-    LOG(WARNING) << __func__ << ": failed for " << address << ", handle "
-                 << handle << ", status " << loghex(cmd_status)
-                 << ", failed_contact_counter " << failed_contact_counter
-                 << " packets, error " << ret;
+    log::warn(
+        "failed for {}, handle {}, status 0x{:x}, failed_contact_counter {} "
+        "packets, error {}",
+        address, handle, cmd_status, failed_contact_counter, ret);
   }
 }
 
@@ -753,10 +769,10 @@ void LogReadTxPowerLevelResult(const RawAddress& address, uint16_t handle,
   int ret = stats_write(BLUETOOTH_DEVICE_TX_POWER_LEVEL_REPORTED, bytes_field,
                         handle, cmd_status, transmit_power_level, metric_id);
   if (ret < 0) {
-    LOG(WARNING) << __func__ << ": failed for " << address << ", handle "
-                 << handle << ", status " << loghex(cmd_status)
-                 << ", transmit_power_level " << transmit_power_level
-                 << " packets, error " << ret;
+    log::warn(
+        "failed for {}, handle {}, status 0x{:x}, transmit_power_level {} "
+        "packets, error {}",
+        address, handle, cmd_status, transmit_power_level, ret);
   }
 }
 
@@ -777,10 +793,10 @@ void LogSmpPairingEvent(const RawAddress& address, uint8_t smp_cmd,
       stats_write(BLUETOOTH_SMP_PAIRING_EVENT_REPORTED, obfuscated_id_field,
                   smp_cmd, direction, smp_fail_reason, metric_id);
   if (ret < 0) {
-    LOG(WARNING) << __func__ << ": failed for " << address << ", smp_cmd "
-                 << loghex(smp_cmd) << ", direction " << direction
-                 << ", smp_fail_reason " << loghex(smp_fail_reason)
-                 << ", error " << ret;
+    log::warn(
+        "failed for {}, smp_cmd 0x{:x}, direction {}, smp_fail_reason 0x{:x}, "
+        "error {}",
+        address, smp_cmd, direction, smp_fail_reason, ret);
   }
 }
 
@@ -800,9 +816,11 @@ void LogClassicPairingEvent(const RawAddress& address, uint16_t handle, uint32_t
                         obfuscated_id_field, handle, hci_cmd, hci_event,
                         cmd_status, reason_code, event_value, metric_id);
   if (ret < 0) {
-    LOG(WARNING) << __func__ << ": failed for " << address << ", handle " << handle << ", hci_cmd " << loghex(hci_cmd)
-                 << ", hci_event " << loghex(hci_event) << ", cmd_status " << loghex(cmd_status) << ", reason "
-                 << loghex(reason_code) << ", event_value " << event_value << ", error " << ret;
+    log::warn(
+        "failed for {}, handle {}, hci_cmd 0x{:x}, hci_event 0x{:x}, "
+        "cmd_status 0x{:x}, reason 0x{:x}, event_value {}, error {}",
+        address, handle, hci_cmd, hci_event, cmd_status, reason_code,
+        event_value, ret);
   }
 }
 
@@ -824,9 +842,9 @@ void LogSdpAttribute(const RawAddress& address, uint16_t protocol_uuid,
       stats_write(BLUETOOTH_SDP_ATTRIBUTE_REPORTED, obfuscated_id_field,
                   protocol_uuid, attribute_id, attribute_field, metric_id);
   if (ret < 0) {
-    LOG(WARNING) << __func__ << ": failed for " << address << ", protocol_uuid "
-                 << loghex(protocol_uuid) << ", attribute_id "
-                 << loghex(attribute_id) << ", error " << ret;
+    log::warn(
+        "failed for {}, protocol_uuid 0x{:x}, attribute_id 0x{:x}, error {}",
+        address, protocol_uuid, attribute_id, ret);
   }
 }
 
@@ -850,11 +868,11 @@ void LogSocketConnectionState(
                   obfuscated_id_field, port, type, connection_state, tx_bytes,
                   rx_bytes, uid, server_port, socket_role, metric_id);
   if (ret < 0) {
-    LOG(WARNING) << __func__ << ": failed for " << address << ", port " << port
-                 << ", type " << type << ", state " << connection_state
-                 << ", tx_bytes " << tx_bytes << ", rx_bytes " << rx_bytes
-                 << ", uid " << uid << ", server_port " << server_port
-                 << ", socket_role " << socket_role << ", error " << ret;
+    log::warn(
+        "failed for {}, port {}, type {}, state {}, tx_bytes {}, rx_bytes {}, "
+        "uid {}, server_port {}, socket_role {}, error {}",
+        address, port, type, connection_state, tx_bytes, rx_bytes, uid,
+        server_port, socket_role, ret);
   }
 }
 
@@ -882,15 +900,13 @@ void LogManufacturerInfo(const RawAddress& address,
       hardware_version.c_str(), software_version.c_str(), metric_id,
       address_type, address.address[5], address.address[4], address.address[3]);
   if (ret < 0) {
-    LOG(WARNING) << __func__ << ": failed for " << address << ", source_type "
-                 << source_type << ", source_name " << source_name
-                 << ", manufacturer " << manufacturer << ", model " << model
-                 << ", hardware_version " << hardware_version
-                 << ", software_version " << software_version
-                 << " MAC address type " << address_type
-                 << " MAC address prefix " << address.address[5] << " "
-                 << address.address[4] << " " << address.address[3] << ", error "
-                 << ret;
+    log::warn(
+        "failed for {}, source_type {}, source_name {}, manufacturer {}, model "
+        "{}, hardware_version {}, software_version {} MAC address type {} MAC "
+        "address prefix {} {} {}, error {}",
+        address, source_type, source_name, manufacturer, model,
+        hardware_version, software_version, address_type, address.address[5],
+        address.address[4], address.address[3], ret);
   }
 }
 
@@ -907,9 +923,9 @@ void LogBluetoothHalCrashReason(const RawAddress& address, uint32_t error_code,
   int ret = stats_write(BLUETOOTH_HAL_CRASH_REASON_REPORTED, 0,
                         obfuscated_id_field, error_code, vendor_error_code);
   if (ret < 0) {
-    LOG(WARNING) << __func__ << ": failed for " << address << ", error_code "
-                 << loghex(error_code) << ", vendor_error_code "
-                 << loghex(vendor_error_code) << ", error " << ret;
+    log::warn(
+        "failed for {}, error_code 0x{:x}, vendor_error_code 0x{:x}, error {}",
+        address, error_code, vendor_error_code, ret);
   }
 }
 
@@ -941,32 +957,40 @@ void LogLeAudioConnectionSessionReported(
       device_connection_status, device_disconnection_status, device_metric_id,
       streaming_offset_nanos, streaming_duration_nanos, streaming_context_type);
   if (ret < 0) {
-    LOG(WARNING) << __func__ << ": failed for group " << group_metric_id
-                 << "device_connecting_offset_nanos["
-                 << device_connecting_offset_nanos.size() << "], "
-                 << "device_connected_offset_nanos["
-                 << device_connected_offset_nanos.size() << "], "
-                 << "device_connection_duration_nanos["
-                 << device_connection_duration_nanos.size() << "], "
-                 << "device_connection_status["
-                 << device_connection_status.size() << "], "
-                 << "device_disconnection_status["
-                 << device_disconnection_status.size() << "], "
-                 << "device_metric_id[" << device_metric_id.size() << "], "
-                 << "streaming_offset_nanos[" << streaming_offset_nanos.size()
-                 << "], "
-                 << "streaming_duration_nanos["
-                 << streaming_duration_nanos.size() << "], "
-                 << "streaming_context_type[" << streaming_context_type.size()
-                 << "]";
+    log::warn(
+        "failed for group {}device_connecting_offset_nanos[{}], "
+        "device_connected_offset_nanos[{}], "
+        "device_connection_duration_nanos[{}], device_connection_status[{}], "
+        "device_disconnection_status[{}], device_metric_id[{}], "
+        "streaming_offset_nanos[{}], streaming_duration_nanos[{}], "
+        "streaming_context_type[{}]",
+        group_metric_id, device_connecting_offset_nanos.size(),
+        device_connected_offset_nanos.size(),
+        device_connection_duration_nanos.size(),
+        device_connection_status.size(), device_disconnection_status.size(),
+        device_metric_id.size(), streaming_offset_nanos.size(),
+        streaming_duration_nanos.size(), streaming_context_type.size());
   }
 }
 
 void LogLeAudioBroadcastSessionReported(int64_t duration_nanos) {
   int ret = stats_write(LE_AUDIO_BROADCAST_SESSION_REPORTED, duration_nanos);
   if (ret < 0) {
-    LOG(WARNING) << __func__ << ": failed for duration=" << duration_nanos;
+    log::warn("failed for duration={}", duration_nanos);
   }
+}
+
+void LogLeBluetoothConnectionMetricEventReported(
+    const Address& address,
+    android::bluetooth::le::LeConnectionOriginType origin_type,
+    android::bluetooth::le::LeConnectionType connection_type,
+    android::bluetooth::le::LeConnectionState transaction_state,
+    std::vector<std::pair<os::ArgumentType, int>>
+        argument_list) {
+  // Log the events for the State Management
+  metrics::MetricsCollector::GetLEConnectionMetricsCollector()
+      ->AddStateChangedEvent(address, origin_type, connection_type,
+                             transaction_state, argument_list);
 }
 
 }  // namespace common

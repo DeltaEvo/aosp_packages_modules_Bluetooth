@@ -19,6 +19,7 @@
 #ifndef BTM_BLE_INT_TYPES_H
 #define BTM_BLE_INT_TYPES_H
 
+#include "macros.h"
 #include "osi/include/alarm.h"
 #include "stack/btm/neighbor_inquiry.h"
 #include "stack/include/btm_ble_api_types.h"
@@ -45,10 +46,10 @@
 #define BTM_BLE_GAP_ADV_INT 512
 /* Tgap(lim_timeout) = 180s max */
 #define BTM_BLE_GAP_LIM_TIMEOUT_MS (180 * 1000)
-/* Interval(scan_int) = 5s= 8000 * 0.625 ms */
-#define BTM_BLE_LOW_LATENCY_SCAN_INT 8000
-/* scan_window = 5s= 8000 * 0.625 ms */
-#define BTM_BLE_LOW_LATENCY_SCAN_WIN 8000
+/* Interval(scan_int) = 100ms= 160 * 0.625 ms */
+#define BTM_BLE_LOW_LATENCY_SCAN_INT 160
+/* scan_window = 100ms= 160 * 0.625 ms */
+#define BTM_BLE_LOW_LATENCY_SCAN_WIN 160
 
 /* TGAP(adv_fast_interval1) = 30(used) ~ 60 ms  = 48 *0.625 */
 #define BTM_BLE_GAP_ADV_FAST_INT_1 48
@@ -63,36 +64,11 @@
 
 #define BTM_BLE_GAP_FAST_ADV_TIMEOUT_MS (30 * 1000)
 
-typedef enum : uint8_t {
-  BTM_BLE_SEC_REQ_ACT_NONE = 0,
-  /* encrypt the link using current key or key refresh */
-  BTM_BLE_SEC_REQ_ACT_ENCRYPT = 1,
-  BTM_BLE_SEC_REQ_ACT_PAIR = 2,
-  /* discard the sec request while encryption is started but not completed */
-  BTM_BLE_SEC_REQ_ACT_DISCARD = 3,
-} tBTM_BLE_SEC_REQ_ACT;
-
-#ifndef CASE_RETURN_TEXT
-#define CASE_RETURN_TEXT(code) \
-  case code:                   \
-    return #code
-#endif
-
-inline std::string btm_ble_sec_req_act_text(
-    const tBTM_BLE_SEC_REQ_ACT& action) {
-  switch (action) {
-    CASE_RETURN_TEXT(BTM_BLE_SEC_REQ_ACT_NONE);
-    CASE_RETURN_TEXT(BTM_BLE_SEC_REQ_ACT_ENCRYPT);
-    CASE_RETURN_TEXT(BTM_BLE_SEC_REQ_ACT_PAIR);
-    CASE_RETURN_TEXT(BTM_BLE_SEC_REQ_ACT_DISCARD);
-  }
-}
-
-#undef CASE_RETURN_TEXT
-
 #define BTM_VSC_CHIP_CAPABILITY_L_VERSION 55
 #define BTM_VSC_CHIP_CAPABILITY_M_VERSION 95
 #define BTM_VSC_CHIP_CAPABILITY_S_VERSION 98
+
+#define BTM_BLE_DEFAULT_PHYS 0x01
 
 typedef struct {
   uint16_t data_mask;
@@ -107,9 +83,10 @@ typedef struct {
 typedef struct {
   uint16_t discoverable_mode;
   uint16_t connectable_mode;
-  uint32_t scan_window;
-  uint32_t scan_interval;
+  uint16_t scan_window;
+  uint16_t scan_interval;
   uint8_t scan_type;             /* current scan type: active or passive */
+  uint8_t scan_phy;
 
   tBTM_BLE_AFP afp; /* advertising filter policy */
   tBTM_BLE_SFP sfp; /* scanning filter policy */
@@ -247,22 +224,6 @@ typedef struct {
 
   /* target announcement observer */
   tBTM_INQ_RESULTS_CB* p_target_announcement_obs_results_cb;
-
-  /* background connection procedure cb value */
-  uint16_t scan_int;
-  uint16_t scan_win;
-
-  /* acceptlist information */
-  uint8_t wl_state;
-  void set_acceptlist_process_in_progress() {
-    wl_state |= BTM_BLE_ACCEPTLIST_INIT;
-  }
-  void reset_acceptlist_process_in_progress() {
-    wl_state &= ~BTM_BLE_ACCEPTLIST_INIT;
-  }
-  bool is_acceptlist_in_progress() const {
-    return wl_state & BTM_BLE_ACCEPTLIST_INIT;
-  }
 
  private:
   enum : uint8_t { /* BLE connection state */

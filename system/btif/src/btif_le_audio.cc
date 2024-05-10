@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-#include <base/logging.h>
+#include <bluetooth/log.h>
 #include <hardware/bluetooth.h>
 #include <hardware/bt_le_audio.h>
 
@@ -24,7 +24,7 @@
 #include "bta_le_audio_api.h"
 #include "btif_common.h"
 #include "btif_profile_storage.h"
-#include "stack/include/btu.h"
+#include "stack/include/main_thread.h"
 
 using base::Bind;
 using base::Unretained;
@@ -32,8 +32,11 @@ using bluetooth::le_audio::btle_audio_codec_config_t;
 using bluetooth::le_audio::ConnectionState;
 using bluetooth::le_audio::GroupNodeStatus;
 using bluetooth::le_audio::GroupStatus;
+using bluetooth::le_audio::GroupStreamStatus;
 using bluetooth::le_audio::LeAudioClientCallbacks;
 using bluetooth::le_audio::LeAudioClientInterface;
+using bluetooth::le_audio::UnicastMonitorModeStatus;
+using namespace bluetooth;
 
 namespace {
 class LeAudioClientInterfaceImpl;
@@ -93,17 +96,57 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
                         local_output_capa_codec_conf));
   }
 
-  void OnAudioGroupCodecConf(
+  void OnAudioGroupCurrentCodecConf(
       int group_id, btle_audio_codec_config_t input_codec_conf,
-      btle_audio_codec_config_t output_codec_conf,
+      btle_audio_codec_config_t output_codec_conf) override {
+    do_in_jni_thread(FROM_HERE,
+                     Bind(&LeAudioClientCallbacks::OnAudioGroupCurrentCodecConf,
+                          Unretained(callbacks), group_id, input_codec_conf,
+                          output_codec_conf));
+  }
+
+  void OnAudioGroupSelectableCodecConf(
+      int group_id,
       std::vector<btle_audio_codec_config_t> input_selectable_codec_conf,
       std::vector<btle_audio_codec_config_t> output_selectable_codec_conf)
       override {
+    do_in_jni_thread(
+        FROM_HERE,
+        Bind(&LeAudioClientCallbacks::OnAudioGroupSelectableCodecConf,
+             Unretained(callbacks), group_id, input_selectable_codec_conf,
+             output_selectable_codec_conf));
+  }
+
+  void OnHealthBasedRecommendationAction(
+      const RawAddress& address,
+      bluetooth::le_audio::LeAudioHealthBasedAction action) override {
+    do_in_jni_thread(
+        FROM_HERE,
+        Bind(&LeAudioClientCallbacks::OnHealthBasedRecommendationAction,
+             Unretained(callbacks), address, action));
+  }
+
+  void OnHealthBasedGroupRecommendationAction(
+      int group_id,
+      bluetooth::le_audio::LeAudioHealthBasedAction action) override {
+    do_in_jni_thread(
+        FROM_HERE,
+        Bind(&LeAudioClientCallbacks::OnHealthBasedGroupRecommendationAction,
+             Unretained(callbacks), group_id, action));
+  }
+
+  void OnUnicastMonitorModeStatus(uint8_t direction,
+                                  UnicastMonitorModeStatus status) override {
     do_in_jni_thread(FROM_HERE,
-                     Bind(&LeAudioClientCallbacks::OnAudioGroupCodecConf,
-                          Unretained(callbacks), group_id, input_codec_conf,
-                          output_codec_conf, input_selectable_codec_conf,
-                          output_selectable_codec_conf));
+                     Bind(&LeAudioClientCallbacks::OnUnicastMonitorModeStatus,
+                          Unretained(callbacks), direction, status));
+  }
+
+  void OnGroupStreamStatus(int group_id,
+                           GroupStreamStatus group_stream_status) override {
+    do_in_jni_thread(
+        FROM_HERE, Bind(&LeAudioClientCallbacks::OnGroupStreamStatus,
+                        Unretained(callbacks), group_id, group_stream_status));
   }
 
   void Initialize(LeAudioClientCallbacks* callbacks,
@@ -112,10 +155,9 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
     this->callbacks = callbacks;
 
     for (auto codec : offloading_preference) {
-      LOG_INFO("supported codec: %s", codec.ToString().c_str());
+      log::info("supported codec: {}", codec.ToString());
     }
 
-    LeAudioClient::InitializeAudioSetConfigurationProvider();
     do_in_main_thread(
         FROM_HERE, Bind(&LeAudioClient::Initialize, this,
                         jni_thread_wrapper(
@@ -132,31 +174,23 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
   }
 
   void Cleanup(void) override {
-    DVLOG(2) << __func__;
     if (!initialized || !LeAudioClient::IsLeAudioClientRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
     initialized = false;
 
-    do_in_main_thread(
-        FROM_HERE,
-        Bind(&LeAudioClient::Cleanup,
-             jni_thread_wrapper(
-                 FROM_HERE,
-                 Bind(&LeAudioClient::CleanupAudioSetConfigurationProvider))));
+    do_in_main_thread(FROM_HERE, Bind(&LeAudioClient::Cleanup));
   }
 
   void RemoveDevice(const RawAddress& address) override {
-    DVLOG(2) << __func__ << " address: " << ADDRESS_TO_LOGGABLE_STR(address);
-
     if (!initialized || !LeAudioClient::IsLeAudioClientRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
 
       do_in_jni_thread(FROM_HERE, Bind(&btif_storage_remove_leaudio, address));
       return;
@@ -170,12 +204,10 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
   }
 
   void Connect(const RawAddress& address) override {
-    DVLOG(2) << __func__ << " address: " << ADDRESS_TO_LOGGABLE_STR(address);
-
     if (!initialized || !LeAudioClient::IsLeAudioClientRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
@@ -185,12 +217,10 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
   }
 
   void Disconnect(const RawAddress& address) override {
-    DVLOG(2) << __func__ << " address: " << ADDRESS_TO_LOGGABLE_STR(address);
-
     if (!initialized || !LeAudioClient::IsLeAudioClientRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
@@ -199,14 +229,24 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
                            Unretained(LeAudioClient::Get()), address));
   }
 
-  void GroupAddNode(const int group_id, const RawAddress& address) override {
-    DVLOG(2) << __func__ << " group_id: " << group_id
-             << " address: " << ADDRESS_TO_LOGGABLE_STR(address);
-
+  void SetEnableState(const RawAddress& address, bool enabled) override {
     if (!initialized || !LeAudioClient::IsLeAudioClientRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
+      return;
+    }
+
+    do_in_main_thread(FROM_HERE,
+                      Bind(&LeAudioClient::SetEnableState,
+                           Unretained(LeAudioClient::Get()), address, enabled));
+  }
+
+  void GroupAddNode(const int group_id, const RawAddress& address) override {
+    if (!initialized || !LeAudioClient::IsLeAudioClientRunning()) {
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
@@ -216,12 +256,10 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
   }
 
   void GroupRemoveNode(const int group_id, const RawAddress& address) override {
-    DVLOG(2) << __func__ << " group_id: " << group_id
-             << " address: " << ADDRESS_TO_LOGGABLE_STR(address);
     if (!initialized || !LeAudioClient::IsLeAudioClientRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
@@ -231,11 +269,10 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
   }
 
   void GroupSetActive(const int group_id) override {
-    DVLOG(2) << __func__ << " group_id: " << group_id;
     if (!initialized || !LeAudioClient::IsLeAudioClientRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
@@ -247,11 +284,10 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
   void SetCodecConfigPreference(int group_id,
                                 btle_audio_codec_config_t input_codec_config,
                                 btle_audio_codec_config_t output_codec_config) {
-    DVLOG(2) << __func__ << " group_id: " << group_id;
     if (!initialized || !LeAudioClient::IsLeAudioClientRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
     do_in_main_thread(FROM_HERE,
@@ -261,12 +297,10 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
   }
 
   void SetCcidInformation(int ccid, int context_type) {
-    DVLOG(2) << __func__ << " ccid: " << ccid << " context_type"
-             << context_type;
     if (!initialized || !LeAudioClient::IsLeAudioClientRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
@@ -276,17 +310,65 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
   }
 
   void SetInCall(bool in_call) {
-    DVLOG(2) << __func__ << " in_call: " << in_call;
     if (!initialized || !LeAudioClient::IsLeAudioClientRunning()) {
-      DVLOG(2) << __func__
-               << " call ignored, due to already started cleanup procedure or "
-                  "service being not read";
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
       return;
     }
 
     do_in_main_thread(FROM_HERE,
                       Bind(&LeAudioClient::SetInCall,
                            Unretained(LeAudioClient::Get()), in_call));
+  }
+
+  void SetUnicastMonitorMode(uint8_t direction, bool enable) {
+    log::verbose("enable: {}", enable);
+    if (!initialized || !LeAudioClient::IsLeAudioClientRunning()) {
+      log::verbose(
+          "Unicast monitoring mode set ignored, due to already"
+          " started cleanup procedure or service being not read");
+      return;
+    }
+
+    do_in_main_thread(
+        FROM_HERE, Bind(&LeAudioClient::SetUnicastMonitorMode,
+                        Unretained(LeAudioClient::Get()), direction, enable));
+  }
+
+  void SendAudioProfilePreferences(int group_id,
+                                   bool is_output_preference_le_audio,
+                                   bool is_duplex_preference_le_audio) {
+    if (!initialized || !LeAudioClient::IsLeAudioClientRunning()) {
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
+      return;
+    }
+
+    do_in_main_thread(
+        FROM_HERE,
+        Bind(&LeAudioClient::SendAudioProfilePreferences,
+             Unretained(LeAudioClient::Get()), group_id,
+             is_output_preference_le_audio, is_duplex_preference_le_audio));
+  }
+
+  void SetGroupAllowedContextMask(int group_id, int sink_context_types,
+                                  int source_context_types) {
+    if (!initialized || !LeAudioClient::IsLeAudioClientRunning()) {
+      log::verbose(
+          "call ignored, due to already started cleanup procedure or service "
+          "being not read");
+      return;
+    }
+
+    log::info("group_id: {}, sink context types: {}, source context types: {}",
+              group_id, sink_context_types, source_context_types);
+
+    do_in_main_thread(FROM_HERE,
+                      Bind(&LeAudioClient::SetGroupAllowedContextMask,
+                           Unretained(LeAudioClient::Get()), group_id,
+                           sink_context_types, source_context_types));
   }
 
  private:

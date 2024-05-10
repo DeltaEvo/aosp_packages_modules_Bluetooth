@@ -16,21 +16,18 @@
 
 #include "repeating_timer.h"
 
+#include <base/functional/callback.h>
+#include <bluetooth/log.h>
+
 #include "message_loop_thread.h"
 #include "time_util.h"
-
-#include <base/functional/callback.h>
-#include <base/logging.h>
 
 namespace bluetooth {
 
 namespace common {
 
-#if BASE_VER < 931007
-constexpr base::TimeDelta kMinimumPeriod = base::TimeDelta::FromMicroseconds(1);
-#else
-constexpr base::TimeDelta kMinimumPeriod = base::Microseconds(1);
-#endif
+constexpr std::chrono::microseconds kMinimumPeriod =
+    std::chrono::microseconds(1);
 
 // This runs on user thread
 RepeatingTimer::~RepeatingTimer() {
@@ -43,18 +40,18 @@ RepeatingTimer::~RepeatingTimer() {
 // This runs on user thread
 bool RepeatingTimer::SchedulePeriodic(
     const base::WeakPtr<MessageLoopThread>& thread,
-    const base::Location& from_here, base::Closure task,
-    base::TimeDelta period) {
+    const base::Location& from_here, base::RepeatingClosure task,
+    std::chrono::microseconds period) {
   if (period < kMinimumPeriod) {
-    LOG(ERROR) << __func__ << ": period must be at least " << kMinimumPeriod;
+    log::error("period must be at least {}", kMinimumPeriod.count());
     return false;
   }
 
   uint64_t time_now_us = time_get_os_boottime_us();
-  uint64_t time_next_task_us = time_now_us + period.InMicroseconds();
+  uint64_t time_next_task_us = time_now_us + period.count();
   std::lock_guard<std::recursive_mutex> api_lock(api_mutex_);
   if (thread == nullptr) {
-    LOG(ERROR) << __func__ << ": thread must be non-null";
+    log::error("thread must be non-null");
     return false;
   }
   CancelAndWait();
@@ -67,14 +64,9 @@ bool RepeatingTimer::SchedulePeriodic(
   uint64_t time_until_next_us = time_next_task_us - time_get_os_boottime_us();
   if (!thread->DoInThreadDelayed(
           from_here, task_wrapper_.callback(),
-#if BASE_VER < 931007
-          base::TimeDelta::FromMicroseconds(time_until_next_us))) {
-#else
-          base::Microseconds(time_until_next_us))) {
-#endif
-    LOG(ERROR) << __func__
-               << ": failed to post task to message loop for thread " << *thread
-               << ", from " << from_here.ToString();
+          std::chrono::microseconds(time_until_next_us))) {
+    log::error("failed to post task to message loop for thread {}, from {}",
+               *thread, from_here.ToString());
     expected_time_next_task_us_ = 0;
     task_wrapper_.Cancel();
     message_loop_thread_ = nullptr;
@@ -124,7 +116,7 @@ void RepeatingTimer::CancelClosure(std::promise<void> promise) {
 #else
   task_ = base::NullCallback();
 #endif
-  period_ = base::TimeDelta();
+  period_ = std::chrono::microseconds(0);
   expected_time_next_task_us_ = 0;
   promise.set_value();
 }
@@ -138,15 +130,14 @@ bool RepeatingTimer::IsScheduled() const {
 // This runs on message loop thread
 void RepeatingTimer::RunTask() {
   if (message_loop_thread_ == nullptr || !message_loop_thread_->IsRunning()) {
-    LOG(ERROR) << __func__
-               << ": message_loop_thread_ is null or is not running";
+    log::error("message_loop_thread_ is null or is not running");
     return;
   }
-  CHECK_EQ(message_loop_thread_->GetThreadId(),
-           base::PlatformThread::CurrentId())
-      << ": task must run on message loop thread";
+  log::assert_that(
+      message_loop_thread_->GetThreadId() == base::PlatformThread::CurrentId(),
+      "task must run on message loop thread");
 
-  int64_t period_us = period_.InMicroseconds();
+  int64_t period_us = period_.count();
   expected_time_next_task_us_ += period_us;
   uint64_t time_now_us = time_get_os_boottime_us();
   int64_t remaining_time_us = expected_time_next_task_us_ - time_now_us;
@@ -157,21 +148,18 @@ void RepeatingTimer::RunTask() {
   }
   message_loop_thread_->DoInThreadDelayed(
       FROM_HERE, task_wrapper_.callback(),
-#if BASE_VER < 931007
-      base::TimeDelta::FromMicroseconds(remaining_time_us));
-#else
-      base::Microseconds(remaining_time_us));
-#endif
+      std::chrono::microseconds(remaining_time_us));
 
   uint64_t time_before_task_us = time_get_os_boottime_us();
   task_.Run();
   uint64_t time_after_task_us = time_get_os_boottime_us();
   auto task_time_us =
       static_cast<int64_t>(time_after_task_us - time_before_task_us);
-  if (task_time_us > period_.InMicroseconds()) {
-    LOG(ERROR) << __func__ << ": Periodic task execution took " << task_time_us
-               << " microseconds, longer than interval "
-               << period_.InMicroseconds() << " microseconds";
+  if (task_time_us > period_.count()) {
+    log::error(
+        "Periodic task execution took {} microseconds, longer than interval {} "
+        "microseconds",
+        task_time_us, period_.count());
   }
 }
 

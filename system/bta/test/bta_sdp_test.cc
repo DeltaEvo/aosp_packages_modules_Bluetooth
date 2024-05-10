@@ -16,76 +16,45 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <stdarg.h>
 
-#include <string>
-
-#include "bta/dm/bta_dm_int.h"
-#include "test/common/main_handler.h"
-#include "test/mock/mock_osi_alarm.h"
-#include "test/mock/mock_osi_allocator.h"
-#include "test/mock/mock_stack_gatt_api.h"
+#include "bta/dm/bta_dm_disc_int.h"
+#include "bta/test/bta_test_fixtures.h"
+#include "osi/include/allocator.h"
 
 void BTA_dm_on_hw_on();
 void BTA_dm_on_hw_off();
 
-struct alarm_t {
-  alarm_t(const char* name){};
-  int any_value;
-};
+namespace {
+const char kName[] = "Hello";
+}
 
-class BtaSdpTest : public testing::Test {
+namespace bluetooth {
+namespace legacy {
+namespace testing {
+
+tBTA_DM_SERVICE_DISCOVERY_CB& bta_dm_discovery_cb();
+void bta_dm_sdp_result(tSDP_STATUS sdp_status);
+
+}  // namespace testing
+}  // namespace legacy
+}  // namespace bluetooth
+
+class BtaSdpTest : public BtaWithHwOnTest {
  protected:
-  void SetUp() override {
-    test::mock::osi_allocator::osi_calloc.body = [](size_t size) -> void* {
-      return calloc(1, size);
-    };
-    test::mock::osi_allocator::osi_free.body = [](void* ptr) { free(ptr); };
-    test::mock::osi_alarm::alarm_new.body = [](const char* name) -> alarm_t* {
-      return new alarm_t(name);
-    };
-    test::mock::osi_alarm::alarm_free.body = [](alarm_t* alarm) {
-      delete alarm;
-    };
-    test::mock::stack_gatt_api::GATT_Register.body =
-        [](const bluetooth::Uuid& p_app_uuid128, const std::string name,
-           tGATT_CBACK* p_cb_info, bool eatt_support) { return 5; };
+  void SetUp() override { BtaWithHwOnTest::SetUp(); }
 
-    main_thread_start_up();
-    sync_main_handler();
-
-    BTA_dm_on_hw_on();
-  }
-
-  void TearDown() override {
-    BTA_dm_on_hw_off();
-
-    sync_main_handler();
-    main_thread_shut_down();
-
-    test::mock::stack_gatt_api::GATT_Register = {};
-    test::mock::osi_allocator::osi_calloc = {};
-    test::mock::osi_allocator::osi_free = {};
-    test::mock::osi_alarm::alarm_new = {};
-    test::mock::osi_alarm::alarm_free = {};
-  }
+  void TearDown() override { BtaWithHwOnTest::TearDown(); }
 };
 
 class BtaSdpRegisteredTest : public BtaSdpTest {
  protected:
-  void SetUp() override {
-    BtaSdpTest::SetUp();
-    bta_sys_register(BTA_ID_DM_SEARCH, &bta_sys_reg);
-  }
+  void SetUp() override { BtaSdpTest::SetUp(); }
 
-  void TearDown() override {
-    bta_sys_deregister(BTA_ID_DM_SEARCH);
-    BtaSdpTest::TearDown();
-  }
+  void TearDown() override { BtaSdpTest::TearDown(); }
 
   tBTA_SYS_REG bta_sys_reg = {
-      .evt_hdlr = [](BT_HDR_RIGID* p_msg) -> bool {
-        osi_free(p_msg);
+      .evt_hdlr = [](const BT_HDR_RIGID* p_msg) -> bool {
+        osi_free((void*)p_msg);
         return false;
       },
       .disable = []() {},
@@ -95,13 +64,9 @@ class BtaSdpRegisteredTest : public BtaSdpTest {
 TEST_F(BtaSdpTest, nop) {}
 
 TEST_F(BtaSdpRegisteredTest, bta_dm_sdp_result_SDP_SUCCESS) {
-  bta_dm_search_cb.service_index = BTA_MAX_SERVICE_ID;
+  tBTA_DM_SERVICE_DISCOVERY_CB& discovery_cb =
+      bluetooth::legacy::testing::bta_dm_discovery_cb();
+  discovery_cb.service_index = BTA_MAX_SERVICE_ID;
 
-  tBTA_DM_MSG msg = {
-      .sdp_event =
-          {
-              .sdp_result = SDP_SUCCESS,
-          },
-  };
-  bta_dm_sdp_result(&msg);
+  bluetooth::legacy::testing::bta_dm_sdp_result(SDP_SUCCESS);
 }

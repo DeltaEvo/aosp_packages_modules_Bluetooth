@@ -23,26 +23,29 @@
  ******************************************************************************/
 
 #include <base/functional/callback.h>
-#include <base/logging.h>
 #include <base/strings/stringprintf.h>
+#include <bluetooth/log.h>
 #include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
 #include <string.h>
 
-#include "bta/include/bta_api.h"
+#include "bta/include/bta_sec_api.h"
 #include "hiddefs.h"
 #include "hidh_api.h"
 #include "hidh_int.h"
+#include "internal_include/bt_target.h"
 #include "l2c_api.h"
 #include "l2cdefs.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
 #include "osi/include/osi.h"
-#include "stack/btm/btm_sec.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/btm_api.h"  // BTM_LogHistory
+#include "stack/include/bt_psm_types.h"
+#include "stack/include/btm_log_history.h"
 #include "stack/include/stack_metrics_logging.h"
 #include "types/raw_address.h"
+
+using namespace bluetooth;
 
 namespace {
 constexpr char kBtmLogTag[] = "HIDH";
@@ -107,7 +110,7 @@ tHID_STATUS hidh_conn_reg(void) {
   if (!L2CA_Register2(HID_PSM_CONTROL, hst_reg_info, false /* enable_snoop */,
                       nullptr, HID_HOST_MTU, 0,
                       BTA_SEC_AUTHENTICATE | BTA_SEC_ENCRYPT)) {
-    HIDH_TRACE_ERROR("HID-Host Control Registration failed");
+    log::error("HID-Host Control Registration failed");
     log_counter_metrics(android::bluetooth::CodePathCounterKeyEnum::
                             HIDH_ERR_L2CAP_FAILED_AT_REGISTER_CONTROL,
                         1);
@@ -117,7 +120,7 @@ tHID_STATUS hidh_conn_reg(void) {
                       nullptr, HID_HOST_MTU, 0,
                       BTA_SEC_AUTHENTICATE | BTA_SEC_ENCRYPT)) {
     L2CA_Deregister(HID_PSM_CONTROL);
-    HIDH_TRACE_ERROR("HID-Host Interrupt Registration failed");
+    log::error("HID-Host Interrupt Registration failed");
     log_counter_metrics(android::bluetooth::CodePathCounterKeyEnum::
                             HIDH_ERR_L2CAP_FAILED_AT_REGISTER_INTERRUPT,
                         1);
@@ -182,8 +185,8 @@ static void hidh_l2cif_connect_ind(const RawAddress& bd_addr,
   bool bAccept = true;
   uint8_t i = kHID_HOST_MAX_DEVICES;
 
-  HIDH_TRACE_EVENT("HID-Host Rcvd L2CAP conn ind, PSM: 0x%04x  CID 0x%x", psm,
-                   l2cap_cid);
+  log::verbose("HID-Host Rcvd L2CAP conn ind, PSM: 0x{:04x}  CID 0x{:x}", psm,
+               l2cap_cid);
 
   /* always add incoming connection device into HID database by default */
   if (HID_HostAddDev(bd_addr, HID_SEC_REQUIRED, &i) != HID_SUCCESS) {
@@ -202,13 +205,12 @@ static void hidh_l2cif_connect_ind(const RawAddress& bd_addr,
   /* Check we are in the correct state for this */
   if (psm == HID_PSM_INTERRUPT) {
     if (p_hcon->ctrl_cid == 0) {
-      HIDH_TRACE_WARNING(
-          "HID-Host Rcvd INTR L2CAP conn ind, but no CTL channel");
+      log::warn("HID-Host Rcvd INTR L2CAP conn ind, but no CTL channel");
       bAccept = false;
     }
     if (p_hcon->conn_state != HID_CONN_STATE_CONNECTING_INTR) {
-      HIDH_TRACE_WARNING("HID-Host Rcvd INTR L2CAP conn ind, wrong state: %d",
-                         p_hcon->conn_state);
+      log::warn("HID-Host Rcvd INTR L2CAP conn ind, wrong state: {}",
+                p_hcon->conn_state);
       bAccept = false;
     }
   } else /* CTRL channel */
@@ -218,8 +220,8 @@ static void hidh_l2cif_connect_ind(const RawAddress& bd_addr,
     p_hcon->conn_state = HID_CONN_STATE_UNUSED;
 #else
     if (p_hcon->conn_state != HID_CONN_STATE_UNUSED) {
-      HIDH_TRACE_WARNING("HID-Host - Rcvd CTL L2CAP conn ind, wrong state: %d",
-                         p_hcon->conn_state);
+      log::warn("HID-Host - Rcvd CTL L2CAP conn ind, wrong state: {}",
+                p_hcon->conn_state);
       bAccept = false;
     }
 #endif
@@ -246,8 +248,9 @@ static void hidh_l2cif_connect_ind(const RawAddress& bd_addr,
   p_hcon->conn_state = HID_CONN_STATE_CONFIG;
   p_hcon->intr_cid = l2cap_cid;
 
-  HIDH_TRACE_EVENT(
-      "HID-Host Rcvd L2CAP conn ind, sent config req, PSM: 0x%04x  CID 0x%x",
+  log::verbose(
+      "HID-Host Rcvd L2CAP conn ind, sent config req, PSM: 0x{:04x}  CID "
+      "0x{:x}",
       psm, l2cap_cid);
 }
 
@@ -280,9 +283,8 @@ static void hidh_try_repage(uint8_t dhandle) {
 static void hidh_on_l2cap_error(uint16_t l2cap_cid, uint16_t result) {
   auto dhandle = find_conn_by_cid(l2cap_cid);
   if (dhandle == kHID_HOST_MAX_DEVICES) {
-    LOG_WARN("Received error for unknown device cid:0x%04x reason:%s",
-             l2cap_cid,
-             hci_reason_code_text(to_hci_reason_code(result)).c_str());
+    log::warn("Received error for unknown device cid:0x{:04x} reason:{}",
+              l2cap_cid, hci_reason_code_text(to_hci_reason_code(result)));
     return;
   }
 
@@ -336,14 +338,13 @@ static void hidh_l2cif_connect_cfm(uint16_t l2cap_cid, uint16_t result) {
       ((l2cap_cid == p_hcon->intr_cid) &&
        (p_hcon->conn_state != HID_CONN_STATE_CONNECTING_INTR) &&
        (p_hcon->conn_state != HID_CONN_STATE_DISCONNECTING))) {
-    HIDH_TRACE_WARNING("HID-Host Rcvd unexpected conn cnf, CID 0x%x ",
-                       l2cap_cid);
+    log::warn("HID-Host Rcvd unexpected conn cnf, CID 0x{:x}", l2cap_cid);
     return;
   }
 
   if (result != L2CAP_CONN_OK) {
     // TODO: We need to provide the real HCI status if we want to retry.
-    LOG(ERROR) << __func__ << ": invoked with non OK status";
+    log::error("invoked with non OK status");
     return;
   }
   /* receive Control Channel connect confirmation */
@@ -387,12 +388,11 @@ static void hidh_l2cif_config_ind(uint16_t l2cap_cid, tL2CAP_CFG_INFO* p_cfg) {
   }
 
   if (p_hcon == NULL) {
-    HIDH_TRACE_WARNING("HID-Host Rcvd L2CAP cfg ind, unknown CID: 0x%x",
-                       l2cap_cid);
+    log::warn("HID-Host Rcvd L2CAP cfg ind, unknown CID: 0x{:x}", l2cap_cid);
     return;
   }
 
-  HIDH_TRACE_EVENT("HID-Host Rcvd cfg ind, sent cfg cfm, CID: 0x%x", l2cap_cid);
+  log::verbose("HID-Host Rcvd cfg ind, sent cfg cfm, CID: 0x{:x}", l2cap_cid);
 
   /* Remember the remote MTU size */
   if ((!p_cfg->mtu_present) || (p_cfg->mtu > HID_HOST_MTU))
@@ -419,15 +419,14 @@ static void hidh_l2cif_config_cfm(uint16_t l2cap_cid, uint16_t initiator,
   tHID_CONN* p_hcon = NULL;
   uint32_t reason;
 
-  HIDH_TRACE_EVENT("HID-Host Rcvd cfg cfm, CID: 0x%x", l2cap_cid);
+  log::verbose("HID-Host Rcvd cfg cfm, CID: 0x{:x}", l2cap_cid);
 
   /* Find CCB based on CID */
   dhandle = find_conn_by_cid(l2cap_cid);
   if (dhandle < kHID_HOST_MAX_DEVICES) p_hcon = &hh_cb.devices[dhandle].conn;
 
   if (p_hcon == NULL) {
-    HIDH_TRACE_WARNING("HID-Host Rcvd L2CAP cfg ind, unknown CID: 0x%x",
-                       l2cap_cid);
+    log::warn("HID-Host Rcvd L2CAP cfg ind, unknown CID: 0x{:x}", l2cap_cid);
     return;
   }
 
@@ -442,7 +441,7 @@ static void hidh_l2cif_config_cfm(uint16_t l2cap_cid, uint16_t initiator,
           L2CA_ConnectReq2(HID_PSM_INTERRUPT, hh_cb.devices[dhandle].addr,
                            BTA_SEC_AUTHENTICATE | BTA_SEC_ENCRYPT);
       if (p_hcon->intr_cid == 0) {
-        HIDH_TRACE_WARNING("HID-Host INTR Originate failed");
+        log::warn("HID-Host INTR Originate failed");
         reason = HID_L2CAP_REQ_FAIL;
         p_hcon->conn_state = HID_CONN_STATE_UNUSED;
         BTM_LogHistory(kBtmLogTag, hh_cb.devices[dhandle].addr, "Failed");
@@ -499,12 +498,11 @@ static void hidh_l2cif_disconnect_ind(uint16_t l2cap_cid, bool ack_needed) {
   if (dhandle < kHID_HOST_MAX_DEVICES) p_hcon = &hh_cb.devices[dhandle].conn;
 
   if (p_hcon == NULL) {
-    HIDH_TRACE_WARNING("HID-Host Rcvd L2CAP disc, unknown CID: 0x%x",
-                       l2cap_cid);
+    log::warn("HID-Host Rcvd L2CAP disc, unknown CID: 0x{:x}", l2cap_cid);
     return;
   }
 
-  HIDH_TRACE_EVENT("HID-Host Rcvd L2CAP disc, CID: 0x%x", l2cap_cid);
+  log::verbose("HID-Host Rcvd L2CAP disc, CID: 0x{:x}", l2cap_cid);
 
   p_hcon->conn_state = HID_CONN_STATE_DISCONNECTING;
   BTM_LogHistory(
@@ -570,7 +568,7 @@ static void hidh_l2cif_disconnect(uint16_t l2cap_cid) {
   /* Find CCB based on CID */
   const uint8_t dhandle = find_conn_by_cid(l2cap_cid);
   if (dhandle == kHID_HOST_MAX_DEVICES) {
-    LOG_WARN("HID-Host Rcvd L2CAP disc cfm, unknown CID: 0x%x", l2cap_cid);
+    log::warn("HID-Host Rcvd L2CAP disc cfm, unknown CID: 0x{:x}", l2cap_cid);
     return;
   }
 
@@ -580,7 +578,7 @@ static void hidh_l2cif_disconnect(uint16_t l2cap_cid) {
   } else {
     p_hcon->intr_cid = 0;
     if (p_hcon->ctrl_cid) {
-      HIDH_TRACE_EVENT("HID-Host Initiating L2CAP Ctrl disconnection");
+      log::verbose("HID-Host Initiating L2CAP Ctrl disconnection");
       L2CA_DisconnectReq(p_hcon->ctrl_cid);
       p_hcon->ctrl_cid = 0;
     }
@@ -613,13 +611,13 @@ static void hidh_l2cif_cong_ind(uint16_t l2cap_cid, bool congested) {
   if (dhandle < kHID_HOST_MAX_DEVICES) p_hcon = &hh_cb.devices[dhandle].conn;
 
   if (p_hcon == NULL) {
-    HIDH_TRACE_WARNING(
-        "HID-Host Rcvd L2CAP congestion status, unknown CID: 0x%x", l2cap_cid);
+    log::warn("HID-Host Rcvd L2CAP congestion status, unknown CID: 0x{:x}",
+              l2cap_cid);
     return;
   }
 
-  HIDH_TRACE_EVENT("HID-Host Rcvd L2CAP congestion status, CID: 0x%x  Cong: %d",
-                   l2cap_cid, congested);
+  log::verbose("HID-Host Rcvd L2CAP congestion status, CID: 0x{:x}  Cong: {}",
+               l2cap_cid, congested);
 
   if (congested)
     p_hcon->conn_flags |= HID_CONN_FLAGS_CONGESTED;
@@ -650,23 +648,20 @@ static void hidh_l2cif_data_ind(uint16_t l2cap_cid, BT_HDR* p_msg) {
   uint8_t dhandle;
   tHID_CONN* p_hcon = NULL;
 
-  HIDH_TRACE_DEBUG("HID-Host hidh_l2cif_data_ind [l2cap_cid=0x%04x]",
-                   l2cap_cid);
+  log::verbose("HID-Host hidh_l2cif_data_ind [l2cap_cid=0x{:04x}]", l2cap_cid);
 
   /* Find CCB based on CID */
   dhandle = find_conn_by_cid(l2cap_cid);
   if (dhandle < kHID_HOST_MAX_DEVICES) p_hcon = &hh_cb.devices[dhandle].conn;
 
   if (p_hcon == NULL) {
-    HIDH_TRACE_WARNING("HID-Host Rcvd L2CAP data, unknown CID: 0x%x",
-                       l2cap_cid);
+    log::warn("HID-Host Rcvd L2CAP data, unknown CID: 0x{:x}", l2cap_cid);
     osi_free(p_msg);
     return;
   }
 
   if (p_msg->len < 1) {
-    HIDH_TRACE_WARNING("Rcvd L2CAP data, invalid length %d, should be >= 1",
-                       p_msg->len);
+    log::warn("Rcvd L2CAP data, invalid length {}, should be >= 1", p_msg->len);
     osi_free(p_msg);
     return;
   }
@@ -891,7 +886,7 @@ tHID_STATUS hidh_conn_initiate(uint8_t dhandle) {
   p_dev->conn.ctrl_cid = L2CA_ConnectReq2(
       HID_PSM_CONTROL, p_dev->addr, BTA_SEC_AUTHENTICATE | BTA_SEC_ENCRYPT);
   if (p_dev->conn.ctrl_cid == 0) {
-    HIDH_TRACE_WARNING("HID-Host Originate failed");
+    log::warn("HID-Host Originate failed");
     hh_cb.callback(dhandle, hh_cb.devices[dhandle].addr, HID_HDEV_EVT_CLOSE,
                    HID_ERR_L2CAP_FAILED, NULL);
     log_counter_metrics(android::bluetooth::CodePathCounterKeyEnum::

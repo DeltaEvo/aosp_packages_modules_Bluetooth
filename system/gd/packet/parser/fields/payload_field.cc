@@ -70,14 +70,6 @@ void PayloadField::GenGetter(std::ostream& s, Size start_offset, Size end_offset
   GenBounds(s, start_offset, end_offset, GetSize());
   s << "return GetLittleEndianSubview(field_begin, field_end);";
   s << "}\n\n";
-
-  s << "PacketView<!kLittleEndian> " << GetGetterFunctionName() << "BigEndian() const {";
-  s << "ASSERT(was_validated_);";
-  s << "size_t end_index = size();";
-  s << "auto to_bound = begin();";
-  GenBounds(s, start_offset, end_offset, GetSize());
-  s << "return GetBigEndianSubview(field_begin, field_end);";
-  s << "}\n";
 }
 
 std::string PayloadField::GetBuilderParameterType() const {
@@ -112,41 +104,3 @@ void PayloadField::GenStringRepresentation(std::ostream& s, std::string) const {
   // TODO: we should parse the child packets
   s << "\"PAYLOAD[]\"";
 }
-
-std::string PayloadField::GetRustDataType() const {
-  return "Vec::<u8>";
-}
-
-void PayloadField::GenBoundsCheck(std::ostream& s, Size start_offset, Size, std::string parent_name) const {
-  if (size_field_ != nullptr) {
-    s << "let want_ = " << start_offset.bytes() << " + (" << size_field_->GetName() << " as usize)";
-    if (!size_modifier_.empty()) {
-      s << " - " << size_modifier_.substr(1);
-    }
-    s << ";";
-    s << "if bytes.len() < want_ {";
-    s << " return Err(Error::InvalidLengthError{";
-    s << "    obj: \"" << parent_name << "\".to_string(),";
-    s << "    field: \"" << GetName() << "\".to_string(),";
-    s << "    wanted: want_,";
-    s << "    got: bytes.len()});";
-    s << "}";
-    if (!size_modifier_.empty()) {
-      s << "if (" << size_field_->GetName() << " as usize) < " << size_modifier_.substr(1) << " {";
-      s << " return Err(Error::ImpossibleStructError);";
-      s << "}";
-    }
-  }
-}
-
-void PayloadField::GenRustGetter(std::ostream& s, Size start_offset, Size, std::string) const {
-  s << "let " << GetName() << ": " << GetRustDataType() << " = ";
-  if (size_field_ == nullptr) {
-    s << "bytes[" << start_offset.bytes() << "..].into();";
-  } else {
-    s << "bytes[" << start_offset.bytes() << "..(";
-    s << start_offset.bytes() << " + " << size_field_->GetName() << " as usize)].into();";
-  }
-}
-
-void PayloadField::GenRustWriter(std::ostream&, Size, Size) const {}

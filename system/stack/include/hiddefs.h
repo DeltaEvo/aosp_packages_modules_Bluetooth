@@ -26,9 +26,10 @@
 #define HIDDEFS_H
 
 #include <base/strings/stringprintf.h>
+#include <bluetooth/log.h>
 
-#include <cstring>
-
+#include "internal_include/bt_target.h"
+#include "macros.h"
 #include "stack/include/sdp_api.h"
 /*
  * tHID_STATUS: HID result codes, returned by HID and device and host functions.
@@ -57,10 +58,6 @@ typedef enum : uint8_t {
   HID_ERR_INVALID = 0xFF
 } tHID_STATUS;
 
-#define CASE_RETURN_TEXT(code) \
-  case code:                   \
-    return #code
-
 inline std::string hid_status_text(const tHID_STATUS& status) {
   switch (status) {
     CASE_RETURN_TEXT(HID_SUCCESS);
@@ -86,7 +83,6 @@ inline std::string hid_status_text(const tHID_STATUS& status) {
       return base::StringPrintf("UNKNOWN[%hhu]", status);
   }
 }
-#undef CASE_RETURN_TEXT
 
 #define HID_L2CAP_CONN_FAIL \
   (0x0100)                          /* Connection Attempt was made but failed */
@@ -187,5 +183,10 @@ typedef struct sdp_info {
                                   HID_DEV_USE_GLB_SDP_REC is set to false.*/
   tSDP_DISC_REC* p_sdp_layer_rec;
 } tHID_DEV_SDP_INFO;
+
+namespace fmt {
+template <>
+struct formatter<tHID_STATUS> : enum_formatter<tHID_STATUS> {};
+}  // namespace fmt
 
 #endif

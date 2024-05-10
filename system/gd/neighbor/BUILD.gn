@@ -15,15 +15,14 @@
 
 source_set("BluetoothNeighborSources") {
   sources = [
-    "connectability.cc",
-    "discoverability.cc",
-    "inquiry.cc",
     "name_db.cc",
-    "page.cc",
     "scan.cc",
   ]
 
   deps = [ "//bt/system/gd:gd_default_deps" ]
 
-  configs += [ "//bt/system/gd:gd_defaults" ]
+  configs += [
+    "//bt/system/gd:gd_defaults",
+    "//bt/system/log:log_defaults",
+  ]
 }

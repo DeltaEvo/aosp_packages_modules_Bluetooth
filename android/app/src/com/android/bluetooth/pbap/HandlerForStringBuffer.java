@@ -16,16 +16,19 @@
 
 package com.android.bluetooth.pbap;
 
+import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothProtoEnums;
 import android.util.Log;
 
+import com.android.bluetooth.BluetoothStatsLog;
+import com.android.bluetooth.content_profiles.ContentProfileErrorReportUtils;
 import com.android.obex.Operation;
 
 import java.io.IOException;
 import java.io.OutputStream;
 
-/**
- * Handler to emit vCards to PCE.
- */
+/** Handler to emit vCards to PCE. */
+// Next tag value for ContentProfileErrorReportUtils.report(): 2
 public class HandlerForStringBuffer {
     private static final String TAG = "HandlerForStringBuffer";
 
@@ -37,9 +40,7 @@ public class HandlerForStringBuffer {
     public HandlerForStringBuffer(Operation op, String ownerVCard) {
         mOperation = op;
         mOwnerVCard = ownerVCard;
-        if (BluetoothPbapService.VERBOSE) {
-            Log.v(TAG, "ownerVCard \n " + mOwnerVCard);
-        }
+        Log.v(TAG, "ownerVCard \n " + mOwnerVCard);
     }
 
     public boolean init() {
@@ -50,6 +51,11 @@ public class HandlerForStringBuffer {
             }
             return true;
         } catch (IOException e) {
+            ContentProfileErrorReportUtils.report(
+                    BluetoothProfile.PBAP,
+                    BluetoothProtoEnums.BLUETOOTH_PBAP_HANDLER_FOR_STRING_BUFFER,
+                    BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
+                    0);
             Log.e(TAG, "openOutputStream failed", e);
         }
         return false;
@@ -62,6 +68,11 @@ public class HandlerForStringBuffer {
                 return true;
             }
         } catch (IOException e) {
+            ContentProfileErrorReportUtils.report(
+                    BluetoothProfile.PBAP,
+                    BluetoothProtoEnums.BLUETOOTH_PBAP_HANDLER_FOR_STRING_BUFFER,
+                    BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
+                    1);
             Log.e(TAG, "write failed", e);
         }
         return false;
@@ -69,12 +80,6 @@ public class HandlerForStringBuffer {
 
     public void terminate() {
         boolean result = BluetoothPbapObexServer.closeStream(mOutputStream, mOperation);
-        if (BluetoothPbapService.VERBOSE) {
-            if (result) {
-                Log.v(TAG, "closeStream succeeded!");
-            } else {
-                Log.v(TAG, "closeStream failed!");
-            }
-        }
+        Log.v(TAG, "closeStream " + (result ? "succeeded" : "failed") + "!");
     }
 }

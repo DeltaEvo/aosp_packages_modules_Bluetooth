@@ -37,14 +37,12 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.provider.Telephony.Mms;
 import android.provider.Telephony.Sms;
-import android.telephony.SmsManager;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.test.mock.MockContentProvider;
 import android.test.mock.MockContentResolver;
 import android.util.Log;
 
-import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
 import androidx.test.runner.AndroidJUnit4;
 
@@ -56,14 +54,15 @@ import com.android.vcard.VCardProperty;
 
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -78,7 +77,6 @@ public class MapClientContentTest {
 
     private BluetoothAdapter mAdapter;
     private BluetoothDevice mTestDevice;
-    private Context mTargetContext;
 
     private Handler mHandler;
     private Bmessage mTestMessage1;
@@ -96,6 +94,8 @@ public class MapClientContentTest {
 
     private MapClientContent mMapClientContent;
 
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock
     private AdapterService mAdapterService;
     @Mock
@@ -111,7 +111,6 @@ public class MapClientContentTest {
     private FakeContentProvider mMockSmsContentProvider;
     private FakeContentProvider mMockMmsContentProvider;
     private FakeContentProvider mMockThreadContentProvider;
-    private SmsManager mSmsManager = SmsManager.getDefault();
 
     @Mock
     private SubscriptionManager mMockSubscriptionManager;
@@ -120,16 +119,10 @@ public class MapClientContentTest {
 
     @Before
     public void setUp() throws Exception {
-        // Do not run test if sms is not supported
-        Assume.assumeTrue(mSmsManager.isImsSmsSupported());
-        MockitoAnnotations.initMocks(this);
-        mTargetContext = InstrumentationRegistry.getTargetContext();
 
-        mMockSmsContentProvider = Mockito.spy(new FakeContentProvider(mTargetContext));
-
-        mMockMmsContentProvider = Mockito.spy(new FakeContentProvider(mTargetContext));
-        mMockThreadContentProvider = Mockito.spy(new FakeContentProvider(mTargetContext));
-
+        mMockSmsContentProvider = new FakeContentProvider(mMockContext);
+        mMockMmsContentProvider = new FakeContentProvider(mMockContext);
+        mMockThreadContentProvider = new FakeContentProvider(mMockContext);
 
         mAdapter = BluetoothAdapter.getDefaultAdapter();
         mTestDevice = mAdapter.getRemoteDevice("00:01:02:03:04:05");
@@ -147,7 +140,6 @@ public class MapClientContentTest {
         when(mMockSubscriptionManager.getActiveSubscriptionInfoList())
                 .thenReturn(Arrays.asList(mMockSubscription));
         createTestMessages();
-
     }
 
     @After
@@ -471,6 +463,20 @@ public class MapClientContentTest {
                 .thenReturn(null);
 
         MapClientContent.clearAllContent(mMockContext);
+    }
+
+    /**
+     * Test verifying dumpsys does not cause Bluetooth to crash (esp since we're querying the
+     * database to generate dump).
+     */
+    @Test
+    public void testDumpsysDoesNotCauseCrash() {
+        testStoreOneSMSOneMMS();
+        // mMapClientContent is set in testStoreOneSMSOneMMS
+        StringBuilder sb = new StringBuilder("Hello world!\n");
+        mMapClientContent.dump(sb);
+
+        assertThat(sb.toString()).isNotNull();
     }
 
     void createTestMessages() {

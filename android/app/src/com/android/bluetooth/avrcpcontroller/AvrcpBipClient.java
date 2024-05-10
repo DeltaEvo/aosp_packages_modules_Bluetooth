@@ -45,8 +45,7 @@ import java.lang.ref.WeakReference;
  * disconnection has occurred, please create a new client.
  */
 public class AvrcpBipClient {
-    private static final String TAG = "AvrcpBipClient";
-    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
+    private static final String TAG = AvrcpBipClient.class.getSimpleName();
 
     // AVRCP Controller BIP Image Initiator/Cover Art UUID - AVRCP 1.6 Section 5.14.2.1
     private static final byte[] BLUETOOTH_UUID_AVRCP_COVER_ART = new byte[] {
@@ -118,7 +117,9 @@ public class AvrcpBipClient {
     }
 
     /**
-     * Creates a BIP image pull client and connects to a remote device's BIP image push server.
+     * Creates a BIP image pull client
+     *
+     * <p>{@link connectAsync()} must be called separately.
      */
     public AvrcpBipClient(BluetoothDevice remoteDevice, int psm, Callback callback) {
         if (remoteDevice == null) {
@@ -138,7 +139,6 @@ public class AvrcpBipClient {
         Looper looper = mThread.getLooper();
 
         mHandler = new AvrcpBipClientHandler(looper, this);
-        mHandler.obtainMessage(CONNECT).sendToTarget();
     }
 
     /**
@@ -165,7 +165,7 @@ public class AvrcpBipClient {
     public void shutdown() {
         debug("Shutdown client");
         try {
-            mHandler.obtainMessage(DISCONNECT).sendToTarget();
+            disconnectAsync();
         } catch (IllegalStateException e) {
             // Means we haven't been started or we're already stopped. Doing this makes this call
             // always safe no matter the state.
@@ -242,6 +242,11 @@ public class AvrcpBipClient {
         }
     }
 
+    /** Connects asynchronously */
+    void connectAsync() {
+        mHandler.obtainMessage(CONNECT).sendToTarget();
+    }
+
     /**
      * Connects to the remote device's BIP Image Pull server
      */
@@ -316,10 +321,14 @@ public class AvrcpBipClient {
         }
     }
 
+    /** Disconnects asynchronously */
+    void disconnectAsync() {
+        mHandler.obtainMessage(DISCONNECT).sendToTarget();
+    }
+
     /**
      * Permanently disconnects this client from the remote device's BIP server and notifies of the
      * new connection status.
-     *
      */
     private synchronized void disconnect() {
         if (mSession != null) {
@@ -448,7 +457,7 @@ public class AvrcpBipClient {
 
     @Override
     public String toString() {
-        return "<AvrcpBipClient" + " device=" + mDevice.getAddress() + " psm=" + mPsm
+        return "<AvrcpBipClient" + " device=" + mDevice + " psm=" + mPsm
                 + " state=" + getStateName() + ">";
     }
 
@@ -456,26 +465,24 @@ public class AvrcpBipClient {
      * Print to debug if debug is enabled for this class
      */
     private void debug(String msg) {
-        if (DBG) {
-            Log.d(TAG, "[" + mDevice.getAddress() + "] " + msg);
-        }
+        Log.d(TAG, "[" + mDevice + "] " + msg);
     }
 
     /**
      * Print to warn
      */
     private void warn(String msg) {
-        Log.w(TAG, "[" + mDevice.getAddress() + "] " + msg);
+        Log.w(TAG, "[" + mDevice + "] " + msg);
     }
 
     /**
      * Print to error
      */
     private void error(String msg) {
-        Log.e(TAG, "[" + mDevice.getAddress() + "] " + msg);
+        Log.e(TAG, "[" + mDevice + "] " + msg);
     }
 
     private void error(String msg, Throwable e) {
-        Log.e(TAG, "[" + mDevice.getAddress() + "] " + msg, e);
+        Log.e(TAG, "[" + mDevice + "] " + msg, e);
     }
 }

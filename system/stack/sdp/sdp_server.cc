@@ -22,31 +22,29 @@
  *  This is mainly dealing with client requests
  *
  ******************************************************************************/
+#define LOG_TAG "sdp_server"
 
-#include <base/location.h>
-#include <base/logging.h>
-#include <log/log.h>
+#include <bluetooth/log.h>
 #include <string.h>  // memcpy
 
 #include <cstdint>
 
-// include before bta_hfp_api for pre-defined variable
-#include "btif/include/btif_storage.h"
-
-// remaining includes
-#include "bta/include/bta_hfp_api.h"
-#include "btif/include/btif_config.h"
 #include "btif/include/btif_profile_storage.h"
 #include "btif/include/btif_storage.h"
 #include "common/init_flags.h"
 #include "device/include/interop.h"
 #include "device/include/interop_config.h"
+#include "internal_include/bt_target.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/properties.h"
-#include "stack/include/avrc_api.h"
-#include "stack/include/avrc_defs.h"
+#include "stack/btm/btm_dev.h"
+#include "stack/btm/btm_sco_hfp_hal.h"
+#include "stack/btm/btm_sec.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/sdp_api.h"
+#include "stack/include/bt_types.h"
+#include "stack/include/bt_uuid16.h"
+#include "stack/include/sdpdefs.h"
 #include "stack/sdp/sdpint.h"
 
 /* Maximum number of bytes to reserve out of SDP MTU for response data */
@@ -57,6 +55,7 @@
 #define SDP_PROFILE_DESC_LENGTH 8
 #define HFP_PROFILE_MINOR_VERSION_6 0x06
 #define HFP_PROFILE_MINOR_VERSION_7 0x07
+#define HFP_PROFILE_MINOR_VERSION_9 0x09
 #define PBAP_GOEP_L2CAP_PSM_LEN 0x06
 #define PBAP_SUPP_FEA_LEN 0x08
 
@@ -66,6 +65,19 @@
 
 #define PBAP_1_2 0x0102
 #define PBAP_1_2_BL_LEN 14
+
+using namespace bluetooth;
+
+/* Used to set PBAP local SDP device record for PBAP 1.2 upgrade */
+typedef struct {
+  int32_t rfcomm_channel_number;
+  int32_t l2cap_psm;
+  int32_t profile_version;
+  uint32_t supported_features;
+  uint32_t supported_repositories;
+} tSDP_PSE_LOCAL_RECORD;
+
+static tSDP_PSE_LOCAL_RECORD sdpPseLocalRecord;
 
 /******************************************************************************/
 /*            L O C A L    F U N C T I O N     P R O T O T Y P E S            */
@@ -157,15 +169,21 @@ bool sdp_dynamic_change_hfp_version(const tSDP_ATTRIBUTE* p_attr,
   bool is_allowlisted_1_7 =
       interop_match_addr_or_name(INTEROP_HFP_1_7_ALLOWLIST, &remote_address,
                                  &btif_storage_get_remote_device_property);
+  bool is_allowlisted_1_9 =
+      interop_match_addr_or_name(INTEROP_HFP_1_9_ALLOWLIST, &remote_address,
+                                 &btif_storage_get_remote_device_property);
   /* For PTS we should update AG's HFP version as 1.7 */
-  if (!(is_allowlisted_1_7) &&
+  if (!(is_allowlisted_1_7) && !(is_allowlisted_1_9) &&
       !(osi_property_get_bool("vendor.bt.pts.certification", false))) {
     return false;
   }
-  p_attr->value_ptr[PROFILE_VERSION_POSITION] = HFP_PROFILE_MINOR_VERSION_7;
-  SDP_TRACE_INFO("%s SDP Change HFP Version = %d for %s", __func__,
-                 p_attr->value_ptr[PROFILE_VERSION_POSITION],
-                 ADDRESS_TO_LOGGABLE_CSTR(remote_address));
+  if (hfp_hal_interface::get_swb_supported() && is_allowlisted_1_9) {
+    p_attr->value_ptr[PROFILE_VERSION_POSITION] = HFP_PROFILE_MINOR_VERSION_9;
+  } else {
+    p_attr->value_ptr[PROFILE_VERSION_POSITION] = HFP_PROFILE_MINOR_VERSION_7;
+  }
+  log::verbose("SDP Change HFP Version = {} for {}",
+               p_attr->value_ptr[PROFILE_VERSION_POSITION], remote_address);
   return true;
 }
 /******************************************************************************
@@ -180,7 +198,7 @@ bool sdp_dynamic_change_hfp_version(const tSDP_ATTRIBUTE* p_attr,
 void hfp_fallback(bool& is_hfp_fallback, const tSDP_ATTRIBUTE* p_attr) {
   /* Update HFP version back to 1.6 */
   p_attr->value_ptr[PROFILE_VERSION_POSITION] = HFP_PROFILE_MINOR_VERSION_6;
-  SDP_TRACE_INFO("Restore HFP version to 1.6");
+  log::verbose("Restore HFP version to 1.6");
   is_hfp_fallback = false;
 }
 
@@ -249,7 +267,7 @@ void sdp_server_handle_client_req(tCONN_CB* p_ccb, BT_HDR* p_msg) {
     default:
       sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_REQ_SYNTAX,
                               SDP_TEXT_BAD_PDU);
-      SDP_TRACE_WARNING("SDP - server got unknown PDU: 0x%x", pdu_id);
+      log::warn("SDP - server got unknown PDU: 0x{:x}", pdu_id);
       break;
   }
 }
@@ -362,10 +380,10 @@ static void process_service_search(tCONN_CB* p_ccb, uint16_t trans_num,
   UINT16_TO_BE_STREAM(p_rsp, num_rsp_handles);
   UINT16_TO_BE_STREAM(p_rsp, cur_handles);
 
-  /*  SDP_TRACE_DEBUG("SDP Service Rsp: tothdl %d, curhdlr %d, start %d, end %d,
-     cont %d",
-                       num_rsp_handles, cur_handles, cont_offset,
-                       cont_offset + cur_handles-1, is_cont); */
+  /*
+    log::verbose("SDP Service Rsp: tothdl {}, curhdlr {}, start {}, end {}, cont
+    {}", num_rsp_handles, cur_handles, cont_offset, cont_offset + cur_handles-1,
+    is_cont); */
   for (xx = cont_offset; xx < cont_offset + cur_handles; xx++)
     UINT32_TO_BE_STREAM(p_rsp, rsp_handles[xx]);
 
@@ -457,7 +475,7 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
           pbap_pse_dynamic_version_upgrade_is_enabled()) {
     p_rec = sdp_upgrade_pse_record(p_rec, p_ccb->device_address);
   } else {
-    SDP_TRACE_WARNING("PBAP PSE dynamic version upgrade is not enabled");
+    log::warn("PBAP PSE dynamic version upgrade is not enabled");
   }
 
   /* Free and reallocate buffer */
@@ -523,8 +541,7 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
                 dynamic_avrcp_version_enhancement_is_enabled()) {
           avrc_sdp_version = sdpu_is_avrcp_profile_description_list(
               p_attr_profile_desc_list_id);
-          SDP_TRACE_ERROR("avrc_sdp_version in SDP records %x",
-                          avrc_sdp_version);
+          log::error("avrc_sdp_version in SDP records {:x}", avrc_sdp_version);
           sdpu_set_avrc_target_features(p_attr, &(p_ccb->device_address),
                                         avrc_sdp_version);
         }
@@ -547,7 +564,7 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
       /* if there is a partial attribute pending to be sent */
       if (p_ccb->cont_info.attr_offset) {
         if (attr_len < p_ccb->cont_info.attr_offset) {
-          LOG(ERROR) << "offset is bigger than attribute length";
+          log::error("offset is bigger than attribute length");
           sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE,
                                   SDP_TEXT_BAD_CONT_LEN);
           return;
@@ -564,8 +581,8 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
                  attr_len) /* Not enough space for attr... so add partially */
       {
         if (attr_len >= SDP_MAX_ATTR_LEN) {
-          SDP_TRACE_ERROR("SDP attr too big: max_list_len=%d,attr_len=%d",
-                          max_list_len, attr_len);
+          log::error("SDP attr too big: max_list_len={},attr_len={}",
+                     max_list_len, attr_len);
           sdpu_build_n_send_error(p_ccb, trans_num, SDP_NO_RESOURCES, NULL);
           return;
         }
@@ -775,7 +792,7 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
             pbap_pse_dynamic_version_upgrade_is_enabled()) {
       p_rec = sdp_upgrade_pse_record(p_rec, p_ccb->device_address);
     } else {
-      SDP_TRACE_WARNING("PBAP PSE dynamic version upgrade is not enabled");
+      log::warn("PBAP PSE dynamic version upgrade is not enabled");
     }
     /* Allow space for attribute sequence type and length */
     p_seq_start = p_rsp;
@@ -814,11 +831,12 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
           sdpu_set_avrc_target_version(p_attr, &(p_ccb->device_address));
           if (p_attr->id == ATTR_ID_SUPPORTED_FEATURES &&
               bluetooth::common::init_flags::
-                  dynamic_avrcp_version_enhancement_is_enabled()) {
+                  dynamic_avrcp_version_enhancement_is_enabled() &&
+                  p_attr_profile_desc_list_id != nullptr) {
             avrc_sdp_version = sdpu_is_avrcp_profile_description_list(
                 p_attr_profile_desc_list_id);
-            SDP_TRACE_ERROR("avrc_sdp_version in SDP records %x",
-                            avrc_sdp_version);
+            log::error("avrc_sdp_version in SDP records {:x}",
+                       avrc_sdp_version);
             sdpu_set_avrc_target_features(p_attr, &(p_ccb->device_address),
                                           avrc_sdp_version);
           }
@@ -842,7 +860,7 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
         /* if there is a partial attribute pending to be sent */
         if (p_ccb->cont_info.attr_offset) {
           if (attr_len < p_ccb->cont_info.attr_offset) {
-            LOG(ERROR) << "offset is bigger than attribute length";
+            log::error("offset is bigger than attribute length");
             sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE,
                                     SDP_TEXT_BAD_CONT_LEN);
             return;
@@ -860,8 +878,8 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
                    attr_len) /* Not enough space for attr... so add partially */
         {
           if (attr_len >= SDP_MAX_ATTR_LEN) {
-            SDP_TRACE_ERROR("SDP attr too big: max_list_len=%d,attr_len=%d",
-                            max_list_len, attr_len);
+            log::error("SDP attr too big: max_list_len={},attr_len={}",
+                       max_list_len, attr_len);
             sdpu_build_n_send_error(p_ccb, trans_num, SDP_NO_RESOURCES, NULL);
             return;
           }
@@ -963,12 +981,12 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
           sdp_pbap_pse_dynamic_attributes_len_update(p_ccb, &attr_seq_sav,
                                                      &uid_seq);
     } else {
-      SDP_TRACE_WARNING("PBAP PSE dynamic version upgrade is not enabled");
+      log::warn("PBAP PSE dynamic version upgrade is not enabled");
       p_ccb->pse_dynamic_attributes_len = 0;
     }
 
-    SDP_TRACE_DEBUG("p_ccb->list_len = %d pse_dynamic_attributes_len = %d",
-                    p_ccb->list_len, p_ccb->pse_dynamic_attributes_len);
+    log::verbose("p_ccb->list_len = {} pse_dynamic_attributes_len = {}",
+                 p_ccb->list_len, p_ccb->pse_dynamic_attributes_len);
 
     /* Put in the sequence header (2 or 3 bytes) */
     if (p_ccb->list_len > 255) {
@@ -1014,9 +1032,9 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
 
   p_ccb->cont_offset += len_to_send;
 
-  SDP_TRACE_DEBUG(
-      "p_ccb->pse_dynamic_attributes_len %d, cont_offset = %d, p_ccb->list_len "
-      "= %d",
+  log::verbose(
+      "p_ccb->pse_dynamic_attributes_len {}, cont_offset = {}, p_ccb->list_len "
+      "= {}",
       p_ccb->pse_dynamic_attributes_len, p_ccb->cont_offset,
       p_ccb->list_len + p_ccb->pse_dynamic_attributes_len);
   /* If anything left to send, continuation needed */
@@ -1057,14 +1075,26 @@ static bool is_device_in_allowlist_for_pbap(RawAddress remote_address,
   if (!check_for_1_2 &&
       interop_match_addr_or_name(INTEROP_ADV_PBAP_VER_1_1, &remote_address,
                                  &btif_storage_get_remote_device_property)) {
-    SDP_TRACE_DEBUG("device is in allowlist for pbap version < 1.2 ");
+    log::verbose("device is in allowlist for pbap version < 1.2");
     return true;
   }
-  if (check_for_1_2 &&
-      interop_match_addr_or_name(INTEROP_ADV_PBAP_VER_1_2, &remote_address,
-                                 &btif_storage_get_remote_device_property)) {
-    SDP_TRACE_DEBUG("device is in allowlist for pbap version 1.2 ");
-    return true;
+  if (check_for_1_2) {
+    if (btm_sec_is_a_bonded_dev(remote_address)) {
+      if (interop_match_addr_or_name(
+              INTEROP_ADV_PBAP_VER_1_2, &remote_address,
+              &btif_storage_get_remote_device_property)) {
+        log::verbose("device is in allowlist for pbap version 1.2");
+        return true;
+      }
+    } else {
+      const char* p_name = BTM_SecReadDevName(remote_address);
+      if ((p_name != NULL) &&
+          interop_match_name(INTEROP_ADV_PBAP_VER_1_2, p_name)) {
+        log::verbose(
+            "device is not paired & in allowlist for pbap version 1.2");
+        return true;
+      }
+    }
   }
   return false;
 }
@@ -1095,12 +1125,11 @@ static uint16_t sdp_pbap_pse_dynamic_attributes_len_update(
       is_device_in_allowlist_for_pbap(p_ccb->device_address, true);
   bool running_pts = osi_property_get_bool(SDP_ENABLE_PTS_PBAP, false);
 
-  SDP_TRACE_DEBUG(
-      "remote BD Addr : %s is_pbap_102_supported = %d "
-      "is_pbap_101_allowlisted = %d is_pbap_102_allowlisted = %d "
-      "running_pts = %d",
-      ADDRESS_TO_LOGGABLE_CSTR(p_ccb->device_address), is_pbap_102_supported,
-      is_pbap_101_allowlisted, is_pbap_102_allowlisted, running_pts);
+  log::verbose(
+      "remote BD Addr : {} is_pbap_102_supported = {} is_pbap_101_allowlisted "
+      "= {} is_pbap_102_allowlisted = {} running_pts = {}",
+      p_ccb->device_address, is_pbap_102_supported, is_pbap_101_allowlisted,
+      is_pbap_102_allowlisted, running_pts);
 
   if (is_pbap_101_allowlisted ||
       (!is_pbap_102_supported && !is_pbap_102_allowlisted && !running_pts)) {
@@ -1118,16 +1147,15 @@ static uint16_t sdp_pbap_pse_dynamic_attributes_len_update(
          UUID_SERVCLASS_PBAP_PSE)) {
       // PBAP PSE Record
       p_rec = sdp_upgrade_pse_record(p_rec, p_ccb->device_address);
-      SDP_TRACE_DEBUG("response has PBAP PSE record for allowlist device");
+      log::verbose("response has PBAP PSE record for allowlist device");
 
       int att_index;
       bool l2cap_psm_len_included = false, supp_attr_len_included = false;
       for (xx = p_ccb->cont_info.next_attr_index; xx < attr_seq->num_attr;
            xx++) {
-        SDP_TRACE_DEBUG(
-            "xx = %d attr_seq->num_attr = %d, "
-            "attr_seq->attr_entry[xx].start = %d , "
-            "attr_seq->attr_entry[xx].end = %d",
+        log::verbose(
+            "xx = {} attr_seq->num_attr = {}, attr_seq->attr_entry[xx].start = "
+            "{} , attr_seq->attr_entry[xx].end = {}",
             xx, attr_seq->num_attr, attr_seq->attr_entry[xx].start,
             attr_seq->attr_entry[xx].end);
 
@@ -1139,9 +1167,8 @@ static uint16_t sdp_pbap_pse_dynamic_attributes_len_update(
               cur_attr.id <= attr_seq->attr_entry[xx].end) {
             l2cap_psm_len_included = true;
             p_ccb->pse_dynamic_attributes_len += PBAP_GOEP_L2CAP_PSM_LEN;
-            SDP_TRACE_ERROR(
-                "ATTR_ID_GOEP_L2CAP_PSM requested,"
-                " need to change length by %d",
+            log::error(
+                "ATTR_ID_GOEP_L2CAP_PSM requested, need to change length by {}",
                 p_ccb->pse_dynamic_attributes_len);
           } else if (cur_attr.id == ATTR_ID_PBAP_SUPPORTED_FEATURES &&
                      !supp_attr_len_included &&
@@ -1149,9 +1176,9 @@ static uint16_t sdp_pbap_pse_dynamic_attributes_len_update(
                      cur_attr.id <= attr_seq->attr_entry[xx].end) {
             supp_attr_len_included = true;
             p_ccb->pse_dynamic_attributes_len += PBAP_SUPP_FEA_LEN;
-            SDP_TRACE_DEBUG(
-                "ATTR_ID_PBAP_SUPPORTED_FEATURES requested,"
-                " need to change length by %d",
+            log::verbose(
+                "ATTR_ID_PBAP_SUPPORTED_FEATURES requested, need to change "
+                "length by {}",
                 p_ccb->pse_dynamic_attributes_len);
           }
         }
@@ -1160,8 +1187,8 @@ static uint16_t sdp_pbap_pse_dynamic_attributes_len_update(
       break;
     }
   }
-  SDP_TRACE_DEBUG("pse_dynamic_attributes_len = %d",
-                  p_ccb->pse_dynamic_attributes_len);
+  log::verbose("pse_dynamic_attributes_len = {}",
+               p_ccb->pse_dynamic_attributes_len);
   return p_ccb->pse_dynamic_attributes_len;
 }
 
@@ -1194,12 +1221,11 @@ static const tSDP_RECORD* sdp_upgrade_pse_record(const tSDP_RECORD* p_rec,
       is_device_in_allowlist_for_pbap(remote_address, true);
   bool running_pts = osi_property_get_bool(SDP_ENABLE_PTS_PBAP, false);
 
-  SDP_TRACE_DEBUG(
-      "%s remote BD Addr : %s is_pbap_102_supported : %d "
-      "is_pbap_101_allowlisted = %d is_pbap_102_allowlisted = %d "
-      "running_pts = %d",
-      __func__, ADDRESS_TO_LOGGABLE_CSTR(remote_address), is_pbap_102_supported,
-      is_pbap_101_allowlisted, is_pbap_102_allowlisted, running_pts);
+  log::verbose(
+      "remote BD Addr : {} is_pbap_102_supported : {} is_pbap_101_allowlisted "
+      "= {} is_pbap_102_allowlisted = {} running_pts = {}",
+      remote_address, is_pbap_102_supported, is_pbap_101_allowlisted,
+      is_pbap_102_allowlisted, running_pts);
 
   if (is_pbap_101_allowlisted ||
       (!is_pbap_102_supported && !is_pbap_102_allowlisted && !running_pts)) {
@@ -1208,10 +1234,6 @@ static const tSDP_RECORD* sdp_upgrade_pse_record(const tSDP_RECORD* p_rec,
   }
 
   static tSDP_RECORD pbap_102_sdp_rec = {};
-
-  uint32_t supported_features = 0x021F;  // PBAP 1.2 Features
-  uint16_t pbap_0102 = PBAP_1_2;         // Profile version
-  uint32_t pbap_l2cap_psm = 0x1025;      // Fixed L2CAP PSM
   const tSDP_ATTRIBUTE* p_attr = &p_rec->attribute[0];
   uint8_t temp[4], j;
   uint8_t* p_temp = temp;
@@ -1223,24 +1245,30 @@ static const tSDP_RECORD* sdp_upgrade_pse_record(const tSDP_RECORD* p_rec,
                              p_attr->len, p_attr->value_ptr);
   }
 
+  /* Add supported repositories 1 byte */
+  status &= SDP_AddAttributeToRecord(
+      &pbap_102_sdp_rec, ATTR_ID_SUPPORTED_REPOSITORIES, UINT_DESC_TYPE,
+      (uint32_t)1, (uint8_t*)&sdpPseLocalRecord.supported_repositories);
+
   /* Add in the Bluetooth Profile Descriptor List */
   status &= SDP_AddProfileDescriptorListToRecord(
-      &pbap_102_sdp_rec, UUID_SERVCLASS_PHONE_ACCESS, pbap_0102);
+      &pbap_102_sdp_rec, UUID_SERVCLASS_PHONE_ACCESS,
+      sdpPseLocalRecord.profile_version);
 
   /* Add PBAP 1.2 supported features 4 */
-  UINT32_TO_BE_STREAM(p_temp, supported_features);
+  UINT32_TO_BE_STREAM(p_temp, sdpPseLocalRecord.supported_features);
   status &= SDP_AddAttributeToRecord(&pbap_102_sdp_rec,
                                      ATTR_ID_PBAP_SUPPORTED_FEATURES,
                                      UINT_DESC_TYPE, (uint32_t)4, temp);
 
   /* Add the L2CAP PSM */
   p_temp = temp;  // The macro modifies p_temp, hence rewind.
-  UINT16_TO_BE_STREAM(p_temp, pbap_l2cap_psm);
+  UINT16_TO_BE_STREAM(p_temp, sdpPseLocalRecord.l2cap_psm);
   status &= SDP_AddAttributeToRecord(&pbap_102_sdp_rec, ATTR_ID_GOEP_L2CAP_PSM,
                                      UINT_DESC_TYPE, (uint32_t)2, temp);
 
   if (!status) {
-    SDP_TRACE_ERROR("FAILED");
+    log::error("FAILED");
     return p_rec;
   }
   return &pbap_102_sdp_rec;
@@ -1257,11 +1285,9 @@ void update_pce_entry_to_interop_database(RawAddress remote_addr) {
   if (!interop_match_addr_or_name(INTEROP_ADV_PBAP_VER_1_2, &remote_addr,
                                   &btif_storage_get_remote_device_property)) {
     interop_database_add_addr(INTEROP_ADV_PBAP_VER_1_2, &remote_addr, 3);
-    SDP_TRACE_DEBUG("device: %s is added into interop list",
-                    ADDRESS_TO_LOGGABLE_CSTR(remote_addr));
+    log::verbose("device: {} is added into interop list", remote_addr);
   } else {
-    SDP_TRACE_WARNING("device: %s is already found on interop list",
-                      ADDRESS_TO_LOGGABLE_CSTR(remote_addr));
+    log::warn("device: {} is already found on interop list", remote_addr);
   }
 }
 
@@ -1279,9 +1305,36 @@ bool is_sdp_pbap_pce_disabled(RawAddress remote_address) {
   if (interop_match_addr_or_name(INTEROP_DISABLE_PCE_SDP_AFTER_PAIRING,
                                  &remote_address,
                                  &btif_storage_get_remote_device_property)) {
-    SDP_TRACE_DEBUG("device is denylisted for PCE SDP ");
+    log::verbose("device is denylisted for PCE SDP");
     return true;
   } else {
     return false;
   }
+}
+
+/*************************************************************************************
+**
+** Function        sdp_save_local_pse_record_attributes_val
+**
+** Description     Save pbap 1.2 sdp record attributes values, which would be
+*used for dynamic version upgrade.
+**
+** Returns         BOOLEAN
+**
+***************************************************************************************/
+void sdp_save_local_pse_record_attributes(int32_t rfcomm_channel_number,
+                                          int32_t l2cap_psm,
+                                          int32_t profile_version,
+                                          uint32_t supported_features,
+                                          uint32_t supported_repositories) {
+  log::warn(
+      "rfcomm_channel_number: 0x{:x}, l2cap_psm: 0x{:x} profile_version: "
+      "0x{:x}supported_features: 0x{:x} supported_repositories:  0x{:x}",
+      rfcomm_channel_number, l2cap_psm, profile_version, supported_features,
+      supported_repositories);
+  sdpPseLocalRecord.rfcomm_channel_number = rfcomm_channel_number;
+  sdpPseLocalRecord.l2cap_psm = l2cap_psm;
+  sdpPseLocalRecord.profile_version = profile_version;
+  sdpPseLocalRecord.supported_features = supported_features;
+  sdpPseLocalRecord.supported_repositories = supported_repositories;
 }

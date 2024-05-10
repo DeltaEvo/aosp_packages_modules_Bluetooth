@@ -15,27 +15,20 @@
  * limitations under the License.
  */
 
-#include <map>
-#include <string>
 #include <vector>
 
 #include "bta/include/bta_groups.h"
-#include "btif/include/btif_storage.h"
 #include "test/common/mock_functions.h"
-
-#ifndef UNUSED_ATTR
-#define UNUSED_ATTR
-#endif
 
 using bluetooth::groups::DeviceGroups;
 
-void DeviceGroups::AddFromStorage(const RawAddress& addr,
-                                  const std::vector<uint8_t>& in) {
+void DeviceGroups::AddFromStorage(const RawAddress& /* addr */,
+                                  const std::vector<uint8_t>& /* in */) {
   inc_func_call_count(__func__);
 }
 
-bool DeviceGroups::GetForStorage(const RawAddress& addr,
-                                 std::vector<uint8_t>& out) {
+bool DeviceGroups::GetForStorage(const RawAddress& /* addr */,
+                                 std::vector<uint8_t>& /* out */) {
   inc_func_call_count(__func__);
   return false;
 }

@@ -14,15 +14,24 @@
  * limitations under the License.
  */
 
-#include "hci_device.h"
+#include "model/devices/hci_device.h"
+
+#include <cstdint>
+#include <memory>
+#include <vector>
 
 #include "log.h"
+#include "model/controller/controller_properties.h"
+#include "model/controller/dual_mode_controller.h"
+#include "model/hci/hci_transport.h"
+#include "packets/link_layer_packets.h"
 
 namespace rootcanal {
 
 HciDevice::HciDevice(std::shared_ptr<HciTransport> transport,
-                     const std::string& properties_filename)
-    : DualModeController(properties_filename), transport_(transport) {
+                     ControllerProperties const& properties)
+    : DualModeController(ControllerProperties(properties)),
+      transport_(transport) {
   link_layer_controller_.SetLocalName(std::vector<uint8_t>({
       'g',
       'D',
@@ -53,33 +62,41 @@ HciDevice::HciDevice(std::shared_ptr<HciTransport> transport,
   }));
 
   RegisterEventChannel([this](std::shared_ptr<std::vector<uint8_t>> packet) {
-    transport_->SendEvent(*packet);
+    transport_->Send(PacketType::EVENT, *packet);
   });
   RegisterAclChannel([this](std::shared_ptr<std::vector<uint8_t>> packet) {
-    transport_->SendAcl(*packet);
+    transport_->Send(PacketType::ACL, *packet);
   });
   RegisterScoChannel([this](std::shared_ptr<std::vector<uint8_t>> packet) {
-    transport_->SendSco(*packet);
+    transport_->Send(PacketType::SCO, *packet);
   });
   RegisterIsoChannel([this](std::shared_ptr<std::vector<uint8_t>> packet) {
-    transport_->SendIso(*packet);
+    transport_->Send(PacketType::ISO, *packet);
   });
 
   transport_->RegisterCallbacks(
-      [this](const std::shared_ptr<std::vector<uint8_t>> command) {
-        HandleCommand(command);
-      },
-      [this](const std::shared_ptr<std::vector<uint8_t>> acl) {
-        HandleAcl(acl);
-      },
-      [this](const std::shared_ptr<std::vector<uint8_t>> sco) {
-        HandleSco(sco);
-      },
-      [this](const std::shared_ptr<std::vector<uint8_t>> iso) {
-        HandleIso(iso);
+      [this](PacketType packet_type,
+             const std::shared_ptr<std::vector<uint8_t>> packet) {
+        switch (packet_type) {
+          case PacketType::COMMAND:
+            HandleCommand(packet);
+            break;
+          case PacketType::ACL:
+            HandleAcl(packet);
+            break;
+          case PacketType::SCO:
+            HandleSco(packet);
+            break;
+          case PacketType::ISO:
+            HandleIso(packet);
+            break;
+          default:
+            ASSERT(false);
+            break;
+        }
       },
       [this]() {
-        LOG_INFO("HCI transport closed");
+        INFO(id_, "HCI transport closed");
         Close();
       });
 }

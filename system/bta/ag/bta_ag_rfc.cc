@@ -24,18 +24,19 @@
  ******************************************************************************/
 
 #include <base/functional/bind.h>
-#include <base/logging.h>
-
-#include <cstring>
+#include <bluetooth/log.h>
 
 #include "bta/ag/bta_ag_int.h"
-#include "osi/include/osi.h"
-#include "stack/include/btu.h"  // do_in_main_thread
+#include "bta/include/bta_sec_api.h"
+#include "internal_include/bt_trace.h"
+#include "stack/include/main_thread.h"
 #include "stack/include/port_api.h"
 #include "types/raw_address.h"
 
 /* Event mask for RfCOMM port callback */
 #define BTA_AG_PORT_EV_MASK PORT_EV_RXCHAR
+
+using namespace bluetooth;
 
 /* each scb has its own rfcomm callbacks */
 void bta_ag_port_cback_1(uint32_t code, uint16_t port_handle);
@@ -71,25 +72,25 @@ const tBTA_AG_PORT_CBACK bta_ag_mgmt_cback_tbl[] = {
  * Returns          void
  *
  ******************************************************************************/
-static void bta_ag_port_cback(UNUSED_ATTR uint32_t code, uint16_t port_handle,
+static void bta_ag_port_cback(uint32_t /* code */, uint16_t port_handle,
                               uint16_t handle) {
   tBTA_AG_SCB* p_scb = bta_ag_scb_by_idx(handle);
   if (p_scb != nullptr) {
     /* ignore port events for port handles other than connected handle */
     if (port_handle != p_scb->conn_handle) {
-      APPL_TRACE_ERROR(
-          "ag_port_cback ignoring handle:%d conn_handle = %d other handle = %d",
+      log::error(
+          "ag_port_cback ignoring handle:{} conn_handle = {} other handle = {}",
           port_handle, p_scb->conn_handle, handle);
       return;
     }
     if (!bta_ag_scb_open(p_scb)) {
-      LOG(ERROR) << __func__ << ": rfcomm data on an unopened control block "
-                 << handle << " peer_addr " << p_scb->peer_addr << " state "
-                 << std::to_string(p_scb->state);
+      log::error(
+          "rfcomm data on an unopened control block {} peer_addr {} state {}",
+          handle, p_scb->peer_addr, p_scb->state);
     }
-    do_in_main_thread(FROM_HERE,
-                      base::Bind(&bta_ag_sm_execute_by_handle, handle,
-                                 BTA_AG_RFC_DATA_EVT, tBTA_AG_DATA::kEmpty));
+    do_in_main_thread(
+        FROM_HERE, base::BindOnce(&bta_ag_sm_execute_by_handle, handle,
+                                  BTA_AG_RFC_DATA_EVT, tBTA_AG_DATA::kEmpty));
   }
 }
 
@@ -106,17 +107,17 @@ static void bta_ag_port_cback(UNUSED_ATTR uint32_t code, uint16_t port_handle,
 static void bta_ag_mgmt_cback(uint32_t code, uint16_t port_handle,
                               uint16_t handle) {
   tBTA_AG_SCB* p_scb = bta_ag_scb_by_idx(handle);
-  APPL_TRACE_DEBUG("%s: code=%d, port_handle=%d, scb_handle=%d, p_scb=0x%08x",
-                   __func__, code, port_handle, handle, p_scb);
+  log::verbose("code={}, port_handle={}, scb_handle={}, p_scb=0x{}", code,
+               port_handle, handle, fmt::ptr(p_scb));
   if (p_scb == nullptr) {
-    LOG(WARNING) << __func__ << ": cannot find scb, code=" << code
-                 << ", port_handle=" << port_handle << ", handle=" << handle;
+    log::warn("cannot find scb, code={}, port_handle={}, handle={}", code,
+              port_handle, handle);
     return;
   }
   /* ignore close event for port handles other than connected handle */
   if ((code != PORT_SUCCESS) && (port_handle != p_scb->conn_handle)) {
-    LOG(WARNING) << __func__ << ": ignore open failure for unmatched "
-                 << "port_handle " << port_handle << ", scb_handle=" << handle;
+    log::warn("ignore open failure for unmatched port_handle {}, scb_handle={}",
+              port_handle, handle);
     return;
   }
   uint16_t event;
@@ -137,9 +138,10 @@ static void bta_ag_mgmt_cback(uint32_t code, uint16_t port_handle,
       }
     }
     if (!found_handle) {
-      LOG(ERROR) << __func__ << ": port opened successfully, but port_handle "
-                 << port_handle << " is unknown"
-                 << ", scb_handle=" << handle;
+      log::error(
+          "port opened successfully, but port_handle {} is unknown, "
+          "scb_handle={}",
+          port_handle, handle);
       return;
     }
     event = BTA_AG_RFC_OPEN_EVT;
@@ -152,8 +154,8 @@ static void bta_ag_mgmt_cback(uint32_t code, uint16_t port_handle,
 
   tBTA_AG_DATA data = {};
   data.rfc.port_handle = port_handle;
-  do_in_main_thread(
-      FROM_HERE, base::Bind(&bta_ag_sm_execute_by_handle, handle, event, data));
+  do_in_main_thread(FROM_HERE, base::BindOnce(&bta_ag_sm_execute_by_handle,
+                                              handle, event, data));
 }
 
 /*******************************************************************************
@@ -217,14 +219,14 @@ void bta_ag_port_cback_6(uint32_t code, uint16_t port_handle) {
  ******************************************************************************/
 void bta_ag_setup_port(tBTA_AG_SCB* p_scb, uint16_t handle) {
   int port_callback_index = bta_ag_scb_to_idx(p_scb) - 1;
-  CHECK_GE(port_callback_index, 0)
-      << "invalid callback index, handle=" << handle << ", bd_addr"
-      << p_scb->peer_addr;
-  CHECK_LT(port_callback_index,
-           static_cast<int>(sizeof(bta_ag_port_cback_tbl) /
-                            sizeof(bta_ag_port_cback_tbl[0])))
-      << "callback index out of bound, handle=" << handle << ", bd_addr"
-      << p_scb->peer_addr;
+  log::assert_that(port_callback_index >= 0,
+                   "invalid callback index, handle={}, bd_addr={}", handle,
+                   ADDRESS_TO_LOGGABLE_STR(p_scb->peer_addr));
+  log::assert_that(
+      port_callback_index < static_cast<int>(sizeof(bta_ag_port_cback_tbl) /
+                                             sizeof(bta_ag_port_cback_tbl[0])),
+      "callback index out of bound, handle={}, bd_addr={}", handle,
+      ADDRESS_TO_LOGGABLE_STR(p_scb->peer_addr));
   PORT_SetEventMask(handle, BTA_AG_PORT_EV_MASK);
   PORT_SetEventCallback(handle, bta_ag_port_cback_tbl[port_callback_index]);
 }
@@ -245,14 +247,15 @@ void bta_ag_start_servers(tBTA_AG_SCB* p_scb, tBTA_SERVICE_MASK services) {
     /* if service is set in mask */
     if (services & 1) {
       int management_callback_index = bta_ag_scb_to_idx(p_scb) - 1;
-      CHECK_GE(management_callback_index, 0)
-          << "invalid callback index, services=" << loghex(services)
-          << ", bd_addr=" << p_scb->peer_addr;
-      CHECK_LT(management_callback_index,
-               static_cast<int>(sizeof(bta_ag_mgmt_cback_tbl) /
-                                sizeof(bta_ag_mgmt_cback_tbl[0])))
-          << "callback index out of bound, services=" << loghex(services)
-          << ", bd_addr" << p_scb->peer_addr;
+      log::assert_that(management_callback_index >= 0,
+                       "invalid callback index, services=0x{:x}, bd_addr={}",
+                       services, ADDRESS_TO_LOGGABLE_STR(p_scb->peer_addr));
+      log::assert_that(
+          management_callback_index <
+              static_cast<int>(sizeof(bta_ag_mgmt_cback_tbl) /
+                               sizeof(bta_ag_mgmt_cback_tbl[0])),
+          "callback index out of bound, services=0x{:x}, bd_addr={}", services,
+          ADDRESS_TO_LOGGABLE_STR(p_scb->peer_addr));
       int status = RFCOMM_CreateConnectionWithSecurity(
           bta_ag_uuid[i], bta_ag_cb.profile[i].scn, true, BTA_AG_MTU,
           RawAddress::kAny, &(p_scb->serv_handle[i]),
@@ -262,13 +265,13 @@ void bta_ag_start_servers(tBTA_AG_SCB* p_scb, tBTA_SERVICE_MASK services) {
         bta_ag_setup_port(p_scb, p_scb->serv_handle[i]);
       } else {
         /* TODO: CR#137125 to handle to error properly */
-        LOG(ERROR) << __func__ << ": RFCOMM_CreateConnectionWithSecurity ERROR "
-                   << status << ", p_scb=" << p_scb
-                   << ", services=" << loghex(services)
-                   << ", mgmt_cback_index=" << management_callback_index;
+        log::error(
+            "RFCOMM_CreateConnectionWithSecurity ERROR {}, p_scb={}, "
+            "services=0x{:x}, mgmt_cback_index={}",
+            status, fmt::ptr(p_scb), services, management_callback_index);
       }
-      APPL_TRACE_DEBUG("%s: p_scb=0x%08x, services=0x%04x, mgmt_cback_index=%d",
-                       __func__, p_scb, services, management_callback_index);
+      log::verbose("p_scb=0x{}, services=0x{:04x}, mgmt_cback_index={}",
+                   fmt::ptr(p_scb), services, management_callback_index);
     }
   }
 }
@@ -332,16 +335,15 @@ void bta_ag_rfc_do_open(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
       p_scb->peer_addr, &(p_scb->conn_handle),
       bta_ag_mgmt_cback_tbl[management_callback_index],
       BTA_SEC_AUTHENTICATE | BTA_SEC_ENCRYPT);
-  APPL_TRACE_DEBUG(
-      "%s: p_scb=0x%08x, conn_handle=%d, mgmt_cback_index=%d,"
-      " status=%d",
-      __func__, p_scb, p_scb->conn_handle, management_callback_index, status);
+  log::verbose("p_scb=0x{}, conn_handle={}, mgmt_cback_index={}, status={}",
+               fmt::ptr(p_scb), p_scb->conn_handle, management_callback_index,
+               status);
   if (status == PORT_SUCCESS) {
     bta_ag_setup_port(p_scb, p_scb->conn_handle);
   } else {
     /* RFCOMM create connection failed; send ourselves RFCOMM close event */
-    LOG(ERROR) << __func__ << ": RFCOMM_CreateConnection ERROR " << status
-               << " for " << p_scb->peer_addr;
+    log::error("RFCOMM_CreateConnection ERROR {} for {}", status,
+               p_scb->peer_addr);
     bta_ag_sm_execute(p_scb, BTA_AG_RFC_CLOSE_EVT, data);
   }
 }
@@ -356,8 +358,8 @@ void bta_ag_rfc_do_open(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
  * Returns          void
  *
  ******************************************************************************/
-void bta_ag_rfc_do_close(tBTA_AG_SCB* p_scb,
-                         UNUSED_ATTR const tBTA_AG_DATA& data) {
+void bta_ag_rfc_do_close(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& /* data */) {
+  log::info("p_scb->conn_handle: 0x{:04x}", p_scb->conn_handle);
   if (p_scb->conn_handle) {
     RFCOMM_RemoveConnection(p_scb->conn_handle);
   } else {
@@ -366,8 +368,8 @@ void bta_ag_rfc_do_close(tBTA_AG_SCB* p_scb,
     /* and move back to INIT state.                                     */
     do_in_main_thread(
         FROM_HERE,
-        base::Bind(&bta_ag_sm_execute_by_handle, bta_ag_scb_to_idx(p_scb),
-                   BTA_AG_RFC_CLOSE_EVT, tBTA_AG_DATA::kEmpty));
+        base::BindOnce(&bta_ag_sm_execute_by_handle, bta_ag_scb_to_idx(p_scb),
+                       BTA_AG_RFC_CLOSE_EVT, tBTA_AG_DATA::kEmpty));
 
     /* Cancel SDP if it had been started. */
     /*

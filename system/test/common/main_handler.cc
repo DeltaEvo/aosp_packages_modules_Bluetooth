@@ -17,51 +17,57 @@
 #include <base/functional/bind.h>
 #include <base/functional/callback_forward.h>
 #include <base/location.h>
-#include <base/time/time.h>
+#include <bluetooth/log.h>
 #include <sys/types.h>
 #include <unistd.h>
+
 #include <functional>
 #include <future>
 
 #include "common/message_loop_thread.h"
+#include "common/postable_context.h"
 #include "include/hardware/bluetooth.h"
-#include "osi/include/log.h"
+#include "os/log.h"
 
 using bluetooth::common::MessageLoopThread;
 using BtMainClosure = std::function<void()>;
 
 namespace {
 
-MessageLoopThread main_thread("bt_test_main_thread", true);
+MessageLoopThread main_thread("bt_test_main_thread");
 void do_post_on_bt_main(BtMainClosure closure) { closure(); }
 
 }  // namespace
 
 bt_status_t do_in_main_thread(const base::Location& from_here,
                               base::OnceClosure task) {
-  ASSERT_LOG(main_thread.DoInThread(from_here, std::move(task)),
-             "Unable to run on main thread");
+  bluetooth::log::assert_that(
+      main_thread.DoInThread(from_here, std::move(task)),
+      "Unable to run on main thread");
   return BT_STATUS_SUCCESS;
 }
 
 bt_status_t do_in_main_thread_delayed(const base::Location& from_here,
                                       base::OnceClosure task,
-                                      const base::TimeDelta& delay) {
-  ASSERT_LOG(!main_thread.DoInThreadDelayed(from_here, std::move(task), delay),
-             "Unable to run on main thread delayed");
+                                      std::chrono::microseconds delay) {
+  bluetooth::log::assert_that(
+      !main_thread.DoInThreadDelayed(from_here, std::move(task), delay),
+      "Unable to run on main thread delayed");
   return BT_STATUS_SUCCESS;
 }
 
 void post_on_bt_main(BtMainClosure closure) {
-  ASSERT(do_in_main_thread(
-             FROM_HERE, base::Bind(do_post_on_bt_main, std::move(closure))) ==
-         BT_STATUS_SUCCESS);
+  bluetooth::log::assert_that(
+      do_in_main_thread(
+          FROM_HERE, base::BindOnce(do_post_on_bt_main, std::move(closure))) ==
+          BT_STATUS_SUCCESS,
+      "Unable to post on main thread");
 }
 
 void main_thread_start_up() {
   main_thread.StartUp();
-  ASSERT_LOG(main_thread.IsRunning(),
-             "Unable to start message loop on main thread");
+  bluetooth::log::assert_that(main_thread.IsRunning(),
+                              "Unable to start message loop on main thread");
 }
 
 void main_thread_shut_down() { main_thread.ShutDown(); }
@@ -69,30 +75,6 @@ void main_thread_shut_down() { main_thread.ShutDown(); }
 // osi_alarm
 bluetooth::common::MessageLoopThread* get_main_thread() { return &main_thread; }
 
-int sync_timeout_in_ms = 3000;
-
-void sync_main_handler() {
-  std::promise promise = std::promise<void>();
-  std::future future = promise.get_future();
-  post_on_bt_main([&promise]() { promise.set_value(); });
-  future.wait_for(std::chrono::milliseconds(sync_timeout_in_ms));
-};
-
-bool is_on_main_thread() {
-  // Pthreads doesn't have the concept of a thread ID, so we have to reach down
-  // into the kernel.
-#if defined(OS_MACOSX)
-  return main_thread.GetThreadId() == pthread_mach_thread_np(pthread_self());
-#elif defined(OS_LINUX)
-#include <sys/syscall.h> /* For SYS_xxx definitions */
-#include <unistd.h>
-  return main_thread.GetThreadId() == syscall(__NR_gettid);
-#elif defined(OS_ANDROID)
-#include <sys/types.h>
-#include <unistd.h>
-  return main_thread.GetThreadId() == gettid();
-#else
-  LOG(ERROR) << __func__ << "Unable to determine if on main thread";
-  return true;
-#endif
+bluetooth::common::PostableContext* get_main() {
+  return main_thread.Postable();
 }

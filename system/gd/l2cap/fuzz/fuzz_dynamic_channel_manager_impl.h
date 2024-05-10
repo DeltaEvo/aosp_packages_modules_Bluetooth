@@ -18,7 +18,6 @@
 
 #pragma once
 
-#include <gd/l2cap/classic/internal/dynamic_channel_service_manager_impl.h>
 #include <future>
 #include <memory>
 
@@ -27,7 +26,6 @@
 #include "l2cap/classic/dynamic_channel_manager.h"
 #include "l2cap/classic/security_policy.h"
 #include "l2cap/psm.h"
-#include "os/handler.h"
 
 namespace bluetooth {
 namespace shim {
@@ -81,12 +79,12 @@ class FuzzDynamicChannelManagerImpl {
   }
 
   void SetConnectionOnFail(l2cap::classic::DynamicChannelManager::ConnectionResult result, std::promise<void> promise) {
-    std::move(on_fail_callback_).Invoke(result);
+    std::move(on_fail_callback_)(result);
     promise.set_value();
   }
 
   void SetConnectionOnOpen(std::unique_ptr<l2cap::DynamicChannel> channel, std::promise<void> promise) {
-    std::move(on_open_callback_).Invoke(std::move(channel));
+    std::move(on_open_callback_)(std::move(channel));
     promise.set_value();
   }
 

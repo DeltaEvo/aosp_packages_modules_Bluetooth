@@ -18,19 +18,24 @@ static_library("audio_hal_interface") {
   sources = [
     "a2dp_encoding_host.cc",
     "hearing_aid_software_encoding_host.cc",
+    "hfp_client_interface_host.cc",
+    "le_audio_software_host.cc",
   ]
 
   include_dirs = [
     "//bt/system/bta/include",
     "//bt/system/btif/include",
-    "//bt/system/internal_include",
     "//bt/system/stack/include",
     "//bt/system/gd/rust/shim",
   ]
 
-  configs += [ "//bt/system:target_defaults" ]
+  configs += [
+    "//bt/system:target_defaults",
+    "//bt/system/log:log_defaults",
+  ]
 
   deps = [
+    "//bt/flags:bluetooth_flags_c_lib",
     "//bt/system/common",
     "//bt/system/osi:osi",
   ]

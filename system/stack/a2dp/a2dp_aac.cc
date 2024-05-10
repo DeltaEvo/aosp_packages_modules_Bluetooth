@@ -25,19 +25,21 @@
 
 #include "a2dp_aac.h"
 
-#include <base/logging.h>
+#include <bluetooth/log.h>
 #include <string.h>
 
 #include "a2dp_aac_decoder.h"
 #include "a2dp_aac_encoder.h"
-#include "bt_utils.h"
-#include "osi/include/log.h"
+#include "internal_include/bt_trace.h"
+#include "os/log.h"
 #include "osi/include/osi.h"
 #include "osi/include/properties.h"
 #include "stack/include/bt_hdr.h"
 
 #define A2DP_AAC_DEFAULT_BITRATE 320000  // 320 kbps
 #define A2DP_AAC_MIN_BITRATE 64000       // 64 kbps
+
+using namespace bluetooth;
 
 // data type for the AAC Codec Information Element */
 // NOTE: bits_per_sample is needed only for AAC encoder initialization.
@@ -130,7 +132,7 @@ static const tA2DP_DECODER_INTERFACE a2dp_decoder_interface_aac = {
     nullptr,  // decoder_configure
 };
 
-UNUSED_ATTR static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilityAac(
+static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilityAac(
     const tA2DP_AAC_CIE* p_cap, const uint8_t* p_codec_info,
     bool is_capability);
 
@@ -246,7 +248,7 @@ bool A2DP_IsSourceCodecValidAac(const uint8_t* p_codec_info) {
          (A2DP_ParseInfoAac(&cfg_cie, p_codec_info, true) == A2DP_SUCCESS);
 }
 
-bool A2DP_IsSinkCodecValidAac(UNUSED_ATTR const uint8_t* p_codec_info) {
+bool A2DP_IsSinkCodecValidAac(const uint8_t* p_codec_info) {
   tA2DP_AAC_CIE cfg_cie;
 
   /* Use a liberal check when parsing the codec info */
@@ -254,7 +256,7 @@ bool A2DP_IsSinkCodecValidAac(UNUSED_ATTR const uint8_t* p_codec_info) {
          (A2DP_ParseInfoAac(&cfg_cie, p_codec_info, true) == A2DP_SUCCESS);
 }
 
-bool A2DP_IsPeerSourceCodecValidAac(UNUSED_ATTR const uint8_t* p_codec_info) {
+bool A2DP_IsPeerSourceCodecValidAac(const uint8_t* p_codec_info) {
   tA2DP_AAC_CIE cfg_cie;
 
   /* Use a liberal check when parsing the codec info */
@@ -295,23 +297,22 @@ static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilityAac(
   /* parse configuration */
   status = A2DP_ParseInfoAac(&cfg_cie, p_codec_info, is_capability);
   if (status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: parsing failed %d", __func__, status);
+    log::error("parsing failed {}", status);
     return status;
   }
 
   /* verify that each parameter is in range */
 
-  LOG_VERBOSE("%s: Object Type peer: 0x%x, capability 0x%x", __func__,
-              cfg_cie.objectType, p_cap->objectType);
-  LOG_VERBOSE("%s: Sample Rate peer: %u, capability %u", __func__,
-              cfg_cie.sampleRate, p_cap->sampleRate);
-  LOG_VERBOSE("%s: Channel Mode peer: 0x%x, capability 0x%x", __func__,
-              cfg_cie.channelMode, p_cap->channelMode);
-  LOG_VERBOSE("%s: Variable Bit Rate Support peer: 0x%x, capability 0x%x",
-              __func__, cfg_cie.variableBitRateSupport,
-              p_cap->variableBitRateSupport);
-  LOG_VERBOSE("%s: Bit Rate peer: %u, capability %u", __func__, cfg_cie.bitRate,
-              p_cap->bitRate);
+  log::verbose("Object Type peer: 0x{:x}, capability 0x{:x}",
+               cfg_cie.objectType, p_cap->objectType);
+  log::verbose("Sample Rate peer: {}, capability {}", cfg_cie.sampleRate,
+               p_cap->sampleRate);
+  log::verbose("Channel Mode peer: 0x{:x}, capability 0x{:x}",
+               cfg_cie.channelMode, p_cap->channelMode);
+  log::verbose("Variable Bit Rate Support peer: 0x{:x}, capability 0x{:x}",
+               cfg_cie.variableBitRateSupport, p_cap->variableBitRateSupport);
+  log::verbose("Bit Rate peer: {}, capability {}", cfg_cie.bitRate,
+               p_cap->bitRate);
 
   /* Object Type */
   if ((cfg_cie.objectType & p_cap->objectType) == 0) return A2DP_BAD_OBJ_TYPE;
@@ -325,12 +326,12 @@ static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilityAac(
   return A2DP_SUCCESS;
 }
 
-bool A2DP_UsesRtpHeaderAac(UNUSED_ATTR bool content_protection_enabled,
-                           UNUSED_ATTR const uint8_t* p_codec_info) {
+bool A2DP_UsesRtpHeaderAac(bool /* content_protection_enabled */,
+                           const uint8_t* /* p_codec_info */) {
   return true;
 }
 
-const char* A2DP_CodecNameAac(UNUSED_ATTR const uint8_t* p_codec_info) {
+const char* A2DP_CodecNameAac(const uint8_t* /* p_codec_info */) {
   return "AAC";
 }
 
@@ -343,12 +344,12 @@ bool A2DP_CodecTypeEqualsAac(const uint8_t* p_codec_info_a,
   tA2DP_STATUS a2dp_status =
       A2DP_ParseInfoAac(&aac_cie_a, p_codec_info_a, true);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return false;
   }
   a2dp_status = A2DP_ParseInfoAac(&aac_cie_b, p_codec_info_b, true);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return false;
   }
 
@@ -364,12 +365,12 @@ bool A2DP_CodecEqualsAac(const uint8_t* p_codec_info_a,
   tA2DP_STATUS a2dp_status =
       A2DP_ParseInfoAac(&aac_cie_a, p_codec_info_a, true);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return false;
   }
   a2dp_status = A2DP_ParseInfoAac(&aac_cie_b, p_codec_info_b, true);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return false;
   }
 
@@ -387,7 +388,7 @@ int A2DP_GetTrackSampleRateAac(const uint8_t* p_codec_info) {
   // Check whether the codec info contains valid data
   tA2DP_STATUS a2dp_status = A2DP_ParseInfoAac(&aac_cie, p_codec_info, false);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return -1;
   }
 
@@ -427,7 +428,7 @@ int A2DP_GetTrackBitsPerSampleAac(const uint8_t* p_codec_info) {
   // Check whether the codec info contains valid data
   tA2DP_STATUS a2dp_status = A2DP_ParseInfoAac(&aac_cie, p_codec_info, false);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return -1;
   }
 
@@ -441,7 +442,7 @@ int A2DP_GetTrackChannelCountAac(const uint8_t* p_codec_info) {
   // Check whether the codec info contains valid data
   tA2DP_STATUS a2dp_status = A2DP_ParseInfoAac(&aac_cie, p_codec_info, false);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return -1;
   }
 
@@ -461,7 +462,7 @@ int A2DP_GetSinkTrackChannelTypeAac(const uint8_t* p_codec_info) {
   // Check whether the codec info contains valid data
   tA2DP_STATUS a2dp_status = A2DP_ParseInfoAac(&aac_cie, p_codec_info, false);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return -1;
   }
 
@@ -481,7 +482,7 @@ int A2DP_GetObjectTypeCodeAac(const uint8_t* p_codec_info) {
   // Check whether the codec info contains valid data
   tA2DP_STATUS a2dp_status = A2DP_ParseInfoAac(&aac_cie, p_codec_info, false);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return -1;
   }
 
@@ -504,7 +505,7 @@ int A2DP_GetChannelModeCodeAac(const uint8_t* p_codec_info) {
   // Check whether the codec info contains valid data
   tA2DP_STATUS a2dp_status = A2DP_ParseInfoAac(&aac_cie, p_codec_info, false);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return -1;
   }
 
@@ -525,7 +526,7 @@ int A2DP_GetVariableBitRateSupportAac(const uint8_t* p_codec_info) {
   // Check whether the codec info contains valid data
   tA2DP_STATUS a2dp_status = A2DP_ParseInfoAac(&aac_cie, p_codec_info, false);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return -1;
   }
 
@@ -546,7 +547,7 @@ int A2DP_GetBitRateAac(const uint8_t* p_codec_info) {
   // Check whether the codec info contains valid data
   tA2DP_STATUS a2dp_status = A2DP_ParseInfoAac(&aac_cie, p_codec_info, false);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return -1;
   }
 
@@ -559,7 +560,7 @@ int A2DP_ComputeMaxBitRateAac(const uint8_t* p_codec_info, uint16_t mtu) {
   // Check whether the codec info contains valid data
   tA2DP_STATUS a2dp_status = A2DP_ParseInfoAac(&aac_cie, p_codec_info, false);
   if (a2dp_status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: cannot decode codec information: %d", __func__, a2dp_status);
+    log::error("cannot decode codec information: {}", a2dp_status);
     return -1;
   }
 
@@ -593,9 +594,9 @@ bool A2DP_GetPacketTimestampAac(const uint8_t* p_codec_info,
   return true;
 }
 
-bool A2DP_BuildCodecHeaderAac(UNUSED_ATTR const uint8_t* p_codec_info,
-                              UNUSED_ATTR BT_HDR* p_buf,
-                              UNUSED_ATTR uint16_t frames_per_packet) {
+bool A2DP_BuildCodecHeaderAac(const uint8_t* /* p_codec_info */,
+                              BT_HDR* /* p_buf */,
+                              uint16_t /* frames_per_packet */) {
   return true;
 }
 
@@ -607,7 +608,8 @@ std::string A2DP_CodecInfoStringAac(const uint8_t* p_codec_info) {
 
   a2dp_status = A2DP_ParseInfoAac(&aac_cie, p_codec_info, true);
   if (a2dp_status != A2DP_SUCCESS) {
-    res << "A2DP_ParseInfoAac fail: " << loghex(a2dp_status);
+    res << "A2DP_ParseInfoAac fail: "
+        << loghex(static_cast<uint8_t>(a2dp_status));
     return res.str();
   }
 
@@ -702,12 +704,12 @@ bool A2DP_AdjustCodecAac(uint8_t* p_codec_info) {
 }
 
 btav_a2dp_codec_index_t A2DP_SourceCodecIndexAac(
-    UNUSED_ATTR const uint8_t* p_codec_info) {
+    const uint8_t* /* p_codec_info */) {
   return BTAV_A2DP_CODEC_INDEX_SOURCE_AAC;
 }
 
 btav_a2dp_codec_index_t A2DP_SinkCodecIndexAac(
-    UNUSED_ATTR const uint8_t* p_codec_info) {
+    const uint8_t* /* p_codec_info */) {
   return BTAV_A2DP_CODEC_INDEX_SINK_AAC;
 }
 
@@ -732,14 +734,6 @@ bool A2DP_InitCodecConfigAac(AvdtpSepConfig* p_cfg) {
                         p_cfg->codec_info) != A2DP_SUCCESS) {
     return false;
   }
-
-#if (BTA_AV_CO_CP_SCMS_T == TRUE)
-  /* Content protection info - support SCMS-T */
-  uint8_t* p = p_cfg->protect_info;
-  *p++ = AVDT_CP_LOSC;
-  UINT16_TO_STREAM(p, AVDT_CP_SCMS_T_ID);
-  p_cfg->num_protect = 1;
-#endif
 
   return true;
 }
@@ -804,7 +798,7 @@ bool A2dpCodecConfigAacSource::init() {
 
   // Load the encoder
   if (!A2DP_LoadEncoderAac()) {
-    LOG_ERROR("%s: cannot load the encoder", __func__);
+    log::error("cannot load the encoder");
     return false;
   }
 
@@ -1040,8 +1034,7 @@ bool A2dpCodecConfigAacBase::setCodecConfig(const uint8_t* p_peer_codec_info,
   tA2DP_STATUS status =
       A2DP_ParseInfoAac(&peer_info_cie, p_peer_codec_info, is_capability);
   if (status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: can't parse peer's capabilities: error = %d", __func__,
-              status);
+    log::error("can't parse peer's capabilities: error = {}", status);
     goto fail;
   }
 
@@ -1178,10 +1171,10 @@ bool A2dpCodecConfigAacBase::setCodecConfig(const uint8_t* p_peer_codec_info,
     }
   } while (false);
   if (codec_config_.sample_rate == BTAV_A2DP_CODEC_SAMPLE_RATE_NONE) {
-    LOG_ERROR(
-        "%s: cannot match sample frequency: source caps = 0x%x "
-        "peer info = 0x%x",
-        __func__, p_a2dp_aac_caps->sampleRate, peer_info_cie.sampleRate);
+    log::error(
+        "cannot match sample frequency: source caps = 0x{:x} peer info = "
+        "0x{:x}",
+        p_a2dp_aac_caps->sampleRate, peer_info_cie.sampleRate);
     goto fail;
   }
 
@@ -1253,10 +1246,10 @@ bool A2dpCodecConfigAacBase::setCodecConfig(const uint8_t* p_peer_codec_info,
     }
   } while (false);
   if (codec_config_.bits_per_sample == BTAV_A2DP_CODEC_BITS_PER_SAMPLE_NONE) {
-    LOG_ERROR(
-        "%s: cannot match bits per sample: default = 0x%x "
-        "user preference = 0x%x",
-        __func__, a2dp_aac_default_config.bits_per_sample,
+    log::error(
+        "cannot match bits per sample: default = 0x{:x} user preference = "
+        "0x{:x}",
+        a2dp_aac_default_config.bits_per_sample,
         codec_user_config_.bits_per_sample);
     goto fail;
   }
@@ -1328,10 +1321,9 @@ bool A2dpCodecConfigAacBase::setCodecConfig(const uint8_t* p_peer_codec_info,
     }
   } while (false);
   if (codec_config_.channel_mode == BTAV_A2DP_CODEC_CHANNEL_MODE_NONE) {
-    LOG_ERROR(
-        "%s: cannot match channel mode: source caps = 0x%x "
-        "peer info = 0x%x",
-        __func__, p_a2dp_aac_caps->channelMode, peer_info_cie.channelMode);
+    log::error(
+        "cannot match channel mode: source caps = 0x{:x} peer info = 0x{:x}",
+        p_a2dp_aac_caps->channelMode, peer_info_cie.channelMode);
     goto fail;
   }
 
@@ -1391,10 +1383,12 @@ bool A2dpCodecConfigAacBase::setCodecConfig(const uint8_t* p_peer_codec_info,
     status = A2DP_BuildInfoAac(AVDT_MEDIA_TYPE_AUDIO, &peer_info_cie,
                                ota_codec_peer_config_);
   }
-  CHECK(status == A2DP_SUCCESS);
+  log::assert_that(status == A2DP_SUCCESS,
+                   "assert failed: status == A2DP_SUCCESS");
   status = A2DP_BuildInfoAac(AVDT_MEDIA_TYPE_AUDIO, &result_config_cie,
                              ota_codec_config_);
-  CHECK(status == A2DP_SUCCESS);
+  log::assert_that(status == A2DP_SUCCESS,
+                   "assert failed: status == A2DP_SUCCESS");
   return true;
 
 fail:
@@ -1432,8 +1426,7 @@ bool A2dpCodecConfigAacBase::setPeerCodecCapabilities(
   tA2DP_STATUS status =
       A2DP_ParseInfoAac(&peer_info_cie, p_peer_codec_capabilities, true);
   if (status != A2DP_SUCCESS) {
-    LOG_ERROR("%s: can't parse peer's capabilities: error = %d", __func__,
-              status);
+    log::error("can't parse peer's capabilities: error = {}", status);
     goto fail;
   }
 
@@ -1484,7 +1477,8 @@ bool A2dpCodecConfigAacBase::setPeerCodecCapabilities(
 
   status = A2DP_BuildInfoAac(AVDT_MEDIA_TYPE_AUDIO, &peer_info_cie,
                              ota_codec_peer_capability_);
-  CHECK(status == A2DP_SUCCESS);
+  log::assert_that(status == A2DP_SUCCESS,
+                   "assert failed: status == A2DP_SUCCESS");
   return true;
 
 fail:
@@ -1508,7 +1502,7 @@ bool A2dpCodecConfigAacSink::init() {
 
   // Load the decoder
   if (!A2DP_LoadDecoderAac()) {
-    LOG_ERROR("%s: cannot load the decoder", __func__);
+    log::error("cannot load the decoder");
     return false;
   }
 

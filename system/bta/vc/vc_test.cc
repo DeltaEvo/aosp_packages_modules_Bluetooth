@@ -27,6 +27,7 @@
 #include "gatt/database_builder.h"
 #include "hardware/bt_gatt_types.h"
 #include "mock_csis_client.h"
+#include "stack/include/bt_uuid16.h"
 #include "test/common/mock_functions.h"
 #include "types.h"
 #include "types/bluetooth/uuid.h"
@@ -56,7 +57,7 @@ using testing::SetArgPointee;
 using testing::WithArg;
 
 RawAddress GetTestAddress(int index) {
-  CHECK_LT(index, UINT8_MAX);
+  EXPECT_LT(index, UINT8_MAX);
   RawAddress result = {
       {0xC0, 0xDE, 0xC0, 0xDE, 0x00, static_cast<uint8_t>(index)}};
   return result;
@@ -245,6 +246,10 @@ class VolumeControlTest : public ::testing::Test {
     gatt::SetMockBtaGattInterface(&gatt_interface);
     gatt::SetMockBtaGattQueue(&gatt_queue);
     callbacks.reset(new MockVolumeControlCallbacks());
+    reset_mock_function_count_map();
+
+    ON_CALL(btm_interface, IsLinkKeyKnown(_, _))
+        .WillByDefault(DoAll(Return(true)));
 
     // default action for GetCharacteristic function call
     ON_CALL(gatt_interface, GetCharacteristic(_, _))
@@ -317,7 +322,7 @@ class VolumeControlTest : public ::testing::Test {
     EXPECT_CALL(gatt_interface, AppRegister(_, _, _))
         .WillOnce(DoAll(SaveArg<0>(&gatt_callback),
                         SaveArg<1>(&app_register_callback)));
-    VolumeControl::Initialize(callbacks.get());
+    VolumeControl::Initialize(callbacks.get(), base::DoNothing());
     ASSERT_TRUE(gatt_callback);
     ASSERT_TRUE(app_register_callback);
     app_register_callback.Run(gatt_if, GATT_SUCCESS);
@@ -337,8 +342,19 @@ class VolumeControlTest : public ::testing::Test {
         .WillByDefault(DoAll(Return(true)));
 
     EXPECT_CALL(gatt_interface,
-                Open(gatt_if, address, BTM_BLE_DIRECT_CONNECTION, _));
+                Open(gatt_if, address, BTM_BLE_DIRECT_CONNECTION, true));
     VolumeControl::Get()->Connect(address);
+    Mock::VerifyAndClearExpectations(&gatt_interface);
+  }
+
+  void TestRemove(const RawAddress& address, uint16_t conn_id) {
+    EXPECT_CALL(gatt_interface, CancelOpen(gatt_if, address, false));
+    if (conn_id) {
+      EXPECT_CALL(gatt_interface, Close(conn_id));
+    } else {
+      EXPECT_CALL(gatt_interface, Close(conn_id)).Times(0);
+    }
+    VolumeControl::Get()->Remove(address);
     Mock::VerifyAndClearExpectations(&gatt_interface);
   }
 
@@ -346,24 +362,20 @@ class VolumeControlTest : public ::testing::Test {
     if (conn_id) {
       EXPECT_CALL(gatt_interface, Close(conn_id));
     } else {
-      EXPECT_CALL(gatt_interface, CancelOpen(gatt_if, address, _));
+      EXPECT_CALL(gatt_interface, Close(conn_id)).Times(0);
     }
     VolumeControl::Get()->Disconnect(address);
     Mock::VerifyAndClearExpectations(&gatt_interface);
   }
 
-  void TestAddFromStorage(const RawAddress& address, bool auto_connect) {
+  void TestAddFromStorage(const RawAddress& address) {
     // by default indicate link as encrypted
     ON_CALL(btm_interface, BTM_IsEncrypted(address, _))
         .WillByDefault(DoAll(Return(true)));
 
-    if (auto_connect) {
-      EXPECT_CALL(gatt_interface,
-                  Open(gatt_if, address, BTM_BLE_BKG_CONNECT_ALLOW_LIST, _));
-    } else {
-      EXPECT_CALL(gatt_interface, Open(gatt_if, address, _, _)).Times(0);
-    }
-    VolumeControl::Get()->AddFromStorage(address, auto_connect);
+    EXPECT_CALL(gatt_interface,
+                Open(gatt_if, address, BTM_BLE_DIRECT_CONNECTION, true));
+    VolumeControl::Get()->AddFromStorage(address);
   }
 
   void TestSubscribeNotifications(const RawAddress& address, uint16_t conn_id,
@@ -425,8 +437,8 @@ class VolumeControlTest : public ::testing::Test {
 
   void GetDisconnectedEvent(const RawAddress& address, uint16_t conn_id) {
     tBTA_GATTC_CLOSE event_data = {
-        .status = GATT_SUCCESS,
         .conn_id = conn_id,
+        .status = GATT_SUCCESS,
         .client_if = gatt_if,
         .remote_bda = address,
         .reason = GATT_CONN_TERMINATE_PEER_USER,
@@ -437,8 +449,8 @@ class VolumeControlTest : public ::testing::Test {
 
   void GetSearchCompleteEvent(uint16_t conn_id) {
     tBTA_GATTC_SEARCH_CMPL event_data = {
-        .status = GATT_SUCCESS,
         .conn_id = conn_id,
+        .status = GATT_SUCCESS,
     };
 
     gatt_callback(BTA_GATTC_SEARCH_CMPL_EVT, (tBTA_GATTC*)&event_data);
@@ -455,6 +467,8 @@ class VolumeControlTest : public ::testing::Test {
   void SetEncryptionResult(const RawAddress& address, bool success) {
     ON_CALL(btm_interface, BTM_IsEncrypted(address, _))
         .WillByDefault(DoAll(Return(false)));
+    ON_CALL(btm_interface, IsLinkKeyKnown(address, _))
+        .WillByDefault(DoAll(Return(true)));
     ON_CALL(btm_interface, SetEncryption(address, _, _, _, BTM_BLE_SEC_ENCRYPT))
         .WillByDefault(Invoke(
             [&success, this](const RawAddress& bd_addr, tBT_TRANSPORT transport,
@@ -511,21 +525,34 @@ TEST_F(VolumeControlTest, test_get_uninitialized) {
 }
 
 TEST_F(VolumeControlTest, test_initialize) {
-  VolumeControl::Initialize(callbacks.get());
+  bool init_cb_called = false;
+  BtaAppRegisterCallback app_register_callback;
+  EXPECT_CALL(gatt_interface, AppRegister(_, _, _))
+      .WillOnce(DoAll(SaveArg<0>(&gatt_callback),
+                      SaveArg<1>(&app_register_callback)));
+  VolumeControl::Initialize(
+      callbacks.get(),
+      base::Bind([](bool* init_cb_called) { *init_cb_called = true; },
+                 &init_cb_called));
+  ASSERT_TRUE(gatt_callback);
+  ASSERT_TRUE(app_register_callback);
+  app_register_callback.Run(gatt_if, GATT_SUCCESS);
+  ASSERT_TRUE(init_cb_called);
+
   ASSERT_TRUE(VolumeControl::IsVolumeControlRunning());
   VolumeControl::CleanUp();
 }
 
 TEST_F(VolumeControlTest, test_initialize_twice) {
-  VolumeControl::Initialize(callbacks.get());
+  VolumeControl::Initialize(callbacks.get(), base::DoNothing());
   VolumeControl* volume_control_p = VolumeControl::Get();
-  VolumeControl::Initialize(callbacks.get());
+  VolumeControl::Initialize(callbacks.get(), base::DoNothing());
   ASSERT_EQ(volume_control_p, VolumeControl::Get());
   VolumeControl::CleanUp();
 }
 
 TEST_F(VolumeControlTest, test_cleanup_initialized) {
-  VolumeControl::Initialize(callbacks.get());
+  VolumeControl::Initialize(callbacks.get(), base::DoNothing());
   VolumeControl::CleanUp();
   ASSERT_FALSE(VolumeControl::IsVolumeControlRunning());
 }
@@ -543,6 +570,34 @@ TEST_F(VolumeControlTest, test_app_registration) {
 TEST_F(VolumeControlTest, test_connect) {
   TestAppRegister();
   TestConnect(GetTestAddress(0));
+  TestAppUnregister();
+}
+
+TEST_F(VolumeControlTest, test_connect_after_remove) {
+  TestAppRegister();
+
+  const RawAddress test_address = GetTestAddress(0);
+  uint16_t conn_id = 1;
+
+  TestConnect(test_address);
+  GetConnectedEvent(test_address, conn_id);
+  Mock::VerifyAndClearExpectations(callbacks.get());
+
+  EXPECT_CALL(*callbacks,
+              OnConnectionState(ConnectionState::DISCONNECTED, test_address))
+      .Times(1);
+
+  TestRemove(test_address, conn_id);
+  Mock::VerifyAndClearExpectations(callbacks.get());
+
+  EXPECT_CALL(*callbacks,
+              OnConnectionState(ConnectionState::DISCONNECTED, test_address))
+      .Times(1);
+  ON_CALL(btm_interface, IsLinkKeyKnown(_, _))
+      .WillByDefault(DoAll(Return(false)));
+
+  VolumeControl::Get()->Connect(test_address);
+  Mock::VerifyAndClearExpectations(callbacks.get());
   TestAppUnregister();
 }
 
@@ -595,10 +650,74 @@ TEST_F(VolumeControlTest, test_reconnect_after_interrupted_discovery) {
   TestAppUnregister();
 }
 
+TEST_F(VolumeControlTest, test_reconnect_after_timeout) {
+  const RawAddress address = GetTestAddress(0);
+
+  // Initial connection
+  SetSampleDatabaseVOCS(1);
+  TestAppRegister();
+
+  EXPECT_CALL(*callbacks,
+              OnConnectionState(ConnectionState::CONNECTED, address))
+      .Times(0);
+  TestConnect(address);
+
+  // Disconnect not connected device - upper layer times out and needs a
+  // disconnection event to leave the transient Connecting state
+  EXPECT_CALL(*callbacks,
+              OnConnectionState(ConnectionState::DISCONNECTED, address));
+  EXPECT_CALL(gatt_interface, CancelOpen(gatt_if, address, false)).Times(0);
+  TestDisconnect(address, 0);
+
+  // Above the device was not connected and we got Disconnect request from the
+  // upper layer - it means it has timed-out but still wants to connect, thus
+  // native is still doing background or opportunistic connect. Let the remote
+  // device reconnect now.
+  ON_CALL(gatt_interface, ServiceSearchRequest(_, _))
+      .WillByDefault(Invoke(
+          [&](uint16_t conn_id, const bluetooth::Uuid* p_srvc_uuid) -> void {
+            if (*p_srvc_uuid == kVolumeControlUuid)
+              GetSearchCompleteEvent(conn_id);
+          }));
+  EXPECT_CALL(*callbacks,
+              OnConnectionState(ConnectionState::CONNECTED, address));
+  EXPECT_CALL(*callbacks, OnDeviceAvailable(address, 2));
+  GetConnectedEvent(address, 1);
+  Mock::VerifyAndClearExpectations(callbacks.get());
+
+  // Make sure that the upper layer gets the disconnection event even if not
+  // connecting actively anymore due to the mentioned time-out mechanism.
+  EXPECT_CALL(*callbacks,
+              OnConnectionState(ConnectionState::DISCONNECTED, address));
+  GetDisconnectedEvent(address, 1);
+  Mock::VerifyAndClearExpectations(callbacks.get());
+  TestAppUnregister();
+}
+
 TEST_F(VolumeControlTest, test_add_from_storage) {
   TestAppRegister();
-  TestAddFromStorage(GetTestAddress(0), true);
-  TestAddFromStorage(GetTestAddress(1), false);
+  TestAddFromStorage(GetTestAddress(0));
+  TestAppUnregister();
+}
+
+TEST_F(VolumeControlTest, test_remove_non_connected) {
+  const RawAddress test_address = GetTestAddress(0);
+  TestAppRegister();
+  TestConnect(test_address);
+  EXPECT_CALL(*callbacks,
+              OnConnectionState(ConnectionState::DISCONNECTED, test_address));
+  TestRemove(test_address, 0);
+  TestAppUnregister();
+}
+
+TEST_F(VolumeControlTest, test_remove_connected) {
+  const RawAddress test_address = GetTestAddress(0);
+  TestAppRegister();
+  TestConnect(test_address);
+  GetConnectedEvent(test_address, 1);
+  EXPECT_CALL(*callbacks,
+              OnConnectionState(ConnectionState::DISCONNECTED, test_address));
+  TestDisconnect(test_address, 1);
   TestAppUnregister();
 }
 
@@ -637,7 +756,7 @@ TEST_F(VolumeControlTest, test_disconnected) {
 TEST_F(VolumeControlTest, test_disconnected_while_autoconnect) {
   const RawAddress test_address = GetTestAddress(0);
   TestAppRegister();
-  TestAddFromStorage(test_address, true);
+  TestAddFromStorage(test_address);
   GetConnectedEvent(test_address, 1);
   // autoconnect - don't indicate disconnection
   EXPECT_CALL(*callbacks,
@@ -647,10 +766,31 @@ TEST_F(VolumeControlTest, test_disconnected_while_autoconnect) {
   TestAppUnregister();
 }
 
+TEST_F(VolumeControlTest, test_disconnect_when_link_key_gone) {
+  const RawAddress test_address = GetTestAddress(0);
+  TestAppRegister();
+  TestAddFromStorage(test_address);
+
+  ON_CALL(btm_interface, BTM_IsEncrypted(test_address, _))
+      .WillByDefault(DoAll(Return(false)));
+  ON_CALL(btm_interface,
+          SetEncryption(test_address, _, _, _, BTM_BLE_SEC_ENCRYPT))
+      .WillByDefault(Return(BTM_ERR_KEY_MISSING));
+
+  // autoconnect - don't indicate disconnection
+  EXPECT_CALL(*callbacks,
+              OnConnectionState(ConnectionState::DISCONNECTED, test_address))
+      .Times(0);
+  EXPECT_CALL(gatt_interface, Close(1));
+  GetConnectedEvent(test_address, 1);
+  Mock::VerifyAndClearExpectations(&btm_interface);
+  TestAppUnregister();
+}
+
 TEST_F(VolumeControlTest, test_reconnect_after_encryption_failed) {
   const RawAddress test_address = GetTestAddress(0);
   TestAppRegister();
-  TestAddFromStorage(test_address, true);
+  TestAddFromStorage(test_address);
   SetEncryptionResult(test_address, false);
   // autoconnect - don't indicate disconnection
   EXPECT_CALL(*callbacks,
@@ -660,6 +800,45 @@ TEST_F(VolumeControlTest, test_reconnect_after_encryption_failed) {
   Mock::VerifyAndClearExpectations(&btm_interface);
   SetEncryptionResult(test_address, true);
   GetConnectedEvent(test_address, 1);
+  TestAppUnregister();
+}
+
+TEST_F(VolumeControlTest, test_service_discovery_completed_before_encryption) {
+  const RawAddress test_address = GetTestAddress(0);
+  SetSampleDatabaseVCS(1);
+  TestAppRegister();
+  TestConnect(test_address);
+
+  ON_CALL(btm_interface, BTM_IsEncrypted(test_address, _))
+      .WillByDefault(DoAll(Return(false)));
+  ON_CALL(btm_interface, IsLinkKeyKnown(test_address, _))
+      .WillByDefault(DoAll(Return(true)));
+  ON_CALL(btm_interface, SetEncryption(test_address, _, _, _, _))
+      .WillByDefault(Return(BTM_SUCCESS));
+
+  EXPECT_CALL(*callbacks,
+              OnConnectionState(ConnectionState::CONNECTED, test_address))
+      .Times(0);
+  uint16_t conn_id = 1;
+  GetConnectedEvent(test_address, conn_id);
+  GetSearchCompleteEvent(conn_id);
+  Mock::VerifyAndClearExpectations(&btm_interface);
+  Mock::VerifyAndClearExpectations(callbacks.get());
+
+  EXPECT_CALL(*callbacks,
+              OnConnectionState(ConnectionState::CONNECTED, test_address))
+      .Times(1);
+
+  ON_CALL(btm_interface, BTM_IsEncrypted(test_address, _))
+      .WillByDefault(DoAll(Return(true)));
+  EXPECT_CALL(gatt_interface, ServiceSearchRequest(_, _));
+
+  GetEncryptionCompleteEvt(test_address);
+  GetSearchCompleteEvent(conn_id);
+
+  Mock::VerifyAndClearExpectations(callbacks.get());
+  Mock::VerifyAndClearExpectations(&gatt_interface);
+
   TestAppUnregister();
 }
 
@@ -875,7 +1054,7 @@ class VolumeControlCallbackTest : public VolumeControlTest {
   }
 };
 
-TEST_F(VolumeControlCallbackTest, test_volume_state_changed) {
+TEST_F(VolumeControlCallbackTest, test_volume_state_changed_stress) {
   std::vector<uint8_t> value({0x03, 0x01, 0x02});
   EXPECT_CALL(*callbacks, OnVolumeStateChanged(test_address, 0x03, true, true));
   GetNotificationEvent(0x0021, value);
@@ -1001,6 +1180,41 @@ class VolumeControlValueSetTest : public VolumeControlTest {
     TestConnect(test_address);
     GetConnectedEvent(test_address, conn_id);
     GetSearchCompleteEvent(conn_id);
+
+    ON_CALL(gatt_queue,
+            WriteCharacteristic(conn_id, 0x0024, _, GATT_WRITE, _, _))
+        .WillByDefault([this](uint16_t conn_id, uint16_t handle,
+                              std::vector<uint8_t> value,
+                              tGATT_WRITE_TYPE write_type, GATT_WRITE_OP_CB cb,
+                              void* cb_data) {
+          uint8_t write_rsp;
+
+          std::vector<uint8_t> ntf_value(
+              {value[0], 0, static_cast<uint8_t>(value[1] + 1)});
+          switch (value[0]) {
+            case 0x06:  // mute
+              ntf_value[1] = 1;
+              break;
+            case 0x05:  // unmute
+              break;
+            case 0x04:  // set abs. volume
+              ntf_value[0] = value[2];
+              ntf_value[1] = (value[2] ? 0 : 1);
+              break;
+            case 0x03:  // unmute rel. up
+              break;
+            case 0x02:  // unmute rel. down
+              break;
+            case 0x01:  // rel. up
+              break;
+            case 0x00:  // rel. down
+              break;
+            default:
+              break;
+          }
+          GetNotificationEvent(0x0021, ntf_value);
+          cb(conn_id, GATT_SUCCESS, 0x0024, 0, &write_rsp, cb_data);
+        });
   }
 
   void GetNotificationEvent(uint16_t handle, std::vector<uint8_t>& value) {
@@ -1022,20 +1236,62 @@ class VolumeControlValueSetTest : public VolumeControlTest {
   }
 };
 
-TEST_F(VolumeControlValueSetTest, test_set_volume) {
-  ON_CALL(gatt_queue, WriteCharacteristic(conn_id, 0x0024, _, GATT_WRITE, _, _))
-      .WillByDefault([this](uint16_t conn_id, uint16_t handle,
-                            std::vector<uint8_t> value,
-                            tGATT_WRITE_TYPE write_type, GATT_WRITE_OP_CB cb,
-                            void* cb_data) {
-        std::vector<uint8_t> ntf_value({
-            value[2],                            // volume level
-            0,                                   // muted
-            static_cast<uint8_t>(value[1] + 1),  // change counter
-        });
-        GetNotificationEvent(0x0021, ntf_value);
-      });
+TEST_F(VolumeControlValueSetTest, test_volume_operation_failed) {
+  const std::vector<uint8_t> vol_x10({0x04, 0x00, 0x10});
+  EXPECT_CALL(gatt_queue,
+              WriteCharacteristic(conn_id, 0x0024, vol_x10, GATT_WRITE, _, _))
+      .Times(1);
+  ON_CALL(gatt_queue, WriteCharacteristic(_, _, _, _, _, _))
+      .WillByDefault(
+          Invoke([this](uint16_t conn_id, uint16_t handle,
+                        std::vector<uint8_t> value, tGATT_WRITE_TYPE write_type,
+                        GATT_WRITE_OP_CB cb, void* cb_data) {
+            auto* svc = gatt::FindService(services_map[conn_id], handle);
+            if (svc == nullptr) return;
 
+            tGATT_STATUS status = GATT_ERROR;
+            if (cb)
+              cb(conn_id, status, handle, value.size(), value.data(), cb_data);
+          }));
+  ASSERT_EQ(0, get_func_call_count("alarm_set_on_mloop"));
+  ASSERT_EQ(0, get_func_call_count("alarm_cancel"));
+
+  VolumeControl::Get()->SetVolume(test_address, 0x10);
+  Mock::VerifyAndClearExpectations(&gatt_queue);
+
+  ASSERT_EQ(1, get_func_call_count("alarm_set_on_mloop"));
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+}
+
+TEST_F(VolumeControlValueSetTest,
+       test_volume_operation_failed_due_to_device_disconnection) {
+  const std::vector<uint8_t> vol_x10({0x04, 0x00, 0x10});
+  EXPECT_CALL(gatt_queue,
+              WriteCharacteristic(conn_id, 0x0024, vol_x10, GATT_WRITE, _, _))
+      .Times(1);
+  ON_CALL(gatt_queue, WriteCharacteristic(_, _, _, _, _, _))
+      .WillByDefault(Invoke(
+          [](uint16_t conn_id, uint16_t handle, std::vector<uint8_t> value,
+             tGATT_WRITE_TYPE write_type, GATT_WRITE_OP_CB cb, void* cb_data) {
+            /* Do nothing */
+          }));
+
+  ASSERT_EQ(0, get_func_call_count("alarm_set_on_mloop"));
+  ASSERT_EQ(0, get_func_call_count("alarm_cancel"));
+
+  VolumeControl::Get()->SetVolume(test_address, 0x10);
+  Mock::VerifyAndClearExpectations(&gatt_queue);
+
+  EXPECT_CALL(*callbacks,
+              OnConnectionState(ConnectionState::DISCONNECTED, test_address));
+  GetDisconnectedEvent(test_address, conn_id);
+  Mock::VerifyAndClearExpectations(callbacks.get());
+
+  ASSERT_EQ(1, get_func_call_count("alarm_set_on_mloop"));
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+}
+
+TEST_F(VolumeControlValueSetTest, test_set_volume) {
   const std::vector<uint8_t> vol_x10({0x04, 0x00, 0x10});
   EXPECT_CALL(gatt_queue,
               WriteCharacteristic(conn_id, 0x0024, vol_x10, GATT_WRITE, _, _))
@@ -1056,17 +1312,162 @@ TEST_F(VolumeControlValueSetTest, test_set_volume) {
   VolumeControl::Get()->SetVolume(test_address, 0x20);
 }
 
-TEST_F(VolumeControlValueSetTest, test_mute) {
-  std::vector<uint8_t> mute({0x06, 0x00});
-  EXPECT_CALL(gatt_queue,
-              WriteCharacteristic(conn_id, 0x0024, mute, GATT_WRITE, _, _));
-  VolumeControl::Get()->Mute(test_address);
+TEST_F(VolumeControlValueSetTest, test_set_volume_stress) {
+  uint8_t n = 100;
+  uint8_t change_cnt = 0;
+  uint8_t vol = 1;
+
+  for (uint8_t i = 1; i < n; i++) {
+    const std::vector<uint8_t> vol_x10({0x04, change_cnt, vol});
+    EXPECT_CALL(gatt_queue,
+                WriteCharacteristic(conn_id, 0x0024, vol_x10, GATT_WRITE, _, _))
+        .Times(1);
+    VolumeControl::Get()->SetVolume(test_address, vol);
+    Mock::VerifyAndClearExpectations(&gatt_queue);
+    change_cnt++;
+    vol++;
+  }
 }
 
-TEST_F(VolumeControlValueSetTest, test_unmute) {
-  std::vector<uint8_t> unmute({0x05, 0x00});
+TEST_F(VolumeControlValueSetTest, test_set_volume_stress_2) {
+  uint8_t change_cnt = 0;
+  uint8_t vol = 1;
+
+  // In this test we simulate notification coming later and operations will be
+  // queued
+  ON_CALL(gatt_queue, WriteCharacteristic(conn_id, 0x0024, _, GATT_WRITE, _, _))
+      .WillByDefault([](uint16_t conn_id, uint16_t handle,
+                        std::vector<uint8_t> value, tGATT_WRITE_TYPE write_type,
+                        GATT_WRITE_OP_CB cb, void* cb_data) {
+        uint8_t write_rsp;
+
+        switch (value[0]) {
+          case 0x04:  // set abs. volume
+            break;
+          default:
+            break;
+        }
+        cb(conn_id, GATT_SUCCESS, handle, 0, &write_rsp, cb_data);
+      });
+
+  const std::vector<uint8_t> vol_x10({0x04, /*change_cnt*/ 0, 0x10});
+  std::vector<uint8_t> ntf_value_x10({0x10, 0, 1});
+  const std::vector<uint8_t> vol_x11({0x04, /*change_cnt*/ 1, 0x11});
+  std::vector<uint8_t> ntf_value_x11({0x11, 0, 2});
+  const std::vector<uint8_t> vol_x12({0x04, /*change_cnt*/ 2, 0x12});
+  std::vector<uint8_t> ntf_value_x12({0x12, 0, 3});
+  const std::vector<uint8_t> vol_x13({0x04, /*change_cnt*/ 3, 0x13});
+  std::vector<uint8_t> ntf_value_x13({0x13, 0, 4});
+
   EXPECT_CALL(gatt_queue,
-              WriteCharacteristic(conn_id, 0x0024, unmute, GATT_WRITE, _, _));
+              WriteCharacteristic(conn_id, 0x0024, vol_x10, GATT_WRITE, _, _))
+      .Times(1);
+  EXPECT_CALL(gatt_queue,
+              WriteCharacteristic(conn_id, 0x0024, vol_x11, GATT_WRITE, _, _))
+      .Times(1);
+  EXPECT_CALL(gatt_queue,
+              WriteCharacteristic(conn_id, 0x0024, vol_x12, GATT_WRITE, _, _))
+      .Times(1);
+  EXPECT_CALL(gatt_queue,
+              WriteCharacteristic(conn_id, 0x0024, vol_x13, GATT_WRITE, _, _))
+      .Times(1);
+
+  VolumeControl::Get()->SetVolume(test_address, 0x10);
+  VolumeControl::Get()->SetVolume(test_address, 0x11);
+  GetNotificationEvent(0x0021, ntf_value_x10);
+  GetNotificationEvent(0x0021, ntf_value_x11);
+  VolumeControl::Get()->SetVolume(test_address, 0x12);
+  VolumeControl::Get()->SetVolume(test_address, 0x13);
+  GetNotificationEvent(0x0021, ntf_value_x12);
+  GetNotificationEvent(0x0021, ntf_value_x13);
+
+  Mock::VerifyAndClearExpectations(&gatt_queue);
+}
+
+TEST_F(VolumeControlValueSetTest, test_set_volume_stress_3) {
+  uint8_t change_cnt = 0;
+  uint8_t vol = 1;
+
+  /* In this test we simulate notification coming later and operations will be
+   * queued but some will be removed from the queue
+   */
+  ON_CALL(gatt_queue, WriteCharacteristic(conn_id, 0x0024, _, GATT_WRITE, _, _))
+      .WillByDefault([](uint16_t conn_id, uint16_t handle,
+                        std::vector<uint8_t> value, tGATT_WRITE_TYPE write_type,
+                        GATT_WRITE_OP_CB cb, void* cb_data) {
+        uint8_t write_rsp;
+
+        switch (value[0]) {
+          case 0x04:  // set abs. volume
+            break;
+          default:
+            break;
+        }
+        cb(conn_id, GATT_SUCCESS, handle, 0, &write_rsp, cb_data);
+      });
+
+  const std::vector<uint8_t> vol_x10({0x04, /*change_cnt*/ 0, 0x10});
+  std::vector<uint8_t> ntf_value_x10({0x10, 0, 1});
+  const std::vector<uint8_t> vol_x11({0x04, /*change_cnt*/ 1, 0x11});
+  std::vector<uint8_t> ntf_value_x11({0x11, 0, 2});
+  const std::vector<uint8_t> vol_x12({0x04, /*change_cnt*/ 1, 0x12});
+  std::vector<uint8_t> ntf_value_x12({0x12, 0, 3});
+  const std::vector<uint8_t> vol_x13({0x04, /*change_cnt*/ 1, 0x13});
+  std::vector<uint8_t> ntf_value_x13({0x13, 0, 4});
+
+  EXPECT_CALL(gatt_queue,
+              WriteCharacteristic(conn_id, 0x0024, vol_x10, GATT_WRITE, _, _))
+      .Times(1);
+
+  // Those two belowe will be removed from the queue
+  EXPECT_CALL(gatt_queue,
+              WriteCharacteristic(conn_id, 0x0024, vol_x11, GATT_WRITE, _, _))
+      .Times(0);
+  EXPECT_CALL(gatt_queue,
+              WriteCharacteristic(conn_id, 0x0024, vol_x12, GATT_WRITE, _, _))
+      .Times(0);
+
+  // This one shall be sent with a change count 1.
+  EXPECT_CALL(gatt_queue,
+              WriteCharacteristic(conn_id, 0x0024, vol_x13, GATT_WRITE, _, _))
+      .Times(1);
+
+  VolumeControl::Get()->SetVolume(test_address, 0x10);
+  VolumeControl::Get()->SetVolume(test_address, 0x11);
+  VolumeControl::Get()->SetVolume(test_address, 0x12);
+  VolumeControl::Get()->SetVolume(test_address, 0x13);
+  GetNotificationEvent(0x0021, ntf_value_x10);
+  GetNotificationEvent(0x0021, ntf_value_x11);
+  GetNotificationEvent(0x0021, ntf_value_x12);
+  GetNotificationEvent(0x0021, ntf_value_x13);
+
+  Mock::VerifyAndClearExpectations(&gatt_queue);
+}
+
+TEST_F(VolumeControlValueSetTest, test_mute_unmute) {
+  std::vector<uint8_t> mute_x0({0x06, 0x00});
+  EXPECT_CALL(gatt_queue,
+              WriteCharacteristic(conn_id, 0x0024, mute_x0, GATT_WRITE, _, _))
+      .Times(1);
+  // Don't mute when already muted
+  std::vector<uint8_t> mute_x1({0x06, 0x01});
+  EXPECT_CALL(gatt_queue,
+              WriteCharacteristic(conn_id, 0x0024, mute_x1, GATT_WRITE, _, _))
+      .Times(0);
+  VolumeControl::Get()->Mute(test_address);
+  VolumeControl::Get()->Mute(test_address);
+
+  // Needs to be muted to unmute
+  std::vector<uint8_t> unmute_x1({0x05, 0x01});
+  EXPECT_CALL(gatt_queue,
+              WriteCharacteristic(conn_id, 0x0024, unmute_x1, GATT_WRITE, _, _))
+      .Times(1);
+  // Don't unmute when already unmuted
+  std::vector<uint8_t> unmute_x2({0x05, 0x02});
+  EXPECT_CALL(gatt_queue,
+              WriteCharacteristic(conn_id, 0x0024, unmute_x2, GATT_WRITE, _, _))
+      .Times(0);
+  VolumeControl::Get()->UnMute(test_address);
   VolumeControl::Get()->UnMute(test_address);
 }
 

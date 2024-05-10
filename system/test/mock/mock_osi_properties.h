@@ -23,20 +23,9 @@
 
 #include <cstdint>
 #include <functional>
-#include <map>
-#include <string>
 
 // Original included files, if any
-// NOTE: Since this is a mock file with mock definitions some number of
-//       include files may not be required.  The include-what-you-use
-//       still applies, but crafting proper inclusion is out of scope
-//       for this effort.  This compilation unit may compile as-is, or
-//       may need attention to prune from (or add to ) the inclusion set.
 #include <cutils/properties.h>
-#include <string.h>
-
-#include "osi/include/properties.h"
-#include "test/common/mock_functions.h"
 
 // Mocked compile conditionals, if any
 
@@ -51,9 +40,8 @@ namespace osi_properties {
 struct osi_property_get {
   int return_value{0};
   std::function<int(const char* key, char* value, const char* default_value)>
-      body{[this](const char* key, char* value, const char* default_value) {
-        return return_value;
-      }};
+      body{[this](const char* /* key */, char* /* value */,
+                  const char* /* default_value */) { return return_value; }};
   int operator()(const char* key, char* value, const char* default_value) {
     return body(key, value, default_value);
   };
@@ -66,7 +54,9 @@ extern struct osi_property_get osi_property_get;
 struct osi_property_get_bool {
   bool return_value{false};
   std::function<bool(const char* key, bool default_value)> body{
-      [this](const char* key, bool default_value) { return return_value; }};
+      [this](const char* /* key */, bool /* default_value */) {
+        return return_value;
+      }};
   bool operator()(const char* key, bool default_value) {
     return body(key, default_value);
   };
@@ -79,7 +69,9 @@ extern struct osi_property_get_bool osi_property_get_bool;
 struct osi_property_get_int32 {
   int32_t return_value{0};
   std::function<int32_t(const char* key, int32_t default_value)> body{
-      [this](const char* key, int32_t default_value) { return return_value; }};
+      [this](const char* /* key */, int32_t /* default_value */) {
+        return return_value;
+      }};
   int32_t operator()(const char* key, int32_t default_value) {
     return body(key, default_value);
   };
@@ -92,7 +84,9 @@ extern struct osi_property_get_int32 osi_property_get_int32;
 struct osi_property_set {
   int return_value{0};
   std::function<int(const char* key, const char* value)> body{
-      [this](const char* key, const char* value) { return return_value; }};
+      [this](const char* /* key */, const char* /* value */) {
+        return return_value;
+      }};
   int operator()(const char* key, const char* value) {
     return body(key, value);
   };

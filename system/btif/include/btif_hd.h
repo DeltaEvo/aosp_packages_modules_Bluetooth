@@ -20,6 +20,7 @@
 #ifndef BTIF_HD_H
 #define BTIF_HD_H
 
+#include <bluetooth/log.h>
 #include <hardware/bluetooth.h>
 #include <hardware/bt_hd.h>
 #include <stdint.h>
@@ -43,7 +44,12 @@ typedef struct {
 
 extern btif_hd_cb_t btif_hd_cb;
 
-extern void btif_hd_remove_device(RawAddress bd_addr);
-extern void btif_hd_service_registration();
+void btif_hd_remove_device(RawAddress bd_addr);
+void btif_hd_service_registration();
+
+namespace fmt {
+template <>
+struct formatter<BTIF_HD_STATUS> : enum_formatter<BTIF_HD_STATUS> {};
+}  // namespace fmt
 
 #endif

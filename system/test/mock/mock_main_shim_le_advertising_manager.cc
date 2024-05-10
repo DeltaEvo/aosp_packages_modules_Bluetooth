@@ -1,5 +1,6 @@
 /*
- * Copyright 2021 The Android Open Source Project
+ * Copyright 2021 HIMSA II K/S - www.himsa.com.
+ * Represented by EHIMA - www.ehima.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,30 +15,31 @@
  * limitations under the License.
  */
 
-/*
- * Generated mock file from original source file
- *   Functions generated:3
- */
+#include "mock_main_shim_le_advertising_manager.h"
 
-#include <map>
-#include <string>
-#include <vector>
+#include <base/memory/weak_ptr.h>
 
-#include "btif/include/btif_common.h"
-#include "gd/common/init_flags.h"
-#include "include/hardware/ble_advertiser.h"
 #include "main/shim/le_advertising_manager.h"
-#include "stack/include/ble_advertiser.h"
-#include "test/common/mock_functions.h"
 
-#ifndef UNUSED_ATTR
-#define UNUSED_ATTR
-#endif
+namespace {
+MockBleAdvertisingManager* bt_le_advertiser_instance;
+}  // namespace
+
+void MockBleAdvertisingManager::Initialize() {
+  if (bt_le_advertiser_instance == nullptr) {
+    bt_le_advertiser_instance = new MockBleAdvertisingManager();
+  }
+}
+
+void MockBleAdvertisingManager::CleanUp() {
+  delete bt_le_advertiser_instance;
+  bt_le_advertiser_instance = nullptr;
+}
+
+MockBleAdvertisingManager* MockBleAdvertisingManager::Get() {
+  return bt_le_advertiser_instance;
+}
 
 BleAdvertiserInterface* bluetooth::shim::get_ble_advertiser_instance() {
-  mock_function_count_map[__func__]++;
-  return nullptr;
-}
-void bluetooth::shim::init_advertising_manager() {
-  mock_function_count_map[__func__]++;
+  return static_cast<BleAdvertiserInterface*>(bt_le_advertiser_instance);
 }

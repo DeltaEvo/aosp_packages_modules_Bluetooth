@@ -104,10 +104,25 @@ struct ApcfCommand {
   uint8_t org_id;
   uint8_t tds_flags;
   uint8_t tds_flags_mask;
+  uint8_t meta_data_type;
+  std::vector<uint8_t> meta_data;
   uint8_t ad_type;
   std::vector<uint8_t> data;
   std::vector<uint8_t> data_mask;
   std::array<uint8_t, 16> irk;  // 128 bit/16 octet IRK
+};
+
+typedef enum {
+  MSFT_CONDITION_TYPE_PATTERNS = 0x01,
+  MSFT_CONDITION_TYPE_UUID = 0x02,
+  MSFT_CONDITION_TYPE_IRK_RESOLUTION = 0x03,
+  MSFT_CONDITION_TYPE_ADDRESS = 0x04,
+} bt_msft_condition_type;
+
+enum MsftLeMonitorAdvConditionUuidType {
+  MSFT_CONDITION_UUID_TYPE_16_BIT = 0x01,
+  MSFT_CONDITION_UUID_TYPE_32_BIT = 0x02,
+  MSFT_CONDITION_UUID_TYPE_128_BIT = 0x03,
 };
 
 // MSFT scan filter pattern
@@ -117,13 +132,30 @@ struct MsftAdvMonitorPattern {
   std::vector<uint8_t> pattern;
 };
 
+struct MsftAdvMonitorAddress {
+  uint8_t addr_type;
+  RawAddress bd_addr;
+};
+
 // LE Scan filter defined by MSFT extension.
 struct MsftAdvMonitor {
   uint8_t rssi_threshold_high;
   uint8_t rssi_threshold_low;
   uint8_t rssi_threshold_low_time_interval;
   uint8_t rssi_sampling_period;
+  uint8_t condition_type;
   std::vector<MsftAdvMonitorPattern> patterns;
+  MsftAdvMonitorAddress addr_info;
 };
+
+#if __has_include(<bluetooth/log.h>)
+#include <bluetooth/log.h>
+
+namespace fmt {
+template <>
+struct formatter<bt_gatt_db_attribute_type_t>
+    : enum_formatter<bt_gatt_db_attribute_type_t> {};
+}  // namespace fmt
+#endif  // __has_include(<bluetooth/log.h>)
 
 #endif /* ANDROID_INCLUDE_BT_COMMON_TYPES_H */

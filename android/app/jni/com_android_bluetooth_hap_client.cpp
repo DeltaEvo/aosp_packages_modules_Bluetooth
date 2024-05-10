@@ -21,7 +21,6 @@
 
 #include <shared_mutex>
 
-#include "base/logging.h"
 #include "com_android_bluetooth.h"
 #include "hardware/bt_has.h"
 
@@ -73,7 +72,7 @@ class HasClientCallbacksImpl : public HasClientCallbacks {
 
   void OnConnectionState(ConnectionState state,
                          const RawAddress& bd_addr) override {
-    LOG(INFO) << __func__;
+    log::info("");
 
     std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
@@ -82,7 +81,7 @@ class HasClientCallbacksImpl : public HasClientCallbacks {
     ScopedLocalRef<jbyteArray> addr(
         sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
     if (!addr.get()) {
-      LOG(ERROR) << "Failed to new bd addr jbyteArray for connection state";
+      log::error("Failed to new bd addr jbyteArray for connection state");
       return;
     }
 
@@ -100,7 +99,7 @@ class HasClientCallbacksImpl : public HasClientCallbacks {
     ScopedLocalRef<jbyteArray> addr(
         sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
     if (!addr.get()) {
-      LOG(ERROR) << "Failed to new bd addr jbyteArray for device available";
+      log::error("Failed to new bd addr jbyteArray for device available");
       return;
     }
     sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
@@ -118,7 +117,7 @@ class HasClientCallbacksImpl : public HasClientCallbacks {
     ScopedLocalRef<jbyteArray> addr(
         sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
     if (!addr.get()) {
-      LOG(ERROR) << "Failed to new bd addr jbyteArray for device available";
+      log::error("Failed to new bd addr jbyteArray for device available");
       return;
     }
     sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
@@ -138,7 +137,7 @@ class HasClientCallbacksImpl : public HasClientCallbacks {
       ScopedLocalRef<jbyteArray> addr(
           sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
       if (!addr.get()) {
-        LOG(ERROR) << "Failed to new bd addr jbyteArray for preset selected";
+        log::error("Failed to new bd addr jbyteArray for preset selected");
         return;
       }
       sCallbackEnv->SetByteArrayRegion(
@@ -164,8 +163,7 @@ class HasClientCallbacksImpl : public HasClientCallbacks {
       ScopedLocalRef<jbyteArray> addr(
           sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
       if (!addr.get()) {
-        LOG(ERROR)
-            << "Failed to new bd addr jbyteArray for preset select error";
+        log::error("Failed to new bd addr jbyteArray for preset select error");
         return;
       }
       sCallbackEnv->SetByteArrayRegion(
@@ -198,14 +196,14 @@ class HasClientCallbacksImpl : public HasClientCallbacks {
     for (auto const& info : detail_records) {
       const char* name = info.preset_name.c_str();
       if (!sCallbackEnv.isValidUtf(name)) {
-        ALOGE("%s: name is not a valid UTF string.", __func__);
+        log::error("name is not a valid UTF string.");
         name = null_str;
       }
 
       ScopedLocalRef<jstring> name_str(sCallbackEnv.get(),
                                        sCallbackEnv->NewStringUTF(name));
       if (!name_str.get()) {
-        LOG(ERROR) << "Failed to new preset name String for preset name";
+        log::error("Failed to new preset name String for preset name");
         return;
       }
 
@@ -222,7 +220,7 @@ class HasClientCallbacksImpl : public HasClientCallbacks {
       ScopedLocalRef<jbyteArray> addr(
           sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
       if (!addr.get()) {
-        LOG(ERROR) << "Failed to new bd addr jbyteArray for preset name";
+        log::error("Failed to new bd addr jbyteArray for preset name");
         return;
       }
       sCallbackEnv->SetByteArrayRegion(
@@ -250,8 +248,8 @@ class HasClientCallbacksImpl : public HasClientCallbacks {
       ScopedLocalRef<jbyteArray> addr(
           sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
       if (!addr.get()) {
-        LOG(ERROR)
-            << "Failed to new bd addr jbyteArray for preset name get error";
+        log::error(
+            "Failed to new bd addr jbyteArray for preset name get error");
         return;
       }
       sCallbackEnv->SetByteArrayRegion(
@@ -279,8 +277,8 @@ class HasClientCallbacksImpl : public HasClientCallbacks {
       ScopedLocalRef<jbyteArray> addr(
           sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
       if (!addr.get()) {
-        LOG(ERROR)
-            << "Failed to new bd addr jbyteArray for preset name set error";
+        log::error(
+            "Failed to new bd addr jbyteArray for preset name set error");
         return;
       }
       sCallbackEnv->SetByteArrayRegion(
@@ -301,112 +299,59 @@ class HasClientCallbacksImpl : public HasClientCallbacks {
 
 static HasClientCallbacksImpl sHasClientCallbacks;
 
-static void classInitNative(JNIEnv* env, jclass clazz) {
-  jclass jniBluetoothBluetoothHapPresetInfoClass =
-      env->FindClass("android/bluetooth/BluetoothHapPresetInfo");
-  CHECK(jniBluetoothBluetoothHapPresetInfoClass != NULL);
-
-  android_bluetooth_BluetoothHapPresetInfo.constructor =
-      env->GetMethodID(jniBluetoothBluetoothHapPresetInfoClass, "<init>",
-                       "(ILjava/lang/String;ZZ)V");
-
-  method_onConnectionStateChanged =
-      env->GetMethodID(clazz, "onConnectionStateChanged", "(I[B)V");
-
-  method_onDeviceAvailable =
-      env->GetMethodID(clazz, "onDeviceAvailable", "([BI)V");
-
-  method_onFeaturesUpdate =
-      env->GetMethodID(clazz, "onFeaturesUpdate", "([BI)V");
-
-  method_onActivePresetSelected =
-      env->GetMethodID(clazz, "onActivePresetSelected", "([BI)V");
-
-  method_onGroupActivePresetSelected =
-      env->GetMethodID(clazz, "onActivePresetGroupSelected", "(II)V");
-
-  method_onActivePresetSelectError =
-      env->GetMethodID(clazz, "onActivePresetSelectError", "([BI)V");
-
-  method_onGroupActivePresetSelectError =
-      env->GetMethodID(clazz, "onActivePresetGroupSelectError", "(II)V");
-
-  method_onPresetInfo =
-      env->GetMethodID(clazz, "onPresetInfo",
-                       "([BI[Landroid/bluetooth/BluetoothHapPresetInfo;)V");
-
-  method_onGroupPresetInfo =
-      env->GetMethodID(clazz, "onGroupPresetInfo",
-                       "(II[Landroid/bluetooth/BluetoothHapPresetInfo;)V");
-
-  method_onPresetNameSetError =
-      env->GetMethodID(clazz, "onPresetNameSetError", "([BII)V");
-
-  method_onGroupPresetNameSetError =
-      env->GetMethodID(clazz, "onGroupPresetNameSetError", "(III)V");
-
-  method_onPresetInfoError =
-      env->GetMethodID(clazz, "onPresetInfoError", "([BII)V");
-
-  method_onGroupPresetInfoError =
-      env->GetMethodID(clazz, "onGroupPresetInfoError", "(III)V");
-
-  LOG(INFO) << __func__ << ": succeeds";
-}
-
 static void initNative(JNIEnv* env, jobject object) {
   std::unique_lock<std::shared_timed_mutex> interface_lock(interface_mutex);
   std::unique_lock<std::shared_timed_mutex> callbacks_lock(callbacks_mutex);
 
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == nullptr) {
-    LOG(ERROR) << "Bluetooth module is not loaded";
+    log::error("Bluetooth module is not loaded");
     return;
   }
 
   if (sHasClientInterface != nullptr) {
-    LOG(INFO) << "Cleaning up HearingAid Interface before initializing...";
+    log::info("Cleaning up HearingAid Interface before initializing...");
     sHasClientInterface->Cleanup();
     sHasClientInterface = nullptr;
   }
 
   if (mCallbacksObj != nullptr) {
-    LOG(INFO) << "Cleaning up HearingAid callback object";
+    log::info("Cleaning up HearingAid callback object");
     env->DeleteGlobalRef(mCallbacksObj);
     mCallbacksObj = nullptr;
   }
 
   if ((mCallbacksObj = env->NewGlobalRef(object)) == nullptr) {
-    LOG(ERROR) << "Failed to allocate Global Ref for Hearing Access Callbacks";
+    log::error("Failed to allocate Global Ref for Hearing Access Callbacks");
     return;
   }
 
   android_bluetooth_BluetoothHapPresetInfo.clazz = (jclass)env->NewGlobalRef(
       env->FindClass("android/bluetooth/BluetoothHapPresetInfo"));
   if (android_bluetooth_BluetoothHapPresetInfo.clazz == nullptr) {
-    ALOGE("%s: Failed to allocate Global Ref for BluetoothHapPresetInfo class",
-          __func__);
+    log::error(
+        "Failed to allocate Global Ref for BluetoothHapPresetInfo class");
     return;
   }
 
   sHasClientInterface = (HasClientInterface*)btInf->get_profile_interface(
       BT_PROFILE_HAP_CLIENT_ID);
   if (sHasClientInterface == nullptr) {
-    LOG(ERROR)
-        << "Failed to get Bluetooth Hearing Access Service Client Interface";
+    log::error(
+        "Failed to get Bluetooth Hearing Access Service Client Interface");
     return;
   }
 
   sHasClientInterface->Init(&sHasClientCallbacks);
 }
 
-static void cleanupNative(JNIEnv* env, jobject object) {
+static void cleanupNative(JNIEnv* env, jobject /* object */) {
   std::unique_lock<std::shared_timed_mutex> interface_lock(interface_mutex);
   std::unique_lock<std::shared_timed_mutex> callbacks_lock(callbacks_mutex);
 
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == nullptr) {
-    LOG(ERROR) << "Bluetooth module is not loaded";
+    log::error("Bluetooth module is not loaded");
     return;
   }
 
@@ -421,11 +366,11 @@ static void cleanupNative(JNIEnv* env, jobject object) {
   }
 }
 
-static jboolean connectHapClientNative(JNIEnv* env, jobject object,
+static jboolean connectHapClientNative(JNIEnv* env, jobject /* object */,
                                        jbyteArray address) {
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   if (!sHasClientInterface) {
-    LOG(ERROR) << __func__ << ": Failed to get the Bluetooth HAP Interface";
+    log::error("Failed to get the Bluetooth HAP Interface");
     return JNI_FALSE;
   }
 
@@ -441,11 +386,11 @@ static jboolean connectHapClientNative(JNIEnv* env, jobject object,
   return JNI_TRUE;
 }
 
-static jboolean disconnectHapClientNative(JNIEnv* env, jobject object,
+static jboolean disconnectHapClientNative(JNIEnv* env, jobject /* object */,
                                           jbyteArray address) {
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   if (!sHasClientInterface) {
-    LOG(ERROR) << __func__ << ": Failed to get the Bluetooth HAP Interface";
+    log::error("Failed to get the Bluetooth HAP Interface");
     return JNI_FALSE;
   }
 
@@ -461,11 +406,11 @@ static jboolean disconnectHapClientNative(JNIEnv* env, jobject object,
   return JNI_TRUE;
 }
 
-static void selectActivePresetNative(JNIEnv* env, jobject object,
+static void selectActivePresetNative(JNIEnv* env, jobject /* object */,
                                      jbyteArray address, jint preset_index) {
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   if (!sHasClientInterface) {
-    LOG(ERROR) << __func__ << ": Failed to get the Bluetooth HAP Interface";
+    log::error("Failed to get the Bluetooth HAP Interface");
     return;
   }
 
@@ -480,22 +425,23 @@ static void selectActivePresetNative(JNIEnv* env, jobject object,
   env->ReleaseByteArrayElements(address, addr, 0);
 }
 
-static void groupSelectActivePresetNative(JNIEnv* env, jobject object,
-                                          jint group_id, jint preset_index) {
+static void groupSelectActivePresetNative(JNIEnv* /* env */,
+                                          jobject /* object */, jint group_id,
+                                          jint preset_index) {
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   if (!sHasClientInterface) {
-    LOG(ERROR) << __func__ << ": Failed to get the Bluetooth HAP Interface";
+    log::error("Failed to get the Bluetooth HAP Interface");
     return;
   }
 
   sHasClientInterface->SelectActivePreset(group_id, preset_index);
 }
 
-static void nextActivePresetNative(JNIEnv* env, jobject object,
+static void nextActivePresetNative(JNIEnv* env, jobject /* object */,
                                    jbyteArray address) {
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   if (!sHasClientInterface) {
-    LOG(ERROR) << __func__ << ": Failed to get the Bluetooth HAP Interface";
+    log::error("Failed to get the Bluetooth HAP Interface");
     return;
   }
 
@@ -510,22 +456,22 @@ static void nextActivePresetNative(JNIEnv* env, jobject object,
   env->ReleaseByteArrayElements(address, addr, 0);
 }
 
-static void groupNextActivePresetNative(JNIEnv* env, jobject object,
+static void groupNextActivePresetNative(JNIEnv* /* env */, jobject /* object */,
                                         jint group_id) {
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   if (!sHasClientInterface) {
-    LOG(ERROR) << __func__ << ": Failed to get the Bluetooth HAP Interface";
+    log::error("Failed to get the Bluetooth HAP Interface");
     return;
   }
 
   sHasClientInterface->NextActivePreset(group_id);
 }
 
-static void previousActivePresetNative(JNIEnv* env, jobject object,
+static void previousActivePresetNative(JNIEnv* env, jobject /* object */,
                                        jbyteArray address) {
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   if (!sHasClientInterface) {
-    LOG(ERROR) << __func__ << ": Failed to get the Bluetooth HAP Interface";
+    log::error("Failed to get the Bluetooth HAP Interface");
     return;
   }
 
@@ -540,22 +486,23 @@ static void previousActivePresetNative(JNIEnv* env, jobject object,
   env->ReleaseByteArrayElements(address, addr, 0);
 }
 
-static void groupPreviousActivePresetNative(JNIEnv* env, jobject object,
+static void groupPreviousActivePresetNative(JNIEnv* /* env */,
+                                            jobject /* object */,
                                             jint group_id) {
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   if (!sHasClientInterface) {
-    LOG(ERROR) << __func__ << ": Failed to get the Bluetooth HAP Interface";
+    log::error("Failed to get the Bluetooth HAP Interface");
     return;
   }
 
   sHasClientInterface->PreviousActivePreset(group_id);
 }
 
-static void getPresetInfoNative(JNIEnv* env, jobject object, jbyteArray address,
-                                jint preset_index) {
+static void getPresetInfoNative(JNIEnv* env, jobject /* object */,
+                                jbyteArray address, jint preset_index) {
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   if (!sHasClientInterface) {
-    LOG(ERROR) << __func__ << ": Failed to get the Bluetooth HAP Interface";
+    log::error("Failed to get the Bluetooth HAP Interface");
     return;
   }
 
@@ -570,11 +517,12 @@ static void getPresetInfoNative(JNIEnv* env, jobject object, jbyteArray address,
   env->ReleaseByteArrayElements(address, addr, 0);
 }
 
-static void setPresetNameNative(JNIEnv* env, jobject object, jbyteArray address,
-                                jint preset_index, jstring name) {
+static void setPresetNameNative(JNIEnv* env, jobject /* object */,
+                                jbyteArray address, jint preset_index,
+                                jstring name) {
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   if (!sHasClientInterface) {
-    LOG(ERROR) << __func__ << ": Failed to get the Bluetooth HAP Interface";
+    log::error("Failed to get the Bluetooth HAP Interface");
     return;
   }
 
@@ -597,11 +545,12 @@ static void setPresetNameNative(JNIEnv* env, jobject object, jbyteArray address,
   env->ReleaseByteArrayElements(address, addr, 0);
 }
 
-static void groupSetPresetNameNative(JNIEnv* env, jobject object, jint group_id,
-                                     jint preset_index, jstring name) {
+static void groupSetPresetNameNative(JNIEnv* env, jobject /* object */,
+                                     jint group_id, jint preset_index,
+                                     jstring name) {
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   if (!sHasClientInterface) {
-    LOG(ERROR) << __func__ << ": Failed to get the Bluetooth HAP Interface";
+    log::error("Failed to get the Bluetooth HAP Interface");
     return;
   }
 
@@ -616,30 +565,65 @@ static void groupSetPresetNameNative(JNIEnv* env, jobject object, jint group_id,
                                      std::move(name_str));
 }
 
-static JNINativeMethod sMethods[] = {
-    {"classInitNative", "()V", (void*)classInitNative},
-    {"initNative", "()V", (void*)initNative},
-    {"cleanupNative", "()V", (void*)cleanupNative},
-    {"connectHapClientNative", "([B)Z", (void*)connectHapClientNative},
-    {"disconnectHapClientNative", "([B)Z", (void*)disconnectHapClientNative},
-    {"selectActivePresetNative", "([BI)V", (void*)selectActivePresetNative},
-    {"groupSelectActivePresetNative", "(II)V",
-     (void*)groupSelectActivePresetNative},
-    {"nextActivePresetNative", "([B)V", (void*)nextActivePresetNative},
-    {"groupNextActivePresetNative", "(I)V", (void*)groupNextActivePresetNative},
-    {"previousActivePresetNative", "([B)V", (void*)previousActivePresetNative},
-    {"groupPreviousActivePresetNative", "(I)V",
-     (void*)groupPreviousActivePresetNative},
-    {"getPresetInfoNative", "([BI)V", (void*)getPresetInfoNative},
-    {"setPresetNameNative", "([BILjava/lang/String;)V",
-     (void*)setPresetNameNative},
-    {"groupSetPresetNameNative", "(IILjava/lang/String;)V",
-     (void*)groupSetPresetNameNative},
-};
-
 int register_com_android_bluetooth_hap_client(JNIEnv* env) {
-  return jniRegisterNativeMethods(
-      env, "com/android/bluetooth/hap/HapClientNativeInterface", sMethods,
-      NELEM(sMethods));
+  const JNINativeMethod methods[] = {
+      {"initNative", "()V", (void*)initNative},
+      {"cleanupNative", "()V", (void*)cleanupNative},
+      {"connectHapClientNative", "([B)Z", (void*)connectHapClientNative},
+      {"disconnectHapClientNative", "([B)Z", (void*)disconnectHapClientNative},
+      {"selectActivePresetNative", "([BI)V", (void*)selectActivePresetNative},
+      {"groupSelectActivePresetNative", "(II)V",
+       (void*)groupSelectActivePresetNative},
+      {"nextActivePresetNative", "([B)V", (void*)nextActivePresetNative},
+      {"groupNextActivePresetNative", "(I)V",
+       (void*)groupNextActivePresetNative},
+      {"previousActivePresetNative", "([B)V",
+       (void*)previousActivePresetNative},
+      {"groupPreviousActivePresetNative", "(I)V",
+       (void*)groupPreviousActivePresetNative},
+      {"getPresetInfoNative", "([BI)V", (void*)getPresetInfoNative},
+      {"setPresetNameNative", "([BILjava/lang/String;)V",
+       (void*)setPresetNameNative},
+      {"groupSetPresetNameNative", "(IILjava/lang/String;)V",
+       (void*)groupSetPresetNameNative},
+  };
+  const int result = REGISTER_NATIVE_METHODS(
+      env, "com/android/bluetooth/hap/HapClientNativeInterface", methods);
+  if (result != 0) {
+    return result;
+  }
+
+  const JNIJavaMethod javaMethods[] = {
+      {"onConnectionStateChanged", "(I[B)V", &method_onConnectionStateChanged},
+      {"onDeviceAvailable", "([BI)V", &method_onDeviceAvailable},
+      {"onFeaturesUpdate", "([BI)V", &method_onFeaturesUpdate},
+      {"onActivePresetSelected", "([BI)V", &method_onActivePresetSelected},
+      {"onActivePresetGroupSelected", "(II)V",
+       &method_onGroupActivePresetSelected},
+      {"onActivePresetSelectError", "([BI)V",
+       &method_onActivePresetSelectError},
+      {"onActivePresetGroupSelectError", "(II)V",
+       &method_onGroupActivePresetSelectError},
+      {"onPresetInfo", "([BI[Landroid/bluetooth/BluetoothHapPresetInfo;)V",
+       &method_onPresetInfo},
+      {"onGroupPresetInfo", "(II[Landroid/bluetooth/BluetoothHapPresetInfo;)V",
+       &method_onGroupPresetInfo},
+      {"onPresetNameSetError", "([BII)V", &method_onPresetNameSetError},
+      {"onGroupPresetNameSetError", "(III)V",
+       &method_onGroupPresetNameSetError},
+      {"onPresetInfoError", "([BII)V", &method_onPresetInfoError},
+      {"onGroupPresetInfoError", "(III)V", &method_onGroupPresetInfoError},
+  };
+  GET_JAVA_METHODS(env, "com/android/bluetooth/hap/HapClientNativeInterface",
+                   javaMethods);
+
+  const JNIJavaMethod javaHapPresetMethods[] = {
+      {"<init>", "(ILjava/lang/String;ZZ)V",
+       &android_bluetooth_BluetoothHapPresetInfo.constructor},
+  };
+  GET_JAVA_METHODS(env, "android/bluetooth/BluetoothHapPresetInfo",
+                   javaHapPresetMethods);
+
+  return 0;
 }
 }  // namespace android

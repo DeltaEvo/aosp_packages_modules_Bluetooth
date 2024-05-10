@@ -20,8 +20,8 @@
 
 #include <vector>
 
-#include "bt_target.h"
 #include "device/include/esco_parameters.h"
+#include "internal_include/bt_target.h"
 #include "raw_address.h"
 
 // Used by the Bluetooth stack to get WBS supported and codec, or notify SCO
@@ -33,6 +33,7 @@ enum codec : uint64_t {
   CVSD = 1 << 0,
   MSBC_TRANSPARENT = 1 << 1,
   MSBC = 1 << 2,
+  LC3 = 1 << 3,
 };
 
 struct bt_codec {
@@ -47,7 +48,7 @@ struct bt_codecs {
 };
 
 // Use default packet size for codec if this value is given.
-constexpr int kDefaultPacketSize = 0;
+constexpr size_t kDefaultPacketSize = 0;
 
 constexpr inline int esco_coding_to_codec(esco_coding_format_t esco_coding) {
   switch (esco_coding) {
@@ -55,6 +56,8 @@ constexpr inline int esco_coding_to_codec(esco_coding_format_t esco_coding) {
       return codec::MSBC_TRANSPARENT;
     case ESCO_CODING_FORMAT_MSBC:
       return codec::MSBC;
+    case ESCO_CODING_FORMAT_LC3:
+      return codec::LC3;
 
     // Default to CVSD encoding if unknown format.
     case ESCO_CODING_FORMAT_CVSD:
@@ -66,8 +69,14 @@ constexpr inline int esco_coding_to_codec(esco_coding_format_t esco_coding) {
 // Initialize the SCO HFP HAL module
 void init();
 
+// Check if specified coding format is supported by the adapter.
+bool is_coding_format_supported(esco_coding_format_t coding_format);
+
 // Check if wideband speech is supported on local device.
 bool get_wbs_supported();
+
+// Check if super wideband speech is supported on local device.
+bool get_swb_supported();
 
 // Checks the details of the codecs (specified as a bitmask of enum codec).
 bt_codecs get_codec_capabilities(uint64_t codecs);
@@ -82,10 +91,10 @@ bool get_offload_enabled();
 bool enable_offload(bool enable);
 
 // Notify the codec datapath to lower layer for offload mode.
-void set_codec_datapath(esco_coding_format_t coding_format);
+void set_codec_datapath(int codec_uuid);
 
 // Get the maximum supported packet size from the lower layer.
-int get_packet_size(int codec);
+size_t get_packet_size(int codec);
 
 // Notify the lower layer about SCO connection change.
 void notify_sco_connection_change(RawAddress device, bool is_connected,

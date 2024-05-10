@@ -16,7 +16,13 @@
 
 #pragma once
 
+#ifdef TARGET_FLOSS
+#include <audio_hal_interface/audio_linux.h>
+#else
 #include <hardware/audio.h>
+#endif
+
+#include <com_android_bluetooth_flags.h>
 
 #include <functional>
 
@@ -27,6 +33,9 @@
 namespace bluetooth {
 namespace audio {
 namespace le_audio {
+
+using ::bluetooth::le_audio::DsaMode;
+using ::bluetooth::le_audio::DsaModes;
 
 enum class StartRequestState {
   IDLE = 0x00,
@@ -53,12 +62,18 @@ constexpr uint8_t kBitsPerSample32 = 32;
 struct StreamCallbacks {
   std::function<bool(bool start_media_task)> on_resume_;
   std::function<bool(void)> on_suspend_;
-  std::function<bool(const source_metadata_t&)> on_metadata_update_;
-  std::function<bool(const sink_metadata_t&)> on_sink_metadata_update_;
+  std::function<bool(const source_metadata_v7_t&, DsaMode)> on_metadata_update_;
+  std::function<bool(const sink_metadata_v7_t&)> on_sink_metadata_update_;
 };
 
-std::vector<::le_audio::set_configurations::AudioSetConfiguration>
-get_offload_capabilities();
+struct OffloadCapabilities {
+  std::vector<bluetooth::le_audio::set_configurations::AudioSetConfiguration>
+      unicast_offload_capabilities;
+  std::vector<bluetooth::le_audio::set_configurations::AudioSetConfiguration>
+      broadcast_offload_capabilities;
+};
+
+OffloadCapabilities get_offload_capabilities();
 
 class LeAudioClientInterface {
  public:
@@ -80,8 +95,10 @@ class LeAudioClientInterface {
     virtual void StopSession() = 0;
     virtual void ConfirmStreamingRequest() = 0;
     virtual void CancelStreamingRequest() = 0;
+    virtual void ConfirmStreamingRequestV2() = 0;
+    virtual void CancelStreamingRequestV2() = 0;
     virtual void UpdateAudioConfigToHal(
-        const ::le_audio::offload_config& config) = 0;
+        const ::bluetooth::le_audio::offload_config& config) = 0;
     virtual void SuspendedForReconfiguration() = 0;
     virtual void ReconfigurationComplete() = 0;
   };
@@ -99,10 +116,12 @@ class LeAudioClientInterface {
     void StopSession() override;
     void ConfirmStreamingRequest() override;
     void CancelStreamingRequest() override;
+    void ConfirmStreamingRequestV2() override;
+    void CancelStreamingRequestV2() override;
     void UpdateAudioConfigToHal(
-        const ::le_audio::offload_config& config) override;
+        const ::bluetooth::le_audio::offload_config& config) override;
     void UpdateBroadcastAudioConfigToHal(
-        const ::le_audio::broadcast_offload_config& config);
+        const ::bluetooth::le_audio::broadcast_offload_config& config);
     void SuspendedForReconfiguration() override;
     void ReconfigurationComplete() override;
     // Read the stream of bytes sinked to us by the upper layers
@@ -123,8 +142,10 @@ class LeAudioClientInterface {
     void StopSession() override;
     void ConfirmStreamingRequest() override;
     void CancelStreamingRequest() override;
+    void ConfirmStreamingRequestV2() override;
+    void CancelStreamingRequestV2() override;
     void UpdateAudioConfigToHal(
-        const ::le_audio::offload_config& config) override;
+        const ::bluetooth::le_audio::offload_config& config) override;
     void SuspendedForReconfiguration() override;
     void ReconfigurationComplete() override;
     // Source the given stream of bytes to be sinked into the upper layers
@@ -152,7 +173,11 @@ class LeAudioClientInterface {
   // Release source interface if belongs to LE audio client interface
   bool ReleaseSource(Source* source);
 
-  // Get interface, if previously not initialized - it'll initialize singleton.
+  // Sets Dynamic Spatial Audio modes supported by the remote device
+  void SetAllowedDsaModes(DsaModes dsa_modes);
+
+  // Get interface, if previously not initialized - it'll initialize
+  // singleton.
   static LeAudioClientInterface* Get();
 
  private:

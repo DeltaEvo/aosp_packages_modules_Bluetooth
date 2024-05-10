@@ -27,15 +27,21 @@
 
 using bluetooth::le_audio::BroadcastId;
 using bluetooth::le_audio::BroadcastState;
+using bluetooth::le_audio::btle_audio_bits_per_sample_index_t;
+using bluetooth::le_audio::btle_audio_channel_count_index_t;
 using bluetooth::le_audio::btle_audio_codec_config_t;
 using bluetooth::le_audio::btle_audio_codec_index_t;
+using bluetooth::le_audio::btle_audio_frame_duration_index_t;
+using bluetooth::le_audio::btle_audio_sample_rate_index_t;
 using bluetooth::le_audio::ConnectionState;
 using bluetooth::le_audio::GroupNodeStatus;
 using bluetooth::le_audio::GroupStatus;
+using bluetooth::le_audio::GroupStreamStatus;
 using bluetooth::le_audio::LeAudioBroadcasterCallbacks;
 using bluetooth::le_audio::LeAudioBroadcasterInterface;
 using bluetooth::le_audio::LeAudioClientCallbacks;
 using bluetooth::le_audio::LeAudioClientInterface;
+using bluetooth::le_audio::UnicastMonitorModeStatus;
 
 namespace android {
 static jmethodID method_onInitialized;
@@ -45,12 +51,23 @@ static jmethodID method_onGroupNodeStatus;
 static jmethodID method_onAudioConf;
 static jmethodID method_onSinkAudioLocationAvailable;
 static jmethodID method_onAudioLocalCodecCapabilities;
-static jmethodID method_onAudioGroupCodecConf;
+static jmethodID method_onAudioGroupCurrentCodecConf;
+static jmethodID method_onAudioGroupSelectableCodecConf;
+static jmethodID method_onHealthBasedRecommendationAction;
+static jmethodID method_onHealthBasedGroupRecommendationAction;
+static jmethodID method_onUnicastMonitorModeStatus;
+static jmethodID method_onGroupStreamStatus;
 
 static struct {
   jclass clazz;
   jmethodID constructor;
   jmethodID getCodecType;
+  jmethodID getSampleRate;
+  jmethodID getBitsPerSample;
+  jmethodID getChannelCount;
+  jmethodID getFrameDuration;
+  jmethodID getOctetsPerFrame;
+  jmethodID getCodecPriority;
 } android_bluetooth_BluetoothLeAudioCodecConfig;
 
 static struct {
@@ -97,10 +114,21 @@ static std::shared_timed_mutex callbacks_mutex;
 
 jobject prepareCodecConfigObj(JNIEnv* env,
                               btle_audio_codec_config_t codecConfig) {
-  jobject codecConfigObj =
-      env->NewObject(android_bluetooth_BluetoothLeAudioCodecConfig.clazz,
-                     android_bluetooth_BluetoothLeAudioCodecConfig.constructor,
-                     (jint)codecConfig.codec_type, 0, 0, 0, 0, 0, 0, 0, 0);
+  log::info(
+      "ct: {}, codec_priority: {}, sample_rate: {}, bits_per_sample: {}, "
+      "channel_count: {}, frame_duration: {}, octets_per_frame: {}",
+      codecConfig.codec_type, codecConfig.codec_priority,
+      codecConfig.sample_rate, codecConfig.bits_per_sample,
+      codecConfig.channel_count, codecConfig.frame_duration,
+      codecConfig.octets_per_frame);
+
+  jobject codecConfigObj = env->NewObject(
+      android_bluetooth_BluetoothLeAudioCodecConfig.clazz,
+      android_bluetooth_BluetoothLeAudioCodecConfig.constructor,
+      (jint)codecConfig.codec_type, (jint)codecConfig.codec_priority,
+      (jint)codecConfig.sample_rate, (jint)codecConfig.bits_per_sample,
+      (jint)codecConfig.channel_count, (jint)codecConfig.frame_duration,
+      (jint)codecConfig.octets_per_frame, 0, 0);
   return codecConfigObj;
 }
 
@@ -126,7 +154,7 @@ class LeAudioClientCallbacksImpl : public LeAudioClientCallbacks {
   ~LeAudioClientCallbacksImpl() = default;
 
   void OnInitialized(void) override {
-    LOG(INFO) << __func__;
+    log::info("");
     std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
     if (!sCallbackEnv.valid() || mCallbacksObj == nullptr) return;
@@ -135,7 +163,8 @@ class LeAudioClientCallbacksImpl : public LeAudioClientCallbacks {
 
   void OnConnectionState(ConnectionState state,
                          const RawAddress& bd_addr) override {
-    LOG(INFO) << __func__ << ", state:" << int(state);
+    log::info("state:{}, addr: {}", int(state),
+              bd_addr.ToRedactedStringForLogging());
 
     std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
@@ -144,7 +173,7 @@ class LeAudioClientCallbacksImpl : public LeAudioClientCallbacks {
     ScopedLocalRef<jbyteArray> addr(
         sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
     if (!addr.get()) {
-      LOG(ERROR) << "Failed to new jbyteArray bd addr for connection state";
+      log::error("Failed to new jbyteArray bd addr for connection state");
       return;
     }
 
@@ -155,7 +184,7 @@ class LeAudioClientCallbacksImpl : public LeAudioClientCallbacks {
   }
 
   void OnGroupStatus(int group_id, GroupStatus group_status) override {
-    LOG(INFO) << __func__;
+    log::info("");
 
     std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
@@ -167,7 +196,7 @@ class LeAudioClientCallbacksImpl : public LeAudioClientCallbacks {
 
   void OnGroupNodeStatus(const RawAddress& bd_addr, int group_id,
                          GroupNodeStatus node_status) override {
-    LOG(INFO) << __func__;
+    log::info("");
 
     std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
@@ -176,7 +205,7 @@ class LeAudioClientCallbacksImpl : public LeAudioClientCallbacks {
     ScopedLocalRef<jbyteArray> addr(
         sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
     if (!addr.get()) {
-      LOG(ERROR) << "Failed to new jbyteArray bd addr for group status";
+      log::error("Failed to new jbyteArray bd addr for group status");
       return;
     }
 
@@ -189,7 +218,7 @@ class LeAudioClientCallbacksImpl : public LeAudioClientCallbacks {
   void OnAudioConf(uint8_t direction, int group_id,
                    uint32_t sink_audio_location, uint32_t source_audio_location,
                    uint16_t avail_cont) override {
-    LOG(INFO) << __func__;
+    log::info("");
 
     std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
@@ -203,7 +232,7 @@ class LeAudioClientCallbacksImpl : public LeAudioClientCallbacks {
 
   void OnSinkAudioLocationAvailable(const RawAddress& bd_addr,
                                     uint32_t sink_audio_location) override {
-    LOG(INFO) << __func__;
+    log::info("");
 
     std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
@@ -212,7 +241,7 @@ class LeAudioClientCallbacksImpl : public LeAudioClientCallbacks {
     ScopedLocalRef<jbyteArray> addr(
         sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
     if (!addr.get()) {
-      LOG(ERROR) << "Failed to new jbyteArray bd addr for group status";
+      log::error("Failed to new jbyteArray bd addr for group status");
       return;
     }
 
@@ -227,7 +256,7 @@ class LeAudioClientCallbacksImpl : public LeAudioClientCallbacks {
       std::vector<btle_audio_codec_config_t> local_input_capa_codec_conf,
       std::vector<btle_audio_codec_config_t> local_output_capa_codec_conf)
       override {
-    LOG(INFO) << __func__;
+    log::info("");
 
     std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
@@ -244,13 +273,10 @@ class LeAudioClientCallbacksImpl : public LeAudioClientCallbacks {
         localInputCapCodecConfigArray, localOutputCapCodecConfigArray);
   }
 
-  void OnAudioGroupCodecConf(
+  void OnAudioGroupCurrentCodecConf(
       int group_id, btle_audio_codec_config_t input_codec_conf,
-      btle_audio_codec_config_t output_codec_conf,
-      std::vector<btle_audio_codec_config_t> input_selectable_codec_conf,
-      std::vector<btle_audio_codec_config_t> output_selectable_codec_conf)
-      override {
-    LOG(INFO) << __func__;
+      btle_audio_codec_config_t output_codec_conf) override {
+    log::info("");
 
     std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
@@ -259,52 +285,101 @@ class LeAudioClientCallbacksImpl : public LeAudioClientCallbacks {
     jobject inputCodecConfigObj =
         prepareCodecConfigObj(sCallbackEnv.get(), input_codec_conf);
     jobject outputCodecConfigObj =
-        prepareCodecConfigObj(sCallbackEnv.get(), input_codec_conf);
+        prepareCodecConfigObj(sCallbackEnv.get(), output_codec_conf);
+
+    sCallbackEnv->CallVoidMethod(
+        mCallbacksObj, method_onAudioGroupCurrentCodecConf, (jint)group_id,
+        inputCodecConfigObj, outputCodecConfigObj);
+  }
+
+  void OnAudioGroupSelectableCodecConf(
+      int group_id,
+      std::vector<btle_audio_codec_config_t> input_selectable_codec_conf,
+      std::vector<btle_audio_codec_config_t> output_selectable_codec_conf)
+      override {
+    log::info("");
+
+    std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
+    CallbackEnv sCallbackEnv(__func__);
+    if (!sCallbackEnv.valid() || mCallbacksObj == nullptr) return;
+
     jobject inputSelectableCodecConfigArray = prepareArrayOfCodecConfigs(
         sCallbackEnv.get(), input_selectable_codec_conf);
     jobject outputSelectableCodecConfigArray = prepareArrayOfCodecConfigs(
         sCallbackEnv.get(), output_selectable_codec_conf);
 
     sCallbackEnv->CallVoidMethod(
-        mCallbacksObj, method_onAudioGroupCodecConf, (jint)group_id,
-        inputCodecConfigObj, outputCodecConfigObj,
+        mCallbacksObj, method_onAudioGroupSelectableCodecConf, (jint)group_id,
         inputSelectableCodecConfigArray, outputSelectableCodecConfigArray);
+  }
+
+  void OnHealthBasedRecommendationAction(
+      const RawAddress& bd_addr,
+      bluetooth::le_audio::LeAudioHealthBasedAction action) override {
+    log::info("");
+
+    std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
+    CallbackEnv sCallbackEnv(__func__);
+    if (!sCallbackEnv.valid() || mCallbacksObj == nullptr) return;
+
+    ScopedLocalRef<jbyteArray> addr(
+        sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
+    if (!addr.get()) {
+      log::error("Failed to new jbyteArray bd addr for group status");
+      return;
+    }
+
+    sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
+                                     (jbyte*)&bd_addr);
+    sCallbackEnv->CallVoidMethod(mCallbacksObj,
+                                 method_onHealthBasedRecommendationAction,
+                                 addr.get(), (jint)action);
+  }
+
+  void OnHealthBasedGroupRecommendationAction(
+      int group_id,
+      bluetooth::le_audio::LeAudioHealthBasedAction action) override {
+    log::info("");
+
+    std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
+    CallbackEnv sCallbackEnv(__func__);
+    if (!sCallbackEnv.valid() || mCallbacksObj == nullptr) return;
+
+    sCallbackEnv->CallVoidMethod(mCallbacksObj,
+                                 method_onHealthBasedGroupRecommendationAction,
+                                 (jint)group_id, (jint)action);
+  }
+
+  void OnUnicastMonitorModeStatus(uint8_t direction,
+                                  UnicastMonitorModeStatus status) override {
+    log::info("");
+
+    std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
+    CallbackEnv sCallbackEnv(__func__);
+    if (!sCallbackEnv.valid() || mCallbacksObj == nullptr) return;
+
+    sCallbackEnv->CallVoidMethod(mCallbacksObj,
+                                 method_onUnicastMonitorModeStatus,
+                                 (jint)direction, (jint)status);
+  }
+
+  void OnGroupStreamStatus(int group_id,
+                           GroupStreamStatus group_stream_status) override {
+    log::info("");
+
+    std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
+    CallbackEnv sCallbackEnv(__func__);
+    if (!sCallbackEnv.valid() || mCallbacksObj == nullptr) return;
+
+    sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onGroupStreamStatus,
+                                 (jint)group_id, (jint)group_stream_status);
   }
 };
 
 static LeAudioClientCallbacksImpl sLeAudioClientCallbacks;
 
-static void classInitNative(JNIEnv* env, jclass clazz) {
-  jclass jniBluetoothLeAudioCodecConfigClass =
-      env->FindClass("android/bluetooth/BluetoothLeAudioCodecConfig");
-  android_bluetooth_BluetoothLeAudioCodecConfig.constructor = env->GetMethodID(
-      jniBluetoothLeAudioCodecConfigClass, "<init>", "(IIIIIIIII)V");
-  android_bluetooth_BluetoothLeAudioCodecConfig.getCodecType = env->GetMethodID(
-      jniBluetoothLeAudioCodecConfigClass, "getCodecType", "()I");
-
-  method_onGroupStatus = env->GetMethodID(clazz, "onGroupStatus", "(II)V");
-  method_onGroupNodeStatus =
-      env->GetMethodID(clazz, "onGroupNodeStatus", "([BII)V");
-  method_onAudioConf = env->GetMethodID(clazz, "onAudioConf", "(IIIII)V");
-  method_onSinkAudioLocationAvailable =
-      env->GetMethodID(clazz, "onSinkAudioLocationAvailable", "([BI)V");
-  method_onInitialized = env->GetMethodID(clazz, "onInitialized", "()V");
-  method_onConnectionStateChanged =
-      env->GetMethodID(clazz, "onConnectionStateChanged", "(I[B)V");
-  method_onAudioLocalCodecCapabilities =
-      env->GetMethodID(clazz, "onAudioLocalCodecCapabilities",
-                       "([Landroid/bluetooth/BluetoothLeAudioCodecConfig;"
-                       "[Landroid/bluetooth/BluetoothLeAudioCodecConfig;)V");
-  method_onAudioGroupCodecConf =
-      env->GetMethodID(clazz, "onAudioGroupCodecConf",
-                       "(ILandroid/bluetooth/BluetoothLeAudioCodecConfig;"
-                       "Landroid/bluetooth/BluetoothLeAudioCodecConfig;"
-                       "[Landroid/bluetooth/BluetoothLeAudioCodecConfig;"
-                       "[Landroid/bluetooth/BluetoothLeAudioCodecConfig;)V");
-}
-
 std::vector<btle_audio_codec_config_t> prepareCodecPreferences(
-    JNIEnv* env, jobject object, jobjectArray codecConfigArray) {
+    JNIEnv* env, jobject /* object */, jobjectArray codecConfigArray) {
   std::vector<btle_audio_codec_config_t> codec_preferences;
 
   int numConfigs = env->GetArrayLength(codecConfigArray);
@@ -314,7 +389,7 @@ std::vector<btle_audio_codec_config_t> prepareCodecPreferences(
     if (!env->IsInstanceOf(
             jcodecConfig,
             android_bluetooth_BluetoothLeAudioCodecConfig.clazz)) {
-      ALOGE("%s: Invalid BluetoothLeAudioCodecConfig instance", __func__);
+      log::error("Invalid BluetoothLeAudioCodecConfig instance");
       continue;
     }
     jint codecType = env->CallIntMethod(
@@ -336,18 +411,18 @@ static void initNative(JNIEnv* env, jobject object,
 
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == nullptr) {
-    LOG(ERROR) << "Bluetooth module is not loaded";
+    log::error("Bluetooth module is not loaded");
     return;
   }
 
   if (mCallbacksObj != nullptr) {
-    LOG(INFO) << "Cleaning up LeAudio callback object";
+    log::info("Cleaning up LeAudio callback object");
     env->DeleteGlobalRef(mCallbacksObj);
     mCallbacksObj = nullptr;
   }
 
   if ((mCallbacksObj = env->NewGlobalRef(object)) == nullptr) {
-    LOG(ERROR) << "Failed to allocate Global Ref for LeAudio Callbacks";
+    log::error("Failed to allocate Global Ref for LeAudio Callbacks");
     return;
   }
 
@@ -355,8 +430,8 @@ static void initNative(JNIEnv* env, jobject object,
       (jclass)env->NewGlobalRef(
           env->FindClass("android/bluetooth/BluetoothLeAudioCodecConfig"));
   if (android_bluetooth_BluetoothLeAudioCodecConfig.clazz == nullptr) {
-    LOG(ERROR) << "Failed to allocate Global Ref for "
-                  "BluetoothLeAudioCodecConfig class";
+    log::error(
+        "Failed to allocate Global Ref for BluetoothLeAudioCodecConfig class");
     return;
   }
 
@@ -364,7 +439,7 @@ static void initNative(JNIEnv* env, jobject object,
       (LeAudioClientInterface*)btInf->get_profile_interface(
           BT_PROFILE_LE_AUDIO_ID);
   if (sLeAudioClientInterface == nullptr) {
-    LOG(ERROR) << "Failed to get Bluetooth LeAudio Interface";
+    log::error("Failed to get Bluetooth LeAudio Interface");
     return;
   }
 
@@ -375,13 +450,13 @@ static void initNative(JNIEnv* env, jobject object,
                                       codec_offloading);
 }
 
-static void cleanupNative(JNIEnv* env, jobject object) {
+static void cleanupNative(JNIEnv* env, jobject /* object */) {
   std::unique_lock<std::shared_timed_mutex> interface_lock(interface_mutex);
   std::unique_lock<std::shared_timed_mutex> callbacks_lock(callbacks_mutex);
 
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == nullptr) {
-    LOG(ERROR) << "Bluetooth module is not loaded";
+    log::error("Bluetooth module is not loaded");
     return;
   }
 
@@ -399,9 +474,9 @@ static void cleanupNative(JNIEnv* env, jobject object) {
   }
 }
 
-static jboolean connectLeAudioNative(JNIEnv* env, jobject object,
+static jboolean connectLeAudioNative(JNIEnv* env, jobject /* object */,
                                      jbyteArray address) {
-  LOG(INFO) << __func__;
+  log::info("");
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   if (!sLeAudioClientInterface) return JNI_FALSE;
 
@@ -417,9 +492,9 @@ static jboolean connectLeAudioNative(JNIEnv* env, jobject object,
   return JNI_TRUE;
 }
 
-static jboolean disconnectLeAudioNative(JNIEnv* env, jobject object,
+static jboolean disconnectLeAudioNative(JNIEnv* env, jobject /* object */,
                                         jbyteArray address) {
-  LOG(INFO) << __func__;
+  log::info("");
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   if (!sLeAudioClientInterface) return JNI_FALSE;
 
@@ -435,13 +510,34 @@ static jboolean disconnectLeAudioNative(JNIEnv* env, jobject object,
   return JNI_TRUE;
 }
 
-static jboolean groupAddNodeNative(JNIEnv* env, jobject object, jint group_id,
-                                   jbyteArray address) {
+static jboolean setEnableStateNative(JNIEnv* env, jobject /* object */,
+                                     jbyteArray address, jboolean enabled) {
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   jbyte* addr = env->GetByteArrayElements(address, nullptr);
 
   if (!sLeAudioClientInterface) {
-    LOG(ERROR) << __func__ << ": Failed to get the Bluetooth LeAudio Interface";
+    log::error("Failed to get the Bluetooth LeAudio Interface");
+    return JNI_FALSE;
+  }
+
+  if (!addr) {
+    jniThrowIOException(env, EINVAL);
+    return JNI_FALSE;
+  }
+
+  RawAddress* tmpraw = (RawAddress*)addr;
+  sLeAudioClientInterface->SetEnableState(*tmpraw, enabled);
+  env->ReleaseByteArrayElements(address, addr, 0);
+  return JNI_TRUE;
+}
+
+static jboolean groupAddNodeNative(JNIEnv* env, jobject /* object */,
+                                   jint group_id, jbyteArray address) {
+  std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
+  jbyte* addr = env->GetByteArrayElements(address, nullptr);
+
+  if (!sLeAudioClientInterface) {
+    log::error("Failed to get the Bluetooth LeAudio Interface");
     return JNI_FALSE;
   }
 
@@ -457,11 +553,11 @@ static jboolean groupAddNodeNative(JNIEnv* env, jobject object, jint group_id,
   return JNI_TRUE;
 }
 
-static jboolean groupRemoveNodeNative(JNIEnv* env, jobject object,
+static jboolean groupRemoveNodeNative(JNIEnv* env, jobject /* object */,
                                       jint group_id, jbyteArray address) {
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   if (!sLeAudioClientInterface) {
-    LOG(ERROR) << __func__ << ": Failed to get the Bluetooth LeAudio Interface";
+    log::error("Failed to get the Bluetooth LeAudio Interface");
     return JNI_FALSE;
   }
 
@@ -477,19 +573,20 @@ static jboolean groupRemoveNodeNative(JNIEnv* env, jobject object,
   return JNI_TRUE;
 }
 
-static void groupSetActiveNative(JNIEnv* env, jobject object, jint group_id) {
-  LOG(INFO) << __func__;
+static void groupSetActiveNative(JNIEnv* /* env */, jobject /* object */,
+                                 jint group_id) {
+  log::info("");
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
 
   if (!sLeAudioClientInterface) {
-    LOG(ERROR) << __func__ << ": Failed to get the Bluetooth LeAudio Interface";
+    log::error("Failed to get the Bluetooth LeAudio Interface");
     return;
   }
 
   sLeAudioClientInterface->GroupSetActive(group_id);
 }
 
-static void setCodecConfigPreferenceNative(JNIEnv* env, jobject object,
+static void setCodecConfigPreferenceNative(JNIEnv* env, jobject /* object */,
                                            jint group_id,
                                            jobject inputCodecConfig,
                                            jobject outputCodecConfig) {
@@ -499,7 +596,7 @@ static void setCodecConfigPreferenceNative(JNIEnv* env, jobject object,
                          android_bluetooth_BluetoothLeAudioCodecConfig.clazz) ||
       !env->IsInstanceOf(outputCodecConfig,
                          android_bluetooth_BluetoothLeAudioCodecConfig.clazz)) {
-    ALOGE("%s: Invalid BluetoothLeAudioCodecConfig instance", __func__);
+    log::error("Invalid BluetoothLeAudioCodecConfig instance");
     return;
   }
 
@@ -507,58 +604,152 @@ static void setCodecConfigPreferenceNative(JNIEnv* env, jobject object,
       inputCodecConfig,
       android_bluetooth_BluetoothLeAudioCodecConfig.getCodecType);
 
+  jint inputSampleRate = env->CallIntMethod(
+      inputCodecConfig,
+      android_bluetooth_BluetoothLeAudioCodecConfig.getSampleRate);
+
+  jint inputBitsPerSample = env->CallIntMethod(
+      inputCodecConfig,
+      android_bluetooth_BluetoothLeAudioCodecConfig.getBitsPerSample);
+
+  jint inputChannelCount = env->CallIntMethod(
+      inputCodecConfig,
+      android_bluetooth_BluetoothLeAudioCodecConfig.getChannelCount);
+
+  jint inputFrameDuration = env->CallIntMethod(
+      inputCodecConfig,
+      android_bluetooth_BluetoothLeAudioCodecConfig.getFrameDuration);
+
+  jint inputOctetsPerFrame = env->CallIntMethod(
+      inputCodecConfig,
+      android_bluetooth_BluetoothLeAudioCodecConfig.getOctetsPerFrame);
+
+  jint inputCodecPriority = env->CallIntMethod(
+      inputCodecConfig,
+      android_bluetooth_BluetoothLeAudioCodecConfig.getCodecPriority);
+
   btle_audio_codec_config_t input_codec_config = {
-      .codec_type = static_cast<btle_audio_codec_index_t>(inputCodecType)};
+      .codec_type = static_cast<btle_audio_codec_index_t>(inputCodecType),
+      .sample_rate =
+          static_cast<btle_audio_sample_rate_index_t>(inputSampleRate),
+      .bits_per_sample =
+          static_cast<btle_audio_bits_per_sample_index_t>(inputBitsPerSample),
+      .channel_count =
+          static_cast<btle_audio_channel_count_index_t>(inputChannelCount),
+      .frame_duration =
+          static_cast<btle_audio_frame_duration_index_t>(inputFrameDuration),
+      .octets_per_frame = static_cast<uint16_t>(inputOctetsPerFrame),
+      .codec_priority = static_cast<int32_t>(inputCodecPriority),
+  };
 
   jint outputCodecType = env->CallIntMethod(
       outputCodecConfig,
       android_bluetooth_BluetoothLeAudioCodecConfig.getCodecType);
 
+  jint outputSampleRate = env->CallIntMethod(
+      outputCodecConfig,
+      android_bluetooth_BluetoothLeAudioCodecConfig.getSampleRate);
+
+  jint outputBitsPerSample = env->CallIntMethod(
+      outputCodecConfig,
+      android_bluetooth_BluetoothLeAudioCodecConfig.getBitsPerSample);
+
+  jint outputChannelCount = env->CallIntMethod(
+      outputCodecConfig,
+      android_bluetooth_BluetoothLeAudioCodecConfig.getChannelCount);
+
+  jint outputFrameDuration = env->CallIntMethod(
+      outputCodecConfig,
+      android_bluetooth_BluetoothLeAudioCodecConfig.getFrameDuration);
+
+  jint outputOctetsPerFrame = env->CallIntMethod(
+      outputCodecConfig,
+      android_bluetooth_BluetoothLeAudioCodecConfig.getOctetsPerFrame);
+
+  jint outputCodecPriority = env->CallIntMethod(
+      outputCodecConfig,
+      android_bluetooth_BluetoothLeAudioCodecConfig.getCodecPriority);
+
   btle_audio_codec_config_t output_codec_config = {
-      .codec_type = static_cast<btle_audio_codec_index_t>(outputCodecType)};
+      .codec_type = static_cast<btle_audio_codec_index_t>(outputCodecType),
+      .sample_rate =
+          static_cast<btle_audio_sample_rate_index_t>(outputSampleRate),
+      .bits_per_sample =
+          static_cast<btle_audio_bits_per_sample_index_t>(outputBitsPerSample),
+      .channel_count =
+          static_cast<btle_audio_channel_count_index_t>(outputChannelCount),
+      .frame_duration =
+          static_cast<btle_audio_frame_duration_index_t>(outputFrameDuration),
+      .octets_per_frame = static_cast<uint16_t>(outputOctetsPerFrame),
+      .codec_priority = static_cast<int32_t>(outputCodecPriority),
+  };
 
   sLeAudioClientInterface->SetCodecConfigPreference(
       group_id, input_codec_config, output_codec_config);
 }
 
-static void setCcidInformationNative(JNIEnv* env, jobject object, jint ccid,
-                                     jint contextType) {
+static void setCcidInformationNative(JNIEnv* /* env */, jobject /* object */,
+                                     jint ccid, jint contextType) {
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   if (!sLeAudioClientInterface) {
-    LOG(ERROR) << __func__ << ": Failed to get the Bluetooth LeAudio Interface";
+    log::error("Failed to get the Bluetooth LeAudio Interface");
     return;
   }
 
   sLeAudioClientInterface->SetCcidInformation(ccid, contextType);
 }
 
-static void setInCallNative(JNIEnv* env, jobject object, jboolean inCall) {
+static void setInCallNative(JNIEnv* /* env */, jobject /* object */,
+                            jboolean inCall) {
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   if (!sLeAudioClientInterface) {
-    LOG(ERROR) << __func__ << ": Failed to get the Bluetooth LeAudio Interface";
+    log::error("Failed to get the Bluetooth LeAudio Interface");
     return;
   }
 
   sLeAudioClientInterface->SetInCall(inCall);
 }
 
-static JNINativeMethod sMethods[] = {
-    {"classInitNative", "()V", (void*)classInitNative},
-    {"initNative", "([Landroid/bluetooth/BluetoothLeAudioCodecConfig;)V",
-     (void*)initNative},
-    {"cleanupNative", "()V", (void*)cleanupNative},
-    {"connectLeAudioNative", "([B)Z", (void*)connectLeAudioNative},
-    {"disconnectLeAudioNative", "([B)Z", (void*)disconnectLeAudioNative},
-    {"groupAddNodeNative", "(I[B)Z", (void*)groupAddNodeNative},
-    {"groupRemoveNodeNative", "(I[B)Z", (void*)groupRemoveNodeNative},
-    {"groupSetActiveNative", "(I)V", (void*)groupSetActiveNative},
-    {"setCodecConfigPreferenceNative",
-     "(ILandroid/bluetooth/BluetoothLeAudioCodecConfig;Landroid/bluetooth/"
-     "BluetoothLeAudioCodecConfig;)V",
-     (void*)setCodecConfigPreferenceNative},
-    {"setCcidInformationNative", "(II)V", (void*)setCcidInformationNative},
-    {"setInCallNative", "(Z)V", (void*)setInCallNative},
-};
+static void setUnicastMonitorModeNative(JNIEnv* /* env */, jobject /* object */,
+                                        jint direction, jboolean enable) {
+  std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
+  if (!sLeAudioClientInterface) {
+    log::error("Failed to get the Bluetooth LeAudio Interface");
+    return;
+  }
+
+  sLeAudioClientInterface->SetUnicastMonitorMode(direction, enable);
+}
+
+static void sendAudioProfilePreferencesNative(
+    JNIEnv* /* env */, jint groupId, jboolean isOutputPreferenceLeAudio,
+    jboolean isDuplexPreferenceLeAudio) {
+  std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
+  if (!sLeAudioClientInterface) {
+    log::error("Failed to get the Bluetooth LeAudio Interface");
+    return;
+  }
+
+  sLeAudioClientInterface->SendAudioProfilePreferences(
+      groupId, isOutputPreferenceLeAudio, isDuplexPreferenceLeAudio);
+}
+
+static void setGroupAllowedContextMaskNative(JNIEnv* /* env */,
+                                             jobject /* object */, jint groupId,
+                                             jint sinkContextTypes,
+                                             jint sourceContextTypes) {
+  std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
+  if (!sLeAudioClientInterface) {
+    log::error("Failed to get the Bluetooth LeAudio Interface");
+    return;
+  }
+
+  log::info("group_id: {}, sink context types: {}, source context types: {}",
+            groupId, sinkContextTypes, sourceContextTypes);
+
+  sLeAudioClientInterface->SetGroupAllowedContextMask(groupId, sinkContextTypes,
+                                                      sourceContextTypes);
+}
 
 /* Le Audio Broadcaster */
 static jmethodID method_onBroadcastCreated;
@@ -592,7 +783,7 @@ jbyteArray prepareRawLtvArray(
 
   jbyteArray raw_metadata = env->NewByteArray(raw_meta_size);
   if (!raw_metadata) {
-    LOG(ERROR) << "Failed to create new jbyteArray for raw LTV";
+    log::error("Failed to create new jbyteArray for raw LTV");
     return nullptr;
   }
 
@@ -619,47 +810,43 @@ static jlong getAudioLocationOrDefault(
     const std::map<uint8_t, std::vector<uint8_t>>& metadata,
     jlong default_location) {
   if (metadata.count(
-          bluetooth::le_audio::kLeAudioCodecLC3TypeAudioChannelAllocation) == 0)
+          bluetooth::le_audio::kLeAudioLtvTypeAudioChannelAllocation) == 0)
     return default_location;
 
-  auto& vec = metadata.at(
-      bluetooth::le_audio::kLeAudioCodecLC3TypeAudioChannelAllocation);
+  auto& vec =
+      metadata.at(bluetooth::le_audio::kLeAudioLtvTypeAudioChannelAllocation);
   return VEC_UINT8_TO_UINT32(vec);
 }
 
 static jint getSamplingFrequencyOrDefault(
     const std::map<uint8_t, std::vector<uint8_t>>& metadata,
     jint default_sampling_frequency) {
-  if (metadata.count(bluetooth::le_audio::kLeAudioCodecLC3TypeSamplingFreq) ==
-      0)
+  if (metadata.count(bluetooth::le_audio::kLeAudioLtvTypeSamplingFreq) == 0)
     return default_sampling_frequency;
 
-  auto& vec =
-      metadata.at(bluetooth::le_audio::kLeAudioCodecLC3TypeSamplingFreq);
+  auto& vec = metadata.at(bluetooth::le_audio::kLeAudioLtvTypeSamplingFreq);
   return (jint)(vec.data()[0]);
 }
 
 static jint getFrameDurationOrDefault(
     const std::map<uint8_t, std::vector<uint8_t>>& metadata,
     jint default_frame_duration) {
-  if (metadata.count(bluetooth::le_audio::kLeAudioCodecLC3TypeFrameDuration) ==
-      0)
+  if (metadata.count(bluetooth::le_audio::kLeAudioLtvTypeFrameDuration) == 0)
     return default_frame_duration;
 
-  auto& vec =
-      metadata.at(bluetooth::le_audio::kLeAudioCodecLC3TypeFrameDuration);
+  auto& vec = metadata.at(bluetooth::le_audio::kLeAudioLtvTypeFrameDuration);
   return (jint)(vec.data()[0]);
 }
 
 static jint getOctetsPerFrameOrDefault(
     const std::map<uint8_t, std::vector<uint8_t>>& metadata,
     jint default_octets_per_frame) {
-  if (metadata.count(bluetooth::le_audio::kLeAudioCodecLC3TypeOctetPerFrame) ==
+  if (metadata.count(bluetooth::le_audio::kLeAudioLtvTypeOctetsPerCodecFrame) ==
       0)
     return default_octets_per_frame;
 
   auto& vec =
-      metadata.at(bluetooth::le_audio::kLeAudioCodecLC3TypeOctetPerFrame);
+      metadata.at(bluetooth::le_audio::kLeAudioLtvTypeOctetsPerCodecFrame);
   return VEC_UINT8_TO_UINT16(vec);
 }
 
@@ -672,7 +859,7 @@ jobject prepareLeAudioCodecConfigMetadataObject(
   ScopedLocalRef<jbyteArray> raw_metadata(env,
                                           prepareRawLtvArray(env, metadata));
   if (!raw_metadata.get()) {
-    LOG(ERROR) << "Failed to create raw metadata jbyteArray";
+    log::error("Failed to create raw metadata jbyteArray");
     return nullptr;
   }
 
@@ -692,7 +879,7 @@ jobject prepareLeBroadcastChannelObject(
       env, prepareLeAudioCodecConfigMetadataObject(
                env, bis_config.codec_specific_params));
   if (!meta_object.get()) {
-    LOG(ERROR) << "Failed to create new metadata object for bis config";
+    log::error("Failed to create new metadata object for bis config");
     return nullptr;
   }
 
@@ -708,25 +895,33 @@ jobject prepareLeAudioContentMetadataObject(
     JNIEnv* env, const std::map<uint8_t, std::vector<uint8_t>>& metadata) {
   jstring program_info_str = nullptr;
   if (metadata.count(bluetooth::le_audio::kLeAudioMetadataTypeProgramInfo)) {
-    program_info_str = env->NewStringUTF(
-        (const char*)(metadata
-                          .at(bluetooth::le_audio::
-                                  kLeAudioMetadataTypeProgramInfo)
-                          .data()));
+    // Convert the metadata vector to string with null terminator
+    std::string p_str(
+        (const char*)metadata
+            .at(bluetooth::le_audio::kLeAudioMetadataTypeProgramInfo)
+            .data(),
+        metadata.at(bluetooth::le_audio::kLeAudioMetadataTypeProgramInfo)
+            .size());
+
+    program_info_str = env->NewStringUTF(p_str.c_str());
     if (!program_info_str) {
-      LOG(ERROR) << "Failed to create new preset name String for preset name";
+      log::error("Failed to create new preset name String for preset name");
       return nullptr;
     }
   }
 
   jstring language_str = nullptr;
   if (metadata.count(bluetooth::le_audio::kLeAudioMetadataTypeLanguage)) {
-    language_str = env->NewStringUTF(
-        (const char*)(metadata
-                          .at(bluetooth::le_audio::kLeAudioMetadataTypeLanguage)
-                          .data()));
+    // Convert the metadata vector to string with null terminator
+    std::string l_str(
+        (const char*)metadata
+            .at(bluetooth::le_audio::kLeAudioMetadataTypeLanguage)
+            .data(),
+        metadata.at(bluetooth::le_audio::kLeAudioMetadataTypeLanguage).size());
+
+    language_str = env->NewStringUTF(l_str.c_str());
     if (!language_str) {
-      LOG(ERROR) << "Failed to create new preset name String for language";
+      log::error("Failed to create new preset name String for language");
       return nullptr;
     }
   }
@@ -735,7 +930,7 @@ jobject prepareLeAudioContentMetadataObject(
   ScopedLocalRef<jbyteArray> raw_metadata(env,
                                           prepareRawLtvArray(env, metadata));
   if (!raw_metadata.get()) {
-    LOG(ERROR) << "Failed to create raw_metadata jbyteArray";
+    log::error("Failed to create raw_metadata jbyteArray");
     return nullptr;
   }
 
@@ -762,7 +957,7 @@ jobject prepareLeBroadcastChannelListObject(
   jobject array = env->NewObject(java_util_ArrayList.clazz,
                                  java_util_ArrayList.constructor);
   if (!array) {
-    LOG(ERROR) << "Failed to create array for subgroups";
+    log::error("Failed to create array for subgroups");
     return nullptr;
   }
 
@@ -770,7 +965,7 @@ jobject prepareLeBroadcastChannelListObject(
     ScopedLocalRef<jobject> channel_obj(
         env, prepareLeBroadcastChannelObject(env, el));
     if (!channel_obj.get()) {
-      LOG(ERROR) << "Failed to create new channel object";
+      log::error("Failed to create new channel object");
       return nullptr;
     }
 
@@ -792,21 +987,21 @@ jobject prepareLeBroadcastSubgroupObject(
       env, prepareLeAudioCodecConfigMetadataObject(
                env, subgroup.codec_config.codec_specific_params));
   if (!codec_config_meta_obj.get()) {
-    LOG(ERROR) << "Failed to create new codec config metadata";
+    log::error("Failed to create new codec config metadata");
     return nullptr;
   }
 
   ScopedLocalRef<jobject> content_meta_obj(
       env, prepareLeAudioContentMetadataObject(env, subgroup.metadata));
   if (!content_meta_obj.get()) {
-    LOG(ERROR) << "Failed to create new codec config metadata";
+    log::error("Failed to create new codec config metadata");
     return nullptr;
   }
 
   ScopedLocalRef<jobject> channel_list_obj(
       env, prepareLeBroadcastChannelListObject(env, subgroup.bis_configs));
   if (!channel_list_obj.get()) {
-    LOG(ERROR) << "Failed to create new codec config metadata";
+    log::error("Failed to create new codec config metadata");
     return nullptr;
   }
 
@@ -825,7 +1020,7 @@ jobject prepareLeBroadcastSubgroupListObject(
   jobject array = env->NewObject(java_util_ArrayList.clazz,
                                  java_util_ArrayList.constructor);
   if (!array) {
-    LOG(ERROR) << "Failed to create array for subgroups";
+    log::error("Failed to create array for subgroups");
     return nullptr;
   }
 
@@ -833,7 +1028,7 @@ jobject prepareLeBroadcastSubgroupListObject(
     ScopedLocalRef<jobject> subgroup_obj(
         env, prepareLeBroadcastSubgroupObject(env, el));
     if (!subgroup_obj.get()) {
-      LOG(ERROR) << "Failed to create new subgroup object";
+      log::error("Failed to create new subgroup object");
       return nullptr;
     }
 
@@ -852,7 +1047,7 @@ jobject prepareBluetoothDeviceObject(JNIEnv* env, const RawAddress& addr,
 
   ScopedLocalRef<jstring> addr_jstr(env, env->NewStringUTF(addr_str.c_str()));
   if (!addr_jstr.get()) {
-    LOG(ERROR) << "Failed to create new preset name String for preset name";
+    log::error("Failed to create new preset name String for preset name");
     return nullptr;
   }
 
@@ -868,7 +1063,7 @@ jobject prepareBluetoothLeBroadcastMetadataObject(
       env, prepareBluetoothDeviceObject(env, broadcast_metadata.addr,
                                         broadcast_metadata.addr_type));
   if (!device_obj.get()) {
-    LOG(ERROR) << "Failed to create new BluetoothDevice";
+    log::error("Failed to create new BluetoothDevice");
     return nullptr;
   }
 
@@ -877,34 +1072,59 @@ jobject prepareBluetoothLeBroadcastMetadataObject(
       prepareLeBroadcastSubgroupListObject(
           env, broadcast_metadata.basic_audio_announcement.subgroup_configs));
   if (!subgroup_list_obj.get()) {
-    LOG(ERROR) << "Failed to create new Subgroup array";
+    log::error("Failed to create new Subgroup array");
     return nullptr;
   }
 
-  // Skip the leading null char bytes
+  // Remove the ending null char bytes
   int nativeCodeSize = 16;
-  int nativeCodeLeadingZeros = 0;
   if (broadcast_metadata.broadcast_code) {
     auto& nativeCode = broadcast_metadata.broadcast_code.value();
-    nativeCodeLeadingZeros =
+    nativeCodeSize =
         std::find_if(nativeCode.cbegin(), nativeCode.cend(),
-                     [](int x) { return x != 0x00; }) -
+                     [](int x) { return x == 0x00; }) -
         nativeCode.cbegin();
-    nativeCodeSize = nativeCode.size() - nativeCodeLeadingZeros;
   }
 
   ScopedLocalRef<jbyteArray> code(env, env->NewByteArray(nativeCodeSize));
   if (!code.get()) {
-    LOG(ERROR) << "Failed to create new jbyteArray for the broadcast code";
+    log::error("Failed to create new jbyteArray for the broadcast code");
     return nullptr;
   }
 
   if (broadcast_metadata.broadcast_code) {
     env->SetByteArrayRegion(
         code.get(), 0, nativeCodeSize,
-        (const jbyte*)broadcast_metadata.broadcast_code->data() +
-            nativeCodeLeadingZeros);
-    CHECK(!env->ExceptionCheck());
+        (const jbyte*)broadcast_metadata.broadcast_code->data());
+    log::assert_that(!env->ExceptionCheck(),
+                     "assert failed: !env->ExceptionCheck()");
+  }
+
+  ScopedLocalRef<jstring> broadcast_name(
+      env, env->NewStringUTF(broadcast_metadata.broadcast_name.c_str()));
+  if (!broadcast_name.get()) {
+    log::error("Failed to create new broadcast name String");
+    return nullptr;
+  }
+
+  jint audio_cfg_quality = 0;
+  if (broadcast_metadata.public_announcement.features &
+      bluetooth::le_audio::kLeAudioQualityStandard) {
+    // Set bit 0 for AUDIO_CONFIG_QUALITY_STANDARD
+    audio_cfg_quality |= 0x1 << bluetooth::le_audio::QUALITY_STANDARD;
+  }
+  if (broadcast_metadata.public_announcement.features &
+      bluetooth::le_audio::kLeAudioQualityHigh) {
+    // Set bit 1 for AUDIO_CONFIG_QUALITY_HIGH
+    audio_cfg_quality |= 0x1 << bluetooth::le_audio::QUALITY_HIGH;
+  }
+
+  ScopedLocalRef<jobject> public_meta_obj(
+      env, prepareLeAudioContentMetadataObject(
+               env, broadcast_metadata.public_announcement.metadata));
+  if (!public_meta_obj.get()) {
+    log::error("Failed to create new public metadata obj");
+    return nullptr;
   }
 
   return env->NewObject(
@@ -914,10 +1134,11 @@ jobject prepareBluetoothLeBroadcastMetadataObject(
       (jint)broadcast_metadata.adv_sid, (jint)broadcast_metadata.broadcast_id,
       (jint)broadcast_metadata.pa_interval,
       broadcast_metadata.broadcast_code ? true : false,
-      false, nullptr,
+      broadcast_metadata.is_public, broadcast_name.get(),
       broadcast_metadata.broadcast_code ? code.get() : nullptr,
-      (jint)broadcast_metadata.basic_audio_announcement.presentation_delay,
-      (jint)0, nullptr, subgroup_list_obj.get());
+      (jint)broadcast_metadata.basic_audio_announcement.presentation_delay_us,
+      audio_cfg_quality, (jint)bluetooth::le_audio::kLeAudioSourceRssiUnknown,
+      public_meta_obj.get(), subgroup_list_obj.get());
 }
 
 class LeAudioBroadcasterCallbacksImpl : public LeAudioBroadcasterCallbacks {
@@ -925,7 +1146,7 @@ class LeAudioBroadcasterCallbacksImpl : public LeAudioBroadcasterCallbacks {
   ~LeAudioBroadcasterCallbacksImpl() = default;
 
   void OnBroadcastCreated(uint32_t broadcast_id, bool success) override {
-    LOG(INFO) << __func__;
+    log::info("");
 
     std::shared_lock<std::shared_timed_mutex> lock(sBroadcasterCallbacksMutex);
     CallbackEnv sCallbackEnv(__func__);
@@ -937,7 +1158,7 @@ class LeAudioBroadcasterCallbacksImpl : public LeAudioBroadcasterCallbacks {
   }
 
   void OnBroadcastDestroyed(uint32_t broadcast_id) override {
-    LOG(INFO) << __func__;
+    log::info("");
 
     std::shared_lock<std::shared_timed_mutex> lock(sBroadcasterCallbacksMutex);
     CallbackEnv sCallbackEnv(__func__);
@@ -950,7 +1171,7 @@ class LeAudioBroadcasterCallbacksImpl : public LeAudioBroadcasterCallbacks {
 
   void OnBroadcastStateChanged(uint32_t broadcast_id,
                                BroadcastState state) override {
-    LOG(INFO) << __func__;
+    log::info("");
 
     std::shared_lock<std::shared_timed_mutex> lock(sBroadcasterCallbacksMutex);
     CallbackEnv sCallbackEnv(__func__);
@@ -965,7 +1186,7 @@ class LeAudioBroadcasterCallbacksImpl : public LeAudioBroadcasterCallbacks {
   void OnBroadcastMetadataChanged(uint32_t broadcast_id,
                                   const bluetooth::le_audio::BroadcastMetadata&
                                       broadcast_metadata) override {
-    LOG(INFO) << __func__;
+    log::info("");
 
     std::shared_lock<std::shared_timed_mutex> lock(sBroadcasterCallbacksMutex);
     CallbackEnv sCallbackEnv(__func__);
@@ -983,63 +1204,6 @@ class LeAudioBroadcasterCallbacksImpl : public LeAudioBroadcasterCallbacks {
 
 static LeAudioBroadcasterCallbacksImpl sLeAudioBroadcasterCallbacks;
 
-static void BroadcasterClassInitNative(JNIEnv* env, jclass clazz) {
-  method_onBroadcastCreated =
-      env->GetMethodID(clazz, "onBroadcastCreated", "(IZ)V");
-  method_onBroadcastDestroyed =
-      env->GetMethodID(clazz, "onBroadcastDestroyed", "(I)V");
-  method_onBroadcastStateChanged =
-      env->GetMethodID(clazz, "onBroadcastStateChanged", "(II)V");
-  method_onBroadcastMetadataChanged =
-      env->GetMethodID(clazz, "onBroadcastMetadataChanged",
-                       "(ILandroid/bluetooth/BluetoothLeBroadcastMetadata;)V");
-
-  jclass jniArrayListClass = env->FindClass("java/util/ArrayList");
-  java_util_ArrayList.constructor =
-      env->GetMethodID(jniArrayListClass, "<init>", "()V");
-  java_util_ArrayList.add =
-      env->GetMethodID(jniArrayListClass, "add", "(Ljava/lang/Object;)Z");
-
-  jclass jniBluetoothLeAudioCodecConfigMetadataClass =
-      env->FindClass("android/bluetooth/BluetoothLeAudioCodecConfigMetadata");
-  android_bluetooth_BluetoothLeAudioCodecConfigMetadata.constructor =
-      env->GetMethodID(jniBluetoothLeAudioCodecConfigMetadataClass, "<init>",
-                       "(JIII[B)V");
-
-  jclass jniBluetoothLeAudioContentMetadataClass =
-      env->FindClass("android/bluetooth/BluetoothLeAudioContentMetadata");
-  android_bluetooth_BluetoothLeAudioContentMetadata.constructor =
-      env->GetMethodID(jniBluetoothLeAudioContentMetadataClass, "<init>",
-                       "(Ljava/lang/String;Ljava/lang/String;[B)V");
-
-  jclass jniBluetoothLeBroadcastChannelClass =
-      env->FindClass("android/bluetooth/BluetoothLeBroadcastChannel");
-  android_bluetooth_BluetoothLeBroadcastChannel.constructor = env->GetMethodID(
-      jniBluetoothLeBroadcastChannelClass, "<init>",
-      "(ZILandroid/bluetooth/BluetoothLeAudioCodecConfigMetadata;)V");
-
-  jclass jniBluetoothLeBroadcastSubgroupClass =
-      env->FindClass("android/bluetooth/BluetoothLeBroadcastSubgroup");
-  android_bluetooth_BluetoothLeBroadcastSubgroup.constructor = env->GetMethodID(
-      jniBluetoothLeBroadcastSubgroupClass, "<init>",
-      "(JLandroid/bluetooth/BluetoothLeAudioCodecConfigMetadata;"
-      "Landroid/bluetooth/BluetoothLeAudioContentMetadata;"
-      "Ljava/util/List;)V");
-
-  jclass jniBluetoothDeviceClass =
-      env->FindClass("android/bluetooth/BluetoothDevice");
-  android_bluetooth_BluetoothDevice.constructor = env->GetMethodID(
-      jniBluetoothDeviceClass, "<init>", "(Ljava/lang/String;I)V");
-
-  jclass jniBluetoothLeBroadcastMetadataClass =
-      env->FindClass("android/bluetooth/BluetoothLeBroadcastMetadata");
-  android_bluetooth_BluetoothLeBroadcastMetadata.constructor = env->GetMethodID(
-      jniBluetoothLeBroadcastMetadataClass, "<init>",
-      "(ILandroid/bluetooth/BluetoothDevice;IIIZZLjava/lang/String;"
-      "[BIILandroid/bluetooth/BluetoothLeAudioContentMetadata;"
-      "Ljava/util/List;)V");
-}
-
 static void BroadcasterInitNative(JNIEnv* env, jobject object) {
   std::unique_lock<std::shared_timed_mutex> interface_lock(
       sBroadcasterInterfaceMutex);
@@ -1048,21 +1212,21 @@ static void BroadcasterInitNative(JNIEnv* env, jobject object) {
 
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == nullptr) {
-    LOG(ERROR) << "Bluetooth module is not loaded";
+    log::error("Bluetooth module is not loaded");
     return;
   }
 
   android_bluetooth_BluetoothDevice.clazz = (jclass)env->NewGlobalRef(
       env->FindClass("android/bluetooth/BluetoothDevice"));
   if (android_bluetooth_BluetoothDevice.clazz == nullptr) {
-    LOG(ERROR) << "Failed to allocate Global Ref for BluetoothDevice class";
+    log::error("Failed to allocate Global Ref for BluetoothDevice class");
     return;
   }
 
   java_util_ArrayList.clazz =
       (jclass)env->NewGlobalRef(env->FindClass("java/util/ArrayList"));
   if (java_util_ArrayList.clazz == nullptr) {
-    LOG(ERROR) << "Failed to allocate Global Ref for ArrayList class";
+    log::error("Failed to allocate Global Ref for ArrayList class");
     return;
   }
 
@@ -1070,8 +1234,9 @@ static void BroadcasterInitNative(JNIEnv* env, jobject object) {
       (jclass)env->NewGlobalRef(env->FindClass(
           "android/bluetooth/BluetoothLeAudioCodecConfigMetadata"));
   if (android_bluetooth_BluetoothLeAudioCodecConfigMetadata.clazz == nullptr) {
-    LOG(ERROR) << "Failed to allocate Global Ref for "
-                  "BluetoothLeAudioCodecConfigMetadata class";
+    log::error(
+        "Failed to allocate Global Ref for BluetoothLeAudioCodecConfigMetadata "
+        "class");
     return;
   }
 
@@ -1079,8 +1244,9 @@ static void BroadcasterInitNative(JNIEnv* env, jobject object) {
       (jclass)env->NewGlobalRef(
           env->FindClass("android/bluetooth/BluetoothLeAudioContentMetadata"));
   if (android_bluetooth_BluetoothLeAudioContentMetadata.clazz == nullptr) {
-    LOG(ERROR) << "Failed to allocate Global Ref for "
-                  "BluetoothLeAudioContentMetadata class";
+    log::error(
+        "Failed to allocate Global Ref for BluetoothLeAudioContentMetadata "
+        "class");
     return;
   }
 
@@ -1088,8 +1254,8 @@ static void BroadcasterInitNative(JNIEnv* env, jobject object) {
       (jclass)env->NewGlobalRef(
           env->FindClass("android/bluetooth/BluetoothLeBroadcastSubgroup"));
   if (android_bluetooth_BluetoothLeBroadcastSubgroup.clazz == nullptr) {
-    LOG(ERROR) << "Failed to allocate Global Ref for "
-                  "BluetoothLeBroadcastSubgroup class";
+    log::error(
+        "Failed to allocate Global Ref for BluetoothLeBroadcastSubgroup class");
     return;
   }
 
@@ -1097,8 +1263,8 @@ static void BroadcasterInitNative(JNIEnv* env, jobject object) {
       (jclass)env->NewGlobalRef(
           env->FindClass("android/bluetooth/BluetoothLeBroadcastChannel"));
   if (android_bluetooth_BluetoothLeBroadcastChannel.clazz == nullptr) {
-    LOG(ERROR) << "Failed to allocate Global Ref for "
-                  "BluetoothLeBroadcastChannel class";
+    log::error(
+        "Failed to allocate Global Ref for BluetoothLeBroadcastChannel class");
     return;
   }
 
@@ -1106,20 +1272,20 @@ static void BroadcasterInitNative(JNIEnv* env, jobject object) {
       (jclass)env->NewGlobalRef(
           env->FindClass("android/bluetooth/BluetoothLeBroadcastMetadata"));
   if (android_bluetooth_BluetoothLeBroadcastMetadata.clazz == nullptr) {
-    LOG(ERROR) << "Failed to allocate Global Ref for "
-                  "BluetoothLeBroadcastMetadata class";
+    log::error(
+        "Failed to allocate Global Ref for BluetoothLeBroadcastMetadata class");
     return;
   }
 
   if (sBroadcasterCallbacksObj != nullptr) {
-    LOG(INFO) << "Cleaning up LeAudio Broadcaster callback object";
+    log::info("Cleaning up LeAudio Broadcaster callback object");
     env->DeleteGlobalRef(sBroadcasterCallbacksObj);
     sBroadcasterCallbacksObj = nullptr;
   }
 
   if ((sBroadcasterCallbacksObj = env->NewGlobalRef(object)) == nullptr) {
-    LOG(ERROR)
-        << "Failed to allocate Global Ref for LeAudio Broadcaster Callbacks";
+    log::error(
+        "Failed to allocate Global Ref for LeAudio Broadcaster Callbacks");
     return;
   }
 
@@ -1127,20 +1293,20 @@ static void BroadcasterInitNative(JNIEnv* env, jobject object) {
       (LeAudioBroadcasterInterface*)btInf->get_profile_interface(
           BT_PROFILE_LE_AUDIO_BROADCASTER_ID);
   if (sLeAudioBroadcasterInterface == nullptr) {
-    LOG(ERROR) << "Failed to get Bluetooth LeAudio Broadcaster Interface";
+    log::error("Failed to get Bluetooth LeAudio Broadcaster Interface");
     return;
   }
 
   sLeAudioBroadcasterInterface->Initialize(&sLeAudioBroadcasterCallbacks);
 }
 
-static void BroadcasterStopNative(JNIEnv* env, jobject object) {
+static void BroadcasterStopNative(JNIEnv* /* env */, jobject /* object */) {
   std::unique_lock<std::shared_timed_mutex> interface_lock(
       sBroadcasterInterfaceMutex);
 
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == nullptr) {
-    LOG(ERROR) << "Bluetooth module is not loaded";
+    log::error("Bluetooth module is not loaded");
     return;
   }
 
@@ -1148,7 +1314,7 @@ static void BroadcasterStopNative(JNIEnv* env, jobject object) {
     sLeAudioBroadcasterInterface->Stop();
 }
 
-static void BroadcasterCleanupNative(JNIEnv* env, jobject object) {
+static void BroadcasterCleanupNative(JNIEnv* env, jobject /* object */) {
   std::unique_lock<std::shared_timed_mutex> interface_lock(
       sBroadcasterInterfaceMutex);
   std::unique_lock<std::shared_timed_mutex> callbacks_lock(
@@ -1156,7 +1322,7 @@ static void BroadcasterCleanupNative(JNIEnv* env, jobject object) {
 
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == nullptr) {
-    LOG(ERROR) << "Bluetooth module is not loaded";
+    log::error("Bluetooth module is not loaded");
     return;
   }
 
@@ -1193,10 +1359,30 @@ static void BroadcasterCleanupNative(JNIEnv* env, jobject object) {
   }
 }
 
-static void CreateBroadcastNative(JNIEnv* env, jobject object,
-                                  jbyteArray metadata,
-                                  jbyteArray broadcast_code) {
-  LOG(INFO) << __func__;
+std::vector<std::vector<uint8_t>> convertToDataVectors(JNIEnv* env,
+                                                       jobjectArray dataArray) {
+  jsize arraySize = env->GetArrayLength(dataArray);
+  std::vector<std::vector<uint8_t>> res(arraySize);
+
+  for (int i = 0; i < arraySize; ++i) {
+    jbyteArray rowData = (jbyteArray)env->GetObjectArrayElement(dataArray, i);
+    jsize dataSize = env->GetArrayLength(rowData);
+    std::vector<uint8_t>& rowVector = res[i];
+    rowVector.resize(dataSize);
+    env->GetByteArrayRegion(rowData, 0, dataSize,
+                            reinterpret_cast<jbyte*>(rowVector.data()));
+    env->DeleteLocalRef(rowData);
+  }
+  return res;
+}
+
+static void CreateBroadcastNative(JNIEnv* env, jobject /* object */,
+                                  jboolean isPublic, jstring broadcastName,
+                                  jbyteArray broadcast_code,
+                                  jbyteArray publicMetadata,
+                                  jintArray qualityArray,
+                                  jobjectArray metadataArray) {
+  log::info("");
   std::shared_lock<std::shared_timed_mutex> lock(sBroadcasterInterfaceMutex);
   if (!sLeAudioBroadcasterInterface) return;
 
@@ -1204,7 +1390,7 @@ static void CreateBroadcastNative(JNIEnv* env, jobject object,
   if (broadcast_code) {
     jsize size = env->GetArrayLength(broadcast_code);
     if (size > 16) {
-      ALOGE("%s: broadcast code to long", __func__);
+      log::error("broadcast code to long");
       return;
     }
 
@@ -1212,85 +1398,279 @@ static void CreateBroadcastNative(JNIEnv* env, jobject object,
     env->GetByteArrayRegion(broadcast_code, 0, size, (jbyte*)code_array.data());
   }
 
-  jbyte* meta = env->GetByteArrayElements(metadata, nullptr);
+  const char* broadcast_name = nullptr;
+  if (broadcastName) {
+    broadcast_name = env->GetStringUTFChars(broadcastName, nullptr);
+  }
+
+  jbyte* public_meta = nullptr;
+  if (publicMetadata) {
+    public_meta = env->GetByteArrayElements(publicMetadata, nullptr);
+  }
+
+  jint* quality_array = nullptr;
+  if (qualityArray) {
+    quality_array = env->GetIntArrayElements(qualityArray, nullptr);
+  }
+
   sLeAudioBroadcasterInterface->CreateBroadcast(
-      std::vector<uint8_t>(meta, meta + env->GetArrayLength(metadata)),
+      isPublic, broadcast_name ? broadcast_name : "",
       broadcast_code ? std::optional<std::array<uint8_t, 16>>(code_array)
-                     : std::nullopt);
-  env->ReleaseByteArrayElements(metadata, meta, 0);
+                     : std::nullopt,
+      public_meta ? std::vector<uint8_t>(
+                        public_meta, public_meta + env->GetArrayLength(publicMetadata))
+                  : std::vector<uint8_t>(),
+      quality_array ? std::vector<uint8_t>(
+                        quality_array, quality_array + env->GetArrayLength(qualityArray))
+                  : std::vector<uint8_t>(),
+      convertToDataVectors(env, metadataArray));
+
+  if (broadcast_name) env->ReleaseStringUTFChars(broadcastName, broadcast_name);
+  if (public_meta) env->ReleaseByteArrayElements(publicMetadata, public_meta, 0);
+  if (quality_array) env->ReleaseIntArrayElements(qualityArray, quality_array, 0);
 }
 
-static void UpdateMetadataNative(JNIEnv* env, jobject object, jint broadcast_id,
-                                 jbyteArray metadata) {
-  jbyte* meta = env->GetByteArrayElements(metadata, nullptr);
+static void UpdateMetadataNative(JNIEnv* env, jobject /* object */,
+                                 jint broadcast_id, jstring broadcastName,
+                                 jbyteArray publicMetadata,
+                                 jobjectArray metadataArray) {
+  const char* broadcast_name = nullptr;
+  if (broadcastName) {
+    broadcast_name = env->GetStringUTFChars(broadcastName, nullptr);
+  }
+
+  jbyte* public_meta = nullptr;
+  if (publicMetadata) {
+    public_meta = env->GetByteArrayElements(publicMetadata, nullptr);
+  }
+
   sLeAudioBroadcasterInterface->UpdateMetadata(
-      broadcast_id,
-      std::vector<uint8_t>(meta, meta + env->GetArrayLength(metadata)));
-  env->ReleaseByteArrayElements(metadata, meta, 0);
+      broadcast_id, broadcast_name ? broadcast_name : "",
+      public_meta
+          ? std::vector<uint8_t>(
+                public_meta, public_meta + env->GetArrayLength(publicMetadata))
+          : std::vector<uint8_t>(),
+      convertToDataVectors(env, metadataArray));
+
+  if (broadcast_name) env->ReleaseStringUTFChars(broadcastName, broadcast_name);
+  if (public_meta) env->ReleaseByteArrayElements(publicMetadata, public_meta, 0);
 }
 
-static void StartBroadcastNative(JNIEnv* env, jobject object,
+static void StartBroadcastNative(JNIEnv* /* env */, jobject /* object */,
                                  jint broadcast_id) {
-  LOG(INFO) << __func__;
+  log::info("");
   std::shared_lock<std::shared_timed_mutex> lock(sBroadcasterInterfaceMutex);
   if (!sLeAudioBroadcasterInterface) return;
   sLeAudioBroadcasterInterface->StartBroadcast(broadcast_id);
 }
 
-static void StopBroadcastNative(JNIEnv* env, jobject object,
+static void StopBroadcastNative(JNIEnv* /* env */, jobject /* object */,
                                 jint broadcast_id) {
-  LOG(INFO) << __func__;
+  log::info("");
   std::shared_lock<std::shared_timed_mutex> lock(sBroadcasterInterfaceMutex);
   if (!sLeAudioBroadcasterInterface) return;
   sLeAudioBroadcasterInterface->StopBroadcast(broadcast_id);
 }
 
-static void PauseBroadcastNative(JNIEnv* env, jobject object,
+static void PauseBroadcastNative(JNIEnv* /* env */, jobject /* object */,
                                  jint broadcast_id) {
-  LOG(INFO) << __func__;
+  log::info("");
   std::shared_lock<std::shared_timed_mutex> lock(sBroadcasterInterfaceMutex);
   if (!sLeAudioBroadcasterInterface) return;
   sLeAudioBroadcasterInterface->PauseBroadcast(broadcast_id);
 }
 
-static void DestroyBroadcastNative(JNIEnv* env, jobject object,
+static void DestroyBroadcastNative(JNIEnv* /* env */, jobject /* object */,
                                    jint broadcast_id) {
-  LOG(INFO) << __func__;
+  log::info("");
   std::shared_lock<std::shared_timed_mutex> lock(sBroadcasterInterfaceMutex);
   if (!sLeAudioBroadcasterInterface) return;
   sLeAudioBroadcasterInterface->DestroyBroadcast(broadcast_id);
 }
 
-static void getBroadcastMetadataNative(JNIEnv* env, jobject object,
+static void getBroadcastMetadataNative(JNIEnv* /* env */, jobject /* object */,
                                        jint broadcast_id) {
-  LOG(INFO) << __func__;
+  log::info("");
   std::shared_lock<std::shared_timed_mutex> lock(sBroadcasterInterfaceMutex);
   if (!sLeAudioBroadcasterInterface) return;
   sLeAudioBroadcasterInterface->GetBroadcastMetadata(broadcast_id);
 }
 
-static JNINativeMethod sBroadcasterMethods[] = {
-    {"classInitNative", "()V", (void*)BroadcasterClassInitNative},
-    {"initNative", "()V", (void*)BroadcasterInitNative},
-    {"stopNative", "()V", (void*)BroadcasterStopNative},
-    {"cleanupNative", "()V", (void*)BroadcasterCleanupNative},
-    {"createBroadcastNative", "([B[B)V", (void*)CreateBroadcastNative},
-    {"updateMetadataNative", "(I[B)V", (void*)UpdateMetadataNative},
-    {"startBroadcastNative", "(I)V", (void*)StartBroadcastNative},
-    {"stopBroadcastNative", "(I)V", (void*)StopBroadcastNative},
-    {"pauseBroadcastNative", "(I)V", (void*)PauseBroadcastNative},
-    {"destroyBroadcastNative", "(I)V", (void*)DestroyBroadcastNative},
-    {"getBroadcastMetadataNative", "(I)V", (void*)getBroadcastMetadataNative},
-};
+static int register_com_android_bluetooth_le_audio_broadcaster(JNIEnv* env) {
+  const JNINativeMethod methods[] = {
+      {"initNative", "()V", (void*)BroadcasterInitNative},
+      {"stopNative", "()V", (void*)BroadcasterStopNative},
+      {"cleanupNative", "()V", (void*)BroadcasterCleanupNative},
+      {"createBroadcastNative", "(ZLjava/lang/String;[B[B[I[[B)V",
+       (void*)CreateBroadcastNative},
+      {"updateMetadataNative", "(ILjava/lang/String;[B[[B)V",
+       (void*)UpdateMetadataNative},
+      {"startBroadcastNative", "(I)V", (void*)StartBroadcastNative},
+      {"stopBroadcastNative", "(I)V", (void*)StopBroadcastNative},
+      {"pauseBroadcastNative", "(I)V", (void*)PauseBroadcastNative},
+      {"destroyBroadcastNative", "(I)V", (void*)DestroyBroadcastNative},
+      {"getBroadcastMetadataNative", "(I)V", (void*)getBroadcastMetadataNative},
+  };
+
+  const int result = REGISTER_NATIVE_METHODS(
+      env, "com/android/bluetooth/le_audio/LeAudioBroadcasterNativeInterface",
+      methods);
+  if (result != 0) {
+    return result;
+  }
+
+  const JNIJavaMethod javaMethods[] = {
+      {"onBroadcastCreated", "(IZ)V", &method_onBroadcastCreated},
+      {"onBroadcastDestroyed", "(I)V", &method_onBroadcastDestroyed},
+      {"onBroadcastStateChanged", "(II)V", &method_onBroadcastStateChanged},
+      {"onBroadcastMetadataChanged",
+       "(ILandroid/bluetooth/BluetoothLeBroadcastMetadata;)V",
+       &method_onBroadcastMetadataChanged},
+  };
+  GET_JAVA_METHODS(
+      env, "com/android/bluetooth/le_audio/LeAudioBroadcasterNativeInterface",
+      javaMethods);
+
+  const JNIJavaMethod javaArrayListMethods[] = {
+      {"<init>", "()V", &java_util_ArrayList.constructor},
+      {"add", "(Ljava/lang/Object;)Z", &java_util_ArrayList.add},
+  };
+  GET_JAVA_METHODS(env, "java/util/ArrayList", javaArrayListMethods);
+
+  const JNIJavaMethod javaLeAudioCodecMethods[] = {
+      {"<init>", "(JIII[B)V",
+       &android_bluetooth_BluetoothLeAudioCodecConfigMetadata.constructor},
+  };
+  GET_JAVA_METHODS(env, "android/bluetooth/BluetoothLeAudioCodecConfigMetadata",
+                   javaLeAudioCodecMethods);
+
+  const JNIJavaMethod javaLeAudioContentMethods[] = {
+      {"<init>", "(Ljava/lang/String;Ljava/lang/String;[B)V",
+       &android_bluetooth_BluetoothLeAudioContentMetadata.constructor},
+  };
+  GET_JAVA_METHODS(env, "android/bluetooth/BluetoothLeAudioContentMetadata",
+                   javaLeAudioContentMethods);
+
+  const JNIJavaMethod javaLeBroadcastChannelMethods[] = {
+      {"<init>", "(ZILandroid/bluetooth/BluetoothLeAudioCodecConfigMetadata;)V",
+       &android_bluetooth_BluetoothLeBroadcastChannel.constructor},
+  };
+  GET_JAVA_METHODS(env, "android/bluetooth/BluetoothLeBroadcastChannel",
+                   javaLeBroadcastChannelMethods);
+
+  const JNIJavaMethod javaLeBroadcastSubgroupMethods[] = {
+      {"<init>",
+       "(JLandroid/bluetooth/BluetoothLeAudioCodecConfigMetadata;"
+       "Landroid/bluetooth/BluetoothLeAudioContentMetadata;"
+       "Ljava/util/List;)V",
+       &android_bluetooth_BluetoothLeBroadcastSubgroup.constructor},
+  };
+  GET_JAVA_METHODS(env, "android/bluetooth/BluetoothLeBroadcastSubgroup",
+                   javaLeBroadcastSubgroupMethods);
+
+  const JNIJavaMethod javaBluetoothDevieceMethods[] = {
+      {"<init>", "(Ljava/lang/String;I)V",
+       &android_bluetooth_BluetoothDevice.constructor},
+  };
+  GET_JAVA_METHODS(env, "android/bluetooth/BluetoothDevice",
+                   javaBluetoothDevieceMethods);
+
+  const JNIJavaMethod javaLeBroadcastMetadataMethods[] = {
+      {"<init>",
+       "(ILandroid/bluetooth/BluetoothDevice;IIIZZLjava/lang/String;"
+       "[BIIILandroid/bluetooth/BluetoothLeAudioContentMetadata;"
+       "Ljava/util/List;)V",
+       &android_bluetooth_BluetoothLeBroadcastMetadata.constructor},
+  };
+  GET_JAVA_METHODS(env, "android/bluetooth/BluetoothLeBroadcastMetadata",
+                   javaLeBroadcastMetadataMethods);
+
+  return 0;
+}
 
 int register_com_android_bluetooth_le_audio(JNIEnv* env) {
-  int register_success = jniRegisterNativeMethods(
-      env, "com/android/bluetooth/le_audio/LeAudioNativeInterface", sMethods,
-      NELEM(sMethods));
-  return register_success &
-         jniRegisterNativeMethods(
-             env,
-             "com/android/bluetooth/le_audio/LeAudioBroadcasterNativeInterface",
-             sBroadcasterMethods, NELEM(sBroadcasterMethods));
+  const JNINativeMethod methods[] = {
+      {"initNative", "([Landroid/bluetooth/BluetoothLeAudioCodecConfig;)V",
+       (void*)initNative},
+      {"cleanupNative", "()V", (void*)cleanupNative},
+      {"connectLeAudioNative", "([B)Z", (void*)connectLeAudioNative},
+      {"disconnectLeAudioNative", "([B)Z", (void*)disconnectLeAudioNative},
+      {"setEnableStateNative", "([BZ)Z", (void*)setEnableStateNative},
+      {"groupAddNodeNative", "(I[B)Z", (void*)groupAddNodeNative},
+      {"groupRemoveNodeNative", "(I[B)Z", (void*)groupRemoveNodeNative},
+      {"groupSetActiveNative", "(I)V", (void*)groupSetActiveNative},
+      {"setCodecConfigPreferenceNative",
+       "(ILandroid/bluetooth/BluetoothLeAudioCodecConfig;"
+       "Landroid/bluetooth/BluetoothLeAudioCodecConfig;)V",
+       (void*)setCodecConfigPreferenceNative},
+      {"setCcidInformationNative", "(II)V", (void*)setCcidInformationNative},
+      {"setInCallNative", "(Z)V", (void*)setInCallNative},
+      {"setUnicastMonitorModeNative", "(IZ)V",
+       (void*)setUnicastMonitorModeNative},
+      {"sendAudioProfilePreferencesNative", "(IZZ)V",
+       (void*)sendAudioProfilePreferencesNative},
+      {"setGroupAllowedContextMaskNative", "(III)V",
+       (void*)setGroupAllowedContextMaskNative},
+  };
+
+  const int result = REGISTER_NATIVE_METHODS(
+      env, "com/android/bluetooth/le_audio/LeAudioNativeInterface", methods);
+  if (result != 0) {
+    return result;
+  }
+
+  const JNIJavaMethod javaMethods[] = {
+      {"onGroupStatus", "(II)V", &method_onGroupStatus},
+      {"onGroupNodeStatus", "([BII)V", &method_onGroupNodeStatus},
+      {"onAudioConf", "(IIIII)V", &method_onAudioConf},
+      {"onSinkAudioLocationAvailable", "([BI)V",
+       &method_onSinkAudioLocationAvailable},
+      {"onInitialized", "()V", &method_onInitialized},
+      {"onConnectionStateChanged", "(I[B)V", &method_onConnectionStateChanged},
+      {"onAudioLocalCodecCapabilities",
+       "([Landroid/bluetooth/BluetoothLeAudioCodecConfig;"
+       "[Landroid/bluetooth/BluetoothLeAudioCodecConfig;)V",
+       &method_onAudioLocalCodecCapabilities},
+      {"onAudioGroupCurrentCodecConf",
+       "(ILandroid/bluetooth/BluetoothLeAudioCodecConfig;"
+       "Landroid/bluetooth/BluetoothLeAudioCodecConfig;)V",
+       &method_onAudioGroupCurrentCodecConf},
+      {"onAudioGroupSelectableCodecConf",
+       "(I[Landroid/bluetooth/BluetoothLeAudioCodecConfig;"
+       "[Landroid/bluetooth/BluetoothLeAudioCodecConfig;)V",
+       &method_onAudioGroupSelectableCodecConf},
+      {"onHealthBasedRecommendationAction", "([BI)V",
+       &method_onHealthBasedRecommendationAction},
+      {"onHealthBasedGroupRecommendationAction", "(II)V",
+       &method_onHealthBasedGroupRecommendationAction},
+      {"onUnicastMonitorModeStatus", "(II)V",
+       &method_onUnicastMonitorModeStatus},
+      {"onGroupStreamStatus", "(II)V", &method_onGroupStreamStatus},
+  };
+  GET_JAVA_METHODS(env, "com/android/bluetooth/le_audio/LeAudioNativeInterface",
+                   javaMethods);
+
+  const JNIJavaMethod javaLeAudioCodecMethods[] = {
+      {"<init>", "(IIIIIIIII)V",
+       &android_bluetooth_BluetoothLeAudioCodecConfig.constructor},
+      {"getCodecType", "()I",
+       &android_bluetooth_BluetoothLeAudioCodecConfig.getCodecType},
+      {"getSampleRate", "()I",
+       &android_bluetooth_BluetoothLeAudioCodecConfig.getSampleRate},
+      {"getBitsPerSample", "()I",
+       &android_bluetooth_BluetoothLeAudioCodecConfig.getBitsPerSample},
+      {"getChannelCount", "()I",
+       &android_bluetooth_BluetoothLeAudioCodecConfig.getChannelCount},
+      {"getFrameDuration", "()I",
+       &android_bluetooth_BluetoothLeAudioCodecConfig.getFrameDuration},
+      {"getOctetsPerFrame", "()I",
+       &android_bluetooth_BluetoothLeAudioCodecConfig.getOctetsPerFrame},
+      {"getCodecPriority", "()I",
+       &android_bluetooth_BluetoothLeAudioCodecConfig.getCodecPriority},
+  };
+  GET_JAVA_METHODS(env, "android/bluetooth/BluetoothLeAudioCodecConfig",
+                   javaLeAudioCodecMethods);
+
+  return register_com_android_bluetooth_le_audio_broadcaster(env);
 }
 }  // namespace android

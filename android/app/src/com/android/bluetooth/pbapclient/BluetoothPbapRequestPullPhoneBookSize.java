@@ -22,10 +22,7 @@ import com.android.bluetooth.ObexAppParameters;
 import com.android.obex.HeaderSet;
 
 final class BluetoothPbapRequestPullPhoneBookSize extends BluetoothPbapRequest {
-
-    private static final boolean VDBG = Utils.VDBG;
-
-    private static final String TAG = "BtPbapReqPullPhoneBookSize";
+    private static final String TAG = "PbapClient.PullPbSize";
 
     private static final String TYPE = "x-bt/phonebook";
 
@@ -50,9 +47,7 @@ final class BluetoothPbapRequestPullPhoneBookSize extends BluetoothPbapRequest {
 
     @Override
     protected void readResponseHeaders(HeaderSet headerset) {
-        if (VDBG) {
-            Log.v(TAG, "readResponseHeaders");
-        }
+        Log.v(TAG, "readResponseHeaders");
 
         ObexAppParameters oap = ObexAppParameters.fromHeaderSet(headerset);
 

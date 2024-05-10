@@ -14,49 +14,39 @@
 #  limitations under the License.
 #
 
-static_library("crypto_toolbox") {
-  sources = [
-    "crypto_toolbox/aes.cc",
-    "crypto_toolbox/aes_cmac.cc",
-    "crypto_toolbox/crypto_toolbox.cc",
-  ]
-
-  include_dirs = [ "//bt/system/" ]
-
-  configs += [ "//bt/system:target_defaults" ]
-}
-
+# Nonstandard codecs are associated with 3P libs and must be contained in MMC
 source_set("nonstandard_codecs") {
   if (defined(use.bt_nonstandard_codecs) && use.bt_nonstandard_codecs) {
     sources = [
       "a2dp/a2dp_aac.cc",
-      "a2dp/a2dp_aac_decoder.cc",
-      "a2dp/a2dp_aac_encoder.cc",
+      "a2dp/a2dp_aac_decoder_linux.cc",
+      "a2dp/a2dp_aac_encoder_linux.cc",
       "a2dp/a2dp_vendor.cc",
-      "a2dp/a2dp_vendor_aptx.cc",
-      "a2dp/a2dp_vendor_aptx_encoder.cc",
-      "a2dp/a2dp_vendor_aptx_hd.cc",
-      "a2dp/a2dp_vendor_aptx_hd_encoder.cc",
-      "a2dp/a2dp_vendor_ldac.cc",
-      "a2dp/a2dp_vendor_ldac_decoder.cc",
-      "a2dp/a2dp_vendor_ldac_encoder.cc",
+      # Following are unimplemented
+      "a2dp/a2dp_vendor_aptx_linux.cc",
+      "a2dp/a2dp_vendor_aptx_hd_linux.cc",
+      "a2dp/a2dp_vendor_ldac_linux.cc",
+      "a2dp/a2dp_vendor_opus_linux.cc",
     ]
 
     include_dirs = [
       "//bt/system",
       "//bt/system/bta/include",
       "//bt/system/btif/include",
-      "//bt/system/internal_include",
+      "//bt/system/include",
+      "//bt/system/stack",
       "//bt/system/stack/include",
       "//bt/system/utils/include",
     ]
 
-    deps = [ "//bt/system/gd/rust/shim:init_flags_bridge_header" ]
+    deps = [
+      "//bt/system/gd/rust/shim:init_flags_bridge_header",
+      "//bt/system/stack/mmc",
+    ]
 
     configs += [
       "//bt/system:target_defaults",
-      "//bt/system:external_libldac",
-      "//bt/system:external_aac",
+      "//bt/system/log:log_defaults",
     ]
   }
 }
@@ -65,6 +55,7 @@ source_set("stack") {
   sources = [
     "a2dp/a2dp_api.cc",
     "a2dp/a2dp_codec_config.cc",
+    "a2dp/a2dp_ext.cc",
     "a2dp/a2dp_sbc.cc",
     "a2dp/a2dp_sbc_decoder.cc",
     "a2dp/a2dp_sbc_encoder.cc",
@@ -72,7 +63,6 @@ source_set("stack") {
     "acl/acl.cc",
     "acl/ble_acl.cc",
     "acl/btm_acl.cc",
-    "acl/btm_ble_connection_establishment.cc",
     "acl/btm_pm.cc",
     "arbiter/acl_arbiter.cc",
     "avct/avct_api.cc",
@@ -101,18 +91,16 @@ source_set("stack") {
     "bnep/bnep_api.cc",
     "bnep/bnep_main.cc",
     "bnep/bnep_utils.cc",
-    "btm/ble_advertiser_hci_interface.cc",
     "btm/ble_scanner_hci_interface.cc",
     "btm/btm_ble.cc",
     "btm/btm_ble_addr.cc",
     "btm/btm_ble_adv_filter.cc",
-    "btm/btm_ble_batchscan.cc",
     "btm/btm_ble_bgconn.cc",
     "btm/btm_ble_cont_energy.cc",
     "btm/btm_ble_gap.cc",
-    "btm/btm_ble_multi_adv.cc",
     "btm/btm_ble_privacy.cc",
     "btm/btm_ble_scanner.cc",
+    "btm/btm_ble_sec.cc",
     "btm/btm_client_interface.cc",
     "btm/btm_dev.cc",
     "btm/btm_devctl.cc",
@@ -120,15 +108,20 @@ source_set("stack") {
     "btm/btm_iot_config.cc",
     "btm/btm_iso.cc",
     "btm/btm_main.cc",
-    "btm/btm_scn.cc",
     "btm/btm_sco.cc",
     "btm/btm_sco_hci.cc",
     "btm/btm_sco_hfp_hal_linux.cc",
     "btm/btm_sec.cc",
+    "btm/btm_sec_cb.cc",
+    "btm/btm_security_client_interface.cc",
+    "btm/security_event_parser.cc",
+    "btm/hfp_lc3_encoder_linux.cc",
+    "btm/hfp_lc3_decoder_linux.cc",
     "btm/hfp_msbc_encoder.cc",
     "btm/hfp_msbc_decoder.cc",
+    "btu/btu_event.cc",
     "btu/btu_hcif.cc",
-    "btu/btu_task.cc",
+    "btu/main_thread.cc",
     "eatt/eatt.cc",
     "gap/gap_ble.cc",
     "gap/gap_conn.cc",
@@ -151,6 +144,7 @@ source_set("stack") {
     "hid/hidh_conn.cc",
     "l2cap/l2c_api.cc",
     "l2cap/l2c_ble.cc",
+    "l2cap/l2c_ble_conn_params.cc",
     "l2cap/l2c_csm.cc",
     "l2cap/l2c_fcr.cc",
     "l2cap/l2c_link.cc",
@@ -214,26 +208,27 @@ source_set("stack") {
     "//bt/system/ctrlr/include",
     "//bt/system/gd",
     "//bt/system/hcis",
-    "//bt/system/internal_include",
     "//bt/system/linux_include",
     "//bt/system/rpc/include",
     "//bt/system/types",
     "//bt/system/udrv/include",
-    "//bt/system/utils/include",
     "//bt/system/vnd/ble",
     "//bt/system/vnd/include",
   ]
 
   deps = [
-    ":crypto_toolbox",
+    "//bt/system/gd/crypto_toolbox:crypto_toolbox",
     ":nonstandard_codecs",
     "//bt/system:libbt-platform-protos-lite",
     "//bt/system/gd/rust/shim:init_flags_bridge_header",
-    "//bt/system/types",
+    "//bt/system/stack/mmc",
     "//bt/system/types",
   ]
 
-  configs += [ "//bt/system:target_defaults" ]
+  configs += [
+    "//bt/system:target_defaults",
+    "//bt/system/log:log_defaults",
+  ]
 }
 
 if (use.test) {
@@ -241,7 +236,6 @@ if (use.test) {
     sources = [
       "btm/btm_iso.cc",
       "test/btm_iso_test.cc",
-      "test/common/mock_controller.cc",
       "test/common/mock_gatt_layer.cc",
       "test/common/mock_hcic_layer.cc",
     ]
@@ -250,7 +244,6 @@ if (use.test) {
       "btm",
       "include",
       "test/common",
-      "//bt/system/internal_include",
       "//bt/system/packet/tests",
     ]
 
@@ -280,17 +273,16 @@ if (defined(use.android) && use.android) {
       "//bt/system/bta/include",
       "//bt/system/bta/sys",
       "//bt/system/embdrv/sbc/encoder/include",
-      "//bt/system/internal_include",
       "//bt/system/stack/a2dp",
       "//bt/system/stack/btm",
       "//bt/system/stack/include",
       "//bt/system/udrv/include",
-      "//bt/system/utils/include",
       "//bt/system/vnd/include",
     ]
 
     libs = [
       "dl",
+      "fmt",
       "pthread",
       "resolv",
       "rt",
@@ -316,19 +308,6 @@ if (defined(use.android) && use.android) {
     ]
   }
 
-  executable("net_test_stack_crypto_toolbox") {
-    sources = [ "test/crypto_toolbox_test.cc" ]
-
-    include_dirs = [ "//bt/system/" ]
-
-    deps = [ ":crypto_toolbox" ]
-
-    configs += [
-      "//bt/system:external_gmock_main",
-      "//bt/system:target_defaults",
-    ]
-  }
-
   executable("net_test_stack_smp") {
     sources = [
       "smp/p_256_curvepara.cc",
@@ -344,23 +323,20 @@ if (defined(use.android) && use.android) {
     include_dirs = [
       "//bt/system/",
       "//bt/system/linux_include",
-      "//bt/system/internal_include",
-      "//bt/system/utils/include",
       "//bt/system/bta/include",
       "//bt/system/bta/sys",
       "//bt/system/embdrv/sbc/encoder/include",
-      "//bt/system/internal_include",
       "//bt/system/stack/a2dp",
       "//bt/system/stack/l2cap",
       "//bt/system/stack/btm",
       "//bt/system/stack/include",
       "//bt/system/udrv/include",
-      "//bt/system/utils/include",
       "//bt/system/vnd/include",
     ]
 
     libs = [
       "dl",
+      "fmt",
       "pthread",
       "resolv",
       "rt",
@@ -368,42 +344,13 @@ if (defined(use.android) && use.android) {
     ]
 
     deps = [
-      ":crypto_toolbox",
+      "//bt/system/gd:crypto_toolbox",
       "//bt/system/osi",
       "//bt/system/types",
     ]
 
     configs += [
       "//bt/system:external_tinyxml2",
-      "//bt/system:external_gmock_main",
-      "//bt/system:target_defaults",
-    ]
-  }
-
-  executable("net_test_stack_multi_adv") {
-    sources = [
-      "btm/btm_ble_multi_adv.cc",
-      "test/ble_advertiser_test.cc",
-    ]
-
-    include_dirs = [
-      "include",
-      "//bt/system/",
-      "//bt/system/internal_include",
-      "//bt/system/stack/btm",
-    ]
-
-    libs = [
-      "dl",
-      "pthread",
-      "resolv",
-      "rt",
-      "z",
-    ]
-
-    deps = [ "//bt/system/types" ]
-
-    configs += [
       "//bt/system:external_gmock_main",
       "//bt/system:target_defaults",
     ]

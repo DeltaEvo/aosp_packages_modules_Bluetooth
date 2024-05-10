@@ -16,7 +16,7 @@
 
 #include "avrcp_browse_packet.h"
 
-#include <base/logging.h>
+#include "internal_include/bt_trace.h"
 
 namespace bluetooth {
 namespace avrcp {

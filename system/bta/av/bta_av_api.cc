@@ -26,13 +26,20 @@
 
 #define LOG_TAG "bt_bta_av"
 
-#include "bt_target.h"  // Must be first to define build configuration
+#include <bluetooth/log.h>
+
 #include "bta/av/bta_av_int.h"
+#include "btif/include/btif_av.h"
+#include "internal_include/bt_target.h"
+#include "internal_include/bt_trace.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/compat.h"
-#include "osi/include/log.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/bt_uuid16.h"
 #include "types/raw_address.h"
+
+using namespace bluetooth;
 
 /*****************************************************************************
  *  Constants
@@ -148,9 +155,8 @@ void BTA_AvDeregister(tBTA_AV_HNDL hndl) {
  ******************************************************************************/
 void BTA_AvOpen(const RawAddress& bd_addr, tBTA_AV_HNDL handle, bool use_rc,
                 uint16_t uuid) {
-  LOG_INFO("%s: peer %s bta_handle:0x%x use_rc=%s uuid=0x%x", __func__,
-           ADDRESS_TO_LOGGABLE_CSTR(bd_addr), handle,
-           (use_rc) ? "true" : "false", uuid);
+  log::info("peer {} bta_handle:0x{:x} use_rc={} uuid=0x{:x}", bd_addr, handle,
+            use_rc, uuid);
 
   tBTA_AV_API_OPEN* p_buf =
       (tBTA_AV_API_OPEN*)osi_malloc(sizeof(tBTA_AV_API_OPEN));
@@ -161,6 +167,17 @@ void BTA_AvOpen(const RawAddress& bd_addr, tBTA_AV_HNDL handle, bool use_rc,
   p_buf->use_rc = use_rc;
   p_buf->switch_res = BTA_AV_RS_NONE;
   p_buf->uuid = uuid;
+  if (btif_av_src_sink_coexist_enabled()) {
+    if (p_buf->uuid == AVDT_TSEP_SRC) {
+      p_buf->uuid = UUID_SERVCLASS_AUDIO_SOURCE;
+      p_buf->incoming = TRUE;
+    } else if (p_buf->uuid == AVDT_TSEP_SNK) {
+      p_buf->uuid = UUID_SERVCLASS_AUDIO_SINK;
+      p_buf->incoming = TRUE;
+    } else {
+      p_buf->incoming = FALSE;
+    }
+  }
 
   bta_sys_sendmsg(p_buf);
 }
@@ -175,7 +192,7 @@ void BTA_AvOpen(const RawAddress& bd_addr, tBTA_AV_HNDL handle, bool use_rc,
  *
  ******************************************************************************/
 void BTA_AvClose(tBTA_AV_HNDL handle) {
-  LOG_INFO("%s: bta_handle:0x%x", __func__, handle);
+  log::info("bta_handle:0x{:x}", handle);
 
   BT_HDR_RIGID* p_buf = (BT_HDR_RIGID*)osi_malloc(sizeof(BT_HDR_RIGID));
 
@@ -195,7 +212,7 @@ void BTA_AvClose(tBTA_AV_HNDL handle) {
  *
  ******************************************************************************/
 void BTA_AvDisconnect(tBTA_AV_HNDL handle) {
-  LOG_INFO("%s: bta_handle=0x%x", __func__, handle);
+  log::info("bta_handle=0x{:x}", handle);
 
   tBTA_AV_API_DISCNT* p_buf =
       (tBTA_AV_API_DISCNT*)osi_malloc(sizeof(tBTA_AV_API_DISCNT));
@@ -216,10 +233,10 @@ void BTA_AvDisconnect(tBTA_AV_HNDL handle) {
  *
  ******************************************************************************/
 void BTA_AvStart(tBTA_AV_HNDL handle, bool use_latency_mode) {
-  LOG_INFO(
-      "Starting audio/video stream data transfer bta_handle:%hhu, "
-      "use_latency_mode:%s",
-      handle, use_latency_mode ? "true" : "false");
+  log::info(
+      "Starting audio/video stream data transfer bta_handle:{}, "
+      "use_latency_mode:{}",
+      handle, use_latency_mode);
 
   tBTA_AV_DO_START* p_buf =
       (tBTA_AV_DO_START*)osi_malloc(sizeof(tBTA_AV_DO_START));
@@ -240,32 +257,12 @@ void BTA_AvStart(tBTA_AV_HNDL handle, bool use_latency_mode) {
  *
  ******************************************************************************/
 void BTA_AvOffloadStart(tBTA_AV_HNDL hndl) {
-  LOG_INFO("%s: bta_handle=0x%x", __func__, hndl);
+  log::info("bta_handle=0x{:x}", hndl);
 
   BT_HDR_RIGID* p_buf = (BT_HDR_RIGID*)osi_malloc(sizeof(BT_HDR_RIGID));
 
   p_buf->event = BTA_AV_API_OFFLOAD_START_EVT;
   p_buf->layer_specific = hndl;
-
-  bta_sys_sendmsg(p_buf);
-}
-
-/*******************************************************************************
- *
- * Function         BTA_AvOffloadStartRsp
- *
- * Description      Response from vendor lib for A2DP Offload Start request.
- *
- * Returns          void
- *
- ******************************************************************************/
-void BTA_AvOffloadStartRsp(tBTA_AV_HNDL hndl, tBTA_AV_STATUS status) {
-  tBTA_AV_API_STATUS_RSP* p_buf =
-      (tBTA_AV_API_STATUS_RSP*)osi_malloc(sizeof(tBTA_AV_API_STATUS_RSP));
-
-  p_buf->hdr.event = BTA_AV_API_OFFLOAD_START_RSP_EVT;
-  p_buf->hdr.layer_specific = hndl;
-  p_buf->status = status;
 
   bta_sys_sendmsg(p_buf);
 }
@@ -282,8 +279,7 @@ void BTA_AvOffloadStartRsp(tBTA_AV_HNDL hndl, tBTA_AV_STATUS status) {
  *
  ******************************************************************************/
 void BTA_AvStop(tBTA_AV_HNDL handle, bool suspend) {
-  LOG_INFO("%s: bta_handle=0x%x suspend=%s", __func__, handle,
-           logbool(suspend).c_str());
+  log::info("bta_handle=0x{:x} suspend={}", handle, suspend);
 
   tBTA_AV_API_STOP* p_buf =
       (tBTA_AV_API_STOP*)osi_malloc(sizeof(tBTA_AV_API_STOP));
@@ -313,8 +309,8 @@ void BTA_AvStop(tBTA_AV_HNDL handle, bool suspend) {
 void BTA_AvReconfig(tBTA_AV_HNDL hndl, bool suspend, uint8_t sep_info_idx,
                     uint8_t* p_codec_info, uint8_t num_protect,
                     const uint8_t* p_protect_info) {
-  LOG_INFO("%s: bta_handle=0x%x suspend=%s sep_info_idx=%d", __func__, hndl,
-           logbool(suspend).c_str(), sep_info_idx);
+  log::info("bta_handle=0x{:x} suspend={} sep_info_idx={}", hndl, suspend,
+            sep_info_idx);
 
   tBTA_AV_API_RCFG* p_buf =
       (tBTA_AV_API_RCFG*)osi_malloc(sizeof(tBTA_AV_API_RCFG) + num_protect);
@@ -628,15 +624,37 @@ void BTA_AvMetaCmd(uint8_t rc_handle, uint8_t label, tBTA_AV_CMD cmd_code,
  *
  ******************************************************************************/
 void BTA_AvSetLatency(tBTA_AV_HNDL handle, bool is_low_latency) {
-  LOG_INFO(
-      "Set audio/video stream low latency bta_handle:%hhu, is_low_latency:%s",
-      handle, is_low_latency ? "true" : "false");
+  log::info(
+      "Set audio/video stream low latency bta_handle:{}, is_low_latency:{}",
+      handle, is_low_latency);
 
   tBTA_AV_API_SET_LATENCY* p_buf =
       (tBTA_AV_API_SET_LATENCY*)osi_malloc(sizeof(tBTA_AV_API_SET_LATENCY));
   p_buf->hdr.event = BTA_AV_API_SET_LATENCY_EVT;
   p_buf->hdr.layer_specific = handle;
   p_buf->is_low_latency = is_low_latency;
+
+  bta_sys_sendmsg(p_buf);
+}
+
+/*******************************************************************************
+ *
+ * Function         BTA_AvSetPeerSep
+ *
+ * Description      Set peer sep in order to delete wrong avrcp handle
+ *                  there are may be two avrcp handle at start, delete the
+ *                  wrong when a2dp connected
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_AvSetPeerSep(const RawAddress& bdaddr, uint8_t sep) {
+  tBTA_AV_API_PEER_SEP* p_buf =
+      (tBTA_AV_API_PEER_SEP*)osi_malloc(sizeof(tBTA_AV_API_PEER_SEP));
+
+  p_buf->hdr.event = BTA_AV_API_PEER_SEP_EVT;
+  p_buf->addr = bdaddr;
+  p_buf->sep = sep;
 
   bta_sys_sendmsg(p_buf);
 }

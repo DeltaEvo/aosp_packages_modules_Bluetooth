@@ -15,7 +15,8 @@
  */
 #include "hci/vendor_specific_event_manager.h"
 
-#include "hci/controller.h"
+#include <bluetooth/log.h>
+
 #include "hci/hci_layer.h"
 #include "hci/hci_packets.h"
 
@@ -30,23 +31,20 @@ struct VendorSpecificEventManager::impl {
 
   ~impl() {}
 
-  void start(os::Handler* handler, hci::HciLayer* hci_layer, hci::Controller* controller) {
+  void start(os::Handler* handler, hci::HciLayer* hci_layer) {
     module_handler_ = handler;
     hci_layer_ = hci_layer;
-    controller_ = controller;
     hci_layer_->RegisterEventHandler(
         EventCode::VENDOR_SPECIFIC, handler->BindOn(this, &VendorSpecificEventManager::impl::on_vendor_specific_event));
-    vendor_capabilities_ = controller->GetVendorCapabilities();
   }
 
   void stop() {}
 
   void register_event(VseSubeventCode event, common::ContextualCallback<void(VendorSpecificEventView)> handler) {
-    ASSERT_LOG(
+    log::assert_that(
         subevent_handlers_.count(event) == 0,
-        "Can not register a second handler for %02hhx (%s)",
-        event,
-        VseSubeventCodeText(event).c_str());
+        "Can not register a second handler opcode:{}",
+        VseSubeventCodeText(event));
     subevent_handlers_[event] = handler;
   }
 
@@ -54,46 +52,22 @@ struct VendorSpecificEventManager::impl {
     subevent_handlers_.erase(subevent_handlers_.find(event));
   }
 
-  bool check_event_supported(VseSubeventCode event) {
-    switch (event) {
-      case (VseSubeventCode::BLE_THRESHOLD): {
-        if (vendor_capabilities_.total_scan_results_storage_ > 0) {
-          return true;
-        }
-      } break;
-      case (VseSubeventCode::BLE_TRACKING): {
-        if (vendor_capabilities_.total_num_of_advt_tracked_ > 0) {
-          return true;
-        }
-      } break;
-      case (VseSubeventCode::DEBUG_INFO): {
-        return vendor_capabilities_.debug_logging_supported_;
-      } break;
-      case (VseSubeventCode::BQR_EVENT): {
-        return vendor_capabilities_.bluetooth_quality_report_support_;
-      } break;
-      default:
-        LOG_WARN("Unhandled event %s", VseSubeventCodeText(event).c_str());
-    }
-    return false;
-  }
-
   void on_vendor_specific_event(EventView event_view) {
     auto vendor_specific_event_view = VendorSpecificEventView::Create(event_view);
-    ASSERT(vendor_specific_event_view.IsValid());
+    log::assert_that(
+        vendor_specific_event_view.IsValid(),
+        "assert failed: vendor_specific_event_view.IsValid()");
     VseSubeventCode vse_subevent_code = vendor_specific_event_view.GetSubeventCode();
     if (subevent_handlers_.find(vse_subevent_code) == subevent_handlers_.end()) {
-      LOG_WARN("Unhandled vendor specific event of type 0x%02hhx", vse_subevent_code);
+      log::warn("Unhandled vendor specific event of type 0x{:02x}", vse_subevent_code);
       return;
     }
-    subevent_handlers_[vse_subevent_code].Invoke(vendor_specific_event_view);
+    subevent_handlers_[vse_subevent_code](vendor_specific_event_view);
   }
 
   Module* module_;
   os::Handler* module_handler_;
   hci::HciLayer* hci_layer_;
-  hci::Controller* controller_;
-  Controller::VendorCapabilities vendor_capabilities_;
   std::map<VseSubeventCode, common::ContextualCallback<void(VendorSpecificEventView)>> subevent_handlers_;
 };
 
@@ -103,11 +77,10 @@ VendorSpecificEventManager::VendorSpecificEventManager() {
 
 void VendorSpecificEventManager::ListDependencies(ModuleList* list) const {
   list->add<hci::HciLayer>();
-  list->add<hci::Controller>();
 }
 
 void VendorSpecificEventManager::Start() {
-  pimpl_->start(GetHandler(), GetDependency<hci::HciLayer>(), GetDependency<hci::Controller>());
+  pimpl_->start(GetHandler(), GetDependency<hci::HciLayer>());
 }
 
 void VendorSpecificEventManager::Stop() {

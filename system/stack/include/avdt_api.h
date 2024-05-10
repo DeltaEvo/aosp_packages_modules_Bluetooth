@@ -26,12 +26,14 @@
 #define AVDT_API_H
 
 #include <base/strings/stringprintf.h>
+#include <bluetooth/log.h>
 
 #include <cstdint>
 #include <string>
 
-#include "bt_target.h"
-#include "osi/include/log.h"
+#include "internal_include/bt_target.h"
+#include "macros.h"
+#include "os/log.h"
 #include "stack/include/bt_hdr.h"
 #include "types/raw_address.h"
 
@@ -39,8 +41,6 @@
  *  Constants
  ****************************************************************************/
 #define AVDT_VERSION_1_3 0x0103
-
-#define AVDTP_VERSION_CONFIG_KEY "AvdtpVersion"
 
 /* Maximum size in bytes of the codec capabilities information element. */
 #define AVDT_CODEC_SIZE 20
@@ -56,14 +56,10 @@ typedef enum : uint16_t {
 } tAVDT_RESULT;
 
 inline tAVDT_RESULT ToAvdtResult(uint16_t result) {
-  ASSERT_LOG(result <= AVDT_WRITE_FAIL, "Unable to convert illegal result:%hu",
-             result);
+  bluetooth::log::assert_that(result <= AVDT_WRITE_FAIL,
+                              "Unable to convert illegal result:{}", result);
   return static_cast<tAVDT_RESULT>(result);
 }
-
-#define CASE_RETURN_TEXT(code) \
-  case code:                   \
-    return #code
 
 inline std::string avdt_result_text(const tAVDT_RESULT& result) {
   switch (result) {
@@ -77,7 +73,6 @@ inline std::string avdt_result_text(const tAVDT_RESULT& result) {
       return base::StringPrintf("UNKNOWN[%hu]", result);
   }
 }
-#undef CASE_RETURN_TEXT
 
 /* The index to access the codec type in codec_info[]. */
 #define AVDT_CODEC_TYPE_INDEX 2
@@ -561,7 +556,7 @@ typedef uint8_t tAVDT_DATA_OPT_MASK;
  * Returns          void
  *
  ******************************************************************************/
-extern void AVDT_Register(AvdtpRcb* p_reg, tAVDT_CTRL_CBACK* p_cback);
+void AVDT_Register(AvdtpRcb* p_reg, tAVDT_CTRL_CBACK* p_cback);
 
 /*******************************************************************************
  *
@@ -575,7 +570,7 @@ extern void AVDT_Register(AvdtpRcb* p_reg, tAVDT_CTRL_CBACK* p_cback);
  * Returns          void
  *
  ******************************************************************************/
-extern void AVDT_Deregister(void);
+void AVDT_Deregister(void);
 
 /*******************************************************************************
  *
@@ -587,7 +582,7 @@ extern void AVDT_Deregister(void);
  * Returns          void.
  *
  ******************************************************************************/
-extern void AVDT_AbortReq(uint8_t handle);
+void AVDT_AbortReq(uint8_t handle);
 
 /*******************************************************************************
  *
@@ -603,8 +598,8 @@ extern void AVDT_AbortReq(uint8_t handle);
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVDT_CreateStream(uint8_t peer_id, uint8_t* p_handle,
-                                  const AvdtpStreamConfig& avdtp_stream_config);
+uint16_t AVDT_CreateStream(uint8_t peer_id, uint8_t* p_handle,
+                           const AvdtpStreamConfig& avdtp_stream_config);
 
 /*******************************************************************************
  *
@@ -620,7 +615,7 @@ extern uint16_t AVDT_CreateStream(uint8_t peer_id, uint8_t* p_handle,
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVDT_RemoveStream(uint8_t handle);
+uint16_t AVDT_RemoveStream(uint8_t handle);
 
 /*******************************************************************************
  *
@@ -648,10 +643,9 @@ extern uint16_t AVDT_RemoveStream(uint8_t handle);
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVDT_DiscoverReq(const RawAddress& bd_addr,
-                                 uint8_t channel_index,
-                                 tAVDT_SEP_INFO* p_sep_info, uint8_t max_seps,
-                                 tAVDT_CTRL_CBACK* p_cback);
+uint16_t AVDT_DiscoverReq(const RawAddress& bd_addr, uint8_t channel_index,
+                          tAVDT_SEP_INFO* p_sep_info, uint8_t max_seps,
+                          tAVDT_CTRL_CBACK* p_cback);
 
 /*******************************************************************************
  *
@@ -677,9 +671,9 @@ extern uint16_t AVDT_DiscoverReq(const RawAddress& bd_addr,
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVDT_GetCapReq(const RawAddress& bd_addr, uint8_t channel_index,
-                               uint8_t seid, AvdtpSepConfig* p_cfg,
-                               tAVDT_CTRL_CBACK* p_cback, bool get_all_cap);
+uint16_t AVDT_GetCapReq(const RawAddress& bd_addr, uint8_t channel_index,
+                        uint8_t seid, AvdtpSepConfig* p_cfg,
+                        tAVDT_CTRL_CBACK* p_cback, bool get_all_cap);
 
 /*******************************************************************************
  *
@@ -692,7 +686,7 @@ extern uint16_t AVDT_GetCapReq(const RawAddress& bd_addr, uint8_t channel_index,
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVDT_DelayReport(uint8_t handle, uint8_t seid, uint16_t delay);
+uint16_t AVDT_DelayReport(uint8_t handle, uint8_t seid, uint16_t delay);
 
 /*******************************************************************************
  *
@@ -708,9 +702,9 @@ extern uint16_t AVDT_DelayReport(uint8_t handle, uint8_t seid, uint16_t delay);
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVDT_OpenReq(uint8_t handle, const RawAddress& bd_addr,
-                             uint8_t channel_index, uint8_t seid,
-                             AvdtpSepConfig* p_cfg);
+uint16_t AVDT_OpenReq(uint8_t handle, const RawAddress& bd_addr,
+                      uint8_t channel_index, uint8_t seid,
+                      AvdtpSepConfig* p_cfg);
 
 /*******************************************************************************
  *
@@ -724,8 +718,8 @@ extern uint16_t AVDT_OpenReq(uint8_t handle, const RawAddress& bd_addr,
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVDT_ConfigRsp(uint8_t handle, uint8_t label,
-                               uint8_t error_code, uint8_t category);
+uint16_t AVDT_ConfigRsp(uint8_t handle, uint8_t label, uint8_t error_code,
+                        uint8_t category);
 
 /*******************************************************************************
  *
@@ -742,7 +736,7 @@ extern uint16_t AVDT_ConfigRsp(uint8_t handle, uint8_t label,
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVDT_StartReq(uint8_t* p_handles, uint8_t num_handles);
+uint16_t AVDT_StartReq(uint8_t* p_handles, uint8_t num_handles);
 
 /*******************************************************************************
  *
@@ -759,7 +753,7 @@ extern uint16_t AVDT_StartReq(uint8_t* p_handles, uint8_t num_handles);
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVDT_SuspendReq(uint8_t* p_handles, uint8_t num_handles);
+uint16_t AVDT_SuspendReq(uint8_t* p_handles, uint8_t num_handles);
 
 /*******************************************************************************
  *
@@ -775,7 +769,7 @@ extern uint16_t AVDT_SuspendReq(uint8_t* p_handles, uint8_t num_handles);
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVDT_CloseReq(uint8_t handle);
+uint16_t AVDT_CloseReq(uint8_t handle);
 
 /*******************************************************************************
  *
@@ -794,7 +788,7 @@ extern uint16_t AVDT_CloseReq(uint8_t handle);
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVDT_ReconfigReq(uint8_t handle, AvdtpSepConfig* p_cfg);
+uint16_t AVDT_ReconfigReq(uint8_t handle, AvdtpSepConfig* p_cfg);
 
 /*******************************************************************************
  *
@@ -810,7 +804,7 @@ extern uint16_t AVDT_ReconfigReq(uint8_t handle, AvdtpSepConfig* p_cfg);
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVDT_SecurityReq(uint8_t handle, uint8_t* p_data, uint16_t len);
+uint16_t AVDT_SecurityReq(uint8_t handle, uint8_t* p_data, uint16_t len);
 
 /*******************************************************************************
  *
@@ -826,9 +820,8 @@ extern uint16_t AVDT_SecurityReq(uint8_t handle, uint8_t* p_data, uint16_t len);
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVDT_SecurityRsp(uint8_t handle, uint8_t label,
-                                 uint8_t error_code, uint8_t* p_data,
-                                 uint16_t len);
+uint16_t AVDT_SecurityRsp(uint8_t handle, uint8_t label, uint8_t error_code,
+                          uint8_t* p_data, uint16_t len);
 
 /*******************************************************************************
  *
@@ -866,9 +859,8 @@ extern uint16_t AVDT_SecurityRsp(uint8_t handle, uint8_t label,
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVDT_WriteReqOpt(uint8_t handle, BT_HDR* p_pkt,
-                                 uint32_t time_stamp, uint8_t m_pt,
-                                 tAVDT_DATA_OPT_MASK opt);
+uint16_t AVDT_WriteReqOpt(uint8_t handle, BT_HDR* p_pkt, uint32_t time_stamp,
+                          uint8_t m_pt, tAVDT_DATA_OPT_MASK opt);
 
 /*******************************************************************************
  *
@@ -885,9 +877,8 @@ extern uint16_t AVDT_WriteReqOpt(uint8_t handle, BT_HDR* p_pkt,
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVDT_ConnectReq(const RawAddress& bd_addr,
-                                uint8_t channel_index,
-                                tAVDT_CTRL_CBACK* p_cback);
+uint16_t AVDT_ConnectReq(const RawAddress& bd_addr, uint8_t channel_index,
+                         tAVDT_CTRL_CBACK* p_cback);
 
 /*******************************************************************************
  *
@@ -901,8 +892,8 @@ extern uint16_t AVDT_ConnectReq(const RawAddress& bd_addr,
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVDT_DisconnectReq(const RawAddress& bd_addr,
-                                   tAVDT_CTRL_CBACK* p_cback);
+uint16_t AVDT_DisconnectReq(const RawAddress& bd_addr,
+                            tAVDT_CTRL_CBACK* p_cback);
 
 /*******************************************************************************
  *
@@ -913,30 +904,7 @@ extern uint16_t AVDT_DisconnectReq(const RawAddress& bd_addr,
  * Returns          CID if successful, otherwise 0.
  *
  ******************************************************************************/
-extern uint16_t AVDT_GetL2CapChannel(uint8_t handle);
-
-/******************************************************************************
- *
- * Function         AVDT_SetTraceLevel
- *
- * Description      Sets the trace level for AVDT. If 0xff is passed, the
- *                  current trace level is returned.
- *
- *                  Input Parameters:
- *                      new_level:  The level to set the AVDT tracing to:
- *                      0xff-returns the current setting.
- *                      0-turns off tracing.
- *                      >= 1-Errors.
- *                      >= 2-Warnings.
- *                      >= 3-APIs.
- *                      >= 4-Events.
- *                      >= 5-Debug.
- *
- * Returns          The new trace level or current trace level if
- *                  the input parameter is 0xff.
- *
- *****************************************************************************/
-extern uint8_t AVDT_SetTraceLevel(uint8_t new_level);
+uint16_t AVDT_GetL2CapChannel(uint8_t handle);
 
 /**
  * Dump debug-related information for the Stack AVDTP module.

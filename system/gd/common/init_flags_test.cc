@@ -34,67 +34,8 @@ TEST(InitFlagsTest, test_leaudio_targeted_announcement_reconnection_mode) {
   ASSERT_TRUE(InitFlags::IsTargetedAnnouncementReconnectionMode());
 }
 
-TEST(InitFlagsTest, test_enable_debug_logging_for_all) {
-  const char* input[] = {"INIT_logging_debug_enabled_for_all=true", nullptr};
+TEST(InitFlagsTest, test_enable_use_rsi_from_cached_inqiry_results) {
+  const char* input[] = {"INIT_use_rsi_from_cached_inqiry_results=true", nullptr};
   InitFlags::Load(input);
-  ASSERT_TRUE(InitFlags::IsDebugLoggingEnabledForTag("foo"));
-  ASSERT_TRUE(InitFlags::IsDebugLoggingEnabledForTag("bar"));
-  ASSERT_TRUE(InitFlags::IsDebugLoggingEnabledForAll());
-}
-
-TEST(InitFlagsTest, test_enable_debug_logging_for_tags) {
-  const char* input[] = {"INIT_logging_debug_enabled_for_tags=foo,bar,hello", nullptr};
-  InitFlags::Load(input);
-  ASSERT_TRUE(InitFlags::IsDebugLoggingEnabledForTag("foo"));
-  ASSERT_TRUE(InitFlags::IsDebugLoggingEnabledForTag("bar"));
-  ASSERT_TRUE(InitFlags::IsDebugLoggingEnabledForTag("hello"));
-  ASSERT_FALSE(InitFlags::IsDebugLoggingEnabledForTag("Foo"));
-  ASSERT_FALSE(InitFlags::IsDebugLoggingEnabledForAll());
-}
-
-TEST(InitFlagsTest, test_disable_debug_logging_for_tags) {
-  const char* input[] = {"INIT_logging_debug_disabled_for_tags=foo,bar,hello", nullptr};
-  InitFlags::Load(input);
-  ASSERT_FALSE(InitFlags::IsDebugLoggingEnabledForTag("foo"));
-  ASSERT_FALSE(InitFlags::IsDebugLoggingEnabledForTag("bar"));
-  ASSERT_FALSE(InitFlags::IsDebugLoggingEnabledForTag("hello"));
-  ASSERT_FALSE(InitFlags::IsDebugLoggingEnabledForTag("Foo"));
-  ASSERT_FALSE(InitFlags::IsDebugLoggingEnabledForAll());
-}
-
-TEST(InitFlagsTest, test_debug_logging_multiple_flags) {
-  const char* input[] = {"INIT_logging_debug_enabled_for_tags=foo,hello",
-                         "INIT_logging_debug_disabled_for_tags=foo,bar",
-                         "INIT_logging_debug_enabled_for_all=false",
-                         nullptr};
-  InitFlags::Load(input);
-  ASSERT_FALSE(InitFlags::IsDebugLoggingEnabledForTag("foo"));
-  ASSERT_FALSE(InitFlags::IsDebugLoggingEnabledForTag("bar"));
-  ASSERT_TRUE(InitFlags::IsDebugLoggingEnabledForTag("hello"));
-  ASSERT_FALSE(InitFlags::IsDebugLoggingEnabledForTag("Foo"));
-  ASSERT_FALSE(InitFlags::IsDebugLoggingEnabledForAll());
-}
-
-TEST(InitFlagsTest, test_enable_snoop_logger_socket) {
-  const char* input[] = {"INIT_gd_hal_snoop_logger_socket=true", nullptr};
-  InitFlags::Load(input);
-  ASSERT_TRUE(InitFlags::IsSnoopLoggerSocketEnabled());
-}
-
-TEST(InitFlagsTest, test_device_iot_config_logging_is_enabled) {
-  const char* input[] = {"INIT_device_iot_config_logging=true", nullptr};
-  InitFlags::Load(input);
-  ASSERT_TRUE(InitFlags::IsDeviceIotConfigLoggingEnabled());
-}
-
-TEST(InitFlagsTest, test_enable_snoop_logger_filtering) {
-  const char* input[] = {"INIT_gd_hal_snoop_logger_filtering=true", nullptr};
-  InitFlags::Load(input);
-  ASSERT_TRUE(InitFlags::IsSnoopLoggerFilteringEnabled());
-}
-
-TEST(InitFlagsTest, test_enable_bluetooth_quality_report_callback) {
-  const char* input[] = {"INIT_bluetooth_quality_report_callback=true", nullptr};
-  InitFlags::Load(input);
-  ASSERT_TRUE(InitFlags::IsBluetoothQualityReportCallbackEnabled());
+  ASSERT_TRUE(InitFlags::UseRsiFromCachedInquiryResults());
 }

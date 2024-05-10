@@ -32,12 +32,14 @@ struct IsoManager::impl {
   impl(const IsoManager& iso_manager) : iso_manager_(iso_manager) {}
 
   void Start() {
-    LOG_ASSERT(!iso_impl_);
+    log::assert_that(iso_impl_ == nullptr,
+                     "assert failed: iso_impl_ == nullptr");
     iso_impl_ = std::make_unique<iso_impl>();
   }
 
   void Stop() {
-    LOG_ASSERT(iso_impl_);
+    log::assert_that(iso_impl_ != nullptr,
+                     "assert failed: iso_impl_ != nullptr");
     iso_impl_.reset();
   }
 
@@ -59,6 +61,10 @@ void IsoManager::RegisterCigCallbacks(CigCallbacks* callbacks) const {
 
 void IsoManager::RegisterBigCallbacks(BigCallbacks* callbacks) const {
   pimpl_->iso_impl_->handle_register_big_callbacks(callbacks);
+}
+
+void IsoManager::RegisterOnIsoTrafficActiveCallback(void callback(bool)) const {
+  pimpl_->iso_impl_->handle_register_on_iso_traffic_active_callback(callback);
 }
 
 void IsoManager::CreateCig(uint8_t cig_id,
@@ -108,7 +114,8 @@ void IsoManager::CreateBig(uint8_t big_id,
 }
 
 void IsoManager::TerminateBig(uint8_t big_id, uint8_t reason) {
-  pimpl_->iso_impl_->terminate_big(big_id, reason);
+  if (pimpl_->IsRunning())
+    pimpl_->iso_impl_->terminate_big(big_id, reason);
 }
 
 void IsoManager::HandleIsoData(void* p_msg) {
@@ -121,12 +128,7 @@ void IsoManager::HandleDisconnect(uint16_t handle, uint8_t reason) {
     pimpl_->iso_impl_->disconnection_complete(handle, reason);
 }
 
-void IsoManager::HandleNumComplDataPkts(uint8_t* p, uint8_t evt_len) {
-  if (pimpl_->IsRunning())
-    pimpl_->iso_impl_->handle_num_completed_pkts(p, evt_len);
-}
-
-void IsoManager::HandleGdNumComplDataPkts(uint16_t handle, uint16_t credits) {
+void IsoManager::HandleNumComplDataPkts(uint16_t handle, uint16_t credits) {
   if (pimpl_->IsRunning())
     pimpl_->iso_impl_->handle_gd_num_completed_pkts(handle, credits);
 }
@@ -152,6 +154,11 @@ void IsoManager::Dump(int fd) {
 }
 
 IsoManager::~IsoManager() = default;
+
+IsoManager* IsoManager::GetInstance() {
+  static IsoManager* instance = new IsoManager();
+  return instance;
+}
 
 }  // namespace hci
 }  // namespace bluetooth

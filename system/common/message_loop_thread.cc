@@ -16,27 +16,35 @@
 
 #include "message_loop_thread.h"
 
+#include <base/functional/callback.h>
+#include <base/location.h>
+#include <base/strings/stringprintf.h>
+#include <base/time/time.h>
+#include <bluetooth/log.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+
+#include <future>
+#include <mutex>
+#include <string>
 #include <thread>
 
-#include <base/logging.h>
-#include <base/strings/stringprintf.h>
-
-#include "gd/common/init_flags.h"
-#include "osi/include/log.h"
+#include "common/postable_context.h"
 
 namespace bluetooth {
-
 namespace common {
 
 static constexpr int kRealTimeFifoSchedulingPriority = 1;
 
-MessageLoopThread::MessageLoopThread(const std::string& thread_name)
-    : MessageLoopThread(thread_name, false) {}
+static base::TimeDelta timeDeltaFromMicroseconds(std::chrono::microseconds t) {
+#if BASE_VER < 931007
+  return base::TimeDelta::FromMicroseconds(t.count());
+#else
+  return base::Microseconds(t.count());
+#endif
+}
 
-MessageLoopThread::MessageLoopThread(const std::string& thread_name,
-                                     bool is_main)
+MessageLoopThread::MessageLoopThread(const std::string& thread_name)
     : thread_name_(thread_name),
       message_loop_(nullptr),
       run_loop_(nullptr),
@@ -44,29 +52,17 @@ MessageLoopThread::MessageLoopThread(const std::string& thread_name,
       thread_id_(-1),
       linux_tid_(-1),
       weak_ptr_factory_(this),
-      shutting_down_(false),
-      is_main_(is_main),
-      rust_thread_(nullptr) {}
+      shutting_down_(false) {}
 
 MessageLoopThread::~MessageLoopThread() { ShutDown(); }
 
 void MessageLoopThread::StartUp() {
-  if (is_main_ && init_flags::gd_rust_is_enabled()) {
-    rust_thread_ = new ::rust::Box<shim::rust::MessageLoopThread>(
-        shim::rust::main_message_loop_thread_create());
-    auto rust_id =
-        bluetooth::shim::rust::main_message_loop_thread_start(**rust_thread_);
-    thread_id_ = rust_id;
-    linux_tid_ = rust_id;
-    return;
-  }
-
   std::promise<void> start_up_promise;
   std::future<void> start_up_future = start_up_promise.get_future();
   {
     std::lock_guard<std::recursive_mutex> api_lock(api_mutex_);
     if (thread_ != nullptr) {
-      LOG(WARNING) << __func__ << ": thread " << *this << " is already started";
+      log::warn("thread {} is already started", *this);
 
       return;
     }
@@ -78,37 +74,24 @@ void MessageLoopThread::StartUp() {
 
 bool MessageLoopThread::DoInThread(const base::Location& from_here,
                                    base::OnceClosure task) {
-  return DoInThreadDelayed(from_here, std::move(task), base::TimeDelta());
+  return DoInThreadDelayed(from_here, std::move(task),
+                           std::chrono::microseconds(0));
 }
 
 bool MessageLoopThread::DoInThreadDelayed(const base::Location& from_here,
                                           base::OnceClosure task,
-                                          const base::TimeDelta& delay) {
+                                          std::chrono::microseconds delay) {
   std::lock_guard<std::recursive_mutex> api_lock(api_mutex_);
-  if (is_main_ && init_flags::gd_rust_is_enabled()) {
-    if (rust_thread_ == nullptr) {
-      LOG(ERROR) << __func__ << ": rust thread is null for thread " << *this
-                 << ", from " << from_here.ToString();
-      return false;
-    }
-
-    shim::rust::main_message_loop_thread_do_delayed(
-        **rust_thread_,
-        std::make_unique<shim::rust::OnceClosure>(std::move(task)),
-        delay.InMilliseconds());
-    return true;
-  }
 
   if (message_loop_ == nullptr) {
-    LOG(ERROR) << __func__ << ": message loop is null for thread " << *this
-               << ", from " << from_here.ToString();
+    log::error("message loop is null for thread {}, from {}", *this,
+               from_here.ToString());
     return false;
   }
-  if (!message_loop_->task_runner()->PostDelayedTask(from_here, std::move(task),
-                                                     delay)) {
-    LOG(ERROR) << __func__
-               << ": failed to post task to message loop for thread " << *this
-               << ", from " << from_here.ToString();
+  if (!message_loop_->task_runner()->PostDelayedTask(
+          from_here, std::move(task), timeDeltaFromMicroseconds(delay))) {
+    log::error("failed to post task to message loop for thread {}, from {}",
+               *this, from_here.ToString());
     return false;
   }
   return true;
@@ -116,31 +99,23 @@ bool MessageLoopThread::DoInThreadDelayed(const base::Location& from_here,
 
 void MessageLoopThread::ShutDown() {
   {
-    if (is_main_ && init_flags::gd_rust_is_enabled()) {
-      delete rust_thread_;
-      rust_thread_ = nullptr;
-      thread_id_ = -1;
-      linux_tid_ = -1;
-      return;
-    }
-
     std::lock_guard<std::recursive_mutex> api_lock(api_mutex_);
     if (thread_ == nullptr) {
-      LOG(INFO) << __func__ << ": thread " << *this << " is already stopped";
+      log::info("thread {} is already stopped", *this);
       return;
     }
     if (message_loop_ == nullptr) {
-      LOG(INFO) << __func__ << ": message_loop_ is null. Already stopping";
+      log::info("message_loop_ is null. Already stopping");
       return;
     }
     if (shutting_down_) {
-      LOG(INFO) << __func__ << ": waiting for thread to join";
+      log::info("waiting for thread to join");
       return;
     }
     shutting_down_ = true;
-    CHECK_NE(thread_id_, base::PlatformThread::CurrentId())
-        << __func__ << " should not be called on the thread itself. "
-        << "Otherwise, deadlock may happen.";
+    log::assert_that(thread_id_ != base::PlatformThread::CurrentId(),
+                     "should not be called on the thread itself. Otherwise, "
+                     "deadlock may happen.");
     run_loop_->QuitWhenIdle();
   }
   thread_->join();
@@ -157,9 +132,7 @@ base::PlatformThreadId MessageLoopThread::GetThreadId() const {
   return thread_id_;
 }
 
-std::string MessageLoopThread::GetName() const {
-  return thread_name_;
-}
+std::string MessageLoopThread::GetName() const { return thread_name_; }
 
 std::string MessageLoopThread::ToString() const {
   std::lock_guard<std::recursive_mutex> api_lock(api_mutex_);
@@ -177,10 +150,8 @@ void MessageLoopThread::RunThread(MessageLoopThread* thread,
   thread->Run(std::move(start_up_promise));
 }
 
+// This is only for use in tests.
 btbase::AbstractMessageLoop* MessageLoopThread::message_loop() const {
-  ASSERT_LOG(!is_main_,
-             "you are not allowed to get the main thread's message loop");
-
   std::lock_guard<std::recursive_mutex> api_lock(api_mutex_);
   return message_loop_;
 }
@@ -189,7 +160,7 @@ bool MessageLoopThread::EnableRealTimeScheduling() {
   std::lock_guard<std::recursive_mutex> api_lock(api_mutex_);
 
   if (!IsRunning()) {
-    LOG(ERROR) << __func__ << ": thread " << *this << " is not running";
+    log::error("thread {} is not running", *this);
     return false;
   }
 
@@ -197,10 +168,10 @@ bool MessageLoopThread::EnableRealTimeScheduling() {
                                       kRealTimeFifoSchedulingPriority};
   int rc = sched_setscheduler(linux_tid_, SCHED_FIFO, &rt_params);
   if (rc != 0) {
-    LOG(ERROR) << __func__ << ": unable to set SCHED_FIFO priority "
-               << kRealTimeFifoSchedulingPriority << " for linux_tid "
-               << std::to_string(linux_tid_) << ", thread " << *this
-               << ", error: " << strerror(errno);
+    log::error(
+        "unable to set SCHED_FIFO priority {} for linux_tid {}, thread {}, "
+        "error: {}",
+        kRealTimeFifoSchedulingPriority, linux_tid_, *this, strerror(errno));
     return false;
   }
   return true;
@@ -214,12 +185,8 @@ base::WeakPtr<MessageLoopThread> MessageLoopThread::GetWeakPtr() {
 void MessageLoopThread::Run(std::promise<void> start_up_promise) {
   {
     std::lock_guard<std::recursive_mutex> api_lock(api_mutex_);
-    if (is_main_ && init_flags::gd_rust_is_enabled()) {
-      return;
-    }
 
-    LOG(INFO) << __func__ << ": message loop starting for thread "
-              << thread_name_;
+    log::info("message loop starting for thread {}", thread_name_);
     base::PlatformThread::SetName(thread_name_);
     message_loop_ = new btbase::AbstractMessageLoop();
     run_loop_ = new base::RunLoop();
@@ -239,11 +206,15 @@ void MessageLoopThread::Run(std::promise<void> start_up_promise) {
     message_loop_ = nullptr;
     delete run_loop_;
     run_loop_ = nullptr;
-    LOG(INFO) << __func__ << ": message loop finished for thread "
-              << thread_name_;
+    log::info("message loop finished for thread {}", thread_name_);
   }
 }
 
-}  // namespace common
+void MessageLoopThread::Post(base::OnceClosure closure) {
+  DoInThread(FROM_HERE, std::move(closure));
+}
 
+PostableContext* MessageLoopThread::Postable() { return this; }
+
+}  // namespace common
 }  // namespace bluetooth

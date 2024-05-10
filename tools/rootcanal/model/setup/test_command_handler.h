@@ -40,9 +40,6 @@ class TestCommandHandler {
   void HandleCommand(const std::string& name,
                      const std::vector<std::string>& args);
 
-  // Dispatches the action from a file
-  void FromFile(const std::string& file_name);
-
   // Dispatches the action corresponding to the command specified by |name|.
   void RegisterSendResponse(std::function<void(const std::string&)> callback);
 
@@ -74,6 +71,9 @@ class TestCommandHandler {
 
   // Change the device's MAC address
   void SetDeviceAddress(const std::vector<std::string>& args);
+
+  // Change the device's configuration
+  void SetDeviceConfiguration(const std::vector<std::string>& args);
 
   // Timer management functions
   void SetTimerPeriod(const std::vector<std::string>& args);

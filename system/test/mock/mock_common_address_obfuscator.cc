@@ -19,38 +19,31 @@
  *   Functions generated:4
  */
 
-#include <base/logging.h>
 #include <openssl/hmac.h>
 
-#include <algorithm>
-#include <map>
 #include <string>
 
 #include "common/address_obfuscator.h"
 #include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
-#ifndef UNUSED_ATTR
-#define UNUSED_ATTR
-#endif
-
 namespace bluetooth {
 namespace common {
 
 bool AddressObfuscator::IsInitialized() {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
   return false;
 }
 bool AddressObfuscator::IsSaltValid(const Octet32& salt_256bit) {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
   return false;
 }
 std::string AddressObfuscator::Obfuscate(const RawAddress& address) {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
   return 0;
 }
 void AddressObfuscator::Initialize(const Octet32& salt_256bit) {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
   salt_256bit_ = salt_256bit;
 }
 

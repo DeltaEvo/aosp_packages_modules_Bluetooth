@@ -28,20 +28,20 @@
 
 #define LOG_TAG "bt_btif_sdp"
 
+#include <bluetooth/log.h>
 #include <hardware/bluetooth.h>
 #include <hardware/bt_sdp.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "bta/include/bta_sdp_api.h"
 #include "bta_api.h"
-#include "bta_sdp_api.h"
 #include "btif_common.h"
-#include "btif_profile_queue.h"
-#include "btif_util.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
 using bluetooth::Uuid;
+using namespace bluetooth;
 
 /*****************************************************************************
  *  Functions implemented in sdp_server.c
@@ -67,7 +67,7 @@ static btsdp_callbacks_t* bt_sdp_callbacks = NULL;
 
 static void btif_sdp_search_comp_evt(uint16_t event, char* p_param) {
   tBTA_SDP_SEARCH_COMP* evt_data = (tBTA_SDP_SEARCH_COMP*)p_param;
-  BTIF_TRACE_DEBUG("%s:  event = %d", __func__, event);
+  log::verbose("event = {}", event);
 
   if (event != BTA_SDP_SEARCH_COMP_EVT) return;
 
@@ -118,7 +118,7 @@ static void sdp_dm_cback(tBTA_SDP_EVT event, tBTA_SDP* p_data,
 }
 
 static bt_status_t init(btsdp_callbacks_t* callbacks) {
-  BTIF_TRACE_DEBUG("Sdp Search %s", __func__);
+  log::verbose("Sdp Search Init");
 
   bt_sdp_callbacks = callbacks;
   sdp_server_init();
@@ -129,7 +129,7 @@ static bt_status_t init(btsdp_callbacks_t* callbacks) {
 }
 
 static bt_status_t deinit() {
-  BTIF_TRACE_DEBUG("Sdp Search %s", __func__);
+  log::verbose("Sdp Search Deinit");
 
   bt_sdp_callbacks = NULL;
   sdp_server_cleanup();
@@ -148,7 +148,7 @@ static const btsdp_interface_t sdp_if = {
     remove_sdp_record};
 
 const btsdp_interface_t* btif_sdp_get_interface(void) {
-  BTIF_TRACE_DEBUG("%s", __func__);
+  log::verbose("");
   return &sdp_if;
 }
 
@@ -162,7 +162,7 @@ const btsdp_interface_t* btif_sdp_get_interface(void) {
  *
  ******************************************************************************/
 bt_status_t btif_sdp_execute_service(bool b_enable) {
-  BTIF_TRACE_DEBUG("%s enable:%d", __func__, b_enable);
+  log::verbose("enable:{}", b_enable);
 
   if (b_enable) {
     BTA_SdpEnable(sdp_dm_cback);

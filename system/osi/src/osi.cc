@@ -18,18 +18,16 @@
 
 #define LOG_TAG "bt_osi_rand"
 
-#include <base/logging.h>
-#include <errno.h>
+#include "osi/include/osi.h"
+
+#include <bluetooth/log.h>
 #include <fcntl.h>
-#include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "check.h"
-#include "osi/include/log.h"
-#include "osi/include/osi.h"
+#include "os/log.h"
 
 #define RANDOM_PATH "/dev/urandom"
 
@@ -38,15 +36,17 @@ int osi_rand(void) {
   int rand_fd = open(RANDOM_PATH, O_RDONLY);
 
   if (rand_fd == INVALID_FD) {
-    LOG_ERROR("%s can't open rand fd %s: %s ", __func__, RANDOM_PATH,
-              strerror(errno));
-    CHECK(rand_fd != INVALID_FD);
+    bluetooth::log::error("can't open rand fd {}: {}", RANDOM_PATH,
+                          strerror(errno));
+    bluetooth::log::assert_that(rand_fd != INVALID_FD,
+                                "assert failed: rand_fd != INVALID_FD");
   }
 
   ssize_t read_bytes = read(rand_fd, &rand, sizeof(rand));
   close(rand_fd);
 
-  CHECK(read_bytes == sizeof(rand));
+  bluetooth::log::assert_that(read_bytes == sizeof(rand),
+                              "assert failed: read_bytes == sizeof(rand)");
 
   if (rand < 0) rand = -rand;
 

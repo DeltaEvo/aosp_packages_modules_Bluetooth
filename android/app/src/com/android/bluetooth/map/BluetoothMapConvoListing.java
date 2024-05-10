@@ -14,10 +14,14 @@
 */
 package com.android.bluetooth.map;
 
+import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothProtoEnums;
 import android.util.Log;
 import android.util.Xml;
 
+import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.content_profiles.ContentProfileErrorReportUtils;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -32,10 +36,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+// Next tag value for ContentProfileErrorReportUtils.report(): 3
 public class BluetoothMapConvoListing {
     private boolean mHasUnread = false;
     private static final String TAG = "BluetoothMapConvoListing";
-    private static final boolean D = BluetoothMapService.DEBUG;
     private static final String XML_TAG = "MAP-convo-listing";
 
     private List<BluetoothMapConvoListingElement> mList;
@@ -105,10 +109,25 @@ public class BluetoothMapConvoListing {
             xmlConvoElement.endTag(null, XML_TAG);
             xmlConvoElement.endDocument();
         } catch (IllegalArgumentException e) {
+            ContentProfileErrorReportUtils.report(
+                    BluetoothProfile.MAP,
+                    BluetoothProtoEnums.BLUETOOTH_MAP_CONVO_LISTING,
+                    BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
+                    0);
             Log.w(TAG, e);
         } catch (IllegalStateException e) {
+            ContentProfileErrorReportUtils.report(
+                    BluetoothProfile.MAP,
+                    BluetoothProtoEnums.BLUETOOTH_MAP_CONVO_LISTING,
+                    BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
+                    1);
             Log.w(TAG, e);
         } catch (IOException e) {
+            ContentProfileErrorReportUtils.report(
+                    BluetoothProfile.MAP,
+                    BluetoothProtoEnums.BLUETOOTH_MAP_CONVO_LISTING,
+                    BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
+                    2);
             Log.w(TAG, e);
         }
         return sw.toString().getBytes("UTF-8");
@@ -152,9 +171,7 @@ public class BluetoothMapConvoListing {
                 // Skip until we get a folder-listing tag
                 String name = parser.getName();
                 if (!name.equalsIgnoreCase(XML_TAG)) {
-                    if (D) {
-                        Log.i(TAG, "Unknown XML tag: " + name);
-                    }
+                    Log.w(TAG, "Unknown XML tag: " + name);
                     Utils.skipCurrentTag(parser);
                 }
                 readConversations(parser);
@@ -174,9 +191,7 @@ public class BluetoothMapConvoListing {
     private void readConversations(XmlPullParser parser)
             throws XmlPullParserException, IOException, ParseException {
         int type;
-        if (D) {
-            Log.i(TAG, "readConversations(): ");
-        }
+        Log.d(TAG, "readConversations");
         while ((type = parser.next()) != XmlPullParser.END_TAG
                 && type != XmlPullParser.END_DOCUMENT) {
             // Skip until we get a start tag
@@ -187,9 +202,7 @@ public class BluetoothMapConvoListing {
             String name = parser.getName();
             if (!name.trim()
                     .equalsIgnoreCase(BluetoothMapConvoListingElement.XML_TAG_CONVERSATION)) {
-                if (D) {
-                    Log.i(TAG, "Unknown XML tag: " + name);
-                }
+                Log.w(TAG, "Unknown XML tag: " + name);
                 Utils.skipCurrentTag(parser);
                 continue;
             }

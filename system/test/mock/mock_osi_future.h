@@ -21,25 +21,13 @@
  *  mockcify.pl ver 0.3.0
  */
 
-#include <cstdint>
 #include <functional>
-#include <map>
-#include <string>
 
 // Original included files, if any
-// NOTE: Since this is a mock file with mock definitions some number of
-//       include files may not be required.  The include-what-you-use
-//       still applies, but crafting proper inclusion is out of scope
-//       for this effort.  This compilation unit may compile as-is, or
-//       may need attention to prune from (or add to ) the inclusion set.
-#include <base/logging.h>
 
-#include "check.h"
-#include "osi/include/allocator.h"
+#include <bluetooth/log.h>
+
 #include "osi/include/future.h"
-#include "osi/include/log.h"
-#include "osi/include/osi.h"
-#include "test/common/mock_functions.h"
 
 // Mocked compile conditionals, if any
 
@@ -54,7 +42,7 @@ namespace osi_future {
 struct future_await {
   void* return_value{};
   std::function<void*(future_t* future)> body{
-      [this](future_t* future) { return return_value; }};
+      [this](future_t* /* future */) { return return_value; }};
   void* operator()(future_t* future) { return body(future); };
 };
 extern struct future_await future_await;
@@ -75,7 +63,7 @@ extern struct future_new future_new;
 struct future_new_named {
   future_t* return_value{0};
   std::function<future_t*(const char* name)> body{
-      [this](const char* name) { return return_value; }};
+      [this](const char* /* name */) { return return_value; }};
   future_t* operator()(const char* name) { return body(name); };
 };
 extern struct future_new_named future_new_named;
@@ -85,8 +73,8 @@ extern struct future_new_named future_new_named;
 // Return: future_t*
 struct future_new_immediate {
   future_t* return_value{0};
-  std::function<future_t*(void* value)> body{[this](void* value) {
-    CHECK(0);
+  std::function<future_t*(void* value)> body{[this](void* /* value */) {
+    bluetooth::log::fatal("unexpectedly called");
     return return_value;
   }};
   future_t* operator()(void* value) { return body(value); };
@@ -98,7 +86,7 @@ extern struct future_new_immediate future_new_immediate;
 // Return: void
 struct future_ready {
   std::function<void(future_t* future, void* value)> body{
-      [](future_t* future, void* value) {}};
+      [](future_t* /* future */, void* /* value */) {}};
   void operator()(future_t* future, void* value) { body(future, value); };
 };
 extern struct future_ready future_ready;

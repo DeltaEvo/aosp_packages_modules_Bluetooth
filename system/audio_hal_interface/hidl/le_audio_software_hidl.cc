@@ -19,7 +19,9 @@
 
 #include "le_audio_software_hidl.h"
 
-#include "osi/include/log.h"
+#include <bluetooth/log.h>
+
+#include "os/log.h"
 
 namespace bluetooth {
 namespace audio {
@@ -35,6 +37,7 @@ using ::bluetooth::audio::hidl::SessionType_2_1;
 
 using ::bluetooth::audio::le_audio::LeAudioClientInterface;
 using ::bluetooth::audio::le_audio::StartRequestState;
+using ::bluetooth::le_audio::DsaMode;
 
 /**
  * Helper utils
@@ -112,29 +115,55 @@ BluetoothAudioCtrlAck LeAudioTransport::StartRequest() {
   SetStartRequestState(StartRequestState::PENDING_BEFORE_RESUME);
   if (stream_cb_.on_resume_(true)) {
     if (start_request_state_ == StartRequestState::CONFIRMED) {
-      LOG_INFO("Start completed.");
+      log::info("Start completed.");
       SetStartRequestState(StartRequestState::IDLE);
       return BluetoothAudioCtrlAck::SUCCESS_FINISHED;
     }
 
     if (start_request_state_ == StartRequestState::CANCELED) {
-      LOG_INFO("Start request failed.");
+      log::info("Start request failed.");
       SetStartRequestState(StartRequestState::IDLE);
       return BluetoothAudioCtrlAck::FAILURE;
     }
 
-    LOG_INFO("Start pending.");
+    log::info("Start pending.");
     SetStartRequestState(StartRequestState::PENDING_AFTER_RESUME);
     return BluetoothAudioCtrlAck::PENDING;
   }
 
-  LOG_ERROR("Start request failed.");
+  log::error("Start request failed.");
+  SetStartRequestState(StartRequestState::IDLE);
+  return BluetoothAudioCtrlAck::FAILURE;
+}
+
+BluetoothAudioCtrlAck LeAudioTransport::StartRequestV2() {
+  SetStartRequestState(StartRequestState::PENDING_BEFORE_RESUME);
+  if (stream_cb_.on_resume_(true)) {
+    std::lock_guard<std::mutex> guard(start_request_state_mutex_);
+    if (start_request_state_ == StartRequestState::CONFIRMED) {
+      log::info("Start completed.");
+      SetStartRequestState(StartRequestState::IDLE);
+      return BluetoothAudioCtrlAck::SUCCESS_FINISHED;
+    }
+
+    if (start_request_state_ == StartRequestState::CANCELED) {
+      log::info("Start request failed.");
+      SetStartRequestState(StartRequestState::IDLE);
+      return BluetoothAudioCtrlAck::FAILURE;
+    }
+
+    log::info("Start pending.");
+    SetStartRequestState(StartRequestState::PENDING_AFTER_RESUME);
+    return BluetoothAudioCtrlAck::PENDING;
+  }
+
+  log::error("Start request failed.");
   SetStartRequestState(StartRequestState::IDLE);
   return BluetoothAudioCtrlAck::FAILURE;
 }
 
 BluetoothAudioCtrlAck LeAudioTransport::SuspendRequest() {
-  LOG(INFO) << __func__;
+  log::info("");
   if (stream_cb_.on_suspend_()) {
     flush_();
     return BluetoothAudioCtrlAck::SUCCESS_FINISHED;
@@ -144,7 +173,7 @@ BluetoothAudioCtrlAck LeAudioTransport::SuspendRequest() {
 }
 
 void LeAudioTransport::StopRequest() {
-  LOG(INFO) << __func__;
+  log::info("");
   if (stream_cb_.on_suspend_()) {
     flush_();
   }
@@ -153,10 +182,9 @@ void LeAudioTransport::StopRequest() {
 bool LeAudioTransport::GetPresentationPosition(uint64_t* remote_delay_report_ns,
                                                uint64_t* total_bytes_processed,
                                                timespec* data_position) {
-  VLOG(2) << __func__ << ": data=" << total_bytes_processed_
-          << " byte(s), timestamp=" << data_position_.tv_sec << "."
-          << data_position_.tv_nsec
-          << "s, delay report=" << remote_delay_report_ms_ << " msec.";
+  log::verbose("data={} byte(s), timestamp={}.{}s, delay report={} msec.",
+               total_bytes_processed_, data_position_.tv_sec,
+               data_position_.tv_nsec, remote_delay_report_ms_);
   if (remote_delay_report_ns != nullptr) {
     *remote_delay_report_ns = remote_delay_report_ms_ * 1000000u;
   }
@@ -172,15 +200,29 @@ void LeAudioTransport::MetadataChanged(
   auto track_count = source_metadata.track_count;
 
   if (track_count == 0) {
-    LOG(WARNING) << ", invalid number of metadata changed tracks";
+    log::warn(", invalid number of metadata changed tracks");
     return;
   }
+  std::vector<playback_track_metadata_v7> tracks_vec;
+  tracks_vec.reserve(track_count);
+  for (size_t i = 0; i < track_count; i++) {
+    tracks_vec.push_back({
+        .base =
+            {
+                .usage = source_metadata.tracks[i].usage,
+                .content_type = source_metadata.tracks[i].content_type,
+                .gain = source_metadata.tracks[i].gain,
+            },
+    });
+  }
+  const source_metadata_v7_t source_metadata_v7 = {
+      .track_count = tracks_vec.size(), .tracks = tracks_vec.data()};
 
-  stream_cb_.on_metadata_update_(source_metadata);
+  stream_cb_.on_metadata_update_(source_metadata_v7, DsaMode::DISABLED);
 }
 
 void LeAudioTransport::ResetPresentationPosition() {
-  VLOG(2) << __func__ << ": called.";
+  log::verbose("called.");
   remote_delay_report_ms_ = 0;
   total_bytes_processed_ = 0;
   data_position_ = {};
@@ -194,7 +236,7 @@ void LeAudioTransport::LogBytesProcessed(size_t bytes_processed) {
 }
 
 void LeAudioTransport::SetRemoteDelay(uint16_t delay_report_ms) {
-  LOG(INFO) << __func__ << ": delay_report=" << delay_report_ms << " msec";
+  log::info("delay_report={} msec", delay_report_ms);
   remote_delay_report_ms_ = delay_report_ms;
 }
 
@@ -210,6 +252,22 @@ void LeAudioTransport::LeAudioSetSelectedHalPcmConfig(uint32_t sample_rate_hz,
   pcm_config_.bitsPerSample = le_audio_bits_per_sample2audio_hal(bit_rate);
   pcm_config_.channelMode = le_audio_channel_mode2audio_hal(channels_count);
   pcm_config_.dataIntervalUs = data_interval;
+}
+
+bool LeAudioTransport::IsRequestCompletedAfterUpdate(
+    const std::function<std::pair<StartRequestState, bool>(StartRequestState)>&
+        lambda) {
+  std::lock_guard<std::mutex> guard(start_request_state_mutex_);
+  auto result = lambda(start_request_state_);
+  auto new_state = std::get<0>(result);
+  if (new_state != start_request_state_) {
+    start_request_state_ = new_state;
+  }
+
+  auto ret = std::get<1>(result);
+  log::verbose("new state: {}, return: {}",
+               static_cast<int>(start_request_state_.load()), ret);
+  return ret;
 }
 
 StartRequestState LeAudioTransport::GetStartRequestState(void) {
@@ -240,6 +298,9 @@ LeAudioSinkTransport::LeAudioSinkTransport(SessionType_2_1 session_type,
 LeAudioSinkTransport::~LeAudioSinkTransport() { delete transport_; }
 
 BluetoothAudioCtrlAck LeAudioSinkTransport::StartRequest() {
+  if (com::android::bluetooth::flags::leaudio_start_stream_race_fix()) {
+    return transport_->StartRequestV2();
+  }
   return transport_->StartRequest();
 }
 
@@ -284,6 +345,12 @@ void LeAudioSinkTransport::LeAudioSetSelectedHalPcmConfig(
                                              channels_count, data_interval);
 }
 
+bool LeAudioSinkTransport::IsRequestCompletedAfterUpdate(
+    const std::function<std::pair<StartRequestState, bool>(StartRequestState)>&
+        lambda) {
+  return transport_->IsRequestCompletedAfterUpdate(lambda);
+}
+
 StartRequestState LeAudioSinkTransport::GetStartRequestState(void) {
   return transport_->GetStartRequestState();
 }
@@ -312,6 +379,9 @@ LeAudioSourceTransport::LeAudioSourceTransport(SessionType_2_1 session_type,
 LeAudioSourceTransport::~LeAudioSourceTransport() { delete transport_; }
 
 BluetoothAudioCtrlAck LeAudioSourceTransport::StartRequest() {
+  if (com::android::bluetooth::flags::leaudio_start_stream_race_fix()) {
+    return transport_->StartRequestV2();
+  }
   return transport_->StartRequest();
 }
 
@@ -356,6 +426,11 @@ void LeAudioSourceTransport::LeAudioSetSelectedHalPcmConfig(
                                              channels_count, data_interval);
 }
 
+bool LeAudioSourceTransport::IsRequestCompletedAfterUpdate(
+    const std::function<std::pair<StartRequestState, bool>(StartRequestState)>&
+        lambda) {
+  return transport_->IsRequestCompletedAfterUpdate(lambda);
+}
 StartRequestState LeAudioSourceTransport::GetStartRequestState(void) {
   return transport_->GetStartRequestState();
 }

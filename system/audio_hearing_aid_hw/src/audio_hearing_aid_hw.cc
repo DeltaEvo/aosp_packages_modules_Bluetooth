@@ -20,29 +20,27 @@
 
 #define LOG_TAG "bt_hearing_aid_hw"
 
-#include <errno.h>
+#include "audio_hearing_aid_hw/include/audio_hearing_aid_hw.h"
+
 #include <fcntl.h>
+#include <hardware/audio.h>
+#include <hardware/hardware.h>
 #include <inttypes.h>
+#include <log/log.h>
 #include <stdint.h>
-#include <sys/errno.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/un.h>
+#include <system/audio.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <mutex>
-
-#include <hardware/audio.h>
-#include <hardware/hardware.h>
-#include <log/log.h>
-#include <system/audio.h>
 
 #include "osi/include/hash_map_utils.h"
 #include "osi/include/osi.h"
 #include "osi/include/socket_utils/sockets.h"
-
-#include "audio_hearing_aid_hw/include/audio_hearing_aid_hw.h"
 
 /*****************************************************************************
  *  Constants & Macros
@@ -1167,7 +1165,7 @@ static int out_set_parameters(struct audio_stream* stream,
   /* dump params */
   hash_map_utils_dump_string_keys_string_values(params);
 
-  if (params["closing"].compare("true") == 0) {
+  if (params[AUDIO_PARAMETER_KEY_CLOSING].compare("true") == 0) {
     DEBUG("stream closing, disallow any writes");
     out->common.state = AUDIO_HA_STATE_STOPPING;
   }

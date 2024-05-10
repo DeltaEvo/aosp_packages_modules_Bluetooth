@@ -313,6 +313,8 @@ class StackA2dpTest : public ::testing::Test {
           supported = true;
           break;
         case BTAV_A2DP_CODEC_INDEX_MAX:
+        case BTAV_A2DP_CODEC_INDEX_SOURCE_MAX:
+        case BTAV_A2DP_CODEC_INDEX_SINK_MAX:
           // Needed to avoid using "default:" case so we can capture when
           // a new codec is added, and it can be included here.
           break;
@@ -914,6 +916,12 @@ TEST_F(StackA2dpTest, test_a2dp_codec_index_str) {
 
   // Test that each codec has a known string
   for (int i = BTAV_A2DP_CODEC_INDEX_MIN; i < BTAV_A2DP_CODEC_INDEX_MAX; i++) {
+    if ((i >= BTAV_A2DP_CODEC_INDEX_SOURCE_EXT_MIN &&
+         i < BTAV_A2DP_CODEC_INDEX_SOURCE_EXT_MAX) ||
+        (i >= BTAV_A2DP_CODEC_INDEX_SINK_EXT_MIN &&
+         i < BTAV_A2DP_CODEC_INDEX_SINK_EXT_MAX)) {
+      continue;
+    }
     btav_a2dp_codec_index_t codec_index =
         static_cast<btav_a2dp_codec_index_t>(i);
     EXPECT_STRNE(A2DP_CodecIndexStr(codec_index), "UNKNOWN CODEC INDEX");
@@ -933,13 +941,6 @@ TEST_F(StackA2dpTest, test_a2dp_init_codec_config) {
   for (size_t i = 0; i < codec_info_sbc_capability[0] + 1; i++) {
     EXPECT_EQ(avdt_cfg.codec_info[i], codec_info_sbc_capability[i]);
   }
-// Test for content protection
-#if (BTA_AV_CO_CP_SCMS_T == TRUE)
-  EXPECT_EQ(avdt_cfg.protect_info[0], AVDT_CP_LOSC);
-  EXPECT_EQ(avdt_cfg.protect_info[1], (AVDT_CP_SCMS_T_ID & 0xFF));
-  EXPECT_EQ(avdt_cfg.protect_info[2], ((AVDT_CP_SCMS_T_ID >> 8) & 0xFF));
-  EXPECT_EQ(avdt_cfg.num_protect, 1);
-#endif
 
   //
   // Test for SBC Sink
@@ -970,14 +971,6 @@ TEST_F(StackA2dpTest, test_a2dp_init_codec_config) {
       ASSERT_EQ(avdt_cfg.codec_info[i], codec_info_aac_capability[i]);
     }
   }
-
-// Test for content protection
-#if (BTA_AV_CO_CP_SCMS_T == TRUE)
-  EXPECT_EQ(avdt_cfg.protect_info[0], AVDT_CP_LOSC);
-  EXPECT_EQ(avdt_cfg.protect_info[1], (AVDT_CP_SCMS_T_ID & 0xFF));
-  EXPECT_EQ(avdt_cfg.protect_info[2], ((AVDT_CP_SCMS_T_ID >> 8) & 0xFF));
-  EXPECT_EQ(avdt_cfg.num_protect, 1);
-#endif
 }
 
 TEST_F(A2dpCodecConfigTest, createCodec) {

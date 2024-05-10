@@ -14,31 +14,23 @@
  * limitations under the License.
  */
 
-#include "stack/include/a2dp_vendor_opus.h"
-
-#include <base/logging.h>
 #include <gtest/gtest.h>
-#include <stdio.h>
 
 #include <chrono>
 #include <cstdint>
-#include <fstream>
 #include <future>
-#include <iomanip>
-#include <map>
 #include <string>
 
 #include "common/init_flags.h"
 #include "common/time_util.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/test/AllocationTestHarness.h"
+#include "stack/include/a2dp_vendor_opus.h"
 #include "stack/include/a2dp_vendor_opus_constants.h"
 #include "stack/include/bt_hdr.h"
 #include "test_util.h"
 #include "wav_reader.h"
 
-extern void allocation_tracker_uninit(void);
 namespace {
 constexpr uint32_t kA2dpTickUs = 23 * 1000;
 constexpr char kWavFile[] = "test/a2dp/raw_data/pcm1644s.wav";
@@ -69,13 +61,10 @@ static BT_HDR* packet = nullptr;
 static WavReader wav_reader = WavReader(GetWavFilePath(kWavFile).c_str());
 static std::promise<void> promise;
 
-class A2dpOpusTest : public AllocationTestHarness {
+class A2dpOpusTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    AllocationTestHarness::SetUp();
     common::InitFlags::SetAllForTesting();
-    // Disable our allocation tracker to allow ASAN full range
-    allocation_tracker_uninit();
     SetCodecConfig();
     encoder_iface_ = const_cast<tA2DP_ENCODER_INTERFACE*>(
         A2DP_VendorGetEncoderInterfaceOpus(kCodecInfoOpusCapability));
@@ -95,7 +84,6 @@ class A2dpOpusTest : public AllocationTestHarness {
     if (decoder_iface_ != nullptr) {
       decoder_iface_->decoder_cleanup();
     }
-    AllocationTestHarness::TearDown();
   }
 
   void SetCodecConfig() {
@@ -174,7 +162,8 @@ TEST_F(A2dpOpusTest, a2dp_source_read_underflow) {
 TEST_F(A2dpOpusTest, a2dp_enqueue_cb_is_invoked) {
   promise = {};
   auto read_cb = +[](uint8_t* p_buf, uint32_t len) -> uint32_t {
-    ASSERT(GetReadSize() == len);
+    log::assert_that(GetReadSize() == len,
+                     "assert failed: GetReadSize() == len");
     return len;
   };
   auto enqueue_cb = +[](BT_HDR* p_buf, size_t frames_n, uint32_t len) -> bool {

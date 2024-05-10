@@ -19,6 +19,21 @@
 namespace bluetooth {
 namespace audio {
 
+const BluetoothAudioHalVersion BluetoothAudioHalVersion::VERSION_UNAVAILABLE =
+    BluetoothAudioHalVersion();
+const BluetoothAudioHalVersion BluetoothAudioHalVersion::VERSION_2_0 =
+    BluetoothAudioHalVersion(BluetoothAudioHalTransport::HIDL, 2, 0);
+const BluetoothAudioHalVersion BluetoothAudioHalVersion::VERSION_2_1 =
+    BluetoothAudioHalVersion(BluetoothAudioHalTransport::HIDL, 2, 1);
+const BluetoothAudioHalVersion BluetoothAudioHalVersion::VERSION_AIDL_V1 =
+    BluetoothAudioHalVersion(BluetoothAudioHalTransport::AIDL, 1, 0);
+const BluetoothAudioHalVersion BluetoothAudioHalVersion::VERSION_AIDL_V2 =
+    BluetoothAudioHalVersion(BluetoothAudioHalTransport::AIDL, 2, 0);
+const BluetoothAudioHalVersion BluetoothAudioHalVersion::VERSION_AIDL_V3 =
+    BluetoothAudioHalVersion(BluetoothAudioHalTransport::AIDL, 3, 0);
+const BluetoothAudioHalVersion BluetoothAudioHalVersion::VERSION_AIDL_V4 =
+    BluetoothAudioHalVersion(BluetoothAudioHalTransport::AIDL, 4, 0);
+
 std::unique_ptr<HalVersionManager> HalVersionManager::instance_ptr = nullptr;
 
 BluetoothAudioHalVersion HalVersionManager::GetHalVersion() {
@@ -41,6 +56,7 @@ HalVersionManager::GetProvidersFactory_2_0() {
 
 HalVersionManager::HalVersionManager() {
   hal_version_ = BluetoothAudioHalVersion::VERSION_UNAVAILABLE;
+  hal_transport_ = BluetoothAudioHalTransport::UNKNOWN;
 }
 
 }  // namespace audio

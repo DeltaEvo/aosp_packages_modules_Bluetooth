@@ -18,12 +18,14 @@ config("packet_config") {
   include_dirs = [
     "//bt/system/",
     "//bt/system/include",
-    "//bt/system/internal_include",
     "//bt/system/stack/include",
     "//bt/system/profile/avrcp",
   ]
 
-  configs = [ "//bt/system:target_defaults" ]
+  configs = [
+    "//bt/system:target_defaults",
+    "//bt/system/log:log_defaults",
+  ]
 }
 
 static_library("packet") {
@@ -38,14 +40,18 @@ static_library("packet") {
     "avrcp/avrcp_reject_packet.cc",
     "avrcp/set_absolute_volume.cc",
     "avrcp/avrcp_packet.cc",
+    "avrcp/get_current_player_application_setting_value.cc",
     "avrcp/get_element_attributes_packet.cc",
     "avrcp/get_play_status_packet.cc",
     "avrcp/general_reject_packet.cc",
     "avrcp/avrcp_browse_packet.cc",
     "avrcp/get_item_attributes.cc",
+    "avrcp/list_player_application_setting_attributes.cc",
+    "avrcp/list_player_application_setting_values.cc",
     "avrcp/play_item.cc",
     "avrcp/vendor_packet.cc",
     "avrcp/set_addressed_player.cc",
+    "avrcp/set_player_application_setting_value.cc",
     "base/iterator.cc",
     "base/packet.cc",
     "base/packet_builder.cc",

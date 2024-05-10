@@ -15,24 +15,20 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-#include <base/logging.h>
+#include "osi/include/allocator.h"
+
+#include <bluetooth/log.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "check.h"
-#include "osi/include/allocation_tracker.h"
-#include "osi/include/allocator.h"
-
-static const allocator_id_t alloc_allocator_id = 42;
+using namespace bluetooth;
 
 char* osi_strdup(const char* str) {
   size_t size = strlen(str) + 1;  // + 1 for the null terminator
-  size_t real_size = allocation_tracker_resize_for_canary(size);
-  void* ptr = malloc(real_size);
-  CHECK(ptr);
+  char* new_string = (char*)malloc(size);
+  log::assert_that(new_string != nullptr,
+                   "assert failed: new_string != nullptr");
 
-  char* new_string = static_cast<char*>(
-      allocation_tracker_notify_alloc(alloc_allocator_id, ptr, size));
   if (!new_string) return NULL;
 
   memcpy(new_string, str, size);
@@ -43,12 +39,10 @@ char* osi_strndup(const char* str, size_t len) {
   size_t size = strlen(str);
   if (len < size) size = len;
 
-  size_t real_size = allocation_tracker_resize_for_canary(size + 1);
-  void* ptr = malloc(real_size);
-  CHECK(ptr);
+  char* new_string = (char*)malloc(size + 1);
+  log::assert_that(new_string != nullptr,
+                   "assert failed: new_string != nullptr");
 
-  char* new_string = static_cast<char*>(
-      allocation_tracker_notify_alloc(alloc_allocator_id, ptr, size + 1));
   if (!new_string) return NULL;
 
   memcpy(new_string, str, size);
@@ -57,27 +51,25 @@ char* osi_strndup(const char* str, size_t len) {
 }
 
 void* osi_malloc(size_t size) {
-  CHECK(static_cast<ssize_t>(size) >= 0);
-  size_t real_size = allocation_tracker_resize_for_canary(size);
-  void* ptr = malloc(real_size);
-  CHECK(ptr);
-  return allocation_tracker_notify_alloc(alloc_allocator_id, ptr, size);
+  log::assert_that(static_cast<ssize_t>(size) >= 0,
+                   "assert failed: static_cast<ssize_t>(size) >= 0");
+  void* ptr = malloc(size);
+  log::assert_that(ptr != nullptr, "assert failed: ptr != nullptr");
+  return ptr;
 }
 
 void* osi_calloc(size_t size) {
-  CHECK(static_cast<ssize_t>(size) >= 0);
-  size_t real_size = allocation_tracker_resize_for_canary(size);
-  void* ptr = calloc(1, real_size);
-  CHECK(ptr);
-  return allocation_tracker_notify_alloc(alloc_allocator_id, ptr, size);
+  log::assert_that(static_cast<ssize_t>(size) >= 0,
+                   "assert failed: static_cast<ssize_t>(size) >= 0");
+  void* ptr = calloc(1, size);
+  log::assert_that(ptr != nullptr, "assert failed: ptr != nullptr");
+  return ptr;
 }
 
-void osi_free(void* ptr) {
-  free(allocation_tracker_notify_free(alloc_allocator_id, ptr));
-}
+void osi_free(void* ptr) { free(ptr); }
 
 void osi_free_and_reset(void** p_ptr) {
-  CHECK(p_ptr != NULL);
+  log::assert_that(p_ptr != NULL, "assert failed: p_ptr != NULL");
   osi_free(*p_ptr);
   *p_ptr = NULL;
 }

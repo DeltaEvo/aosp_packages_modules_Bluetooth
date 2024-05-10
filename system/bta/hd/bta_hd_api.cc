@@ -26,15 +26,19 @@
 #define LOG_TAG "bluetooth"
 
 // BTA_HD_INCLUDED
-#include "bt_target.h"  // Must be first to define build configuration
+#include "internal_include/bt_target.h"
 #if defined(BTA_HD_INCLUDED) && (BTA_HD_INCLUDED == TRUE)
 
+#include <bluetooth/log.h>
+
 #include "bta/hd/bta_hd_int.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/compat.h"
-#include "osi/include/log.h"
 #include "stack/include/bt_hdr.h"
 #include "types/raw_address.h"
+
+using namespace bluetooth;
 
 /*****************************************************************************
  *  Constants
@@ -52,7 +56,7 @@ static const tBTA_SYS_REG bta_hd_reg = {bta_hd_hdl_event, BTA_HdDisable};
  *
  ******************************************************************************/
 void BTA_HdEnable(tBTA_HD_CBACK* p_cback) {
-  APPL_TRACE_API("%s", __func__);
+  log::verbose("");
 
   bta_sys_register(BTA_ID_HD, &bta_hd_reg);
 
@@ -77,12 +81,7 @@ void BTA_HdEnable(tBTA_HD_CBACK* p_cback) {
  *
  ******************************************************************************/
 void BTA_HdDisable(void) {
-  APPL_TRACE_API("%s", __func__);
-
-  if (!bluetooth::common::init_flags::
-          delay_hidh_cleanup_until_hidh_ready_start_is_enabled()) {
-    bta_sys_deregister(BTA_ID_HD);
-  }
+  log::verbose("");
 
   BT_HDR_RIGID* p_buf = (BT_HDR_RIGID*)osi_malloc(sizeof(BT_HDR_RIGID));
   p_buf->event = BTA_HD_API_DISABLE_EVT;
@@ -99,10 +98,9 @@ void BTA_HdDisable(void) {
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_HdRegisterApp(tBTA_HD_APP_INFO* p_app_info,
-                              tBTA_HD_QOS_INFO* p_in_qos,
-                              tBTA_HD_QOS_INFO* p_out_qos) {
-  APPL_TRACE_API("%s", __func__);
+void BTA_HdRegisterApp(tBTA_HD_APP_INFO* p_app_info, tBTA_HD_QOS_INFO* p_in_qos,
+                       tBTA_HD_QOS_INFO* p_out_qos) {
+  log::verbose("");
 
   tBTA_HD_REGISTER_APP* p_buf =
       (tBTA_HD_REGISTER_APP*)osi_malloc(sizeof(tBTA_HD_REGISTER_APP));
@@ -153,8 +151,8 @@ extern void BTA_HdRegisterApp(tBTA_HD_APP_INFO* p_app_info,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_HdUnregisterApp(void) {
-  APPL_TRACE_API("%s", __func__);
+void BTA_HdUnregisterApp(void) {
+  log::verbose("");
 
   BT_HDR_RIGID* p_buf = (BT_HDR_RIGID*)osi_malloc(sizeof(BT_HDR_RIGID));
   p_buf->event = BTA_HD_API_UNREGISTER_APP_EVT;
@@ -171,14 +169,14 @@ extern void BTA_HdUnregisterApp(void) {
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_HdSendReport(tBTA_HD_REPORT* p_report) {
-  APPL_TRACE_VERBOSE("%s", __func__);
+void BTA_HdSendReport(tBTA_HD_REPORT* p_report) {
+  log::verbose("");
 
   if (p_report->len > BTA_HD_REPORT_LEN) {
-    APPL_TRACE_WARNING(
-        "%s, report len (%d) > MTU len (%d), can't send report."
-        " Increase value of HID_DEV_MTU_SIZE to send larger reports",
-        __func__, p_report->len, BTA_HD_REPORT_LEN);
+    log::warn(
+        "report len ({}) > MTU len ({}), can't send report. Increase value of "
+        "HID_DEV_MTU_SIZE to send larger reports",
+        p_report->len, BTA_HD_REPORT_LEN);
     return;
   }
 
@@ -204,8 +202,8 @@ extern void BTA_HdSendReport(tBTA_HD_REPORT* p_report) {
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_HdVirtualCableUnplug(void) {
-  APPL_TRACE_API("%s", __func__);
+void BTA_HdVirtualCableUnplug(void) {
+  log::verbose("");
 
   BT_HDR_RIGID* p_buf = (BT_HDR_RIGID*)osi_malloc(sizeof(BT_HDR_RIGID));
   p_buf->event = BTA_HD_API_VC_UNPLUG_EVT;
@@ -223,8 +221,8 @@ extern void BTA_HdVirtualCableUnplug(void) {
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_HdConnect(const RawAddress& addr) {
-  APPL_TRACE_API("%s", __func__);
+void BTA_HdConnect(const RawAddress& addr) {
+  log::verbose("");
 
   tBTA_HD_DEVICE_CTRL* p_buf =
       (tBTA_HD_DEVICE_CTRL*)osi_malloc(sizeof(tBTA_HD_DEVICE_CTRL));
@@ -244,8 +242,8 @@ extern void BTA_HdConnect(const RawAddress& addr) {
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_HdDisconnect(void) {
-  APPL_TRACE_API("%s", __func__);
+void BTA_HdDisconnect(void) {
+  log::verbose("");
   BT_HDR_RIGID* p_buf = (BT_HDR_RIGID*)osi_malloc(sizeof(BT_HDR_RIGID));
   p_buf->event = BTA_HD_API_DISCONNECT_EVT;
 
@@ -261,8 +259,8 @@ extern void BTA_HdDisconnect(void) {
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_HdAddDevice(const RawAddress& addr) {
-  APPL_TRACE_API("%s", __func__);
+void BTA_HdAddDevice(const RawAddress& addr) {
+  log::verbose("");
   tBTA_HD_DEVICE_CTRL* p_buf =
       (tBTA_HD_DEVICE_CTRL*)osi_malloc(sizeof(tBTA_HD_DEVICE_CTRL));
   p_buf->hdr.event = BTA_HD_API_ADD_DEVICE_EVT;
@@ -281,8 +279,8 @@ extern void BTA_HdAddDevice(const RawAddress& addr) {
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_HdRemoveDevice(const RawAddress& addr) {
-  APPL_TRACE_API("%s", __func__);
+void BTA_HdRemoveDevice(const RawAddress& addr) {
+  log::verbose("");
   tBTA_HD_DEVICE_CTRL* p_buf =
       (tBTA_HD_DEVICE_CTRL*)osi_malloc(sizeof(tBTA_HD_DEVICE_CTRL));
   p_buf->hdr.event = BTA_HD_API_REMOVE_DEVICE_EVT;
@@ -301,8 +299,8 @@ extern void BTA_HdRemoveDevice(const RawAddress& addr) {
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_HdReportError(uint8_t error) {
-  APPL_TRACE_API("%s", __func__);
+void BTA_HdReportError(uint8_t error) {
+  log::verbose("");
   tBTA_HD_REPORT_ERR* p_buf =
       (tBTA_HD_REPORT_ERR*)osi_malloc(sizeof(tBTA_HD_REPORT_ERR));
   p_buf->hdr.event = BTA_HD_API_REPORT_ERROR_EVT;

@@ -20,12 +20,6 @@
 #ifndef BT_TARGET_H
 #define BT_TARGET_H
 
-#ifndef BUILDCFG
-#define BUILDCFG
-#endif
-
-#include "bt_types.h" /* This must be defined AFTER buildcfg.h */
-
 #ifndef FALSE
 #define FALSE false
 #endif
@@ -74,36 +68,16 @@
 #define BTA_AG_AT_MAX_LEN 512
 #endif
 
-#ifndef BTA_AG_SCO_PKT_TYPES
-#define BTA_AG_SCO_PKT_TYPES                                     \
-  (BTM_SCO_LINK_ONLY_MASK | ESCO_PKT_TYPES_MASK_EV3 |            \
-   ESCO_PKT_TYPES_MASK_NO_3_EV3 | ESCO_PKT_TYPES_MASK_NO_2_EV5 | \
-   ESCO_PKT_TYPES_MASK_NO_3_EV5)
-#endif
-
 #ifndef BTA_AV_RET_TOUT
 #define BTA_AV_RET_TOUT 15
-#endif
-
-/* TRUE to use SCMS-T content protection */
-#ifndef BTA_AV_CO_CP_SCMS_T
-#define BTA_AV_CO_CP_SCMS_T FALSE
 #endif
 
 #ifndef BTA_DM_SDP_DB_SIZE
 #define BTA_DM_SDP_DB_SIZE 20000
 #endif
 
-#ifndef HL_INCLUDED
-#define HL_INCLUDED TRUE
-#endif
-
 #ifndef AG_VOICE_SETTINGS
 #define AG_VOICE_SETTINGS HCI_DEFAULT_VOICE_SETTINGS
-#endif
-
-#ifndef BTIF_DM_OOB_TEST
-#define BTIF_DM_OOB_TEST TRUE
 #endif
 
 // How long to wait before activating sniff mode after entering the
@@ -159,10 +133,6 @@
 #define L2CAP_CMD_BUF_SIZE BT_SMALL_BUFFER_SIZE
 #endif
 
-#ifndef L2CAP_FCR_ERTM_BUF_SIZE
-#define L2CAP_FCR_ERTM_BUF_SIZE (10240 + 24)
-#endif
-
 /* Number of ACL buffers to assign to LE */
 /*
  * TODO: Do we need this?
@@ -175,10 +145,6 @@
 /* Used by BTM when it sends HCI commands to the controller. */
 #ifndef BTM_CMD_BUF_SIZE
 #define BTM_CMD_BUF_SIZE BT_SMALL_BUFFER_SIZE
-#endif
-
-#ifndef OBX_LRG_DATA_BUF_SIZE
-#define OBX_LRG_DATA_BUF_SIZE (8080 + 26)
 #endif
 
 /* BNEP data and protocol messages. */
@@ -215,10 +181,6 @@
 #define AVRC_META_CMD_BUF_SIZE BT_SMALL_BUFFER_SIZE
 #endif
 
-#ifndef BTA_HL_LRG_DATA_BUF_SIZE
-#define BTA_HL_LRG_DATA_BUF_SIZE (10240 + 24)
-#endif
-
 /* GATT Data sending buffer size */
 #ifndef GATT_DATA_BUF_SIZE
 #define GATT_DATA_BUF_SIZE BT_DEFAULT_BUFFER_SIZE
@@ -230,34 +192,18 @@
  *
  *****************************************************************************/
 
-/* Cancel Inquiry on incoming SSP */
-#ifndef BTM_NO_SSP_ON_INQUIRY
-#define BTM_NO_SSP_ON_INQUIRY FALSE
-#endif
-
-#ifndef DISABLE_WBS
-#define DISABLE_WBS FALSE
-#endif
-
-/*  This is used to work around a controller bug that doesn't like Disconnect
- *  issued while there is a role switch in progress
-*/
-#ifndef BTM_DISC_DURING_RS
-#define BTM_DISC_DURING_RS TRUE
-#endif
-
 /**************************
  * Initial SCO TX credit
  ************************/
 /* The size of buffer used for TX SCO data packets. The size should be divisible
- * by BTM_MSBC_CODE_SIZE(240) */
+ * by BTM_MSBC_CODE_SIZE(240) and BTM_LC3_CODE_SIZE(480). */
 #ifndef BTM_SCO_DATA_SIZE_MAX
-#define BTM_SCO_DATA_SIZE_MAX 240
+#define BTM_SCO_DATA_SIZE_MAX 480
 #endif
 
 /* The size in bytes of the BTM inquiry database. */
 #ifndef BTM_INQ_DB_SIZE
-#define BTM_INQ_DB_SIZE 40
+#define BTM_INQ_DB_SIZE 80
 #endif
 
 /* Sets the Page_Scan_Window:  the length of time that the device is performing
@@ -298,27 +244,6 @@
 #define BTM_SEC_MAX_SERVICE_RECORDS 32
 #endif
 
-/* If True, force a retrieval of remote device name for each bond in case it's
- * changed */
-#ifndef BTM_SEC_FORCE_RNR_FOR_DBOND
-#define BTM_SEC_FORCE_RNR_FOR_DBOND FALSE
-#endif
-
-/* Maximum device name length used in btm database. */
-#ifndef BTM_MAX_REM_BD_NAME_LEN
-#define BTM_MAX_REM_BD_NAME_LEN 248
-#endif
-
-/* Maximum local device name length stored btm database */
-#ifndef BTM_MAX_LOC_BD_NAME_LEN
-#define BTM_MAX_LOC_BD_NAME_LEN 248
-#endif
-
-/* Maximum service name stored with security authorization (0 if not needed) */
-#ifndef BTM_SEC_SERVICE_NAME_LEN
-#define BTM_SEC_SERVICE_NAME_LEN BT_MAX_SERVICE_NAME_LEN
-#endif
-
 /* Maximum length of the service name. */
 #ifndef BT_MAX_SERVICE_NAME_LEN
 #define BT_MAX_SERVICE_NAME_LEN 21
@@ -345,38 +270,15 @@
 /******************************************
  *    Lisbon Features
  ******************************************/
-/* This is set to TRUE if the FEC is required for EIR packet. */
-#ifndef BTM_EIR_DEFAULT_FEC_REQUIRED
-#define BTM_EIR_DEFAULT_FEC_REQUIRED TRUE
-#endif
 
 /* The IO capability of the local device (for Simple Pairing) */
 #ifndef BTM_LOCAL_IO_CAPS
 #define BTM_LOCAL_IO_CAPS BTM_IO_CAP_IO
 #endif
 
-#ifndef BTM_LOCAL_IO_CAPS_BLE
-#define BTM_LOCAL_IO_CAPS_BLE BTM_IO_CAP_KBDISP
-#endif
-
-/* TRUE to include Sniff Subrating */
-#ifndef BTM_SSR_INCLUDED
-#define BTM_SSR_INCLUDED TRUE
-#endif
-
 /*************************
  * End of Lisbon Features
  *************************/
-
-/* 4.1/4.2 secure connections feature */
-#ifndef SC_MODE_INCLUDED
-#define SC_MODE_INCLUDED TRUE
-#endif
-
-/* Used for conformance testing ONLY */
-#ifndef BTM_BLE_CONFORMANCE_TESTING
-#define BTM_BLE_CONFORMANCE_TESTING FALSE
-#endif
 
 /******************************************************************************
  *
@@ -422,34 +324,9 @@
 #define L2CAP_MTU_SIZE 1691
 #endif
 
-/*
- * The L2CAP MPS over Bluetooth; must be in accord with the FCR tx buffer size
- * and ACL down buffer size.
- */
-#ifndef L2CAP_MPS_OVER_BR_EDR
-#define L2CAP_MPS_OVER_BR_EDR 1010
-#endif
-
-/* If host flow control enabled, this is the number of buffers the controller
- * can have unacknowledged. */
-#ifndef L2CAP_HOST_FC_ACL_BUFS
-#define L2CAP_HOST_FC_ACL_BUFS 20
-#endif
-
-/* This is set to enable L2CAP to  take the ACL link out of park mode when ACL
- * data is to be sent. */
-#ifndef L2CAP_WAKE_PARKED_LINK
-#define L2CAP_WAKE_PARKED_LINK TRUE
-#endif
-
 /* Minimum number of ACL credit for high priority link */
 #ifndef L2CAP_HIGH_PRI_MIN_XMIT_QUOTA
 #define L2CAP_HIGH_PRI_MIN_XMIT_QUOTA 5
-#endif
-
-/* used for monitoring HCI ACL credit management */
-#ifndef L2CAP_HCI_FLOW_CONTROL_DEBUG
-#define L2CAP_HCI_FLOW_CONTROL_DEBUG TRUE
 #endif
 
 /* Used for features using fixed channels; set to zero if no fixed channels
@@ -467,11 +344,6 @@
 #ifndef L2CAP_LAST_FIXED_CHNL
 #define L2CAP_LAST_FIXED_CHNL \
   (L2CAP_FIRST_FIXED_CHNL + L2CAP_NUM_FIXED_CHNLS - 1)
-#endif
-
-/* Round Robin service channels in link */
-#ifndef L2CAP_ROUND_ROBIN_CHANNEL_SERVICE
-#define L2CAP_ROUND_ROBIN_CHANNEL_SERVICE TRUE
 #endif
 
 /* Used for conformance testing ONLY:  When TRUE lets scriptwrapper overwrite
@@ -493,18 +365,6 @@
  * BLE
  *
  *****************************************************************************/
-
-#ifndef LOCAL_BLE_CONTROLLER_ID
-#define LOCAL_BLE_CONTROLLER_ID 1
-#endif
-
-/*
- * Toggles support for vendor specific extensions such as RPA offloading,
- * feature discovery, multi-adv etc.
- */
-#ifndef BLE_VND_INCLUDED
-#define BLE_VND_INCLUDED TRUE
-#endif
 
 /* The maximum number of simultaneous applications that can register with LE
  * L2CAP. */
@@ -530,8 +390,15 @@
  * create l2cap connection, it will use this fixed ID. */
 #define CONN_MGR_ID_L2CAP (GATT_MAX_APPS + 10)
 
+/* This value is used for static allocation of resources. The actual maximum at
+ * runtime is controlled by a system property. */
 #ifndef GATT_MAX_PHY_CHANNEL
-#define GATT_MAX_PHY_CHANNEL 7
+#define GATT_MAX_PHY_CHANNEL 16
+#endif
+
+/* Devices must support at least 8 GATT channels per the CDD. */
+#ifndef GATT_MAX_PHY_CHANNEL_FLOOR
+#define GATT_MAX_PHY_CHANNEL_FLOOR 8
 #endif
 
 /* Used for conformance testing ONLY */
@@ -565,10 +432,6 @@
  * SMP
  *
  *****************************************************************************/
-#ifndef SMP_DEBUG
-#define SMP_DEBUG FALSE
-#endif
-
 #ifndef SMP_DEFAULT_AUTH_REQ
 #define SMP_DEFAULT_AUTH_REQ SMP_AUTH_NB_ENC_ONLY
 #endif
@@ -582,11 +445,7 @@
    Prefer greater than 0 second, and no less than default inactivity link idle
    timer(L2CAP_LINK_INACTIVITY_TOUT) in l2cap) */
 #ifndef SMP_LINK_TOUT_MIN
-#if (L2CAP_LINK_INACTIVITY_TOUT > 0)
 #define SMP_LINK_TOUT_MIN L2CAP_LINK_INACTIVITY_TOUT
-#else
-#define SMP_LINK_TOUT_MIN 2
-#endif
 #endif
 /******************************************************************************
  *
@@ -647,11 +506,6 @@
 /* The MTU size for the L2CAP configuration. */
 #ifndef SDP_MTU_SIZE
 #define SDP_MTU_SIZE 1024
-#endif
-
-/* The name for security authorization. */
-#ifndef SDP_SERVICE_NAME
-#define SDP_SERVICE_NAME "Service Discovery"
 #endif
 
 /******************************************************************************
@@ -720,11 +574,6 @@
 #define PORT_TX_BUF_CRITICAL_WM 15
 #endif
 
-/* The RFCOMM multiplexer preferred flow control mechanism. */
-#ifndef PORT_FC_DEFAULT
-#define PORT_FC_DEFAULT PORT_FC_CREDIT
-#endif
-
 /******************************************************************************
  *
  * BNEP
@@ -733,11 +582,6 @@
 
 #ifndef BNEP_INCLUDED
 #define BNEP_INCLUDED TRUE
-#endif
-
-/* BNEP status API call is used mainly to get the L2CAP handle */
-#ifndef BNEP_SUPPORTS_STATUS_API
-#define BNEP_SUPPORTS_STATUS_API TRUE
 #endif
 
 /* Maximum number of protocol filters supported. */
@@ -806,14 +650,6 @@
 #define PAN_INCLUDED TRUE
 #endif
 
-#ifndef PAN_NAP_DISABLED
-#define PAN_NAP_DISABLED FALSE
-#endif
-
-#ifndef PANU_DISABLED
-#define PANU_DISABLED FALSE
-#endif
-
 /* This will enable the PANU role */
 #ifndef PAN_SUPPORTS_ROLE_PANU
 #define PAN_SUPPORTS_ROLE_PANU TRUE
@@ -860,23 +696,9 @@
  *
  *****************************************************************************/
 
-#ifndef GAP_INCLUDED
-#define GAP_INCLUDED TRUE
-#endif
-
 /* The maximum number of simultaneous GAP L2CAP connections. */
 #ifndef GAP_MAX_CONNECTIONS
 #define GAP_MAX_CONNECTIONS 30
-#endif
-
-/* keep the raw data received from SDP server in database. */
-#ifndef SDP_RAW_DATA_INCLUDED
-#define SDP_RAW_DATA_INCLUDED TRUE
-#endif
-
-/* Inquiry duration in 1.28 second units. */
-#ifndef SDP_DEBUG
-#define SDP_DEBUG TRUE
 #endif
 
 /******************************************************************************
@@ -958,43 +780,12 @@
 
 /******************************************************************************
  *
- * AVRCP
- *
- *****************************************************************************/
-
-#ifndef DUMP_PCM_DATA
-#define DUMP_PCM_DATA FALSE
-#endif
-
-/******************************************************************************
- *
  * BTA
  *
  *****************************************************************************/
-/* BTA EIR canned UUID list (default is dynamic) */
-#ifndef BTA_EIR_CANNED_UUID_LIST
-#define BTA_EIR_CANNED_UUID_LIST FALSE
-#endif
-
 /* Number of supported customer UUID in EIR */
 #ifndef BTA_EIR_SERVER_NUM_CUSTOM_UUID
 #define BTA_EIR_SERVER_NUM_CUSTOM_UUID 8
-#endif
-
-/* CHLD override */
-#ifndef BTA_AG_CHLD_VAL_ECC
-#define BTA_AG_CHLD_VAL_ECC "(0,1,1x,2,2x,3)"
-#endif
-
-#ifndef BTA_AG_CHLD_VAL
-#define BTA_AG_CHLD_VAL "(0,1,2,3)"
-#endif
-
-/* Set the CIND to match HFP 1.5 */
-#ifndef BTA_AG_CIND_INFO
-#define BTA_AG_CIND_INFO                                                       \
-  "(\"call\",(0,1)),(\"callsetup\",(0-3)),(\"service\",(0-1)),(\"signal\",(0-" \
-  "5)),(\"roam\",(0,1)),(\"battchg\",(0-5)),(\"callheld\",(0-2))"
 #endif
 
 /******************************************************************************
@@ -1002,12 +793,5 @@
  * Tracing:  Include trace header file here.
  *
  *****************************************************************************/
-
-/* Enable/disable BTSnoop memory logging */
-#ifndef BTSNOOP_MEM
-#define BTSNOOP_MEM TRUE
-#endif
-
-#include "bt_trace.h"
 
 #endif /* BT_TARGET_H */

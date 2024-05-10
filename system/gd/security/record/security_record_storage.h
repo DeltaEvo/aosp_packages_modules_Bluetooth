@@ -17,25 +17,21 @@
  */
 #pragma once
 
-#include <unordered_map>
+#include <set>
 
-#include "hci/hci_packets.h"
 #include "os/handler.h"
-#include "os/utils.h"
 #include "security/record/security_record.h"
-#include "storage/classic_device.h"
-#include "storage/le_device.h"
 #include "storage/storage_module.h"
 
 namespace bluetooth {
 namespace security {
 namespace record {
 
-#if defined(OS_GENERIC)
-static const char* CONFIG_FILE_PATH = "bt_config.conf";
-#else   // !defined(OS_GENERIC)
+#ifdef __ANDROID__
 static const char* CONFIG_FILE_PATH = "/data/misc/bluedroid/bt_config.conf";
-#endif  // defined(OS_GENERIC)
+#else   // !__ANDROID__
+static const char* CONFIG_FILE_PATH = "bt_config.conf";
+#endif  // __ANDROID__
 
 class SecurityRecordStorage {
  public:

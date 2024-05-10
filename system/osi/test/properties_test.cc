@@ -16,13 +16,11 @@
  *
  ******************************************************************************/
 
-#include <gtest/gtest.h>
-
-#include "AllocationTestHarness.h"
-
 #include "osi/include/properties.h"
 
-class PropertiesTest : public AllocationTestHarness {};
+#include <gtest/gtest.h>
+
+class PropertiesTest : public ::testing::Test {};
 
 TEST_F(PropertiesTest, test_default_value) {
   char value[PROPERTY_VALUE_MAX] = {0};
@@ -31,7 +29,7 @@ TEST_F(PropertiesTest, test_default_value) {
 }
 
 TEST_F(PropertiesTest, test_successfull_set_and_get_value) {
-#if !defined(OS_GENERIC)
+#ifdef __ANDROID__
   char value[PROPERTY_VALUE_MAX] = "nothing_interesting";
   int ret = osi_property_set("very.useful.set.test", value);
   ASSERT_EQ(0, ret);
@@ -49,7 +47,7 @@ TEST_F(PropertiesTest, test_default_value_int32) {
 }
 
 TEST_F(PropertiesTest, test_successfull_set_and_get_value_int32) {
-#if !defined(OS_GENERIC)
+#ifdef __ANDROID__
   char value[PROPERTY_VALUE_MAX] = "42";
   int ret = osi_property_set("very.useful.set.test", value);
   ASSERT_EQ(0, ret);

@@ -1,4 +1,17 @@
-import lib_rootcanal_python3 as rootcanal
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import hci_packets as hci
 import link_layer_packets as ll
 import unittest
@@ -17,8 +30,6 @@ class Test(ControllerTest):
     # LL/DDI/ADV/BV-21-C [Extended Advertising, Legacy PDUs, Non-Connectable]
     async def test(self):
         controller = self.controller
-        public_peer_address = Address('aa:bb:cc:dd:ee:ff')
-        connection_handle = 0xefe
 
         # 1. Configure Lower Tester to monitor advertising packets from the IUT.
         # 2. The Upper Tester sends an HCI_LE_Set_Extended_Advertising_Parameters command to the
@@ -49,9 +60,9 @@ class Test(ControllerTest):
         # 3. Upper Tester sends an HCI_LE_Set_Extended_Advertising_Data command to the IUT with
         # values according to Table 4.2 and receives an HCI_Command_Complete in response.
         controller.send_cmd(
-            hci.LeSetExtendedAdvertisingDataRaw(advertising_handle=0,
-                                                operation=hci.Operation.COMPLETE_ADVERTISEMENT,
-                                                advertising_data=advertising_data))
+            hci.LeSetExtendedAdvertisingData(advertising_handle=0,
+                                             operation=hci.Operation.COMPLETE_ADVERTISEMENT,
+                                             advertising_data=advertising_data))
 
         await self.expect_evt(
             hci.LeSetExtendedAdvertisingDataComplete(status=ErrorCode.SUCCESS, num_hci_command_packets=1))
@@ -72,7 +83,7 @@ class Test(ControllerTest):
         # first packet.
         # 7. Repeat steps 5–6 until a number of advertising intervals (50) have been detected.
         for n in range(3):
-            self.expect_ll(
+            await self.expect_ll(
                 ll.LeLegacyAdvertisingPdu(source_address=controller.address,
                                           advertising_address_type=ll.AddressType.PUBLIC,
                                           advertising_type=ll.LegacyAdvertisingType.ADV_NONCONN_IND,

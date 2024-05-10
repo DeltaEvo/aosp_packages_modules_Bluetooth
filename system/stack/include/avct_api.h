@@ -27,7 +27,7 @@
 
 #include <cstdint>
 
-#include "bt_target.h"
+#include "internal_include/bt_target.h"
 #include "stack/include/bt_hdr.h"
 #include "types/raw_address.h"
 
@@ -139,7 +139,7 @@ typedef struct {
  * Returns          void
  *
  ******************************************************************************/
-extern void AVCT_Register();
+void AVCT_Register();
 
 /*******************************************************************************
  *
@@ -155,7 +155,7 @@ extern void AVCT_Register();
  * Returns          void
  *
  ******************************************************************************/
-extern void AVCT_Deregister(void);
+void AVCT_Deregister(void);
 
 /*******************************************************************************
  *
@@ -174,8 +174,8 @@ extern void AVCT_Deregister(void);
  * Returns          AVCT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVCT_CreateConn(uint8_t* p_handle, tAVCT_CC* p_cc,
-                                const RawAddress& peer_addr);
+uint16_t AVCT_CreateConn(uint8_t* p_handle, tAVCT_CC* p_cc,
+                         const RawAddress& peer_addr);
 
 /*******************************************************************************
  *
@@ -190,7 +190,7 @@ extern uint16_t AVCT_CreateConn(uint8_t* p_handle, tAVCT_CC* p_cc,
  * Returns          AVCT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVCT_RemoveConn(uint8_t handle);
+uint16_t AVCT_RemoveConn(uint8_t handle);
 
 /*******************************************************************************
  *
@@ -209,7 +209,7 @@ extern uint16_t AVCT_RemoveConn(uint8_t handle);
  * Returns          AVCT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVCT_CreateBrowse(uint8_t handle, uint8_t role);
+uint16_t AVCT_CreateBrowse(uint8_t handle, uint8_t role);
 
 /*******************************************************************************
  *
@@ -224,7 +224,7 @@ extern uint16_t AVCT_CreateBrowse(uint8_t handle, uint8_t role);
  * Returns          AVCT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVCT_RemoveBrowse(uint8_t handle);
+uint16_t AVCT_RemoveBrowse(uint8_t handle);
 
 /*******************************************************************************
  *
@@ -236,7 +236,7 @@ extern uint16_t AVCT_RemoveBrowse(uint8_t handle);
  * Returns          the peer browsing channel MTU.
  *
  ******************************************************************************/
-extern uint16_t AVCT_GetBrowseMtu(uint8_t handle);
+uint16_t AVCT_GetBrowseMtu(uint8_t handle);
 
 /*******************************************************************************
  *
@@ -248,7 +248,7 @@ extern uint16_t AVCT_GetBrowseMtu(uint8_t handle);
  * Returns          the peer MTU size.
  *
  ******************************************************************************/
-extern uint16_t AVCT_GetPeerMtu(uint8_t handle);
+uint16_t AVCT_GetPeerMtu(uint8_t handle);
 
 /*******************************************************************************
  *
@@ -273,30 +273,6 @@ extern uint16_t AVCT_GetPeerMtu(uint8_t handle);
  * Returns          AVCT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-extern uint16_t AVCT_MsgReq(uint8_t handle, uint8_t label, uint8_t cr,
-                            BT_HDR* p_msg);
-
-/******************************************************************************
- *
- * Function         AVCT_SetTraceLevel
- *
- * Description      Sets the trace level for AVCT. If 0xff is passed, the
- *                  current trace level is returned.
- *
- *                  Input Parameters:
- *                      new_level:  The level to set the AVCT tracing to:
- *                      0xff-returns the current setting.
- *                      0-turns off tracing.
- *                      >= 1-Errors.
- *                      >= 2-Warnings.
- *                      >= 3-APIs.
- *                      >= 4-Events.
- *                      >= 5-Debug.
- *
- * Returns          The new trace level or current trace level if
- *                  the input parameter is 0xff.
- *
- *****************************************************************************/
-extern uint8_t AVCT_SetTraceLevel(uint8_t new_level);
+uint16_t AVCT_MsgReq(uint8_t handle, uint8_t label, uint8_t cr, BT_HDR* p_msg);
 
 #endif /* AVCT_API_H */

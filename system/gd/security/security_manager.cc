@@ -17,7 +17,7 @@
  */
 #include "security_manager.h"
 
-#include "os/log.h"
+#include "hci/octets.h"
 
 namespace bluetooth {
 namespace security {
@@ -80,7 +80,7 @@ void SecurityManager::SetUserInterfaceHandler(UI* user_interface, os::Handler* h
 void SecurityManager::SetLeInitiatorAddressPolicyForTest(
     hci::LeAddressManager::AddressPolicy address_policy,
     hci::AddressWithType fixed_address,
-    crypto_toolbox::Octet16 rotation_irk,
+    hci::Octet16 rotation_irk,
     std::chrono::milliseconds minimum_rotation_time,
     std::chrono::milliseconds maximum_rotation_time) {
   security_handler_->Post(common::BindOnce(

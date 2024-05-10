@@ -21,37 +21,54 @@
  *  mockcify.pl ver 0.2
  */
 
-#include <map>
+#include <cstdint>
+#include <functional>
 #include <string>
-
-#include "test/common/mock_functions.h"
+#include <vector>
 
 // Original included files, if any
-// NOTE: Since this is a mock file with mock definitions some number of
-//       include files may not be required.  The include-what-you-use
-//       still applies, but crafting proper inclusion is out of scope
-//       for this effort.  This compilation unit may compile as-is, or
-//       may need attention to prune the inclusion set.
 
-#include "btif/include/btif_config.h"
 #include "types/raw_address.h"
 
 // Mocked compile conditionals, if any
-#ifndef UNUSED_ATTR
-#define UNUSED_ATTR
-#endif
 
 namespace test {
 namespace mock {
 namespace btif_config {
 
 // Shared state between mocked functions and tests
+// Name: btif_get_device_clockoffset
+// Params: const RawAddress& bda, int* p_clock_offset
+// Returns: bool
+struct btif_get_device_clockoffset {
+  std::function<bool(const RawAddress& bda, int* p_clock_offset)> body{
+      [](const RawAddress& /* bda */, int* /* p_clock_offset */) {
+        return false;
+      }};
+  bool operator()(const RawAddress& bda, int* p_clock_offset) {
+    return body(bda, p_clock_offset);
+  };
+};
+// Name: btif_set_device_clockoffset
+// Params: const RawAddress& bda, int* p_clock_offset
+// Returns: bool
+struct btif_set_device_clockoffset {
+  std::function<bool(const RawAddress& bda, int clock_offset)> body{
+      [](const RawAddress& /* bda */, int /* clock_offset */) {
+        return false;
+      }};
+  bool operator()(const RawAddress& bda, int clock_offset) {
+    return body(bda, clock_offset);
+  };
+};
 // Name: btif_config_exist
 // Params: const std::string& section, const std::string& key
 // Returns: bool
 struct btif_config_exist {
   std::function<bool(const std::string& section, const std::string& key)> body{
-      [](const std::string& section, const std::string& key) { return false; }};
+      [](const std::string& /* section */, const std::string& /* key */) {
+        return false;
+      }};
   bool operator()(const std::string& section, const std::string& key) {
     return body(section, key);
   };
@@ -63,9 +80,8 @@ extern struct btif_config_exist btif_config_exist;
 struct btif_config_get_int {
   std::function<bool(const std::string& section, const std::string& key,
                      int* value)>
-      body{[](const std::string& section, const std::string& key, int* value) {
-        return false;
-      }};
+      body{[](const std::string& /* section */, const std::string& /* key */,
+              int* /* value */) { return false; }};
   bool operator()(const std::string& section, const std::string& key,
                   int* value) {
     return body(section, key, value);
@@ -78,9 +94,8 @@ extern struct btif_config_get_int btif_config_get_int;
 struct btif_config_set_int {
   std::function<bool(const std::string& section, const std::string& key,
                      int value)>
-      body{[](const std::string& section, const std::string& key, int value) {
-        return false;
-      }};
+      body{[](const std::string& /* section */, const std::string& /* key */,
+              int /* value */) { return false; }};
   bool operator()(const std::string& section, const std::string& key,
                   int value) {
     return body(section, key, value);
@@ -93,8 +108,8 @@ extern struct btif_config_set_int btif_config_set_int;
 struct btif_config_get_uint64 {
   std::function<bool(const std::string& section, const std::string& key,
                      uint64_t* value)>
-      body{[](const std::string& section, const std::string& key,
-              uint64_t* value) { return false; }};
+      body{[](const std::string& /* section */, const std::string& /* key */,
+              uint64_t* /* value */) { return false; }};
   bool operator()(const std::string& section, const std::string& key,
                   uint64_t* value) {
     return body(section, key, value);
@@ -107,8 +122,8 @@ extern struct btif_config_get_uint64 btif_config_get_uint64;
 struct btif_config_set_uint64 {
   std::function<bool(const std::string& section, const std::string& key,
                      uint64_t value)>
-      body{[](const std::string& section, const std::string& key,
-              uint64_t value) { return false; }};
+      body{[](const std::string& /* section */, const std::string& /* key */,
+              uint64_t /* value */) { return false; }};
   bool operator()(const std::string& section, const std::string& key,
                   uint64_t value) {
     return body(section, key, value);
@@ -121,8 +136,8 @@ extern struct btif_config_set_uint64 btif_config_set_uint64;
 struct btif_config_get_str {
   std::function<bool(const std::string& section, const std::string& key,
                      char* value, int* size_bytes)>
-      body{[](const std::string& section, const std::string& key, char* value,
-              int* size_bytes) { return false; }};
+      body{[](const std::string& /* section */, const std::string& /* key */,
+              char* /* value */, int* /* size_bytes */) { return false; }};
   bool operator()(const std::string& section, const std::string& key,
                   char* value, int* size_bytes) {
     return body(section, key, value, size_bytes);
@@ -135,8 +150,8 @@ extern struct btif_config_get_str btif_config_get_str;
 struct btif_config_set_str {
   std::function<bool(const std::string& section, const std::string& key,
                      const std::string& value)>
-      body{[](const std::string& section, const std::string& key,
-              const std::string& value) { return false; }};
+      body{[](const std::string& /* section */, const std::string& /* key */,
+              const std::string& /* value */) { return false; }};
   bool operator()(const std::string& section, const std::string& key,
                   const std::string& value) {
     return body(section, key, value);
@@ -149,8 +164,8 @@ extern struct btif_config_set_str btif_config_set_str;
 struct btif_config_get_bin {
   std::function<bool(const std::string& section, const std::string& key,
                      uint8_t* value, size_t* length)>
-      body{[](const std::string& section, const std::string& key,
-              uint8_t* value, size_t* length) { return false; }};
+      body{[](const std::string& /* section */, const std::string& /* key */,
+              uint8_t* /* value */, size_t* /* length */) { return false; }};
   bool operator()(const std::string& section, const std::string& key,
                   uint8_t* value, size_t* length) {
     return body(section, key, value, length);
@@ -162,8 +177,9 @@ extern struct btif_config_get_bin btif_config_get_bin;
 // Returns: size_t
 struct btif_config_get_bin_length {
   std::function<size_t(const std::string& section, const std::string& key)>
-      body{
-          [](const std::string& section, const std::string& key) { return 0; }};
+      body{[](const std::string& /* section */, const std::string& /* key */) {
+        return 0;
+      }};
   size_t operator()(const std::string& section, const std::string& key) {
     return body(section, key);
   };
@@ -175,8 +191,9 @@ extern struct btif_config_get_bin_length btif_config_get_bin_length;
 struct btif_config_set_bin {
   std::function<bool(const std::string& section, const std::string& key,
                      const uint8_t* value, size_t length)>
-      body{[](const std::string& section, const std::string& key,
-              const uint8_t* value, size_t length) { return false; }};
+      body{[](const std::string& /* section */, const std::string& /* key */,
+              const uint8_t* /* value */,
+              size_t /* length */) { return false; }};
   bool operator()(const std::string& section, const std::string& key,
                   const uint8_t* value, size_t length) {
     return body(section, key, value, length);
@@ -198,28 +215,23 @@ extern struct btif_config_get_paired_devices btif_config_get_paired_devices;
 // Returns: bool
 struct btif_config_remove {
   std::function<bool(const std::string& section, const std::string& key)> body{
-      [](const std::string& section, const std::string& key) { return false; }};
+      [](const std::string& /* section */, const std::string& /* key */) {
+        return false;
+      }};
   bool operator()(const std::string& section, const std::string& key) {
     return body(section, key);
   };
 };
 extern struct btif_config_remove btif_config_remove;
-// Name: btif_config_save
-// Params: void
+// Name: btif_config_remove_device
+// Params: const std::string& section
 // Returns: void
-struct btif_config_save {
-  std::function<void(void)> body{[](void) {}};
-  void operator()(void) { body(); };
+struct btif_config_remove_device {
+  std::function<void(const std::string& section)> body{
+      [](const std::string& /* section */) { return; }};
+  void operator()(const std::string& /* section */) { return; };
 };
-extern struct btif_config_save btif_config_save;
-// Name: btif_config_flush
-// Params: void
-// Returns: void
-struct btif_config_flush {
-  std::function<void(void)> body{[](void) {}};
-  void operator()(void) { body(); };
-};
-extern struct btif_config_flush btif_config_flush;
+extern struct btif_config_remove_device btif_config_remove_device;
 // Name: btif_config_clear
 // Params: void
 // Returns: bool
@@ -228,14 +240,6 @@ struct btif_config_clear {
   bool operator()(void) { return body(); };
 };
 extern struct btif_config_clear btif_config_clear;
-// Name: btif_debug_config_dump
-// Params: int fd
-// Returns: void
-struct btif_debug_config_dump {
-  std::function<void(int fd)> body{[](int fd) {}};
-  void operator()(int fd) { body(fd); };
-};
-extern struct btif_debug_config_dump btif_debug_config_dump;
 
 }  // namespace btif_config
 }  // namespace mock

@@ -18,6 +18,7 @@
 
 #include <base/functional/bind.h>
 #include <base/functional/callback.h>
+
 #include <map>
 #include <mutex>
 #include <shared_mutex>
@@ -25,7 +26,6 @@
 
 #include "avrcp.h"
 #include "com_android_bluetooth.h"
-#include "utils/Log.h"
 
 using namespace bluetooth::avrcp;
 
@@ -62,6 +62,27 @@ static void volumeDeviceConnected(
 static void volumeDeviceDisconnected(const RawAddress& address);
 static void setVolume(int8_t volume);
 
+using ListPlayerSettingsCb =
+    PlayerSettingsInterface::ListPlayerSettingsCallback;
+static void listPlayerSettings(ListPlayerSettingsCb cb);
+ListPlayerSettingsCb list_player_settings_cb;
+using ListPlayerSettingValuesCb =
+    PlayerSettingsInterface::ListPlayerSettingValuesCallback;
+static void listPlayerSettingValues(PlayerAttribute setting,
+                                    ListPlayerSettingValuesCb cb);
+ListPlayerSettingValuesCb list_player_setting_values_cb;
+using GetCurrentPlayerSettingValueCb =
+    PlayerSettingsInterface::GetCurrentPlayerSettingValueCallback;
+static void getPlayerSettings(std::vector<PlayerAttribute> attributes,
+                              GetCurrentPlayerSettingValueCb cb);
+GetCurrentPlayerSettingValueCb get_current_player_setting_value_cb;
+using SetPlayerSettingValueCb =
+    PlayerSettingsInterface::SetPlayerSettingValueCallback;
+static void setPlayerSettings(std::vector<PlayerAttribute> attributes,
+                              std::vector<uint8_t> values,
+                              SetPlayerSettingValueCb cb);
+SetPlayerSettingValueCb set_player_setting_value_cb;
+
 // Local Variables
 // TODO (apanicke): Use a map here to store the callback in order to
 // support multi-browsing
@@ -70,6 +91,18 @@ using map_entry = std::pair<std::string, GetFolderItemsCb>;
 std::map<std::string, GetFolderItemsCb> get_folder_items_cb_map;
 std::map<RawAddress, ::bluetooth::avrcp::VolumeInterface::VolumeChangedCb>
     volumeCallbackMap;
+
+template <typename T>
+void copyJavaArraytoCppVector(JNIEnv* env, const jbyteArray& jArray,
+                              std::vector<T>& cVec) {
+  size_t len = (size_t)env->GetArrayLength(jArray);
+  if (len == 0) return;
+  jbyte* elements = env->GetByteArrayElements(jArray, nullptr);
+  T* array = reinterpret_cast<T*>(elements);
+  cVec.reserve(len);
+  std::copy(array, array + len, std::back_inserter(cVec));
+  env->ReleaseByteArrayElements(jArray, elements, 0);
+}
 
 // TODO (apanicke): In the future, this interface should guarantee that
 // all calls happen on the JNI Thread. Right now this is very difficult
@@ -117,7 +150,7 @@ class AvrcpMediaInterfaceImpl : public MediaInterface {
     mServiceCallbacks = callback;
   }
 
-  void UnregisterUpdateCallback(MediaCallbacks* callback) override {
+  void UnregisterUpdateCallback(MediaCallbacks* /* callback */) override {
     mServiceCallbacks = nullptr;
   }
 
@@ -150,6 +183,30 @@ class VolumeInterfaceImpl : public VolumeInterface {
 };
 static VolumeInterfaceImpl mVolumeInterface;
 
+class PlayerSettingsInterfaceImpl : public PlayerSettingsInterface {
+ public:
+  void ListPlayerSettings(ListPlayerSettingsCallback cb) {
+    listPlayerSettings(cb);
+  }
+
+  void ListPlayerSettingValues(PlayerAttribute setting,
+                               ListPlayerSettingValuesCallback cb) {
+    listPlayerSettingValues(setting, cb);
+  }
+
+  void GetCurrentPlayerSettingValue(std::vector<PlayerAttribute> attributes,
+                                    GetCurrentPlayerSettingValueCallback cb) {
+    getPlayerSettings(attributes, cb);
+  }
+
+  void SetPlayerSettings(std::vector<PlayerAttribute> attributes,
+                         std::vector<uint8_t> values,
+                         SetPlayerSettingValueCallback cb) {
+    setPlayerSettings(attributes, values, cb);
+  }
+};
+static PlayerSettingsInterfaceImpl mPlayerSettingsInterface;
+
 static jmethodID method_getCurrentSongInfo;
 static jmethodID method_getPlaybackStatus;
 static jmethodID method_sendMediaKeyEvent;
@@ -170,89 +227,50 @@ static jmethodID method_volumeDeviceDisconnected;
 
 static jmethodID method_setVolume;
 
-static void classInitNative(JNIEnv* env, jclass clazz) {
-  method_getCurrentSongInfo = env->GetMethodID(
-      clazz, "getCurrentSongInfo", "()Lcom/android/bluetooth/audio_util/Metadata;");
-
-  method_getPlaybackStatus = env->GetMethodID(
-      clazz, "getPlayStatus", "()Lcom/android/bluetooth/audio_util/PlayStatus;");
-
-  method_sendMediaKeyEvent =
-      env->GetMethodID(clazz, "sendMediaKeyEvent", "(IZ)V");
-
-  method_getCurrentMediaId =
-      env->GetMethodID(clazz, "getCurrentMediaId", "()Ljava/lang/String;");
-
-  method_getNowPlayingList =
-      env->GetMethodID(clazz, "getNowPlayingList", "()Ljava/util/List;");
-
-  method_getCurrentPlayerId =
-      env->GetMethodID(clazz, "getCurrentPlayerId", "()I");
-
-  method_getMediaPlayerList =
-      env->GetMethodID(clazz, "getMediaPlayerList", "()Ljava/util/List;");
-
-  method_setBrowsedPlayer = env->GetMethodID(clazz, "setBrowsedPlayer", "(I)V");
-
-  method_getFolderItemsRequest = env->GetMethodID(
-      clazz, "getFolderItemsRequest", "(ILjava/lang/String;)V");
-
-  method_playItem =
-      env->GetMethodID(clazz, "playItem", "(IZLjava/lang/String;)V");
-
-  method_setActiveDevice =
-      env->GetMethodID(clazz, "setActiveDevice", "(Ljava/lang/String;)V");
-
-  // Volume Management functions
-  method_volumeDeviceConnected =
-      env->GetMethodID(clazz, "deviceConnected", "(Ljava/lang/String;Z)V");
-
-  method_volumeDeviceDisconnected =
-      env->GetMethodID(clazz, "deviceDisconnected", "(Ljava/lang/String;)V");
-
-  method_setVolume = env->GetMethodID(clazz, "setVolume", "(I)V");
-
-  ALOGI("%s: AvrcpTargetJni initialized!", __func__);
-}
+static jmethodID method_listPlayerSettings;
+static jmethodID method_listPlayerSettingValues;
+static jmethodID method_getPlayerSettings;
+static jmethodID method_setPlayerSettings;
 
 static void initNative(JNIEnv* env, jobject object) {
-  ALOGD("%s", __func__);
+  log::debug("");
   std::unique_lock<std::shared_timed_mutex> interface_lock(interface_mutex);
   std::unique_lock<std::shared_timed_mutex> callbacks_lock(callbacks_mutex);
   mJavaInterface = env->NewGlobalRef(object);
 
   sServiceInterface = getBluetoothInterface()->get_avrcp_service();
-  sServiceInterface->Init(&mAvrcpInterface, &mVolumeInterface);
+  sServiceInterface->Init(&mAvrcpInterface, &mVolumeInterface,
+                          &mPlayerSettingsInterface);
 }
 
-static void registerBipServerNative(JNIEnv* env, jobject object,
+static void registerBipServerNative(JNIEnv* /* env */, jobject /* object */,
                                     jint l2cap_psm) {
-  ALOGD("%s: l2cap_psm=%d", __func__, (int)l2cap_psm);
+  log::debug("l2cap_psm={}", (int)l2cap_psm);
   std::unique_lock<std::shared_timed_mutex> interface_lock(interface_mutex);
   if (sServiceInterface == nullptr) {
-    ALOGW("%s: Service not loaded.", __func__);
+    log::warn("Service not loaded.");
     return;
   }
   sServiceInterface->RegisterBipServer((int)l2cap_psm);
 }
 
-static void unregisterBipServerNative(JNIEnv* env, jobject object) {
-  ALOGD("%s", __func__);
+static void unregisterBipServerNative(JNIEnv* /* env */, jobject /* object */) {
+  log::debug("");
   std::unique_lock<std::shared_timed_mutex> interface_lock(interface_mutex);
   if (sServiceInterface == nullptr) {
-    ALOGW("%s: Service not loaded.", __func__);
+    log::warn("Service not loaded.");
     return;
   }
   sServiceInterface->UnregisterBipServer();
 }
 
-static void sendMediaUpdateNative(JNIEnv* env, jobject object,
+static void sendMediaUpdateNative(JNIEnv* /* env */, jobject /* object */,
                                   jboolean metadata, jboolean state,
                                   jboolean queue) {
-  ALOGD("%s", __func__);
+  log::debug("");
   std::unique_lock<std::shared_timed_mutex> interface_lock(interface_mutex);
   if (mServiceCallbacks == nullptr) {
-    ALOGW("%s: Service not loaded.", __func__);
+    log::warn("Service not loaded.");
     return;
   }
 
@@ -260,13 +278,13 @@ static void sendMediaUpdateNative(JNIEnv* env, jobject object,
                                      queue == JNI_TRUE);
 }
 
-static void sendFolderUpdateNative(JNIEnv* env, jobject object,
+static void sendFolderUpdateNative(JNIEnv* /* env */, jobject /* object */,
                                    jboolean available_players,
                                    jboolean addressed_player, jboolean uids) {
-  ALOGD("%s", __func__);
+  log::debug("");
   std::unique_lock<std::shared_timed_mutex> interface_lock(interface_mutex);
   if (mServiceCallbacks == nullptr) {
-    ALOGW("%s: Service not loaded.", __func__);
+    log::warn("Service not loaded.");
     return;
   }
 
@@ -275,7 +293,7 @@ static void sendFolderUpdateNative(JNIEnv* env, jobject object,
                                       uids == JNI_TRUE);
 }
 
-static void cleanupNative(JNIEnv* env, jobject object) {
+static void cleanupNative(JNIEnv* env, jobject /* object */) {
   std::unique_lock<std::shared_timed_mutex> interface_lock(interface_mutex);
   std::unique_lock<std::shared_timed_mutex> callbacks_lock(callbacks_mutex);
 
@@ -289,11 +307,12 @@ static void cleanupNative(JNIEnv* env, jobject object) {
   sServiceInterface = nullptr;
 }
 
-jboolean connectDeviceNative(JNIEnv* env, jobject object, jstring address) {
-  ALOGD("%s", __func__);
+jboolean connectDeviceNative(JNIEnv* env, jobject /* object */,
+                             jstring address) {
+  log::debug("");
   std::unique_lock<std::shared_timed_mutex> interface_lock(interface_mutex);
   if (mServiceCallbacks == nullptr) {
-    ALOGW("%s: Service not loaded.", __func__);
+    log::warn("Service not loaded.");
     return JNI_FALSE;
   }
 
@@ -308,11 +327,12 @@ jboolean connectDeviceNative(JNIEnv* env, jobject object, jstring address) {
                                                           : JNI_FALSE;
 }
 
-jboolean disconnectDeviceNative(JNIEnv* env, jobject object, jstring address) {
-  ALOGD("%s", __func__);
+jboolean disconnectDeviceNative(JNIEnv* env, jobject /* object */,
+                                jstring address) {
+  log::debug("");
   std::unique_lock<std::shared_timed_mutex> interface_lock(interface_mutex);
   if (mServiceCallbacks == nullptr) {
-    ALOGW("%s: Service not loaded.", __func__);
+    log::warn("Service not loaded.");
     return JNI_FALSE;
   }
 
@@ -328,7 +348,7 @@ jboolean disconnectDeviceNative(JNIEnv* env, jobject object, jstring address) {
 }
 
 static void sendMediaKeyEvent(int key, KeyState state) {
-  ALOGD("%s", __func__);
+  log::debug("");
   std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid() || !mJavaInterface) return;
@@ -499,7 +519,7 @@ static FolderInfo getFolderInfoFromJavaObj(JNIEnv* env, jobject folder) {
 }
 
 static SongInfo getSongInfo() {
-  ALOGD("%s", __func__);
+  log::debug("");
   std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid() || !mJavaInterface) return SongInfo();
@@ -512,7 +532,7 @@ static SongInfo getSongInfo() {
 }
 
 static PlayStatus getCurrentPlayStatus() {
-  ALOGD("%s", __func__);
+  log::debug("");
   std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid() || !mJavaInterface) return PlayStatus();
@@ -522,7 +542,7 @@ static PlayStatus getCurrentPlayStatus() {
       sCallbackEnv->CallObjectMethod(mJavaInterface, method_getPlaybackStatus);
 
   if (playStatus == nullptr) {
-    ALOGE("%s: Got a null play status", __func__);
+    log::error("Got a null play status");
     return status;
   }
 
@@ -544,7 +564,7 @@ static PlayStatus getCurrentPlayStatus() {
 }
 
 static std::string getCurrentMediaId() {
-  ALOGD("%s", __func__);
+  log::debug("");
   std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid() || !mJavaInterface) return "";
@@ -552,7 +572,7 @@ static std::string getCurrentMediaId() {
   jstring media_id = (jstring)sCallbackEnv->CallObjectMethod(
       mJavaInterface, method_getCurrentMediaId);
   if (media_id == nullptr) {
-    ALOGE("%s: Got a null media ID", __func__);
+    log::error("Got a null media ID");
     return "";
   }
 
@@ -564,7 +584,7 @@ static std::string getCurrentMediaId() {
 }
 
 static std::vector<SongInfo> getNowPlayingList() {
-  ALOGD("%s", __func__);
+  log::debug("");
   std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid() || !mJavaInterface) return std::vector<SongInfo>();
@@ -572,7 +592,7 @@ static std::vector<SongInfo> getNowPlayingList() {
   jobject song_list =
       sCallbackEnv->CallObjectMethod(mJavaInterface, method_getNowPlayingList);
   if (song_list == nullptr) {
-    ALOGE("%s: Got a null now playing list", __func__);
+    log::error("Got a null now playing list");
     return std::vector<SongInfo>();
   }
 
@@ -599,7 +619,7 @@ static std::vector<SongInfo> getNowPlayingList() {
 }
 
 static uint16_t getCurrentPlayerId() {
-  ALOGD("%s", __func__);
+  log::debug("");
   std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid() || !mJavaInterface) return 0u;
@@ -611,7 +631,7 @@ static uint16_t getCurrentPlayerId() {
 }
 
 static std::vector<MediaPlayerInfo> getMediaPlayerList() {
-  ALOGD("%s", __func__);
+  log::debug("");
   std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid() || !mJavaInterface)
@@ -621,7 +641,7 @@ static std::vector<MediaPlayerInfo> getMediaPlayerList() {
       mJavaInterface, method_getMediaPlayerList);
 
   if (player_list == nullptr) {
-    ALOGE("%s: Got a null media player list", __func__);
+    log::error("Got a null media player list");
     return std::vector<MediaPlayerInfo>();
   }
 
@@ -677,7 +697,7 @@ static std::vector<MediaPlayerInfo> getMediaPlayerList() {
 }
 
 static void setBrowsedPlayer(uint16_t player_id, SetBrowsedPlayerCb cb) {
-  ALOGD("%s", __func__);
+  log::debug("");
   std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid() || !mJavaInterface) return;
@@ -687,10 +707,11 @@ static void setBrowsedPlayer(uint16_t player_id, SetBrowsedPlayerCb cb) {
                                player_id);
 }
 
-static void setBrowsedPlayerResponseNative(JNIEnv* env, jobject object,
-                                           jint player_id, jboolean success,
-                                           jstring root_id, jint num_items) {
-  ALOGD("%s", __func__);
+static void setBrowsedPlayerResponseNative(JNIEnv* env, jobject /* object */,
+                                           jint /* player_id */,
+                                           jboolean success, jstring root_id,
+                                           jint num_items) {
+  log::debug("");
 
   std::string root;
   if (root_id != nullptr) {
@@ -702,9 +723,9 @@ static void setBrowsedPlayerResponseNative(JNIEnv* env, jobject object,
   set_browsed_player_cb.Run(success == JNI_TRUE, root, num_items);
 }
 
-static void getFolderItemsResponseNative(JNIEnv* env, jobject object,
+static void getFolderItemsResponseNative(JNIEnv* env, jobject /* object */,
                                          jstring parent_id, jobject list) {
-  ALOGD("%s", __func__);
+  log::debug("");
 
   std::string id;
   if (parent_id != nullptr) {
@@ -718,8 +739,8 @@ static void getFolderItemsResponseNative(JNIEnv* env, jobject object,
   // that both callbacks can be handled with one lookup if a request comes
   // for a folder that is already trying to be looked at.
   if (get_folder_items_cb_map.find(id) == get_folder_items_cb_map.end()) {
-    ALOGE("Could not find response callback for the request of \"%s\"",
-          id.c_str());
+    log::error("Could not find response callback for the request of \"{}\"",
+               id);
     return;
   }
 
@@ -727,7 +748,7 @@ static void getFolderItemsResponseNative(JNIEnv* env, jobject object,
   get_folder_items_cb_map.erase(id);
 
   if (list == nullptr) {
-    ALOGE("%s: Got a null get folder items response list", __func__);
+    log::error("Got a null get folder items response list");
     callback.Run(std::vector<ListItem>());
     return;
   }
@@ -781,7 +802,7 @@ static void getFolderItemsResponseNative(JNIEnv* env, jobject object,
 
 static void getFolderItems(uint16_t player_id, std::string media_id,
                            GetFolderItemsCb cb) {
-  ALOGD("%s", __func__);
+  log::debug("");
   std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid() || !mJavaInterface) return;
@@ -797,7 +818,7 @@ static void getFolderItems(uint16_t player_id, std::string media_id,
 
 static void playItem(uint16_t player_id, bool now_playing,
                      std::string media_id) {
-  ALOGD("%s", __func__);
+  log::debug("");
   std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid() || !mJavaInterface) return;
@@ -808,7 +829,7 @@ static void playItem(uint16_t player_id, bool now_playing,
 }
 
 static void setActiveDevice(const RawAddress& address) {
-  ALOGD("%s", __func__);
+  log::debug("");
   std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid() || !mJavaInterface) return;
@@ -819,7 +840,7 @@ static void setActiveDevice(const RawAddress& address) {
 }
 
 static void volumeDeviceConnected(const RawAddress& address) {
-  ALOGD("%s", __func__);
+  log::debug("");
   std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid() || !mJavaInterface) return;
@@ -832,7 +853,7 @@ static void volumeDeviceConnected(const RawAddress& address) {
 static void volumeDeviceConnected(
     const RawAddress& address,
     ::bluetooth::avrcp::VolumeInterface::VolumeChangedCb cb) {
-  ALOGD("%s", __func__);
+  log::debug("");
   std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid() || !mJavaInterface) return;
@@ -845,7 +866,7 @@ static void volumeDeviceConnected(
 }
 
 static void volumeDeviceDisconnected(const RawAddress& address) {
-  ALOGD("%s", __func__);
+  log::debug("");
   std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid() || !mJavaInterface) return;
@@ -857,7 +878,7 @@ static void volumeDeviceDisconnected(const RawAddress& address) {
                                j_bdaddr);
 }
 
-static void sendVolumeChangedNative(JNIEnv* env, jobject object,
+static void sendVolumeChangedNative(JNIEnv* env, jobject /* object */,
                                     jstring address, jint volume) {
   const char* tmp_addr = env->GetStringUTFChars(address, 0);
   RawAddress bdaddr;
@@ -866,14 +887,14 @@ static void sendVolumeChangedNative(JNIEnv* env, jobject object,
 
   if (!success) return;
 
-  ALOGD("%s", __func__);
+  log::debug("");
   if (volumeCallbackMap.find(bdaddr) != volumeCallbackMap.end()) {
     volumeCallbackMap.find(bdaddr)->second.Run(volume & 0x7F);
   }
 }
 
 static void setVolume(int8_t volume) {
-  ALOGD("%s", __func__);
+  log::debug("");
   std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid() || !mJavaInterface) return;
@@ -881,11 +902,11 @@ static void setVolume(int8_t volume) {
   sCallbackEnv->CallVoidMethod(mJavaInterface, method_setVolume, volume);
 }
 
-static void setBipClientStatusNative(JNIEnv* env, jobject object,
-                                    jstring address, jboolean connected) {
+static void setBipClientStatusNative(JNIEnv* env, jobject /* object */,
+                                     jstring address, jboolean connected) {
   std::unique_lock<std::shared_timed_mutex> interface_lock(interface_mutex);
   if (mServiceCallbacks == nullptr) {
-    ALOGW("%s: Service not loaded.", __func__);
+    log::warn("Service not loaded.");
     return;
   }
 
@@ -900,32 +921,196 @@ static void setBipClientStatusNative(JNIEnv* env, jobject object,
   sServiceInterface->SetBipClientStatus(bdaddr, status);
 }
 
-static JNINativeMethod sMethods[] = {
-    {"classInitNative", "()V", (void*)classInitNative},
-    {"initNative", "()V", (void*)initNative},
-    {"registerBipServerNative", "(I)V", (void*)registerBipServerNative},
-    {"unregisterBipServerNative", "()V", (void*)unregisterBipServerNative},
-    {"sendMediaUpdateNative", "(ZZZ)V", (void*)sendMediaUpdateNative},
-    {"sendFolderUpdateNative", "(ZZZ)V", (void*)sendFolderUpdateNative},
-    {"setBrowsedPlayerResponseNative", "(IZLjava/lang/String;I)V",
-     (void*)setBrowsedPlayerResponseNative},
-    {"getFolderItemsResponseNative", "(Ljava/lang/String;Ljava/util/List;)V",
-     (void*)getFolderItemsResponseNative},
-    {"cleanupNative", "()V", (void*)cleanupNative},
-    {"connectDeviceNative", "(Ljava/lang/String;)Z",
-     (void*)connectDeviceNative},
-    {"disconnectDeviceNative", "(Ljava/lang/String;)Z",
-     (void*)disconnectDeviceNative},
-    {"sendVolumeChangedNative", "(Ljava/lang/String;I)V",
-     (void*)sendVolumeChangedNative},
-    {"setBipClientStatusNative", "(Ljava/lang/String;Z)V",
-     (void*)setBipClientStatusNative},
-};
+// Called from native to list available player settings
+static void listPlayerSettings(ListPlayerSettingsCb cb) {
+  log::debug("");
+  std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
+  CallbackEnv sCallbackEnv(__func__);
+  if (!sCallbackEnv.valid() || !mJavaInterface) return;
+
+  list_player_settings_cb = std::move(cb);
+  sCallbackEnv->CallVoidMethod(mJavaInterface, method_listPlayerSettings);
+}
+
+static void listPlayerSettingsResponseNative(JNIEnv* env, jobject /* object */,
+                                             jbyteArray attributes) {
+  log::debug("");
+
+  std::vector<PlayerAttribute> attributes_vector;
+  copyJavaArraytoCppVector(env, attributes, attributes_vector);
+
+  list_player_settings_cb.Run(std::move(attributes_vector));
+}
+
+// Called from native to list available values for player setting
+static void listPlayerSettingValues(PlayerAttribute attribute,
+                                    ListPlayerSettingValuesCb cb) {
+  log::debug("");
+  std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
+  CallbackEnv sCallbackEnv(__func__);
+  if (!sCallbackEnv.valid() || !mJavaInterface) return;
+
+  list_player_setting_values_cb = std::move(cb);
+  sCallbackEnv->CallVoidMethod(mJavaInterface, method_listPlayerSettingValues,
+                               (jbyte)attribute);
+}
+
+static void listPlayerSettingValuesResponseNative(JNIEnv* env,
+                                                  jobject /* object */,
+                                                  jbyte attribute,
+                                                  jbyteArray values) {
+  log::debug("");
+  PlayerAttribute player_attribute = static_cast<PlayerAttribute>(attribute);
+  std::vector<uint8_t> values_vector;
+  copyJavaArraytoCppVector(env, values, values_vector);
+  list_player_setting_values_cb.Run(player_attribute, std::move(values_vector));
+}
+
+// Called from native to get current player settings
+static void getPlayerSettings(std::vector<PlayerAttribute> attributes,
+                              GetCurrentPlayerSettingValueCb cb) {
+  log::debug("");
+  std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
+  CallbackEnv sCallbackEnv(__func__);
+  if (!sCallbackEnv.valid() || !mJavaInterface) return;
+
+  jbyteArray attributes_array = sCallbackEnv->NewByteArray(attributes.size());
+  sCallbackEnv->SetByteArrayRegion(
+      attributes_array, 0, attributes.size(),
+      reinterpret_cast<const jbyte*>(attributes.data()));
+
+  get_current_player_setting_value_cb = std::move(cb);
+  sCallbackEnv->CallVoidMethod(mJavaInterface, method_getPlayerSettings,
+                               attributes_array);
+}
+
+static void getPlayerSettingsResponseNative(JNIEnv* env, jobject /* object */,
+                                            jbyteArray attributes,
+                                            jbyteArray values) {
+  log::debug("");
+  std::vector<PlayerAttribute> attributes_vector;
+  std::vector<uint8_t> values_vector;
+  copyJavaArraytoCppVector(env, attributes, attributes_vector);
+  copyJavaArraytoCppVector(env, values, values_vector);
+  get_current_player_setting_value_cb.Run(std::move(attributes_vector),
+                                          std::move(values_vector));
+}
+
+// Called from native to set current player settings
+static void setPlayerSettings(std::vector<PlayerAttribute> attributes,
+                              std::vector<uint8_t> values,
+                              SetPlayerSettingValueCb cb) {
+  log::debug("");
+  std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
+  CallbackEnv sCallbackEnv(__func__);
+  if (!sCallbackEnv.valid() || !mJavaInterface) return;
+
+  jbyteArray attributes_array = sCallbackEnv->NewByteArray(attributes.size());
+  sCallbackEnv->SetByteArrayRegion(
+      attributes_array, 0, attributes.size(),
+      reinterpret_cast<const jbyte*>(attributes.data()));
+
+  jbyteArray values_array = sCallbackEnv->NewByteArray(values.size());
+  sCallbackEnv->SetByteArrayRegion(
+      values_array, 0, values.size(),
+      reinterpret_cast<const jbyte*>(values.data()));
+
+  set_player_setting_value_cb = std::move(cb);
+
+  sCallbackEnv->CallVoidMethod(mJavaInterface, method_setPlayerSettings,
+                               attributes_array, values_array);
+}
+
+static void setPlayerSettingsResponseNative(JNIEnv* /* env */,
+                                            jobject /* object */,
+                                            jboolean success) {
+  log::debug("");
+  set_player_setting_value_cb.Run(success);
+}
+
+static void sendPlayerSettingsNative(JNIEnv* env, jobject /* object */,
+                                     jbyteArray attributes, jbyteArray values) {
+  log::debug("");
+  std::unique_lock<std::shared_timed_mutex> interface_lock(interface_mutex);
+  if (mServiceCallbacks == nullptr) {
+    log::warn("Service not loaded.");
+    return;
+  }
+  std::vector<PlayerAttribute> attributes_vector;
+  std::vector<uint8_t> values_vector;
+  copyJavaArraytoCppVector(env, attributes, attributes_vector);
+  copyJavaArraytoCppVector(env, values, values_vector);
+  mServiceCallbacks->SendPlayerSettingsChanged(attributes_vector,
+                                               values_vector);
+}
 
 int register_com_android_bluetooth_avrcp_target(JNIEnv* env) {
-  return jniRegisterNativeMethods(
-      env, "com/android/bluetooth/avrcp/AvrcpNativeInterface", sMethods,
-      NELEM(sMethods));
+  const JNINativeMethod methods[] = {
+      {"initNative", "()V", (void*)initNative},
+      {"registerBipServerNative", "(I)V", (void*)registerBipServerNative},
+      {"unregisterBipServerNative", "()V", (void*)unregisterBipServerNative},
+      {"sendMediaUpdateNative", "(ZZZ)V", (void*)sendMediaUpdateNative},
+      {"sendFolderUpdateNative", "(ZZZ)V", (void*)sendFolderUpdateNative},
+      {"setBrowsedPlayerResponseNative", "(IZLjava/lang/String;I)V",
+       (void*)setBrowsedPlayerResponseNative},
+      {"getFolderItemsResponseNative", "(Ljava/lang/String;Ljava/util/List;)V",
+       (void*)getFolderItemsResponseNative},
+      {"cleanupNative", "()V", (void*)cleanupNative},
+      {"connectDeviceNative", "(Ljava/lang/String;)Z",
+       (void*)connectDeviceNative},
+      {"disconnectDeviceNative", "(Ljava/lang/String;)Z",
+       (void*)disconnectDeviceNative},
+      {"sendVolumeChangedNative", "(Ljava/lang/String;I)V",
+       (void*)sendVolumeChangedNative},
+      {"setBipClientStatusNative", "(Ljava/lang/String;Z)V",
+       (void*)setBipClientStatusNative},
+      {"listPlayerSettingsResponseNative", "([B)V",
+       (void*)listPlayerSettingsResponseNative},
+      {"listPlayerSettingValuesResponseNative", "(B[B)V",
+       (void*)listPlayerSettingValuesResponseNative},
+      {"getPlayerSettingsResponseNative", "([B[B)V",
+       (void*)getPlayerSettingsResponseNative},
+      {"setPlayerSettingsResponseNative", "(Z)V",
+       (void*)setPlayerSettingsResponseNative},
+      {"sendPlayerSettingsNative", "([B[B)V", (void*)sendPlayerSettingsNative},
+  };
+  const int result = REGISTER_NATIVE_METHODS(
+      env, "com/android/bluetooth/avrcp/AvrcpNativeInterface", methods);
+  if (result != 0) {
+    return result;
+  }
+
+  const JNIJavaMethod javaMethods[] = {
+      {"getCurrentSongInfo", "()Lcom/android/bluetooth/audio_util/Metadata;",
+       &method_getCurrentSongInfo},
+      {"getPlayStatus", "()Lcom/android/bluetooth/audio_util/PlayStatus;",
+       &method_getPlaybackStatus},
+      {"sendMediaKeyEvent", "(IZ)V", &method_sendMediaKeyEvent},
+      {"getCurrentMediaId", "()Ljava/lang/String;", &method_getCurrentMediaId},
+      {"getNowPlayingList", "()Ljava/util/List;", &method_getNowPlayingList},
+      {"getCurrentPlayerId", "()I", &method_getCurrentPlayerId},
+      {"getMediaPlayerList", "()Ljava/util/List;", &method_getMediaPlayerList},
+      {"setBrowsedPlayer", "(I)V", &method_setBrowsedPlayer},
+      {"getFolderItemsRequest", "(ILjava/lang/String;)V",
+       &method_getFolderItemsRequest},
+      {"playItem", "(IZLjava/lang/String;)V", &method_playItem},
+      {"setActiveDevice", "(Ljava/lang/String;)V", &method_setActiveDevice},
+      {"deviceConnected", "(Ljava/lang/String;Z)V",
+       &method_volumeDeviceConnected},
+      {"deviceDisconnected", "(Ljava/lang/String;)V",
+       &method_volumeDeviceDisconnected},
+      {"setVolume", "(I)V", &method_setVolume},
+      {"listPlayerSettingsRequest", "()V", &method_listPlayerSettings},
+      {"listPlayerSettingValuesRequest", "(B)V",
+       &method_listPlayerSettingValues},
+      {"getCurrentPlayerSettingValuesRequest", "([B)V",
+       &method_getPlayerSettings},
+      {"setPlayerSettingsRequest", "([B[B)V", &method_setPlayerSettings},
+  };
+  GET_JAVA_METHODS(env, "com/android/bluetooth/avrcp/AvrcpNativeInterface",
+                   javaMethods);
+
+  return 0;
 }
 
 }  // namespace android

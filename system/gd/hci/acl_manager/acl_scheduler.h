@@ -18,10 +18,9 @@
 
 #include <memory>
 #include <string>
-#include <utility>
 
 #include "common/contextual_callback.h"
-#include "hci/hci_packets.h"
+#include "hci/address.h"
 #include "module.h"
 
 namespace bluetooth {
@@ -46,7 +45,7 @@ class AclScheduler : public bluetooth::Module {
 
   // Report that an ACL connection has completed, and dispatch to the appropriate callback based on the internal
   // state. Then, start the next operation.
-  void ReportAclConnectionCompletion(
+  virtual void ReportAclConnectionCompletion(
       Address address,
       common::ContextualOnceCallback<void()> handle_outgoing_connection,
       common::ContextualOnceCallback<void()> handle_incoming_connection,
@@ -93,7 +92,7 @@ class AclScheduler : public bluetooth::Module {
  public:
   static const ModuleFactory Factory;
   AclScheduler();
-  ~AclScheduler();
+  virtual ~AclScheduler();
 };
 
 }  // namespace acl_manager

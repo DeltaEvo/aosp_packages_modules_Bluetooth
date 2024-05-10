@@ -26,7 +26,7 @@
 
 #include <cstdint>
 
-#include "stack/include/bt_types.h"
+#include "stack/include/bt_octets.h"
 #include "types/raw_address.h"
 
 /*****************************************************************************
@@ -44,8 +44,8 @@
  * Returns          void
  *
  ******************************************************************************/
-extern void bta_dm_ci_rmt_oob(bool accept, const RawAddress& bd_addr,
-                              const Octet16& c, const Octet16& r);
+void bta_dm_ci_rmt_oob(bool accept, const RawAddress& bd_addr, const Octet16& c,
+                       const Octet16& r);
 /*******************************************************************************
  *
  * Function         bta_dm_sco_ci_data_ready
@@ -56,6 +56,6 @@ extern void bta_dm_ci_rmt_oob(bool accept, const RawAddress& bd_addr,
  * Returns          void
  *
  ******************************************************************************/
-extern void bta_dm_sco_ci_data_ready(uint16_t event, uint16_t sco_handle);
+void bta_dm_sco_ci_data_ready(uint16_t event, uint16_t sco_handle);
 
 #endif

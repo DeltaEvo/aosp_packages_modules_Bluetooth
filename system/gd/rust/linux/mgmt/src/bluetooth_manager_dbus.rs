@@ -2,7 +2,7 @@ use dbus::arg::RefArg;
 use dbus::strings::Path;
 use dbus_crossroads;
 use dbus_macros::{dbus_method, dbus_propmap, dbus_proxy_obj, generate_dbus_exporter};
-use dbus_projection::{dbus_generated, DisconnectWatcher};
+use dbus_projection::prelude::*;
 
 use btstack::RPCProxy;
 
@@ -71,6 +71,16 @@ impl IBluetoothManager for BluetoothManagerDBus {
     fn set_desired_default_adapter(&mut self, hci_interface: i32) {
         dbus_generated!()
     }
+
+    #[dbus_method("GetFlossApiVersion")]
+    fn get_floss_api_version(&mut self) -> u32 {
+        dbus_generated!()
+    }
+
+    #[dbus_method("SetTabletMode")]
+    fn set_tablet_mode(&mut self, tablet_mode: bool) {
+        dbus_generated!()
+    }
 }
 
 /// D-Bus projection of IBluetoothManagerCallback.
@@ -79,11 +89,11 @@ struct BluetoothManagerCallbackDBus {}
 #[dbus_proxy_obj(BluetoothManagerCallback, "org.chromium.bluetooth.ManagerCallback")]
 impl IBluetoothManagerCallback for BluetoothManagerCallbackDBus {
     #[dbus_method("OnHciDeviceChanged")]
-    fn on_hci_device_changed(&self, hci_interface: i32, present: bool) {}
+    fn on_hci_device_changed(&mut self, hci_interface: i32, present: bool) {}
 
     #[dbus_method("OnHciEnabledChanged")]
-    fn on_hci_enabled_changed(&self, hci_interface: i32, enabled: bool) {}
+    fn on_hci_enabled_changed(&mut self, hci_interface: i32, enabled: bool) {}
 
     #[dbus_method("OnDefaultAdapterChanged")]
-    fn on_default_adapter_changed(&self, hci_interface: i32) {}
+    fn on_default_adapter_changed(&mut self, hci_interface: i32) {}
 }

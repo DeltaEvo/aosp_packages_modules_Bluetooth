@@ -19,7 +19,6 @@ package com.android.bluetooth.avrcpcontroller;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.Context;
-import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -333,7 +332,7 @@ public final class AvrcpCoverArtStorageTest {
     @Test
     public void toString_returnsDeviceInfo() {
         String expectedString =
-                "CoverArtStorage:\n" + "  " + mDevice1.getAddress() + " (" + 1 + "):" + "\n    "
+                "CoverArtStorage:\n" + "  " + mDevice1 + " (" + 1 + "):" + "\n    "
                         + mHandle1 + "\n";
 
         mAvrcpCoverArtStorage.addImage(mDevice1, mHandle1, mImage1);

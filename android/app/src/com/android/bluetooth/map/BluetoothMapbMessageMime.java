@@ -14,10 +14,15 @@
 */
 package com.android.bluetooth.map;
 
+import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothProtoEnums;
 import android.text.util.Rfc822Token;
 import android.text.util.Rfc822Tokenizer;
 import android.util.Base64;
 import android.util.Log;
+
+import com.android.bluetooth.BluetoothStatsLog;
+import com.android.bluetooth.content_profiles.ContentProfileErrorReportUtils;
 
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.Charset;
@@ -29,6 +34,7 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.UUID;
 
+// Next tag value for ContentProfileErrorReportUtils.report(): 8
 public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
 
     public static class MimePart {
@@ -60,6 +66,12 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
                         charset = "UTF-8";
                     }
                 } catch (IllegalCharsetNameException e) {
+                    ContentProfileErrorReportUtils.report(
+                            BluetoothProfile.MAP,
+                            BluetoothProtoEnums.BLUETOOTH_MAP_BMESSAGE_MIME,
+                            BluetoothStatsLog
+                                    .BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
+                            0);
                     Log.w(TAG, "Received unknown charset: " + charset + " - using UTF-8.");
                     charset = "UTF-8";
                 }
@@ -67,10 +79,21 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
             try {
                 result = new String(mData, charset);
             } catch (UnsupportedEncodingException e) {
+                ContentProfileErrorReportUtils.report(
+                        BluetoothProfile.MAP,
+                        BluetoothProtoEnums.BLUETOOTH_MAP_BMESSAGE_MIME,
+                        BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
+                        1);
                 /* This cannot happen unless Charset.isSupported() is out of sync with String */
                 try {
                     result = new String(mData, "UTF-8");
                 } catch (UnsupportedEncodingException e2) {
+                    ContentProfileErrorReportUtils.report(
+                            BluetoothProfile.MAP,
+                            BluetoothProtoEnums.BLUETOOTH_MAP_BMESSAGE_MIME,
+                            BluetoothStatsLog
+                                    .BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
+                            2);
                     Log.e(TAG, "getDataAsString: " + e);
                 }
             }
@@ -158,7 +181,6 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
     private String mBoundary = null;
     private boolean mTextonly = false;
     private boolean mIncludeAttachments;
-    private boolean mHasHeaders = false;
     private String mMyEncoding = null;
 
     private String getBoundary() {
@@ -350,9 +372,7 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
             for (MimePart part : mParts) {
                 if (part.mContentType != null && part.mContentType.toUpperCase().contains("TEXT")) {
                     mCharset = "UTF-8";
-                    if (V) {
-                        Log.v(TAG, "Charset set to UTF-8");
-                    }
+                    Log.v(TAG, "Charset set to UTF-8");
                     break;
                 }
             }
@@ -550,17 +570,12 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
      */
     private String parseMimeHeaders(String hdrPart) {
         String[] headers = hdrPart.split("\r\n");
-        if (D) {
-            Log.d(TAG, "Header count=" + headers.length);
-        }
+        Log.d(TAG, "Header count=" + headers.length);
         String header;
-        mHasHeaders = false;
 
         for (int i = 0, c = headers.length; i < c; i++) {
             header = headers[i];
-            if (D) {
-                Log.d(TAG, "Header[" + i + "]: " + header);
-            }
+            Log.d(TAG, "Header[" + i + "]: " + header);
             /* We need to figure out if any headers are present, in cases where devices do
              * not follow the e-mail RFCs.
              * Skip empty lines, and then parse headers until a non-header line is found,
@@ -628,9 +643,7 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
                                 mBoundary.charAt(mBoundary.length() - 1) == '\"')) {
                             mBoundary = mBoundary.substring(1, mBoundary.length() - 1);
                         }
-                        if (D) {
-                            Log.d(TAG, "Boundary tag=" + mBoundary);
-                        }
+                        Log.d(TAG, "Boundary tag=" + mBoundary);
                     } else if (contentTypeParts[j].contains("charset")) {
                         mCharset = contentTypeParts[j].split("charset[\\s]*=", 2)[1].trim();
                     }
@@ -638,9 +651,12 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
             } else if (headerType.contains("CONTENT-TRANSFER-ENCODING")) {
                 mMyEncoding = headerValue;
             } else {
-                if (D) {
-                    Log.w(TAG, "Skipping unknown header: " + headerType + " (" + header + ")");
-                }
+                Log.w(TAG, "Skipping unknown header: " + headerType + " (" + header + ")");
+                ContentProfileErrorReportUtils.report(
+                        BluetoothProfile.MAP,
+                        BluetoothProtoEnums.BLUETOOTH_MAP_BMESSAGE_MIME,
+                        BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__LOG_WARN,
+                        3);
             }
         }
         return null;
@@ -653,9 +669,7 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
         String body;
 
         String[] headers = parts[0].split("\r\n");
-        if (D) {
-            Log.d(TAG, "parseMimePart: headers count=" + headers.length);
-        }
+        Log.d(TAG, "parseMimePart: headers count=" + headers.length);
 
         if (parts.length != 2) {
             body = partStr;
@@ -669,14 +683,16 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
 
                 String[] headerParts = header.split(":", 2);
                 if (headerParts.length != 2) {
-                    if (D) {
-                        Log.w(TAG, "part-Header not formatted correctly: ");
-                    }
+                    Log.w(TAG, "part-Header not formatted correctly: ");
+                    ContentProfileErrorReportUtils.report(
+                            BluetoothProfile.MAP,
+                            BluetoothProtoEnums.BLUETOOTH_MAP_BMESSAGE_MIME,
+                            BluetoothStatsLog
+                                    .BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__LOG_WARN,
+                            4);
                     continue;
                 }
-                if (D) {
-                    Log.d(TAG, "parseMimePart: header=" + header);
-                }
+                Log.d(TAG, "parseMimePart: header=" + header);
                 String headerType = headerParts[0].toUpperCase();
                 String headerValue = headerParts[1].trim();
                 if (headerType.contains("CONTENT-TYPE")) {
@@ -702,10 +718,14 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
                     // This is used if the smil refers to a cid:<xxx> in it's src
                     newPart.mContentDisposition = headerValue;
                 } else {
-                    if (D) {
-                        Log.w(TAG, "Skipping unknown part-header: " + headerType + " (" + header
-                                + ")");
-                    }
+                    Log.w(TAG, "Skipping unknown part-header: " + headerType + " (" + header
+                            + ")");
+                    ContentProfileErrorReportUtils.report(
+                            BluetoothProfile.MAP,
+                            BluetoothProtoEnums.BLUETOOTH_MAP_BMESSAGE_MIME,
+                            BluetoothStatsLog
+                                    .BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__LOG_WARN,
+                            5);
                 }
             }
             body = parts[1];
@@ -737,6 +757,11 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
 
                 return body.getBytes("UTF-8");
             } catch (UnsupportedEncodingException e) {
+                ContentProfileErrorReportUtils.report(
+                        BluetoothProfile.MAP,
+                        BluetoothProtoEnums.BLUETOOTH_MAP_BMESSAGE_MIME,
+                        BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
+                        6);
                 // This will never happen, as UTF-8 is mandatory on Android platforms
             }
         }
@@ -747,6 +772,11 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
         // Check for null String, otherwise NPE will cause BT to crash
         if (message == null) {
             Log.e(TAG, "parseMime called with a NULL message, terminating early");
+            ContentProfileErrorReportUtils.report(
+                    BluetoothProfile.MAP,
+                    BluetoothProtoEnums.BLUETOOTH_MAP_BMESSAGE_MIME,
+                    BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__LOG_ERROR,
+                    7);
             return;
         }
 
@@ -772,9 +802,7 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
             // If we have some text not being a header, add it to the message body.
             if (remaining != null) {
                 messageBody = remaining + messageParts[1];
-                if (D) {
-                    Log.d(TAG, "parseMime remaining=" + remaining);
-                }
+                Log.d(TAG, "parseMime remaining=" + remaining);
             } else {
                 messageBody = messageParts[1];
             }
@@ -790,9 +818,7 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
             mParts.get(0).mContentType = mContentType;
         } else {
             mimeParts = messageBody.split("--" + mBoundary);
-            if (D) {
-                Log.d(TAG, "mimePart count=" + mimeParts.length);
-            }
+            Log.d(TAG, "mimePart count=" + mimeParts.length);
             // Part 0 is the message to clients not capable of decoding MIME
             for (int i = 1; i < mimeParts.length - 1; i++) {
                 String part = mimeParts[i];

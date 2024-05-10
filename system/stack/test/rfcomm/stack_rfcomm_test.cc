@@ -16,23 +16,24 @@
  *
  ******************************************************************************/
 
-#include <base/logging.h>
+#include <bluetooth/log.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "internal_include/bt_target.h"
 #include "mock_btm_layer.h"
 #include "mock_l2cap_layer.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
-#include "osi/include/osi.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/btm_api.h"
+#include "stack/include/bt_psm_types.h"
 #include "stack/include/l2c_api.h"
 #include "stack/include/port_api.h"
-#include "stack/rfcomm/rfc_int.h"
+#include "stack/include/rfcdefs.h"
 #include "stack_rfcomm_test_utils.h"
 #include "stack_test_packet_utils.h"
 #include "types/raw_address.h"
+
+using namespace bluetooth;
 
 std::string DumpByteBufferToString(uint8_t* p_data, size_t len) {
   std::stringstream str;
@@ -122,7 +123,7 @@ void port_event_cback_1(uint32_t code, uint16_t port_handle) {
 }
 
 RawAddress GetTestAddress(int index) {
-  CHECK_LT(index, UINT8_MAX);
+  EXPECT_LT(index, UINT8_MAX);
   RawAddress result = {
       {0xAA, 0x00, 0x11, 0x22, 0x33, static_cast<uint8_t>(index)}};
   return result;
@@ -134,7 +135,7 @@ class StackRfcommTest : public Test {
                        tPORT_CALLBACK* management_callback,
                        tPORT_CALLBACK* event_callback,
                        uint16_t* server_handle) {
-    VLOG(1) << "Step 1";
+    log::verbose("Step 1");
     ASSERT_EQ(RFCOMM_CreateConnectionWithSecurity(
                   uuid, scn, true, mtu, RawAddress::kAny, server_handle,
                   management_callback, 0),
@@ -146,7 +147,7 @@ class StackRfcommTest : public Test {
 
   void ConnectServerL2cap(const RawAddress& peer_addr, uint16_t acl_handle,
                           uint16_t lcid) {
-    VLOG(1) << "Step 1";
+    log::verbose("Step 1");
     // Remote device connect to this channel, we shall accept
     static const uint8_t cmd_id = 0x07;
     EXPECT_CALL(l2cap_interface_,
@@ -158,19 +159,19 @@ class StackRfcommTest : public Test {
     l2cap_appl_info_.pL2CA_ConnectInd_Cb(peer_addr, lcid, BT_PSM_RFCOMM,
                                          cmd_id);
 
-    VLOG(1) << "Step 2";
+    log::verbose("Step 2");
     // MTU configuration is done
     cfg_req.mtu_present = false;
     l2cap_appl_info_.pL2CA_ConfigCfm_Cb(lcid, L2CAP_CFG_OK, {});
 
-    VLOG(1) << "Step 3";
+    log::verbose("Step 3");
     // Remote device also ask to configure MTU size
     EXPECT_CALL(l2cap_interface_,
                 ConfigResponse(lcid, PointerMemoryEqual(&cfg_req)))
         .WillOnce(Return(true));
     l2cap_appl_info_.pL2CA_ConfigInd_Cb(lcid, &cfg_req);
 
-    VLOG(1) << "Step 4";
+    log::verbose("Step 4");
     // Remote device connect to server channel 0
     BT_HDR* sabm_channel_0 = AllocateWrappedIncomingL2capAclPacket(
         CreateQuickSabmPacket(RFCOMM_MX_DLCI, lcid, acl_handle));
@@ -186,7 +187,7 @@ class StackRfcommTest : public Test {
   void ConnectServerPort(const RawAddress& peer_addr, uint16_t port_handle,
                          uint8_t scn, uint16_t mtu, uint16_t acl_handle,
                          uint16_t lcid, int port_callback_index) {
-    VLOG(1) << "Step 1";
+    log::verbose("Step 1");
     // Negotiate parameters on scn
     BT_HDR* uih_pn_cmd_from_peer = AllocateWrappedIncomingL2capAclPacket(
         CreateQuickPnPacket(true, GetDlci(false, scn), true, mtu,
@@ -203,7 +204,7 @@ class StackRfcommTest : public Test {
     l2cap_appl_info_.pL2CA_DataInd_Cb(lcid, uih_pn_cmd_from_peer);
     osi_free(uih_pn_rsp_to_peer);
 
-    VLOG(1) << "Step 2";
+    log::verbose("Step 2");
     // Remote device connect to scn
     tBTM_SEC_CALLBACK* security_callback = nullptr;
     void* p_port = nullptr;
@@ -218,7 +219,7 @@ class StackRfcommTest : public Test {
     // sabm_channel_dlci should be freed by this method
     l2cap_appl_info_.pL2CA_DataInd_Cb(lcid, sabm_channel_dlci);
 
-    VLOG(1) << "Step 3";
+    log::verbose("Step 3");
     // Confirm security check should trigger port as connected
     EXPECT_CALL(
         rfcomm_callback_,
@@ -231,7 +232,7 @@ class StackRfcommTest : public Test {
     security_callback(&peer_addr, BT_TRANSPORT_BR_EDR, p_port, BTM_SUCCESS);
     osi_free(ua_channel_dlci);
 
-    VLOG(1) << "Step 4";
+    log::verbose("Step 4");
     // Remote also need to configure its modem signal before we can send data
     BT_HDR* uih_msc_cmd_from_peer = AllocateWrappedIncomingL2capAclPacket(
         CreateQuickMscPacket(true, GetDlci(false, scn), lcid, acl_handle, true,
@@ -253,7 +254,7 @@ class StackRfcommTest : public Test {
     l2cap_appl_info_.pL2CA_DataInd_Cb(lcid, uih_msc_cmd_from_peer);
     osi_free(uih_msc_response_to_peer);
 
-    VLOG(1) << "Step 5";
+    log::verbose("Step 5");
     // modem configuration is done
     BT_HDR* uih_msc_response_from_peer = AllocateWrappedIncomingL2capAclPacket(
         CreateQuickMscPacket(true, GetDlci(false, scn), lcid, acl_handle, false,
@@ -268,7 +269,7 @@ class StackRfcommTest : public Test {
                        tPORT_CALLBACK* event_callback, uint16_t lcid,
                        uint16_t acl_handle, uint16_t* client_handle,
                        bool is_first_connection) {
-    VLOG(1) << "Step 1";
+    log::verbose("Step 1");
     BT_HDR* uih_pn_channel_3 =
         AllocateWrappedOutgoingL2capAclPacket(CreateQuickPnPacket(
             true, GetDlci(false, scn), true, mtu, RFCOMM_PN_CONV_LAYER_TYPE_1,
@@ -292,7 +293,7 @@ class StackRfcommTest : public Test {
   }
 
   void TestConnectClientPortL2cap(uint16_t acl_handle, uint16_t lcid) {
-    VLOG(1) << "Step 1";
+    log::verbose("Step 1");
     // Send configuration request when L2CAP connect is succsseful
     tL2CAP_CFG_INFO cfg_req = {.mtu_present = true, .mtu = L2CAP_MTU_SIZE};
     EXPECT_CALL(l2cap_interface_,
@@ -300,12 +301,12 @@ class StackRfcommTest : public Test {
         .WillOnce(Return(true));
     l2cap_appl_info_.pL2CA_ConnectCfm_Cb(lcid, L2CAP_CONN_OK);
 
-    VLOG(1) << "Step 2";
+    log::verbose("Step 2");
     // Remote device confirms our configuration request
     cfg_req.mtu_present = false;
     l2cap_appl_info_.pL2CA_ConfigCfm_Cb(lcid, L2CAP_CFG_OK, {});
 
-    VLOG(1) << "Step 3";
+    log::verbose("Step 3");
     // Remote device also asks to configure MTU
     // Once configuration is done, we connect to multiplexer control channel 0
     EXPECT_CALL(l2cap_interface_,
@@ -324,9 +325,9 @@ class StackRfcommTest : public Test {
                          uint8_t scn, uint16_t mtu, uint16_t acl_handle,
                          uint16_t lcid, int port_callback_index,
                          bool is_first_connection) {
-    VLOG(1) << "Step 1";
+    log::verbose("Step 1");
     if (is_first_connection) {
-      VLOG(1) << "Step 1.5";
+      log::verbose("Step 1.5");
       // Once remote accept multiplexer control channel 0
       // We change to desired channel on non-initiating device (remote device)
       BT_HDR* ua_channel_0 = AllocateWrappedIncomingL2capAclPacket(
@@ -343,7 +344,7 @@ class StackRfcommTest : public Test {
       osi_free(uih_pn_channel_3);
     }
 
-    VLOG(1) << "Step 2";
+    log::verbose("Step 2");
     // Once remote accept service channel change, we start security procedure
     BT_HDR* uih_pn_channel_3_accept =
         AllocateWrappedIncomingL2capAclPacket(CreateQuickPnPacket(
@@ -360,7 +361,7 @@ class StackRfcommTest : public Test {
                         Return(BTM_SUCCESS)));
     l2cap_appl_info_.pL2CA_DataInd_Cb(lcid, uih_pn_channel_3_accept);
 
-    VLOG(1) << "Step 3";
+    log::verbose("Step 3");
     // Once security procedure is done, we officially connect to target scn
     BT_HDR* sabm_channel_3 = AllocateWrappedOutgoingL2capAclPacket(
         CreateQuickSabmPacket(GetDlci(false, scn), lcid, acl_handle));
@@ -370,7 +371,7 @@ class StackRfcommTest : public Test {
     security_callback(&peer_addr, BT_TRANSPORT_BR_EDR, p_port, BTM_SUCCESS);
     osi_free(sabm_channel_3);
 
-    VLOG(1) << "Step 4";
+    log::verbose("Step 4");
     // When target scn is accepted by remote, we need to configure modem signal
     // state beofre using the port
     EXPECT_CALL(
@@ -386,14 +387,14 @@ class StackRfcommTest : public Test {
     l2cap_appl_info_.pL2CA_DataInd_Cb(lcid, ua_channel_3);
     osi_free(uih_msc_cmd);
 
-    VLOG(1) << "Step 5";
+    log::verbose("Step 5");
     // modem configuration is done
     BT_HDR* uih_msc_response = AllocateWrappedIncomingL2capAclPacket(
         CreateQuickMscPacket(false, GetDlci(false, scn), lcid, acl_handle,
                              false, false, true, true, false, true));
     l2cap_appl_info_.pL2CA_DataInd_Cb(lcid, uih_msc_response);
 
-    VLOG(1) << "Step 6";
+    log::verbose("Step 6");
     // Remote also need to configure its modem signal before we can send data
     BT_HDR* uih_msc_cmd_from_peer = AllocateWrappedIncomingL2capAclPacket(
         CreateQuickMscPacket(false, GetDlci(false, scn), lcid, acl_handle, true,
@@ -413,7 +414,7 @@ class StackRfcommTest : public Test {
                                          bool cr, const std::string& message,
                                          int credits, uint16_t acl_handle,
                                          uint16_t lcid) {
-    VLOG(1) << "Step 1";
+    log::verbose("Step 1");
     BT_HDR* data_packet = AllocateWrappedOutgoingL2capAclPacket(
         CreateQuickDataPacket(GetDlci(is_initiator, scn), cr, lcid, acl_handle,
                               credits, message));
@@ -432,7 +433,7 @@ class StackRfcommTest : public Test {
                                             int credits, uint16_t acl_handle,
                                             uint16_t lcid,
                                             int port_callback_index) {
-    VLOG(1) << "Step 1";
+    log::verbose("Step 1");
     BT_HDR* data_packet = AllocateWrappedIncomingL2capAclPacket(
         CreateQuickDataPacket(GetDlci(is_initiator, scn), cr, lcid, acl_handle,
                               credits, message));
@@ -440,7 +441,7 @@ class StackRfcommTest : public Test {
                 PortEventCallback(_, port_handle, port_callback_index));
     l2cap_appl_info_.pL2CA_DataInd_Cb(lcid, data_packet);
 
-    VLOG(1) << "Step 2";
+    log::verbose("Step 2");
     char buffer[L2CAP_MTU_SIZE] = {};
     uint16_t length = 0;
     int status = PORT_ReadData(port_handle, buffer, L2CAP_MTU_SIZE, &length);
@@ -458,7 +459,6 @@ class StackRfcommTest : public Test {
     EXPECT_CALL(l2cap_interface_, Register(BT_PSM_RFCOMM, _, _, _))
         .WillOnce(Return(BT_PSM_RFCOMM));
     RFCOMM_Init();
-    rfc_cb.trace_level = BT_TRACE_LEVEL_DEBUG;
   }
 
   void TearDown() override {
@@ -724,7 +724,7 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
   static const uint16_t test_mtu = 1000;
   static const RawAddress test_address = GetTestAddress(0);
   uint16_t server_handle = 0;
-  VLOG(1) << "Step 1";
+  log::verbose("Step 1");
   // Prepare a server port
   int status = RFCOMM_CreateConnectionWithSecurity(
       test_uuid, test_server_scn, true, test_mtu, RawAddress::kAny,
@@ -735,7 +735,7 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
   status = PORT_SetEventCallback(server_handle, port_event_cback_0);
   ASSERT_EQ(status, PORT_SUCCESS);
 
-  VLOG(1) << "Step 2";
+  log::verbose("Step 2");
   // Try to connect to a client port
   uint16_t client_handle_1 = 0;
   EXPECT_CALL(l2cap_interface_, ConnectRequest(BT_PSM_RFCOMM, test_address))
@@ -750,7 +750,7 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
   status = PORT_SetEventCallback(client_handle_1, port_event_cback_1);
   ASSERT_EQ(status, PORT_SUCCESS);
 
-  VLOG(1) << "Step 3";
+  log::verbose("Step 3");
   // While our connection is pending, remote device tries to connect to
   // new_lcid, with L2CAP command id: pending_cmd_id
   static const uint8_t pending_cmd_id = 0x05;
@@ -758,7 +758,7 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
   l2cap_appl_info_.pL2CA_ConnectInd_Cb(test_address, new_lcid, BT_PSM_RFCOMM,
                                        pending_cmd_id);
 
-  VLOG(1) << "Step 4";
+  log::verbose("Step 4");
   // Remote reject our connection request saying PSM not allowed
   // This should trigger RFCOMM to accept remote L2CAP connection at new_lcid
   EXPECT_CALL(l2cap_interface_, ConnectResponse(test_address, pending_cmd_id,
@@ -771,7 +771,7 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
       .WillOnce(Return(true));
   l2cap_appl_info_.pL2CA_ConnectCfm_Cb(old_lcid, L2CAP_CONN_NO_PSM);
 
-  VLOG(1) << "Step 5";
+  log::verbose("Step 5");
   // Remote device also ask to configure MTU size as well
   tL2CAP_CFG_INFO peer_cfg_req = {.mtu_present = true, .mtu = test_mtu};
   // We responded by saying OK
@@ -782,13 +782,13 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
       .WillOnce(Return(true));
   l2cap_appl_info_.pL2CA_ConfigInd_Cb(new_lcid, &peer_cfg_req);
 
-  VLOG(1) << "Step 6";
+  log::verbose("Step 6");
   // Remote device accepted our MTU size
   l2cap_appl_info_.pL2CA_ConfigCfm_Cb(new_lcid, L2CAP_CFG_OK, {});
 
   // L2CAP collision and connection setup done
 
-  VLOG(1) << "Step 7";
+  log::verbose("Step 7");
   // Remote device connect multiplexer channel
   BT_HDR* sabm_channel_0 = AllocateWrappedIncomingL2capAclPacket(
       CreateQuickSabmPacket(RFCOMM_MX_DLCI, new_lcid, acl_handle));
@@ -810,7 +810,7 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
   osi_free(ua_channel_0);
   osi_free(uih_pn_cmd_to_peer);
 
-  VLOG(1) << "Step 8";
+  log::verbose("Step 8");
   // Peer tries to configure test_server_scn
   BT_HDR* uih_pn_cmd_from_peer = AllocateWrappedIncomingL2capAclPacket(
       CreateQuickPnPacket(true, GetDlci(false, test_server_scn), true, test_mtu,
@@ -828,7 +828,7 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
   l2cap_appl_info_.pL2CA_DataInd_Cb(new_lcid, uih_pn_cmd_from_peer);
   osi_free(uih_pn_rsp_to_peer);
 
-  VLOG(1) << "Step 9";
+  log::verbose("Step 9");
   // Remote never replies our configuration request for test_peer_scn
   // But instead connect to test_server_scn directly
   BT_HDR* sabm_server_scn =
@@ -845,7 +845,7 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
                       Return(BTM_SUCCESS)));
   l2cap_appl_info_.pL2CA_DataInd_Cb(new_lcid, sabm_server_scn);
 
-  VLOG(1) << "Step 10";
+  log::verbose("Step 10");
   // After security check, we accept the connection
   ASSERT_TRUE(security_callback);
   BT_HDR* ua_server_scn =
@@ -860,7 +860,7 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
   security_callback(&test_address, BT_TRANSPORT_BR_EDR, p_port, BTM_SUCCESS);
   osi_free(ua_server_scn);
 
-  VLOG(1) << "Step 11";
+  log::verbose("Step 11");
   // MPX_CTRL Modem Status Command (MSC)
   BT_HDR* uih_msc_cmd_from_peer = AllocateWrappedIncomingL2capAclPacket(
       CreateQuickMscPacket(true, GetDlci(false, test_server_scn), new_lcid,
@@ -882,7 +882,7 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
   osi_free(uih_msc_rsp_to_peer);
   osi_free(uih_msc_cmd_to_peer);
 
-  VLOG(1) << "Step 12";
+  log::verbose("Step 12");
   BT_HDR* uih_msc_rsp_from_peer = AllocateWrappedIncomingL2capAclPacket(
       CreateQuickMscPacket(true, GetDlci(false, test_server_scn), new_lcid,
                            acl_handle, false, false, true, true, false, true));

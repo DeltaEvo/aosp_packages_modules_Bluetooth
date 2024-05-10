@@ -38,8 +38,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * properties, download the image, and place it into a Content Provider for others to retrieve from
  */
 public class AvrcpCoverArtManager {
-    private static final String TAG = "AvrcpCoverArtManager";
-    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
+    private static final String TAG = AvrcpCoverArtManager.class.getSimpleName();
 
     // Image Download Schemes for cover art
     public static final String AVRCP_CONTROLLER_COVER_ART_SCHEME =
@@ -90,13 +89,8 @@ public class AvrcpCoverArtManager {
      * Currently contains the mapping of image handles seen to assigned UUIDs.
      */
     private class AvrcpBipSession {
-        private final BluetoothDevice mDevice;
         private Map<String, String> mUuids = new ConcurrentHashMap<>(1); /* handle -> UUID */
         private Map<String, String> mHandles = new ConcurrentHashMap<>(1); /* UUID -> handle */
-
-        AvrcpBipSession(BluetoothDevice device) {
-            mDevice = device;
-        }
 
         public String getHandleUuid(String handle) {
             if (!isValidImageHandle(handle)) return null;
@@ -156,11 +150,12 @@ public class AvrcpCoverArtManager {
      * @return True if the connection is successfully queued, False otherwise.
      */
     public synchronized boolean connect(BluetoothDevice device, int psm) {
-        debug("Connect " + device.getAddress() + ", psm: " + psm);
+        debug("Connect " + device + ", psm: " + psm);
         if (mClients.containsKey(device)) return false;
         AvrcpBipClient client = new AvrcpBipClient(device, psm, new BipClientCallback(device));
+        client.connectAsync();
         mClients.put(device, client);
-        mBipSessions.put(device, new AvrcpBipSession(device));
+        mBipSessions.put(device, new AvrcpBipSession());
         return true;
     }
 
@@ -171,10 +166,10 @@ public class AvrcpCoverArtManager {
      * @return True if the refresh is successfully queued, False otherwise.
      */
     public synchronized boolean refreshSession(BluetoothDevice device) {
-        debug("Refresh OBEX session for " + device.getAddress());
+        debug("Refresh OBEX session for " + device);
         AvrcpBipClient client = getClient(device);
         if (client == null) {
-            warn("No client for " + device.getAddress());
+            warn("No client for " + device);
             return false;
         }
         client.refreshSession();
@@ -188,10 +183,10 @@ public class AvrcpCoverArtManager {
      * @return True if the disconnection is successfully queued, False otherwise.
      */
     public synchronized boolean disconnect(BluetoothDevice device) {
-        debug("Disconnect " + device.getAddress());
+        debug("Disconnect " + device);
         AvrcpBipClient client = getClient(device);
         if (client == null) {
-            warn("No client for " + device.getAddress());
+            warn("No client for " + device);
             return false;
         }
         client.shutdown();
@@ -298,7 +293,7 @@ public class AvrcpCoverArtManager {
      * @return A Uri that will be assign to the image once the download is complete
      */
     public Uri downloadImage(BluetoothDevice device, String imageUuid) {
-        debug("Download Image - device: " + device.getAddress() + ", Handle: " + imageUuid);
+        debug("Download Image - device: " + device + ", Handle: " + imageUuid);
         AvrcpBipClient client = getClient(device);
         if (client == null) {
             error("Cannot download an image. No client is available.");
@@ -407,7 +402,7 @@ public class AvrcpCoverArtManager {
 
         @Override
         public void onConnectionStateChanged(int oldState, int newState) {
-            debug(mDevice.getAddress() + ": " + oldState + " -> " + newState);
+            debug(mDevice + ": " + oldState + " -> " + newState);
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 // Ensure the handle map is cleared since old ones are invalid on a new connection
                 clearHandleUuids(mDevice);
@@ -430,16 +425,16 @@ public class AvrcpCoverArtManager {
         public void onGetImagePropertiesComplete(int status, String imageHandle,
                 BipImageProperties properties) {
             if (status != ResponseCodes.OBEX_HTTP_OK || properties == null) {
-                warn(mDevice.getAddress() + ": GetImageProperties() failed - Handle: " + imageHandle
+                warn(mDevice + ": GetImageProperties() failed - Handle: " + imageHandle
                         + ", Code: " + status);
                 return;
             }
             BipImageDescriptor descriptor = determineImageDescriptor(properties);
-            debug(mDevice.getAddress() + ": Download image - handle='" + imageHandle + "'");
+            debug(mDevice + ": Download image - handle='" + imageHandle + "'");
 
             AvrcpBipClient client = getClient(mDevice);
             if (client == null) {
-                warn(mDevice.getAddress() + ": Could not getImage() for " + imageHandle
+                warn(mDevice + ": Could not getImage() for " + imageHandle
                         + " because client has disconnected.");
                 return;
             }
@@ -449,12 +444,12 @@ public class AvrcpCoverArtManager {
         @Override
         public void onGetImageComplete(int status, String imageHandle, BipImage image) {
             if (status != ResponseCodes.OBEX_HTTP_OK) {
-                warn(mDevice.getAddress() + ": GetImage() failed - Handle: " + imageHandle
+                warn(mDevice + ": GetImage() failed - Handle: " + imageHandle
                         + ", Code: " + status);
                 return;
             }
             String imageUuid = getUuidForHandle(mDevice, imageHandle);
-            debug(mDevice.getAddress() + ": Received image data for handle: " + imageHandle
+            debug(mDevice + ": Received image data for handle: " + imageHandle
                     + ", uuid: " + imageUuid + ", image: " + image);
             Uri uri = mCoverArtStorage.addImage(mDevice, imageUuid, image.getImage());
             if (uri == null) {
@@ -473,7 +468,7 @@ public class AvrcpCoverArtManager {
         for (BluetoothDevice device : mClients.keySet()) {
             AvrcpBipClient client = getClient(device);
             AvrcpBipSession session = getSession(device);
-            s += "    " + device.getAddress() + ":" + "\n";
+            s += "    " + device + ":" + "\n";
             s += "      Client: " + client.toString() + "\n";
             s += "      Handles: " + "\n";
             for (String handle : session.getSessionHandles()) {
@@ -488,9 +483,7 @@ public class AvrcpCoverArtManager {
      * Print to debug if debug is enabled for this class
      */
     private void debug(String msg) {
-        if (DBG) {
-            Log.d(TAG, msg);
-        }
+        Log.d(TAG, msg);
     }
 
     /**

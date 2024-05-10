@@ -16,18 +16,15 @@
 
 #pragma once
 
-#ifdef __cplusplus
+#include <array>
+#include <cstddef>
 #include <cstdint>
-#else
-#include <stdint.h>
-#endif  // __cplusplus
+#include <sstream>
 
-#define DEV_CLASS_LEN 3
-typedef uint8_t DEV_CLASS[DEV_CLASS_LEN]; /* Device class */
+constexpr size_t kDevClassLength = 3;
+typedef std::array<uint8_t, kDevClassLength> DEV_CLASS; /* Device class */
 
-#ifdef __cplusplus
 inline constexpr DEV_CLASS kDevClassEmpty = {};
-#endif  // __cplusplus
 
 /* 0x00 is used as unclassified for all minor device classes */
 #define BTM_COD_MINOR_UNCLASSIFIED 0x00
@@ -96,11 +93,20 @@ inline constexpr DEV_CLASS kDevClassEmpty = {};
 #define BTM_COD_SERVICE_TELEPHONY 0x4000
 #define BTM_COD_SERVICE_INFORMATION 0x8000
 
+/* the COD masks */
+#define BTM_COD_MINOR_CLASS_MASK 0xFC
+#define BTM_COD_MAJOR_CLASS_MASK 0x1F
+#define BTM_COD_SERVICE_CLASS_LO_B 0x00E0
+#define BTM_COD_SERVICE_CLASS_MASK 0xFFE0
+
+inline constexpr DEV_CLASS kDevClassUnclassified = {
+    0x00, BTM_COD_MAJOR_UNCLASSIFIED, BTM_COD_MINOR_UNCLASSIFIED};
+
 /* class of device field macros */
 #define BTM_COD_MINOR_CLASS(u8, pd) \
-  { (u8) = (pd)[2] & 0xFC; }
+  { (u8) = (pd)[2] & BTM_COD_MINOR_CLASS_MASK; }
 #define BTM_COD_MAJOR_CLASS(u8, pd) \
-  { (u8) = (pd)[1] & 0x1F; }
+  { (u8) = (pd)[1] & BTM_COD_MAJOR_CLASS_MASK; }
 #define BTM_COD_SERVICE_CLASS(u16, pd) \
   {                                    \
     (u16) = (pd)[0];                   \
@@ -116,22 +122,27 @@ inline constexpr DEV_CLASS kDevClassEmpty = {};
     (pd)[0] = (sv) >> 8;                                \
   }
 
-/* the COD masks */
-#define BTM_COD_MINOR_CLASS_MASK 0xFC
-#define BTM_COD_MAJOR_CLASS_MASK 0x1F
-#define BTM_COD_SERVICE_CLASS_LO_B 0x00E0
-#define BTM_COD_SERVICE_CLASS_MASK 0xFFE0
+inline std::string dev_class_text(const DEV_CLASS& dev_class) {
+  std::ostringstream oss;
+  uint16_t sv;
+  uint8_t mj, mn;
+  BTM_COD_SERVICE_CLASS(sv, dev_class);
+  BTM_COD_MAJOR_CLASS(mj, dev_class);
+  BTM_COD_MINOR_CLASS(mn, dev_class);
+  oss << std::hex << (int)sv << "-" << (int)mj << "-" << (int)mn;
+  return oss.str();
+}
 
-#define DEVCLASS_TO_STREAM(p, a)                      \
-  {                                                   \
-    int ijk;                                          \
-    for (ijk = 0; ijk < DEV_CLASS_LEN; ijk++)         \
-      *(p)++ = (uint8_t)(a)[DEV_CLASS_LEN - 1 - ijk]; \
+#define DEVCLASS_TO_STREAM(p, a)                \
+  {                                             \
+    size_t ijk;                                 \
+    for (ijk = 0; ijk < kDevClassLength; ijk++) \
+      *(p)++ = (a)[kDevClassLength - 1 - ijk];  \
   }
 
-#define STREAM_TO_DEVCLASS(a, p)                               \
-  {                                                            \
-    int ijk;                                                   \
-    uint8_t* _pa = (uint8_t*)(a) + DEV_CLASS_LEN - 1;          \
-    for (ijk = 0; ijk < DEV_CLASS_LEN; ijk++) *_pa-- = *(p)++; \
+#define STREAM_TO_DEVCLASS(a, p)                                 \
+  {                                                              \
+    size_t ijk;                                                  \
+    uint8_t* _pa = a.data() + kDevClassLength - 1;               \
+    for (ijk = 0; ijk < kDevClassLength; ijk++) *_pa-- = *(p)++; \
   }

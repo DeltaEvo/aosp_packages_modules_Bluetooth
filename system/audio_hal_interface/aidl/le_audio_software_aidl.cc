@@ -19,13 +19,17 @@
 
 #include "le_audio_software_aidl.h"
 
+#include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
+
 #include <atomic>
+#include <bitset>
 #include <unordered_map>
 #include <vector>
 
 #include "codec_status_aidl.h"
 #include "hal_version_manager.h"
-#include "osi/include/log.h"
+#include "os/log.h"
 
 namespace bluetooth {
 namespace audio {
@@ -44,8 +48,8 @@ using ::bluetooth::audio::aidl::BluetoothAudioCtrlAck;
 using ::bluetooth::audio::le_audio::LeAudioClientInterface;
 using ::bluetooth::audio::le_audio::StartRequestState;
 using ::bluetooth::audio::le_audio::StreamCallbacks;
-using ::le_audio::set_configurations::SetConfiguration;
-using ::le_audio::types::LeAudioLc3Config;
+using ::bluetooth::le_audio::set_configurations::AseConfiguration;
+using ::bluetooth::le_audio::types::LeAudioCoreCodecConfig;
 
 static ChannelMode le_audio_channel_mode2audio_hal(uint8_t channels_count) {
   switch (channels_count) {
@@ -66,22 +70,37 @@ LeAudioTransport::LeAudioTransport(void (*flush)(void),
       total_bytes_processed_(0),
       data_position_({}),
       pcm_config_(std::move(pcm_config)),
-      start_request_state_(StartRequestState::IDLE){};
+      start_request_state_(StartRequestState::IDLE),
+      dsa_mode_(DsaMode::DISABLED),
+      cached_source_metadata_({}){};
+
+LeAudioTransport::~LeAudioTransport() {
+  if (cached_source_metadata_.tracks != nullptr) {
+    free(cached_source_metadata_.tracks);
+    cached_source_metadata_.tracks = nullptr;
+  }
+}
 
 BluetoothAudioCtrlAck LeAudioTransport::StartRequest(bool is_low_latency) {
+  // Check if operation is pending already
+  if (GetStartRequestState() == StartRequestState::PENDING_AFTER_RESUME) {
+    log::info("Start request is already pending. Ignore the request");
+    return BluetoothAudioCtrlAck::PENDING;
+  }
+
   SetStartRequestState(StartRequestState::PENDING_BEFORE_RESUME);
   if (stream_cb_.on_resume_(true)) {
     auto expected = StartRequestState::CONFIRMED;
     if (std::atomic_compare_exchange_strong(&start_request_state_, &expected,
                                             StartRequestState::IDLE)) {
-      LOG_INFO("Start completed.");
+      log::info("Start completed.");
       return BluetoothAudioCtrlAck::SUCCESS_FINISHED;
     }
 
     expected = StartRequestState::CANCELED;
     if (std::atomic_compare_exchange_strong(&start_request_state_, &expected,
                                             StartRequestState::IDLE)) {
-      LOG_INFO("Start request failed.");
+      log::info("Start request failed.");
       return BluetoothAudioCtrlAck::FAILURE;
     }
 
@@ -89,20 +108,57 @@ BluetoothAudioCtrlAck LeAudioTransport::StartRequest(bool is_low_latency) {
     if (std::atomic_compare_exchange_strong(
             &start_request_state_, &expected,
             StartRequestState::PENDING_AFTER_RESUME)) {
-      LOG_INFO("Start pending.");
+      log::info("Start pending.");
       return BluetoothAudioCtrlAck::PENDING;
     }
   }
 
-  LOG_ERROR("Start request failed.");
+  log::error("Start request failed.");
   auto expected = StartRequestState::PENDING_BEFORE_RESUME;
   std::atomic_compare_exchange_strong(&start_request_state_, &expected,
                                       StartRequestState::IDLE);
   return BluetoothAudioCtrlAck::FAILURE;
 }
 
+BluetoothAudioCtrlAck LeAudioTransport::StartRequestV2(bool is_low_latency) {
+  // Check if operation is pending already
+  if (GetStartRequestState() == StartRequestState::PENDING_AFTER_RESUME) {
+    log::info("Start request is already pending. Ignore the request");
+    return BluetoothAudioCtrlAck::PENDING;
+  }
+
+  SetStartRequestState(StartRequestState::PENDING_BEFORE_RESUME);
+  if (stream_cb_.on_resume_(true)) {
+    std::lock_guard<std::mutex> guard(start_request_state_mutex_);
+
+    switch (start_request_state_) {
+      case StartRequestState::CONFIRMED:
+        log::info("Start completed.");
+        SetStartRequestState(StartRequestState::IDLE);
+        return BluetoothAudioCtrlAck::SUCCESS_FINISHED;
+      case StartRequestState::CANCELED:
+        log::info("Start request failed.");
+        SetStartRequestState(StartRequestState::IDLE);
+        return BluetoothAudioCtrlAck::FAILURE;
+      case StartRequestState::PENDING_BEFORE_RESUME:
+        log::info("Start pending.");
+        SetStartRequestState(StartRequestState::PENDING_AFTER_RESUME);
+        return BluetoothAudioCtrlAck::PENDING;
+      default:
+        SetStartRequestState(StartRequestState::IDLE);
+        log::error("Unexpected state {}",
+                   static_cast<int>(start_request_state_.load()));
+        return BluetoothAudioCtrlAck::FAILURE;
+    }
+  }
+
+  SetStartRequestState(StartRequestState::IDLE);
+  log::info("On resume failed.");
+  return BluetoothAudioCtrlAck::FAILURE;
+}
+
 BluetoothAudioCtrlAck LeAudioTransport::SuspendRequest() {
-  LOG(INFO) << __func__;
+  log::info("");
   if (stream_cb_.on_suspend_()) {
     flush_();
     return BluetoothAudioCtrlAck::SUCCESS_FINISHED;
@@ -112,21 +168,53 @@ BluetoothAudioCtrlAck LeAudioTransport::SuspendRequest() {
 }
 
 void LeAudioTransport::StopRequest() {
-  LOG(INFO) << __func__;
+  log::info("");
   if (stream_cb_.on_suspend_()) {
     flush_();
   }
 }
 
-void LeAudioTransport::SetLowLatency(bool is_low_latency) {}
+void LeAudioTransport::SetLatencyMode(LatencyMode latency_mode) {
+  log::debug(
+      "Latency mode: {}",
+      ::aidl::android::hardware::bluetooth::audio::toString(latency_mode));
+
+  DsaMode prev_dsa_mode = dsa_mode_;
+
+  switch (latency_mode) {
+    case LatencyMode::FREE:
+      dsa_mode_ = DsaMode::DISABLED;
+      break;
+    case LatencyMode::LOW_LATENCY:
+      dsa_mode_ = DsaMode::ACL;
+      break;
+    case LatencyMode::DYNAMIC_SPATIAL_AUDIO_SOFTWARE:
+      dsa_mode_ = DsaMode::ISO_SW;
+      break;
+    case LatencyMode::DYNAMIC_SPATIAL_AUDIO_HARDWARE:
+      dsa_mode_ = DsaMode::ISO_HW;
+      break;
+    default:
+      log::warn(", invalid latency mode: {}", (int)latency_mode);
+      return;
+  }
+
+  if (com::android::bluetooth::flags::leaudio_dynamic_spatial_audio()) {
+    if (dsa_mode_ != prev_dsa_mode &&
+        cached_source_metadata_.tracks != nullptr &&
+        cached_source_metadata_.tracks != 0) {
+      log::info(", latency mode changed, update source metadata");
+      stream_cb_.on_metadata_update_(cached_source_metadata_, dsa_mode_);
+    }
+  }
+}
 
 bool LeAudioTransport::GetPresentationPosition(uint64_t* remote_delay_report_ns,
                                                uint64_t* total_bytes_processed,
                                                timespec* data_position) {
-  VLOG(2) << __func__ << ": data=" << total_bytes_processed_
-          << " byte(s), timestamp=" << data_position_.tv_sec << "."
-          << data_position_.tv_nsec
-          << "s, delay report=" << remote_delay_report_ms_ << " msec.";
+  log::verbose("data={} byte(s), timestamp={}.{}s, delay report={} msec.",
+               total_bytes_processed_, data_position_.tv_sec,
+               data_position_.tv_nsec, remote_delay_report_ms_);
   if (remote_delay_report_ns != nullptr) {
     *remote_delay_report_ns = remote_delay_report_ms_ * 1000000u;
   }
@@ -138,23 +226,39 @@ bool LeAudioTransport::GetPresentationPosition(uint64_t* remote_delay_report_ns,
 }
 
 void LeAudioTransport::SourceMetadataChanged(
-    const source_metadata_t& source_metadata) {
+    const source_metadata_v7_t& source_metadata) {
   auto track_count = source_metadata.track_count;
 
   if (track_count == 0) {
-    LOG(WARNING) << ", invalid number of metadata changed tracks";
+    log::warn(", invalid number of metadata changed tracks");
     return;
   }
 
-  stream_cb_.on_metadata_update_(source_metadata);
+  if (com::android::bluetooth::flags::leaudio_dynamic_spatial_audio()) {
+    if (cached_source_metadata_.tracks != nullptr) {
+      free(cached_source_metadata_.tracks);
+      cached_source_metadata_.tracks = nullptr;
+    }
+
+    log::info(", caching source metadata");
+
+    playback_track_metadata_v7* tracks;
+    tracks = (playback_track_metadata_v7*)malloc(sizeof(*tracks) * track_count);
+    memcpy(tracks, source_metadata.tracks, sizeof(*tracks) * track_count);
+
+    cached_source_metadata_.track_count = track_count;
+    cached_source_metadata_.tracks = tracks;
+  }
+
+  stream_cb_.on_metadata_update_(source_metadata, dsa_mode_);
 }
 
 void LeAudioTransport::SinkMetadataChanged(
-    const sink_metadata_t& sink_metadata) {
+    const sink_metadata_v7_t& sink_metadata) {
   auto track_count = sink_metadata.track_count;
 
   if (track_count == 0) {
-    LOG(WARNING) << ", invalid number of metadata changed tracks";
+    log::warn(", invalid number of metadata changed tracks");
     return;
   }
 
@@ -163,7 +267,7 @@ void LeAudioTransport::SinkMetadataChanged(
 }
 
 void LeAudioTransport::ResetPresentationPosition() {
-  VLOG(2) << __func__ << ": called.";
+  log::verbose("called.");
   remote_delay_report_ms_ = 0;
   total_bytes_processed_ = 0;
   data_position_ = {};
@@ -177,7 +281,7 @@ void LeAudioTransport::LogBytesProcessed(size_t bytes_processed) {
 }
 
 void LeAudioTransport::SetRemoteDelay(uint16_t delay_report_ms) {
-  LOG(INFO) << __func__ << ": delay_report=" << delay_report_ms << " msec";
+  log::info("delay_report={} msec", delay_report_ms);
   remote_delay_report_ms_ = delay_report_ms;
 }
 
@@ -196,7 +300,7 @@ void LeAudioTransport::LeAudioSetSelectedHalPcmConfig(uint32_t sample_rate_hz,
 }
 
 void LeAudioTransport::LeAudioSetBroadcastConfig(
-    const ::le_audio::broadcast_offload_config& offload_config) {
+    const ::bluetooth::le_audio::broadcast_offload_config& offload_config) {
   broadcast_config_.streamMap.resize(0);
   for (auto& [handle, location] : offload_config.stream_map) {
     Lc3Configuration lc3_config{
@@ -220,7 +324,28 @@ LeAudioTransport::LeAudioGetBroadcastConfig() {
   return broadcast_config_;
 }
 
+bool LeAudioTransport::IsRequestCompletedAfterUpdate(
+    const std::function<std::pair<StartRequestState, bool>(StartRequestState)>&
+        lambda) {
+  std::lock_guard<std::mutex> guard(start_request_state_mutex_);
+  auto result = lambda(start_request_state_);
+  auto new_state = std::get<0>(result);
+  if (new_state != start_request_state_) {
+    start_request_state_ = new_state;
+  }
+
+  auto ret = std::get<1>(result);
+  log::verbose("new state: {}, return {}", (int)(start_request_state_.load()),
+               ret);
+
+  return ret;
+}
+
 StartRequestState LeAudioTransport::GetStartRequestState(void) {
+  if (com::android::bluetooth::flags::
+          leaudio_start_request_state_mutex_check()) {
+    std::lock_guard<std::mutex> guard(start_request_state_mutex_);
+  }
   return start_request_state_;
 }
 void LeAudioTransport::ClearStartRequestState(void) {
@@ -265,6 +390,9 @@ LeAudioSinkTransport::LeAudioSinkTransport(SessionType session_type,
 LeAudioSinkTransport::~LeAudioSinkTransport() { delete transport_; }
 
 BluetoothAudioCtrlAck LeAudioSinkTransport::StartRequest(bool is_low_latency) {
+  if (com::android::bluetooth::flags::leaudio_start_stream_race_fix()) {
+    return transport_->StartRequestV2(is_low_latency);
+  }
   return transport_->StartRequest(is_low_latency);
 }
 
@@ -274,8 +402,8 @@ BluetoothAudioCtrlAck LeAudioSinkTransport::SuspendRequest() {
 
 void LeAudioSinkTransport::StopRequest() { transport_->StopRequest(); }
 
-void LeAudioSinkTransport::SetLowLatency(bool is_low_latency) {
-  transport_->SetLowLatency(is_low_latency);
+void LeAudioSinkTransport::SetLatencyMode(LatencyMode latency_mode) {
+  transport_->SetLatencyMode(latency_mode);
 }
 
 bool LeAudioSinkTransport::GetPresentationPosition(
@@ -286,12 +414,12 @@ bool LeAudioSinkTransport::GetPresentationPosition(
 }
 
 void LeAudioSinkTransport::SourceMetadataChanged(
-    const source_metadata_t& source_metadata) {
+    const source_metadata_v7_t& source_metadata) {
   transport_->SourceMetadataChanged(source_metadata);
 }
 
 void LeAudioSinkTransport::SinkMetadataChanged(
-    const sink_metadata_t& sink_metadata) {
+    const sink_metadata_v7_t& sink_metadata) {
   transport_->SinkMetadataChanged(sink_metadata);
 }
 
@@ -319,13 +447,19 @@ void LeAudioSinkTransport::LeAudioSetSelectedHalPcmConfig(
 }
 
 void LeAudioSinkTransport::LeAudioSetBroadcastConfig(
-    const ::le_audio::broadcast_offload_config& offload_config) {
+    const ::bluetooth::le_audio::broadcast_offload_config& offload_config) {
   transport_->LeAudioSetBroadcastConfig(offload_config);
 }
 
 const LeAudioBroadcastConfiguration&
 LeAudioSinkTransport::LeAudioGetBroadcastConfig() {
   return transport_->LeAudioGetBroadcastConfig();
+}
+
+bool LeAudioSinkTransport::IsRequestCompletedAfterUpdate(
+    const std::function<std::pair<StartRequestState, bool>(StartRequestState)>&
+        lambda) {
+  return transport_->IsRequestCompletedAfterUpdate(lambda);
 }
 
 StartRequestState LeAudioSinkTransport::GetStartRequestState(void) {
@@ -355,6 +489,9 @@ LeAudioSourceTransport::~LeAudioSourceTransport() { delete transport_; }
 
 BluetoothAudioCtrlAck LeAudioSourceTransport::StartRequest(
     bool is_low_latency) {
+  if (com::android::bluetooth::flags::leaudio_start_stream_race_fix()) {
+    return transport_->StartRequestV2(is_low_latency);
+  }
   return transport_->StartRequest(is_low_latency);
 }
 
@@ -364,8 +501,8 @@ BluetoothAudioCtrlAck LeAudioSourceTransport::SuspendRequest() {
 
 void LeAudioSourceTransport::StopRequest() { transport_->StopRequest(); }
 
-void LeAudioSourceTransport::SetLowLatency(bool is_low_latency) {
-  transport_->SetLowLatency(is_low_latency);
+void LeAudioSourceTransport::SetLatencyMode(LatencyMode latency_mode) {
+  transport_->SetLatencyMode(latency_mode);
 }
 
 bool LeAudioSourceTransport::GetPresentationPosition(
@@ -376,12 +513,12 @@ bool LeAudioSourceTransport::GetPresentationPosition(
 }
 
 void LeAudioSourceTransport::SourceMetadataChanged(
-    const source_metadata_t& source_metadata) {
+    const source_metadata_v7_t& source_metadata) {
   transport_->SourceMetadataChanged(source_metadata);
 }
 
 void LeAudioSourceTransport::SinkMetadataChanged(
-    const sink_metadata_t& sink_metadata) {
+    const sink_metadata_v7_t& sink_metadata) {
   transport_->SinkMetadataChanged(sink_metadata);
 }
 
@@ -409,6 +546,12 @@ void LeAudioSourceTransport::LeAudioSetSelectedHalPcmConfig(
                                              channels_count, data_interval);
 }
 
+bool LeAudioSourceTransport::IsRequestCompletedAfterUpdate(
+    const std::function<std::pair<StartRequestState, bool>(StartRequestState)>&
+        lambda) {
+  return transport_->IsRequestCompletedAfterUpdate(lambda);
+}
+
 StartRequestState LeAudioSourceTransport::GetStartRequestState(void) {
   return transport_->GetStartRequestState();
 }
@@ -421,52 +564,62 @@ void LeAudioSourceTransport::SetStartRequestState(StartRequestState state) {
 }
 
 std::unordered_map<int32_t, uint8_t> sampling_freq_map{
-    {8000, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq8000Hz},
-    {16000, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq16000Hz},
-    {24000, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq24000Hz},
-    {32000, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq32000Hz},
-    {44100, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq44100Hz},
-    {48000, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq48000Hz},
-    {88200, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq88200Hz},
-    {96000, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq96000Hz},
-    {176400, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq176400Hz},
-    {192000, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq192000Hz}};
+    {8000, ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq8000Hz},
+    {16000,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq16000Hz},
+    {24000,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq24000Hz},
+    {32000,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq32000Hz},
+    {44100,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq44100Hz},
+    {48000,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq48000Hz},
+    {88200,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq88200Hz},
+    {96000,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq96000Hz},
+    {176400,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq176400Hz},
+    {192000,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq192000Hz}};
 
 std::unordered_map<int32_t, uint8_t> frame_duration_map{
-    {7500, ::le_audio::codec_spec_conf::kLeAudioCodecLC3FrameDur7500us},
-    {10000, ::le_audio::codec_spec_conf::kLeAudioCodecLC3FrameDur10000us}};
+    {7500, ::bluetooth::le_audio::codec_spec_conf::kLeAudioCodecFrameDur7500us},
+    {10000,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioCodecFrameDur10000us}};
 
 std::unordered_map<int32_t, uint16_t> octets_per_frame_map{
-    {30, ::le_audio::codec_spec_conf::kLeAudioCodecLC3FrameLen30},
-    {40, ::le_audio::codec_spec_conf::kLeAudioCodecLC3FrameLen40},
-    {60, ::le_audio::codec_spec_conf::kLeAudioCodecLC3FrameLen60},
-    {80, ::le_audio::codec_spec_conf::kLeAudioCodecLC3FrameLen80},
-    {120, ::le_audio::codec_spec_conf::kLeAudioCodecLC3FrameLen120}};
+    {30, ::bluetooth::le_audio::codec_spec_conf::kLeAudioCodecFrameLen30},
+    {40, ::bluetooth::le_audio::codec_spec_conf::kLeAudioCodecFrameLen40},
+    {60, ::bluetooth::le_audio::codec_spec_conf::kLeAudioCodecFrameLen60},
+    {80, ::bluetooth::le_audio::codec_spec_conf::kLeAudioCodecFrameLen80},
+    {100, ::bluetooth::le_audio::codec_spec_conf::kLeAudioCodecFrameLen100},
+    {120, ::bluetooth::le_audio::codec_spec_conf::kLeAudioCodecFrameLen120}};
 
 std::unordered_map<AudioLocation, uint32_t> audio_location_map{
     {AudioLocation::UNKNOWN,
-     ::le_audio::codec_spec_conf::kLeAudioLocationFrontCenter},
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontCenter},
     {AudioLocation::FRONT_LEFT,
-     ::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft},
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft},
     {AudioLocation::FRONT_RIGHT,
-     ::le_audio::codec_spec_conf::kLeAudioLocationFrontRight},
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontRight},
     {static_cast<AudioLocation>(
          static_cast<uint8_t>(AudioLocation::FRONT_LEFT) |
          static_cast<uint8_t>(AudioLocation::FRONT_RIGHT)),
-     ::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft |
-         ::le_audio::codec_spec_conf::kLeAudioLocationFrontRight}};
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft |
+         ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontRight}};
 
 bool hal_ucast_capability_to_stack_format(
     const UnicastCapability& hal_capability,
-    CodecCapabilitySetting& stack_capability) {
+    CodecConfigSetting& stack_capability) {
   if (hal_capability.codecType != CodecType::LC3) {
-    LOG(WARNING) << "Unsupported codecType: "
-                 << toString(hal_capability.codecType);
+    log::warn("Unsupported codecType: {}", toString(hal_capability.codecType));
     return false;
   }
   if (hal_capability.leAudioCodecCapabilities.getTag() !=
       UnicastCapability::LeAudioCodecCapabilities::lc3Capabilities) {
-    LOG(WARNING) << "Unknown LE Audio capabilities(vendor proprietary?)";
+    log::warn("Unknown LE Audio capabilities(vendor proprietary?)");
     return false;
   }
 
@@ -484,37 +637,46 @@ bool hal_ucast_capability_to_stack_format(
       octets_per_frame_map.find(octets_per_frame) ==
           octets_per_frame_map.end() ||
       audio_location_map.find(supported_channel) == audio_location_map.end()) {
-    LOG(ERROR) << __func__ << ": Failed to convert HAL format to stack format"
-               << "\nsample rate = " << sample_rate_hz
-               << "\nframe duration = " << frame_duration_us
-               << "\noctets per frame= " << octets_per_frame
-               << "\naudio location = " << toString(supported_channel);
+    log::error(
+        "Failed to convert HAL format to stack format\nsample rate hz = "
+        "{}\nframe duration us = {}\noctets per frame= {}\nsupported channel = "
+        "{}\nchannel count per device = {}\ndevice count = {}",
+        sample_rate_hz, frame_duration_us, octets_per_frame,
+        toString(supported_channel), channel_count, hal_capability.deviceCount);
 
     return false;
   }
 
-  stack_capability = {
-      .id = ::le_audio::set_configurations::LeAudioCodecIdLc3,
-      .config = LeAudioLc3Config(
-          {.sampling_frequency = sampling_freq_map[sample_rate_hz],
-           .frame_duration = frame_duration_map[frame_duration_us],
-           .audio_channel_allocation = audio_location_map[supported_channel],
-           .octets_per_codec_frame = octets_per_frame_map[octets_per_frame],
-           .channel_count = static_cast<uint8_t>(channel_count)})};
+  stack_capability.id =
+      ::bluetooth::le_audio::set_configurations::LeAudioCodecIdLc3;
+  stack_capability.channel_count_per_iso_stream = channel_count;
+
+  stack_capability.params.Add(
+      ::bluetooth::le_audio::codec_spec_conf::kLeAudioLtvTypeSamplingFreq,
+      sampling_freq_map[sample_rate_hz]);
+  stack_capability.params.Add(
+      ::bluetooth::le_audio::codec_spec_conf::kLeAudioLtvTypeFrameDuration,
+      frame_duration_map[frame_duration_us]);
+  stack_capability.params.Add(::bluetooth::le_audio::codec_spec_conf::
+                                  kLeAudioLtvTypeAudioChannelAllocation,
+                              audio_location_map[supported_channel]);
+  stack_capability.params.Add(::bluetooth::le_audio::codec_spec_conf::
+                                  kLeAudioLtvTypeOctetsPerCodecFrame,
+                              octets_per_frame_map[octets_per_frame]);
   return true;
 }
 
 bool hal_bcast_capability_to_stack_format(
     const BroadcastCapability& hal_bcast_capability,
-    CodecCapabilitySetting& stack_capability) {
+    CodecConfigSetting& stack_capability) {
   if (hal_bcast_capability.codecType != CodecType::LC3) {
-    LOG(WARNING) << "Unsupported codecType: "
-                 << toString(hal_bcast_capability.codecType);
+    log::warn("Unsupported codecType: {}",
+              toString(hal_bcast_capability.codecType));
     return false;
   }
   if (hal_bcast_capability.leAudioCodecCapabilities.getTag() !=
       BroadcastCapability::LeAudioCodecCapabilities::lc3Capabilities) {
-    LOG(WARNING) << "Unknown LE Audio capabilities(vendor proprietary?)";
+    log::warn("Unknown LE Audio capabilities(vendor proprietary?)");
     return false;
   }
 
@@ -523,7 +685,7 @@ bool hal_bcast_capability_to_stack_format(
           BroadcastCapability::LeAudioCodecCapabilities::lc3Capabilities>();
 
   if (hal_lc3_capabilities->size() != 1) {
-    LOG(WARNING) << __func__ << ": The number of config is not supported yet.";
+    log::warn("The number of config is not supported yet.");
   }
 
   auto supported_channel = hal_bcast_capability.supportedChannel;
@@ -537,37 +699,46 @@ bool hal_bcast_capability_to_stack_format(
       octets_per_frame_map.find(octets_per_frame) ==
           octets_per_frame_map.end() ||
       audio_location_map.find(supported_channel) == audio_location_map.end()) {
-    LOG(WARNING) << __func__
-                 << " : Failed to convert HAL format to stack format"
-                 << "\nsample rate = " << sample_rate_hz
-                 << "\nframe duration = " << frame_duration_us
-                 << "\noctets per frame= " << octets_per_frame
-                 << "\naudio location = " << toString(supported_channel);
+    log::warn(
+        "Failed to convert HAL format to stack format\nsample rate hz = "
+        "{}\nframe duration us = {}\noctets per frame= {}\nsupported channel = "
+        "{}\nchannel count per stream = {}",
+        sample_rate_hz, frame_duration_us, octets_per_frame,
+        toString(supported_channel), channel_count);
 
     return false;
   }
 
-  stack_capability = {
-      .id = ::le_audio::set_configurations::LeAudioCodecIdLc3,
-      .config = LeAudioLc3Config(
-          {.sampling_frequency = sampling_freq_map[sample_rate_hz],
-           .frame_duration = frame_duration_map[frame_duration_us],
-           .audio_channel_allocation = audio_location_map[supported_channel],
-           .octets_per_codec_frame = octets_per_frame_map[octets_per_frame],
-           .channel_count = static_cast<uint8_t>(channel_count)})};
+  stack_capability.id =
+      ::bluetooth::le_audio::set_configurations::LeAudioCodecIdLc3;
+  stack_capability.channel_count_per_iso_stream = channel_count;
+
+  stack_capability.params.Add(
+      ::bluetooth::le_audio::codec_spec_conf::kLeAudioLtvTypeSamplingFreq,
+      sampling_freq_map[sample_rate_hz]);
+  stack_capability.params.Add(
+      ::bluetooth::le_audio::codec_spec_conf::kLeAudioLtvTypeFrameDuration,
+      frame_duration_map[frame_duration_us]);
+  stack_capability.params.Add(::bluetooth::le_audio::codec_spec_conf::
+                                  kLeAudioLtvTypeAudioChannelAllocation,
+                              audio_location_map[supported_channel]);
+  stack_capability.params.Add(::bluetooth::le_audio::codec_spec_conf::
+                                  kLeAudioLtvTypeOctetsPerCodecFrame,
+                              octets_per_frame_map[octets_per_frame]);
   return true;
 }
 
-std::vector<AudioSetConfiguration> get_offload_capabilities() {
-  LOG(INFO) << __func__;
+bluetooth::audio::le_audio::OffloadCapabilities get_offload_capabilities() {
+  log::info("");
   std::vector<AudioSetConfiguration> offload_capabilities;
+  std::vector<AudioSetConfiguration> broadcast_offload_capabilities;
   std::vector<AudioCapabilities> le_audio_hal_capabilities =
       BluetoothAudioSinkClientInterface::GetAudioCapabilities(
           SessionType::LE_AUDIO_HARDWARE_OFFLOAD_ENCODING_DATAPATH);
   std::string str_capability_log;
 
   for (auto hal_cap : le_audio_hal_capabilities) {
-    CodecCapabilitySetting encode_cap, decode_cap, bcast_cap;
+    CodecConfigSetting encode_cap, decode_cap, bcast_cap;
     UnicastCapability hal_encode_cap =
         hal_cap.get<AudioCapabilities::leAudioCapabilities>()
             .unicastEncodeCapability;
@@ -581,49 +752,54 @@ std::vector<AudioSetConfiguration> get_offload_capabilities() {
     str_capability_log.clear();
 
     if (hal_ucast_capability_to_stack_format(hal_encode_cap, encode_cap)) {
-      audio_set_config.confs.push_back(SetConfiguration(
-          ::le_audio::types::kLeAudioDirectionSink, hal_encode_cap.deviceCount,
-          hal_encode_cap.deviceCount * hal_encode_cap.channelCountPerDevice,
-          ::le_audio::types::kTargetLatencyBalancedLatencyReliability,
-          encode_cap));
+      auto ase_cnt =
+          hal_encode_cap.deviceCount * hal_encode_cap.channelCountPerDevice;
+      while (ase_cnt--) {
+        audio_set_config.confs.sink.push_back(AseConfiguration(encode_cap));
+      }
       str_capability_log = " Encode Capability: " + hal_encode_cap.toString();
     }
 
     if (hal_ucast_capability_to_stack_format(hal_decode_cap, decode_cap)) {
-      audio_set_config.confs.push_back(SetConfiguration(
-          ::le_audio::types::kLeAudioDirectionSource,
-          hal_decode_cap.deviceCount,
-          hal_decode_cap.deviceCount * hal_decode_cap.channelCountPerDevice,
-          ::le_audio::types::kTargetLatencyBalancedLatencyReliability,
-          decode_cap));
+      auto ase_cnt =
+          hal_decode_cap.deviceCount * hal_decode_cap.channelCountPerDevice;
+      while (ase_cnt--) {
+        audio_set_config.confs.source.push_back(AseConfiguration(decode_cap));
+      }
       str_capability_log += " Decode Capability: " + hal_decode_cap.toString();
     }
 
     if (hal_bcast_capability_to_stack_format(hal_bcast_cap, bcast_cap)) {
-      // Set device_cnt, ase_cnt, target_latency to zero to ignore these fields
-      // for broadcast
-      audio_set_config.confs.push_back(SetConfiguration(
-          ::le_audio::types::kLeAudioDirectionSink, 0, 0, 0, bcast_cap));
+      AudioSetConfiguration audio_set_config = {
+          .name = "broadcast offload capability"};
+      // Note: The offloader config supports multiple channels per stream
+      //       (subgroup), corresponding to the number of BISes, where each BIS
+      //       has a single channel.
+      bcast_cap.channel_count_per_iso_stream = 1;
+      auto bis_cnt = hal_bcast_cap.channelCountPerStream;
+      while (bis_cnt--) {
+        audio_set_config.confs.sink.push_back(AseConfiguration(bcast_cap));
+      }
+      broadcast_offload_capabilities.push_back(audio_set_config);
       str_capability_log +=
           " Broadcast Capability: " + hal_bcast_cap.toString();
     }
 
-    if (!audio_set_config.confs.empty()) {
+    if (!audio_set_config.confs.sink.empty() ||
+        !audio_set_config.confs.source.empty()) {
       offload_capabilities.push_back(audio_set_config);
-      LOG(INFO) << __func__
-                << ": Supported codec capability =" << str_capability_log;
+      log::info("Supported codec capability ={}", str_capability_log);
 
     } else {
-      LOG(INFO) << __func__
-                << ": Unknown codec capability =" << hal_cap.toString();
+      log::info("Unknown codec capability ={}", hal_cap.toString());
     }
   }
 
-  return offload_capabilities;
+  return {offload_capabilities, broadcast_offload_capabilities};
 }
 
 AudioConfiguration offload_config_to_hal_audio_config(
-    const ::le_audio::offload_config& offload_config) {
+    const ::bluetooth::le_audio::offload_config& offload_config) {
   Lc3Configuration lc3_config{
       .pcmBitDepth = static_cast<int8_t>(offload_config.bits_per_sample),
       .samplingFrequencyHz = static_cast<int32_t>(offload_config.sampling_rate),
@@ -635,10 +811,11 @@ AudioConfiguration offload_config_to_hal_audio_config(
       .peerDelayUs = static_cast<int32_t>(offload_config.peer_delay_ms * 1000),
       .leAudioCodecConfig = LeAudioCodecConfiguration(lc3_config)};
 
-  for (auto& [handle, location] : offload_config.stream_map) {
+  for (auto& [handle, location, state] : offload_config.stream_map) {
     ucast_config.streamMap.push_back({
         .streamHandle = handle,
         .audioChannelAllocation = static_cast<int32_t>(location),
+        .isStreamActive = state,
     });
   }
 

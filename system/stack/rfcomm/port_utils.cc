@@ -22,12 +22,16 @@
  *
  ******************************************************************************/
 
-#include <base/logging.h>
+#define LOG_TAG "rfcomm_port_utils"
+
+#include <bluetooth/log.h>
 
 #include <cstdint>
 #include <cstring>
 
-#include "bt_target.h"
+#include "internal_include/bt_target.h"
+#include "internal_include/bt_trace.h"
+#include "os/logging/log_adapter.h"
 #include "osi/include/allocator.h"
 #include "osi/include/mutex.h"
 #include "stack/include/bt_hdr.h"
@@ -35,6 +39,8 @@
 #include "stack/rfcomm/port_int.h"
 #include "stack/rfcomm/rfc_int.h"
 #include "types/raw_address.h"
+
+using namespace bluetooth;
 
 static const tPORT_STATE default_port_pars = {
     PORT_BAUD_RATE_9600,
@@ -81,16 +87,13 @@ tPORT* port_allocate_port(uint8_t dlci, const RawAddress& bd_addr) {
       p_port->dlci = dlci;
       p_port->bd_addr = bd_addr;
       rfc_cb.rfc.last_port_index = port_index;
-      RFCOMM_TRACE_DEBUG(
-          "%s: rfc_cb.port.port[%d]:%p chosen, "
-          "last_port_index:%d, bd_addr=%s",
-          __func__, port_index, p_port, rfc_cb.rfc.last_port_index,
-          ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+      log::verbose(
+          "rfc_cb.port.port[{}]:{} chosen, last_port_index:{}, bd_addr={}",
+          port_index, fmt::ptr(p_port), rfc_cb.rfc.last_port_index, bd_addr);
       return p_port;
     }
   }
-  LOG(WARNING) << __func__ << ": running out of free ports for dlci "
-               << std::to_string(dlci) << ", bd_addr " << bd_addr;
+  log::warn("running out of free ports for dlci {}, bd_addr {}", dlci, bd_addr);
   return nullptr;
 }
 
@@ -147,7 +150,7 @@ void port_select_mtu(tPORT* p_port) {
         get_btm_client_interface().peer.BTM_GetMaxPacketSize(p_port->bd_addr);
     if (packet_size == 0) {
       /* something is very wrong */
-      LOG(WARNING) << __func__ << ": bad packet size 0 for" << p_port->bd_addr;
+      log::warn("bad packet size 0 for{}", p_port->bd_addr);
       p_port->mtu = RFCOMM_DEFAULT_MTU;
     } else {
       /* We try to negotiate MTU that each packet can be split into whole
@@ -167,16 +170,14 @@ void port_select_mtu(tPORT* p_port) {
         p_port->mtu = ((L2CAP_MTU_SIZE + L2CAP_PKT_OVERHEAD) / packet_size *
                        packet_size) -
                       RFCOMM_DATA_OVERHEAD - L2CAP_PKT_OVERHEAD;
-        RFCOMM_TRACE_DEBUG("%s: selected %d based on connection speed",
-                           __func__, p_port->mtu);
+        log::verbose("selected {} based on connection speed", p_port->mtu);
       } else {
         p_port->mtu = L2CAP_MTU_SIZE - RFCOMM_DATA_OVERHEAD;
-        RFCOMM_TRACE_DEBUG("%s: selected %d based on l2cap PDU size", __func__,
-                           p_port->mtu);
+        log::verbose("selected {} based on l2cap PDU size", p_port->mtu);
       }
     }
   } else {
-    RFCOMM_TRACE_DEBUG("%s: application selected %d", __func__, p_port->mtu);
+    log::verbose("application selected {}", p_port->mtu);
   }
   p_port->credit_rx_max = (PORT_RX_HIGH_WM / p_port->mtu);
   if (p_port->credit_rx_max > PORT_RX_BUF_HIGH_WM)
@@ -187,9 +188,9 @@ void port_select_mtu(tPORT* p_port) {
   p_port->rx_buf_critical = (PORT_RX_CRITICAL_WM / p_port->mtu);
   if (p_port->rx_buf_critical > PORT_RX_BUF_CRITICAL_WM)
     p_port->rx_buf_critical = PORT_RX_BUF_CRITICAL_WM;
-  RFCOMM_TRACE_DEBUG(
-      "%s: credit_rx_max %d, credit_rx_low %d, rx_buf_critical %d", __func__,
-      p_port->credit_rx_max, p_port->credit_rx_low, p_port->rx_buf_critical);
+  log::verbose("credit_rx_max {}, credit_rx_low {}, rx_buf_critical {}",
+               p_port->credit_rx_max, p_port->credit_rx_low,
+               p_port->rx_buf_critical);
 }
 
 /*******************************************************************************
@@ -202,8 +203,8 @@ void port_select_mtu(tPORT* p_port) {
  *
  ******************************************************************************/
 void port_release_port(tPORT* p_port) {
-  RFCOMM_TRACE_DEBUG("%s p_port: %p state: %d keep_handle: %d", __func__,
-                     p_port, p_port->rfc.state, p_port->keep_port_handle);
+  log::verbose("p_port: {} state: {} keep_handle: {}", fmt::ptr(p_port),
+               p_port->rfc.state, p_port->keep_port_handle);
 
   mutex_global_lock();
   BT_HDR* p_buf;
@@ -242,8 +243,7 @@ void port_release_port(tPORT* p_port) {
     mutex_global_unlock();
 
     if (p_port->keep_port_handle) {
-      RFCOMM_TRACE_DEBUG("%s Re-initialize handle: %d", __func__,
-                         p_port->handle);
+      log::verbose("Re-initialize handle: {}", p_port->handle);
 
       /* save event mask and callback */
       uint32_t mask = p_port->ev_mask;
@@ -265,7 +265,7 @@ void port_release_port(tPORT* p_port) {
       p_port->local_ctrl.modem_signal = p_port->default_signal_state;
       p_port->bd_addr = RawAddress::kAny;
     } else {
-      RFCOMM_TRACE_DEBUG("%s Clean-up handle: %d", __func__, p_port->handle);
+      log::verbose("Clean-up handle: {}", p_port->handle);
       alarm_free(p_port->rfc.port_timer);
       memset(p_port, 0, sizeof(tPORT));
     }
@@ -284,12 +284,12 @@ tRFC_MCB* port_find_mcb(const RawAddress& bd_addr) {
   for (tRFC_MCB& mcb : rfc_cb.port.rfc_mcb) {
     if ((mcb.state != RFC_MX_STATE_IDLE) && (mcb.bd_addr == bd_addr)) {
       /* Multiplexer channel found do not change anything */
-      VLOG(1) << __func__ << ": found bd_addr=" << bd_addr
-              << ", rfc_mcb=" << &mcb << ", lcid=" << loghex(mcb.lcid);
+      log::verbose("found, bd_addr:{}, rfc_mcb:{}, lcid:0x{:x}", bd_addr,
+                   fmt::ptr(&mcb), mcb.lcid);
       return &mcb;
     }
   }
-  VLOG(1) << __func__ << ": not found, bd_addr:" << bd_addr;
+  log::warn("not found, bd_addr:{}", bd_addr);
   return nullptr;
 }
 
@@ -307,22 +307,21 @@ tRFC_MCB* port_find_mcb(const RawAddress& bd_addr) {
  ******************************************************************************/
 tPORT* port_find_mcb_dlci_port(tRFC_MCB* p_mcb, uint8_t dlci) {
   if (!p_mcb) {
-    LOG(ERROR) << __func__ << ": p_mcb is null, dlci=" << std::to_string(dlci);
+    log::error("p_mcb is null, dlci={}", dlci);
     return nullptr;
   }
 
   if (dlci > RFCOMM_MAX_DLCI) {
-    LOG(WARNING) << __func__ << ": DLCI " << std::to_string(dlci)
-                 << " is too large, bd_addr=" << p_mcb->bd_addr
-                 << ", p_mcb=" << p_mcb;
+    log::warn("DLCI {} is too large, bd_addr={}, p_mcb={}", dlci,
+              p_mcb->bd_addr, fmt::ptr(p_mcb));
     return nullptr;
   }
 
   uint8_t handle = p_mcb->port_handles[dlci];
   if (handle == 0) {
-    LOG(INFO) << __func__ << ": Cannot find allocated RFCOMM app port for DLCI "
-              << std::to_string(dlci) << " on " << p_mcb->bd_addr
-              << ", p_mcb=" << p_mcb;
+    log::info(
+        "Cannot find allocated RFCOMM app port for DLCI {} on {}, p_mcb={}",
+        dlci, p_mcb->bd_addr, fmt::ptr(p_mcb));
     return nullptr;
   }
   return &rfc_cb.port.port[handle - 1];
@@ -517,7 +516,7 @@ void port_flow_control_peer(tPORT* p_port, bool enable, uint16_t count) {
       else if (((p_port->rx.queue_size > PORT_RX_HIGH_WM) ||
                 (fixed_queue_length(p_port->rx.queue) > PORT_RX_BUF_HIGH_WM)) &&
                !p_port->rx.peer_fc) {
-        RFCOMM_TRACE_EVENT("PORT_DataInd Data reached HW. Sending FC set.");
+        log::verbose("PORT_DataInd Data reached HW. Sending FC set.");
 
         p_port->rx.peer_fc = true;
         RFCOMM_FlowReq(p_port->rfc.p_mcb, p_port->dlci, false);

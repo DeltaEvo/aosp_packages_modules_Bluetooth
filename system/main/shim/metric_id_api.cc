@@ -13,14 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-#include <mutex>
-
-#include "gd/common/metric_id_manager.h"
-#include "gd/hci/address.h"
-#include "main/shim/helpers.h"
 #include "main/shim/metric_id_api.h"
-#include "main/shim/shim.h"
+
+#include "common/metric_id_manager.h"
+#include "hci/address.h"
+#include "main/shim/helpers.h"
 #include "types/raw_address.h"
 
 using bluetooth::common::MetricIdManager;

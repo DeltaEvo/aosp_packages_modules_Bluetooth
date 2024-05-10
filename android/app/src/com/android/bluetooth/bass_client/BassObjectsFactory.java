@@ -22,6 +22,7 @@ import android.os.Looper;
 import android.util.Log;
 
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.btservice.AdapterService;
 import com.android.internal.annotations.VisibleForTesting;
 
 /**
@@ -70,9 +71,12 @@ public class BassObjectsFactory {
      * @param looper the thread that the state machine is supposed to run on
      * @return a state machine that is initialized and started, ready to go
      */
-    public BassClientStateMachine makeStateMachine(BluetoothDevice device,
-            BassClientService svc, Looper looper) {
-        return BassClientStateMachine.make(device, svc, looper);
+    public BassClientStateMachine makeStateMachine(
+            BluetoothDevice device,
+            BassClientService svc,
+            AdapterService adapterService,
+            Looper looper) {
+        return BassClientStateMachine.make(device, svc, adapterService, looper);
     }
 
     /**

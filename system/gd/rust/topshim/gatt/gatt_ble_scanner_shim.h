@@ -117,7 +117,12 @@ class BleScannerIntf : public ScanningCallbacks {
 
   // Sets the LE scan interval and window in units of N * 0.625 msec. The result
   // of this action is returned via |OnStatusCallback|.
-  void SetScanParameters(uint8_t scanner_id, uint16_t scan_interval, uint16_t scan_window);
+  void SetScanParameters(
+      uint8_t scanner_id,
+      uint8_t scan_type,
+      uint16_t scan_interval,
+      uint16_t scan_window,
+      uint8_t scan_phy);
 
   // Configure the batchscan storage and get a response via |OnStatusCallback|.
   void BatchscanConfigStorage(
@@ -175,9 +180,11 @@ class BleScannerIntf : public ScanningCallbacks {
   void OnFilterParamSetupCallback(uint8_t scanner_id, uint8_t avbl_space, uint8_t action_type, uint8_t btm_status);
   void OnFilterConfigCallback(
       uint8_t filt_index, uint8_t filt_type, uint8_t avbl_space, uint8_t action, uint8_t btm_status);
+#if TARGET_FLOSS
   void OnMsftAdvMonitorAddCallback(uint32_t call_id, uint8_t monitor_handle, uint8_t status);
   void OnMsftAdvMonitorRemoveCallback(uint32_t call_id, uint8_t status);
   void OnMsftAdvMonitorEnableCallback(uint32_t call_id, uint8_t status);
+#endif
 
   BleScannerInterface* scanner_intf_;
 };

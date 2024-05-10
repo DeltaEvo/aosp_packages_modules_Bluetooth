@@ -37,7 +37,7 @@ struct SyspropsModule::impl {
   os::Handler* sysprops_handler_;
 };
 
-void SyspropsModule::ListDependencies(ModuleList* list) const {}
+void SyspropsModule::ListDependencies(ModuleList* /* list */) const {}
 
 void SyspropsModule::Start() {
   std::string file_path = os::ParameterProvider::SyspropsFilePath();
@@ -66,10 +66,16 @@ std::string SyspropsModule::ToString() const {
 void SyspropsModule::parse_config(std::string file_path) {
   const std::list<std::string> supported_sysprops = {
       // General
+      "bluetooth.btm.sec.delay_auth_ms.value",
       "bluetooth.device.default_name",
       "bluetooth.core.gap.le.privacy.enabled",
       "bluetooth.core.gap.le.conn.only_init_1m_phy.enabled",
       "bluetooth.device.class_of_device",
+      "bluetooth.device_id.product_id",
+      "bluetooth.device_id.product_version",
+      "bluetooth.device_id.vendor_id",
+      "bluetooth.device_id.vendor_id_source",
+      "persist.bluetooth.inq_by_rssi",
       // BR/EDR
       "bluetooth.core.classic.page_scan_type",
       "bluetooth.core.classic.page_scan_interval",
@@ -77,6 +83,7 @@ void SyspropsModule::parse_config(std::string file_path) {
       "bluetooth.core.classic.inq_scan_type",
       "bluetooth.core.classic.inq_scan_interval",
       "bluetooth.core.classic.inq_scan_window",
+      "bluetooth.core.classic.inq_length",
       "bluetooth.core.acl.link_supervision_timeout",
       "bluetooth.core.classic.page_timeout",
       "bluetooth.core.classic.sniff_max_intervals",
@@ -97,9 +104,16 @@ void SyspropsModule::parse_config(std::string file_path) {
       "bluetooth.core.le.connection_scan_window_slow",
       "bluetooth.core.le.inquiry_scan_interval",
       "bluetooth.core.le.inquiry_scan_window",
+      "bluetooth.core.le.adv_mon_scan_interval",
+      "bluetooth.core.le.adv_mon_scan_window",
+      "bluetooth.core.le.adv_mon_rtl_quirk",
+      "bluetooth.core.le.adv_mon_qca_quirk",
       "bluetooth.core.le.vendor_capabilities.enabled",
+      // LE Audio
+      "bluetooth.le_audio.enable_le_audio_only",
       // SCO
       "bluetooth.sco.disable_enhanced_connection",
+      "bluetooth.sco.swb_supported",
       // Profile
       "persist.bluetooth.avrcpcontrolversion",
   };

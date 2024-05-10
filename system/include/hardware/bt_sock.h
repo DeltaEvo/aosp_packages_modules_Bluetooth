@@ -22,6 +22,8 @@
 #include "bluetooth/uuid.h"
 #include "raw_address.h"
 
+using bluetooth::Uuid;
+
 __BEGIN_DECLS
 
 #define BTSOCK_FLAG_ENCRYPT 1
@@ -52,6 +54,10 @@ typedef struct {
   // The reader must read using a buffer of at least this size to avoid
   // loosing data. (L2CAP only)
   unsigned short max_rx_packet_size;
+
+  // The connection uuid. (L2CAP only)
+  uint64_t conn_uuid_lsb;
+  uint64_t conn_uuid_msb;
 } __attribute__((packed)) sock_connect_signal_t;
 
 typedef struct {
@@ -90,6 +96,43 @@ typedef struct {
    */
   void (*request_max_tx_data_length)(const RawAddress& bd_addr);
 
+  /**
+   * Send control parameters to the peer. So far only for qualification use.
+   * RFCOMM layer starts the control request only when it is the client.
+   * This API allows the host to start the control request while it works as an
+   * RFCOMM server.
+   */
+  bt_status_t (*control_req)(uint8_t dlci, const RawAddress& bd_addr,
+                             uint8_t modem_signal, uint8_t break_signal,
+                             uint8_t discard_buffers, uint8_t break_signal_seq,
+                             bool fc);
+
+  /**
+   * Disconnect all RFCOMM and L2CAP socket connections with the associated
+   * device address.
+   */
+  bt_status_t (*disconnect_all)(const RawAddress* bd_addr);
+
+  /**
+   * Get L2CAP local channel ID with the associated connection uuid.
+   */
+  bt_status_t (*get_l2cap_local_cid)(Uuid& conn_uuid, uint16_t* cid);
+
+  /**
+   * Get L2CAP remote channel ID with the associated connection uuid.
+   */
+  bt_status_t (*get_l2cap_remote_cid)(Uuid& conn_uuid, uint16_t* cid);
+
 } btsock_interface_t;
 
 __END_DECLS
+
+#if __has_include(<bluetooth/log.h>)
+#include <bluetooth/log.h>
+
+namespace fmt {
+template <>
+struct formatter<btsock_type_t> : enum_formatter<btsock_type_t> {};
+}  // namespace fmt
+
+#endif  // __has_include(<bluetooth/log.h>)

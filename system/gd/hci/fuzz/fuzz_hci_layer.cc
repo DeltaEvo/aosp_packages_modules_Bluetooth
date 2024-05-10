@@ -15,7 +15,9 @@
  */
 
 #include "hci/fuzz/fuzz_hci_layer.h"
+
 #include "fuzz/helpers.h"
+#include "hci/class_of_device.h"
 
 namespace bluetooth {
 namespace hci {
@@ -25,45 +27,61 @@ using bluetooth::common::ContextualCallback;
 using bluetooth::fuzz::GetArbitraryBytes;
 using bluetooth::fuzz::InvokeIfValid;
 
-hci::SecurityInterface* FuzzHciLayer::GetSecurityInterface(ContextualCallback<void(hci::EventView)> event_handler) {
+hci::SecurityInterface* FuzzHciLayer::GetSecurityInterface(
+    ContextualCallback<void(hci::EventView)> /* event_handler */) {
   return &security_interface_;
 }
 
 hci::LeSecurityInterface* FuzzHciLayer::GetLeSecurityInterface(
-    ContextualCallback<void(hci::LeMetaEventView)> event_handler) {
+    ContextualCallback<void(hci::LeMetaEventView)> /* event_handler */) {
   return &le_security_interface_;
 }
 
 hci::AclConnectionInterface* FuzzHciLayer::GetAclConnectionInterface(
-    ContextualCallback<void(hci::EventView)> event_handler,
-    ContextualCallback<void(uint16_t, hci::ErrorCode)> on_disconnect,
-    ContextualCallback<
-        void(hci::ErrorCode, uint16_t, uint8_t version, uint16_t manufacturer_name, uint16_t sub_version)>
-        on_read_remote_version) {
+    ContextualCallback<void(hci::EventView)> /* event_handler */,
+    ContextualCallback<void(uint16_t, hci::ErrorCode)> /* on_disconnect */,
+    ContextualCallback<void(Address, ClassOfDevice)> /* on_connection_request */,
+    ContextualCallback<void(
+        hci::ErrorCode,
+        uint16_t,
+        uint8_t version,
+        uint16_t manufacturer_name,
+        uint16_t sub_version)>
+    /* on_read_remote_version */) {
   return &acl_connection_interface_;
 }
 
 hci::LeAclConnectionInterface* FuzzHciLayer::GetLeAclConnectionInterface(
-    ContextualCallback<void(hci::LeMetaEventView)> event_handler,
-    ContextualCallback<void(uint16_t, hci::ErrorCode)> on_disconnect,
-    ContextualCallback<
-        void(hci::ErrorCode, uint16_t, uint8_t version, uint16_t manufacturer_name, uint16_t sub_version)>
-        on_read_remote_version) {
+    ContextualCallback<void(hci::LeMetaEventView)> /* event_handler */,
+    ContextualCallback<void(uint16_t, hci::ErrorCode)> /* on_disconnect */,
+    ContextualCallback<void(
+        hci::ErrorCode,
+        uint16_t,
+        uint8_t version,
+        uint16_t manufacturer_name,
+        uint16_t sub_version)>
+    /* on_read_remote_version */) {
   return &le_acl_connection_interface_;
 }
 
 hci::LeAdvertisingInterface* FuzzHciLayer::GetLeAdvertisingInterface(
-    ContextualCallback<void(hci::LeMetaEventView)> event_handler) {
+    ContextualCallback<void(hci::LeMetaEventView)> /* event_handler */) {
   return &le_advertising_interface_;
 }
 
 hci::LeScanningInterface* FuzzHciLayer::GetLeScanningInterface(
-    ContextualCallback<void(hci::LeMetaEventView)> event_handler) {
+    ContextualCallback<void(hci::LeMetaEventView)> /* event_handler */) {
   return &le_scanning_interface_;
 }
 
-hci::LeIsoInterface* FuzzHciLayer::GetLeIsoInterface(ContextualCallback<void(hci::LeMetaEventView)> event_handler) {
+hci::LeIsoInterface* FuzzHciLayer::GetLeIsoInterface(
+    ContextualCallback<void(hci::LeMetaEventView)> /* event_handler */) {
   return &le_iso_interface_;
+}
+
+hci::DistanceMeasurementInterface* FuzzHciLayer::GetDistanceMeasurementInterface(
+    ContextualCallback<void(hci::LeMetaEventView)> /* event_handler */) {
+  return &distance_measurement_interface_;
 }
 
 void FuzzHciLayer::Start() {
@@ -163,8 +181,11 @@ void FuzzHciLayer::injectAclEvent(std::vector<uint8_t> data) {
 }
 
 void FuzzHciLayer::injectAclDisconnect(FuzzedDataProvider& fdp) {
-  acl_on_disconnect_.InvokeIfNotEmpty(fdp.ConsumeIntegral<uint16_t>(),
-                                      static_cast<hci::ErrorCode>(fdp.ConsumeIntegral<uint8_t>()));
+  if (acl_on_disconnect_) {
+    acl_on_disconnect_(
+        fdp.ConsumeIntegral<uint16_t>(),
+        static_cast<hci::ErrorCode>(fdp.ConsumeIntegral<uint8_t>()));
+  }
 }
 
 void FuzzHciLayer::injectLeAclEvent(std::vector<uint8_t> data) {
@@ -172,8 +193,11 @@ void FuzzHciLayer::injectLeAclEvent(std::vector<uint8_t> data) {
 }
 
 void FuzzHciLayer::injectLeAclDisconnect(FuzzedDataProvider& fdp) {
-  le_acl_on_disconnect_.InvokeIfNotEmpty(fdp.ConsumeIntegral<uint16_t>(),
-                                         static_cast<hci::ErrorCode>(fdp.ConsumeIntegral<uint8_t>()));
+  if (le_acl_on_disconnect_) {
+    le_acl_on_disconnect_(
+        fdp.ConsumeIntegral<uint16_t>(),
+        static_cast<hci::ErrorCode>(fdp.ConsumeIntegral<uint8_t>()));
+  }
 }
 
 void FuzzHciLayer::injectLeAdvertisingEvent(std::vector<uint8_t> data) {

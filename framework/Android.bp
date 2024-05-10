@@ -2,19 +2,14 @@ package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
-java_defaults {
-    name: "bluetooth-module-sdk-version-defaults",
-    min_sdk_version: "Tiramisu",
-}
-
 filegroup {
     name: "framework-bluetooth-sources",
+    defaults: ["framework-sources-module-defaults"],
     srcs: [
-        "java/**/*.java",
         "java/**/*.aidl",
+        "java/**/*.java",
     ],
     path: "java",
-    visibility: ["//frameworks/base"],
 }
 
 // defaults shared between `framework-bluetooth` & `framework-bluetooth-pre-jarjar`
@@ -22,21 +17,27 @@ filegroup {
 // `framework-bluetooth-pre-jarjar`
 java_defaults {
     name: "framework-bluetooth-defaults",
-    defaults: ["bluetooth-module-sdk-version-defaults"],
     static_libs: [
-        "modules-utils-synchronous-result-receiver",
         "PlatformProperties",
+        "bluetooth_flags_java_lib",
+        "modules-utils-expresslog",
+        "service-bluetooth-binder-aidl",
     ],
     libs: [
+        "app-compat-annotations",
         "framework-tethering.stubs.module_lib",
         "unsupportedappusage", // for android.compat.annotation.UnsupportedAppUsage
-        "app-compat-annotations",
     ],
-    stub_only_libs: ["framework-tethering.stubs.module_lib"],
+    stub_only_libs: [
+        // TODO: b/332362688 --- Metalava should already ignore our library
+        "bluetooth_flags_java_lib",
+        "framework-tethering.stubs.module_lib",
+    ],
     srcs: [
+        ":Bluetooth-binder-aidl",
         ":framework-bluetooth-sources",
-        ":libbluetooth-binder-aidl",
     ],
+    min_sdk_version: "Tiramisu",
 }
 
 // bluetooth-service needs pre-jarjared version of framework-bluetooth so it can reference copied utility
@@ -53,14 +54,14 @@ java_library {
 java_sdk_library {
     name: "framework-bluetooth",
     defaults: [
-        "framework-module-defaults",
         "framework-bluetooth-defaults",
+        "framework-module-defaults",
     ],
 
     jarjar_rules: ":bluetooth-jarjar-rules",
     installable: true,
     optimize: {
-        enabled: false
+        enabled: false,
     },
     hostdex: true, // for hiddenapi check
 
@@ -69,8 +70,8 @@ java_sdk_library {
         "//frameworks/opt/wear",
         "//packages/modules/Bluetooth/android/app/tests/unit",
         "//packages/modules/Bluetooth/android/pandora/server",
+        "//packages/modules/Bluetooth/framework/tests/bumble",
         "//packages/modules/Bluetooth/service",
-        "//packages/modules/Connectivity/nearby/tests/multidevices/clients/test_support/fastpair_provider",
         "//packages/services/Car/car-builtin-lib",
         // TODO(240720385)
         "//packages/services/Car/tests/carservice_unit_test",
@@ -83,9 +84,16 @@ java_sdk_library {
 
     permitted_packages: [
         "android.bluetooth",
-        // Created by jarjar rules.
-        "com.android.bluetooth.x",
+        "com.android.bluetooth.flags",
+        "com.android.bluetooth.jarjar",
     ],
+    errorprone: {
+        javacflags: [
+            "-Xep:InlineMeSuggester:OFF", // The @InlineMe annotation is not available
+            "-XepExcludedPaths:.*/srcjars/.*", // Exclude generated files
+        ],
+        enabled: true,
+    },
     lint: {
         strict_updatability_linting: true,
     },
@@ -99,11 +107,10 @@ java_defaults {
         // order matters: classes in framework-bluetooth are resolved before framework, meaning
         // @hide APIs in framework-bluetooth are resolved before @SystemApi stubs in framework
         "framework-bluetooth.impl",
-        "framework",
 
+        "framework",
         // if sdk_version="" this gets automatically included, but here we need to add manually.
         "framework-res",
-        "app-compat-annotations",
     ],
     defaults_visibility: ["//visibility:public"],
 }
@@ -113,17 +120,7 @@ filegroup {
     srcs: ["jarjar-rules.txt"],
 }
 
-java_api_contribution {
-    name: "framework-bluetooth-public-stubs",
-    api_surface: "public",
-    api_file: "api/current.txt",
-    visibility: [
-        "//build/orchestrator/apis",
-    ],
-}
-
-platform_compat_config
-{
+platform_compat_config {
     name: "framework-bluetooth-compat-config",
     src: ":framework-bluetooth",
 }

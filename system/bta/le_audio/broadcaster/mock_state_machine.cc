@@ -17,22 +17,25 @@
 
 #include "mock_state_machine.h"
 
-using namespace le_audio::broadcaster;
+using namespace bluetooth::le_audio::broadcaster;
 
 IBroadcastStateMachineCallbacks* callbacks;
-void BroadcastStateMachine::Initialize(IBroadcastStateMachineCallbacks* cb) {
+AdvertisingCallbacks* adv_callbacks;
+void BroadcastStateMachine::Initialize(IBroadcastStateMachineCallbacks* cb,
+                                       AdvertisingCallbacks* adv_cb) {
   callbacks = cb;
+  adv_callbacks = adv_cb;
 }
 
 std::unique_ptr<BroadcastStateMachine> BroadcastStateMachine::CreateInstance(
     BroadcastStateMachineConfig msg) {
-  auto instance =
-      std::make_unique<MockBroadcastStateMachine>(std::move(msg), callbacks);
+  auto instance = std::make_unique<MockBroadcastStateMachine>(
+      std::move(msg), callbacks, adv_callbacks);
   MockBroadcastStateMachine::last_instance_ = instance.get();
   return std::move(instance);
 }
 
-namespace le_audio {
+namespace bluetooth::le_audio {
 namespace broadcaster {
 
 std::ostream& operator<<(std::ostream& os,
@@ -66,7 +69,7 @@ std::ostream& operator<<(std::ostream& os,
 }
 
 }  // namespace broadcaster
-}  // namespace le_audio
+}  // namespace bluetooth::le_audio
 
 uint8_t MockBroadcastStateMachine::instance_counter_ = 0;
 MockBroadcastStateMachine* MockBroadcastStateMachine::last_instance_ = nullptr;

@@ -80,8 +80,9 @@ mod test {
         gatt::{
             ffi::Uuid,
             server::{
-                att_database::{CHARACTERISTIC_UUID, PRIMARY_SERVICE_DECLARATION_UUID},
-                gatt_database::AttPermissions,
+                gatt_database::{
+                    AttPermissions, CHARACTERISTIC_UUID, PRIMARY_SERVICE_DECLARATION_UUID,
+                },
                 test::test_att_db::TestAttDatabase,
             },
         },
@@ -105,7 +106,7 @@ mod test {
                 AttAttribute {
                     handle: AttHandle(3),
                     type_: UUID,
-                    permissions: AttPermissions::READONLY,
+                    permissions: AttPermissions::READABLE,
                 },
                 VALUE.into(),
             ),
@@ -113,7 +114,7 @@ mod test {
                 AttAttribute {
                     handle: AttHandle(4),
                     type_: ANOTHER_UUID,
-                    permissions: AttPermissions::READONLY,
+                    permissions: AttPermissions::READABLE,
                 },
                 VALUE.into(),
             ),
@@ -121,7 +122,7 @@ mod test {
                 AttAttribute {
                     handle: AttHandle(5),
                     type_: UUID,
-                    permissions: AttPermissions::READONLY,
+                    permissions: AttPermissions::READABLE,
                 },
                 VALUE.into(),
             ),
@@ -167,7 +168,7 @@ mod test {
                 AttAttribute {
                     handle: AttHandle(3),
                     type_: UUID,
-                    permissions: AttPermissions::READONLY,
+                    permissions: AttPermissions::READABLE,
                 },
                 VALUE.into(),
             ),
@@ -175,7 +176,7 @@ mod test {
                 AttAttribute {
                     handle: AttHandle(4),
                     type_: UUID,
-                    permissions: AttPermissions::READONLY,
+                    permissions: AttPermissions::READABLE,
                 },
                 ANOTHER_VALUE.into(),
             ),
@@ -183,7 +184,7 @@ mod test {
                 AttAttribute {
                     handle: AttHandle(5),
                     type_: UUID,
-                    permissions: AttPermissions::READONLY,
+                    permissions: AttPermissions::READABLE,
                 },
                 VALUE.into(),
             ),
@@ -257,7 +258,7 @@ mod test {
             AttAttribute {
                 handle: AttHandle(3),
                 type_: UUID,
-                permissions: AttPermissions::READONLY,
+                permissions: AttPermissions::READABLE,
             },
             VALUE.into(),
         )]);
@@ -294,7 +295,7 @@ mod test {
                 AttAttribute {
                     handle: AttHandle(3),
                     type_: CHARACTERISTIC_UUID,
-                    permissions: AttPermissions::READONLY,
+                    permissions: AttPermissions::READABLE,
                 },
                 VALUE.into(),
             ),
@@ -302,7 +303,7 @@ mod test {
                 AttAttribute {
                     handle: AttHandle(4),
                     type_: UUID,
-                    permissions: AttPermissions::READONLY,
+                    permissions: AttPermissions::READABLE,
                 },
                 VALUE.into(),
             ),
@@ -310,7 +311,7 @@ mod test {
                 AttAttribute {
                     handle: AttHandle(5),
                     type_: PRIMARY_SERVICE_DECLARATION_UUID,
-                    permissions: AttPermissions::READONLY,
+                    permissions: AttPermissions::READABLE,
                 },
                 VALUE.into(),
             ),
@@ -350,7 +351,7 @@ mod test {
                 AttAttribute {
                     handle: AttHandle(3),
                     type_: UUID,
-                    permissions: AttPermissions::READONLY,
+                    permissions: AttPermissions::READABLE,
                 },
                 VALUE.into(),
             ),
@@ -358,7 +359,7 @@ mod test {
                 AttAttribute {
                     handle: AttHandle(4),
                     type_: UUID,
-                    permissions: AttPermissions::READONLY,
+                    permissions: AttPermissions::READABLE,
                 },
                 VALUE.into(),
             ),

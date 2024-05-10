@@ -21,29 +21,15 @@
  *  mockcify.pl ver 0.3.0
  */
 
-#include <cstdint>
 #include <functional>
-#include <map>
-#include <string>
 
 // Original included files, if any
-// NOTE: Since this is a mock file with mock definitions some number of
-//       include files may not be required.  The include-what-you-use
-//       still applies, but crafting proper inclusion is out of scope
-//       for this effort.  This compilation unit may compile as-is, or
-//       may need attention to prune from (or add to ) the inclusion set.
-#include <base/logging.h>
+
 #include <string.h>
 
-#include <mutex>
-
-#include "check.h"
-#include "osi/include/allocator.h"
 #include "osi/include/fixed_queue.h"
 #include "osi/include/list.h"
-#include "osi/include/osi.h"
 #include "osi/include/reactor.h"
-#include "test/common/mock_functions.h"
 
 // Mocked compile conditionals, if any
 
@@ -58,7 +44,7 @@ namespace osi_fixed_queue {
 struct fixed_queue_capacity {
   size_t return_value{0};
   std::function<size_t(fixed_queue_t* queue)> body{
-      [this](fixed_queue_t* queue) { return return_value; }};
+      [this](fixed_queue_t* /* queue */) { return return_value; }};
   size_t operator()(fixed_queue_t* queue) { return body(queue); };
 };
 extern struct fixed_queue_capacity fixed_queue_capacity;
@@ -69,7 +55,7 @@ extern struct fixed_queue_capacity fixed_queue_capacity;
 struct fixed_queue_dequeue {
   void* return_value{};
   std::function<void*(fixed_queue_t* queue)> body{
-      [this](fixed_queue_t* queue) { return return_value; }};
+      [this](fixed_queue_t* /* queue */) { return return_value; }};
   void* operator()(fixed_queue_t* queue) { return body(queue); };
 };
 extern struct fixed_queue_dequeue fixed_queue_dequeue;
@@ -79,7 +65,7 @@ extern struct fixed_queue_dequeue fixed_queue_dequeue;
 // Return: void
 struct fixed_queue_enqueue {
   std::function<void(fixed_queue_t* queue, void* data)> body{
-      [](fixed_queue_t* queue, void* data) {}};
+      [](fixed_queue_t* /* queue */, void* /* data */) {}};
   void operator()(fixed_queue_t* queue, void* data) { body(queue, data); };
 };
 extern struct fixed_queue_enqueue fixed_queue_enqueue;
@@ -89,7 +75,7 @@ extern struct fixed_queue_enqueue fixed_queue_enqueue;
 // Return: void
 struct fixed_queue_flush {
   std::function<void(fixed_queue_t* queue, fixed_queue_free_cb free_cb)> body{
-      [](fixed_queue_t* queue, fixed_queue_free_cb free_cb) {}};
+      [](fixed_queue_t* /* queue */, fixed_queue_free_cb /* free_cb */) {}};
   void operator()(fixed_queue_t* queue, fixed_queue_free_cb free_cb) {
     body(queue, free_cb);
   };
@@ -101,7 +87,7 @@ extern struct fixed_queue_flush fixed_queue_flush;
 // Return: void
 struct fixed_queue_free {
   std::function<void(fixed_queue_t* queue, fixed_queue_free_cb free_cb)> body{
-      [](fixed_queue_t* queue, fixed_queue_free_cb free_cb) {}};
+      [](fixed_queue_t* /* queue */, fixed_queue_free_cb /* free_cb */) {}};
   void operator()(fixed_queue_t* queue, fixed_queue_free_cb free_cb) {
     body(queue, free_cb);
   };
@@ -114,7 +100,7 @@ extern struct fixed_queue_free fixed_queue_free;
 struct fixed_queue_get_dequeue_fd {
   int return_value{0};
   std::function<int(const fixed_queue_t* queue)> body{
-      [this](const fixed_queue_t* queue) { return return_value; }};
+      [this](const fixed_queue_t* /* queue */) { return return_value; }};
   int operator()(const fixed_queue_t* queue) { return body(queue); };
 };
 extern struct fixed_queue_get_dequeue_fd fixed_queue_get_dequeue_fd;
@@ -125,7 +111,7 @@ extern struct fixed_queue_get_dequeue_fd fixed_queue_get_dequeue_fd;
 struct fixed_queue_get_enqueue_fd {
   int return_value{0};
   std::function<int(const fixed_queue_t* queue)> body{
-      [this](const fixed_queue_t* queue) { return return_value; }};
+      [this](const fixed_queue_t* /* queue */) { return return_value; }};
   int operator()(const fixed_queue_t* queue) { return body(queue); };
 };
 extern struct fixed_queue_get_enqueue_fd fixed_queue_get_enqueue_fd;
@@ -136,7 +122,7 @@ extern struct fixed_queue_get_enqueue_fd fixed_queue_get_enqueue_fd;
 struct fixed_queue_get_list {
   list_t* return_value{0};
   std::function<list_t*(fixed_queue_t* queue)> body{
-      [this](fixed_queue_t* queue) { return return_value; }};
+      [this](fixed_queue_t* /* queue */) { return return_value; }};
   list_t* operator()(fixed_queue_t* queue) { return body(queue); };
 };
 extern struct fixed_queue_get_list fixed_queue_get_list;
@@ -147,7 +133,7 @@ extern struct fixed_queue_get_list fixed_queue_get_list;
 struct fixed_queue_is_empty {
   bool return_value{false};
   std::function<bool(fixed_queue_t* queue)> body{
-      [this](fixed_queue_t* queue) { return return_value; }};
+      [this](fixed_queue_t* /* queue */) { return return_value; }};
   bool operator()(fixed_queue_t* queue) { return body(queue); };
 };
 extern struct fixed_queue_is_empty fixed_queue_is_empty;
@@ -158,7 +144,7 @@ extern struct fixed_queue_is_empty fixed_queue_is_empty;
 struct fixed_queue_length {
   size_t return_value{0};
   std::function<size_t(fixed_queue_t* queue)> body{
-      [this](fixed_queue_t* queue) { return return_value; }};
+      [this](fixed_queue_t* /* queue */) { return return_value; }};
   size_t operator()(fixed_queue_t* queue) { return body(queue); };
 };
 extern struct fixed_queue_length fixed_queue_length;
@@ -169,7 +155,7 @@ extern struct fixed_queue_length fixed_queue_length;
 struct fixed_queue_new {
   fixed_queue_t* return_value{0};
   std::function<fixed_queue_t*(size_t capacity)> body{
-      [this](size_t capacity) { return return_value; }};
+      [this](size_t /* capacity */) { return return_value; }};
   fixed_queue_t* operator()(size_t capacity) { return body(capacity); };
 };
 extern struct fixed_queue_new fixed_queue_new;
@@ -180,8 +166,8 @@ extern struct fixed_queue_new fixed_queue_new;
 struct fixed_queue_register_dequeue {
   std::function<void(fixed_queue_t* queue, reactor_t* reactor,
                      fixed_queue_cb ready_cb, void* context)>
-      body{[](fixed_queue_t* queue, reactor_t* reactor, fixed_queue_cb ready_cb,
-              void* context) {}};
+      body{[](fixed_queue_t* /* queue */, reactor_t* /* reactor */,
+              fixed_queue_cb /* ready_cb */, void* /* context */) {}};
   void operator()(fixed_queue_t* queue, reactor_t* reactor,
                   fixed_queue_cb ready_cb, void* context) {
     body(queue, reactor, ready_cb, context);
@@ -195,7 +181,7 @@ extern struct fixed_queue_register_dequeue fixed_queue_register_dequeue;
 struct fixed_queue_try_dequeue {
   void* return_value{};
   std::function<void*(fixed_queue_t* queue)> body{
-      [this](fixed_queue_t* queue) { return return_value; }};
+      [this](fixed_queue_t* /* queue */) { return return_value; }};
   void* operator()(fixed_queue_t* queue) { return body(queue); };
 };
 extern struct fixed_queue_try_dequeue fixed_queue_try_dequeue;
@@ -206,7 +192,9 @@ extern struct fixed_queue_try_dequeue fixed_queue_try_dequeue;
 struct fixed_queue_try_enqueue {
   bool return_value{false};
   std::function<bool(fixed_queue_t* queue, void* data)> body{
-      [this](fixed_queue_t* queue, void* data) { return return_value; }};
+      [this](fixed_queue_t* /* queue */, void* /* data */) {
+        return return_value;
+      }};
   bool operator()(fixed_queue_t* queue, void* data) {
     return body(queue, data);
   };
@@ -219,7 +207,7 @@ extern struct fixed_queue_try_enqueue fixed_queue_try_enqueue;
 struct fixed_queue_try_peek_first {
   void* return_value{};
   std::function<void*(fixed_queue_t* queue)> body{
-      [this](fixed_queue_t* queue) { return return_value; }};
+      [this](fixed_queue_t* /* queue */) { return return_value; }};
   void* operator()(fixed_queue_t* queue) { return body(queue); };
 };
 extern struct fixed_queue_try_peek_first fixed_queue_try_peek_first;
@@ -230,7 +218,7 @@ extern struct fixed_queue_try_peek_first fixed_queue_try_peek_first;
 struct fixed_queue_try_peek_last {
   void* return_value{};
   std::function<void*(fixed_queue_t* queue)> body{
-      [this](fixed_queue_t* queue) { return return_value; }};
+      [this](fixed_queue_t* /* queue */) { return return_value; }};
   void* operator()(fixed_queue_t* queue) { return body(queue); };
 };
 extern struct fixed_queue_try_peek_last fixed_queue_try_peek_last;
@@ -241,7 +229,9 @@ extern struct fixed_queue_try_peek_last fixed_queue_try_peek_last;
 struct fixed_queue_try_remove_from_queue {
   void* return_value{};
   std::function<void*(fixed_queue_t* queue, void* data)> body{
-      [this](fixed_queue_t* queue, void* data) { return return_value; }};
+      [this](fixed_queue_t* /* queue */, void* /* data */) {
+        return return_value;
+      }};
   void* operator()(fixed_queue_t* queue, void* data) {
     return body(queue, data);
   };
@@ -253,7 +243,8 @@ extern struct fixed_queue_try_remove_from_queue
 // Params: fixed_queue_t* queue
 // Return: void
 struct fixed_queue_unregister_dequeue {
-  std::function<void(fixed_queue_t* queue)> body{[](fixed_queue_t* queue) {}};
+  std::function<void(fixed_queue_t* queue)> body{
+      [](fixed_queue_t* /* queue */) {}};
   void operator()(fixed_queue_t* queue) { body(queue); };
 };
 extern struct fixed_queue_unregister_dequeue fixed_queue_unregister_dequeue;

@@ -16,20 +16,19 @@
 
 #include "a2dp_encoding_host.h"
 
-#include <errno.h>
+#include <bluetooth/log.h>
 #include <grp.h>
 #include <sys/stat.h>
 
 #include <memory>
+#include <vector>
 
 #include "a2dp_encoding.h"
-#include "a2dp_sbc_constants.h"
-#include "btif_a2dp_source.h"
-#include "btif_av.h"
-#include "btif_av_co.h"
-#include "btif_hf.h"
-#include "osi/include/log.h"
-#include "osi/include/properties.h"
+#include "btif/include/btif_a2dp_source.h"
+#include "btif/include/btif_av.h"
+#include "btif/include/btif_hf.h"
+#include "os/log.h"
+#include "stack/include/avdt_api.h"
 #include "types/raw_address.h"
 #include "udrv/include/uipc.h"
 
@@ -38,14 +37,21 @@
 // TODO(b/198260375): Make A2DP data owner group configurable.
 #define A2DP_HOST_DATA_GROUP "bluetooth-audio"
 
+namespace fmt {
+template <>
+struct formatter<tUIPC_EVENT> : enum_formatter<tUIPC_EVENT> {};
+template <>
+struct formatter<tA2DP_CTRL_CMD> : enum_formatter<tA2DP_CTRL_CMD> {};
+}  // namespace fmt
+
 namespace {
 
 std::unique_ptr<tUIPC_STATE> a2dp_uipc = nullptr;
 
 static void btif_a2dp_data_cb([[maybe_unused]] tUIPC_CH_ID ch_id,
                               tUIPC_EVENT event) {
-  APPL_TRACE_WARNING("%s: BTIF MEDIA (A2DP-DATA) EVENT %s", __func__,
-                     dump_uipc_event(event));
+  bluetooth::log::warn("BTIF MEDIA (A2DP-DATA) EVENT {}",
+                       dump_uipc_event(event));
 
   switch (event) {
     case UIPC_OPEN_EVT:
@@ -69,8 +75,7 @@ static void btif_a2dp_data_cb([[maybe_unused]] tUIPC_CH_ID ch_id,
       break;
 
     default:
-      APPL_TRACE_ERROR("%s: ### A2DP-DATA EVENT %d NOT HANDLED ###", __func__,
-                       event);
+      bluetooth::log::error("### A2DP-DATA EVENT {} NOT HANDLED ###", event);
       break;
   }
 }
@@ -87,7 +92,7 @@ static void a2dp_data_path_open() {
   if (grp) {
     int res = chown(A2DP_HOST_DATA_PATH, -1, grp->gr_gid);
     if (res == -1) {
-      LOG_ERROR("%s failed: %s", __func__, strerror(errno));
+      bluetooth::log::error("failed: {}", strerror(errno));
     }
   }
 }
@@ -122,25 +127,25 @@ bool StartRequest() {
 
   // Check if a previous request is not finished
   if (a2dp_pending_cmd_ == A2DP_CTRL_CMD_START) {
-    LOG_INFO("%s: A2DP_CTRL_CMD_START in progress", __func__);
+    log::info("A2DP_CTRL_CMD_START in progress");
     return false;
   } else if (a2dp_pending_cmd_ != A2DP_CTRL_CMD_NONE) {
-    LOG_WARN("%s: busy in pending_cmd=%u", __func__, a2dp_pending_cmd_);
+    log::warn("busy in pending_cmd={}", a2dp_pending_cmd_);
     return false;
   }
 
   // Don't send START request to stack while we are in a call
   if (!bluetooth::headset::IsCallIdle()) {
-    LOG_ERROR("%s: call state is busy", __func__);
+    log::error("call state is busy");
     return false;
   }
 
-  if (btif_av_stream_started_ready()) {
+  if (btif_av_stream_started_ready(A2dpType::kSource)) {
     // Already started, ACK back immediately.
     a2dp_data_path_open();
     return true;
   }
-  if (btif_av_stream_ready()) {
+  if (btif_av_stream_ready(A2dpType::kSource)) {
     a2dp_data_path_open();
     /*
      * Post start event and wait for audio path to open.
@@ -148,28 +153,43 @@ bool StartRequest() {
      * procedure is completed.
      */
     a2dp_pending_cmd_ = A2DP_CTRL_CMD_START;
-    btif_av_stream_start();
-    if (btif_av_get_peer_sep() != AVDT_TSEP_SRC) {
-      LOG_INFO("%s: accepted", __func__);
+    btif_av_stream_start(A2dpType::kSource);
+    if (btif_av_get_peer_sep(A2dpType::kSource) != AVDT_TSEP_SRC) {
+      log::info("accepted");
       return true;  // NOTE: The request is placed, but could still fail.
     }
     a2dp_pending_cmd_ = A2DP_CTRL_CMD_NONE;
     return true;
   }
-  LOG_ERROR("%s: AV stream is not ready to start", __func__);
+  log::error("AV stream is not ready to start");
   return false;
 }
 
 // Invoked by audio server when audio streaming is done.
 bool StopRequest() {
-  if (btif_av_get_peer_sep() == AVDT_TSEP_SNK &&
-      !btif_av_stream_started_ready()) {
-    btif_av_clear_remote_suspend_flag();
+  if (btif_av_get_peer_sep(A2dpType::kSource) == AVDT_TSEP_SNK &&
+      !btif_av_stream_started_ready(A2dpType::kSource)) {
+    btif_av_clear_remote_suspend_flag(A2dpType::kSource);
     return true;
   }
-  LOG_INFO("%s: handling", __func__);
+  log::info("handling");
   a2dp_pending_cmd_ = A2DP_CTRL_CMD_STOP;
   btif_av_stream_stop(RawAddress::kEmpty);
+  return true;
+}
+
+bool SuspendRequest() {
+  if (a2dp_pending_cmd_ != A2DP_CTRL_CMD_NONE) {
+    log::warn("busy in pending_cmd={}", a2dp_pending_cmd_);
+    return false;
+  }
+  if (!btif_av_stream_started_ready(A2dpType::kSource)) {
+    log::warn("AV stream is not started");
+    return false;
+  }
+  log::info("handling");
+  a2dp_pending_cmd_ = A2DP_CTRL_CMD_SUSPEND;
+  btif_av_stream_suspend();
   return true;
 }
 
@@ -190,7 +210,8 @@ void set_remote_delay(uint16_t delay_report) {
 
 // Inform audio server about offloading codec; not used for now
 bool update_codec_offloading_capabilities(
-    const std::vector<btav_a2dp_codec_config_t>& framework_preference) {
+    const std::vector<btav_a2dp_codec_config_t>& framework_preference,
+    bool supports_a2dp_hw_offload_v2) {
   return false;
 }
 
@@ -216,6 +237,7 @@ void cleanup() {
 
   if (a2dp_uipc != nullptr) {
     UIPC_Close(*a2dp_uipc, UIPC_CH_ID_ALL);
+    a2dp_uipc = nullptr;
   }
 }
 
@@ -265,6 +287,70 @@ size_t read(uint8_t* p_buf, uint32_t len) {
   clock_gettime(CLOCK_MONOTONIC_RAW, &data_position_);
   return bytes_read;
 }
+
+// Check if OPUS codec is supported
+bool is_opus_supported() { return true; }
+
+namespace provider {
+
+// Lookup the codec info in the list of supported offloaded sink codecs.
+std::optional<btav_a2dp_codec_index_t> sink_codec_index(
+    const uint8_t* p_codec_info) {
+  return std::nullopt;
+}
+
+// Lookup the codec info in the list of supported offloaded source codecs.
+std::optional<btav_a2dp_codec_index_t> source_codec_index(
+    const uint8_t* p_codec_info) {
+  return std::nullopt;
+}
+
+// Return the name of the codec which is assigned to the input index.
+// The codec index must be in the ranges
+// BTAV_A2DP_CODEC_INDEX_SINK_EXT_MIN..BTAV_A2DP_CODEC_INDEX_SINK_EXT_MAX or
+// BTAV_A2DP_CODEC_INDEX_SOURCE_EXT_MIN..BTAV_A2DP_CODEC_INDEX_SOURCE_EXT_MAX.
+// Returns nullopt if the codec_index is not assigned or codec extensibility
+// is not supported or enabled.
+std::optional<const char*> codec_index_str(
+    btav_a2dp_codec_index_t codec_index) {
+  return std::nullopt;
+}
+
+// Return true if the codec is supported for the session type
+// A2DP_HARDWARE_ENCODING_DATAPATH or A2DP_HARDWARE_DECODING_DATAPATH.
+bool supports_codec(btav_a2dp_codec_index_t codec_index) { return false; }
+
+// Return the A2DP capabilities for the selected codec.
+bool codec_info(btav_a2dp_codec_index_t codec_index, uint64_t* codec_id,
+                uint8_t* codec_info, btav_a2dp_codec_config_t* codec_config) {
+  return false;
+}
+
+// Query the codec selection fromt the audio HAL.
+// The HAL is expected to pick the best audio configuration based on the
+// discovered remote SEPs.
+std::optional<a2dp_configuration> get_a2dp_configuration(
+    RawAddress peer_address,
+    std::vector<a2dp_remote_capabilities> const& remote_seps,
+    btav_a2dp_codec_config_t const& user_preferences) {
+  return std::nullopt;
+}
+
+// Query the codec parameters from the audio HAL.
+// The HAL performs a two part validation:
+//  - check if the configuration is valid
+//  - check if the configuration is supported by the audio provider
+// In case any of these checks fails, the corresponding A2DP
+// status is returned. If the configuration is valid and supported,
+// A2DP_OK is returned.
+tA2DP_STATUS parse_a2dp_configuration(
+    btav_a2dp_codec_index_t codec_index, const uint8_t* codec_info,
+    btav_a2dp_codec_config_t* codec_parameters,
+    std::vector<uint8_t>* vendor_specific_parameters) {
+  return A2DP_FAIL;
+}
+
+}  // namespace provider
 
 }  // namespace a2dp
 }  // namespace audio

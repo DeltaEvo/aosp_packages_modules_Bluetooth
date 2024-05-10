@@ -16,14 +16,17 @@
 
 #pragma once
 
+#include <fuzzer/FuzzedDataProvider.h>
+
+#include <vector>
+
+#include "fuzz/helpers.h"
+#include "hci/class_of_device.h"
 #include "hci/command_interface.h"
 #include "hci/hci_layer.h"
 #include "os/fuzz/dev_null_queue.h"
 #include "os/fuzz/fuzz_inject_queue.h"
 #include "os/log.h"
-
-#include <fuzzer/FuzzedDataProvider.h>
-#include "fuzz/helpers.h"
 
 namespace bluetooth {
 namespace hci {
@@ -32,11 +35,13 @@ namespace fuzz {
 template <typename T>
 class FuzzCommandInterface : public CommandInterface<T> {
  public:
-  void EnqueueCommand(std::unique_ptr<T> command,
-                      common::ContextualOnceCallback<void(hci::CommandCompleteView)> on_complete) override {}
+  void EnqueueCommand(
+      std::unique_ptr<T> /* command */,
+      common::ContextualOnceCallback<void(hci::CommandCompleteView)> /* on_complete */) override {}
 
-  void EnqueueCommand(std::unique_ptr<T> command,
-                      common::ContextualOnceCallback<void(hci::CommandStatusView)> on_status) override {}
+  void EnqueueCommand(
+      std::unique_ptr<T> /* command */,
+      common::ContextualOnceCallback<void(hci::CommandStatusView)> /* on_status */) override {}
 };
 
 class FuzzHciLayer : public HciLayer {
@@ -50,7 +55,7 @@ class FuzzHciLayer : public HciLayer {
   }
 
   void EnqueueCommand(
-      std::unique_ptr<hci::CommandBuilder> command,
+      std::unique_ptr<hci::CommandBuilder> /* command */,
       common::ContextualOnceCallback<void(hci::CommandCompleteView)> on_complete) override {
     on_command_complete_ = std::move(on_complete);
     if (auto_reply_fdp != nullptr) {
@@ -59,7 +64,7 @@ class FuzzHciLayer : public HciLayer {
   }
 
   void EnqueueCommand(
-      std::unique_ptr<CommandBuilder> command,
+      std::unique_ptr<CommandBuilder> /* command */,
       common::ContextualOnceCallback<void(hci::CommandStatusView)> on_status) override {
     on_command_status_ = std::move(on_status);
     if (auto_reply_fdp != nullptr) {
@@ -110,8 +115,10 @@ class FuzzHciLayer : public HciLayer {
   hci::AclConnectionInterface* GetAclConnectionInterface(
       common::ContextualCallback<void(hci::EventView)> event_handler,
       common::ContextualCallback<void(uint16_t, hci::ErrorCode)> on_disconnect,
-      common::ContextualCallback<void(hci::ErrorCode hci_status, uint16_t, uint8_t, uint16_t, uint16_t)>
-          on_read_remote_version) override;
+      common::ContextualCallback<void(Address, ClassOfDevice)> on_connection_request,
+      common::ContextualCallback<void(
+          hci::ErrorCode hci_status, uint16_t, uint8_t, uint16_t, uint16_t)> on_read_remote_version)
+      override;
   void PutAclConnectionInterface() override {}
 
   hci::LeAclConnectionInterface* GetLeAclConnectionInterface(
@@ -129,6 +136,9 @@ class FuzzHciLayer : public HciLayer {
 
   hci::LeIsoInterface* GetLeIsoInterface(common::ContextualCallback<void(LeMetaEventView)> event_handler) override;
 
+  hci::DistanceMeasurementInterface* GetDistanceMeasurementInterface(
+      common::ContextualCallback<void(hci::LeMetaEventView)> event_handler) override;
+
   void injectArbitrary(FuzzedDataProvider& fdp);
 
   std::string ToString() const override {
@@ -138,7 +148,7 @@ class FuzzHciLayer : public HciLayer {
   static const ModuleFactory Factory;
 
  protected:
-  void ListDependencies(ModuleList* list) const override {}
+  void ListDependencies(ModuleList* /* list */) const override {}
   void Start() override;
   void Stop() override;
 
@@ -179,6 +189,7 @@ class FuzzHciLayer : public HciLayer {
   FuzzCommandInterface<LeAdvertisingCommandBuilder> le_advertising_interface_{};
   FuzzCommandInterface<LeScanningCommandBuilder> le_scanning_interface_{};
   FuzzCommandInterface<LeIsoCommandBuilder> le_iso_interface_{};
+  FuzzCommandInterface<DistanceMeasurementCommandBuilder> distance_measurement_interface_{};
 
   common::ContextualOnceCallback<void(hci::CommandCompleteView)> on_command_complete_;
   common::ContextualOnceCallback<void(hci::CommandStatusView)> on_command_status_;

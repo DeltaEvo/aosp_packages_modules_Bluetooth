@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "gd/rust/topshim/btav/btav_shim.h"
+#include "rust/topshim/btav/btav_shim.h"
 
 #include <cstdio>
 #include <memory>
@@ -114,6 +114,16 @@ class AvrcpMediaInterfaceImpl : public MediaInterface {
     }
   }
 
+  uint16_t AddPlayer(std::string name, bool browsing_supported) {
+    playerList_.push_back(MediaPlayerInfo{player_id_, name, browsing_supported});
+
+    if (mediaCb_)
+      mediaCb_->SendFolderUpdate(
+          /*available_players*/ true, /*addressed_players*/ true, /*uids_changed*/ false);
+
+    return player_id_++;
+  }
+
  private:
   MediaCallbacks* mediaCb_;
 
@@ -123,6 +133,8 @@ class AvrcpMediaInterfaceImpl : public MediaInterface {
   std::vector<MediaPlayerInfo> playerList_;
   std::vector<SongInfo> nowPlayingList_;
   uint16_t currentPlayer_;
+
+  uint16_t player_id_ = 0;
 };
 
 class VolumeInterfaceImpl : public VolumeInterface {
@@ -234,7 +246,7 @@ static void audio_config_cb(
 }
 static bool mandatory_codec_preferred_cb(const RawAddress& addr) {
   rusty::mandatory_codec_preferred_callback(addr);
-  return true;
+  return false;
 }
 
 btav_source_callbacks_t g_callbacks = {
@@ -264,7 +276,8 @@ std::unique_ptr<A2dpIntf> GetA2dpProfile(const unsigned char* btif) {
 int A2dpIntf::init() const {
   std::vector<btav_a2dp_codec_config_t> a;
   std::vector<btav_a2dp_codec_config_t> b;
-  return intf_->init(&internal::g_callbacks, 1, a, b);
+  std::vector<btav_a2dp_codec_info_t> c;
+  return intf_->init(&internal::g_callbacks, 1, a, b, &c);
 }
 
 uint32_t A2dpIntf::connect(RawAddress addr) const {
@@ -288,7 +301,7 @@ int A2dpIntf::config_codec(RawAddress addr, ::rust::Vec<A2dpCodecConfig> codec_p
 }
 
 void A2dpIntf::cleanup() const {
-  // TODO: Implement.
+  intf_->cleanup();
 }
 bool A2dpIntf::set_audio_config(A2dpCodecConfig rconfig) const {
   bluetooth::audio::a2dp::AudioConfig config = {
@@ -303,6 +316,9 @@ bool A2dpIntf::start_audio_request() const {
 }
 bool A2dpIntf::stop_audio_request() const {
   return bluetooth::audio::a2dp::StopRequest();
+}
+bool A2dpIntf::suspend_audio_request() const {
+  return bluetooth::audio::a2dp::SuspendRequest();
 }
 RustPresentationPosition A2dpIntf::get_presentation_position() const {
   bluetooth::audio::a2dp::PresentationPosition p = bluetooth::audio::a2dp::GetPresentationPosition();
@@ -333,7 +349,7 @@ std::unique_ptr<AvrcpIntf> GetAvrcpProfile(const unsigned char* btif) {
 AvrcpIntf::~AvrcpIntf() {}
 
 void AvrcpIntf::init() {
-  intf_->Init(&mAvrcpInterface, &mVolumeInterface);
+  intf_->Init(&mAvrcpInterface, &mVolumeInterface, nullptr);
 }
 
 void AvrcpIntf::cleanup() {
@@ -368,6 +384,10 @@ void AvrcpIntf::set_position(int64_t position) {
 void AvrcpIntf::set_metadata(
     const ::rust::String& title, const ::rust::String& artist, const ::rust::String& album, int64_t length_us) {
   mAvrcpInterface.SetMetadata(std::string(title), std::string(artist), std::string(album), length_us);
+}
+
+uint16_t AvrcpIntf::add_player(const ::rust::String& name, bool browsing_supported) {
+  return mAvrcpInterface.AddPlayer(std::string(name), browsing_supported);
 }
 
 }  // namespace rust

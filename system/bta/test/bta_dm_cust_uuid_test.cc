@@ -19,15 +19,10 @@
 #include <gtest/gtest.h>
 
 #include "bta/dm/bta_dm_int.h"
-#include "stack/include/bt_hdr.h"
+#include "bta/test/bta_test_fixtures.h"
 #include "types/bluetooth/uuid.h"
 
 using bluetooth::Uuid;
-
-class BtaCustUuid : public testing::Test {
- protected:
-  void SetUp() override { bta_dm_cb = {}; }
-};
 
 namespace {
   uint32_t handle1 = 1;
@@ -41,7 +36,7 @@ namespace {
 }
 
 // Test we can remove/add 128 bit custom UUID from/to bta_dm_cb.bta_custom_uuid
-TEST_F(BtaCustUuid, test_add_remove_cust_uuid) {
+TEST_F(BtaWithMocksTest, test_add_remove_cust_uuid) {
   tBTA_CUSTOM_UUID& curr0 = bta_dm_cb.bta_custom_uuid[0];
   tBTA_CUSTOM_UUID& curr1 = bta_dm_cb.bta_custom_uuid[1];
   tBTA_CUSTOM_UUID curr0_expect = {uuid1, handle1};

@@ -23,44 +23,14 @@
 
 #include <cstdint>
 #include <functional>
-#include <map>
-#include <string>
 
 // Original included files, if any
-// NOTE: Since this is a mock file with mock definitions some number of
-//       include files may not be required.  The include-what-you-use
-//       still applies, but crafting proper inclusion is out of scope
-//       for this effort.  This compilation unit may compile as-is, or
-//       may need attention to prune the inclusion set.
-#include <future>
-#include <unordered_map>
-#include <unordered_set>
-
-#include "bta/include/bta_dm_acl.h"
-#include "gd/os/log.h"
-#include "gd/os/queue.h"
-#include "main/shim/acl_api.h"
-#include "main/shim/entry.h"
-#include "main/shim/helpers.h"
-#include "main/shim/l2c_api.h"
-#include "osi/include/allocator.h"
-#include "stack/btm/btm_ble_int.h"
-#include "stack/btm/btm_sec.h"
-#include "stack/include/acl_hci_link_interface.h"
-#include "stack/include/ble_acl_interface.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/btm_api.h"
-#include "stack/include/gatt_api.h"
-#include "stack/include/sco_hci_link_interface.h"
-#include "test/common/mock_functions.h"
+#include "stack/include/l2c_api.h"
 #include "types/ble_address_with_type.h"
 #include "types/raw_address.h"
 
 // Mocked compile conditionals, if any
-#ifndef UNUSED_ATTR
-#define UNUSED_ATTR
-#endif
-
 namespace test {
 namespace mock {
 namespace main_shim_l2cap_api {
@@ -90,14 +60,6 @@ struct L2CA_ReadRemoteFeatures {
   uint8_t* operator()(const RawAddress& addr) { return body(addr); };
 };
 extern struct L2CA_ReadRemoteFeatures L2CA_ReadRemoteFeatures;
-// Name: L2CA_UseLegacySecurityModule
-// Params:
-// Returns: void
-struct L2CA_UseLegacySecurityModule {
-  std::function<void()> body{[]() {}};
-  void operator()() { body(); };
-};
-extern struct L2CA_UseLegacySecurityModule L2CA_UseLegacySecurityModule;
 // Name: L2CA_Register
 // Params: uint16_t client_psm, const tL2CAP_APPL_INFO& callbacks, bool
 // enable_snoop, tL2CAP_ERTM_INFO* p_ertm_info, uint16_t my_mtu, uint16_t
@@ -329,17 +291,30 @@ struct L2CA_LeConnectionUpdate {
   };
 };
 extern struct L2CA_LeConnectionUpdate L2CA_LeConnectionUpdate;
-// Name: L2CA_EnableUpdateBleConnParams
+// Name: L2CA_LockBleConnParamsForServiceDiscovery
 // Params: const RawAddress& rem_bda, bool enable
-// Returns: bool
-struct L2CA_EnableUpdateBleConnParams {
-  std::function<bool(const RawAddress& rem_bda, bool enable)> body{
+// Returns: void
+struct L2CA_LockBleConnParamsForServiceDiscovery {
+  std::function<void(const RawAddress& rem_bda, bool enable)> body{
       [](const RawAddress& rem_bda, bool enable) { return false; }};
-  bool operator()(const RawAddress& rem_bda, bool enable) {
+  void operator()(const RawAddress& rem_bda, bool enable) {
     return body(rem_bda, enable);
   };
 };
-extern struct L2CA_EnableUpdateBleConnParams L2CA_EnableUpdateBleConnParams;
+extern struct L2CA_LockBleConnParamsForServiceDiscovery
+    L2CA_LockBleConnParamsForServiceDiscovery;
+// Name: L2CA_LockBleConnParamsForProfileConnection
+// Params: const RawAddress& rem_bda, bool enable
+// Returns: void
+struct L2CA_LockBleConnParamsForProfileConnection {
+  std::function<void(const RawAddress& rem_bda, bool enable)> body{
+      [](const RawAddress& rem_bda, bool enable) { return false; }};
+  void operator()(const RawAddress& rem_bda, bool enable) {
+    return body(rem_bda, enable);
+  };
+};
+extern struct L2CA_LockBleConnParamsForProfileConnection
+    L2CA_LockBleConnParamsForProfileConnection;
 // Name: L2CA_GetRemoteCid
 // Params: uint16_t lcid, uint16_t* rcid
 // Returns: bool

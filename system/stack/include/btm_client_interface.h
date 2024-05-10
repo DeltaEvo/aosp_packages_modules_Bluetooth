@@ -20,15 +20,13 @@
 
 #include "device/include/esco_parameters.h"
 #include "stack/btm/neighbor_inquiry.h"
+#include "stack/btm/power_mode.h"
 #include "stack/include/acl_client_callbacks.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/bt_octets.h"
 #include "stack/include/btm_api_types.h"
 #include "stack/include/btm_ble_api_types.h"
 #include "stack/include/btm_status.h"
-#include "stack/include/hci_error_code.h"
 #include "stack/include/security_client_callbacks.h"
-#include "types/bluetooth/uuid.h"
 #include "types/bt_transport.h"
 #include "types/raw_address.h"
 
@@ -50,41 +48,15 @@ struct btm_client_interface_t {
     void (*BTM_reset_complete)();
   } lifecycle;
 
-  struct {
-    // Server channel number
-    uint8_t (*BTM_AllocateSCN)(void);
-    bool (*BTM_TryAllocateSCN)(uint8_t scn);
-    bool (*BTM_FreeSCN)(uint8_t scn);
-  } scn;
-
-  // Neighbor
-  struct {
-    void (*BTM_CancelInquiry)();
-    tBTM_INQ_INFO* (*BTM_InqDbNext)(tBTM_INQ_INFO* p_cur);
-    tBTM_STATUS (*BTM_ClearInqDb)(const RawAddress* p_bda);
-    tBTM_STATUS (*BTM_SetDiscoverability)(uint16_t inq_mode);
-    tBTM_STATUS (*BTM_SetConnectability)(uint16_t page_mode);
-    tBTM_STATUS (*BTM_StartInquiry)(tBTM_INQ_RESULTS_CB* p_results_cb,
-                                    tBTM_CMPL_CB* p_cmpl_cb);
-    uint16_t (*BTM_IsInquiryActive)(void);
-    tBTM_STATUS (*BTM_SetInquiryMode)(uint8_t mode);
-    void (*BTM_EnableInterlacedInquiryScan)();
-    void (*BTM_EnableInterlacedPageScan)();
-  } neighbor;
-
   // Acl peer and lifecycle
   struct {
-    struct {
-      bool (*SupportTransparentSynchronousData)(const RawAddress& bd_addr);
-    } features;
-
     bool (*BTM_IsAclConnectionUp)(const RawAddress& bd_addr,
                                   tBT_TRANSPORT transport);
     bool (*BTM_ReadConnectedTransportAddress)(RawAddress* bd_addr,
                                               tBT_TRANSPORT transport);
     tBTM_STATUS (*BTM_CancelRemoteDeviceName)(void);
     tBTM_STATUS (*BTM_ReadRemoteDeviceName)(const RawAddress& bd_addr,
-                                            tBTM_CMPL_CB* p_cb,
+                                            tBTM_NAME_CMPL_CB* p_cb,
                                             tBT_TRANSPORT transport);
     uint8_t* (*BTM_ReadRemoteFeatures)(const RawAddress&);
     void (*BTM_ReadDevInfo)(const RawAddress& bd_addr,
@@ -118,61 +90,15 @@ struct btm_client_interface_t {
     tBTM_STATUS (*BTM_ReadRSSI)(const RawAddress& bd_addr, tBTM_CMPL_CB* p_cb);
   } link_controller;
 
-  struct {
-    bool (*BTM_SecAddDevice)(const RawAddress& bd_addr, DEV_CLASS dev_class,
-                             const BD_NAME& bd_name, uint8_t* features,
-                             LinkKey* link_key, uint8_t key_type,
-                             uint8_t pin_length);
-    bool (*BTM_SecAddRmtNameNotifyCallback)(tBTM_RMT_NAME_CALLBACK* p_callback);
-    bool (*BTM_SecDeleteDevice)(const RawAddress& bd_addr);
-    bool (*BTM_SecDeleteRmtNameNotifyCallbac)(
-        tBTM_RMT_NAME_CALLBACK* p_callback);
-    bool (*BTM_SecRegister)(const tBTM_APPL_INFO* p_cb_info);
-    char* (*BTM_SecReadDevName)(const RawAddress& bd_addr);
-    tBTM_STATUS (*BTM_SecBond)(const RawAddress& bd_addr,
-                               tBLE_ADDR_TYPE addr_type,
-                               tBT_TRANSPORT transport,
-                               tBT_DEVICE_TYPE device_type, uint8_t pin_len,
-                               uint8_t* p_pin);
-    tBTM_STATUS (*BTM_SecBondCancel)(const RawAddress& bd_addr);
-    void (*BTM_SecAddBleKey)(const RawAddress& bd_addr,
-                             tBTM_LE_KEY_VALUE* p_le_key,
-                             tBTM_LE_KEY_TYPE key_type);
-    void (*BTM_SecAddBleDevice)(const RawAddress& bd_addr,
-                                tBT_DEVICE_TYPE dev_type,
-                                tBLE_ADDR_TYPE addr_type);
-    void (*BTM_SecClearSecurityFlags)(const RawAddress& bd_addr);
-    uint8_t (*BTM_SecClrService)(uint8_t service_id);
-    uint8_t (*BTM_SecClrServiceByPsm)(uint16_t psm);
-    void (*BTM_RemoteOobDataReply)(tBTM_STATUS res, const RawAddress& bd_addr,
-                                   const Octet16& c, const Octet16& r);
-    void (*BTM_PINCodeReply)(const RawAddress& bd_addr, tBTM_STATUS res,
-                             uint8_t pin_len, uint8_t* p_pin);
-    void (*BTM_ConfirmReqReply)(tBTM_STATUS res, const RawAddress& bd_addr);
-    bool (*BTM_SecDeleteRmtNameNotifyCallback)(
-        tBTM_RMT_NAME_CALLBACK* p_callback);
-    tBTM_STATUS (*BTM_SetEncryption)(const RawAddress& bd_addr,
-                                     tBT_TRANSPORT transport,
-                                     tBTM_SEC_CALLBACK* p_callback,
-                                     void* p_ref_data,
-                                     tBTM_BLE_SEC_ACT sec_act);
-    bool (*BTM_IsEncrypted)(const RawAddress& bd_addr, tBT_TRANSPORT transport);
-    bool (*BTM_SecIsSecurityPending)(const RawAddress& bd_addr);
-    bool (*BTM_IsLinkKeyKnown)(const RawAddress& bd_addr,
-                               tBT_TRANSPORT transport);
-  } security;
-
+  SecurityClientInterface security;
   struct {
     tBTM_STATUS (*BTM_BleGetEnergyInfo)(tBTM_BLE_ENERGY_INFO_CBACK* callback);
     tBTM_STATUS (*BTM_BleObserve)(bool start, uint8_t duration,
                                   tBTM_INQ_RESULTS_CB* p_results_cb,
-                                  tBTM_CMPL_CB* p_cmpl_cb);
+                                  tBTM_CMPL_CB* p_cmpl_cb,
+                                  bool low_latency_scan);
     tBTM_STATUS (*BTM_SetBleDataLength)(const RawAddress& bd_addr,
                                         uint16_t tx_pdu_length);
-    void (*BTM_BleConfirmReply)(const RawAddress& bd_addr, uint8_t res);
-    void (*BTM_BleLoadLocalKeys)(uint8_t key_type, tBTM_BLE_LOCAL_KEYS* p_key);
-    void (*BTM_BlePasskeyReply)(const RawAddress& bd_addr, uint8_t res,
-                                uint32_t passkey);
     void (*BTM_BleReadControllerFeatures)(
         tBTM_BLE_CTRL_FEATURES_CBACK* p_vsc_cback);
     void (*BTM_BleSetConnScanParams)(uint32_t scan_interval,
@@ -208,7 +134,7 @@ struct btm_client_interface_t {
     tBTM_STATUS (*BTM_SetLocalDeviceName)(const char* p_name);
     tBTM_STATUS (*BTM_SetDeviceClass)(DEV_CLASS dev_class);
     bool (*BTM_IsDeviceUp)();
-    uint8_t* (*BTM_ReadDeviceClass)();
+    DEV_CLASS (*BTM_ReadDeviceClass)();
   } local;
 
   struct {

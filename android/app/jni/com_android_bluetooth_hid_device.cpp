@@ -16,11 +16,10 @@
 
 #define LOG_TAG "BluetoothHidDeviceServiceJni"
 
+#include <string.h>
+
 #include "com_android_bluetooth.h"
 #include "hardware/bt_hd.h"
-#include "utils/Log.h"
-
-#include <string.h>
 
 namespace android {
 
@@ -41,7 +40,7 @@ static jbyteArray marshall_bda(RawAddress* bd_addr) {
 
   jbyteArray addr = sCallbackEnv->NewByteArray(sizeof(RawAddress));
   if (!addr) {
-    ALOGE("Fail to new jbyteArray bd addr");
+    log::error("Fail to new jbyteArray bd addr");
     return NULL;
   }
   sCallbackEnv->SetByteArrayRegion(addr, 0, sizeof(RawAddress),
@@ -64,7 +63,7 @@ static void application_state_callback(RawAddress* bd_addr,
   if (bd_addr) {
     addr.reset(marshall_bda(bd_addr));
     if (!addr.get()) {
-      ALOGE("%s: failed to allocate storage for bt_addr", __FUNCTION__);
+      log::error("failed to allocate storage for bt_addr");
       return;
     }
   }
@@ -79,7 +78,7 @@ static void connection_state_callback(RawAddress* bd_addr,
 
   ScopedLocalRef<jbyteArray> addr(sCallbackEnv.get(), marshall_bda(bd_addr));
   if (!addr.get()) {
-    ALOGE("%s: failed to allocate storage for bt_addr", __FUNCTION__);
+    log::error("failed to allocate storage for bt_addr");
     return;
   }
 
@@ -102,7 +101,7 @@ static void set_report_callback(uint8_t type, uint8_t id, uint16_t len,
   ScopedLocalRef<jbyteArray> data(sCallbackEnv.get(),
                                   sCallbackEnv->NewByteArray(len));
   if (!data.get()) {
-    ALOGE("%s: failed to allocate storage for report data", __FUNCTION__);
+    log::error("failed to allocate storage for report data");
     return;
   }
   sCallbackEnv->SetByteArrayRegion(data.get(), 0, len, (jbyte*)p_data);
@@ -124,7 +123,7 @@ static void intr_data_callback(uint8_t report_id, uint16_t len,
   ScopedLocalRef<jbyteArray> data(sCallbackEnv.get(),
                                   sCallbackEnv->NewByteArray(len));
   if (!data.get()) {
-    ALOGE("%s: failed to allocate storage for report data", __FUNCTION__);
+    log::error("failed to allocate storage for report data");
     return;
   }
   sCallbackEnv->SetByteArrayRegion(data.get(), 0, len, (jbyte*)p_data);
@@ -150,77 +149,62 @@ static bthd_callbacks_t sHiddCb = {
     vc_unplug_callback,
 };
 
-static void classInitNative(JNIEnv* env, jclass clazz) {
-  ALOGV("%s: done", __FUNCTION__);
-
-  method_onApplicationStateChanged =
-      env->GetMethodID(clazz, "onApplicationStateChanged", "([BZ)V");
-  method_onConnectStateChanged =
-      env->GetMethodID(clazz, "onConnectStateChanged", "([BI)V");
-  method_onGetReport = env->GetMethodID(clazz, "onGetReport", "(BBS)V");
-  method_onSetReport = env->GetMethodID(clazz, "onSetReport", "(BB[B)V");
-  method_onSetProtocol = env->GetMethodID(clazz, "onSetProtocol", "(B)V");
-  method_onInterruptData = env->GetMethodID(clazz, "onInterruptData", "(B[B)V");
-  method_onVirtualCableUnplug =
-      env->GetMethodID(clazz, "onVirtualCableUnplug", "()V");
-}
-
 static void initNative(JNIEnv* env, jobject object) {
   const bt_interface_t* btif;
   bt_status_t status;
 
-  ALOGV("%s enter", __FUNCTION__);
+  log::verbose("enter");
 
   if ((btif = getBluetoothInterface()) == NULL) {
-    ALOGE("Cannot obtain BT interface");
+    log::error("Cannot obtain BT interface");
     return;
   }
 
   if (sHiddIf != NULL) {
-    ALOGW("Cleaning up interface");
+    log::warn("Cleaning up interface");
     sHiddIf->cleanup();
     sHiddIf = NULL;
   }
 
   if (mCallbacksObj != NULL) {
-    ALOGW("Cleaning up callback object");
+    log::warn("Cleaning up callback object");
     env->DeleteGlobalRef(mCallbacksObj);
     mCallbacksObj = NULL;
   }
 
   if ((sHiddIf = (bthd_interface_t*)btif->get_profile_interface(
            BT_PROFILE_HIDDEV_ID)) == NULL) {
-    ALOGE("Cannot obtain interface");
+    log::error("Cannot obtain interface");
     return;
   }
 
   if ((status = sHiddIf->init(&sHiddCb)) != BT_STATUS_SUCCESS) {
-    ALOGE("Failed to initialize interface (%d)", status);
+    log::error("Failed to initialize interface ({})", bt_status_text(status));
     sHiddIf = NULL;
     return;
   }
 
   mCallbacksObj = env->NewGlobalRef(object);
 
-  ALOGV("%s done", __FUNCTION__);
+  log::verbose("done");
 }
 
-static void cleanupNative(JNIEnv* env, jobject object) {
-  ALOGV("%s enter", __FUNCTION__);
+static void cleanupNative(JNIEnv* env, jobject /* object */) {
+  log::verbose("enter");
 
   if (sHiddIf != NULL) {
-    ALOGI("Cleaning up interface");
+    log::info("Cleaning up interface");
     sHiddIf->cleanup();
     sHiddIf = NULL;
   }
 
   if (mCallbacksObj != NULL) {
-    ALOGI("Cleaning up callback object");
+    log::info("Cleaning up callback object");
     env->DeleteGlobalRef(mCallbacksObj);
     mCallbacksObj = NULL;
   }
 
-  ALOGV("%s done", __FUNCTION__);
+  log::verbose("done");
 }
 
 static void fill_qos(JNIEnv* env, jintArray in, bthd_qos_param_t* out) {
@@ -252,14 +236,14 @@ static void fill_qos(JNIEnv* env, jintArray in, bthd_qos_param_t* out) {
   free(buf);
 }
 
-static jboolean registerAppNative(JNIEnv* env, jobject thiz, jstring name,
+static jboolean registerAppNative(JNIEnv* env, jobject /* thiz */, jstring name,
                                   jstring description, jstring provider,
                                   jbyte subclass, jbyteArray descriptors,
                                   jintArray p_in_qos, jintArray p_out_qos) {
-  ALOGV("%s enter", __FUNCTION__);
+  log::verbose("enter");
 
   if (!sHiddIf) {
-    ALOGE("%s: Failed to get the Bluetooth HIDD Interface", __func__);
+    log::error("Failed to get the Bluetooth HIDD Interface");
     return JNI_FALSE;
   }
 
@@ -288,7 +272,7 @@ static jboolean registerAppNative(JNIEnv* env, jobject thiz, jstring name,
 
     bt_status_t ret = sHiddIf->register_app(&app_param, &in_qos, &out_qos);
 
-    ALOGV("%s: register_app() returned %d", __FUNCTION__, ret);
+    log::verbose("register_app() returned {}", bt_status_text(ret));
 
     if (ret == BT_STATUS_SUCCESS) {
       result = JNI_TRUE;
@@ -301,40 +285,40 @@ static jboolean registerAppNative(JNIEnv* env, jobject thiz, jstring name,
     free(data);
   }
 
-  ALOGV("%s done (%d)", __FUNCTION__, result);
+  log::verbose("done ({})", result);
 
   return result;
 }
 
-static jboolean unregisterAppNative(JNIEnv* env, jobject thiz) {
-  ALOGV("%s enter", __FUNCTION__);
+static jboolean unregisterAppNative(JNIEnv* /* env */, jobject /* thiz */) {
+  log::verbose("enter");
 
   jboolean result = JNI_FALSE;
 
   if (!sHiddIf) {
-    ALOGE("%s: Failed to get the Bluetooth HIDD Interface", __func__);
+    log::error("Failed to get the Bluetooth HIDD Interface");
     return JNI_FALSE;
   }
 
   bt_status_t ret = sHiddIf->unregister_app();
 
-  ALOGV("%s: unregister_app() returned %d", __FUNCTION__, ret);
+  log::verbose("unregister_app() returned {}", bt_status_text(ret));
 
   if (ret == BT_STATUS_SUCCESS) {
     result = JNI_TRUE;
   }
 
-  ALOGV("%s done (%d)", __FUNCTION__, result);
+  log::verbose("done ({})", result);
 
   return result;
 }
 
-static jboolean sendReportNative(JNIEnv* env, jobject thiz, jint id,
+static jboolean sendReportNative(JNIEnv* env, jobject /* thiz */, jint id,
                                  jbyteArray data) {
   jboolean result = JNI_FALSE;
 
   if (!sHiddIf) {
-    ALOGE("%s: Failed to get the Bluetooth HIDD Interface", __func__);
+    log::error("Failed to get the Bluetooth HIDD Interface");
     return JNI_FALSE;
   }
 
@@ -360,12 +344,12 @@ static jboolean sendReportNative(JNIEnv* env, jobject thiz, jint id,
   return result;
 }
 
-static jboolean replyReportNative(JNIEnv* env, jobject thiz, jbyte type,
+static jboolean replyReportNative(JNIEnv* env, jobject /* thiz */, jbyte type,
                                   jbyte id, jbyteArray data) {
-  ALOGV("%s enter", __FUNCTION__);
+  log::verbose("enter");
 
   if (!sHiddIf) {
-    ALOGE("%s: Failed to get the Bluetooth HIDD Interface", __func__);
+    log::error("Failed to get the Bluetooth HIDD Interface");
     return JNI_FALSE;
   }
 
@@ -383,7 +367,7 @@ static jboolean replyReportNative(JNIEnv* env, jobject thiz, jbyte type,
     bt_status_t ret =
         sHiddIf->send_report((bthd_report_type_t)report_type, id, size, buf);
 
-    ALOGV("%s: send_report() returned %d", __FUNCTION__, ret);
+    log::verbose("send_report() returned {}", bt_status_text(ret));
 
     if (ret == BT_STATUS_SUCCESS) {
       result = JNI_TRUE;
@@ -392,16 +376,17 @@ static jboolean replyReportNative(JNIEnv* env, jobject thiz, jbyte type,
     free(buf);
   }
 
-  ALOGV("%s done (%d)", __FUNCTION__, result);
+  log::verbose("done ({})", result);
 
   return result;
 }
 
-static jboolean reportErrorNative(JNIEnv* env, jobject thiz, jbyte error) {
-  ALOGV("%s enter", __FUNCTION__);
+static jboolean reportErrorNative(JNIEnv* /* env */, jobject /* thiz */,
+                                  jbyte error) {
+  log::verbose("enter");
 
   if (!sHiddIf) {
-    ALOGE("%s: Failed to get the Bluetooth HIDD Interface", __func__);
+    log::error("Failed to get the Bluetooth HIDD Interface");
     return JNI_FALSE;
   }
 
@@ -409,22 +394,22 @@ static jboolean reportErrorNative(JNIEnv* env, jobject thiz, jbyte error) {
 
   bt_status_t ret = sHiddIf->report_error(error);
 
-  ALOGV("%s: report_error() returned %d", __FUNCTION__, ret);
+  log::verbose("report_error() returned {}", bt_status_text(ret));
 
   if (ret == BT_STATUS_SUCCESS) {
     result = JNI_TRUE;
   }
 
-  ALOGV("%s done (%d)", __FUNCTION__, result);
+  log::verbose("done ({})", result);
 
   return result;
 }
 
-static jboolean unplugNative(JNIEnv* env, jobject thiz) {
-  ALOGV("%s enter", __FUNCTION__);
+static jboolean unplugNative(JNIEnv* /* env */, jobject /* thiz */) {
+  log::verbose("enter");
 
   if (!sHiddIf) {
-    ALOGE("%s: Failed to get the Bluetooth HIDD Interface", __func__);
+    log::error("Failed to get the Bluetooth HIDD Interface");
     return JNI_FALSE;
   }
 
@@ -432,22 +417,23 @@ static jboolean unplugNative(JNIEnv* env, jobject thiz) {
 
   bt_status_t ret = sHiddIf->virtual_cable_unplug();
 
-  ALOGV("%s: virtual_cable_unplug() returned %d", __FUNCTION__, ret);
+  log::verbose("virtual_cable_unplug() returned {}", bt_status_text(ret));
 
   if (ret == BT_STATUS_SUCCESS) {
     result = JNI_TRUE;
   }
 
-  ALOGV("%s done (%d)", __FUNCTION__, result);
+  log::verbose("done ({})", result);
 
   return result;
 }
 
-static jboolean connectNative(JNIEnv* env, jobject thiz, jbyteArray address) {
-  ALOGV("%s enter", __FUNCTION__);
+static jboolean connectNative(JNIEnv* env, jobject /* thiz */,
+                              jbyteArray address) {
+  log::verbose("enter");
 
   if (!sHiddIf) {
-    ALOGE("%s: Failed to get the Bluetooth HIDD Interface", __func__);
+    log::error("Failed to get the Bluetooth HIDD Interface");
     return JNI_FALSE;
   }
 
@@ -455,28 +441,28 @@ static jboolean connectNative(JNIEnv* env, jobject thiz, jbyteArray address) {
 
   jbyte* addr = env->GetByteArrayElements(address, NULL);
   if (!addr) {
-    ALOGE("Bluetooth device address null");
+    log::error("Bluetooth device address null");
     return JNI_FALSE;
   }
 
   bt_status_t ret = sHiddIf->connect((RawAddress*)addr);
 
-  ALOGV("%s: connect() returned %d", __FUNCTION__, ret);
+  log::verbose("connect() returned {}", bt_status_text(ret));
 
   if (ret == BT_STATUS_SUCCESS) {
     result = JNI_TRUE;
   }
 
-  ALOGV("%s done (%d)", __FUNCTION__, result);
+  log::verbose("done ({})", result);
 
   return result;
 }
 
-static jboolean disconnectNative(JNIEnv* env, jobject thiz) {
-  ALOGV("%s enter", __FUNCTION__);
+static jboolean disconnectNative(JNIEnv* /* env */, jobject /* thiz */) {
+  log::verbose("enter");
 
   if (!sHiddIf) {
-    ALOGE("%s: Failed to get the Bluetooth HIDD Interface", __func__);
+    log::error("Failed to get the Bluetooth HIDD Interface");
     return JNI_FALSE;
   }
 
@@ -484,36 +470,51 @@ static jboolean disconnectNative(JNIEnv* env, jobject thiz) {
 
   bt_status_t ret = sHiddIf->disconnect();
 
-  ALOGV("%s: disconnect() returned %d", __FUNCTION__, ret);
+  log::verbose("disconnect() returned {}", bt_status_text(ret));
 
   if (ret == BT_STATUS_SUCCESS) {
     result = JNI_TRUE;
   }
 
-  ALOGV("%s done (%d)", __FUNCTION__, result);
+  log::verbose("done ({})", result);
 
   return result;
 }
 
-static JNINativeMethod sMethods[] = {
-    {"classInitNative", "()V", (void*)classInitNative},
-    {"initNative", "()V", (void*)initNative},
-    {"cleanupNative", "()V", (void*)cleanupNative},
-    {"registerAppNative",
-     "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;B[B[I[I)Z",
-     (void*)registerAppNative},
-    {"unregisterAppNative", "()Z", (void*)unregisterAppNative},
-    {"sendReportNative", "(I[B)Z", (void*)sendReportNative},
-    {"replyReportNative", "(BB[B)Z", (void*)replyReportNative},
-    {"reportErrorNative", "(B)Z", (void*)reportErrorNative},
-    {"unplugNative", "()Z", (void*)unplugNative},
-    {"connectNative", "([B)Z", (void*)connectNative},
-    {"disconnectNative", "()Z", (void*)disconnectNative},
-};
-
 int register_com_android_bluetooth_hid_device(JNIEnv* env) {
-  return jniRegisterNativeMethods(
-      env, "com/android/bluetooth/hid/HidDeviceNativeInterface", sMethods,
-      NELEM(sMethods));
+  const JNINativeMethod methods[] = {
+      {"initNative", "()V", (void*)initNative},
+      {"cleanupNative", "()V", (void*)cleanupNative},
+      {"registerAppNative",
+       "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;B[B[I[I)Z",
+       (void*)registerAppNative},
+      {"unregisterAppNative", "()Z", (void*)unregisterAppNative},
+      {"sendReportNative", "(I[B)Z", (void*)sendReportNative},
+      {"replyReportNative", "(BB[B)Z", (void*)replyReportNative},
+      {"reportErrorNative", "(B)Z", (void*)reportErrorNative},
+      {"unplugNative", "()Z", (void*)unplugNative},
+      {"connectNative", "([B)Z", (void*)connectNative},
+      {"disconnectNative", "()Z", (void*)disconnectNative},
+  };
+  const int result = REGISTER_NATIVE_METHODS(
+      env, "com/android/bluetooth/hid/HidDeviceNativeInterface", methods);
+  if (result != 0) {
+    return result;
+  }
+
+  const JNIJavaMethod javaMethods[] = {
+      {"onApplicationStateChanged", "([BZ)V",
+       &method_onApplicationStateChanged},
+      {"onConnectStateChanged", "([BI)V", &method_onConnectStateChanged},
+      {"onGetReport", "(BBS)V", &method_onGetReport},
+      {"onSetReport", "(BB[B)V", &method_onSetReport},
+      {"onSetProtocol", "(B)V", &method_onSetProtocol},
+      {"onInterruptData", "(B[B)V", &method_onInterruptData},
+      {"onVirtualCableUnplug", "()V", &method_onVirtualCableUnplug},
+  };
+  GET_JAVA_METHODS(env, "com/android/bluetooth/hid/HidDeviceNativeInterface",
+                   javaMethods);
+
+  return 0;
 }
 }  // namespace android

@@ -26,22 +26,20 @@ import android.os.Looper;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
-import androidx.test.rule.ServiceTestRule;
 import androidx.test.runner.AndroidJUnit4;
 
-import com.android.bluetooth.R;
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.btservice.AdapterService;
 
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 @MediumTest
 @RunWith(AndroidJUnit4.class)
@@ -50,8 +48,7 @@ public class McpServiceTest {
     private McpService mMcpService;
     private Context mTargetContext;
 
-    @Rule
-    public final ServiceTestRule mServiceRule = new ServiceTestRule();
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
 
     @Mock
     private AdapterService mAdapterService;
@@ -67,16 +64,14 @@ public class McpServiceTest {
             Looper.prepare();
         }
 
-        MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
 
         mAdapter = BluetoothAdapter.getDefaultAdapter();
 
-        doReturn(true).when(mAdapterService).isStartedProfile(anyString());
         McpService.setMediaControlProfileForTesting(mMediaControlProfile);
-        TestUtils.startService(mServiceRule, McpService.class);
-        mMcpService = McpService.getMcpService();
-        Assert.assertNotNull(mMcpService);
+        mMcpService = new McpService(mTargetContext);
+        mMcpService.start();
+        mMcpService.setAvailable(true);
     }
 
     @After
@@ -85,8 +80,7 @@ public class McpServiceTest {
             return;
         }
 
-        doReturn(false).when(mAdapterService).isStartedProfile(anyString());
-        TestUtils.stopService(mServiceRule, McpService.class);
+        mMcpService.stop();
         mMcpService = McpService.getMcpService();
         Assert.assertNull(mMcpService);
         reset(mMediaControlProfile);
@@ -120,21 +114,13 @@ public class McpServiceTest {
 
     @Test
     public void testStopMcpService() {
-        InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
-            public void run() {
-                Assert.assertTrue(mMcpService.stop());
-            }
-        });
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(mMcpService::stop);
         Assert.assertNull(McpService.getMcpService());
         Assert.assertNull(McpService.getMediaControlProfile());
 
         McpService.setMediaControlProfileForTesting(mMediaControlProfile);
         // Try to restart the service. Note: must be done on the main thread
-        InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
-            public void run() {
-                Assert.assertTrue(mMcpService.start());
-            }
-        });
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(mMcpService::start);
     }
 
     @Test

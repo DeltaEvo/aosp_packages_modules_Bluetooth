@@ -23,40 +23,29 @@
  *
  ******************************************************************************/
 
-#include "bt_target.h"  // Must be first to define build configuration
 #include "bta/ag/bta_ag_int.h"
 #include "bta/include/bta_ag_api.h"
 #include "device/include/esco_parameters.h"
-#include "osi/include/allocator.h"
-#include "osi/include/compat.h"
-#include "stack/include/bt_types.h"
+#include "internal_include/bt_target.h"
 
-#ifndef BTA_AG_CIND_INFO
+/* Set the CIND to match HFP 1.5 */
 #define BTA_AG_CIND_INFO                                                       \
-  "(\"call\",(0,1)),(\"callsetup\",(0-3)),(\"service\",(0-3)),(\"signal\",(0-" \
-  "6)),(\"roam\",(0,1)),(\"battchg\",(0-5)),(\"callheld\",(0-2)),(\"bearer\"," \
-  "(0-7))"
-#endif
+  "(\"call\",(0,1)),(\"callsetup\",(0-3)),(\"service\",(0-1)),(\"signal\",(0-" \
+  "5)),(\"roam\",(0,1)),(\"battchg\",(0-5)),(\"callheld\",(0-2))"
 
-#ifndef BTA_AG_CHLD_VAL_ECC
-#define BTA_AG_CHLD_VAL_ECC "(0,1,1x,2,2x,3,4)"
-#endif
+#define BTA_AG_CHLD_VAL_ECC "(0,1,1x,2,2x,3)"
 
-#ifndef BTA_AG_CHLD_VAL
-#define BTA_AG_CHLD_VAL "(0,1,2,3,4)"
-#endif
+#define BTA_AG_CHLD_VAL "(0,1,2,3)"
 
 #ifndef BTA_AG_CONN_TIMEOUT
 #define BTA_AG_CONN_TIMEOUT 5000
 #endif
 
-#ifndef BTA_AG_SCO_PKT_TYPES
 /* S1 packet type setting from HFP 1.5 spec */
 #define BTA_AG_SCO_PKT_TYPES /* BTM_SCO_LINK_ALL_PKT_MASK */     \
   (BTM_SCO_LINK_ONLY_MASK | ESCO_PKT_TYPES_MASK_EV3 |            \
    ESCO_PKT_TYPES_MASK_NO_3_EV3 | ESCO_PKT_TYPES_MASK_NO_2_EV5 | \
    ESCO_PKT_TYPES_MASK_NO_3_EV5)
-#endif
 
 #ifndef BTA_AG_BIND_INFO
 #define BTA_AG_BIND_INFO "(1)"

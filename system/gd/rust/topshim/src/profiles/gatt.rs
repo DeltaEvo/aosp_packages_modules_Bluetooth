@@ -84,6 +84,8 @@ pub mod ffi {
         org_id: u8,
         tds_flags: u8,
         tds_flags_mask: u8,
+        meta_data_type: u8,
+        meta_data: Vec<u8>,
         data: Vec<u8>,
         data_mask: Vec<u8>,
         irk: [u8; 16],
@@ -97,6 +99,12 @@ pub mod ffi {
         pub pattern: Vec<u8>,
     }
 
+    #[derive(Debug, Clone)]
+    pub struct RustMsftAdvMonitorAddress {
+        pub addr_type: u8,
+        pub bd_addr: RawAddress,
+    }
+
     // Defined in C++ and needs a translation in shim.
     #[derive(Debug, Clone)]
     pub struct RustMsftAdvMonitor {
@@ -104,7 +112,9 @@ pub mod ffi {
         pub rssi_low_threshold: u8,
         pub rssi_low_timeout: u8,
         pub rssi_sampling_period: u8,
+        pub condition_type: u8,
         pub patterns: Vec<RustMsftAdvMonitorPattern>,
+        pub addr_info: RustMsftAdvMonitorAddress,
     }
 
     #[derive(Debug, Clone)]
@@ -197,8 +207,10 @@ pub mod ffi {
         fn SetScanParameters(
             self: Pin<&mut BleScannerIntf>,
             scanner_id: u8,
+            scan_type: u8,
             scan_interval: u16,
             scan_window: u16,
+            scan_phy: u8,
         );
 
         fn BatchscanConfigStorage(
@@ -426,6 +438,8 @@ pub type GattFilterParam = ffi::RustGattFilterParam;
 pub type ApcfCommand = ffi::RustApcfCommand;
 pub type MsftAdvMonitor = ffi::RustMsftAdvMonitor;
 pub type MsftAdvMonitorPattern = ffi::RustMsftAdvMonitorPattern;
+pub type MsftAdvMonitorAddress = ffi::RustMsftAdvMonitorAddress;
+
 pub type AdvertiseParameters = ffi::RustAdvertiseParameters;
 pub type PeriodicAdvertisingParameters = ffi::RustPeriodicAdvertisingParameters;
 
@@ -1392,10 +1406,11 @@ impl GattServer {
         &self,
         server_if: i32,
         addr: &RawAddress,
+        addr_type: u8,
         is_direct: bool,
         transport: i32,
     ) -> BtStatus {
-        BtStatus::from(ccall!(self, connect, server_if, addr, is_direct, transport))
+        BtStatus::from(ccall!(self, connect, server_if, addr, addr_type, is_direct, transport))
     }
 
     pub fn disconnect(&self, server_if: i32, addr: &RawAddress, conn_id: i32) -> BtStatus {
@@ -1538,8 +1553,23 @@ impl BleScanner {
         mutcxxcall!(self, MsftAdvMonitorEnable, call_id, enable);
     }
 
-    pub fn set_scan_parameters(&mut self, scanner_id: u8, scan_interval: u16, scan_window: u16) {
-        mutcxxcall!(self, SetScanParameters, scanner_id, scan_interval, scan_window);
+    pub fn set_scan_parameters(
+        &mut self,
+        scanner_id: u8,
+        scan_type: u8,
+        scan_interval: u16,
+        scan_window: u16,
+        scan_phy: u8,
+    ) {
+        mutcxxcall!(
+            self,
+            SetScanParameters,
+            scanner_id,
+            scan_type,
+            scan_interval,
+            scan_window,
+            scan_phy
+        );
     }
 
     pub fn batchscan_config_storage(

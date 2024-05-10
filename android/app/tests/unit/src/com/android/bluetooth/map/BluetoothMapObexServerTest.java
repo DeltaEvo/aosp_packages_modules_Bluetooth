@@ -40,14 +40,15 @@ import androidx.test.runner.AndroidJUnit4;
 import com.android.bluetooth.BluetoothMethodProxy;
 import com.android.bluetooth.mapapi.BluetoothMapContract;
 import com.android.obex.ResponseCodes;
-import com.android.obex.Operation;
 
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 @SmallTest
 @RunWith(AndroidJUnit4.class)
@@ -68,6 +69,8 @@ public class BluetoothMapObexServerTest {
     private BluetoothMapObexServer mObexServer;
     private BluetoothMapAppParams mParams;
 
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock
     private Context mContext;
     @Mock
@@ -81,7 +84,6 @@ public class BluetoothMapObexServerTest {
 
     @Before
     public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
         BluetoothMethodProxy.setInstanceForTesting(mMapMethodProxy);
         doReturn(mProviderClient).when(
                 mMapMethodProxy).contentResolverAcquireUnstableContentProviderClient(any(), any());

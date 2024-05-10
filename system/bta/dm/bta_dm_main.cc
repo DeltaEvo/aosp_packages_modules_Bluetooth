@@ -21,152 +21,27 @@
  *  This is the main implementation file for the BTA device manager.
  *
  ******************************************************************************/
+#include <base/strings/stringprintf.h>
+#include <stddef.h>
 
-#include "bt_trace.h"
+#include "bta/dm/bta_dm_device_search.h"
+#include "bta/dm/bta_dm_disc.h"
+#include "bta/dm/bta_dm_gatt_client.h"
 #include "bta/dm/bta_dm_int.h"
-#include "stack/include/bt_hdr.h"
-#include "stack/include/bt_types.h"
+#include "bta/dm/bta_dm_sec_int.h"
+#include "main/shim/dumpsys.h"
 
-/*****************************************************************************
- * Constants and types
- ****************************************************************************/
-
+tBTA_DM_ACL_CB bta_dm_acl_cb;
 tBTA_DM_CB bta_dm_cb;
-tBTA_DM_SEARCH_CB bta_dm_search_cb;
 tBTA_DM_DI_CB bta_dm_di_cb;
 
-/*******************************************************************************
- *
- * Function         bta_dm_sm_search_disable
- *
- * Description     unregister BTA SEARCH DM
- *
- *
- * Returns          void
- *
- ******************************************************************************/
-void bta_dm_search_sm_disable() { bta_sys_deregister(BTA_ID_DM_SEARCH); }
+tBTA_DM_SEC_CB bta_dm_sec_cb;
 
-/*******************************************************************************
- *
- * Function         bta_dm_search_sm_execute
- *
- * Description      State machine event handling function for DM
- *
- *
- * Returns          void
- *
- ******************************************************************************/
-bool bta_dm_search_sm_execute(BT_HDR_RIGID* p_msg) {
-  LOG_INFO("bta_dm_search_sm_execute state:%d, event:0x%x",
-           bta_dm_search_get_state(), p_msg->event);
-
-  tBTA_DM_MSG* message = (tBTA_DM_MSG*)p_msg;
-  switch (bta_dm_search_get_state()) {
-    case BTA_DM_SEARCH_IDLE:
-      switch (p_msg->event) {
-        case BTA_DM_API_SEARCH_EVT:
-          bta_dm_search_set_state(BTA_DM_SEARCH_ACTIVE);
-          bta_dm_search_start(message);
-          break;
-        case BTA_DM_API_DISCOVER_EVT:
-          bta_dm_search_set_state(BTA_DM_DISCOVER_ACTIVE);
-          bta_dm_discover(message);
-          break;
-        case BTA_DM_SDP_RESULT_EVT:
-          bta_dm_free_sdp_db();
-          break;
-        case BTA_DM_DISC_CLOSE_TOUT_EVT:
-          bta_dm_close_gatt_conn(message);
-          break;
-        default:
-          LOG_INFO("Received unexpected event 0x%x in state %d", p_msg->event,
-                   bta_dm_search_cb.state);
-      }
-      break;
-    case BTA_DM_SEARCH_ACTIVE:
-      switch (p_msg->event) {
-        case BTA_DM_REMT_NAME_EVT:
-          bta_dm_rmt_name(message);
-          break;
-        case BTA_DM_SEARCH_CMPL_EVT:
-          bta_dm_search_cmpl();
-          break;
-        case BTA_DM_DISCOVERY_RESULT_EVT:
-          bta_dm_search_result(message);
-          break;
-        case BTA_DM_DISC_CLOSE_TOUT_EVT:
-          bta_dm_close_gatt_conn(message);
-          break;
-        case BTA_DM_API_DISCOVER_EVT:
-          bta_dm_queue_disc(message);
-          break;
-        default:
-          LOG_INFO("Received unexpected event 0x%x in state %d", p_msg->event,
-                   bta_dm_search_cb.state);
-      }
-      break;
-    case BTA_DM_SEARCH_CANCELLING:
-      switch (p_msg->event) {
-        case BTA_DM_API_SEARCH_EVT:
-          bta_dm_queue_search(message);
-          break;
-        case BTA_DM_API_DISCOVER_EVT:
-          bta_dm_queue_disc(message);
-          break;
-        case BTA_DM_SDP_RESULT_EVT:
-        case BTA_DM_REMT_NAME_EVT:
-        case BTA_DM_SEARCH_CMPL_EVT:
-        case BTA_DM_DISCOVERY_RESULT_EVT:
-          bta_dm_search_set_state(BTA_DM_SEARCH_IDLE);
-          bta_dm_free_sdp_db();
-          bta_dm_search_cancel_notify();
-          bta_dm_execute_queued_request();
-          break;
-        case BTA_DM_DISC_CLOSE_TOUT_EVT:
-          if (bluetooth::common::init_flags::
-                  bta_dm_clear_conn_id_on_client_close_is_enabled()) {
-            bta_dm_close_gatt_conn(message);
-            break;
-          }
-          [[fallthrough]];
-        default:
-          LOG_INFO("Received unexpected event 0x%x in state %d", p_msg->event,
-                   bta_dm_search_cb.state);
-      }
-      break;
-    case BTA_DM_DISCOVER_ACTIVE:
-      switch (p_msg->event) {
-        case BTA_DM_REMT_NAME_EVT:
-          bta_dm_disc_rmt_name(message);
-          break;
-        case BTA_DM_SDP_RESULT_EVT:
-          bta_dm_sdp_result(message);
-          break;
-        case BTA_DM_SEARCH_CMPL_EVT:
-          bta_dm_search_cmpl();
-          break;
-        case BTA_DM_DISCOVERY_RESULT_EVT:
-          bta_dm_disc_result(message);
-          break;
-        case BTA_DM_API_SEARCH_EVT:
-          bta_dm_queue_search(message);
-          break;
-        case BTA_DM_API_DISCOVER_EVT:
-          bta_dm_queue_disc(message);
-          break;
-        case BTA_DM_DISC_CLOSE_TOUT_EVT:
-          if (bluetooth::common::init_flags::
-                  bta_dm_clear_conn_id_on_client_close_is_enabled()) {
-            bta_dm_close_gatt_conn(message);
-            break;
-          }
-          [[fallthrough]];
-        default:
-          LOG_INFO("Received unexpected event 0x%x in state %d", p_msg->event,
-                   bta_dm_search_cb.state);
-      }
-      break;
-  }
-  return true;
+#define DUMPSYS_TAG "shim::legacy::bta::dm"
+void DumpsysBtaDm(int fd) {
+  LOG_DUMPSYS_TITLE(fd, DUMPSYS_TAG);
+  DumpsysBtaDmDisc(fd);
+  DumpsysBtaDmSearch(fd);
+  DumpsysBtaDmGattClient(fd);
 }
+#undef DUMPSYS_TAG

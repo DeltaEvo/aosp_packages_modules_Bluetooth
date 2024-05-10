@@ -16,17 +16,19 @@
 
 #pragma once
 
+#include <bluetooth/log.h>
 #include <flatbuffers/flatbuffers.h>
+
 #include <chrono>
 #include <functional>
 #include <future>
 #include <map>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "common/bind.h"
-#include "dumpsys_data_generated.h"
 #include "os/handler.h"
 #include "os/log.h"
 #include "os/thread.h"
@@ -60,11 +62,19 @@ public:
    list_.push_back(&T::Factory);
  }
 
+ // Return the number of modules in this list
+ size_t NumModules() const {
+   return list_.size();
+ }
+
  private:
   std::vector<const ModuleFactory*> list_;
 };
 
-using DumpsysDataFinisher = std::function<void(DumpsysDataBuilder* dumpsys_data_builder)>;
+struct DumpsysDataBuilder;
+using DumpsysDataFinisher = std::function<void(DumpsysDataBuilder*)>;
+
+extern DumpsysDataFinisher EmptyDumpsysDataFinisher;
 
 // Each leaf node module must have a factory like so:
 //
@@ -80,6 +90,7 @@ class Module {
 
  public:
   virtual ~Module() = default;
+
  protected:
   // Populate the provided list with modules that must start before yours
   virtual void ListDependencies(ModuleList* list) const = 0;
@@ -90,9 +101,6 @@ class Module {
 
   // Release all resources, you're about to be deleted
   virtual void Stop() = 0;
-
-  // Get relevant state data from the module
-  virtual DumpsysDataFinisher GetDumpsysData(flatbuffers::FlatBufferBuilder* builder) const;
 
   virtual std::string ToString() const = 0;
 
@@ -114,6 +122,8 @@ class Module {
   void CallOn(T* obj, Functor&& functor, Args&&... args) {
     GetHandler()->CallOn(obj, std::forward<Functor>(functor), std::forward<Args>(args)...);
   }
+
+  virtual DumpsysDataFinisher GetDumpsysData(flatbuffers::FlatBufferBuilder* builder) const;
 
  private:
   Module* GetDependency(const ModuleFactory* module) const;
@@ -159,17 +169,6 @@ class ModuleRegistry {
   std::map<const ModuleFactory*, Module*> started_modules_;
   std::vector<const ModuleFactory*> start_order_;
   std::string last_instance_;
-};
-
-class ModuleDumper {
- public:
-  ModuleDumper(const ModuleRegistry& module_registry, const char* title)
-      : module_registry_(module_registry), title_(title) {}
-  void DumpState(std::string* output) const;
-
- private:
-  const ModuleRegistry& module_registry_;
-  const std::string title_;
 };
 
 class TestModuleRegistry : public ModuleRegistry {
@@ -229,7 +228,7 @@ class FuzzTestModuleRegistry : public TestModuleRegistry {
 
   void WaitForIdleAndStopAll() {
     if (!GetTestThread().GetReactor()->WaitForIdle(std::chrono::milliseconds(100))) {
-      LOG_ERROR("idle timed out");
+      log::error("idle timed out");
     }
     StopAll();
   }

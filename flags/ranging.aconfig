@@ -1,0 +1,17 @@
+package: "com.android.bluetooth.flags"
+container: "com.android.btservices"
+
+flag {
+    name: "channel_sounding"
+    is_exported: true
+    namespace: "bluetooth"
+    description: "Enable Channel Sounding"
+    bug: "317683528"
+}
+
+flag {
+    name: "channel_sounding_in_stack"
+    namespace: "bluetooth"
+    description: "Enable Channel Sounding in the Bluetooth stack"
+    bug: "324185011"
+}

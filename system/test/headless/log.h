@@ -16,20 +16,15 @@
 
 #pragma once
 
-#include <assert.h>
 #include <log/log.h>
-#include <stdio.h>
 #include <sys/syscall.h> /* Definition of SYS_* constants */
 #include <unistd.h>
 
 #include <chrono>
-#include <ctime>
 #include <string>
 
 #include "build_timestamp.h"  // generated
 
-void enable_logging();
-void log_logging();
 long long GetTimestampMs();
 
 // Internal to headless below

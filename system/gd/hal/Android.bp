@@ -10,6 +10,7 @@ package {
 filegroup {
     name: "BluetoothHalSources",
     srcs: [
+        "link_clocker.cc",
         "snoop_logger.cc",
         "snoop_logger_socket.cc",
         "snoop_logger_socket_thread.cc",
@@ -20,9 +21,9 @@ filegroup {
 filegroup {
     name: "BluetoothHalTestSources",
     srcs: [
-        "snoop_logger_test.cc",
         "snoop_logger_socket_test.cc",
         "snoop_logger_socket_thread_test.cc",
+        "snoop_logger_test.cc",
     ],
 }
 

@@ -15,11 +15,12 @@
  */
 
 #include "main/shim/metrics_api.h"
-#include "gd/hci/address.h"
-#include "gd/metrics/counter_metrics.h"
-#include "gd/os/metrics.h"
+
+#include "hci/address.h"
 #include "main/shim/entry.h"
 #include "main/shim/helpers.h"
+#include "metrics/counter_metrics.h"
+#include "os/metrics.h"
 #include "types/raw_address.h"
 
 using bluetooth::hci::Address;
@@ -64,6 +65,35 @@ void LogMetricA2dpPlaybackEvent(const RawAddress& raw_address,
   Address address = bluetooth::ToGdAddress(raw_address);
   bluetooth::os::LogMetricA2dpPlaybackEvent(address, playback_state,
                                             audio_coding_mode);
+}
+
+void LogMetricA2dpSessionMetricsEvent(
+    const RawAddress& raw_address, int64_t audio_duration_ms,
+    int media_timer_min_ms, int media_timer_max_ms, int media_timer_avg_ms,
+    int total_scheduling_count, int buffer_overruns_max_count,
+    int buffer_overruns_total, float buffer_underruns_average,
+    int buffer_underruns_count, int64_t codec_index, bool is_a2dp_offload) {
+  Address address = bluetooth::ToGdAddress(raw_address);
+  bluetooth::os::LogMetricA2dpSessionMetricsEvent(
+      address, audio_duration_ms, media_timer_min_ms, media_timer_max_ms,
+      media_timer_avg_ms, total_scheduling_count, buffer_overruns_max_count,
+      buffer_overruns_total, buffer_underruns_average, buffer_underruns_count,
+      codec_index, is_a2dp_offload);
+}
+
+void LogMetricHfpPacketLossStats(const RawAddress& raw_address,
+                                 int num_decoded_frames,
+                                 double packet_loss_ratio,
+                                 uint16_t codec_type) {
+  Address address = bluetooth::ToGdAddress(raw_address);
+  bluetooth::os::LogMetricHfpPacketLossStats(address, num_decoded_frames,
+                                             packet_loss_ratio, codec_type);
+}
+
+void LogMetricMmcTranscodeRttStats(int maximum_rtt, double mean_rtt,
+                                   int num_requests, int codec_type) {
+  bluetooth::os::LogMetricMmcTranscodeRttStats(maximum_rtt, mean_rtt,
+                                               num_requests, codec_type);
 }
 
 void LogMetricReadRssiResult(const RawAddress& raw_address, uint16_t handle,
@@ -146,5 +176,17 @@ bool CountCounterMetrics(int32_t key, int64_t count) {
   }
   return counter_metrics->Count(key, count);
 }
+
+void LogMetricBluetoothLEConnectionMetricEvent(
+    const RawAddress& raw_address,
+    android::bluetooth::le::LeConnectionOriginType origin_type,
+    android::bluetooth::le::LeConnectionType connection_type,
+    android::bluetooth::le::LeConnectionState transaction_state,
+    std::vector<std::pair<os::ArgumentType, int>> argument_list) {
+
+  Address address = bluetooth::ToGdAddress(raw_address);
+  bluetooth::os::LogMetricBluetoothLEConnectionMetricEvent(address, origin_type, connection_type, transaction_state, argument_list);
+}
+
 }  // namespace shim
 }  // namespace bluetooth

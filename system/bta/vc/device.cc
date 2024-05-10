@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+#include <bluetooth/log.h>
+
 #include <map>
 #include <vector>
 
@@ -22,10 +24,12 @@
 #include "bta_gatt_queue.h"
 #include "devices.h"
 #include "gatt_api.h"
+#include "internal_include/bt_trace.h"
+#include "os/log.h"
+#include "os/logging/log_adapter.h"
 #include "stack/btm/btm_sec.h"
+#include "stack/include/bt_types.h"
 #include "types/bluetooth/uuid.h"
-
-#include <base/logging.h>
 
 using namespace bluetooth::vc::internal;
 
@@ -46,15 +50,13 @@ void VolumeControlDevice::DeregisterNotifications(tGATT_IF gatt_if) {
 }
 
 void VolumeControlDevice::Disconnect(tGATT_IF gatt_if) {
-  LOG(INFO) << __func__ << ": " << ADDRESS_TO_LOGGABLE_STR(address);
+  log::info("{}", address);
 
   if (IsConnected()) {
     DeregisterNotifications(gatt_if);
     BtaGattQueue::Clean(connection_id);
     BTA_GATTC_Close(connection_id);
     connection_id = GATT_INVALID_CONN_ID;
-  } else {
-    BTA_GATTC_CancelOpen(gatt_if, address, false);
   }
 
   device_ready = false;
@@ -69,7 +71,7 @@ uint16_t VolumeControlDevice::find_ccc_handle(uint16_t chrc_handle) {
   const gatt::Characteristic* p_char =
       BTA_GATTC_GetCharacteristic(connection_id, chrc_handle);
   if (!p_char) {
-    LOG(WARNING) << __func__ << ": no such handle=" << loghex(chrc_handle);
+    log::warn("no such handle=0x{:x}", chrc_handle);
     return 0;
   }
 
@@ -96,7 +98,7 @@ bool VolumeControlDevice::set_volume_control_service_handles(
       flags_handle = chrc.value_handle;
       flags_ccc_handle = find_ccc_handle(chrc.value_handle);
     } else {
-      LOG(WARNING) << __func__ << ": unknown characteristic=" << chrc.uuid;
+      log::warn("unknown characteristic={}", chrc.uuid);
     }
   }
 
@@ -142,7 +144,7 @@ void VolumeControlDevice::set_volume_offset_control_service_handles(
           chrc.properties & GATT_CHAR_PROP_BIT_WRITE_NR;
 
     } else {
-      LOG(WARNING) << __func__ << ": unknown characteristic=" << chrc.uuid;
+      log::warn("unknown characteristic={}", chrc.uuid);
     }
   }
 
@@ -155,9 +157,9 @@ void VolumeControlDevice::set_volume_offset_control_service_handles(
       GATT_HANDLE_IS_VALID(offset.audio_descr_handle)
       /* audio_descr_ccc_handle is optional */) {
     audio_offsets.Add(offset);
-    LOG(INFO) << "Offset added id=" << loghex(offset.id);
+    log::info("Offset added id=0x{:x}", offset.id);
   } else {
-    LOG(WARNING) << "Ignoring offset handle=" << loghex(service.handle);
+    log::warn("Ignoring offset handle=0x{:x}", service.handle);
   }
 }
 
@@ -168,13 +170,13 @@ bool VolumeControlDevice::UpdateHandles(void) {
   const std::list<gatt::Service>* services =
       BTA_GATTC_GetServices(connection_id);
   if (services == nullptr) {
-    LOG(ERROR) << "No services found";
+    log::error("No services found");
     return false;
   }
 
   for (auto const& service : *services) {
     if (service.uuid == kVolumeControlUuid) {
-      LOG(INFO) << "Found VCS, handle=" << loghex(service.handle);
+      log::info("Found VCS, handle=0x{:x}", service.handle);
       vcs_found = set_volume_control_service_handles(service);
       if (!vcs_found) break;
 
@@ -185,11 +187,11 @@ bool VolumeControlDevice::UpdateHandles(void) {
         if (service == nullptr) continue;
 
         if (included.uuid == kVolumeOffsetUuid) {
-          LOG(INFO) << "Found VOCS, handle=" << loghex(service->handle);
+          log::info("Found VOCS, handle=0x{:x}", service->handle);
           set_volume_offset_control_service_handles(*service);
 
         } else {
-          LOG(WARNING) << __func__ << ": unknown service=" << service->uuid;
+          log::warn("unknown service={}", service->uuid);
         }
       }
     }
@@ -233,7 +235,7 @@ bool VolumeControlDevice::subscribe_for_notifications(tGATT_IF gatt_if,
   tGATT_STATUS status =
       BTA_GATTC_RegisterForNotifications(gatt_if, address, handle);
   if (status != GATT_SUCCESS) {
-    LOG(ERROR) << __func__ << ": failed, status=" << loghex(+status);
+    log::error("failed, status=0x{:x}", status);
     return false;
   }
 
@@ -324,7 +326,7 @@ void VolumeControlDevice::GetExtAudioOutVolumeOffset(uint8_t ext_output_id,
                                                      void* cb_data) {
   VolumeOffset* offset = audio_offsets.FindById(ext_output_id);
   if (!offset) {
-    LOG(ERROR) << __func__ << ": no such offset!";
+    log::error("no such offset!");
     return;
   }
 
@@ -337,7 +339,7 @@ void VolumeControlDevice::GetExtAudioOutLocation(uint8_t ext_output_id,
                                                  void* cb_data) {
   VolumeOffset* offset = audio_offsets.FindById(ext_output_id);
   if (!offset) {
-    LOG(ERROR) << __func__ << ": no such offset!";
+    log::error("no such offset!");
     return;
   }
 
@@ -349,12 +351,12 @@ void VolumeControlDevice::SetExtAudioOutLocation(uint8_t ext_output_id,
                                                  uint32_t location) {
   VolumeOffset* offset = audio_offsets.FindById(ext_output_id);
   if (!offset) {
-    LOG(ERROR) << __func__ << ": no such offset!";
+    log::error("no such offset!");
     return;
   }
 
   if (!offset->audio_location_writable) {
-    LOG(WARNING) << __func__ << ": not writable";
+    log::warn("not writable");
     return;
   }
 
@@ -371,7 +373,7 @@ void VolumeControlDevice::GetExtAudioOutDescription(uint8_t ext_output_id,
                                                     void* cb_data) {
   VolumeOffset* offset = audio_offsets.FindById(ext_output_id);
   if (!offset) {
-    LOG(ERROR) << __func__ << ": no such offset!";
+    log::error("no such offset!");
     return;
   }
 
@@ -383,12 +385,12 @@ void VolumeControlDevice::SetExtAudioOutDescription(uint8_t ext_output_id,
                                                     std::string& descr) {
   VolumeOffset* offset = audio_offsets.FindById(ext_output_id);
   if (!offset) {
-    LOG(ERROR) << __func__ << ": no such offset!";
+    log::error("no such offset!");
     return;
   }
 
   if (!offset->audio_descr_writable) {
-    LOG(WARNING) << __func__ << ": not writable";
+    log::warn("not writable");
     return;
   }
 
@@ -402,7 +404,7 @@ void VolumeControlDevice::ExtAudioOutControlPointOperation(
     GATT_WRITE_OP_CB cb, void* cb_data) {
   VolumeOffset* offset = audio_offsets.FindById(ext_output_id);
   if (!offset) {
-    LOG(ERROR) << __func__ << ": no such offset!";
+    log::error("no such offset!");
     return;
   }
 
@@ -418,8 +420,10 @@ bool VolumeControlDevice::IsEncryptionEnabled() {
   return BTM_IsEncrypted(address, BT_TRANSPORT_LE);
 }
 
-void VolumeControlDevice::EnableEncryption() {
+bool VolumeControlDevice::EnableEncryption() {
   int result = BTM_SetEncryption(address, BT_TRANSPORT_LE, nullptr, nullptr,
                                  BTM_BLE_SEC_ENCRYPT);
-  LOG(INFO) << __func__ << ": result=" << +result;
+  log::info("{}: result=0x{:02x}", address, result);
+
+  return result != BTM_ERR_KEY_MISSING;
 }

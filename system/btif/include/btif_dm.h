@@ -20,9 +20,32 @@
 #define BTIF_DM_H
 
 #include "bta/include/bta_api.h"
-#include "bte_appl.h"
+#include "bta/include/bta_sec_api.h"
 #include "btif_uid.h"
+#include "hci/le_rand_callback.h"
+#include "internal_include/bt_target.h"
+#include "internal_include/bte_appl.h"
 #include "types/raw_address.h"
+
+/*******************************************************************************
+ *  Constants & Macros
+ ******************************************************************************/
+#define COD_MASK 0x07FF
+#define COD_UNCLASSIFIED ((0x1F) << 8)
+/* Focus on Major and minor device class*/
+#define COD_DEVICE_MASK 0x1FFC
+#define COD_HID_KEYBOARD 0x0540
+#define COD_HID_POINTING 0x0580
+#define COD_HID_COMBO 0x05C0
+#define COD_HID_MAJOR 0x0500
+#define COD_HID_SUB_MAJOR 0x00C0
+#define COD_HID_MASK 0x0700
+#define COD_AV_HEADSETS 0x0404
+#define COD_AV_HANDSFREE 0x0408
+#define COD_AV_HEADPHONES 0x0418
+#define COD_AV_PORTABLE_AUDIO 0x041C
+#define COD_AV_HIFI_AUDIO 0x0428
+#define COD_CLASS_LE_AUDIO (1 << 14)
 
 /*******************************************************************************
  *  Functions
@@ -31,9 +54,14 @@ void btif_dm_init(uid_set_t* set);
 void btif_dm_cleanup(void);
 
 /**
- * BTIF callback to switch context from bte to btif
+ * BTIF callback for security events
  */
-void bte_dm_evt(tBTA_DM_SEC_EVT event, tBTA_DM_SEC* p_data);
+void btif_dm_sec_evt(tBTA_DM_SEC_EVT event, tBTA_DM_SEC* p_data);
+
+/**
+ * BTIF callback for ACL up/down and address consolidation events
+ */
+void btif_dm_acl_evt(tBTA_DM_ACL_EVT event, tBTA_DM_ACL* p_data);
 
 /**
  * Notify BT disable being initiated. DM may chose to abort
@@ -54,7 +82,7 @@ void btif_dm_proc_io_rsp(const RawAddress& bd_addr, tBTM_IO_CAP io_cap,
 /**
  * Device Configuration Queries
  */
-void btif_dm_get_local_class_of_device(DEV_CLASS device_class);
+DEV_CLASS btif_dm_get_local_class_of_device();
 
 /**
  * Out-of-band functions
@@ -63,14 +91,14 @@ void btif_dm_set_oob_for_io_req(tBTM_OOB_DATA* p_oob_data);
 void btif_dm_set_oob_for_le_io_req(const RawAddress& bd_addr,
                                    tBTM_OOB_DATA* p_oob_data,
                                    tBTM_LE_AUTH_REQ* p_auth_req);
-#ifdef BTIF_DM_OOB_TEST
 void btif_dm_load_local_oob(void);
 void btif_dm_proc_loc_oob(tBT_TRANSPORT transport, bool is_valid,
                           const Octet16& c, const Octet16& r);
 bool btif_dm_proc_rmt_oob(const RawAddress& bd_addr, Octet16* p_c,
                           Octet16* p_r);
 void btif_dm_generate_local_oob_data(tBT_TRANSPORT transport);
-#endif /* BTIF_DM_OOB_TEST */
+
+void btif_check_device_in_inquiry_db(const RawAddress& address);
 
 void btif_dm_clear_event_filter();
 
@@ -80,11 +108,13 @@ void btif_dm_clear_filter_accept_list();
 
 void btif_dm_disconnect_all_acls();
 
-void btif_dm_le_rand(LeRandCallback callback);
+void btif_dm_le_rand(bluetooth::hci::LeRandCallback callback);
 void btif_dm_set_event_filter_connection_setup_all_devices();
 void btif_dm_allow_wake_by_hid(
-    std::vector<std::pair<RawAddress, uint8_t>> addrs);
-void btif_dm_restore_filter_accept_list();
+    std::vector<RawAddress> classic_addrs,
+    std::vector<std::pair<RawAddress, uint8_t>> le_addrs);
+void btif_dm_restore_filter_accept_list(
+    std::vector<std::pair<RawAddress, uint8_t>> le_devices);
 void btif_dm_set_default_event_mask_except(uint64_t mask, uint64_t le_mask);
 void btif_dm_set_event_filter_inquiry_result_all_devices();
 void btif_dm_metadata_changed(const RawAddress& remote_bd_addr, int key,
@@ -118,8 +148,11 @@ void btif_dm_get_ble_local_keys(tBTA_DM_BLE_LOCAL_KEY_MASK* p_key_mask,
                                 Octet16* p_er,
                                 tBTA_BLE_LOCAL_ID_KEYS* p_id_keys);
 void btif_dm_update_ble_remote_properties(const RawAddress& bd_addr,
-                                          BD_NAME bd_name,
+                                          BD_NAME bd_name, DEV_CLASS dev_class,
                                           tBT_DEVICE_TYPE dev_type);
 
 bool check_cod_hid(const RawAddress& bd_addr);
+bool check_cod_hid_major(const RawAddress& bd_addr, uint32_t cod);
+bool is_device_le_audio_capable(const RawAddress bd_addr);
+bool is_le_audio_capable_during_service_discovery(const RawAddress& bd_addr);
 #endif

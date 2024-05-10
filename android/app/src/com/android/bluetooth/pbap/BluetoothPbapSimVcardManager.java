@@ -1,20 +1,23 @@
 /*
-* Copyright (c) 2015, The Linux Foundation. All rights reserved.
-* Copyright (C) 2014 Samsung System LSI
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*      http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Copyright (C) 2024 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.android.bluetooth.pbap;
 
+import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothProtoEnums;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
@@ -29,27 +32,26 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import com.android.bluetooth.BluetoothMethodProxy;
+import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.R;
+import com.android.bluetooth.content_profiles.ContentProfileErrorReportUtils;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.obex.Operation;
 import com.android.obex.ResponseCodes;
 import com.android.obex.ServerOperation;
 import com.android.vcard.VCardBuilder;
 import com.android.vcard.VCardConfig;
-import com.android.vcard.VCardUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * VCard composer especially for Call Log used in Bluetooth.
- */
+/** VCard composer especially for Call Log used in Bluetooth. */
+// Next tag value for ContentProfileErrorReportUtils.report(): 6
 public class BluetoothPbapSimVcardManager {
     private static final String TAG = "PbapSIMvCardComposer";
 
-    private static final boolean V = BluetoothPbapService.VERBOSE;
 
     @VisibleForTesting
     public static final String FAILURE_REASON_FAILED_TO_GET_DATABASE_INFO =
@@ -122,6 +124,11 @@ public class BluetoothPbapSimVcardManager {
             try {
                 mCursor.close();
             } catch (SQLiteException e) {
+                ContentProfileErrorReportUtils.report(
+                        BluetoothProfile.PBAP,
+                        BluetoothProtoEnums.BLUETOOTH_PBAP_SIM_VCARD_MANAGER,
+                        BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
+                        0);
                 Log.e(TAG, "SQLiteException on Cursor#close(): " + e.getMessage());
             } finally {
                 mErrorReason = FAILURE_REASON_NO_ENTRY;
@@ -153,7 +160,6 @@ public class BluetoothPbapSimVcardManager {
         if (TextUtils.isEmpty(name)) {
             name = mCursor.getString(NUMBER_COLUMN_INDEX);
         }
-        final boolean needCharset = !(VCardUtils.containsOnlyPrintableAscii(name));
         // Create ContentValues for making name as Structured name
         List<ContentValues> contentValuesList = new ArrayList<ContentValues>();
         ContentValues nameContentValues = new ContentValues();
@@ -188,6 +194,11 @@ public class BluetoothPbapSimVcardManager {
             try {
                 mCursor.close();
             } catch (SQLiteException e) {
+                ContentProfileErrorReportUtils.report(
+                        BluetoothProfile.PBAP,
+                        BluetoothProtoEnums.BLUETOOTH_PBAP_SIM_VCARD_MANAGER,
+                        BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
+                        1);
                 Log.e(TAG, "SQLiteException on Cursor#close(): " + e.getMessage());
             }
             mCursor = null;
@@ -303,9 +314,9 @@ public class BluetoothPbapSimVcardManager {
             }
         }
         if (orderByWhat == BluetoothPbapObexServer.ORDER_BY_INDEXED) {
-            if (V) Log.v(TAG, "getPhonebookNameList, order by index");
+            Log.v(TAG, "getPhonebookNameList, order by index");
         } else if (orderByWhat == BluetoothPbapObexServer.ORDER_BY_ALPHABETICAL) {
-            if (V) Log.v(TAG, "getPhonebookNameList, order by alpha");
+            Log.v(TAG, "getPhonebookNameList, order by alpha");
             Collections.sort(allnames, new Comparator <String> () {
                 @Override
                 public int compare(String str1, String str2) {
@@ -334,23 +345,23 @@ public class BluetoothPbapSimVcardManager {
                         .moveToNext()) {
                     String number = contactCursor.getString(NUMBER_COLUMN_INDEX);
                     if (number == null) {
-                        if (V) Log.v(TAG, "number is null");
+                        Log.v(TAG, "number is null");
                         continue;
                     }
 
-                    if (V) Log.v(TAG, "number: " + number + " phoneNumber:" + phoneNumber);
+                    Log.v(TAG, "number: " + number + " phoneNumber:" + phoneNumber);
                     if ((number.endsWith(phoneNumber)) || (number.startsWith(phoneNumber))) {
                         String name = contactCursor.getString(NAME_COLUMN_INDEX);
                         if (TextUtils.isEmpty(name)) {
                             name = mContext.getString(android.R.string.unknownName);
                         }
-                        if (V) Log.v(TAG, "got name " + name + " by number " + phoneNumber);
+                        Log.v(TAG, "got name " + name + " by number " + phoneNumber);
 
                         if (number.endsWith(phoneNumber)) {
-                            if (V) Log.v(TAG, "Adding to end name list");
+                            Log.v(TAG, "Adding to end name list");
                             nameList.add(name);
                         } else {
-                            if (V) Log.v(TAG, "Adding to start name list");
+                            Log.v(TAG, "Adding to start name list");
                             startNameList.add(name);
                         }
                     }
@@ -376,6 +387,11 @@ public class BluetoothPbapSimVcardManager {
             String ownerVCard) {
         if (startPoint < 1 || startPoint > endPoint) {
             Log.e(TAG, "internal error: startPoint or endPoint is not correct.");
+            ContentProfileErrorReportUtils.report(
+                    BluetoothProfile.PBAP,
+                    BluetoothProtoEnums.BLUETOOTH_PBAP_SIM_VCARD_MANAGER,
+                    BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__LOG_ERROR,
+                    2);
             return ResponseCodes.OBEX_HTTP_INTERNAL_ERROR;
         }
         BluetoothPbapSimVcardManager composer = null;
@@ -387,7 +403,7 @@ public class BluetoothPbapSimVcardManager {
             if (!composer.init(SIM_URI, null, null, null) || !buffer.init()) {
                 return ResponseCodes.OBEX_HTTP_INTERNAL_ERROR;
             }
-            composer.moveToPosition(startPoint -1, false);
+            composer.moveToPosition(startPoint - 1, false);
             for (int count =startPoint -1; count < endPoint; count++) {
                 if (BluetoothPbapObexServer.sIsAborted) {
                     ((ServerOperation)op).setAborted(true);
@@ -398,6 +414,12 @@ public class BluetoothPbapSimVcardManager {
                 if (vcard == null) {
                     Log.e(TAG, "Failed to read a contact. Error reason: "
                             + composer.getErrorReason() + ", count:" + count);
+                    ContentProfileErrorReportUtils.report(
+                            BluetoothProfile.PBAP,
+                            BluetoothProtoEnums.BLUETOOTH_PBAP_SIM_VCARD_MANAGER,
+                            BluetoothStatsLog
+                                    .BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__LOG_ERROR,
+                            3);
                     return ResponseCodes.OBEX_HTTP_INTERNAL_ERROR;
                 }
                 buffer.writeVCard(vcard);
@@ -418,9 +440,14 @@ public class BluetoothPbapSimVcardManager {
             int orderByWhat) {
         if (offset < 1) {
             Log.e(TAG, "Internal error: offset is not correct.");
+            ContentProfileErrorReportUtils.report(
+                    BluetoothProfile.PBAP,
+                    BluetoothProtoEnums.BLUETOOTH_PBAP_SIM_VCARD_MANAGER,
+                    BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__LOG_ERROR,
+                    4);
             return ResponseCodes.OBEX_HTTP_INTERNAL_ERROR;
         }
-        if (V) Log.v(TAG, "composeAndSendSIMPhonebookOneVcard orderByWhat " + orderByWhat);
+        Log.v(TAG, "composeAndSendSIMPhonebookOneVcard orderByWhat " + orderByWhat);
         BluetoothPbapSimVcardManager composer = null;
         HandlerForStringBuffer buffer = null;
         try {
@@ -442,6 +469,11 @@ public class BluetoothPbapSimVcardManager {
             if (vcard == null) {
                 Log.e(TAG, "Failed to read a contact. Error reason: "
                             + composer.getErrorReason());
+                ContentProfileErrorReportUtils.report(
+                        BluetoothProfile.PBAP,
+                        BluetoothProtoEnums.BLUETOOTH_PBAP_SIM_VCARD_MANAGER,
+                        BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__LOG_ERROR,
+                        5);
                 return ResponseCodes.OBEX_HTTP_INTERNAL_ERROR;
             }
             buffer.writeVCard(vcard);

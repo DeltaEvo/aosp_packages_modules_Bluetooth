@@ -30,10 +30,15 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.AssetFileDescriptor;
 import android.database.Cursor;
+import android.media.session.MediaController;
+import android.media.session.MediaSessionManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Looper;
+import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.provider.Telephony;
 import android.util.Log;
@@ -41,7 +46,6 @@ import android.util.Log;
 import com.android.bluetooth.gatt.AppAdvertiseStats;
 import com.android.bluetooth.gatt.ContextMap;
 import com.android.bluetooth.gatt.GattService;
-import com.android.bluetooth.opp.BluetoothOppNotification;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.obex.HeaderSet;
 
@@ -49,6 +53,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -141,6 +146,13 @@ public class BluetoothMethodProxy {
     }
 
     /**
+     * Proxies {@link BluetoothAdapter#getRemoteLeDevice(String, int)} on default Bluetooth Adapter.
+     */
+    public BluetoothDevice getDefaultAdapterRemoteLeDevice(String address, int addressType) {
+        return BluetoothAdapter.getDefaultAdapter().getRemoteLeDevice(address, addressType);
+    }
+
+    /**
      * Proxies {@link ContentResolver#openFileDescriptor(Uri, String)}.
      */
     public ParcelFileDescriptor contentResolverOpenFileDescriptor(ContentResolver contentResolver,
@@ -196,6 +208,14 @@ public class BluetoothMethodProxy {
     }
 
     /**
+     * Proxies {@link Handler#sendMessageDelayed(Message, long)}.
+     */
+    public boolean handlerSendMessageDelayed(Handler handler, final int what,
+            final long delayMillis) {
+        return handler.sendMessageDelayed(handler.obtainMessage(what), delayMillis);
+    }
+
+    /**
      * Proxies {@link HeaderSet#getHeader}.
      */
     public Object getHeader(HeaderSet headerSet, int headerId) throws IOException {
@@ -226,6 +246,11 @@ public class BluetoothMethodProxy {
         manager.registerSync(scanResult, skip, timeout, callback, handler);
     }
 
+    /** Proxies {@link PeriodicAdvertisingManager#unregisterSync(PeriodicAdvertisingCallback)}. */
+    public void periodicAdvertisingManagerUnregisterSync(
+            PeriodicAdvertisingManager manager, PeriodicAdvertisingCallback callback) {
+        manager.unregisterSync(callback);
+    }
     /**
      * Proxies {@link PeriodicAdvertisingManager#transferSync}.
      */
@@ -243,20 +268,25 @@ public class BluetoothMethodProxy {
         manager.transferSetInfo(bda, serviceData, advHandle, callback);
     }
 
-    /**
-     * Proxies {@link AppAdvertiseStats}.
-     */
-    public AppAdvertiseStats createAppAdvertiseStats(int appUid, int id, String name,
-            ContextMap map, GattService service) {
-        return new AppAdvertiseStats(appUid, id, name, map, service);
+    /** Proxies {@link AppAdvertiseStats}. */
+    public AppAdvertiseStats createAppAdvertiseStats(
+            int id, String name, ContextMap map, GattService service) {
+        return new AppAdvertiseStats(id, name, map, service);
     }
 
+    /** Proxies {@link Thread#start()}. */
+    public void threadStart(Thread thread) {
+        thread.start();
+    }
 
-    /**
-     * Proxies {@link com.android.bluetooth.opp.BluetoothOppNotification#BluetoothOppNotification(
-     * Context)}.
-     */
-    public BluetoothOppNotification newBluetoothOppNotification(final Context context) {
-        return new BluetoothOppNotification(context);
+    /** Proxies {@link HandlerThread#getLooper()}. */
+    public Looper handlerThreadGetLooper(HandlerThread handlerThread) {
+        return handlerThread.getLooper();
+    }
+
+    /** Peoziws {@link MediaSessionManager#getActiveSessions} */
+    public @NonNull List<MediaController> mediaSessionManagerGetActiveSessions(
+            MediaSessionManager manager) {
+        return manager.getActiveSessions(null);
     }
 }

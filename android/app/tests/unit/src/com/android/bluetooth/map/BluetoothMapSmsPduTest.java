@@ -33,10 +33,12 @@ import com.android.bluetooth.map.BluetoothMapSmsPdu.SmsPdu;
 
 import org.junit.Assume;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -57,6 +59,8 @@ public class BluetoothMapSmsPduTest {
     private int TEST_LANGUAGE_TABLE;
 
     private SmsManager mSmsManager = SmsManager.getDefault();
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock
     private Context mTargetContext;
     @Mock
@@ -64,7 +68,6 @@ public class BluetoothMapSmsPduTest {
 
     @Before
     public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
         when(mTargetContext.getSystemServiceName(TelephonyManager.class)).thenReturn(
                 "TELEPHONY_SERVICE");
         when(mTargetContext.getSystemService("TELEPHONY_SERVICE")).thenReturn(mTelephonyManager);
@@ -146,15 +149,8 @@ public class BluetoothMapSmsPduTest {
 
         byte[] encodedMessageSms = messageSmsToEncode.encode();
         InputStream inputStream = new ByteArrayInputStream(encodedMessageSms);
-        BluetoothMapbMessage messageParsed;
-        try {
-          messageParsed = BluetoothMapbMessage.parse(inputStream,
+        BluetoothMapbMessage messageParsed = BluetoothMapbMessage.parse(inputStream,
                 BluetoothMapAppParams.CHARSET_NATIVE);
-        } catch (IllegalArgumentException e) {
-          android.util.Log.e("getSubmitPdus_withTypeCDMA", "Failure: " + e);
-          // TODO b/257375445 remove try catch that prevent failure
-          return;
-        }
 
         assertThat(messageParsed).isInstanceOf(BluetoothMapbMessageSms.class);
     }

@@ -23,22 +23,12 @@
 
 #include <cstdint>
 #include <functional>
-#include <map>
-#include <string>
 
 // Original included files, if any
-// NOTE: Since this is a mock file with mock definitions some number of
-//       include files may not be required.  The include-what-you-use
-//       still applies, but crafting proper inclusion is out of scope
-//       for this effort.  This compilation unit may compile as-is, or
-//       may need attention to prune from (or add to ) the inclusion set.
-#include <base/logging.h>
+
 #include <stdlib.h>
 
-#include "check.h"
-#include "osi/include/allocator.h"
 #include "osi/include/ringbuffer.h"
-#include "test/common/mock_functions.h"
 
 // Mocked compile conditionals, if any
 
@@ -53,7 +43,7 @@ namespace osi_ringbuffer {
 struct ringbuffer_available {
   size_t return_value{0};
   std::function<size_t(const ringbuffer_t* rb)> body{
-      [this](const ringbuffer_t* rb) { return return_value; }};
+      [this](const ringbuffer_t* /* rb */) { return return_value; }};
   size_t operator()(const ringbuffer_t* rb) { return body(rb); };
 };
 extern struct ringbuffer_available ringbuffer_available;
@@ -64,7 +54,9 @@ extern struct ringbuffer_available ringbuffer_available;
 struct ringbuffer_delete {
   size_t return_value{0};
   std::function<size_t(ringbuffer_t* rb, size_t length)> body{
-      [this](ringbuffer_t* rb, size_t length) { return return_value; }};
+      [this](ringbuffer_t* /* rb */, size_t /* length */) {
+        return return_value;
+      }};
   size_t operator()(ringbuffer_t* rb, size_t length) {
     return body(rb, length);
   };
@@ -75,7 +67,7 @@ extern struct ringbuffer_delete ringbuffer_delete;
 // Params: ringbuffer_t* rb
 // Return: void
 struct ringbuffer_free {
-  std::function<void(ringbuffer_t* rb)> body{[](ringbuffer_t* rb) {}};
+  std::function<void(ringbuffer_t* rb)> body{[](ringbuffer_t* /* rb */) {}};
   void operator()(ringbuffer_t* rb) { body(rb); };
 };
 extern struct ringbuffer_free ringbuffer_free;
@@ -86,7 +78,7 @@ extern struct ringbuffer_free ringbuffer_free;
 struct ringbuffer_init {
   ringbuffer_t* return_value{0};
   std::function<ringbuffer_t*(const size_t size)> body{
-      [this](const size_t size) { return return_value; }};
+      [this](const size_t /* size */) { return return_value; }};
   ringbuffer_t* operator()(const size_t size) { return body(size); };
 };
 extern struct ringbuffer_init ringbuffer_init;
@@ -97,9 +89,8 @@ extern struct ringbuffer_init ringbuffer_init;
 struct ringbuffer_insert {
   size_t return_value{0};
   std::function<size_t(ringbuffer_t* rb, const uint8_t* p, size_t length)> body{
-      [this](ringbuffer_t* rb, const uint8_t* p, size_t length) {
-        return return_value;
-      }};
+      [this](ringbuffer_t* /* rb */, const uint8_t* /* p */,
+             size_t /* length */) { return return_value; }};
   size_t operator()(ringbuffer_t* rb, const uint8_t* p, size_t length) {
     return body(rb, p, length);
   };
@@ -113,8 +104,9 @@ struct ringbuffer_peek {
   size_t return_value{0};
   std::function<size_t(const ringbuffer_t* rb, off_t offset, uint8_t* p,
                        size_t length)>
-      body{[this](const ringbuffer_t* rb, off_t offset, uint8_t* p,
-                  size_t length) { return return_value; }};
+      body{[this](const ringbuffer_t* /* rb */, off_t /* offset */,
+                  uint8_t* /* p */,
+                  size_t /* length */) { return return_value; }};
   size_t operator()(const ringbuffer_t* rb, off_t offset, uint8_t* p,
                     size_t length) {
     return body(rb, offset, p, length);
@@ -128,7 +120,7 @@ extern struct ringbuffer_peek ringbuffer_peek;
 struct ringbuffer_pop {
   size_t return_value{0};
   std::function<size_t(ringbuffer_t* rb, uint8_t* p, size_t length)> body{
-      [this](ringbuffer_t* rb, uint8_t* p, size_t length) {
+      [this](ringbuffer_t* /* rb */, uint8_t* /* p */, size_t /* length */) {
         return return_value;
       }};
   size_t operator()(ringbuffer_t* rb, uint8_t* p, size_t length) {
@@ -143,7 +135,7 @@ extern struct ringbuffer_pop ringbuffer_pop;
 struct ringbuffer_size {
   size_t return_value{0};
   std::function<size_t(const ringbuffer_t* rb)> body{
-      [this](const ringbuffer_t* rb) { return return_value; }};
+      [this](const ringbuffer_t* /* rb */) { return return_value; }};
   size_t operator()(const ringbuffer_t* rb) { return body(rb); };
 };
 extern struct ringbuffer_size ringbuffer_size;

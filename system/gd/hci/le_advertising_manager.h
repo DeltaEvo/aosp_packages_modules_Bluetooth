@@ -15,7 +15,10 @@
  */
 #pragma once
 
+#include <bluetooth/log.h>
+
 #include <memory>
+#include <vector>
 
 #include "common/callback.h"
 #include "hci/address_with_type.h"
@@ -103,7 +106,10 @@ class LeAdvertisingManager : public bluetooth::Module {
   static constexpr AdvertiserId kInvalidId = 0xFF;
   static constexpr uint8_t kInvalidHandle = 0xFF;
   static constexpr uint8_t kAdvertisingSetIdMask = 0x0F;
+  static constexpr uint16_t kLeMaximumLegacyAdvertisingDataLength = 31;
   static constexpr uint16_t kLeMaximumFragmentLength = 251;
+  static constexpr uint16_t kLeMaximumPeriodicDataFragmentLength = 252;
+  static constexpr uint16_t kLeMaximumGapDataLength = 255;
   static constexpr FragmentPreference kFragment_preference = FragmentPreference::CONTROLLER_SHOULD_NOT;
   LeAdvertisingManager();
   LeAdvertisingManager(const LeAdvertisingManager&) = delete;
@@ -111,11 +117,16 @@ class LeAdvertisingManager : public bluetooth::Module {
 
   size_t GetNumberOfAdvertisingInstances() const;
 
-  AdvertiserId ExtendedCreateAdvertiser(
+  size_t GetNumberOfAdvertisingInstancesInUse() const;
+
+  int GetAdvertiserRegId(AdvertiserId advertiser_id);
+
+  void ExtendedCreateAdvertiser(
+      uint8_t client_id,
       int reg_id,
       const AdvertisingConfig config,
-      const common::Callback<void(Address, AddressType)>& scan_callback,
-      const common::Callback<void(ErrorCode, uint8_t, uint8_t)>& set_terminated_callback,
+      common::Callback<void(Address, AddressType)> scan_callback,
+      common::Callback<void(ErrorCode, uint8_t, uint8_t)> set_terminated_callback,
       uint16_t duration,
       uint8_t max_extended_advertising_events,
       os::Handler* handler);
@@ -126,13 +137,14 @@ class LeAdvertisingManager : public bluetooth::Module {
       uint16_t duration,
       base::OnceCallback<void(uint8_t /* status */)> status_callback,
       base::OnceCallback<void(uint8_t /* status */)> timeout_callback,
-      const common::Callback<void(Address, AddressType)>& scan_callback,
-      const common::Callback<void(ErrorCode, uint8_t, uint8_t)>& set_terminated_callback,
+      common::Callback<void(Address, AddressType)> scan_callback,
+      common::Callback<void(ErrorCode, uint8_t, uint8_t)> set_terminated_callback,
       os::Handler* handler);
 
   void GetOwnAddress(uint8_t advertiser_id);
 
-  void RegisterAdvertiser(base::OnceCallback<void(uint8_t /* inst_id */, uint8_t /* status */)> callback);
+  void RegisterAdvertiser(
+      common::ContextualOnceCallback<void(uint8_t /* inst_id */, uint8_t /* status */)> callback);
 
   void SetParameters(AdvertiserId advertiser_id, AdvertisingConfig config);
 
@@ -163,16 +175,15 @@ class LeAdvertisingManager : public bluetooth::Module {
   std::string ToString() const override;
 
  private:
-  // Return -1 if the advertiser was not created, otherwise the advertiser ID.
-  AdvertiserId create_advertiser(
-      int reg_id,
-      const AdvertisingConfig config,
-      const common::Callback<void(Address, AddressType)>& scan_callback,
-      const common::Callback<void(ErrorCode, uint8_t, uint8_t)>& set_terminated_callback,
-      os::Handler* handler);
   struct impl;
   std::unique_ptr<impl> pimpl_;
 };
 
 }  // namespace hci
 }  // namespace bluetooth
+
+namespace fmt {
+template <>
+struct formatter<bluetooth::hci::AdvertiserAddressType>
+    : enum_formatter<bluetooth::hci::AdvertiserAddressType> {};
+}  // namespace fmt

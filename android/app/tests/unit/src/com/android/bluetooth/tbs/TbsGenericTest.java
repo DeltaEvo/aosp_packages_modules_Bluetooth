@@ -14,27 +14,23 @@
 
 package com.android.bluetooth.tbs;
 
-import static com.google.common.truth.Truth.assertThat;
-import static com.google.common.truth.Truth.assertWithMessage;
+import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentation;
 
-import static org.mockito.Mockito.*;
+import static com.google.common.truth.Truth.assertThat;
+
 import static org.mockito.AdditionalMatchers.*;
+import static org.mockito.Mockito.*;
 
 import android.bluetooth.*;
 import android.bluetooth.IBluetoothLeCallControlCallback;
 import android.content.Context;
-import android.os.Looper;
 import android.os.ParcelUuid;
 import android.os.RemoteException;
 
-import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
-import androidx.test.rule.ServiceTestRule;
 import androidx.test.runner.AndroidJUnit4;
-import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentation;
 
 import com.android.bluetooth.TestUtils;
-import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.le_audio.LeAudioService;
 
 import org.junit.After;
@@ -45,15 +41,14 @@ import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
-import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.TimeoutException;
 
 @MediumTest
 @RunWith(AndroidJUnit4.class)
@@ -62,6 +57,8 @@ public class TbsGenericTest {
     private BluetoothDevice mCurrentDevice;
 
     private TbsGeneric mTbsGeneric;
+
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
 
     private @Mock TbsGatt mTbsGatt;
     private @Mock IBluetoothLeCallControlCallback mIBluetoothLeCallControlCallback;
@@ -77,7 +74,6 @@ public class TbsGenericTest {
 
     @Before
     public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
 
         mAdapter = BluetoothAdapter.getDefaultAdapter();
         mContext = getInstrumentation().getTargetContext();

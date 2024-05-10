@@ -23,26 +23,29 @@
  *
  ******************************************************************************/
 
+#include <bluetooth/log.h>
+
+#include <deque>
 #include <map>
 
 #include "base/functional/callback.h"
-#include "bt_target.h"
-#include "bt_utils.h"
 #include "btif/include/btif_storage.h"
 #include "eatt/eatt.h"
 #include "gatt_api.h"
 #include "gatt_int.h"
-#include "gd/common/init_flags.h"
-#include "osi/include/log.h"
-#include "osi/include/osi.h"
+#include "internal_include/bt_target.h"
+#include "internal_include/bt_trace.h"
+#include "os/log.h"
+#include "os/logging/log_adapter.h"
 #include "stack/include/bt_types.h"
+#include "stack/include/bt_uuid16.h"
+#include "stack/include/btm_sec_api.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
-#include <base/logging.h>
-
 using base::StringPrintf;
 using bluetooth::Uuid;
+using namespace bluetooth;
 
 #define BLE_GATT_SVR_SUP_FEAT_EATT_BITMASK 0x01
 
@@ -55,19 +58,22 @@ using bluetooth::Uuid;
 
 using gatt_sr_supported_feat_cb =
     base::OnceCallback<void(const RawAddress&, uint8_t)>;
+using gatt_sirk_cb = base::OnceCallback<void(
+    tGATT_STATUS status, const RawAddress&, uint8_t sirk_type, Octet16& sirk)>;
 
 typedef struct {
   uint16_t op_uuid;
   gatt_sr_supported_feat_cb cb;
+  gatt_sirk_cb sirk_cb;
 } gatt_op_cb_data;
 
-static std::map<uint16_t, gatt_op_cb_data> OngoingOps;
+static std::map<uint16_t, std::deque<gatt_op_cb_data>> OngoingOps;
 
 static void gatt_request_cback(uint16_t conn_id, uint32_t trans_id,
                                uint8_t op_code, tGATTS_DATA* p_data);
-static void gatt_connect_cback(UNUSED_ATTR tGATT_IF gatt_if,
-                               const RawAddress& bda, uint16_t conn_id,
-                               bool connected, tGATT_DISCONN_REASON reason,
+static void gatt_connect_cback(tGATT_IF /* gatt_if */, const RawAddress& bda,
+                               uint16_t conn_id, bool connected,
+                               tGATT_DISCONN_REASON reason,
                                tBT_TRANSPORT transport);
 static void gatt_disc_res_cback(uint16_t conn_id, tGATT_DISC_TYPE disc_type,
                                 tGATT_DISC_RES* p_data);
@@ -79,12 +85,15 @@ static void gatt_cl_op_cmpl_cback(uint16_t conn_id, tGATTC_OPTYPE op,
 
 static void gatt_cl_start_config_ccc(tGATT_PROFILE_CLCB* p_clcb);
 
-static bool gatt_cl_is_robust_caching_enabled();
-
 static bool gatt_sr_is_robust_caching_enabled();
 
 static bool read_sr_supported_feat_req(
     uint16_t conn_id, base::OnceCallback<void(const RawAddress&, uint8_t)> cb);
+static bool read_sr_sirk_req(
+    uint16_t conn_id,
+    base::OnceCallback<void(tGATT_STATUS status, const RawAddress&,
+                            uint8_t sirk_type, Octet16& sirk)>
+        cb);
 
 static tGATT_STATUS gatt_sr_read_db_hash(uint16_t conn_id,
                                          tGATT_VALUE* p_value);
@@ -318,12 +327,12 @@ static void gatt_request_cback(uint16_t conn_id, uint32_t trans_id,
       break;
 
     case GATTS_REQ_TYPE_MTU:
-      VLOG(1) << "Get MTU exchange new mtu size: " << +p_data->mtu;
+      log::verbose("Get MTU exchange new mtu size: {}", p_data->mtu);
       rsp_needed = false;
       break;
 
     default:
-      VLOG(1) << "Unknown/unexpected LE GAP ATT request: " << loghex(type);
+      log::verbose("Unknown/unexpected LE GAP ATT request: 0x{:x}", type);
       break;
   }
 
@@ -339,17 +348,16 @@ static void gatt_request_cback(uint16_t conn_id, uint32_t trans_id,
  * Returns          void
  *
  ******************************************************************************/
-static void gatt_connect_cback(UNUSED_ATTR tGATT_IF gatt_if,
-                               const RawAddress& bda, uint16_t conn_id,
-                               bool connected, tGATT_DISCONN_REASON reason,
+static void gatt_connect_cback(tGATT_IF /* gatt_if */, const RawAddress& bda,
+                               uint16_t conn_id, bool connected,
+                               tGATT_DISCONN_REASON reason,
                                tBT_TRANSPORT transport) {
-  VLOG(1) << __func__ << ": from " << ADDRESS_TO_LOGGABLE_STR(bda)
-          << " connected: " << connected << ", conn_id: " << loghex(conn_id);
+  log::verbose("from {} connected: {}, conn_id: 0x{:x}", bda, connected,
+               conn_id);
 
   // if the device is not trusted, remove data when the link is disconnected
   if (!connected && !btm_sec_is_a_bonded_dev(bda)) {
-    LOG(INFO) << __func__ << ": remove untrusted client status, bda="
-              << ADDRESS_TO_LOGGABLE_STR(bda);
+    log::info("remove untrusted client status, bda={}", bda);
     btif_storage_remove_gatt_cl_supp_feat(bda);
     btif_storage_remove_gatt_cl_db_hash(bda);
   }
@@ -383,6 +391,8 @@ void gatt_profile_db_init(void) {
   std::array<uint8_t, Uuid::kNumBytes128> tmp;
   tmp.fill(0x81);
 
+  OngoingOps.clear();
+
   /* Create a GATT profile service */
   gatt_cb.gatt_if = GATT_Register(Uuid::From128BitBE(tmp), "GattProfileDb",
                                   &gatt_profile_cback, false);
@@ -407,14 +417,14 @@ void gatt_profile_db_init(void) {
           .permissions = 0,
       },
       {
-          .type = BTGATT_DB_CHARACTERISTIC,
           .uuid = svr_sup_feat_uuid,
+          .type = BTGATT_DB_CHARACTERISTIC,
           .properties = GATT_CHAR_PROP_BIT_READ,
           .permissions = GATT_PERM_READ,
       },
       {
-          .type = BTGATT_DB_CHARACTERISTIC,
           .uuid = cl_sup_feat_uuid,
+          .type = BTGATT_DB_CHARACTERISTIC,
           .properties = GATT_CHAR_PROP_BIT_READ | GATT_CHAR_PROP_BIT_WRITE,
           .permissions = GATT_PERM_READ | GATT_PERM_WRITE,
       },
@@ -435,11 +445,9 @@ void gatt_profile_db_init(void) {
 
   gatt_cb.gatt_svr_supported_feat_mask |= BLE_GATT_SVR_SUP_FEAT_EATT_BITMASK;
   gatt_cb.gatt_cl_supported_feat_mask |= BLE_GATT_CL_ANDROID_SUP_FEAT;
+  gatt_cb.gatt_cl_supported_feat_mask |= BLE_GATT_CL_SUP_FEAT_CACHING_BITMASK;
 
-  if (gatt_cl_is_robust_caching_enabled())
-    gatt_cb.gatt_cl_supported_feat_mask |= BLE_GATT_CL_SUP_FEAT_CACHING_BITMASK;
-
-  VLOG(1) << __func__ << ": gatt_if=" << gatt_cb.gatt_if << " EATT supported";
+  log::verbose("gatt_if={} EATT supported", gatt_cb.gatt_if);
 }
 
 /*******************************************************************************
@@ -478,7 +486,7 @@ static void gatt_disc_res_cback(uint16_t conn_id, tGATT_DISC_TYPE disc_type,
     case GATT_DISC_SRVC_ALL:
     case GATT_DISC_INC_SRVC:
     case GATT_DISC_MAX:
-      LOG_ERROR("Illegal discovery item handled");
+      log::error("Illegal discovery item handled");
       break;
   }
 }
@@ -496,17 +504,17 @@ static void gatt_disc_cmpl_cback(uint16_t conn_id, tGATT_DISC_TYPE disc_type,
                                  tGATT_STATUS status) {
   tGATT_PROFILE_CLCB* p_clcb = gatt_profile_find_clcb_by_conn_id(conn_id);
   if (p_clcb == NULL) {
-    LOG_WARN("Unable to find gatt profile after discovery complete");
+    log::warn("Unable to find gatt profile after discovery complete");
     return;
   }
 
   if (status != GATT_SUCCESS) {
-    LOG_WARN("Gatt discovery completed with errors status:%u", status);
+    log::warn("Gatt discovery completed with errors status:{}", status);
     return;
   }
   if (p_clcb->ccc_result == 0) {
-    LOG_WARN("Gatt discovery completed but connection was idle id:%hu",
-             conn_id);
+    log::warn("Gatt discovery completed but connection was idle id:{}",
+              conn_id);
     return;
   }
 
@@ -515,8 +523,7 @@ static void gatt_disc_cmpl_cback(uint16_t conn_id, tGATT_DISC_TYPE disc_type,
   gatt_cl_start_config_ccc(p_clcb);
 }
 
-static bool gatt_svc_read_cl_supp_feat_req(uint16_t conn_id,
-                                           gatt_op_cb_data* cb) {
+static bool gatt_svc_read_cl_supp_feat_req(uint16_t conn_id) {
   tGATT_READ_PARAM param;
 
   memset(&param, 0, sizeof(tGATT_READ_PARAM));
@@ -529,12 +536,17 @@ static bool gatt_svc_read_cl_supp_feat_req(uint16_t conn_id,
 
   tGATT_STATUS status = GATTC_Read(conn_id, GATT_READ_BY_TYPE, &param);
   if (status != GATT_SUCCESS) {
-    LOG(ERROR) << __func__ << " Read failed. Status: "
-               << loghex(static_cast<uint8_t>(status));
+    log::error("Read failed. Status: 0x{:x}", static_cast<uint8_t>(status));
     return false;
   }
 
-  cb->op_uuid = GATT_UUID_CLIENT_SUP_FEAT;
+  gatt_op_cb_data cb_data;
+
+  cb_data.cb =
+      base::BindOnce([](const RawAddress& bdaddr, uint8_t support) { return; });
+  cb_data.op_uuid = GATT_UUID_CLIENT_SUP_FEAT;
+  OngoingOps[conn_id].emplace_back(std::move(cb_data));
+
   return true;
 }
 
@@ -550,8 +562,7 @@ static bool gatt_att_write_cl_supp_feat(uint16_t conn_id, uint16_t handle) {
 
   tGATT_STATUS status = GATTC_Write(conn_id, GATT_WRITE, &attr);
   if (status != GATT_SUCCESS) {
-    LOG(ERROR) << __func__ << " Write failed. Status: "
-               << loghex(static_cast<uint8_t>(status));
+    log::error("Write failed. Status: 0x{:x}", static_cast<uint8_t>(status));
     return false;
   }
 
@@ -572,48 +583,49 @@ static void gatt_cl_op_cmpl_cback(uint16_t conn_id, tGATTC_OPTYPE op,
                                   tGATT_CL_COMPLETE* p_data) {
   auto iter = OngoingOps.find(conn_id);
 
-  VLOG(1) << __func__ << " opcode: " << loghex(static_cast<uint8_t>(op))
-          << " status: " << status
-          << " conn id: " << loghex(static_cast<uint8_t>(conn_id));
+  log::verbose("opcode: 0x{:x} status: {} conn id: 0x{:x}",
+               static_cast<uint8_t>(op), status, static_cast<uint8_t>(conn_id));
 
   if (op != GATTC_OPTYPE_READ && op != GATTC_OPTYPE_WRITE) {
-    LOG_DEBUG("Not interested in opcode %d", op);
+    log::verbose("Not interested in opcode {}", op);
     return;
   }
 
-  if (iter == OngoingOps.end()) {
+  if (iter == OngoingOps.end() || (iter->second.size() == 0)) {
     /* If OngoingOps is empty it means we are not interested in the result here.
      */
-    LOG_DEBUG("Unexpected read complete");
+    log::debug("Unexpected read complete");
     return;
   }
 
-  gatt_op_cb_data* operation_callback_data = &iter->second;
-  uint16_t cl_op_uuid = operation_callback_data->op_uuid;
-  operation_callback_data->op_uuid = 0;
+  uint16_t cl_op_uuid = iter->second.front().op_uuid;
 
   if (op == GATTC_OPTYPE_WRITE) {
     if (cl_op_uuid == GATT_UUID_GATT_SRV_CHGD) {
-      LOG_DEBUG("Write response from Service Changed CCC");
-      OngoingOps.erase(iter);
+      log::debug("Write response from Service Changed CCC");
+      iter->second.pop_front();
       /* Read server supported features here supported */
       read_sr_supported_feat_req(
           conn_id, base::BindOnce([](const RawAddress& bdaddr,
                                      uint8_t support) { return; }));
     } else {
-      LOG_DEBUG("Not interested in that write response");
+      log::debug("Not interested in that write response");
     }
     return;
   }
 
+  /* Handle Read operations */
   uint8_t* pp = p_data->att_value.value;
 
-  VLOG(1) << __func__ << " cl_op_uuid " << loghex(cl_op_uuid);
+  log::verbose("cl_op_uuid 0x{:x}", cl_op_uuid);
 
   switch (cl_op_uuid) {
     case GATT_UUID_SERVER_SUP_FEAT: {
       uint8_t tcb_idx = GATT_GET_TCB_IDX(conn_id);
       tGATT_TCB& tcb = gatt_cb.tcb[tcb_idx];
+
+      auto operation_callback_data = std::move(iter->second.front());
+      iter->second.pop_front();
 
       /* Check if EATT is supported */
       if (status == GATT_SUCCESS) {
@@ -622,32 +634,42 @@ static void gatt_cl_op_cmpl_cback(uint16_t conn_id, tGATTC_OPTYPE op,
       }
 
       /* Notify user about the supported features */
-      std::move(operation_callback_data->cb)
-          .Run(tcb.peer_bda, tcb.sr_supp_feat);
+      std::move(operation_callback_data.cb).Run(tcb.peer_bda, tcb.sr_supp_feat);
 
       /* If server supports EATT lets try to find handle for the
        * client supported features characteristic, where we could write
        * our supported features as a client.
        */
       if (tcb.sr_supp_feat & BLE_GATT_SVR_SUP_FEAT_EATT_BITMASK) {
-        /* If read succeed, return here */
-        if (gatt_svc_read_cl_supp_feat_req(conn_id, operation_callback_data))
-          return;
+        gatt_svc_read_cl_supp_feat_req(conn_id);
       }
 
-      /* Could not read client supported charcteristic or eatt is not
-       * supported. Erase callback data now.
-       */
-      OngoingOps.erase(iter);
+      break;
+    }
+    case GATT_UUID_CSIS_SIRK: {
+      uint8_t tcb_idx = GATT_GET_TCB_IDX(conn_id);
+      tGATT_TCB& tcb = gatt_cb.tcb[tcb_idx];
+
+      auto operation_callback_data = std::move(iter->second.front());
+      iter->second.pop_front();
+      tcb.gatt_status = status;
+
+      if (status == GATT_SUCCESS) {
+        STREAM_TO_UINT8(tcb.sirk_type, pp);
+        STREAM_TO_ARRAY(tcb.sirk.data(), pp, 16);
+      }
+
+      std::move(operation_callback_data.sirk_cb)
+          .Run(tcb.gatt_status, tcb.peer_bda, tcb.sirk_type, tcb.sirk);
+
       break;
     }
     case GATT_UUID_CLIENT_SUP_FEAT:
       /*We don't need callback data anymore */
-      OngoingOps.erase(iter);
+      iter->second.pop_front();
 
       if (status != GATT_SUCCESS) {
-        LOG(INFO) << __func__
-                  << " Client supported features charcteristic not found";
+        log::info("Client supported features charcteristic not found");
         return;
       }
 
@@ -667,8 +689,7 @@ static void gatt_cl_op_cmpl_cback(uint16_t conn_id, tGATTC_OPTYPE op,
  *
  ******************************************************************************/
 static void gatt_cl_start_config_ccc(tGATT_PROFILE_CLCB* p_clcb) {
-
-  VLOG(1) << __func__ << ": stage: " << +p_clcb->ccc_stage;
+  log::verbose("stage: {}", p_clcb->ccc_stage);
 
   switch (p_clcb->ccc_stage) {
     case GATT_SVC_CHANGED_SERVICE: /* discover GATT service */
@@ -699,7 +720,7 @@ static void gatt_cl_start_config_ccc(tGATT_PROFILE_CLCB* p_clcb) {
       cb_data.cb = base::BindOnce(
           [](const RawAddress& bdaddr, uint8_t support) { return; });
       cb_data.op_uuid = GATT_UUID_GATT_SRV_CHGD;
-      OngoingOps[p_clcb->conn_id] = std::move(cb_data);
+      OngoingOps[p_clcb->conn_id].emplace_back(std::move(cb_data));
 
       break;
     }
@@ -770,7 +791,7 @@ static bool read_sr_supported_feat_req(
   param.service.uuid = bluetooth::Uuid::From16Bit(GATT_UUID_SERVER_SUP_FEAT);
 
   if (GATTC_Read(conn_id, GATT_READ_BY_TYPE, &param) != GATT_SUCCESS) {
-    LOG_ERROR("Read GATT Support features GATT_Read Failed");
+    log::error("Read GATT Support features GATT_Read Failed");
     return false;
   }
 
@@ -778,7 +799,35 @@ static bool read_sr_supported_feat_req(
 
   cb_data.cb = std::move(cb);
   cb_data.op_uuid = GATT_UUID_SERVER_SUP_FEAT;
-  OngoingOps[conn_id] = std::move(cb_data);
+  OngoingOps[conn_id].emplace_back(std::move(cb_data));
+
+  return true;
+}
+
+static bool read_sr_sirk_req(
+    uint16_t conn_id,
+    base::OnceCallback<void(tGATT_STATUS status, const RawAddress&,
+                            uint8_t sirk_type, Octet16& sirk)>
+        cb) {
+  tGATT_READ_PARAM param = {};
+
+  param.service.s_handle = 1;
+  param.service.e_handle = 0xFFFF;
+  param.service.auth_req = 0;
+
+  param.service.uuid = bluetooth::Uuid::From16Bit(GATT_UUID_CSIS_SIRK);
+
+  if (GATTC_Read(conn_id, GATT_READ_BY_TYPE, &param) != GATT_SUCCESS) {
+    log::error("Read GATT Support features GATT_Read Failed, conn_id: {}",
+               static_cast<int>(conn_id));
+    return false;
+  }
+
+  gatt_op_cb_data cb_data;
+
+  cb_data.sirk_cb = std::move(cb);
+  cb_data.op_uuid = GATT_UUID_CSIS_SIRK;
+  OngoingOps[conn_id].emplace_back(std::move(cb_data));
 
   return true;
 }
@@ -800,8 +849,7 @@ bool gatt_cl_read_sr_supp_feat_req(
 
   if (!cb) return false;
 
-  VLOG(1) << __func__ << " BDA: " << ADDRESS_TO_LOGGABLE_STR(peer_bda)
-          << " read gatt supported features";
+  log::verbose("BDA: {} read gatt supported features", peer_bda);
 
   GATT_GetConnIdIfConnected(gatt_cb.gatt_if, peer_bda, &conn_id,
                             BT_TRANSPORT_LE);
@@ -813,18 +861,60 @@ bool gatt_cl_read_sr_supp_feat_req(
   }
 
   if (!p_clcb) {
-    VLOG(1) << __func__ << " p_clcb is NULL " << loghex(conn_id);
+    log::verbose("p_clcb is NULL 0x{:x}", conn_id);
     return false;
   }
 
   auto it = OngoingOps.find(conn_id);
-  if (it != OngoingOps.end()) {
-    LOG(ERROR) << __func__ << " There is ongoing operation for conn_id: "
-               << loghex(conn_id);
-    return false;
+  if (it == OngoingOps.end()) {
+    OngoingOps[conn_id] = std::deque<gatt_op_cb_data>();
   }
 
   return read_sr_supported_feat_req(conn_id, std::move(cb));
+}
+
+/*******************************************************************************
+ *
+ * Function         gatt_cl_read_sirk_req
+ *
+ * Description      Read remote SIRK if it's a set member device.
+ *
+ * Returns          bool
+ *
+ ******************************************************************************/
+bool gatt_cl_read_sirk_req(
+    const RawAddress& peer_bda,
+    base::OnceCallback<void(tGATT_STATUS status, const RawAddress&,
+                            uint8_t sirk_type, Octet16& sirk)>
+        cb) {
+  tGATT_PROFILE_CLCB* p_clcb;
+  uint16_t conn_id;
+
+  if (!cb) return false;
+
+  log::debug("BDA: {}, read SIRK", peer_bda);
+
+  GATT_GetConnIdIfConnected(gatt_cb.gatt_if, peer_bda, &conn_id,
+                            BT_TRANSPORT_LE);
+  if (conn_id == GATT_INVALID_CONN_ID) return false;
+
+  p_clcb = gatt_profile_find_clcb_by_conn_id(conn_id);
+  if (!p_clcb) {
+    p_clcb = gatt_profile_clcb_alloc(conn_id, peer_bda, BT_TRANSPORT_LE);
+  }
+
+  if (!p_clcb) {
+    log::verbose("p_clcb is NULL, conn_id: {:04x}", conn_id);
+    return false;
+  }
+
+  auto it = OngoingOps.find(conn_id);
+
+  if (it == OngoingOps.end()) {
+    OngoingOps[conn_id] = std::deque<gatt_op_cb_data>();
+  }
+
+  return read_sr_sirk_req(conn_id, std::move(cb));
 }
 
 /*******************************************************************************
@@ -839,8 +929,7 @@ bool gatt_cl_read_sr_supp_feat_req(
 bool gatt_profile_get_eatt_support(const RawAddress& remote_bda) {
   uint16_t conn_id;
 
-  VLOG(1) << __func__ << " BDA: " << ADDRESS_TO_LOGGABLE_STR(remote_bda)
-          << " read GATT support";
+  log::verbose("BDA: {} read GATT support", remote_bda);
 
   GATT_GetConnIdIfConnected(gatt_cb.gatt_if, remote_bda, &conn_id,
                             BT_TRANSPORT_LE);
@@ -852,19 +941,6 @@ bool gatt_profile_get_eatt_support(const RawAddress& remote_bda) {
   uint8_t tcb_idx = GATT_GET_TCB_IDX(conn_id);
   tGATT_TCB& tcb = gatt_cb.tcb[tcb_idx];
   return tcb.sr_supp_feat & BLE_GATT_SVR_SUP_FEAT_EATT_BITMASK;
-}
-
-/*******************************************************************************
- *
- * Function         gatt_cl_is_robust_caching_enabled
- *
- * Description      Check if Robust Caching is enabled on client side.
- *
- * Returns          true if enabled in gd flag, otherwise false
- *
- ******************************************************************************/
-static bool gatt_cl_is_robust_caching_enabled() {
-  return bluetooth::common::init_flags::gatt_robust_caching_client_is_enabled();
 }
 
 /*******************************************************************************
@@ -948,9 +1024,8 @@ void gatt_sr_init_cl_status(tGATT_TCB& tcb) {
     tcb.is_robust_cache_change_aware = true;
   }
 
-  LOG(INFO) << __func__ << ": bda=" << ADDRESS_TO_LOGGABLE_STR(tcb.peer_bda)
-            << ", cl_supp_feat=" << loghex(tcb.cl_supp_feat)
-            << ", aware=" << tcb.is_robust_cache_change_aware;
+  log::info("bda={}, cl_supp_feat=0x{:x}, aware={}", tcb.peer_bda,
+            tcb.cl_supp_feat, tcb.is_robust_cache_change_aware);
 }
 
 /*******************************************************************************
@@ -974,8 +1049,7 @@ void gatt_sr_update_cl_status(tGATT_TCB& tcb, bool chg_aware) {
 
   // only when the status is changed, print the log
   if (tcb.is_robust_cache_change_aware != chg_aware) {
-    LOG(INFO) << __func__ << ": bda=" << ADDRESS_TO_LOGGABLE_STR(tcb.peer_bda)
-              << ", chg_aware=" << chg_aware;
+    log::info("bda={}, chg_aware={}", tcb.peer_bda, chg_aware);
   }
 
   tcb.is_robust_cache_change_aware = chg_aware;
@@ -984,7 +1058,7 @@ void gatt_sr_update_cl_status(tGATT_TCB& tcb, bool chg_aware) {
 /* handle request for reading database hash */
 static tGATT_STATUS gatt_sr_read_db_hash(uint16_t conn_id,
                                          tGATT_VALUE* p_value) {
-  LOG(INFO) << __func__ << ": conn_id=" << loghex(conn_id);
+  log::info("conn_id=0x{:x}", conn_id);
 
   uint8_t* p = p_value->value;
   Octet16& db_hash = gatt_cb.database_hash;
@@ -1038,14 +1112,12 @@ static tGATT_STATUS gatt_sr_write_cl_supp_feat(uint16_t conn_id,
 
   // If input length is zero, return value_not_allowed
   if (tmp.empty()) {
-    LOG(INFO) << __func__ << ": zero length, conn_id=" << loghex(conn_id)
-              << ", bda=" << ADDRESS_TO_LOGGABLE_STR(tcb.peer_bda);
+    log::info("zero length, conn_id=0x{:x}, bda={}", conn_id, tcb.peer_bda);
     return GATT_VALUE_NOT_ALLOWED;
   }
   // if original length is longer than new one, it must be the bit reset case.
   if (feature_list.size() > tmp.size()) {
-    LOG(INFO) << __func__ << ": shorter length, conn_id=" << loghex(conn_id)
-              << ", bda=" << ADDRESS_TO_LOGGABLE_STR(tcb.peer_bda);
+    log::info("shorter length, conn_id=0x{:x}, bda={}", conn_id, tcb.peer_bda);
     return GATT_VALUE_NOT_ALLOWED;
   }
   // new length is longer or equals to the original, need to check bits
@@ -1059,9 +1131,8 @@ static tGATT_STATUS gatt_sr_write_cl_supp_feat(uint16_t conn_id,
     uint8_t val_xor = *it_old ^ *it_new;
     uint8_t val_and = val_xor & *it_new;
     if (val_and != val_xor) {
-      LOG(INFO) << __func__
-                << ": bit cannot be reset, conn_id=" << loghex(conn_id)
-                << ", bda=" << ADDRESS_TO_LOGGABLE_STR(tcb.peer_bda);
+      log::info("bit cannot be reset, conn_id=0x{:x}, bda={}", conn_id,
+                tcb.peer_bda);
       return GATT_VALUE_NOT_ALLOWED;
     }
   }
@@ -1073,9 +1144,8 @@ static tGATT_STATUS gatt_sr_write_cl_supp_feat(uint16_t conn_id,
   if (!gatt_sr_is_robust_caching_enabled()) {
     // remove robust caching bit
     tcb.cl_supp_feat &= ~BLE_GATT_CL_SUP_FEAT_CACHING_BITMASK;
-    LOG(INFO) << __func__
-              << ": reset robust caching bit, conn_id=" << loghex(conn_id)
-              << ", bda=" << ADDRESS_TO_LOGGABLE_STR(tcb.peer_bda);
+    log::info("reset robust caching bit, conn_id=0x{:x}, bda={}", conn_id,
+              tcb.peer_bda);
   }
   // TODO(hylo): save data as byte array
   btif_storage_set_gatt_cl_supp_feat(tcb.peer_bda, tcb.cl_supp_feat);
@@ -1084,8 +1154,7 @@ static tGATT_STATUS gatt_sr_write_cl_supp_feat(uint16_t conn_id,
   bool new_caching_state = gatt_sr_is_cl_robust_caching_supported(tcb);
   // only when the first time robust caching request, print the log
   if (!curr_caching_state && new_caching_state) {
-    LOG(INFO) << __func__ << ": robust caching enabled by client"
-              << ", conn_id=" << loghex(conn_id);
+    log::info("robust caching enabled by client, conn_id=0x{:x}", conn_id);
   }
 
   return GATT_SUCCESS;

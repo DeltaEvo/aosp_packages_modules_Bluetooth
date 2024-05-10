@@ -14,25 +14,30 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "acl"
+
+#include <bluetooth/log.h>
+
 #include <cstdint>
 
-#include "osi/include/log.h"
+#include "common/init_flags.h"
+#include "os/log.h"
 #include "stack/btm/btm_ble_int.h"
 #include "stack/btm/btm_dev.h"
+#include "stack/btm/btm_int_types.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/gatt/connection_manager.h"
 #include "stack/include/acl_api.h"
-#include "stack/include/bt_types.h"
+#include "stack/include/btm_ble_addr.h"
+#include "stack/include/btm_ble_privacy.h"
 #include "stack/include/l2cap_hci_link_interface.h"
 #include "types/raw_address.h"
 
+using namespace bluetooth;
+
 extern tBTM_CB btm_cb;
 
-void btm_ble_advertiser_notify_terminated_legacy(uint8_t status,
-                                                 uint16_t connection_handle);
 void btm_ble_increment_link_topology_mask(uint8_t link_role);
-
-bool maybe_resolve_address(RawAddress* bda, tBLE_ADDR_TYPE* bda_type);
 
 static bool acl_ble_common_connection(
     const tBLE_BD_ADDR& address_with_type, uint16_t handle, tHCI_ROLE role,
@@ -44,7 +49,10 @@ static bool acl_ble_common_connection(
   }
 
   // Inform any applications that a connection has completed.
-  connection_manager::on_connection_complete(address_with_type.bda);
+  if (!bluetooth::common::init_flags::
+          use_unified_connection_manager_is_enabled()) {
+    connection_manager::on_connection_complete(address_with_type.bda);
+  }
 
   // Allocate or update the security device record for this device
   btm_ble_connected(address_with_type.bda, handle, HCI_ENCRYPT_MODE_DISABLED,
@@ -59,7 +67,7 @@ static bool acl_ble_common_connection(
                         address_with_type.type, conn_interval, conn_latency,
                         conn_timeout)) {
     btm_sec_disconnect(handle, HCI_ERR_PEER_USER, "stack::acl::ble_acl fail");
-    LOG_WARN("Unable to complete l2cap connection");
+    log::warn("Unable to complete l2cap connection");
     return false;
   }
 
@@ -72,32 +80,27 @@ static bool acl_ble_common_connection(
 void acl_ble_enhanced_connection_complete(
     const tBLE_BD_ADDR& address_with_type, uint16_t handle, tHCI_ROLE role,
     bool match, uint16_t conn_interval, uint16_t conn_latency,
-    uint16_t conn_timeout, const RawAddress& local_rpa,
+    uint16_t conn_timeout, const RawAddress& /* local_rpa */,
     const RawAddress& peer_rpa, tBLE_ADDR_TYPE peer_addr_type,
     bool can_read_discoverable_characteristics) {
   if (!acl_ble_common_connection(address_with_type, handle, role, match,
                                  conn_interval, conn_latency, conn_timeout,
                                  can_read_discoverable_characteristics)) {
-    LOG_WARN("Unable to create enhanced ble acl connection");
+    log::warn("Unable to create enhanced ble acl connection");
     return;
   }
 
-  btm_ble_refresh_local_resolvable_private_addr(address_with_type.bda,
-                                                local_rpa);
-
   if (peer_addr_type & BLE_ADDR_TYPE_ID_BIT)
-    btm_ble_refresh_peer_resolvable_private_addr(
-        address_with_type.bda, peer_rpa, tBTM_SEC_BLE::BTM_BLE_ADDR_RRA);
+    btm_ble_refresh_peer_resolvable_private_addr(address_with_type.bda,
+                                                 peer_rpa, BTM_BLE_ADDR_RRA);
   btm_ble_update_mode_operation(role, &address_with_type.bda, HCI_SUCCESS);
-
-  if (role == HCI_ROLE_PERIPHERAL)
-    btm_ble_advertiser_notify_terminated_legacy(HCI_SUCCESS, handle);
 }
 
 static bool maybe_resolve_received_address(
     const tBLE_BD_ADDR& address_with_type,
     tBLE_BD_ADDR* resolved_address_with_type) {
-  ASSERT(resolved_address_with_type != nullptr);
+  log::assert_that(resolved_address_with_type != nullptr,
+                   "assert failed: resolved_address_with_type != nullptr");
 
   *resolved_address_with_type = address_with_type;
   return maybe_resolve_address(&resolved_address_with_type->bda,
@@ -109,7 +112,10 @@ void acl_ble_enhanced_connection_complete_from_shim(
     uint16_t conn_interval, uint16_t conn_latency, uint16_t conn_timeout,
     const RawAddress& local_rpa, const RawAddress& peer_rpa,
     tBLE_ADDR_TYPE peer_addr_type, bool can_read_discoverable_characteristics) {
-  connection_manager::on_connection_complete(address_with_type.bda);
+  if (!bluetooth::common::init_flags::
+          use_unified_connection_manager_is_enabled()) {
+    connection_manager::on_connection_complete(address_with_type.bda);
+  }
 
   tBLE_BD_ADDR resolved_address_with_type;
   const bool is_in_security_db = maybe_resolve_received_address(
@@ -127,15 +133,11 @@ void acl_ble_enhanced_connection_complete_from_shim(
 }
 
 void acl_ble_connection_fail(const tBLE_BD_ADDR& address_with_type,
-                             uint16_t handle, bool enhanced, tHCI_STATUS status,
-                             bool locally_initiated) {
-  acl_set_locally_initiated(locally_initiated);
+                             uint16_t /* handle */, bool /* enhanced */,
+                             tHCI_STATUS status) {
+  acl_set_locally_initiated(
+      true);  // LE connection failures are always locally initiated
   btm_acl_create_failed(address_with_type.bda, BT_TRANSPORT_LE, status);
-
-  // Stop here if the connection is not locally initiated.
-  if (!locally_initiated) {
-    return;
-  }
 
   if (status != HCI_ERR_ADVERTISING_TIMEOUT) {
     btm_cb.ble_ctr_cb.set_connection_state_idle();
@@ -143,12 +145,14 @@ void acl_ble_connection_fail(const tBLE_BD_ADDR& address_with_type,
     tBLE_BD_ADDR resolved_address_with_type;
     maybe_resolve_received_address(address_with_type,
                                    &resolved_address_with_type);
-    connection_manager::on_connection_timed_out_from_shim(
-        resolved_address_with_type.bda);
-    LOG_WARN("LE connection fail peer:%s bd_addr:%s hci_status:%s",
-             ADDRESS_TO_LOGGABLE_CSTR(address_with_type),
-             ADDRESS_TO_LOGGABLE_CSTR(resolved_address_with_type.bda),
-             hci_status_code_text(status).c_str());
+    if (!bluetooth::common::init_flags::
+            use_unified_connection_manager_is_enabled()) {
+      connection_manager::on_connection_timed_out_from_shim(
+          resolved_address_with_type.bda);
+    }
+    log::warn("LE connection fail peer:{} bd_addr:{} hci_status:{}",
+              address_with_type, resolved_address_with_type.bda,
+              hci_status_code_text(status));
   } else {
     btm_cb.ble_ctr_cb.inq_var.adv_mode = BTM_BLE_ADV_DISABLE;
   }
@@ -176,9 +180,17 @@ void acl_ble_data_length_change_event(uint16_t handle, uint16_t max_tx_octets,
                                       uint16_t max_tx_time,
                                       uint16_t max_rx_octets,
                                       uint16_t max_rx_time) {
-  LOG_DEBUG(
-      "Data length change event received handle:0x%04x max_tx_octets:%hu "
-      "max_tx_time:%hu max_rx_octets:%hu max_rx_time:%hu",
+  log::debug(
+      "Data length change event received handle:0x{:04x} max_tx_octets:{} "
+      "max_tx_time:{} max_rx_octets:{} max_rx_time:{}",
       handle, max_tx_octets, max_tx_time, max_rx_octets, max_rx_time);
   l2cble_process_data_length_change_event(handle, max_tx_octets, max_rx_octets);
+}
+
+uint64_t btm_get_next_private_addrress_interval_ms() {
+  /* 7 minutes minimum, 15 minutes maximum for random address refreshing */
+  const uint64_t interval_min_ms = (7 * 60 * 1000);
+  const uint64_t interval_random_part_max_ms = (8 * 60 * 1000);
+
+  return interval_min_ms + std::rand() % interval_random_part_max_ms;
 }

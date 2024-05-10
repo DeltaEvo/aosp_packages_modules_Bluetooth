@@ -65,17 +65,25 @@ namespace {
 
 class TestLeConnectionManagementCallbacks : public hci::acl_manager::LeConnectionManagementCallbacks {
   void OnConnectionUpdate(
-      hci::ErrorCode hci_status,
-      uint16_t connection_interval,
-      uint16_t connection_latency,
-      uint16_t supervision_timeout) override {}
-  virtual void OnDataLengthChange(uint16_t tx_octets, uint16_t tx_time, uint16_t rx_octets, uint16_t rx_time) override {
-  }
-  virtual void OnDisconnection(hci::ErrorCode reason) override {}
+      hci::ErrorCode /* hci_status */,
+      uint16_t /* connection_interval */,
+      uint16_t /* connection_latency */,
+      uint16_t /* supervision_timeout */) override {}
+  virtual void OnDataLengthChange(
+      uint16_t /* tx_octets */,
+      uint16_t /* tx_time */,
+      uint16_t /* rx_octets */,
+      uint16_t /* rx_time */) override {}
+  virtual void OnDisconnection(hci::ErrorCode /* reason */) override {}
   virtual void OnReadRemoteVersionInformationComplete(
-      hci::ErrorCode hci_status, uint8_t lmp_version, uint16_t manufacturer_name, uint16_t sub_version) override {}
-  virtual void OnLeReadRemoteFeaturesComplete(hci::ErrorCode hci_status, uint64_t features) override {}
-  virtual void OnPhyUpdate(hci::ErrorCode hci_status, uint8_t tx_phy, uint8_t rx_phy) override {}
+      hci::ErrorCode /* hci_status */,
+      uint8_t /* lmp_version */,
+      uint16_t /* manufacturer_name */,
+      uint16_t /* sub_version */) override {}
+  virtual void OnLeReadRemoteFeaturesComplete(
+      hci::ErrorCode /* hci_status */, uint64_t /* features */) override {}
+  virtual void OnPhyUpdate(
+      hci::ErrorCode /* hci_status */, uint8_t /* tx_phy */, uint8_t /* rx_phy */) override {}
   MOCK_METHOD(
       void,
       OnLeSubrateChange,
@@ -187,8 +195,10 @@ class LeAclConnectionTest : public ::testing::Test {
   }
 
   void sync_handler() {
-    ASSERT(thread_ != nullptr);
-    ASSERT(thread_->GetReactor()->WaitForIdle(2s));
+    log::assert_that(thread_ != nullptr, "assert failed: thread_ != nullptr");
+    log::assert_that(
+        thread_->GetReactor()->WaitForIdle(2s),
+        "assert failed: thread_->GetReactor()->WaitForIdle(2s)");
   }
 
   AddressWithType address_1 =
@@ -225,7 +235,7 @@ TEST_F(LeAclConnectionTest, LeSubrateRequest_success) {
   hci::EventView event = hci::EventView::Create(GetPacketView(std::move(status_builder)));
   hci::CommandStatusView command_status = hci::CommandStatusView::Create(event);
   auto on_status = le_acl_connection_interface_.DequeueStatusCallback();
-  on_status.Invoke(command_status);
+  on_status(command_status);
   sync_handler();
 }
 
@@ -246,7 +256,7 @@ TEST_F(LeAclConnectionTest, LeSubrateRequest_error) {
   hci::EventView event = hci::EventView::Create(GetPacketView(std::move(status_builder)));
   hci::CommandStatusView command_status = hci::CommandStatusView::Create(event);
   auto on_status = le_acl_connection_interface_.DequeueStatusCallback();
-  on_status.Invoke(std::move(command_status));
+  on_status(std::move(command_status));
   sync_handler();
 }
 

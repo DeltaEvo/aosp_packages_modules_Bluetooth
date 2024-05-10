@@ -16,14 +16,21 @@
 
 #include "hci/controller.h"
 
+#include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
+
 #include <future>
 #include <memory>
 #include <string>
 #include <utility>
 
 #include "common/init_flags.h"
+#include "dumpsys_data_generated.h"
+#include "hci/controller_interface.h"
+#include "hci/event_checkers.h"
 #include "hci/hci_layer.h"
 #include "hci_controller_generated.h"
+#include "os/log.h"
 #include "os/metrics.h"
 #include "os/system_properties.h"
 #include "sysprops/sysprops_module.h"
@@ -95,16 +102,22 @@ struct Controller::impl {
           handler->BindOnceOn(this, &Controller::impl::le_read_buffer_size_handler));
     }
 
+    if (is_supported(OpCode::READ_LOCAL_SUPPORTED_CODECS_V1)) {
+      hci_->EnqueueCommand(
+          ReadLocalSupportedCodecsV1Builder::Create(),
+          handler->BindOnceOn(this, &Controller::impl::read_local_supported_codecs_v1_handler));
+    }
+
     hci_->EnqueueCommand(
         LeReadFilterAcceptListSizeBuilder::Create(),
-        handler->BindOnceOn(this, &Controller::impl::le_read_connect_list_size_handler));
+        handler->BindOnceOn(this, &Controller::impl::le_read_accept_list_size_handler));
 
     if (is_supported(OpCode::LE_READ_RESOLVING_LIST_SIZE) && module_.SupportsBlePrivacy()) {
       hci_->EnqueueCommand(
           LeReadResolvingListSizeBuilder::Create(),
           handler->BindOnceOn(this, &Controller::impl::le_read_resolving_list_size_handler));
     } else {
-      LOG_INFO("LE_READ_RESOLVING_LIST_SIZE not supported, defaulting to 0");
+      log::info("LE_READ_RESOLVING_LIST_SIZE not supported, defaulting to 0");
       le_resolving_list_size_ = 0;
     }
 
@@ -112,7 +125,7 @@ struct Controller::impl {
       hci_->EnqueueCommand(LeReadMaximumDataLengthBuilder::Create(),
                            handler->BindOnceOn(this, &Controller::impl::le_read_maximum_data_length_handler));
     } else {
-      LOG_INFO("LE_READ_MAXIMUM_DATA_LENGTH not supported, defaulting to 0");
+      log::info("LE_READ_MAXIMUM_DATA_LENGTH not supported, defaulting to 0");
       le_maximum_data_length_.supported_max_rx_octets_ = 0;
       le_maximum_data_length_.supported_max_rx_time_ = 0;
       le_maximum_data_length_.supported_max_tx_octets_ = 0;
@@ -120,20 +133,19 @@ struct Controller::impl {
     }
 
     // SSP is managed by security layer once enabled
-    if (!common::init_flags::gd_security_is_enabled()) {
-      write_simple_pairing_mode(Enable::ENABLED);
-      if (module_.SupportsSecureConnections()) {
-        hci_->EnqueueCommand(
-            WriteSecureConnectionsHostSupportBuilder::Create(Enable::ENABLED),
-            handler->BindOnceOn(this, &Controller::impl::write_secure_connections_host_support_complete_handler));
-      }
+    write_simple_pairing_mode(Enable::ENABLED);
+    if (module_.SupportsSecureConnections()) {
+      hci_->EnqueueCommand(
+          WriteSecureConnectionsHostSupportBuilder::Create(Enable::ENABLED),
+          handler->BindOnceOn(
+              this, &Controller::impl::write_secure_connections_host_support_complete_handler));
     }
     if (is_supported(OpCode::LE_READ_SUGGESTED_DEFAULT_DATA_LENGTH) && module_.SupportsBleDataPacketLengthExtension()) {
       hci_->EnqueueCommand(
           LeReadSuggestedDefaultDataLengthBuilder::Create(),
           handler->BindOnceOn(this, &Controller::impl::le_read_suggested_default_data_length_handler));
     } else {
-      LOG_INFO("LE_READ_SUGGESTED_DEFAULT_DATA_LENGTH not supported, defaulting to 27 (0x1B)");
+      log::info("LE_READ_SUGGESTED_DEFAULT_DATA_LENGTH not supported, defaulting to 27 (0x1B)");
       le_suggested_default_data_length_ = 27;
     }
 
@@ -142,7 +154,7 @@ struct Controller::impl {
           LeReadMaximumAdvertisingDataLengthBuilder::Create(),
           handler->BindOnceOn(this, &Controller::impl::le_read_maximum_advertising_data_length_handler));
     } else {
-      LOG_INFO("LE_READ_MAXIMUM_ADVERTISING_DATA_LENGTH not supported, defaulting to 31 (0x1F)");
+      log::info("LE_READ_MAXIMUM_ADVERTISING_DATA_LENGTH not supported, defaulting to 31 (0x1F)");
       le_maximum_advertising_data_length_ = 31;
     }
 
@@ -152,16 +164,17 @@ struct Controller::impl {
           LeReadNumberOfSupportedAdvertisingSetsBuilder::Create(),
           handler->BindOnceOn(this, &Controller::impl::le_read_number_of_supported_advertising_sets_handler));
     } else {
-      LOG_INFO("LE_READ_NUMBER_OF_SUPPORTED_ADVERTISING_SETS not supported, defaulting to 1");
+      log::info("LE_READ_NUMBER_OF_SUPPORTED_ADVERTISING_SETS not supported, defaulting to 1");
       le_number_supported_advertising_sets_ = 1;
     }
 
-    if (is_supported(OpCode::LE_READ_PERIODIC_ADVERTISING_LIST_SIZE) && module_.SupportsBlePeriodicAdvertising()) {
+    if (is_supported(OpCode::LE_READ_PERIODIC_ADVERTISER_LIST_SIZE) &&
+        module_.SupportsBlePeriodicAdvertising()) {
       hci_->EnqueueCommand(
           LeReadPeriodicAdvertiserListSizeBuilder::Create(),
           handler->BindOnceOn(this, &Controller::impl::le_read_periodic_advertiser_list_size_handler));
     } else {
-      LOG_INFO("LE_READ_PERIODIC_ADVERTISING_LIST_SIZE not supported, defaulting to 0");
+      log::info("LE_READ_PERIODIC_ADVERTISER_LIST_SIZE not supported, defaulting to 0");
       le_periodic_advertiser_list_size_ = 0;
     }
     if (is_supported(OpCode::LE_SET_HOST_FEATURE) && module_.SupportsBleConnectedIsochronousStreamCentral()) {
@@ -178,12 +191,26 @@ struct Controller::impl {
           handler->BindOnceOn(this, &Controller::impl::le_set_host_feature_handler));
     }
 
+    if (is_supported(OpCode::READ_DEFAULT_ERRONEOUS_DATA_REPORTING)) {
+      hci_->EnqueueCommand(
+          ReadDefaultErroneousDataReportingBuilder::Create(),
+          handler->BindOnceOn(
+              this, &Controller::impl::read_default_erroneous_data_reporting_handler));
+    }
+
     // Skip vendor capabilities check if configured.
     if (os::GetSystemPropertyBool(
             kPropertyVendorCapabilitiesEnabled, kDefaultVendorCapabilitiesEnabled)) {
+      // More commands can be enqueued from le_get_vendor_capabilities_handler
+      std::promise<void> vendor_promise;
+      auto vendor_future = vendor_promise.get_future();
       hci_->EnqueueCommand(
           LeGetVendorCapabilitiesBuilder::Create(),
-          handler->BindOnceOn(this, &Controller::impl::le_get_vendor_capabilities_handler));
+          handler->BindOnceOn(
+              this,
+              &Controller::impl::le_get_vendor_capabilities_handler,
+              std::move(vendor_promise)));
+      vendor_future.wait();
     } else {
       vendor_capabilities_.is_supported_ = 0x00;
     }
@@ -198,15 +225,12 @@ struct Controller::impl {
   }
 
   void Stop() {
-    if (bluetooth::common::init_flags::gd_core_is_enabled()) {
-      hci_->UnregisterEventHandler(EventCode::NUMBER_OF_COMPLETED_PACKETS);
-    }
     hci_ = nullptr;
   }
 
   void NumberOfCompletedPackets(EventView event) {
-    if (acl_credits_callback_.IsEmpty()) {
-      LOG_WARN("Received event when AclManager is not listening");
+    if (!acl_credits_callback_) {
+      log::warn("Received event when AclManager is not listening");
       return;
     }
     auto complete_view = NumberOfCompletedPacketsView::Create(event);
@@ -214,40 +238,40 @@ struct Controller::impl {
     for (auto completed_packets : complete_view.GetCompletedPackets()) {
       uint16_t handle = completed_packets.connection_handle_;
       uint16_t credits = completed_packets.host_num_of_completed_packets_;
-      acl_credits_callback_.Invoke(handle, credits);
-      if (!acl_monitor_credits_callback_.IsEmpty()) {
-        acl_monitor_credits_callback_.Invoke(handle, credits);
+      acl_credits_callback_(handle, credits);
+      if (acl_monitor_credits_callback_) {
+        acl_monitor_credits_callback_(handle, credits);
       }
     }
   }
 
   void register_completed_acl_packets_callback(CompletedAclPacketsCallback callback) {
-    ASSERT(acl_credits_callback_.IsEmpty());
+    ASSERT(!acl_credits_callback_);
     acl_credits_callback_ = callback;
   }
 
   void unregister_completed_acl_packets_callback() {
-    ASSERT(!acl_credits_callback_.IsEmpty());
+    ASSERT(acl_credits_callback_);
     acl_credits_callback_ = {};
   }
 
   void register_completed_monitor_acl_packets_callback(CompletedAclPacketsCallback callback) {
-    ASSERT(acl_monitor_credits_callback_.IsEmpty());
+    ASSERT(!acl_monitor_credits_callback_);
     acl_monitor_credits_callback_ = callback;
   }
 
   void unregister_completed_monitor_acl_packets_callback() {
-    ASSERT(!acl_monitor_credits_callback_.IsEmpty());
+    ASSERT(acl_monitor_credits_callback_);
     acl_monitor_credits_callback_ = {};
   }
 
   void register_monitor_completed_acl_packets_callback(CompletedAclPacketsCallback callback) {
-    ASSERT(acl_monitor_credits_callback_.IsEmpty());
+    ASSERT(!acl_monitor_credits_callback_);
     acl_monitor_credits_callback_ = callback;
   }
 
   void unregister_monitor_completed_acl_packets_callback() {
-    ASSERT(!acl_monitor_credits_callback_.IsEmpty());
+    ASSERT(acl_monitor_credits_callback_);
     acl_monitor_credits_callback_ = {};
   }
 
@@ -255,14 +279,14 @@ struct Controller::impl {
     auto complete_view = WriteSecureConnectionsHostSupportCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
   }
 
   void read_local_name_complete_handler(CommandCompleteView view) {
     auto complete_view = ReadLocalNameCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
     std::array<uint8_t, 248> local_name_array = complete_view.GetLocalName();
 
     local_name_ = std::string(local_name_array.begin(), local_name_array.end());
@@ -274,7 +298,7 @@ struct Controller::impl {
     auto complete_view = ReadLocalVersionInformationCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
 
     local_version_information_ = complete_view.GetLocalVersionInformation();
     bluetooth::os::LogMetricBluetoothLocalVersions(
@@ -289,7 +313,7 @@ struct Controller::impl {
     auto complete_view = ReadLocalSupportedCommandsCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
     local_supported_commands_ = complete_view.GetSupportedCommands();
   }
 
@@ -297,7 +321,7 @@ struct Controller::impl {
     auto complete_view = ReadLocalExtendedFeaturesCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
     uint8_t page_number = complete_view.GetPageNumber();
     extended_lmp_features_array_.push_back(complete_view.GetExtendedLmpFeatures());
     bluetooth::os::LogMetricBluetoothLocalSupportedFeatures(page_number, complete_view.GetExtendedLmpFeatures());
@@ -317,7 +341,7 @@ struct Controller::impl {
     auto complete_view = ReadBufferSizeCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
     acl_buffer_length_ = complete_view.GetAclDataPacketLength();
     acl_buffers_ = complete_view.GetTotalNumAclDataPackets();
 
@@ -329,7 +353,7 @@ struct Controller::impl {
     auto complete_view = ReadBdAddrCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
     mac_address_ = complete_view.GetBdAddr();
     promise.set_value();
   }
@@ -338,7 +362,7 @@ struct Controller::impl {
     auto complete_view = LeReadBufferSizeV1CompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
     le_buffer_size_ = complete_view.GetLeBufferSize();
 
     // If LE buffer size is zero, then buffers returned by Read_Buffer_Size are shared between BR/EDR and LE.
@@ -350,18 +374,27 @@ struct Controller::impl {
     }
   }
 
+  void read_local_supported_codecs_v1_handler(CommandCompleteView view) {
+    auto complete_view = ReadLocalSupportedCodecsV1CompleteView::Create(view);
+    ASSERT(complete_view.IsValid());
+    ErrorCode status = complete_view.GetStatus();
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
+    local_supported_codec_ids_ = complete_view.GetSupportedCodecs();
+    local_supported_vendor_codec_ids_ = complete_view.GetVendorSpecificCodecs();
+  }
+
   void set_min_encryption_key_size_handler(CommandCompleteView view) {
     auto complete_view = SetMinEncryptionKeySizeCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
   }
 
   void le_read_buffer_size_v2_handler(CommandCompleteView view) {
     auto complete_view = LeReadBufferSizeV2CompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
     le_buffer_size_ = complete_view.GetLeBufferSize();
     iso_buffer_size_ = complete_view.GetIsoBufferSize();
 
@@ -378,14 +411,70 @@ struct Controller::impl {
     auto complete_view = LeSetHostFeatureCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
+  }
+
+  void read_default_erroneous_data_reporting_handler(CommandCompleteView view) {
+    ASSERT(view.GetCommandOpCode() == OpCode::READ_DEFAULT_ERRONEOUS_DATA_REPORTING);
+    auto complete_view = ReadDefaultErroneousDataReportingCompleteView::Create(view);
+    // Check to see that the opcode was correct.
+    // log::assert_that is not used here to avoid process abort.
+    // Some devices, such as mokey_go32, may claim to support it but do not
+    // actually do so (b/277589118).
+    if (!complete_view.IsValid()) {
+      log::error("invalid command complete view");
+      return;
+    }
+
+    ErrorCode status = complete_view.GetStatus();
+    // This is an optional feature to enhance audio quality. It is okay
+    // to just return if the status is not SUCCESS.
+    if (status != ErrorCode::SUCCESS) {
+      log::error("Unexpected status: {}", ErrorCodeText(status));
+      return;
+    }
+
+    Enable erroneous_data_reporting = complete_view.GetErroneousDataReporting();
+    log::info("erroneous data reporting: {}", erroneous_data_reporting);
+
+    // Enable Erroneous Data Reporting if it is disabled and the write command is supported.
+    if (erroneous_data_reporting == Enable::DISABLED &&
+        is_supported(OpCode::WRITE_DEFAULT_ERRONEOUS_DATA_REPORTING)) {
+      std::unique_ptr<WriteDefaultErroneousDataReportingBuilder> packet =
+          WriteDefaultErroneousDataReportingBuilder::Create(Enable::ENABLED);
+      hci_->EnqueueCommand(
+          std::move(packet),
+          module_.GetHandler()->BindOnceOn(
+              this, &Controller::impl::write_default_erroneous_data_reporting_handler));
+    }
+  }
+
+  void write_default_erroneous_data_reporting_handler(CommandCompleteView view) {
+    ASSERT(view.GetCommandOpCode() == OpCode::WRITE_DEFAULT_ERRONEOUS_DATA_REPORTING);
+    auto complete_view = WriteDefaultErroneousDataReportingCompleteView::Create(view);
+    // Check to see that the opcode was correct.
+    // log::assert_that is not used here to avoid process abort.
+    // Some devices, such as mokey_go32, may claim to support it but do not
+    // actually do so (b/277589118).
+    if (!complete_view.IsValid()) {
+      log::error("invalid command complete view");
+      return;
+    }
+
+    ErrorCode status = complete_view.GetStatus();
+    // This is an optional feature to enhance audio quality. It is okay
+    // to just return if the status is not SUCCESS.
+    if (status != ErrorCode::SUCCESS) {
+      log::error("Unexpected status: {}", ErrorCodeText(status));
+      return;
+    }
   }
 
   void le_read_local_supported_features_handler(CommandCompleteView view) {
     auto complete_view = LeReadLocalSupportedFeaturesCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", status, ErrorCodeText(status));
     le_local_supported_features_ = complete_view.GetLeFeatures();
   }
 
@@ -393,23 +482,23 @@ struct Controller::impl {
     auto complete_view = LeReadSupportedStatesCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
     le_supported_states_ = complete_view.GetLeStates();
   }
 
-  void le_read_connect_list_size_handler(CommandCompleteView view) {
+  void le_read_accept_list_size_handler(CommandCompleteView view) {
     auto complete_view = LeReadFilterAcceptListSizeCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
-    le_connect_list_size_ = complete_view.GetFilterAcceptListSize();
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
+    le_accept_list_size_ = complete_view.GetFilterAcceptListSize();
   }
 
   void le_read_resolving_list_size_handler(CommandCompleteView view) {
     auto complete_view = LeReadResolvingListSizeCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
     le_resolving_list_size_ = complete_view.GetResolvingListSize();
   }
 
@@ -417,7 +506,7 @@ struct Controller::impl {
     auto complete_view = LeReadMaximumDataLengthCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
     le_maximum_data_length_ = complete_view.GetLeMaximumDataLength();
   }
 
@@ -425,7 +514,7 @@ struct Controller::impl {
     auto complete_view = LeReadSuggestedDefaultDataLengthCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
     le_suggested_default_data_length_ = complete_view.GetTxOctets();
   }
 
@@ -433,7 +522,7 @@ struct Controller::impl {
     auto complete_view = LeReadMaximumAdvertisingDataLengthCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
     le_maximum_advertising_data_length_ = complete_view.GetMaximumAdvertisingDataLength();
   }
 
@@ -441,7 +530,7 @@ struct Controller::impl {
     auto complete_view = LeReadNumberOfSupportedAdvertisingSetsCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
     le_number_supported_advertising_sets_ = complete_view.GetNumberSupportedAdvertisingSets();
   }
 
@@ -449,11 +538,12 @@ struct Controller::impl {
     auto complete_view = LeReadPeriodicAdvertiserListSizeCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+    log::assert_that(status == ErrorCode::SUCCESS, "Status {}", ErrorCodeText(status));
     le_periodic_advertiser_list_size_ = complete_view.GetPeriodicAdvertiserListSize();
   }
 
-  void le_get_vendor_capabilities_handler(CommandCompleteView view) {
+  void le_get_vendor_capabilities_handler(
+      std::promise<void> vendor_promise, CommandCompleteView view) {
     auto complete_view = LeGetVendorCapabilitiesCompleteView::Create(view);
 
     vendor_capabilities_.is_supported_ = 0x00;
@@ -472,110 +562,221 @@ struct Controller::impl {
     vendor_capabilities_.le_address_generation_offloading_support_ = 0x00;
     vendor_capabilities_.a2dp_source_offload_capability_mask_ = 0x00;
     vendor_capabilities_.bluetooth_quality_report_support_ = 0x00;
+    vendor_capabilities_.a2dp_offload_v2_support_ = 0x00;
 
-    if (complete_view.IsValid()) {
-      vendor_capabilities_.is_supported_ = 0x01;
-
-      // v0.55
-      BaseVendorCapabilities base_vendor_capabilities = complete_view.GetBaseVendorCapabilities();
-      vendor_capabilities_.max_advt_instances_ = base_vendor_capabilities.max_advt_instances_;
-      vendor_capabilities_.offloaded_resolution_of_private_address_ =
-          base_vendor_capabilities.offloaded_resolution_of_private_address_;
-      vendor_capabilities_.total_scan_results_storage_ = base_vendor_capabilities.total_scan_results_storage_;
-      vendor_capabilities_.max_irk_list_sz_ = base_vendor_capabilities.max_irk_list_sz_;
-      vendor_capabilities_.filtering_support_ = base_vendor_capabilities.filtering_support_;
-      vendor_capabilities_.max_filter_ = base_vendor_capabilities.max_filter_;
-      vendor_capabilities_.activity_energy_info_support_ = base_vendor_capabilities.activity_energy_info_support_;
-      if (complete_view.GetPayload().size() == 0) {
-        vendor_capabilities_.version_supported_ = 55;
-        return;
-      }
-
-      // v0.95
-      auto v95 = LeGetVendorCapabilitiesComplete095View::Create(complete_view);
-      if (!v95.IsValid()) {
-        LOG_ERROR("invalid data for hci requirements v0.95");
-        return;
-      }
-      vendor_capabilities_.version_supported_ = v95.GetVersionSupported();
-      vendor_capabilities_.total_num_of_advt_tracked_ = v95.GetTotalNumOfAdvtTracked();
-      vendor_capabilities_.extended_scan_support_ = v95.GetExtendedScanSupport();
-      vendor_capabilities_.debug_logging_supported_ = v95.GetDebugLoggingSupported();
-      if (vendor_capabilities_.version_supported_ <= 95 || complete_view.GetPayload().size() == 0) {
-        return;
-      }
-
-      // v0.96
-      auto v96 = LeGetVendorCapabilitiesComplete096View::Create(v95);
-      if (!v96.IsValid()) {
-        LOG_ERROR("invalid data for hci requirements v0.96");
-        return;
-      }
-      vendor_capabilities_.le_address_generation_offloading_support_ = v96.GetLeAddressGenerationOffloadingSupport();
-      if (vendor_capabilities_.version_supported_ <= 96 || complete_view.GetPayload().size() == 0) {
-        return;
-      }
-
-      // v0.98
-      auto v98 = LeGetVendorCapabilitiesComplete098View::Create(v96);
-      if (!v98.IsValid()) {
-        LOG_ERROR("invalid data for hci requirements v0.98");
-        return;
-      }
-      vendor_capabilities_.a2dp_source_offload_capability_mask_ = v98.GetA2dpSourceOffloadCapabilityMask();
-      vendor_capabilities_.bluetooth_quality_report_support_ = v98.GetBluetoothQualityReportSupport();
+    if (!complete_view.IsValid()) {
+      vendor_promise.set_value();
+      return;
     }
+    vendor_capabilities_.is_supported_ = 0x01;
+
+    // v0.55
+    BaseVendorCapabilities base_vendor_capabilities = complete_view.GetBaseVendorCapabilities();
+    vendor_capabilities_.max_advt_instances_ = base_vendor_capabilities.max_advt_instances_;
+    vendor_capabilities_.offloaded_resolution_of_private_address_ =
+        base_vendor_capabilities.offloaded_resolution_of_private_address_;
+    vendor_capabilities_.total_scan_results_storage_ =
+        base_vendor_capabilities.total_scan_results_storage_;
+    vendor_capabilities_.max_irk_list_sz_ = base_vendor_capabilities.max_irk_list_sz_;
+    vendor_capabilities_.filtering_support_ = base_vendor_capabilities.filtering_support_;
+    vendor_capabilities_.max_filter_ = base_vendor_capabilities.max_filter_;
+    vendor_capabilities_.activity_energy_info_support_ =
+        base_vendor_capabilities.activity_energy_info_support_;
+
+    if (complete_view.GetPayload().size() == 0) {
+      vendor_capabilities_.version_supported_ = 55;
+      vendor_promise.set_value();
+      return;
+    }
+
+    // v0.95
+    auto v95 = LeGetVendorCapabilitiesComplete095View::Create(complete_view);
+    if (!v95.IsValid()) {
+      log::info("invalid data for hci requirements v0.95");
+      vendor_promise.set_value();
+      return;
+    }
+    vendor_capabilities_.version_supported_ = v95.GetVersionSupported();
+    vendor_capabilities_.total_num_of_advt_tracked_ = v95.GetTotalNumOfAdvtTracked();
+    vendor_capabilities_.extended_scan_support_ = v95.GetExtendedScanSupport();
+    vendor_capabilities_.debug_logging_supported_ = v95.GetDebugLoggingSupported();
+    if (vendor_capabilities_.version_supported_ <= 95 || complete_view.GetPayload().size() == 0) {
+      vendor_promise.set_value();
+      return;
+    }
+
+    // v0.96
+    auto v96 = LeGetVendorCapabilitiesComplete096View::Create(v95);
+    if (!v96.IsValid()) {
+      log::info("invalid data for hci requirements v0.96");
+      vendor_promise.set_value();
+      return;
+    }
+    vendor_capabilities_.le_address_generation_offloading_support_ =
+        v96.GetLeAddressGenerationOffloadingSupport();
+    if (vendor_capabilities_.version_supported_ <= 96 || complete_view.GetPayload().size() == 0) {
+      vendor_promise.set_value();
+      return;
+    }
+
+    // v0.98
+    auto v98 = LeGetVendorCapabilitiesComplete098View::Create(v96);
+    if (!v98.IsValid()) {
+      log::info("invalid data for hci requirements v0.98");
+      vendor_promise.set_value();
+      return;
+    }
+    vendor_capabilities_.a2dp_source_offload_capability_mask_ =
+        v98.GetA2dpSourceOffloadCapabilityMask();
+    vendor_capabilities_.bluetooth_quality_report_support_ = v98.GetBluetoothQualityReportSupport();
+
+    // v1.03
+    auto v103 = LeGetVendorCapabilitiesComplete103View::Create(v98);
+    if (!v103.IsValid()) {
+      log::info("invalid data for hci requirements v1.03");
+      vendor_promise.set_value();
+      return;
+    }
+    vendor_capabilities_.dynamic_audio_buffer_support_ = v103.GetDynamicAudioBufferSupport();
+
+    if (com::android::bluetooth::flags::a2dp_offload_codec_extensibility()) {
+      // v1.04
+      auto v104 = LeGetVendorCapabilitiesComplete104View::Create(v103);
+      if (!v104.IsValid()) {
+        log::info("invalid data for hci requirements v1.04");
+      } else {
+        vendor_capabilities_.a2dp_offload_v2_support_ = v104.GetA2dpOffloadV2Support();
+      }
+
+      if (vendor_capabilities_.dynamic_audio_buffer_support_) {
+        hci_->EnqueueCommand(
+            DabGetAudioBufferTimeCapabilityBuilder::Create(),
+            module_.GetHandler()->BindOnceOn(
+                this,
+                &Controller::impl::le_get_dynamic_audio_buffer_support_handler,
+                std::move(vendor_promise)));
+        return;
+      }
+
+      vendor_promise.set_value();
+    } else {
+      if (vendor_capabilities_.dynamic_audio_buffer_support_ == 0) {
+        vendor_promise.set_value();
+        return;
+      }
+      hci_->EnqueueCommand(
+          DabGetAudioBufferTimeCapabilityBuilder::Create(),
+          module_.GetHandler()->BindOnceOn(
+              this,
+              &Controller::impl::le_get_dynamic_audio_buffer_support_handler,
+              std::move(vendor_promise)));
+    }
+  }
+
+  void le_get_dynamic_audio_buffer_support_handler(
+      std::promise<void> vendor_promise, CommandCompleteView view) {
+    vendor_promise.set_value();
+    auto dab_complete_view = DynamicAudioBufferCompleteView::Create(view);
+    if (!dab_complete_view.IsValid()) {
+      log::warn("Invalid command complete");
+      return;
+    }
+
+    if (dab_complete_view.GetStatus() != ErrorCode::SUCCESS) {
+      log::warn("Unexpected error code {}", ErrorCodeText(dab_complete_view.GetStatus()));
+      return;
+    }
+
+    auto complete_view = DabGetAudioBufferTimeCapabilityCompleteView::Create(dab_complete_view);
+    if (!complete_view.IsValid()) {
+      log::warn("Invalid get complete");
+      return;
+    }
+    dab_supported_codecs_ = complete_view.GetAudioCodecTypeSupported();
+    dab_codec_capabilities_ = complete_view.GetAudioCodecCapabilities();
+  }
+
+  void set_controller_dab_audio_buffer_time_complete(CommandCompleteView complete) {
+    auto dab_complete = DynamicAudioBufferCompleteView::Create(complete);
+    if (!dab_complete.IsValid()) {
+      log::warn("Invalid command complete");
+      return;
+    }
+
+    if (dab_complete.GetStatus() != ErrorCode::SUCCESS) {
+      log::warn("Unexpected return code {}", ErrorCodeText(dab_complete.GetStatus()));
+      return;
+    }
+
+    auto dab_set_complete = DabSetAudioBufferTimeCompleteView::Create(dab_complete);
+
+    if (!dab_set_complete.IsValid()) {
+      log::warn("Invalid set complete");
+      return;
+    }
+
+    log::info(
+        "Configured Media Tx Buffer, time returned = {}",
+        dab_set_complete.GetCurrentBufferTimeMs());
+  }
+
+  void set_controller_dab_audio_buffer_time(uint16_t buffer_time_ms) {
+    hci_->EnqueueCommand(
+        DabSetAudioBufferTimeBuilder::Create(buffer_time_ms),
+        module_.GetHandler()->BindOnceOn(
+            this, &Controller::impl::set_controller_dab_audio_buffer_time_complete));
   }
 
   void set_event_mask(uint64_t event_mask) {
     std::unique_ptr<SetEventMaskBuilder> packet = SetEventMaskBuilder::Create(event_mask);
-    hci_->EnqueueCommand(std::move(packet), module_.GetHandler()->BindOnceOn(
-                                                this, &Controller::impl::check_status<SetEventMaskCompleteView>));
+    hci_->EnqueueCommand(
+        std::move(packet),
+        module_.GetHandler()->BindOnce(check_complete<SetEventMaskCompleteView>));
   }
 
   void write_le_host_support(Enable enable, Enable deprecated_host_bit) {
     if (deprecated_host_bit == Enable::ENABLED) {
       // Since Bluetooth Core Spec 4.1, this bit should be 0
-      LOG_WARN("Setting deprecated Simultaneous LE BR/EDR Host bit");
+      log::warn("Setting deprecated Simultaneous LE BR/EDR Host bit");
     }
     std::unique_ptr<WriteLeHostSupportBuilder> packet = WriteLeHostSupportBuilder::Create(enable, deprecated_host_bit);
     hci_->EnqueueCommand(
         std::move(packet),
-        module_.GetHandler()->BindOnceOn(this, &Controller::impl::check_status<WriteLeHostSupportCompleteView>));
+        module_.GetHandler()->BindOnce(check_complete<WriteLeHostSupportCompleteView>));
   }
 
   void write_simple_pairing_mode(Enable enable) {
     std::unique_ptr<WriteSimplePairingModeBuilder> packet = WriteSimplePairingModeBuilder::Create(enable);
     hci_->EnqueueCommand(
         std::move(packet),
-        module_.GetHandler()->BindOnceOn(this, &Controller::impl::check_status<WriteSimplePairingModeCompleteView>));
+        module_.GetHandler()->BindOnce(check_complete<WriteSimplePairingModeCompleteView>));
   }
 
   void reset() {
     std::unique_ptr<ResetBuilder> packet = ResetBuilder::Create();
-    hci_->EnqueueCommand(std::move(packet),
-                         module_.GetHandler()->BindOnceOn(this, &Controller::impl::check_status<ResetCompleteView>));
+    hci_->EnqueueCommand(
+        std::move(packet), module_.GetHandler()->BindOnce(check_complete<ResetCompleteView>));
   }
 
   void le_rand(LeRandCallback cb) {
     std::unique_ptr<LeRandBuilder> packet = LeRandBuilder::Create();
     hci_->EnqueueCommand(
         std::move(packet),
-        module_.GetHandler()->BindOnceOn(this, &Controller::impl::le_rand_cb<LeRandCompleteView>, cb));
+        module_.GetHandler()->BindOnceOn(this, &Controller::impl::le_rand_cb, std::move(cb)));
   }
 
-  template <class T>
   void le_rand_cb(LeRandCallback cb, CommandCompleteView view) {
     ASSERT(view.IsValid());
-    auto status_view = T::Create(view);
+    auto status_view = LeRandCompleteView::Create(view);
     ASSERT(status_view.IsValid());
     ASSERT(status_view.GetStatus() == ErrorCode::SUCCESS);
-    cb.Run(status_view.GetRandomNumber());
+    std::move(cb)(status_view.GetRandomNumber());
   }
 
   void set_event_filter(std::unique_ptr<SetEventFilterBuilder> packet) {
-    hci_->EnqueueCommand(std::move(packet), module_.GetHandler()->BindOnceOn(
-                                                this, &Controller::impl::check_status<SetEventFilterCompleteView>));
+    hci_->EnqueueCommand(
+        std::move(packet),
+        module_.GetHandler()->BindOnce(check_complete<SetEventFilterCompleteView>));
   }
 
   void write_local_name(std::string local_name) {
@@ -586,8 +787,9 @@ struct Controller::impl {
     std::copy(std::begin(local_name), std::end(local_name), std::begin(local_name_array));
 
     std::unique_ptr<WriteLocalNameBuilder> packet = WriteLocalNameBuilder::Create(local_name_array);
-    hci_->EnqueueCommand(std::move(packet), module_.GetHandler()->BindOnceOn(
-                                                this, &Controller::impl::check_status<WriteLocalNameCompleteView>));
+    hci_->EnqueueCommand(
+        std::move(packet),
+        module_.GetHandler()->BindOnce(check_complete<WriteLocalNameCompleteView>));
   }
 
   void host_buffer_size(uint16_t host_acl_data_packet_length, uint8_t host_synchronous_data_packet_length,
@@ -595,44 +797,28 @@ struct Controller::impl {
     std::unique_ptr<HostBufferSizeBuilder> packet =
         HostBufferSizeBuilder::Create(host_acl_data_packet_length, host_synchronous_data_packet_length,
                                       host_total_num_acl_data_packets, host_total_num_synchronous_data_packets);
-    hci_->EnqueueCommand(std::move(packet), module_.GetHandler()->BindOnceOn(
-                                                this, &Controller::impl::check_status<HostBufferSizeCompleteView>));
+    hci_->EnqueueCommand(
+        std::move(packet),
+        module_.GetHandler()->BindOnce(check_complete<HostBufferSizeCompleteView>));
   }
 
   void le_set_event_mask(uint64_t le_event_mask) {
     std::unique_ptr<LeSetEventMaskBuilder> packet = LeSetEventMaskBuilder::Create(le_event_mask);
     hci_->EnqueueCommand(
-        std::move(packet), module_.GetHandler()->BindOnceOn(this, &Controller::impl::check_le_set_event_mask_status));
+        std::move(packet),
+        module_.GetHandler()->BindOnce(check_complete<LeSetEventMaskCompleteView>));
   }
 
-  void check_le_set_event_mask_status(CommandCompleteView view) {
-    ASSERT(view.IsValid());
-    auto status_view = LeSetEventMaskCompleteView::Create(view);
-    ASSERT(status_view.IsValid());
-    auto status = status_view.GetStatus();
-    if (status != ErrorCode::SUCCESS) {
-      LOG_WARN("Unexpected return status %s", ErrorCodeText(status).c_str());
-    }
-  }
-
-  template <class T>
-  void check_status(CommandCompleteView view) {
-    ASSERT(view.IsValid());
-    auto status_view = T::Create(view);
-    ASSERT(status_view.IsValid());
-    ASSERT(status_view.GetStatus() == ErrorCode::SUCCESS);
-  }
-
-#define OP_CODE_MAPPING(name)                                                  \
-  case OpCode::name: {                                                         \
-    uint16_t index = (uint16_t)OpCodeIndex::name;                              \
-    uint16_t byte_index = index / 10;                                          \
-    uint16_t bit_index = index % 10;                                           \
-    bool supported = local_supported_commands_[byte_index] & (1 << bit_index); \
-    if (!supported) {                                                          \
-      LOG_DEBUG("unsupported command opcode: 0x%04x", (uint16_t)OpCode::name); \
-    }                                                                          \
-    return supported;                                                          \
+#define OP_CODE_MAPPING(name)                                                     \
+  case OpCode::name: {                                                            \
+    uint16_t index = (uint16_t)OpCodeIndex::name;                                 \
+    uint16_t byte_index = index / 10;                                             \
+    uint16_t bit_index = index % 10;                                              \
+    bool supported = local_supported_commands_[byte_index] & (1 << bit_index);    \
+    if (!supported) {                                                             \
+      log::debug("unsupported command opcode: 0x{:04x}", (uint16_t)OpCode::name); \
+    }                                                                             \
+    return supported;                                                             \
   }
 
   void Dump(
@@ -688,6 +874,8 @@ struct Controller::impl {
       OP_CODE_MAPPING(HOLD_MODE)
       OP_CODE_MAPPING(SNIFF_MODE)
       OP_CODE_MAPPING(EXIT_SNIFF_MODE)
+      OP_CODE_MAPPING(PARK_STATE)
+      OP_CODE_MAPPING(EXIT_PARK_STATE)
       OP_CODE_MAPPING(QOS_SETUP)
       OP_CODE_MAPPING(ROLE_DISCOVERY)
       OP_CODE_MAPPING(SWITCH_ROLE)
@@ -876,7 +1064,7 @@ struct Controller::impl {
       OP_CODE_MAPPING(LE_READ_NUMBER_OF_SUPPORTED_ADVERTISING_SETS)
       OP_CODE_MAPPING(LE_REMOVE_ADVERTISING_SET)
       OP_CODE_MAPPING(LE_CLEAR_ADVERTISING_SETS)
-      OP_CODE_MAPPING(LE_SET_PERIODIC_ADVERTISING_PARAM)
+      OP_CODE_MAPPING(LE_SET_PERIODIC_ADVERTISING_PARAMETERS)
       OP_CODE_MAPPING(LE_SET_PERIODIC_ADVERTISING_DATA)
       OP_CODE_MAPPING(LE_SET_PERIODIC_ADVERTISING_ENABLE)
       OP_CODE_MAPPING(LE_SET_EXTENDED_SCAN_PARAMETERS)
@@ -885,10 +1073,10 @@ struct Controller::impl {
       OP_CODE_MAPPING(LE_PERIODIC_ADVERTISING_CREATE_SYNC)
       OP_CODE_MAPPING(LE_PERIODIC_ADVERTISING_CREATE_SYNC_CANCEL)
       OP_CODE_MAPPING(LE_PERIODIC_ADVERTISING_TERMINATE_SYNC)
-      OP_CODE_MAPPING(LE_ADD_DEVICE_TO_PERIODIC_ADVERTISING_LIST)
-      OP_CODE_MAPPING(LE_REMOVE_DEVICE_FROM_PERIODIC_ADVERTISING_LIST)
-      OP_CODE_MAPPING(LE_CLEAR_PERIODIC_ADVERTISING_LIST)
-      OP_CODE_MAPPING(LE_READ_PERIODIC_ADVERTISING_LIST_SIZE)
+      OP_CODE_MAPPING(LE_ADD_DEVICE_TO_PERIODIC_ADVERTISER_LIST)
+      OP_CODE_MAPPING(LE_REMOVE_DEVICE_FROM_PERIODIC_ADVERTISER_LIST)
+      OP_CODE_MAPPING(LE_CLEAR_PERIODIC_ADVERTISER_LIST)
+      OP_CODE_MAPPING(LE_READ_PERIODIC_ADVERTISER_LIST_SIZE)
       OP_CODE_MAPPING(LE_READ_TRANSMIT_POWER)
       OP_CODE_MAPPING(LE_READ_RF_PATH_COMPENSATION_POWER)
       OP_CODE_MAPPING(LE_WRITE_RF_PATH_COMPENSATION_POWER)
@@ -965,6 +1153,8 @@ struct Controller::impl {
         return vendor_capabilities_.a2dp_source_offload_capability_mask_ != 0x00;
       case OpCode::CONTROLLER_BQR:
         return vendor_capabilities_.bluetooth_quality_report_support_ == 0x01;
+      case OpCode::DYNAMIC_AUDIO_BUFFER:
+        return vendor_capabilities_.dynamic_audio_buffer_support_ > 0x00;
       // Before MSFT extension is fully supported, return false for the following MSFT_OPCODE_XXXX for now.
       case OpCode::MSFT_OPCODE_INTEL:
         return false;
@@ -976,6 +1166,22 @@ struct Controller::impl {
       case OpCode::READ_LOCAL_SUPPORTED_COMMANDS:
         return true;
       case OpCode::NONE:
+        return false;
+      case OpCode::LE_CS_READ_LOCAL_SUPPORTED_CAPABILITIES:
+      case OpCode::LE_CS_READ_REMOTE_SUPPORTED_CAPABILITIES:
+      case OpCode::LE_CS_WRITE_CACHED_REMOTE_SUPPORTED_CAPABILITIES:
+      case OpCode::LE_CS_SECURITY_ENABLE:
+      case OpCode::LE_CS_SET_DEFAULT_SETTINGS:
+      case OpCode::LE_CS_READ_REMOTE_FAE_TABLE:
+      case OpCode::LE_CS_WRITE_CACHED_REMOTE_FAE_TABLE:
+      case OpCode::LE_CS_CREATE_CONFIG:
+      case OpCode::LE_CS_REMOVE_CONFIG:
+      case OpCode::LE_CS_SET_CHANNEL_CLASSIFICATION:
+      case OpCode::LE_CS_PROCEDURE_ENABLE:
+      case OpCode::LE_CS_TEST:
+      case OpCode::LE_CS_TEST_END:
+      case OpCode::LE_CS_SET_PROCEDURE_PARAMETERS:
+        // TODO add to OP_CODE_MAPPING list
         return false;
     }
     return false;
@@ -998,10 +1204,12 @@ struct Controller::impl {
   Address mac_address_{};
   std::string local_name_{};
   LeBufferSize le_buffer_size_{};
+  std::vector<uint8_t> local_supported_codec_ids_{};
+  std::vector<uint32_t> local_supported_vendor_codec_ids_{};
   LeBufferSize iso_buffer_size_{};
   uint64_t le_local_supported_features_{};
   uint64_t le_supported_states_{};
-  uint8_t le_connect_list_size_{};
+  uint8_t le_accept_list_size_{};
   uint8_t le_resolving_list_size_{};
   LeMaximumDataLength le_maximum_data_length_{};
   uint16_t le_maximum_advertising_data_length_{};
@@ -1009,6 +1217,8 @@ struct Controller::impl {
   uint8_t le_number_supported_advertising_sets_{};
   uint8_t le_periodic_advertiser_list_size_{};
   VendorCapabilities vendor_capabilities_{};
+  uint32_t dab_supported_codecs_{};
+  std::array<DynamicAudioBufferCodecCapability, 32> dab_codec_capabilities_{};
 };  // namespace hci
 
 Controller::Controller() : impl_(std::make_unique<impl>(*this)) {}
@@ -1037,6 +1247,10 @@ std::string Controller::GetLocalName() const {
 
 LocalVersionInformation Controller::GetLocalVersionInformation() const {
   return impl_->local_version_information_;
+}
+
+std::vector<uint8_t> Controller::GetLocalSupportedBrEdrCodecIds() const {
+  return impl_->local_supported_codec_ids_;
 }
 
 #define BIT(x) (0x1ULL << (x))
@@ -1158,18 +1372,7 @@ void Controller::Reset() {
 }
 
 void Controller::LeRand(LeRandCallback cb) {
-  CallOn(impl_.get(), &impl::le_rand, cb);
-}
-
-void Controller::AllowWakeByHid() {
-  // Allow Classic HID
-  auto class_of_device = ClassOfDevice::FromUint32Legacy(COD_HID_MAJOR).value();
-  auto class_of_device_mask = ClassOfDevice::FromUint32Legacy(COD_HID_MASK).value();
-  auto auto_accept_flag = AutoAcceptFlag::AUTO_ACCEPT_OFF;
-  std::unique_ptr<SetEventFilterConnectionSetupClassOfDeviceBuilder> packet =
-      SetEventFilterConnectionSetupClassOfDeviceBuilder::Create(
-          class_of_device, class_of_device_mask, auto_accept_flag);
-  CallOn(impl_.get(), &impl::set_event_filter, std::move(packet));
+  CallOn(impl_.get(), &impl::le_rand, std::move(cb));
 }
 
 void Controller::SetEventFilterClearAll() {
@@ -1259,7 +1462,7 @@ uint64_t Controller::GetLeSupportedStates() const {
 }
 
 uint8_t Controller::GetLeFilterAcceptListSize() const {
-  return impl_->le_connect_list_size_;
+  return impl_->le_accept_list_size_;
 }
 
 uint8_t Controller::GetLeResolvingListSize() const {
@@ -1286,12 +1489,48 @@ Controller::VendorCapabilities Controller::GetVendorCapabilities() const {
   return impl_->vendor_capabilities_;
 }
 
+uint32_t Controller::GetDabSupportedCodecs() const {
+  return impl_->dab_supported_codecs_;
+}
+
+const std::array<DynamicAudioBufferCodecCapability, 32>& Controller::GetDabCodecCapabilities()
+    const {
+  return impl_->dab_codec_capabilities_;
+}
+
+void Controller::SetDabAudioBufferTime(uint16_t buffer_time_ms) {
+  if (impl_->vendor_capabilities_.dynamic_audio_buffer_support_ == 0) {
+    log::warn("Dynamic Audio Buffer not supported");
+    return;
+  }
+  impl_->set_controller_dab_audio_buffer_time(buffer_time_ms);
+}
+
 uint8_t Controller::GetLePeriodicAdvertiserListSize() const {
   return impl_->le_periodic_advertiser_list_size_;
 }
 
 bool Controller::IsSupported(bluetooth::hci::OpCode op_code) const {
   return impl_->is_supported(op_code);
+}
+
+uint64_t Controller::MaskLeEventMask(HciVersion version, uint64_t mask) {
+  if (!common::init_flags::subrating_is_enabled()) {
+    mask = mask & ~(static_cast<uint64_t>(LLFeaturesBits::CONNECTION_SUBRATING_HOST_SUPPORT));
+  }
+  if (version >= HciVersion::V_5_3) {
+    return mask;
+  } else if (version >= HciVersion::V_5_2) {
+    return mask & kLeEventMask52;
+  } else if (version >= HciVersion::V_5_1) {
+    return mask & kLeEventMask51;
+  } else if (version >= HciVersion::V_5_0) {
+    return mask & kLeEventMask50;
+  } else if (version >= HciVersion::V_4_2) {
+    return mask & kLeEventMask42;
+  } else {
+    return mask & kLeEventMask41;
+  }
 }
 
 const ModuleFactory Controller::Factory = ModuleFactory([]() { return new Controller(); });
@@ -1378,7 +1617,7 @@ void Controller::impl::Dump(
   builder.add_iso_buffer_size(&iso_buffer_size_data);
   builder.add_le_buffer_size(&le_buffer_size_data);
 
-  builder.add_le_connect_list_size(le_connect_list_size_);
+  builder.add_le_accept_list_size(le_accept_list_size_);
   builder.add_le_resolving_list_size(le_resolving_list_size_);
 
   builder.add_le_maximum_data_length(&le_maximum_data_length_data);

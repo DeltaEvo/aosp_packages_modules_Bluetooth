@@ -16,16 +16,11 @@
 
 #include "hci/facade/le_initiator_address_facade.h"
 
-#include <condition_variable>
-#include <memory>
-#include <mutex>
-
 #include "blueberry/facade/hci/le_initiator_address_facade.grpc.pb.h"
 #include "blueberry/facade/hci/le_initiator_address_facade.pb.h"
-#include "common/bind.h"
-#include "grpc/grpc_event_queue.h"
 #include "hci/acl_manager.h"
 #include "hci/hci_packets.h"
+#include "hci/octets.h"
 #include "packet/raw_builder.h"
 
 using ::grpc::ServerAsyncResponseWriter;
@@ -46,38 +41,43 @@ class LeInitiatorAddressFacadeService : public LeInitiatorAddressFacade::Service
       : acl_manager_(acl_manager),
         address_manager_(acl_manager_->GetLeAddressManager()),
         facade_handler_(facade_handler) {
-    ASSERT(facade_handler_ != nullptr);
+    log::assert_that(facade_handler_ != nullptr, "assert failed: facade_handler_ != nullptr");
   }
 
   ::grpc::Status SetPrivacyPolicyForInitiatorAddress(
-      ::grpc::ServerContext* context, const PrivacyPolicy* request, ::google::protobuf::Empty* writer) override {
+      ::grpc::ServerContext* /* context */,
+      const PrivacyPolicy* request,
+      ::google::protobuf::Empty* /* writer */) override {
     Address address = Address::kEmpty;
     LeAddressManager::AddressPolicy address_policy =
         static_cast<LeAddressManager::AddressPolicy>(request->address_policy());
     if (address_policy == LeAddressManager::AddressPolicy::USE_STATIC_ADDRESS) {
-      ASSERT(Address::FromString(request->address_with_type().address().address(), address));
+      log::assert_that(
+          Address::FromString(request->address_with_type().address().address(), address),
+          "assert failed: Address::FromString(request->address_with_type().address().address(), "
+          "address)");
     }
     AddressWithType address_with_type(address, static_cast<AddressType>(request->address_with_type().type()));
     auto minimum_rotation_time = std::chrono::milliseconds(request->minimum_rotation_time());
     auto maximum_rotation_time = std::chrono::milliseconds(request->maximum_rotation_time());
-    crypto_toolbox::Octet16 irk = {};
+    Octet16 irk = {};
     auto request_irk_length = request->rotation_irk().end() - request->rotation_irk().begin();
-    if (request_irk_length == crypto_toolbox::OCTET16_LEN) {
+    if (request_irk_length == kOctet16Length) {
       std::vector<uint8_t> irk_data(request->rotation_irk().begin(), request->rotation_irk().end());
-      std::copy_n(irk_data.begin(), crypto_toolbox::OCTET16_LEN, irk.begin());
+      std::copy_n(irk_data.begin(), kOctet16Length, irk.begin());
       acl_manager_->SetPrivacyPolicyForInitiatorAddressForTest(
           address_policy, address_with_type, irk, minimum_rotation_time, maximum_rotation_time);
     } else {
       acl_manager_->SetPrivacyPolicyForInitiatorAddress(
           address_policy, address_with_type, minimum_rotation_time, maximum_rotation_time);
-      ASSERT(request_irk_length == 0);
+      log::assert_that(request_irk_length == 0, "assert failed: request_irk_length == 0");
     }
     return ::grpc::Status::OK;
   }
 
   ::grpc::Status GetCurrentInitiatorAddress(
-      ::grpc::ServerContext* context,
-      const ::google::protobuf::Empty* request,
+      ::grpc::ServerContext* /* context */,
+      const ::google::protobuf::Empty* /* request */,
       ::blueberry::facade::BluetoothAddressWithType* response) override {
     AddressWithType current = address_manager_->GetInitiatorAddress();
     auto bluetooth_address = new ::blueberry::facade::BluetoothAddress();
@@ -88,8 +88,8 @@ class LeInitiatorAddressFacadeService : public LeInitiatorAddressFacade::Service
   }
 
   ::grpc::Status NewResolvableAddress(
-      ::grpc::ServerContext* context,
-      const ::google::protobuf::Empty* request,
+      ::grpc::ServerContext* /* context */,
+      const ::google::protobuf::Empty* /* request */,
       ::blueberry::facade::BluetoothAddressWithType* response) override {
     AddressWithType another = address_manager_->NewResolvableAddress();
     auto bluetooth_address = new ::blueberry::facade::BluetoothAddress();

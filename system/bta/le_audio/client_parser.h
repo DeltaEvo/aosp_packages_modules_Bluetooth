@@ -22,9 +22,11 @@
 
 #pragma once
 
+#include <vector>
+
 #include "le_audio_types.h"
 
-namespace le_audio {
+namespace bluetooth::le_audio {
 namespace client_parser {
 namespace ascs {
 /*
@@ -59,6 +61,16 @@ constexpr uint8_t kCtpResponseRetransmissionNumber = 0x07;
 constexpr uint8_t kCtpResponseMaxTransportLatency = 0x08;
 constexpr uint8_t kCtpResponsePresentationDelay = 0x09;
 constexpr uint8_t kCtpResponseInvalidAseCisMapping = 0x0A;
+
+constexpr uint8_t kCtpMetadataResponsePreferredAudioContexts = 0x01;
+constexpr uint8_t kCtpMetadataResponseStreamingAudioContexts = 0x02;
+constexpr uint8_t kCtpMetadataResponseProgramInfo = 0x03;
+constexpr uint8_t kCtpMetadataResponseLanguage = 0x04;
+constexpr uint8_t kCtpMetadataResponseCcidList = 0x05;
+constexpr uint8_t kCtpMetadataResponseParentalRating = 0x06;
+constexpr uint8_t kCtpMetadataResponseProgramInfoUri = 0x07;
+constexpr uint8_t kCtpMetadataResponseExtendedMetadata = 0xFE;
+constexpr uint8_t kCtpMetadataResponseVendorSpecific = 0xFF;
 
 constexpr uint8_t kLeAudioErrorCtpUnsupporterdOpcode = 0xFF;
 constexpr uint8_t kLeAudioErrorCtpTruncatedOperation = 0xFE;
@@ -151,7 +163,7 @@ struct ctp_codec_conf {
   uint8_t target_latency;
   uint8_t target_phy;
   types::LeAudioCodecId codec_id;
-  types::LeAudioLc3Config codec_config;
+  std::vector<uint8_t> codec_config;
 };
 
 constexpr uint16_t kCtpQosConfMinLen = 16;
@@ -220,16 +232,8 @@ constexpr uint16_t kAcsPacDiscoverRspMinLen = 1;
 constexpr uint16_t kAudioLocationsRspMinLen = 4;
 
 constexpr uint16_t kAseAudioAvailRspMinLen = 4;
-struct acs_available_audio_contexts {
-  types::AudioContexts snk_avail_cont;
-  types::AudioContexts src_avail_cont;
-};
 
 constexpr uint16_t kAseAudioSuppContRspMinLen = 4;
-struct acs_supported_audio_contexts {
-  types::AudioContexts snk_supp_cont;
-  types::AudioContexts src_supp_cont;
-};
 
 int ParseSinglePac(std::vector<struct types::acs_ac_record>& pac_recs,
                    uint16_t len, const uint8_t* value);
@@ -237,10 +241,12 @@ bool ParsePacs(std::vector<struct types::acs_ac_record>& pac_recs, uint16_t len,
                const uint8_t* value);
 bool ParseAudioLocations(types::AudioLocations& audio_locations, uint16_t len,
                          const uint8_t* value);
-bool ParseAvailableAudioContexts(struct acs_available_audio_contexts& rsp,
-                                 uint16_t len, const uint8_t* value);
-bool ParseSupportedAudioContexts(struct acs_supported_audio_contexts& rsp,
-                                 uint16_t len, const uint8_t* value);
+bool ParseAvailableAudioContexts(
+    types::BidirectionalPair<types::AudioContexts>& rsp, uint16_t len,
+    const uint8_t* value);
+bool ParseSupportedAudioContexts(
+    types::BidirectionalPair<types::AudioContexts>& rsp, uint16_t len,
+    const uint8_t* value);
 }  // namespace pacs
 
 namespace tmap {
@@ -251,4 +257,4 @@ bool ParseTmapRole(std::bitset<16>& role, uint16_t len, const uint8_t* value);
 
 }  // namespace tmap
 }  // namespace client_parser
-}  // namespace le_audio
+}  // namespace bluetooth::le_audio

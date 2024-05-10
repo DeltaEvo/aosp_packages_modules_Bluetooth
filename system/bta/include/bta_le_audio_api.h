@@ -29,8 +29,12 @@ class LeAudioHalVerifier {
   static bool SupportsLeAudio();
   static bool SupportsLeAudioHardwareOffload();
   static bool SupportsLeAudioBroadcast();
+  static bool SupportsStreamActiveApi();
 };
 
+typedef bool(LeAudioIsoDataCallback)(const RawAddress& address,
+                                     uint16_t cis_conn_hdl, uint8_t* data,
+                                     uint16_t size, uint32_t timestamp);
 /* Interface class */
 class LeAudioClient {
  public:
@@ -41,13 +45,14 @@ class LeAudioClient {
       base::Closure initCb, base::Callback<bool()> hal_2_1_verifier,
       const std::vector<bluetooth::le_audio::btle_audio_codec_config_t>&
           offloading_preference);
-  static void Cleanup(base::Callback<void()> cleanupCb);
+  static void Cleanup(void);
   static LeAudioClient* Get(void);
   static void DebugDump(int fd);
 
   virtual void RemoveDevice(const RawAddress& address) = 0;
   virtual void Connect(const RawAddress& address) = 0;
   virtual void Disconnect(const RawAddress& address) = 0;
+  virtual void SetEnableState(const RawAddress& address, bool enabled) = 0;
   virtual void GroupAddNode(const int group_id, const RawAddress& addr) = 0;
   virtual void GroupRemoveNode(const int group_id, const RawAddress& addr) = 0;
   virtual void GroupStream(const int group_id, const uint16_t content_type) = 0;
@@ -61,8 +66,23 @@ class LeAudioClient {
       bluetooth::le_audio::btle_audio_codec_config_t output_codec_config) = 0;
   virtual void SetCcidInformation(int ccid, int context_type) = 0;
   virtual void SetInCall(bool in_call) = 0;
+  virtual bool IsInCall() = 0;
+  virtual void SetInVoipCall(bool in_call) = 0;
+  virtual void SetUnicastMonitorMode(uint8_t direction, bool enable) = 0;
+  virtual bool IsInVoipCall() = 0;
+  virtual bool IsInStreaming() = 0;
+  virtual void SendAudioProfilePreferences(
+      const int group_id, bool is_output_preference_le_audio,
+      bool is_duplex_preference_le_audio) = 0;
+  virtual void SetGroupAllowedContextMask(int group_id, int sink_context_types,
+                                          int source_context_types) = 0;
 
+  virtual bool isOutputPreferenceLeAudio(const RawAddress& address) = 0;
+  virtual bool isDuplexPreferenceLeAudio(const RawAddress& address) = 0;
   virtual std::vector<RawAddress> GetGroupDevices(const int group_id) = 0;
+
+  static bool RegisterIsoDataConsumer(LeAudioIsoDataCallback callback);
+
   static void AddFromStorage(const RawAddress& addr, bool autoconnect,
                              int sink_audio_location, int source_audio_location,
                              int sink_supported_context_types,
@@ -80,7 +100,5 @@ class LeAudioClient {
   static bool GetAsesForStorage(const RawAddress& addr,
                                 std::vector<uint8_t>& out);
   static bool IsLeAudioClientRunning();
-
-  static void InitializeAudioSetConfigurationProvider(void);
-  static void CleanupAudioSetConfigurationProvider(void);
+  static bool IsLeAudioClientInStreaming();
 };

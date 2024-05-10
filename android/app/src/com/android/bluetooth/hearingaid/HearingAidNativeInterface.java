@@ -34,16 +34,12 @@ import com.android.internal.annotations.VisibleForTesting;
  */
 public class HearingAidNativeInterface {
     private static final String TAG = "HearingAidNativeInterface";
-    private static final boolean DBG = true;
     private BluetoothAdapter mAdapter;
 
     @GuardedBy("INSTANCE_LOCK")
     private static HearingAidNativeInterface sInstance;
-    private static final Object INSTANCE_LOCK = new Object();
 
-    static {
-        classInitNative();
-    }
+    private static final Object INSTANCE_LOCK = new Object();
 
     private HearingAidNativeInterface() {
         mAdapter = BluetoothAdapter.getDefaultAdapter();
@@ -61,6 +57,14 @@ public class HearingAidNativeInterface {
                 sInstance = new HearingAidNativeInterface();
             }
             return sInstance;
+        }
+    }
+
+    /** Set singleton instance. */
+    @VisibleForTesting
+    public static void setInstance(HearingAidNativeInterface instance) {
+        synchronized (INSTANCE_LOCK) {
+            sInstance = instance;
         }
     }
 
@@ -157,9 +161,7 @@ public class HearingAidNativeInterface {
         event.device = getDevice(address);
         event.valueInt1 = state;
 
-        if (DBG) {
-            Log.d(TAG, "onConnectionStateChanged: " + event);
-        }
+        Log.d(TAG, "onConnectionStateChanged: " + event);
         sendMessageToService(event);
     }
 
@@ -171,14 +173,11 @@ public class HearingAidNativeInterface {
         event.valueInt1 = capabilities;
         event.valueLong2 = hiSyncId;
 
-        if (DBG) {
-            Log.d(TAG, "onDeviceAvailable: " + event);
-        }
+        Log.d(TAG, "onDeviceAvailable: " + event);
         sendMessageToService(event);
     }
 
     // Native methods that call into the JNI interface
-    private static native void classInitNative();
     private native void initNative();
     private native void cleanupNative();
     private native boolean connectHearingAidNative(byte[] address);

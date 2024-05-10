@@ -1,10 +1,10 @@
-# Copyright 2022 Google LLC
+# Copyright (C) 2024 The Android Open Source Project
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     https://www.apache.org/licenses/LICENSE-2.0
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,12 +21,13 @@ from grpc import RpcError
 from mmi2grpc._audio import AudioSignal
 from mmi2grpc._helpers import assert_description
 from mmi2grpc._proxy import ProfileProxy
-from pandora_experimental.a2dp_grpc import A2DP
-from pandora_experimental.a2dp_pb2 import Sink, Source
+from pandora.a2dp_grpc import A2DP
+from pandora.a2dp_pb2 import Sink, Source
 from pandora_experimental.avrcp_grpc import AVRCP
 from pandora.host_grpc import Host
 from pandora.host_pb2 import Connection
 from pandora_experimental.mediaplayer_grpc import MediaPlayer
+from pandora_experimental.mediaplayer_pb2 import NONE, ALL, GROUP
 
 
 class AVRCPProxy(ProfileProxy):
@@ -350,7 +351,7 @@ class AVRCPProxy(ProfileProxy):
         Using the Upper Tester register the function MessageInd_CBTest_System
         for callback on the AVCT_MessageRec_Ind event by sending an
         AVCT_EventRegistration command to the IUT with the following parameter
-        values:     
+        values:
            * Event = AVCT_MessageRec_Ind
            * Callback =
         MessageInd_CBTest_System
@@ -469,10 +470,9 @@ class AVRCPProxy(ProfileProxy):
         passthrough command, if the current streaming state is not relevant to
         this IUT, please press 'OK to continue.
         """
-        if not self.a2dp.IsSuspended(source=self.source).is_suspended:
-            return "Yes"
-        else:
-            return "No"
+
+        suspended = self.a2dp.IsSuspended(source=self.source).value
+        return "Yes" if not suspended else "No"
 
     @assert_description
     def TSC_AVRCP_mmi_iut_reject_invalid_get_capabilities(self, **kwargs):
@@ -540,7 +540,7 @@ class AVRCPProxy(ProfileProxy):
            * Callback =
         ConnectCfm_CBTest_System
            * PID = PIDTest_System
-    
+
         Press 'OK' to
         continue once the IUT has responded.
         """
@@ -569,11 +569,11 @@ class AVRCPProxy(ProfileProxy):
     def TSC_AVRCP_mmi_user_confirm_virtual_file_system(self, **kwargs):
         """
         Are the following items found in the current folder?
-    
+
         Folder:
         com.android.pandora
-    
-    
+
+
         Note: Some media elements and folders may not be
         listed above.
         """
@@ -618,6 +618,75 @@ class AVRCPProxy(ProfileProxy):
         return "OK"
 
     @assert_description
+    def TSC_AVRCP_mmi_iut_reject_list_player_application_setting_values_invalid_attribute(self, **kwargs):
+        """
+        PTS has sent a List Player Application Setting Values command with an
+        invalid Attribute Id.  The IUT must respond with the error code: Invalid
+        Parameter (0x01).
+
+        Description: Verify that the IUT can properly reject
+        a List Player Application Setting Values command that contains an
+        invalid attribute id.
+        """
+
+        return "OK"
+
+    @assert_description
+    def TSC_AVRCP_mmi_iut_reject_set_player_application_setting_value_invalid_pair(self, **kwargs):
+        """
+        PTS has sent a Set Player Application Setting Value command with an
+        invalid Attribute and Value.  The IUT must respond with the error code:
+        Invalid Parameter (0x01).
+
+        Description: Verify that the IUT can properly
+        reject a Set Player Application Setting Value command that contains an
+        invalid attribute and value.
+        """
+
+        return "OK"
+
+    @assert_description
+    def TSC_AVRCP_mmi_iut_reject_get_current_player_application_setting_value_invalid_attribute(self, **kwargs):
+        """
+        PTS has sent a Get Current Player Application Setting Value command with
+        an invalid Attribute.  The IUT must respond with the error code: Invalid
+        Parameter (0x01).
+
+        Description: Verify that the IUT can properly reject
+        an Get Current Player Application Setting Value command that contains an
+        invalid attribute.
+        """
+
+        return "OK"
+
+    @assert_description
+    def TSC_AVRCP_mmi_iut_accept_get_current_player_application_setting_value(self, **kwargs):
+        """
+        Take action to send a valid response to the [Get Current Player
+        Application Setting Value] command sent by the PTS.
+        """
+
+        return "OK"
+
+    @assert_description
+    def TSC_AVRCP_mmi_iut_accept_list_player_application_setting_attributes(self, **kwargs):
+        """
+        Take action to send a valid response to the [List Player Application
+        Setting Attributes] command sent by the PTS.
+        """
+
+        return "OK"
+
+    @assert_description
+    def TSC_AVRCP_mmi_iut_accept_list_player_application_setting_values(self, **kwargs):
+        """
+        Take action to send a valid response to the [List Player Application
+        Setting Values] command sent by the PTS.
+        """
+
+        return "OK"
+
+    @assert_description
     def TSC_AVRCP_mmi_iut_reject_set_addressed_player_invalid_player_id(self, **kwargs):
         """
         PTS has sent a Set Addressed Player command with an invalid Player Id.
@@ -629,12 +698,39 @@ class AVRCPProxy(ProfileProxy):
         return "OK"
 
     @assert_description
+    def TSC_AVRCP_mmi_iut_initiate_register_notification_changed_player_application_setting_changed(self, **kwargs):
+        """
+        Take action to trigger a [Register Notification, Changed] response for
+        <Player Application Setting Changed> to the PTS from the IUT.  This can
+        be accomplished by changing a Player Application Setting (Equalizer,
+        Repeat Mode, Shuffle, Scan) on the IUT.
+
+        Description: Verify that the
+        Implementation Under Test (IUT) can update database by sending a valid
+        Player Application Setting Changed Notification to the PTS.
+        """
+
+        nextShuffleMode = NONE
+        self.mediaplayer.StartTestPlayback()
+        currentShuffleMode = self.mediaplayer.GetShuffleMode().mode
+        if (currentShuffleMode == NONE):
+            nextShuffleMode = ALL
+        elif (currentShuffleMode == ALL):
+            nextShuffleMode = GROUP
+        elif (currentShuffleMode == GROUP):
+            nextShuffleMode = ALL
+        self.mediaplayer.SetShuffleMode(mode=nextShuffleMode)
+        self.mediaplayer.StopTestPlayback()
+
+        return "OK"
+
+    @assert_description
     def TSC_AVRCP_mmi_iut_reject_get_folder_items_out_of_range(self, **kwargs):
         """
         PTS has sent a Get Folder Items command with invalid values for Start
         and End.  The IUT must respond with the error code: Range Out Of Bounds
         (0x0B).
-    
+
         Description: Verify that the IUT can properly reject a Get
         Folder Items command that contains an invalid start and end index.
         """
@@ -679,7 +775,7 @@ class AVRCPProxy(ProfileProxy):
         """
         PTS has sent a Play Item command with an invalid UID.  The IUT must
         respond with the error code: Does Not Exist (0x09).
-    
+
         Description: Verify
         that the IUT can properly reject a Play Item command that contains an
         invalid UID.
@@ -906,7 +1002,7 @@ class AVRCPProxy(ProfileProxy):
         * PID = PIDTest_System
 
         The IUT should then initiate an
-        L2CAP_DisconnectReq.   
+        L2CAP_DisconnectReq.
         """
         # Currently disconnect is required in TG role
         if "TG" in test:

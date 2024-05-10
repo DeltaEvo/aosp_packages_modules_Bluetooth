@@ -21,8 +21,8 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -41,15 +41,18 @@ import com.android.bluetooth.BluetoothMethodProxy;
 import com.android.bluetooth.R;
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.util.DevicePolicyUtils;
 import com.android.internal.telephony.GsmAlphabet;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 @RunWith(AndroidJUnit4.class)
 public class AtPhonebookTest {
@@ -58,9 +61,11 @@ public class AtPhonebookTest {
     private BluetoothAdapter mAdapter;
     private BluetoothDevice mTestDevice;
 
-    @Mock
-    private AdapterService mAdapterService;
-    private HeadsetNativeInterface mNativeInterface;
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
+    @Mock private AdapterService mAdapterService;
+    @Mock private HeadsetNativeInterface mNativeInterface;
+
     private AtPhonebook mAtPhonebook;
     @Spy
     private BluetoothMethodProxy mHfpMethodProxy = BluetoothMethodProxy.getInstance();
@@ -68,14 +73,12 @@ public class AtPhonebookTest {
     @Before
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
-        MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
 
         BluetoothMethodProxy.setInstanceForTesting(mHfpMethodProxy);
         mAdapter = BluetoothAdapter.getDefaultAdapter();
         mTestDevice = mAdapter.getRemoteDevice("00:01:02:03:04:05");
         // Spy on native interface
-        mNativeInterface = spy(HeadsetNativeInterface.getInstance());
         mAtPhonebook = new AtPhonebook(mTargetContext, mNativeInterface);
     }
 
@@ -284,6 +287,35 @@ public class AtPhonebookTest {
         String expected = "+CPBR: " + 1 + ",\"" + number.substring(0, 30) + "\","
                 + PhoneNumberUtils.toaFromString(number) + ",\"" + expectedName + "\"" + "\r\n\r\n";
         verify(mNativeInterface).atResponseString(mTestDevice, expected);
+    }
+
+    @Test
+    public void processCpbrCommand_doesNotCrashWithEncodingNeededNumber() {
+        final String encodingNeededNumber = "###0102124";
+
+        Cursor mockCursorOne = mock(Cursor.class);
+        when(mockCursorOne.getCount()).thenReturn(1);
+        when(mockCursorOne.getColumnIndex(Phone.TYPE)).thenReturn(1); // TypeColumn
+        when(mockCursorOne.getColumnIndex(Phone.NUMBER)).thenReturn(2); // numberColumn
+        when(mockCursorOne.getColumnIndex(Phone.DISPLAY_NAME)).thenReturn(-1); // nameColumn
+        when(mockCursorOne.getInt(1)).thenReturn(Phone.TYPE_WORK);
+        when(mockCursorOne.getString(2)).thenReturn(encodingNeededNumber);
+        when(mockCursorOne.moveToNext()).thenReturn(false);
+        doReturn(mockCursorOne)
+                .when(mHfpMethodProxy)
+                .contentResolverQuery(
+                        any(),
+                        eq(DevicePolicyUtils.getEnterprisePhoneUri(mTargetContext)),
+                        any(),
+                        any(),
+                        any());
+
+        mAtPhonebook.mCurrentPhonebook = "ME";
+        mAtPhonebook.mCpbrIndex1 = 1;
+        mAtPhonebook.mCpbrIndex2 = 2;
+
+        // This call should not crash
+        mAtPhonebook.processCpbrCommand(mTestDevice);
     }
 
     @Test

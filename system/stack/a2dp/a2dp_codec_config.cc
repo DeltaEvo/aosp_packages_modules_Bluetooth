@@ -20,12 +20,11 @@
 
 #define LOG_TAG "a2dp_codec"
 
-#include "a2dp_codec_api.h"
-
-#include <base/logging.h>
-#include <inttypes.h>
+#include <bluetooth/log.h>
 
 #include "a2dp_aac.h"
+#include "a2dp_codec_api.h"
+#include "a2dp_ext.h"
 #include "a2dp_sbc.h"
 #include "a2dp_vendor.h"
 
@@ -36,9 +35,10 @@
 #include "a2dp_vendor_opus.h"
 #endif
 
+#include "audio_hal_interface/a2dp_encoding.h"
 #include "bta/av/bta_av_int.h"
 #include "device/include/device_iot_config.h"
-#include "osi/include/log.h"
+#include "internal_include/bt_trace.h"
 #include "osi/include/properties.h"
 #include "stack/include/bt_hdr.h"
 
@@ -50,6 +50,8 @@
 // |codec_index| and |codec_priority| are the codec type and priority to use
 // for the initialization.
 
+using namespace bluetooth;
+
 static void init_btav_a2dp_codec_config(
     btav_a2dp_codec_config_t* codec_config, btav_a2dp_codec_index_t codec_index,
     btav_a2dp_codec_priority_t codec_priority) {
@@ -59,9 +61,10 @@ static void init_btav_a2dp_codec_config(
 }
 
 A2dpCodecConfig::A2dpCodecConfig(btav_a2dp_codec_index_t codec_index,
-                                 const std::string& name,
+                                 uint64_t codec_id, const std::string& name,
                                  btav_a2dp_codec_priority_t codec_priority)
     : codec_index_(codec_index),
+      codec_id_(codec_id),
       name_(name),
       default_codec_priority_(codec_priority) {
   setCodecPriority(codec_priority);
@@ -110,7 +113,14 @@ void A2dpCodecConfig::setDefaultCodecPriority() {
 A2dpCodecConfig* A2dpCodecConfig::createCodec(
     btav_a2dp_codec_index_t codec_index,
     btav_a2dp_codec_priority_t codec_priority) {
-  LOG_INFO("%s", A2DP_CodecIndexStr(codec_index));
+  log::info("{}", A2DP_CodecIndexStr(codec_index));
+
+  // Hardware offload codec extensibility:
+  // management of the codec is moved under the ProviderInfo
+  // class of the aidl audio HAL client.
+  if (::bluetooth::audio::a2dp::provider::supports_codec(codec_index)) {
+    return new A2dpCodecConfigExt(codec_index, true);
+  }
 
   A2dpCodecConfig* codec_config = nullptr;
   switch (codec_index) {
@@ -166,7 +176,7 @@ int A2dpCodecConfig::getTrackBitRate() const {
   memcpy(p_codec_info, ota_codec_config_, sizeof(ota_codec_config_));
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
 
-  LOG_VERBOSE("%s: codec_type = 0x%x", __func__, codec_type);
+  log::verbose("codec_type = 0x{:x}", codec_type);
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
@@ -181,7 +191,7 @@ int A2dpCodecConfig::getTrackBitRate() const {
       break;
   }
 
-  LOG_ERROR("%s: unsupported codec type 0x%x", __func__, codec_type);
+  log::error("unsupported codec type 0x{:x}", codec_type);
   return -1;
 }
 
@@ -251,8 +261,8 @@ bool A2dpCodecConfig::getCodecSpecificConfig(tBT_A2DP_OFFLOAD* p_a2dp_offload) {
         }
         p_a2dp_offload->codec_info[7] =
             codec_config[10];  // LDAC specific channel mode
-        LOG_VERBOSE("%s: Ldac specific channelmode =%d", __func__,
-                    p_a2dp_offload->codec_info[7]);
+        log::verbose("Ldac specific channelmode ={}",
+                     p_a2dp_offload->codec_info[7]);
       }
       break;
 #endif
@@ -526,7 +536,7 @@ void A2dpCodecConfig::debug_codec_dump(int fd) {
 int A2DP_IotGetPeerSinkCodecType(const uint8_t* p_codec_info) {
   int peer_codec_type = 0;
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
-  LOG_VERBOSE("%s: codec_type = 0x%x", __func__, codec_type);
+  log::verbose("codec_type = 0x{:x}", codec_type);
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
       peer_codec_type = IOT_CONF_VAL_A2DP_CODECTYPE_SBC;
@@ -536,8 +546,8 @@ int A2DP_IotGetPeerSinkCodecType(const uint8_t* p_codec_info) {
       uint16_t codec_id = A2DP_VendorCodecGetCodecId(p_codec_info);
       uint32_t vendor_id = A2DP_VendorCodecGetVendorId(p_codec_info);
 
-      LOG_VERBOSE("%s codec_id = %d", __func__, codec_id);
-      LOG_VERBOSE("%s vendor_id = %x", __func__, vendor_id);
+      log::verbose("codec_id = {}", codec_id);
+      log::verbose("vendor_id = {:x}", vendor_id);
 
       if (codec_id == A2DP_APTX_CODEC_ID_BLUETOOTH &&
           vendor_id == A2DP_APTX_VENDOR_ID) {
@@ -595,8 +605,11 @@ A2dpCodecs::~A2dpCodecs() {
 }
 
 bool A2dpCodecs::init() {
-  LOG_INFO("%s", __func__);
+  log::info("");
   std::lock_guard<std::recursive_mutex> lock(codec_mutex_);
+
+  bool opus_enabled =
+      osi_property_get_bool("persist.bluetooth.opus.enabled", false);
 
   for (int i = BTAV_A2DP_CODEC_INDEX_MIN; i < BTAV_A2DP_CODEC_INDEX_MAX; i++) {
     btav_a2dp_codec_index_t codec_index =
@@ -610,13 +623,29 @@ bool A2dpCodecs::init() {
       codec_priority = cp_iter->second;
     }
 
+#if !defined(UNIT_TESTS)
+    if (codec_index == BTAV_A2DP_CODEC_INDEX_SOURCE_OPUS) {
+      if (!bluetooth::audio::a2dp::is_opus_supported()) {
+        // We are using HIDL HAL which does not support OPUS codec
+        // Mark OPUS as disabled
+        opus_enabled = false;
+      }
+    }
+#endif
+
+    // If OPUS is not supported it is disabled
+    if (codec_index == BTAV_A2DP_CODEC_INDEX_SOURCE_OPUS && !opus_enabled) {
+      codec_priority = BTAV_A2DP_CODEC_PRIORITY_DISABLED;
+      log::info("OPUS codec disabled, updated priority to {}", codec_priority);
+    }
+
     A2dpCodecConfig* codec_config =
         A2dpCodecConfig::createCodec(codec_index, codec_priority);
     if (codec_config == nullptr) continue;
 
     if (codec_priority != BTAV_A2DP_CODEC_PRIORITY_DEFAULT) {
-      LOG_INFO("%s: updated %s codec priority to %d", __func__,
-               codec_config->name().c_str(), codec_priority);
+      log::info("updated {} codec priority to {}", codec_config->name(),
+                codec_priority);
     }
 
     // Test if the codec is disabled
@@ -637,18 +666,19 @@ bool A2dpCodecs::init() {
   }
 
   if (ordered_source_codecs_.empty()) {
-    LOG_ERROR("%s: no Source codecs were initialized", __func__);
+    log::error("no Source codecs were initialized");
   } else {
     for (auto iter : ordered_source_codecs_) {
-      LOG_INFO("%s: initialized Source codec %s", __func__,
-               iter->name().c_str());
+      log::info("initialized Source codec {}, idx {}", iter->name(),
+                iter->codecIndex());
     }
   }
   if (ordered_sink_codecs_.empty()) {
-    LOG_ERROR("%s: no Sink codecs were initialized", __func__);
+    log::error("no Sink codecs were initialized");
   } else {
     for (auto iter : ordered_sink_codecs_) {
-      LOG_INFO("%s: initialized Sink codec %s", __func__, iter->name().c_str());
+      log::info("initialized Sink codec {}, idx {}", iter->name(),
+                iter->codecIndex());
     }
   }
 
@@ -660,6 +690,15 @@ A2dpCodecConfig* A2dpCodecs::findSourceCodecConfig(
   std::lock_guard<std::recursive_mutex> lock(codec_mutex_);
   btav_a2dp_codec_index_t codec_index = A2DP_SourceCodecIndex(p_codec_info);
   if (codec_index == BTAV_A2DP_CODEC_INDEX_MAX) return nullptr;
+
+  auto iter = indexed_codecs_.find(codec_index);
+  if (iter == indexed_codecs_.end()) return nullptr;
+  return iter->second;
+}
+
+A2dpCodecConfig* A2dpCodecs::findSourceCodecConfig(
+    btav_a2dp_codec_index_t codec_index) {
+  std::lock_guard<std::recursive_mutex> lock(codec_mutex_);
 
   auto iter = indexed_codecs_.find(codec_index);
   if (iter == indexed_codecs_.end()) return nullptr;
@@ -728,8 +767,7 @@ bool A2dpCodecs::setCodecUserConfig(
   *p_restart_output = false;
   *p_config_updated = false;
 
-  LOG_INFO("%s: Configuring: %s", __func__,
-           codec_user_config.ToString().c_str());
+  log::info("Configuring: {}", codec_user_config.ToString());
 
   if (codec_user_config.codec_type < BTAV_A2DP_CODEC_INDEX_MAX) {
     auto iter = indexed_codecs_.find(codec_user_config.codec_type);
@@ -808,10 +846,9 @@ bool A2dpCodecs::setCodecUserConfig(
 
   if (*p_restart_input || *p_restart_output) *p_config_updated = true;
 
-  LOG_INFO(
-      "%s: Configured: restart_input = %d restart_output = %d "
-      "config_updated = %d",
-      __func__, *p_restart_input, *p_restart_output, *p_config_updated);
+  log::info(
+      "Configured: restart_input = {} restart_output = {} config_updated = {}",
+      *p_restart_input, *p_restart_output, *p_config_updated);
 
   return true;
 
@@ -866,11 +903,10 @@ bool A2dpCodecs::setCodecOtaConfig(
   if (current_codec_config_ != nullptr) {
     codec_user_config = current_codec_config_->getCodecUserConfig();
     if (!A2dpCodecConfig::isCodecConfigEmpty(codec_user_config)) {
-      LOG_WARN(
-          "%s: ignoring peer OTA configuration for codec %s: "
-          "existing user configuration for current codec %s",
-          __func__, A2DP_CodecName(p_ota_codec_config),
-          current_codec_config_->name().c_str());
+      log::warn(
+          "ignoring peer OTA configuration for codec {}: existing user "
+          "configuration for current codec {}",
+          A2DP_CodecName(p_ota_codec_config), current_codec_config_->name());
       goto fail;
     }
   }
@@ -880,16 +916,13 @@ bool A2dpCodecs::setCodecOtaConfig(
   // ignored.
   codec_type = A2DP_SourceCodecIndex(p_ota_codec_config);
   if (codec_type == BTAV_A2DP_CODEC_INDEX_MAX) {
-    LOG_WARN(
-        "%s: ignoring peer OTA codec configuration: "
-        "invalid codec",
-        __func__);
+    log::warn("ignoring peer OTA codec configuration: invalid codec");
     goto fail;  // Invalid codec
   } else {
     auto iter = indexed_codecs_.find(codec_type);
     if (iter == indexed_codecs_.end()) {
-      LOG_WARN("%s: cannot find codec configuration for peer OTA codec %s",
-               __func__, A2DP_CodecName(p_ota_codec_config));
+      log::warn("cannot find codec configuration for peer OTA codec {}",
+                A2DP_CodecName(p_ota_codec_config));
       goto fail;
     }
     a2dp_codec_config = iter->second;
@@ -897,10 +930,10 @@ bool A2dpCodecs::setCodecOtaConfig(
   if (a2dp_codec_config == nullptr) goto fail;
   codec_user_config = a2dp_codec_config->getCodecUserConfig();
   if (!A2dpCodecConfig::isCodecConfigEmpty(codec_user_config)) {
-    LOG_WARN(
-        "%s: ignoring peer OTA configuration for codec %s: "
-        "existing user configuration for same codec",
-        __func__, A2DP_CodecName(p_ota_codec_config));
+    log::warn(
+        "ignoring peer OTA configuration for codec {}: existing user "
+        "configuration for same codec",
+        A2DP_CodecName(p_ota_codec_config));
     goto fail;
   }
   current_codec_config_ = a2dp_codec_config;
@@ -911,11 +944,12 @@ bool A2dpCodecs::setCodecOtaConfig(
           codec_user_config, codec_audio_config, p_peer_params,
           p_ota_codec_config, false, p_result_codec_config, p_restart_input,
           p_restart_output, p_config_updated)) {
-    LOG_WARN("%s: cannot set codec configuration for peer OTA codec %s",
-             __func__, A2DP_CodecName(p_ota_codec_config));
+    log::warn("cannot set codec configuration for peer OTA codec {}",
+              A2DP_CodecName(p_ota_codec_config));
     goto fail;
   }
-  CHECK(current_codec_config_ != nullptr);
+  log::assert_that(current_codec_config_ != nullptr,
+                   "assert failed: current_codec_config_ != nullptr");
 
   if (*p_restart_input || *p_restart_output) *p_config_updated = true;
 
@@ -930,10 +964,19 @@ bool A2dpCodecs::setPeerSinkCodecCapabilities(
     const uint8_t* p_peer_codec_capabilities) {
   std::lock_guard<std::recursive_mutex> lock(codec_mutex_);
 
-  if (!A2DP_IsPeerSinkCodecValid(p_peer_codec_capabilities)) return false;
   A2dpCodecConfig* a2dp_codec_config =
       findSourceCodecConfig(p_peer_codec_capabilities);
   if (a2dp_codec_config == nullptr) return false;
+
+  // Bypass the validation for codecs that are offloaded:
+  // the stack does not need to know about the peer capabilities,
+  // since the validation and selection will be performed by the
+  // bluetooth audio HAL for offloaded codecs.
+  if (!::bluetooth::audio::a2dp::provider::supports_codec(
+          a2dp_codec_config->codecIndex()) &&
+      !A2DP_IsPeerSinkCodecValid(p_peer_codec_capabilities))
+    return false;
+
   return a2dp_codec_config->setPeerCodecCapabilities(p_peer_codec_capabilities);
 }
 
@@ -1010,7 +1053,7 @@ tA2DP_CODEC_TYPE A2DP_GetCodecType(const uint8_t* p_codec_info) {
 bool A2DP_IsSourceCodecValid(const uint8_t* p_codec_info) {
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
 
-  LOG_VERBOSE("%s: codec_type = 0x%x", __func__, codec_type);
+  log::verbose("codec_type = 0x{:x}", codec_type);
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
@@ -1031,7 +1074,7 @@ bool A2DP_IsSourceCodecValid(const uint8_t* p_codec_info) {
 bool A2DP_IsSinkCodecValid(const uint8_t* p_codec_info) {
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
 
-  LOG_VERBOSE("%s: codec_type = 0x%x", __func__, codec_type);
+  log::verbose("codec_type = 0x{:x}", codec_type);
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
@@ -1052,7 +1095,7 @@ bool A2DP_IsSinkCodecValid(const uint8_t* p_codec_info) {
 bool A2DP_IsPeerSourceCodecValid(const uint8_t* p_codec_info) {
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
 
-  LOG_VERBOSE("%s: codec_type = 0x%x", __func__, codec_type);
+  log::verbose("codec_type = 0x{:x}", codec_type);
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
@@ -1073,7 +1116,7 @@ bool A2DP_IsPeerSourceCodecValid(const uint8_t* p_codec_info) {
 bool A2DP_IsPeerSinkCodecValid(const uint8_t* p_codec_info) {
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
 
-  LOG_VERBOSE("%s: codec_type = 0x%x", __func__, codec_type);
+  log::verbose("codec_type = 0x{:x}", codec_type);
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
@@ -1094,7 +1137,7 @@ bool A2DP_IsPeerSinkCodecValid(const uint8_t* p_codec_info) {
 bool A2DP_IsSinkCodecSupported(const uint8_t* p_codec_info) {
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
 
-  LOG_VERBOSE("%s: codec_type = 0x%x", __func__, codec_type);
+  log::verbose("codec_type = 0x{:x}", codec_type);
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
@@ -1109,14 +1152,14 @@ bool A2DP_IsSinkCodecSupported(const uint8_t* p_codec_info) {
       break;
   }
 
-  LOG_ERROR("%s: unsupported codec type 0x%x", __func__, codec_type);
+  log::error("unsupported codec type 0x{:x}", codec_type);
   return false;
 }
 
 bool A2DP_IsPeerSourceCodecSupported(const uint8_t* p_codec_info) {
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
 
-  LOG_VERBOSE("%s: codec_type = 0x%x", __func__, codec_type);
+  log::verbose("codec_type = 0x{:x}", codec_type);
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
@@ -1131,7 +1174,7 @@ bool A2DP_IsPeerSourceCodecSupported(const uint8_t* p_codec_info) {
       break;
   }
 
-  LOG_ERROR("%s: unsupported codec type 0x%x", __func__, codec_type);
+  log::error("unsupported codec type 0x{:x}", codec_type);
   return false;
 }
 
@@ -1160,7 +1203,7 @@ uint8_t A2DP_GetMediaType(const uint8_t* p_codec_info) {
 const char* A2DP_CodecName(const uint8_t* p_codec_info) {
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
 
-  LOG_VERBOSE("%s: codec_type = 0x%x", __func__, codec_type);
+  log::verbose("codec_type = 0x{:x}", codec_type);
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
@@ -1175,7 +1218,7 @@ const char* A2DP_CodecName(const uint8_t* p_codec_info) {
       break;
   }
 
-  LOG_ERROR("%s: unsupported codec type 0x%x", __func__, codec_type);
+  log::error("unsupported codec type 0x{:x}", codec_type);
   return "UNKNOWN CODEC";
 }
 
@@ -1199,7 +1242,7 @@ bool A2DP_CodecTypeEquals(const uint8_t* p_codec_info_a,
       break;
   }
 
-  LOG_ERROR("%s: unsupported codec type 0x%x", __func__, codec_type_a);
+  log::error("unsupported codec type 0x{:x}", codec_type_a);
   return false;
 }
 
@@ -1223,14 +1266,14 @@ bool A2DP_CodecEquals(const uint8_t* p_codec_info_a,
       break;
   }
 
-  LOG_ERROR("%s: unsupported codec type 0x%x", __func__, codec_type_a);
+  log::error("unsupported codec type 0x{:x}", codec_type_a);
   return false;
 }
 
 int A2DP_GetTrackSampleRate(const uint8_t* p_codec_info) {
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
 
-  LOG_VERBOSE("%s: codec_type = 0x%x", __func__, codec_type);
+  log::verbose("codec_type = 0x{:x}", codec_type);
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
@@ -1245,14 +1288,14 @@ int A2DP_GetTrackSampleRate(const uint8_t* p_codec_info) {
       break;
   }
 
-  LOG_ERROR("%s: unsupported codec type 0x%x", __func__, codec_type);
+  log::error("unsupported codec type 0x{:x}", codec_type);
   return -1;
 }
 
 int A2DP_GetTrackBitsPerSample(const uint8_t* p_codec_info) {
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
 
-  LOG_VERBOSE("%s: codec_type = 0x%x", __func__, codec_type);
+  log::verbose("codec_type = 0x{:x}", codec_type);
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
@@ -1267,14 +1310,14 @@ int A2DP_GetTrackBitsPerSample(const uint8_t* p_codec_info) {
       break;
   }
 
-  LOG_ERROR("%s: unsupported codec type 0x%x", __func__, codec_type);
+  log::error("unsupported codec type 0x{:x}", codec_type);
   return -1;
 }
 
 int A2DP_GetTrackChannelCount(const uint8_t* p_codec_info) {
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
 
-  LOG_VERBOSE("%s: codec_type = 0x%x", __func__, codec_type);
+  log::verbose("codec_type = 0x{:x}", codec_type);
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
@@ -1289,14 +1332,14 @@ int A2DP_GetTrackChannelCount(const uint8_t* p_codec_info) {
       break;
   }
 
-  LOG_ERROR("%s: unsupported codec type 0x%x", __func__, codec_type);
+  log::error("unsupported codec type 0x{:x}", codec_type);
   return -1;
 }
 
 int A2DP_GetSinkTrackChannelType(const uint8_t* p_codec_info) {
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
 
-  LOG_VERBOSE("%s: codec_type = 0x%x", __func__, codec_type);
+  log::verbose("codec_type = 0x{:x}", codec_type);
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
@@ -1311,7 +1354,7 @@ int A2DP_GetSinkTrackChannelType(const uint8_t* p_codec_info) {
       break;
   }
 
-  LOG_ERROR("%s: unsupported codec type 0x%x", __func__, codec_type);
+  log::error("unsupported codec type 0x{:x}", codec_type);
   return -1;
 }
 
@@ -1332,7 +1375,7 @@ bool A2DP_GetPacketTimestamp(const uint8_t* p_codec_info, const uint8_t* p_data,
       break;
   }
 
-  LOG_ERROR("%s: unsupported codec type 0x%x", __func__, codec_type);
+  log::error("unsupported codec type 0x{:x}", codec_type);
   return false;
 }
 
@@ -1354,7 +1397,7 @@ bool A2DP_BuildCodecHeader(const uint8_t* p_codec_info, BT_HDR* p_buf,
       break;
   }
 
-  LOG_ERROR("%s: unsupported codec type 0x%x", __func__, codec_type);
+  log::error("unsupported codec type 0x{:x}", codec_type);
   return false;
 }
 
@@ -1362,7 +1405,12 @@ const tA2DP_ENCODER_INTERFACE* A2DP_GetEncoderInterface(
     const uint8_t* p_codec_info) {
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
 
-  LOG_VERBOSE("%s: codec_type = 0x%x", __func__, codec_type);
+  log::verbose("codec_type = 0x{:x}", codec_type);
+
+  if (::bluetooth::audio::a2dp::provider::supports_codec(
+          A2DP_SourceCodecIndex(p_codec_info))) {
+    return A2DP_GetEncoderInterfaceExt(p_codec_info);
+  }
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
@@ -1377,7 +1425,7 @@ const tA2DP_ENCODER_INTERFACE* A2DP_GetEncoderInterface(
       break;
   }
 
-  LOG_ERROR("%s: unsupported codec type 0x%x", __func__, codec_type);
+  log::error("unsupported codec type 0x{:x}", codec_type);
   return NULL;
 }
 
@@ -1385,7 +1433,7 @@ const tA2DP_DECODER_INTERFACE* A2DP_GetDecoderInterface(
     const uint8_t* p_codec_info) {
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
 
-  LOG_VERBOSE("%s: codec_type = 0x%x", __func__, codec_type);
+  log::verbose("codec_type = 0x{:x}", codec_type);
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
@@ -1400,7 +1448,7 @@ const tA2DP_DECODER_INTERFACE* A2DP_GetDecoderInterface(
       break;
   }
 
-  LOG_ERROR("%s: unsupported codec type 0x%x", __func__, codec_type);
+  log::error("unsupported codec type 0x{:x}", codec_type);
   return NULL;
 }
 
@@ -1420,14 +1468,20 @@ bool A2DP_AdjustCodec(uint8_t* p_codec_info) {
       break;
   }
 
-  LOG_ERROR("%s: unsupported codec type 0x%x", __func__, codec_type);
+  log::error("unsupported codec type 0x{:x}", codec_type);
   return false;
 }
 
 btav_a2dp_codec_index_t A2DP_SourceCodecIndex(const uint8_t* p_codec_info) {
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
 
-  LOG_VERBOSE("%s: codec_type = 0x%x", __func__, codec_type);
+  log::verbose("codec_type = 0x{:x}", codec_type);
+
+  auto ext_codec_index =
+      bluetooth::audio::a2dp::provider::source_codec_index(p_codec_info);
+  if (ext_codec_index.has_value()) {
+    return ext_codec_index.value();
+  }
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
@@ -1442,14 +1496,20 @@ btav_a2dp_codec_index_t A2DP_SourceCodecIndex(const uint8_t* p_codec_info) {
       break;
   }
 
-  LOG_ERROR("%s: unsupported codec type 0x%x", __func__, codec_type);
+  log::error("unsupported codec type 0x{:x}", codec_type);
   return BTAV_A2DP_CODEC_INDEX_MAX;
 }
 
 btav_a2dp_codec_index_t A2DP_SinkCodecIndex(const uint8_t* p_codec_info) {
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
 
-  LOG_VERBOSE("%s: codec_type = 0x%x", __func__, codec_type);
+  log::verbose("codec_type = 0x{:x}", codec_type);
+
+  auto ext_codec_index =
+      bluetooth::audio::a2dp::provider::sink_codec_index(p_codec_info);
+  if (ext_codec_index.has_value()) {
+    return ext_codec_index.value();
+  }
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
@@ -1464,11 +1524,22 @@ btav_a2dp_codec_index_t A2DP_SinkCodecIndex(const uint8_t* p_codec_info) {
       break;
   }
 
-  LOG_ERROR("%s: unsupported codec type 0x%x", __func__, codec_type);
+  log::error("unsupported codec type 0x{:x}", codec_type);
   return BTAV_A2DP_CODEC_INDEX_MAX;
 }
 
 const char* A2DP_CodecIndexStr(btav_a2dp_codec_index_t codec_index) {
+  if ((codec_index >= BTAV_A2DP_CODEC_INDEX_SOURCE_EXT_MIN &&
+       codec_index < BTAV_A2DP_CODEC_INDEX_SOURCE_EXT_MAX) ||
+      (codec_index >= BTAV_A2DP_CODEC_INDEX_SINK_EXT_MIN &&
+       codec_index < BTAV_A2DP_CODEC_INDEX_SINK_EXT_MAX)) {
+    auto codec_index_str =
+        bluetooth::audio::a2dp::provider::codec_index_str(codec_index);
+    if (codec_index_str.has_value()) {
+      return codec_index_str.value();
+    }
+  }
+
   switch (codec_index) {
     case BTAV_A2DP_CODEC_INDEX_SOURCE_SBC:
       return A2DP_CodecIndexStrSbc();
@@ -1494,11 +1565,16 @@ const char* A2DP_CodecIndexStr(btav_a2dp_codec_index_t codec_index) {
 
 bool A2DP_InitCodecConfig(btav_a2dp_codec_index_t codec_index,
                           AvdtpSepConfig* p_cfg) {
-  LOG_VERBOSE("%s: codec %s", __func__, A2DP_CodecIndexStr(codec_index));
+  log::verbose("codec {}", A2DP_CodecIndexStr(codec_index));
 
   /* Default: no content protection info */
   p_cfg->num_protect = 0;
   p_cfg->protect_info[0] = 0;
+
+  if (::bluetooth::audio::a2dp::provider::supports_codec(codec_index)) {
+    return ::bluetooth::audio::a2dp::provider::codec_info(
+        codec_index, nullptr, p_cfg->codec_info, nullptr);
+  }
 
   switch (codec_index) {
     case BTAV_A2DP_CODEC_INDEX_SOURCE_SBC:
@@ -1543,26 +1619,9 @@ std::string A2DP_CodecInfoString(const uint8_t* p_codec_info) {
 }
 
 int A2DP_GetEecoderEffectiveFrameSize(const uint8_t* p_codec_info) {
-  tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
-
-  const tA2DP_ENCODER_INTERFACE* a2dp_encoder_interface = nullptr;
-  switch (codec_type) {
-    case A2DP_MEDIA_CT_SBC:
-      a2dp_encoder_interface = A2DP_GetEncoderInterfaceSbc(p_codec_info);
-      break;
-#if !defined(EXCLUDE_NONSTANDARD_CODECS)
-    case A2DP_MEDIA_CT_AAC:
-      a2dp_encoder_interface = A2DP_GetEncoderInterfaceAac(p_codec_info);
-      break;
-    case A2DP_MEDIA_CT_NON_A2DP:
-      a2dp_encoder_interface = A2DP_VendorGetEncoderInterface(p_codec_info);
-      break;
-#endif
-    default:
-      break;
-  }
-  if (a2dp_encoder_interface == nullptr) {
-    return 0;
-  }
-  return a2dp_encoder_interface->get_effective_frame_size();
+  const tA2DP_ENCODER_INTERFACE* a2dp_encoder_interface =
+      A2DP_GetEncoderInterface(p_codec_info);
+  return a2dp_encoder_interface
+             ? a2dp_encoder_interface->get_effective_frame_size()
+             : 0;
 }

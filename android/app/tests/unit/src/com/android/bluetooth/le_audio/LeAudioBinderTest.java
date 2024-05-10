@@ -16,44 +16,61 @@
 
 package com.android.bluetooth.le_audio;
 
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothLeAudio;
 import android.bluetooth.BluetoothLeAudioCodecConfig;
-import android.bluetooth.BluetoothLeAudioCodecStatus;
 import android.bluetooth.BluetoothLeAudioContentMetadata;
 import android.bluetooth.BluetoothLeBroadcastSettings;
 import android.bluetooth.BluetoothLeBroadcastSubgroupSettings;
-import android.bluetooth.BluetoothLeBroadcastMetadata;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.IBluetoothLeAudioCallback;
 import android.bluetooth.IBluetoothLeBroadcastCallback;
 import android.content.AttributionSource;
 import android.os.ParcelUuid;
 import android.os.RemoteCallbackList;
+import android.platform.test.flag.junit.SetFlagsRule;
+
+import androidx.test.InstrumentationRegistry;
 
 import com.android.bluetooth.TestUtils;
-import com.android.bluetooth.x.com.android.modules.utils.SynchronousResultReceiver;
+import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.btservice.AudioRoutingManager;
+import com.android.bluetooth.btservice.storage.DatabaseManager;
+import com.android.bluetooth.flags.Flags;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
-import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 public class LeAudioBinderTest {
-    @Mock
-    private LeAudioService mMockService;
-    @Mock
-    private RemoteCallbackList<IBluetoothLeAudioCallback> mLeAudioCallbacks;
-    @Mock
-    private RemoteCallbackList<IBluetoothLeBroadcastCallback> mBroadcastCallbacks;
+
+    @Rule public final SetFlagsRule mSetFlagsRule = new SetFlagsRule();
+
+    private LeAudioService mLeAudioService;
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
+    @Mock private AdapterService mAdapterService;
+    @Mock private LeAudioNativeInterface mNativeInterface;
+    @Mock private DatabaseManager mDatabaseManager;
+    @Mock private AudioRoutingManager mAudioRoutingManager;
+
+    @Mock private RemoteCallbackList<IBluetoothLeAudioCallback> mLeAudioCallbacks;
+    @Mock private RemoteCallbackList<IBluetoothLeBroadcastCallback> mBroadcastCallbacks;
 
     private LeAudioService.BluetoothLeAudioBinder mBinder;
     private BluetoothAdapter mAdapter;
@@ -64,107 +81,128 @@ public class LeAudioBinderTest {
 
     @Before
     public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
+        TestUtils.setAdapterService(mAdapterService);
+        doReturn(false).when(mAdapterService).isQuietModeEnabled();
+        doReturn(mDatabaseManager).when(mAdapterService).getDatabase();
+        doReturn(mAudioRoutingManager).when(mAdapterService).getActiveDeviceManager();
+
+        CompletableFuture<Boolean> future = new CompletableFuture<>();
+        future.complete(true);
+        doReturn(future).when(mAudioRoutingManager).activateDeviceProfile(any(), anyInt());
+
+        mLeAudioService =
+                spy(
+                        new LeAudioService(
+                                InstrumentationRegistry.getTargetContext(), mNativeInterface));
+        mLeAudioService.start();
         mAdapter = BluetoothAdapter.getDefaultAdapter();
-        mBinder = new LeAudioService.BluetoothLeAudioBinder(mMockService);
-        mMockService.mLeAudioCallbacks = mLeAudioCallbacks;
-        mMockService.mBroadcastCallbacks = mBroadcastCallbacks;
+        mBinder = new LeAudioService.BluetoothLeAudioBinder(mLeAudioService);
+        mLeAudioService.mLeAudioCallbacks = mLeAudioCallbacks;
+        mLeAudioService.mBroadcastCallbacks = mBroadcastCallbacks;
     }
 
     @After
     public void cleanUp() {
         mBinder.cleanup();
+        mLeAudioService.stop();
+        TestUtils.clearAdapterService(mAdapterService);
     }
 
     @Test
     public void connect() {
         BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
 
-        mBinder.connect(device, source, recv);
-        verify(mMockService).connect(device);
+        mBinder.connect(device, source);
+        verify(mLeAudioService).connect(device);
     }
 
     @Test
     public void disconnect() {
         BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
 
-        mBinder.disconnect(device, source, recv);
-        verify(mMockService).disconnect(device);
+        mBinder.disconnect(device, source);
+        verify(mLeAudioService).disconnect(device);
     }
 
     @Test
     public void getConnectedDevices() {
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<List<BluetoothDevice>> recv =
-                SynchronousResultReceiver.get();
 
-        mBinder.getConnectedDevices(source, recv);
-        verify(mMockService).getConnectedDevices();
+        mBinder.getConnectedDevices(source);
+        verify(mLeAudioService).getConnectedDevices();
     }
 
     @Test
     public void getConnectedGroupLeadDevice() {
         int groupId = 1;
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<List<BluetoothDevice>> recv =
-                SynchronousResultReceiver.get();
 
-        mBinder.getConnectedGroupLeadDevice(groupId, source, recv);
-        verify(mMockService).getConnectedGroupLeadDevice(groupId);
+        mBinder.getConnectedGroupLeadDevice(groupId, source);
+        verify(mLeAudioService).getConnectedGroupLeadDevice(groupId);
     }
 
     @Test
     public void getDevicesMatchingConnectionStates() {
         int[] states = new int[] {BluetoothProfile.STATE_DISCONNECTED };
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<List<BluetoothDevice>> recv =
-                SynchronousResultReceiver.get();
 
-        mBinder.getDevicesMatchingConnectionStates(states, source, recv);
-        verify(mMockService).getDevicesMatchingConnectionStates(states);
+        mBinder.getDevicesMatchingConnectionStates(states, source);
+        verify(mLeAudioService).getDevicesMatchingConnectionStates(states);
     }
 
     @Test
     public void getConnectionState() {
         BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
 
-        mBinder.getConnectionState(device, source, recv);
-        verify(mMockService).getConnectionState(device);
+        mBinder.getConnectionState(device, source);
+        verify(mLeAudioService).getConnectionState(device);
     }
 
     @Test
     public void setActiveDevice() {
         BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
 
-        mBinder.setActiveDevice(device, source, recv);
-        verify(mMockService).setActiveDevice(device);
+        mSetFlagsRule.disableFlags(Flags.FLAG_AUDIO_ROUTING_CENTRALIZATION);
+        mBinder.setActiveDevice(device, source);
+        verify(mLeAudioService).setActiveDevice(device);
+
+        mSetFlagsRule.enableFlags(Flags.FLAG_AUDIO_ROUTING_CENTRALIZATION);
+        mBinder.setActiveDevice(device, source);
+        verify(mAudioRoutingManager).activateDeviceProfile(device, BluetoothProfile.LE_AUDIO);
+    }
+
+    @Test
+    public void setActiveDevice_withNullDevice_callsRemoveActiveDevice() {
+        AttributionSource source = new AttributionSource.Builder(0).build();
+
+        mSetFlagsRule.disableFlags(Flags.FLAG_AUDIO_ROUTING_CENTRALIZATION);
+        mBinder.setActiveDevice(null, source);
+        verify(mLeAudioService).removeActiveDevice(true);
+
+        mSetFlagsRule.enableFlags(Flags.FLAG_AUDIO_ROUTING_CENTRALIZATION);
+        mBinder.setActiveDevice(null, source);
+        verify(mAudioRoutingManager).activateDeviceProfile(null, BluetoothProfile.LE_AUDIO);
     }
 
     @Test
     public void getActiveDevices() {
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
 
-        mBinder.getActiveDevices(source, recv);
-        verify(mMockService).getActiveDevices();
+        mBinder.getActiveDevices(source);
+        verify(mLeAudioService).getActiveDevices();
     }
 
     @Test
     public void getAudioLocation() {
         BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
 
-        mBinder.getAudioLocation(device, source, recv);
-        verify(mMockService).getAudioLocation(device);
+        mBinder.getAudioLocation(device, source);
+        verify(mLeAudioService).getAudioLocation(device);
     }
 
     @Test
@@ -172,20 +210,18 @@ public class LeAudioBinderTest {
         BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
         int connectionPolicy = BluetoothProfile.CONNECTION_POLICY_UNKNOWN;
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
 
-        mBinder.setConnectionPolicy(device, connectionPolicy, source, recv);
-        verify(mMockService).setConnectionPolicy(device, connectionPolicy);
+        mBinder.setConnectionPolicy(device, connectionPolicy, source);
+        verify(mLeAudioService).setConnectionPolicy(device, connectionPolicy);
     }
 
     @Test
     public void getConnectionPolicy() {
         BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
 
-        mBinder.getConnectionPolicy(device, source, recv);
-        verify(mMockService).getConnectionPolicy(device);
+        mBinder.getConnectionPolicy(device, source);
+        verify(mLeAudioService).getConnectionPolicy(device);
     }
 
     @Test
@@ -194,20 +230,18 @@ public class LeAudioBinderTest {
         int ccid = 0;
         int contextType = BluetoothLeAudio.CONTEXT_TYPE_UNSPECIFIED;
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Void> recv = SynchronousResultReceiver.get();
 
-        mBinder.setCcidInformation(uuid, ccid, contextType, source, recv);
-        verify(mMockService).setCcidInformation(uuid, ccid, contextType);
+        mBinder.setCcidInformation(uuid, ccid, contextType, source);
+        verify(mLeAudioService).setCcidInformation(uuid, ccid, contextType);
     }
 
     @Test
     public void getGroupId() {
         BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
 
-        mBinder.getGroupId(device, source, recv);
-        verify(mMockService).getGroupId(device);
+        mBinder.getGroupId(device, source);
+        verify(mLeAudioService).getGroupId(device);
     }
 
     @Test
@@ -215,30 +249,27 @@ public class LeAudioBinderTest {
         int groupId = 1;
         BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
 
-        mBinder.groupAddNode(groupId, device, source, recv);
-        verify(mMockService).groupAddNode(groupId, device);
+        mBinder.groupAddNode(groupId, device, source);
+        verify(mLeAudioService).groupAddNode(groupId, device);
     }
 
     @Test
     public void setInCall() {
         boolean inCall = true;
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Void> recv = SynchronousResultReceiver.get();
 
-        mBinder.setInCall(inCall, source, recv);
-        verify(mMockService).setInCall(inCall);
+        mBinder.setInCall(inCall, source);
+        verify(mLeAudioService).setInCall(inCall);
     }
 
     @Test
     public void setInactiveForHfpHandover() {
         BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Void> recv = SynchronousResultReceiver.get();
 
-        mBinder.setInactiveForHfpHandover(device, source, recv);
-        verify(mMockService).setInactiveForHfpHandover(device);
+        mBinder.setInactiveForHfpHandover(device, source);
+        verify(mLeAudioService).setInactiveForHfpHandover(device);
     }
 
     @Test
@@ -246,60 +277,54 @@ public class LeAudioBinderTest {
         int groupId = 1;
         BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
 
-        mBinder.groupRemoveNode(groupId, device, source, recv);
-        verify(mMockService).groupRemoveNode(groupId, device);
+        mBinder.groupRemoveNode(groupId, device, source);
+        verify(mLeAudioService).groupRemoveNode(groupId, device);
     }
 
     @Test
     public void setVolume() {
         int volume = 3;
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Void> recv = SynchronousResultReceiver.get();
 
-        mBinder.setVolume(volume, source, recv);
-        verify(mMockService).setVolume(volume);
+        mBinder.setVolume(volume, source);
+        verify(mLeAudioService).setVolume(volume);
     }
 
     @Test
     public void registerCallback() {
         IBluetoothLeAudioCallback callback = Mockito.mock(IBluetoothLeAudioCallback.class);
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Void> recv = SynchronousResultReceiver.get();
 
-        mBinder.registerCallback(callback, source, recv);
-        verify(mMockService.mLeAudioCallbacks).register(callback);
+        mBinder.registerCallback(callback, source);
+        verify(mLeAudioService.mLeAudioCallbacks).register(callback);
     }
 
     @Test
     public void unregisterCallback() {
         IBluetoothLeAudioCallback callback = Mockito.mock(IBluetoothLeAudioCallback.class);
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Void> recv = SynchronousResultReceiver.get();
 
-        mBinder.unregisterCallback(callback, source, recv);
-        verify(mMockService.mLeAudioCallbacks).unregister(callback);
+        mBinder.unregisterCallback(callback, source);
+        verify(mLeAudioService.mLeAudioCallbacks).unregister(callback);
     }
 
     @Test
     public void registerLeBroadcastCallback() {
         IBluetoothLeBroadcastCallback callback = Mockito.mock(IBluetoothLeBroadcastCallback.class);
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Void> recv = SynchronousResultReceiver.get();
 
-        mBinder.registerLeBroadcastCallback(callback, source, recv);
-        verify(mMockService.mBroadcastCallbacks).register(callback);
+        mBinder.registerLeBroadcastCallback(callback, source);
+        verify(mLeAudioService.mBroadcastCallbacks).register(callback);
     }
 
     @Test
     public void unregisterLeBroadcastCallback() {
         IBluetoothLeBroadcastCallback callback = Mockito.mock(IBluetoothLeBroadcastCallback.class);
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Void> recv = SynchronousResultReceiver.get();
 
-        mBinder.unregisterLeBroadcastCallback(callback, source, recv);
-        verify(mMockService.mBroadcastCallbacks).unregister(callback);
+        mBinder.unregisterLeBroadcastCallback(callback, source);
+        verify(mLeAudioService.mBroadcastCallbacks).unregister(callback);
     }
 
     @Test
@@ -308,7 +333,7 @@ public class LeAudioBinderTest {
         AttributionSource source = new AttributionSource.Builder(0).build();
 
         mBinder.startBroadcast(broadcastSettings, source);
-        verify(mMockService).createBroadcast(broadcastSettings);
+        verify(mLeAudioService).createBroadcast(broadcastSettings);
     }
 
     @Test
@@ -317,7 +342,7 @@ public class LeAudioBinderTest {
         AttributionSource source = new AttributionSource.Builder(0).build();
 
         mBinder.stopBroadcast(id, source);
-        verify(mMockService).stopBroadcast(id);
+        verify(mLeAudioService).stopBroadcast(id);
     }
 
     @Test
@@ -327,7 +352,7 @@ public class LeAudioBinderTest {
         AttributionSource source = new AttributionSource.Builder(0).build();
 
         mBinder.updateBroadcast(id, broadcastSettings, source);
-        verify(mMockService).updateBroadcast(id, broadcastSettings);
+        verify(mLeAudioService).updateBroadcast(id, broadcastSettings);
     }
 
     @Test
@@ -336,58 +361,50 @@ public class LeAudioBinderTest {
         BluetoothLeAudioContentMetadata metadata =
                 new BluetoothLeAudioContentMetadata.Builder().build();
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
 
-        mBinder.isPlaying(id, source, recv);
-        verify(mMockService).isPlaying(id);
+        mBinder.isPlaying(id, source);
+        verify(mLeAudioService).isPlaying(id);
     }
 
     @Test
     public void getAllBroadcastMetadata() {
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<List<BluetoothLeBroadcastMetadata>> recv =
-                SynchronousResultReceiver.get();
 
-        mBinder.getAllBroadcastMetadata(source, recv);
-        verify(mMockService).getAllBroadcastMetadata();
+        mBinder.getAllBroadcastMetadata(source);
+        verify(mLeAudioService).getAllBroadcastMetadata();
     }
 
     @Test
     public void getMaximumNumberOfBroadcasts() {
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
 
-        mBinder.getMaximumNumberOfBroadcasts(source, recv);
-        verify(mMockService).getMaximumNumberOfBroadcasts();
+        mBinder.getMaximumNumberOfBroadcasts(source);
+        verify(mLeAudioService).getMaximumNumberOfBroadcasts();
     }
 
     @Test
     public void getMaximumStreamsPerBroadcast() {
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
 
-        mBinder.getMaximumStreamsPerBroadcast(source, recv);
-        verify(mMockService).getMaximumStreamsPerBroadcast();
+        mBinder.getMaximumStreamsPerBroadcast(source);
+        verify(mLeAudioService).getMaximumStreamsPerBroadcast();
     }
 
     @Test
     public void getMaximumSubgroupsPerBroadcast() {
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
 
-        mBinder.getMaximumSubgroupsPerBroadcast(source, recv);
-        verify(mMockService).getMaximumSubgroupsPerBroadcast();
+        mBinder.getMaximumSubgroupsPerBroadcast(source);
+        verify(mLeAudioService).getMaximumSubgroupsPerBroadcast();
     }
 
     @Test
     public void getCodecStatus() {
         int groupId = 1;
         AttributionSource source = new AttributionSource.Builder(0).build();
-        final SynchronousResultReceiver<BluetoothLeAudioCodecStatus> recv =
-                SynchronousResultReceiver.get();
 
-        mBinder.getCodecStatus(groupId, source, recv);
-        verify(mMockService).getCodecStatus(groupId);
+        mBinder.getCodecStatus(groupId, source);
+        verify(mLeAudioService).getCodecStatus(groupId);
     }
 
     @Test
@@ -400,7 +417,7 @@ public class LeAudioBinderTest {
         AttributionSource source = new AttributionSource.Builder(0).build();
 
         mBinder.setCodecConfigPreference(groupId, inputConfig, outputConfig, source);
-        verify(mMockService).setCodecConfigPreference(groupId, inputConfig, outputConfig);
+        verify(mLeAudioService).setCodecConfigPreference(groupId, inputConfig, outputConfig);
     }
 
     private BluetoothLeBroadcastSettings buildBroadcastSettingsFromMetadata() {

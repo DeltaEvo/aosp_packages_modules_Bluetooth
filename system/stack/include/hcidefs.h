@@ -30,6 +30,7 @@
 #define HCI_PROTO_VERSION_4_1 0x07 /* Version for BT spec 4.1          */
 #define HCI_PROTO_VERSION_4_2 0x08 /* Version for BT spec 4.2          */
 #define HCI_PROTO_VERSION_5_0 0x09 /* Version for BT spec 5.0          */
+#define HCI_PROTO_VERSION_5_2 0x0B /* Version for BT spec 5.2          */
 
 /*
  *  Definitions for HCI groups
@@ -431,9 +432,6 @@
 
 /* Multi adv opcode */
 #define HCI_BLE_MULTI_ADV (0x0154 | HCI_GRP_VENDOR_SPECIFIC)
-
-/* Batch scan opcode */
-#define HCI_BLE_BATCH_SCAN (0x0156 | HCI_GRP_VENDOR_SPECIFIC)
 
 /* ADV filter opcode */
 #define HCI_BLE_ADV_FILTER (0x0157 | HCI_GRP_VENDOR_SPECIFIC)
@@ -912,11 +910,30 @@ typedef struct {
 // TODO Remove this once all QTI specific hacks are removed.
 #define LMP_COMPID_QTI 0x001D
 
+// TODO Remove this once all UNISOC specific hacks are removed.
+#define LMP_COMPID_UNISOC 0x073F
+
+// TODO Remove this once all Mediatek specific hacks are removed.
+#define LMP_COMPID_MEDIATEK 0x0046
+
 /* Parameter information for HCI_SYNA_SET_ACL_PRIORITY */
 #define HCI_SYNA_ACL_PRIORITY_PARAM_SIZE 3
-#define HCI_SYNA_ACL_PRIORITY_LOW 0x00
-#define HCI_SYNA_ACL_PRIORITY_HIGH 0xFF
+#define HCI_SYNA_ACL_NORMAL_PRIORITY 0xF0
+#define HCI_SYNA_ACL_HIGH_PRIORITY 0xF2
+#define HCI_SYNA_ACL_HIGH_PRIORITY_LOW_LATENCY 0xF3
 #define HCI_SYNA_SET_ACL_PRIORITY (0x0057 | HCI_GRP_VENDOR_SPECIFIC)
+
+/* Parameter information for HCI_UNISOC_SET_ACL_PRIORITY */
+#define HCI_UNISOC_ACL_PRIORITY_PARAM_SIZE 3
+#define HCI_UNISOC_SET_ACL_PRIORITY (0x0057 | HCI_GRP_VENDOR_SPECIFIC)
+#define HCI_UNISOC_ACL_NORMAL_PRIORITY 0x00
+#define HCI_UNISOC_ACL_HIGH_PRIORITY 0xFF
+
+/* Parameter information for HCI_MTK_SET_ACL_PRIORITY */
+#define HCI_MTK_ACL_PRIORITY_PARAM_SIZE 4
+#define HCI_MTK_SET_ACL_PRIORITY (0xFD95 | HCI_GRP_VENDOR_SPECIFIC)
+#define HCI_MTK_ACL_NORMAL_PRIORITY 0x00
+#define HCI_MTK_ACL_HIGH_PRIORITY 0x01
 
 /*
  * Define packet size

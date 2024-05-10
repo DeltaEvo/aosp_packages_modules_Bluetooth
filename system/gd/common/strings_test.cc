@@ -16,6 +16,7 @@
 
 #include "common/strings.h"
 
+#include <bluetooth/log.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -44,6 +45,8 @@ static inline bool is_arch64() {
   return sizeof(long) == 8;
 }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Winteger-overflow"
 TEST(StringsTest, to_hex_string_from_number) {
   ASSERT_EQ(ToHexString(0), "0x00000000");
   ASSERT_EQ(ToHexString(3), "0x00000003");
@@ -72,7 +75,7 @@ TEST(StringsTest, to_hex_string_from_number) {
     ASSERT_EQ(ToHexString(LONG_MIN), "LONG_MIN");
     ASSERT_EQ(ToHexString(LONG_MIN + 1L), "-0x7fffffffffffffff");
   } else {
-    LOG_ERROR("Unknown architecture");
+    bluetooth::log::error("Unknown architecture");
     ASSERT_TRUE(false);
   }
   ASSERT_EQ(ToHexString('a'), "0x61");
@@ -87,6 +90,7 @@ TEST(StringsTest, to_hex_string_from_number_unsigned_int) {
   ASSERT_EQ(ToHexString(1U + UINT_MAX), "0x00000000");  // Rolled over
   ASSERT_EQ(ToHexString(2U + UINT_MAX), "0x00000001");  // Rolled over
 }
+#pragma clang diagnostic pop
 
 TEST(StringsTest, trim_string_test) {
   ASSERT_EQ(StringTrim("  aa bb"), "aa bb");
@@ -257,7 +261,7 @@ TEST(StringsTest, string_format_time_with_ms_test) {
 }
 
 class ExampleClass {};
-std::ostream& operator<<(std::ostream& os, const ExampleClass& obj) {
+std::ostream& operator<<(std::ostream& os, const ExampleClass& /* obj */) {
   os << "ExampleClass";
   return os;
 }

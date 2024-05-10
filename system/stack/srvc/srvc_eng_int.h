@@ -19,12 +19,12 @@
 #ifndef SRVC_ENG_INT_H
 #define SRVC_ENG_INT_H
 
-#include "bt_target.h"
 #include "gatt_api.h"
+#include "internal_include/bt_target.h"
 #include "srvc_api.h"
 #include "types/raw_address.h"
 
-#define SRVC_MAX_APPS GATT_CL_MAX_LCB
+#define SRVC_MAX_APPS GATT_MAX_APPS
 
 #define SRVC_ID_NONE 0
 #define SRVC_ID_DIS 1
@@ -57,9 +57,8 @@ typedef struct {
 /* Global GATT data */
 extern tSRVC_ENG_CB srvc_eng_cb;
 
-extern tSRVC_CLCB* srvc_eng_find_clcb_by_conn_id(uint16_t conn_id);
+tSRVC_CLCB* srvc_eng_find_clcb_by_conn_id(uint16_t conn_id);
 
-extern void srvc_eng_release_channel(uint16_t conn_id);
-extern bool srvc_eng_request_channel(const RawAddress& remote_bda,
-                                     uint8_t srvc_id);
+void srvc_eng_release_channel(uint16_t conn_id);
+bool srvc_eng_request_channel(const RawAddress& remote_bda, uint8_t srvc_id);
 #endif

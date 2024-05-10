@@ -22,72 +22,31 @@
  *
  ******************************************************************************/
 
+#define LOG_TAG "ble"
+
+#include "stack/include/btm_ble_addr.h"
+
 #include <base/functional/bind.h>
+#include <bluetooth/log.h>
 #include <string.h>
 
 #include "btm_ble_int.h"
-#include "device/include/controller.h"
-#include "gap_api.h"
-#include "main/shim/shim.h"
-#include "osi/include/osi.h"  // UNUSED_ATTR
-#include "stack/btm/btm_dev.h"
-#include "stack/crypto_toolbox/crypto_toolbox.h"
+#include "btm_dev.h"
+#include "btm_sec_cb.h"
+#include "crypto_toolbox/crypto_toolbox.h"
+#include "hci/controller_interface.h"
+#include "main/shim/entry.h"
+#include "os/log.h"
+#include "stack/btm/btm_int_types.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_octets.h"
+#include "stack/include/btm_ble_privacy.h"
 #include "types/ble_address_with_type.h"
 #include "types/raw_address.h"
 
+using namespace bluetooth;
+
 extern tBTM_CB btm_cb;
-
-/* This function generates Resolvable Private Address (RPA) from Identity
- * Resolving Key |irk| and |random|*/
-static RawAddress generate_rpa_from_irk_and_rand(const Octet16& irk,
-                                                 BT_OCTET8 random) {
-  random[2] &= (~BLE_RESOLVE_ADDR_MASK);
-  random[2] |= BLE_RESOLVE_ADDR_MSB;
-
-  RawAddress address;
-  address.address[2] = random[0];
-  address.address[1] = random[1];
-  address.address[0] = random[2];
-
-  /* encrypt with IRK */
-  Octet16 p = crypto_toolbox::aes_128(irk, random, 3);
-
-  /* set hash to be LSB of rpAddress */
-  address.address[5] = p[0];
-  address.address[4] = p[1];
-  address.address[3] = p[2];
-  return address;
-}
-
-/** This function is called when random address for local controller was
- * generated */
-void btm_gen_resolve_paddr_low(const RawAddress& address) {
-  /* when GD advertising and scanning modules are enabled, set random address
-   * via address manager in GD */
-  LOG_INFO("GD advertising and scanning modules are enabled, skip");
-}
-
-/** This function generate a resolvable private address using local IRK */
-void btm_gen_resolvable_private_addr(
-    base::Callback<void(const RawAddress&)> cb) {
-  /* generate 3B rand as BD LSB, SRK with it, get BD MSB */
-  btsnd_hcic_ble_rand(base::Bind(
-      [](base::Callback<void(const RawAddress&)> cb, BT_OCTET8 random) {
-        const Octet16& irk = BTM_GetDeviceIDRoot();
-        cb.Run(generate_rpa_from_irk_and_rand(irk, random));
-      },
-      std::move(cb)));
-}
-
-uint64_t btm_get_next_private_addrress_interval_ms() {
-  /* 7 minutes minimum, 15 minutes maximum for random address refreshing */
-  const uint64_t interval_min_ms = (7 * 60 * 1000);
-  const uint64_t interval_random_part_max_ms = (8 * 60 * 1000);
-
-  return interval_min_ms + std::rand() % interval_random_part_max_ms;
-}
 
 /*******************************************************************************
  *  Utility functions for Random address resolving
@@ -117,19 +76,19 @@ bool btm_ble_init_pseudo_addr(tBTM_SEC_DEV_REC* p_dev_rec,
  * Resolving Key |irk| */
 static bool rpa_matches_irk(const RawAddress& rpa, const Octet16& irk) {
   /* use the 3 MSB of bd address as prand */
-  uint8_t rand[3];
+  Octet16 rand{};
   rand[0] = rpa.address[2];
   rand[1] = rpa.address[1];
   rand[2] = rpa.address[0];
 
   /* generate X = E irk(R0, R1, R2) and R is random address 3 LSO */
-  Octet16 x = crypto_toolbox::aes_128(irk, &rand[0], 3);
+  Octet16 x = crypto_toolbox::aes_128(irk, rand);
 
   rand[0] = rpa.address[5];
   rand[1] = rpa.address[4];
   rand[2] = rpa.address[3];
 
-  if (memcmp(x.data(), &rand[0], 3) == 0) {
+  if (memcmp(x.data(), rand.data(), 3) == 0) {
     // match
     return true;
   }
@@ -145,8 +104,8 @@ bool btm_ble_addr_resolvable(const RawAddress& rpa,
   if (!BTM_BLE_IS_RESOLVE_BDA(rpa)) return false;
 
   if ((p_dev_rec->device_type & BT_DEVICE_TYPE_BLE) &&
-      (p_dev_rec->ble.key_type & BTM_LE_KEY_PID)) {
-    if (rpa_matches_irk(rpa, p_dev_rec->ble.keys.irk)) {
+      (p_dev_rec->sec_rec.ble_keys.key_type & BTM_LE_KEY_PID)) {
+    if (rpa_matches_irk(rpa, p_dev_rec->sec_rec.ble_keys.irk)) {
       btm_ble_init_pseudo_addr(p_dev_rec, rpa);
       return true;
     }
@@ -162,11 +121,11 @@ static bool btm_ble_match_random_bda(void* data, void* context) {
   RawAddress* random_bda = static_cast<RawAddress*>(context);
 
   if (!(p_dev_rec->device_type & BT_DEVICE_TYPE_BLE) ||
-      !(p_dev_rec->ble.key_type & BTM_LE_KEY_PID))
+      !(p_dev_rec->sec_rec.ble_keys.key_type & BTM_LE_KEY_PID))
     // Match fails preconditions
     return true;
 
-  if (rpa_matches_irk(*random_bda, p_dev_rec->ble.keys.irk)) {
+  if (rpa_matches_irk(*random_bda, p_dev_rec->sec_rec.ble_keys.irk)) {
     // Matched
     return false;
   }
@@ -180,9 +139,9 @@ static bool btm_ble_match_random_bda(void* data, void* context) {
  * matched to.
  */
 tBTM_SEC_DEV_REC* btm_ble_resolve_random_addr(const RawAddress& random_bda) {
-  if (btm_cb.sec_dev_rec == nullptr) return nullptr;
-  list_node_t* n = list_foreach(btm_cb.sec_dev_rec, btm_ble_match_random_bda,
-                                (void*)&random_bda);
+  if (btm_sec_cb.sec_dev_rec == nullptr) return nullptr;
+  list_node_t* n = list_foreach(btm_sec_cb.sec_dev_rec,
+                                btm_ble_match_random_bda, (void*)&random_bda);
   return (n == nullptr) ? (nullptr)
                         : (static_cast<tBTM_SEC_DEV_REC*>(list_node(n)));
 }
@@ -193,20 +152,18 @@ tBTM_SEC_DEV_REC* btm_ble_resolve_random_addr(const RawAddress& random_bda) {
 /** Find the security record whose LE identity address is matching */
 static tBTM_SEC_DEV_REC* btm_find_dev_by_identity_addr(
     const RawAddress& bd_addr, uint8_t addr_type) {
-  if (btm_cb.sec_dev_rec == nullptr) return nullptr;
+  if (btm_sec_cb.sec_dev_rec == nullptr) return nullptr;
 
-  list_node_t* end = list_end(btm_cb.sec_dev_rec);
-  for (list_node_t* node = list_begin(btm_cb.sec_dev_rec); node != end;
+  list_node_t* end = list_end(btm_sec_cb.sec_dev_rec);
+  for (list_node_t* node = list_begin(btm_sec_cb.sec_dev_rec); node != end;
        node = list_next(node)) {
     tBTM_SEC_DEV_REC* p_dev_rec =
         static_cast<tBTM_SEC_DEV_REC*>(list_node(node));
     if (p_dev_rec->ble.identity_address_with_type.bda == bd_addr) {
       if ((p_dev_rec->ble.identity_address_with_type.type &
            (~BLE_ADDR_TYPE_ID_BIT)) != (addr_type & (~BLE_ADDR_TYPE_ID_BIT)))
-        BTM_TRACE_WARNING(
-            "%s find pseudo->random match with diff addr type: %d vs %d",
-            __func__, p_dev_rec->ble.identity_address_with_type.type,
-            addr_type);
+        log::warn("pseudo->random match with diff addr type: {} vs {}",
+                  p_dev_rec->ble.identity_address_with_type.type, addr_type);
 
       /* found the match */
       return p_dev_rec;
@@ -236,7 +193,7 @@ bool btm_identity_addr_to_random_pseudo(RawAddress* bd_addr,
   /* evt reported on static address, map static address to random pseudo */
   /* if RPA offloading is supported, or 4.2 controller, do RPA refresh */
   if (refresh &&
-      controller_get_interface()->get_ble_resolving_list_max_size() != 0) {
+      bluetooth::shim::GetController()->GetLeResolvingListSize() != 0) {
     btm_ble_read_resolving_list_entry(p_dev_rec);
   }
 
@@ -271,7 +228,7 @@ bool btm_random_pseudo_to_identity_addr(RawAddress* random_pseudo,
     if (p_dev_rec->ble.in_controller_list & BTM_RESOLVING_LIST_BIT) {
       *p_identity_addr_type = p_dev_rec->ble.identity_address_with_type.type;
       *random_pseudo = p_dev_rec->ble.identity_address_with_type.bda;
-      if (controller_get_interface()->supports_ble_privacy())
+      if (bluetooth::shim::GetController()->SupportsBlePrivacy())
         *p_identity_addr_type |= BLE_ADDR_TYPE_ID_BIT;
       return true;
     }
@@ -290,19 +247,18 @@ bool btm_random_pseudo_to_identity_addr(RawAddress* random_pseudo,
  ******************************************************************************/
 void btm_ble_refresh_peer_resolvable_private_addr(
     const RawAddress& pseudo_bda, const RawAddress& rpa,
-    tBTM_SEC_BLE::tADDRESS_TYPE rra_type) {
+    tBLE_RAND_ADDR_TYPE rra_type) {
   tBTM_SEC_DEV_REC* p_sec_rec = btm_find_dev(pseudo_bda);
   if (p_sec_rec == nullptr) {
-    LOG_WARN("%s No matching known device in record", __func__);
+    log::warn("No matching known device in record");
     return;
   }
 
   p_sec_rec->ble.cur_rand_addr = rpa;
 
-  if (rra_type == tBTM_SEC_BLE::BTM_BLE_ADDR_PSEUDO) {
-    p_sec_rec->ble.active_addr_type = rpa.IsEmpty()
-                                          ? tBTM_SEC_BLE::BTM_BLE_ADDR_STATIC
-                                          : tBTM_SEC_BLE::BTM_BLE_ADDR_RRA;
+  if (rra_type == BTM_BLE_ADDR_PSEUDO) {
+    p_sec_rec->ble.active_addr_type =
+        rpa.IsEmpty() ? BTM_BLE_ADDR_STATIC : BTM_BLE_ADDR_RRA;
   } else {
     p_sec_rec->ble.active_addr_type = rra_type;
   }
@@ -317,7 +273,45 @@ void btm_ble_refresh_peer_resolvable_private_addr(
     if (!acl_refresh_remote_address(identity_address, identity_address_type,
                                     p_sec_rec->ble.pseudo_addr, rra_type,
                                     rpa)) {
-      LOG_ERROR("%s Unknown device to refresh remote device", __func__);
+      log::error("Unknown device to refresh remote device");
     }
   }
+}
+
+bool maybe_resolve_address(RawAddress* bda, tBLE_ADDR_TYPE* bda_type) {
+  bool is_in_security_db = false;
+  tBLE_ADDR_TYPE peer_addr_type = *bda_type;
+  bool addr_is_rpa =
+      (peer_addr_type == BLE_ADDR_RANDOM && BTM_BLE_IS_RESOLVE_BDA(*bda));
+
+  /* We must translate whatever address we received into the "pseudo" address.
+   * i.e. if we bonded with device that was using RPA for first connection,
+   * "pseudo" address is equal to this RPA. If it later decides to use Public
+   * address, or Random Static Address, we convert it into the "pseudo"
+   * address here. */
+  if (!addr_is_rpa || peer_addr_type & BLE_ADDR_TYPE_ID_BIT) {
+    is_in_security_db = btm_identity_addr_to_random_pseudo(bda, bda_type, true);
+  }
+
+  /* possiblly receive connection complete with resolvable random while
+     the device has been paired */
+  if (!is_in_security_db && addr_is_rpa) {
+    tBTM_SEC_DEV_REC* match_rec = btm_ble_resolve_random_addr(*bda);
+    if (match_rec) {
+      log::info("matched/resolved random address:{}", *bda);
+      is_in_security_db = true;
+      match_rec->ble.active_addr_type = BTM_BLE_ADDR_RRA;
+      match_rec->ble.cur_rand_addr = *bda;
+      if (!btm_ble_init_pseudo_addr(match_rec, *bda)) {
+        /* assign the original address to be the current report address */
+        *bda = match_rec->ble.pseudo_addr;
+        *bda_type = match_rec->ble.AddressType();
+      } else {
+        *bda = match_rec->bd_addr;
+      }
+    } else {
+      log::info("unable to match/resolve random address:{}", *bda);
+    }
+  }
+  return is_in_security_db;
 }

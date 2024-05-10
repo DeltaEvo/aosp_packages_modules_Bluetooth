@@ -35,6 +35,8 @@ package com.android.bluetooth.opp;
 import static android.view.WindowManager.LayoutParams.SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS;
 
 import android.bluetooth.AlertActivity;
+import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothProtoEnums;
 import android.content.BroadcastReceiver;
 import android.content.ContentValues;
 import android.content.Context;
@@ -53,19 +55,21 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.android.bluetooth.BluetoothMethodProxy;
+import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.R;
+import com.android.bluetooth.content_profiles.ContentProfileErrorReportUtils;
+import com.android.internal.annotations.VisibleForTesting;
 
-/**
- * This class is designed to ask user to confirm if accept incoming file;
- */
+/** This class is designed to ask user to confirm if accept incoming file; */
+// Next tag value for ContentProfileErrorReportUtils.report(): 1
 public class BluetoothOppIncomingFileConfirmActivity extends AlertActivity {
     private static final String TAG = "BluetoothIncomingFileConfirmActivity";
-    private static final boolean D = Constants.DEBUG;
-    private static final boolean V = Constants.VERBOSE;
 
-    private static final int DISMISS_TIMEOUT_DIALOG = 0;
+    @VisibleForTesting
+    static final int DISMISS_TIMEOUT_DIALOG = 0;
 
-    private static final int DISMISS_TIMEOUT_DIALOG_VALUE = 2000;
+    @VisibleForTesting
+    static final int DISMISS_TIMEOUT_DIALOG_VALUE = 2000;
 
     private static final String PREFERENCE_USER_TIMEOUT = "user_timeout";
 
@@ -82,9 +86,7 @@ public class BluetoothOppIncomingFileConfirmActivity extends AlertActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         setTheme(R.style.Theme_Material_Settings_Floating);
-        if (V) {
-            Log.d(TAG, "onCreate(): action = " + getIntent().getAction());
-        }
+        Log.v(TAG, "onCreate(): action = " + getIntent().getAction());
         super.onCreate(savedInstanceState);
 
         getWindow().addSystemFlags(SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS);
@@ -93,9 +95,12 @@ public class BluetoothOppIncomingFileConfirmActivity extends AlertActivity {
         mTransInfo = new BluetoothOppTransferInfo();
         mTransInfo = BluetoothOppUtility.queryRecord(this, mUri);
         if (mTransInfo == null) {
-            if (V) {
-                Log.e(TAG, "Error: Can not get data from db");
-            }
+            Log.w(TAG, "Error: Can not get data from db");
+            ContentProfileErrorReportUtils.report(
+                    BluetoothProfile.OPP,
+                    BluetoothProtoEnums.BLUETOOTH_OPP_INCOMING_FILE_CONFIRM_ACTIVITY,
+                    BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__LOG_ERROR,
+                    0);
             finish();
             return;
         }
@@ -108,16 +113,12 @@ public class BluetoothOppIncomingFileConfirmActivity extends AlertActivity {
                 (dialog, which) -> onIncomingFileConfirmCancel());
 
         setupAlert();
-        if (V) {
-            Log.v(TAG, "mTimeout: " + mTimeout);
-        }
+        Log.v(TAG, "mTimeout: " + mTimeout);
         if (mTimeout) {
             onTimeout();
         }
 
-        if (V) {
-            Log.v(TAG, "BluetoothIncomingFileConfirmActivity: Got uri:" + mUri);
-        }
+        Log.v(TAG, "BluetoothIncomingFileConfirmActivity: Got uri:" + mUri);
 
         mReceiver = new BroadcastReceiver() {
             @Override
@@ -128,8 +129,9 @@ public class BluetoothOppIncomingFileConfirmActivity extends AlertActivity {
                 onTimeout();
             }
         };
-        registerReceiver(mReceiver,
-                new IntentFilter(BluetoothShare.USER_CONFIRMATION_TIMEOUT_ACTION));
+        IntentFilter filter = new IntentFilter(BluetoothShare.USER_CONFIRMATION_TIMEOUT_ACTION);
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
+        registerReceiver(mReceiver, filter);
     }
 
     private View createView() {
@@ -175,9 +177,7 @@ public class BluetoothOppIncomingFileConfirmActivity extends AlertActivity {
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (D) {
-                Log.d(TAG, "onKeyDown() called; Key: back key");
-            }
+            Log.d(TAG, "onKeyDown() called; Key: back key");
             finish();
             return true;
         }
@@ -196,9 +196,7 @@ public class BluetoothOppIncomingFileConfirmActivity extends AlertActivity {
     protected void onRestoreInstanceState(Bundle savedInstanceState) {
         super.onRestoreInstanceState(savedInstanceState);
         mTimeout = savedInstanceState.getBoolean(PREFERENCE_USER_TIMEOUT);
-        if (V) {
-            Log.v(TAG, "onRestoreInstanceState() mTimeout: " + mTimeout);
-        }
+        Log.v(TAG, "onRestoreInstanceState() mTimeout: " + mTimeout);
         if (mTimeout) {
             onTimeout();
         }
@@ -207,9 +205,7 @@ public class BluetoothOppIncomingFileConfirmActivity extends AlertActivity {
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        if (V) {
-            Log.v(TAG, "onSaveInstanceState() mTimeout: " + mTimeout);
-        }
+        Log.v(TAG, "onSaveInstanceState() mTimeout: " + mTimeout);
         outState.putBoolean(PREFERENCE_USER_TIMEOUT, mTimeout);
     }
 
@@ -224,8 +220,8 @@ public class BluetoothOppIncomingFileConfirmActivity extends AlertActivity {
                 DialogInterface.BUTTON_POSITIVE,
                 getString(R.string.incoming_file_confirm_timeout_ok));
 
-        mTimeoutHandler.sendMessageDelayed(mTimeoutHandler.obtainMessage(DISMISS_TIMEOUT_DIALOG),
-                DISMISS_TIMEOUT_DIALOG_VALUE);
+        BluetoothMethodProxy.getInstance().handlerSendMessageDelayed(mTimeoutHandler,
+                DISMISS_TIMEOUT_DIALOG, DISMISS_TIMEOUT_DIALOG_VALUE);
     }
 
     private final Handler mTimeoutHandler = new Handler() {
@@ -233,9 +229,7 @@ public class BluetoothOppIncomingFileConfirmActivity extends AlertActivity {
         public void handleMessage(Message msg) {
             switch (msg.what) {
                 case DISMISS_TIMEOUT_DIALOG:
-                    if (V) {
-                        Log.v(TAG, "Received DISMISS_TIMEOUT_DIALOG msg.");
-                    }
+                    Log.v(TAG, "Received DISMISS_TIMEOUT_DIALOG msg.");
                     finish();
                     break;
                 default:

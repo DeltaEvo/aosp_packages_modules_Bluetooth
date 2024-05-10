@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <list>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -52,10 +52,9 @@ class BtifConfigInterface {
                      const uint8_t* value, size_t length);
   static bool RemoveProperty(const std::string& section,
                              const std::string& key);
+  static void RemoveSection(const std::string& section);
   static std::vector<std::string> GetPersistentDevices();
   static void ConvertEncryptOrDecryptKeyIfNeeded();
-  static void Save();
-  static void Flush();
   static void Clear();
 };
 

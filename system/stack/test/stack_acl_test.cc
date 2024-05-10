@@ -17,31 +17,23 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
-#include <deque>
 
 #include "common/init_flags.h"
-#include "osi/include/log.h"
+#include "hci/controller_interface_mock.h"
 #include "stack/acl/acl.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/btm/security_device_record.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/acl_hci_link_interface.h"
-#include "stack/include/hci_error_code.h"
+#include "stack/include/hcidefs.h"
 #include "test/common/mock_functions.h"
-#include "test/mock/mock_main_shim_acl_api.h"
-#include "types/ble_address_with_type.h"
+#include "test/mock/mock_main_shim_entry.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
 
-uint8_t btif_trace_level = BT_TRACE_LEVEL_DEBUG;
 tBTM_CB btm_cb;
 
 namespace {
-const char* test_flags[] = {
-    "INIT_logging_debug_enabled_for_all=true",
-    nullptr,
-};
-
 const RawAddress kRawAddress = RawAddress({0x11, 0x22, 0x33, 0x44, 0x55, 0x66});
 }  // namespace
 
@@ -53,21 +45,18 @@ std::set<const RawAddress> copy_of_connected_with_both_public_and_random_set();
 }  // namespace testing
 }  // namespace bluetooth
 
-void BTM_update_version_info(const RawAddress& bd_addr,
-                             const remote_version_info& remote_version_info) {}
-
-void btm_sec_role_changed(tHCI_STATUS hci_status, const RawAddress& bd_addr,
-                          tHCI_ROLE new_role) {}
-
 class StackAclTest : public testing::Test {
  protected:
   void SetUp() override {
     reset_mock_function_count_map();
-    bluetooth::common::InitFlags::Load(test_flags);
+    bluetooth::hci::testing::mock_controller_ = &controller_;
   }
-  void TearDown() override {}
+  void TearDown() override {
+    bluetooth::hci::testing::mock_controller_ = nullptr;
+  }
 
   tBTM_SEC_DEV_REC device_record_;
+  bluetooth::hci::testing::MockControllerInterface controller_;
 };
 
 TEST_F(StackAclTest, nop) {}

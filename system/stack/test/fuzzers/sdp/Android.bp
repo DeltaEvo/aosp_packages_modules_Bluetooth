@@ -9,8 +9,10 @@ package {
 
 cc_fuzz {
     name: "sdp_fuzz",
+    static_libs: ["libchrome"],
     defaults: ["libbt-stack_fuzz_defaults"],
     srcs: [
         "fuzz_sdp.cc",
     ],
+    cflags: ["-Wno-unused-parameter"],
 }

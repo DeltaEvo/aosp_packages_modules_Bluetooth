@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "gd/rust/topshim/gatt/gatt_ble_advertiser_shim.h"
+#include "rust/topshim/gatt/gatt_ble_advertiser_shim.h"
 
 #include <base/functional/bind.h>
 #include <base/functional/callback.h>
@@ -176,6 +176,7 @@ void BleAdvertiserIntf::StartAdvertisingSet(
   std::copy(periodic_data.begin(), periodic_data.end(), std::back_inserter(converted_periodic_data));
 
   adv_intf_->StartAdvertisingSet(
+      kAdvertiserClientIdJni,
       reg_id,
       base::Bind(&BleAdvertiserIntf::OnIdTxPowerStatusCallback, base::Unretained(this)),
       converted_params,

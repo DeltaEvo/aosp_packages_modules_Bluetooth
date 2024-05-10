@@ -24,22 +24,25 @@
 #ifndef BTA_AV_INT_H
 #define BTA_AV_INT_H
 
+#include <bluetooth/log.h>
+
 #include <cstdint>
 #include <string>
 
-#include "bta/av/bta_av_int.h"
 #include "bta/include/bta_av_api.h"
-#include "bta/include/bta_av_co.h"
+#include "bta/include/bta_sec_api.h"
 #include "bta/sys/bta_sys.h"
+#include "include/hardware/bt_av.h"
+#include "internal_include/bt_target.h"
+#include "macros.h"
 #include "osi/include/list.h"
+#include "stack/include/a2dp_error_codes.h"
 #include "stack/include/avdt_api.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/bt_types.h"
+#include "stack/include/hci_error_code.h"
+#include "stack/sdp/sdp_discovery_db.h"
+#include "types/hci_role.h"
 #include "types/raw_address.h"
-
-#define CASE_RETURN_TEXT(code) \
-  case code:                   \
-    return #code
 
 /*****************************************************************************
  *  Constants
@@ -112,6 +115,7 @@ enum {
   BTA_AV_CONN_CHG_EVT,
   BTA_AV_DEREG_COMP_EVT,
   BTA_AV_AVDT_RPT_CONN_EVT,
+  BTA_AV_API_PEER_SEP_EVT,
   BTA_AV_API_START_EVT, /* the following 2 events must be in the same order as
                            the *AP_*EVT */
   BTA_AV_API_STOP_EVT,
@@ -263,6 +267,7 @@ typedef struct {
   bool use_rc;
   tBTA_AV_RS_RES switch_res;
   uint16_t uuid; /* uuid of initiator */
+  bool incoming; /* peer launch connection */
 } tBTA_AV_API_OPEN;
 
 /* data type for BTA_AV_API_SET_LATENCY_EVT */
@@ -398,8 +403,8 @@ typedef struct {
 /* data type for BTA_AV_ROLE_CHANGE_EVT */
 typedef struct {
   BT_HDR_RIGID hdr;
-  uint8_t new_role;
-  uint8_t hci_status;
+  tHCI_ROLE new_role;
+  tHCI_STATUS hci_status;
 } tBTA_AV_ROLE_RES;
 
 /* data type for BTA_AV_SDP_DISC_OK_EVT */
@@ -436,6 +441,12 @@ enum : uint8_t {
 };
 typedef uint8_t tBTA_AV_ROLE;
 
+typedef struct {
+  BT_HDR_RIGID hdr;
+  RawAddress addr;
+  uint8_t sep;
+} tBTA_AV_API_PEER_SEP;
+
 /* union of all event datatypes */
 union tBTA_AV_DATA {
   BT_HDR_RIGID hdr;
@@ -460,6 +471,7 @@ union tBTA_AV_DATA {
   tBTA_AV_SDP_RES sdp_res;
   tBTA_AV_API_META_RSP api_meta_rsp;
   tBTA_AV_API_STATUS_RSP api_status_rsp;
+  tBTA_AV_API_PEER_SEP peer_sep;
 };
 
 typedef union {
@@ -612,6 +624,8 @@ typedef struct {
   uint8_t lidx;               /* (index+1) to LCB */
   tBTA_AV_FEAT peer_features; /* peer features mask */
   uint16_t cover_art_psm;     /* BIP PSM for cover art feature */
+  tBTA_AV_FEAT peer_ct_features;
+  tBTA_AV_FEAT peer_tg_features;
 } tBTA_AV_RCB;
 #define BTA_AV_NUM_RCB (BTA_AV_NUM_STRS + 2)
 
@@ -654,6 +668,12 @@ typedef struct {
   bool sco_occupied; /* true if SCO is being used or call is in progress */
   uint16_t offload_start_pending_hndl;
   uint16_t offload_started_hndl;
+  /* Set to true if the new offload start vendor command
+   * was used to start the stream on the controller. */
+  bool offload_start_v2;
+  tBTA_AV_FEAT sink_features; /* sink features */
+  uint8_t reg_role;           /* bit0-src, bit1-sink */
+  tBTA_AV_RC_FEAT rc_feature; /* save peer rc feature */
 } tBTA_AV_CB;
 
 // total attempts are half seconds
@@ -681,6 +701,9 @@ class tBT_A2DP_OFFLOAD {
 
 #define VS_HCI_A2DP_OFFLOAD_START 0x01
 #define VS_HCI_A2DP_OFFLOAD_STOP 0x02
+#define VS_HCI_A2DP_OFFLOAD_START_V2 0x03
+#define VS_HCI_A2DP_OFFLOAD_STOP_V2 0x04
+
 /*****************************************************************************
  *  Global data
  ****************************************************************************/
@@ -699,131 +722,131 @@ extern uint16_t* p_bta_av_rc_id;
 extern uint16_t* p_bta_av_rc_id_ac;
 
 extern const tBTA_AV_CO_FUNCTS bta_av_a2dp_cos;
-extern void bta_av_sink_data_cback(uint8_t handle, BT_HDR* p_pkt,
-                                   uint32_t time_stamp, uint8_t m_pt);
+void bta_av_sink_data_cback(uint8_t handle, BT_HDR* p_pkt, uint32_t time_stamp,
+                            uint8_t m_pt);
 
 /*****************************************************************************
  *  Function prototypes
  ****************************************************************************/
 /* utility functions */
-extern tBTA_AV_SCB* bta_av_hndl_to_scb(uint16_t handle);
+tBTA_AV_SCB* bta_av_hndl_to_scb(uint16_t handle);
 tBTA_AV_SCB* bta_av_addr_to_scb(const RawAddress& bd_addr);
-extern bool bta_av_chk_start(tBTA_AV_SCB* p_scb);
-extern void bta_av_restore_switch(void);
-extern void bta_av_conn_cback(uint8_t handle, const RawAddress& bd_addr,
-                              uint8_t event, tAVDT_CTRL* p_data,
-                              uint8_t scb_index);
-extern uint8_t bta_av_rc_create(tBTA_AV_CB* p_cb, uint8_t role, uint8_t shdl,
-                                uint8_t lidx);
-extern void bta_av_stream_chg(tBTA_AV_SCB* p_scb, bool started);
-extern bool bta_av_is_scb_opening(tBTA_AV_SCB* p_scb);
-extern bool bta_av_is_scb_incoming(tBTA_AV_SCB* p_scb);
-extern void bta_av_set_scb_sst_init(tBTA_AV_SCB* p_scb);
-extern bool bta_av_is_scb_init(tBTA_AV_SCB* p_scb);
-extern void bta_av_set_scb_sst_incoming(tBTA_AV_SCB* p_scb);
-extern tBTA_AV_LCB* bta_av_find_lcb(const RawAddress& addr, uint8_t op);
-extern const char* bta_av_sst_code(uint8_t state);
-extern void bta_av_free_scb(tBTA_AV_SCB* p_scb);
+bool bta_av_chk_start(tBTA_AV_SCB* p_scb);
+void bta_av_restore_switch(void);
+void bta_av_conn_cback(uint8_t handle, const RawAddress& bd_addr, uint8_t event,
+                       tAVDT_CTRL* p_data, uint8_t scb_index);
+uint8_t bta_av_rc_create(tBTA_AV_CB* p_cb, uint8_t role, uint8_t shdl,
+                         uint8_t lidx);
+void bta_av_stream_chg(tBTA_AV_SCB* p_scb, bool started);
+bool bta_av_is_scb_opening(tBTA_AV_SCB* p_scb);
+bool bta_av_is_scb_incoming(tBTA_AV_SCB* p_scb);
+void bta_av_set_scb_sst_init(tBTA_AV_SCB* p_scb);
+tBTA_AV_LCB* bta_av_find_lcb(const RawAddress& addr, uint8_t op);
+const char* bta_av_sst_code(uint8_t state);
+void bta_av_free_scb(tBTA_AV_SCB* p_scb);
 
 /* main functions */
-extern void bta_av_api_deregister(tBTA_AV_DATA* p_data);
-extern void bta_av_dup_audio_buf(tBTA_AV_SCB* p_scb, BT_HDR* p_buf);
-extern void bta_av_sm_execute(tBTA_AV_CB* p_cb, uint16_t event,
-                              tBTA_AV_DATA* p_data);
-extern void bta_av_ssm_execute(tBTA_AV_SCB* p_scb, uint16_t event,
-                               tBTA_AV_DATA* p_data);
-extern bool bta_av_hdl_event(BT_HDR_RIGID* p_msg);
-extern const char* bta_av_evt_code(uint16_t evt_code);
-extern bool bta_av_switch_if_needed(tBTA_AV_SCB* p_scb);
-extern bool bta_av_link_role_ok(tBTA_AV_SCB* p_scb, uint8_t bits);
+void bta_av_api_deregister(tBTA_AV_DATA* p_data);
+void bta_av_dup_audio_buf(tBTA_AV_SCB* p_scb, BT_HDR* p_buf);
+void bta_av_sm_execute(tBTA_AV_CB* p_cb, uint16_t event, tBTA_AV_DATA* p_data);
+void bta_av_ssm_execute(tBTA_AV_SCB* p_scb, uint16_t event,
+                        tBTA_AV_DATA* p_data);
+bool bta_av_hdl_event(const BT_HDR_RIGID* p_msg);
+const char* bta_av_evt_code(uint16_t evt_code);
+bool bta_av_switch_if_needed(tBTA_AV_SCB* p_scb);
+bool bta_av_link_role_ok(tBTA_AV_SCB* p_scb, uint8_t bits);
 
 /* nsm action functions */
-extern void bta_av_api_disconnect(tBTA_AV_DATA* p_data);
-extern void bta_av_set_use_latency_mode(tBTA_AV_SCB* p_scb,
-                                        bool use_latency_mode);
-extern void bta_av_api_set_latency(tBTA_AV_DATA* p_data);
-extern void bta_av_sig_chg(tBTA_AV_DATA* p_data);
-extern void bta_av_signalling_timer(tBTA_AV_DATA* p_data);
-extern void bta_av_rc_disc_done(tBTA_AV_DATA* p_data);
-extern void bta_av_rc_closed(tBTA_AV_DATA* p_data);
-extern void bta_av_rc_browse_opened(tBTA_AV_DATA* p_data);
-extern void bta_av_rc_browse_closed(tBTA_AV_DATA* p_data);
-extern void bta_av_rc_disc(uint8_t disc);
-extern void bta_av_conn_chg(tBTA_AV_DATA* p_data);
-extern void bta_av_dereg_comp(tBTA_AV_DATA* p_data);
+void bta_av_api_disconnect(tBTA_AV_DATA* p_data);
+void bta_av_set_use_latency_mode(tBTA_AV_SCB* p_scb, bool use_latency_mode);
+void bta_av_api_set_latency(tBTA_AV_DATA* p_data);
+void bta_av_sig_chg(tBTA_AV_DATA* p_data);
+void bta_av_signalling_timer(tBTA_AV_DATA* p_data);
+void bta_av_rc_disc_done(tBTA_AV_DATA* p_data);
+void bta_av_rc_closed(tBTA_AV_DATA* p_data);
+void bta_av_rc_browse_opened(tBTA_AV_DATA* p_data);
+void bta_av_rc_browse_closed(tBTA_AV_DATA* p_data);
+void bta_av_rc_disc(uint8_t disc);
+void bta_av_conn_chg(tBTA_AV_DATA* p_data);
+void bta_av_dereg_comp(tBTA_AV_DATA* p_data);
 
 /* sm action functions */
-extern void bta_av_disable(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
-extern void bta_av_rc_opened(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
-extern void bta_av_rc_remote_cmd(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
-extern void bta_av_rc_vendor_cmd(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
-extern void bta_av_rc_vendor_rsp(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
-extern void bta_av_rc_msg(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
-extern void bta_av_rc_close(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
-extern void bta_av_rc_meta_rsp(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
-extern void bta_av_rc_free_rsp(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
-extern void bta_av_rc_free_browse_msg(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
+void bta_av_disable(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
+void bta_av_rc_opened(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
+void bta_av_rc_remote_cmd(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
+void bta_av_rc_vendor_cmd(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
+void bta_av_rc_vendor_rsp(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
+void bta_av_rc_msg(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
+void bta_av_rc_close(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
+void bta_av_rc_meta_rsp(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
+void bta_av_rc_free_rsp(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
+void bta_av_rc_free_browse_msg(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data);
 
-extern tBTA_AV_RCB* bta_av_get_rcb_by_shdl(uint8_t shdl);
-extern void bta_av_del_rc(tBTA_AV_RCB* p_rcb);
+tBTA_AV_RCB* bta_av_get_rcb_by_shdl(uint8_t shdl);
+void bta_av_del_rc(tBTA_AV_RCB* p_rcb);
 
-extern void bta_av_proc_stream_evt(uint8_t handle, const RawAddress& bd_addr,
-                                   uint8_t event, tAVDT_CTRL* p_data,
-                                   uint8_t scb_index);
+void bta_av_proc_stream_evt(uint8_t handle, const RawAddress& bd_addr,
+                            uint8_t event, tAVDT_CTRL* p_data,
+                            uint8_t scb_index);
 
 /* ssm action functions */
-extern void bta_av_do_disc_a2dp(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_cleanup(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_free_sdb(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_config_ind(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_disconnect_req(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_security_req(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_security_rsp(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_setconfig_rsp(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_str_opened(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_security_ind(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_security_cfm(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_do_close(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_connect_req(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_sdp_failed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_disc_results(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_disc_res_as_acp(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_open_failed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_getcap_results(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_setconfig_rej(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_discover_req(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_conn_failed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_do_start(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_str_stopped(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_reconfig(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_data_path(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_start_ok(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_start_failed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_str_closed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_clr_cong(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_suspend_cfm(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_rcfg_str_ok(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_rcfg_failed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_rcfg_connect(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_rcfg_discntd(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_suspend_cont(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_rcfg_cfm(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_rcfg_open(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_security_rej(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_open_rc(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_chk_2nd_start(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_save_caps(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_rej_conn(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_rej_conn(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_set_use_rc(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_cco_close(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_switch_role(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_role_res(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_delay_co(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_open_at_inc(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_offload_req(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_offload_rsp(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
-extern void bta_av_vendor_offload_stop(void);
-extern void bta_av_st_rc_timer(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_do_disc_a2dp(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_cleanup(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_free_sdb(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_config_ind(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_disconnect_req(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_security_req(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_security_rsp(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_setconfig_rsp(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_str_opened(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_security_ind(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_security_cfm(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_do_close(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_connect_req(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_sdp_failed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_disc_results(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_disc_res_as_acp(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_open_failed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_getcap_results(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_setconfig_rej(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_discover_req(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_conn_failed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_do_start(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_str_stopped(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_reconfig(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_data_path(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_start_ok(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_start_failed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_str_closed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_clr_cong(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_suspend_cfm(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_rcfg_str_ok(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_rcfg_failed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_rcfg_connect(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_rcfg_discntd(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_suspend_cont(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_rcfg_cfm(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_rcfg_open(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_security_rej(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_open_rc(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_save_caps(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_rej_conn(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_rej_conn(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_set_use_rc(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_cco_close(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_switch_role(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_role_res(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_delay_co(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_open_at_inc(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_offload_req(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_offload_rsp(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_vendor_offload_stop(void);
+void bta_av_st_rc_timer(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data);
+void bta_av_api_set_peer_sep(tBTA_AV_DATA* p_data);
+
+namespace fmt {
+template <>
+struct formatter<tBTA_AV_RS_RES> : enum_formatter<tBTA_AV_RS_RES> {};
+}  // namespace fmt
 
 #endif /* BTA_AV_INT_H */

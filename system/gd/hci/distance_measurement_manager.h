@@ -15,6 +15,8 @@
  */
 #pragma once
 
+#include <bluetooth/log.h>
+
 #include "address.h"
 #include "module.h"
 
@@ -24,6 +26,7 @@ namespace hci {
 enum DistanceMeasurementMethod {
   METHOD_AUTO,
   METHOD_RSSI,
+  METHOD_CS,
 };
 
 enum DistanceMeasurementErrorCode {
@@ -61,6 +64,8 @@ class DistanceMeasurementCallbacks {
       int altitude_angle,
       int error_altitude_angle,
       DistanceMeasurementMethod method) = 0;
+  virtual void OnRasFragmentReady(
+      Address address, uint16_t procedure_counter, bool is_last, std::vector<uint8_t> raw_data) = 0;
 };
 
 class DistanceMeasurementManager : public bluetooth::Module {
@@ -72,8 +77,9 @@ class DistanceMeasurementManager : public bluetooth::Module {
 
   void RegisterDistanceMeasurementCallbacks(DistanceMeasurementCallbacks* callbacks);
   void StartDistanceMeasurement(
-      const Address&, uint16_t frequency, DistanceMeasurementMethod method);
+      const Address&, uint16_t interval, DistanceMeasurementMethod method);
   void StopDistanceMeasurement(const Address& address, DistanceMeasurementMethod method);
+  void HandleRemoteData(const Address& address, const std::vector<uint8_t>& raw_data);
 
   static const ModuleFactory Factory;
 
@@ -93,3 +99,9 @@ class DistanceMeasurementManager : public bluetooth::Module {
 
 }  // namespace hci
 }  // namespace bluetooth
+
+namespace fmt {
+template <>
+struct formatter<bluetooth::hci::DistanceMeasurementMethod>
+    : enum_formatter<bluetooth::hci::DistanceMeasurementMethod> {};
+}  // namespace fmt

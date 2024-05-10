@@ -15,19 +15,18 @@
  */
 #define LOG_TAG "l2cap2"
 
+#include "l2cap/classic/l2cap_classic_module.h"
+
 #include <future>
 #include <memory>
 
-#include "common/bidi_queue.h"
+#include "dumpsys_data_generated.h"
 #include "hci/acl_manager.h"
 #include "hci/address.h"
-#include "hci/hci_layer.h"
-#include "hci/hci_packets.h"
 #include "l2cap/classic/internal/dumpsys_helper.h"
 #include "l2cap/classic/internal/dynamic_channel_service_manager_impl.h"
 #include "l2cap/classic/internal/fixed_channel_service_manager_impl.h"
 #include "l2cap/classic/internal/link_manager.h"
-#include "l2cap/classic/l2cap_classic_module.h"
 #include "l2cap/internal/parameter_provider.h"
 #include "l2cap_classic_module_generated.h"
 #include "module.h"
@@ -61,18 +60,18 @@ struct L2capClassicModule::impl {
     SecurityInterfaceImpl(impl* module_impl) : module_impl_(module_impl) {}
 
     void RegisterLinkSecurityInterfaceListener(os::Handler* handler, LinkSecurityInterfaceListener* listener) {
-      ASSERT(!registered_);
+      log::assert_that(!registered_, "assert failed: !registered_");
       module_impl_->link_manager_.RegisterLinkSecurityInterfaceListener(handler, listener);
       registered_ = true;
     }
 
     void InitiateConnectionForSecurity(hci::Address remote) override {
-      ASSERT(registered_);
+      log::assert_that(registered_, "assert failed: registered_");
       module_impl_->link_manager_.InitiateConnectionForSecurity(remote);
     }
 
     void Unregister() override {
-      ASSERT(registered_);
+      log::assert_that(registered_, "assert failed: registered_");
       module_impl_->link_manager_.RegisterLinkSecurityInterfaceListener(nullptr, nullptr);
       registered_ = false;
     }
@@ -153,7 +152,7 @@ void L2capClassicModule::impl::Dump(
 }
 
 DumpsysDataFinisher L2capClassicModule::GetDumpsysData(flatbuffers::FlatBufferBuilder* fb_builder) const {
-  ASSERT(fb_builder != nullptr);
+  log::assert_that(fb_builder != nullptr, "assert failed: fb_builder != nullptr");
 
   std::promise<flatbuffers::Offset<L2capClassicModuleData>> promise;
   auto future = promise.get_future();

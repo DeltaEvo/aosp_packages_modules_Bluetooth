@@ -26,7 +26,8 @@
 class DistanceMeasurementCallbacks {
  public:
   virtual ~DistanceMeasurementCallbacks() = default;
-  virtual void OnDistanceMeasurementStarted(RawAddress address, uint8_t method);
+  virtual void OnDistanceMeasurementStarted(RawAddress address,
+                                            uint8_t method) = 0;
   virtual void OnDistanceMeasurementStartFail(RawAddress address,
                                               uint8_t reason,
                                               uint8_t method) = 0;
@@ -44,7 +45,7 @@ class DistanceMeasurementInterface {
   virtual void RegisterDistanceMeasurementCallbacks(
       DistanceMeasurementCallbacks* callbacks) = 0;
   virtual void StartDistanceMeasurement(RawAddress raw_address,
-                                        uint16_t frequency, uint8_t method) = 0;
+                                        uint16_t interval, uint8_t method) = 0;
   virtual void StopDistanceMeasurement(RawAddress raw_address,
                                        uint8_t method) = 0;
 };

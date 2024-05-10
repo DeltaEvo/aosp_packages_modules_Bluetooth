@@ -15,15 +15,19 @@
  */
 
 #include "module.h"
+
+#include <unistd.h>
+
+#include <functional>
+#include <sstream>
+#include <string>
+
+#include "dumpsys_data_generated.h"
+#include "gtest/gtest.h"
+#include "module_dumper.h"
 #include "module_unittest_generated.h"
 #include "os/handler.h"
 #include "os/thread.h"
-
-#include "gtest/gtest.h"
-
-#include <functional>
-#include <future>
-#include <string>
 
 using ::bluetooth::os::Thread;
 
@@ -53,7 +57,7 @@ class TestModuleNoDependency : public Module {
   static const ModuleFactory Factory;
 
  protected:
-  void ListDependencies(ModuleList* list) const {}
+  void ListDependencies(ModuleList* /* list */) const {}
 
   void Start() override {
     // A module is not considered started until Start() finishes
@@ -116,7 +120,7 @@ class TestModuleNoDependencyTwo : public Module {
   static const ModuleFactory Factory;
 
  protected:
-  void ListDependencies(ModuleList* list) const {}
+  void ListDependencies(ModuleList* /* list */) const {}
 
   void Start() override {
     // A module is not considered started until Start() finishes
@@ -290,10 +294,11 @@ TEST_F(ModuleTest, dump_state) {
   list.add<TestModuleDumpState>();
   registry_->Start(&list, thread_);
 
-  ModuleDumper dumper(*registry_, title);
+  ModuleDumper dumper(STDOUT_FILENO, *registry_, title);
 
   std::string output;
-  dumper.DumpState(&output);
+  std::ostringstream oss;
+  dumper.DumpState(&output, oss);
 
   auto data = flatbuffers::GetRoot<DumpsysData>(output.data());
   EXPECT_STREQ(title, data->title()->c_str());
@@ -305,7 +310,9 @@ TEST_F(ModuleTest, dump_state) {
       static_cast<TestModuleDumpState*>(registry_->Start(&TestModuleDumpState::Factory, nullptr));
   test_module->test_string_ = "A Second Test String";
 
-  dumper.DumpState(&output);
+  oss.clear();
+  output.clear();
+  dumper.DumpState(&output, oss);
 
   data = flatbuffers::GetRoot<DumpsysData>(output.data());
   test_data = data->module_unittest_data();

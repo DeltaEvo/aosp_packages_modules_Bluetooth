@@ -15,15 +15,18 @@
  * limitations under the License.
  */
 
-#include <base/logging.h>
+#include <bluetooth/log.h>
 
 #include <algorithm>
 #include <limits>
 #include <map>
+#include <mutex>
 #include <unordered_set>
 
 #include "bta_groups.h"
-#include "btif_profile_storage.h"
+#include "btif/include/btif_profile_storage.h"
+#include "os/logging/log_adapter.h"
+#include "stack/include/bt_types.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
@@ -34,6 +37,7 @@ namespace groups {
 
 class DeviceGroupsImpl;
 DeviceGroupsImpl* instance;
+std::mutex instance_mutex;
 static constexpr int kMaxGroupId = 0xEF;
 
 class DeviceGroup {
@@ -113,11 +117,10 @@ class DeviceGroupsImpl : public DeviceGroups {
       }
     }
 
-    LOG_ASSERT(group);
+    log::assert_that(group, "assert failed: group");
 
     if (group->Contains(addr)) {
-      LOG(ERROR) << __func__ << " device " << ADDRESS_TO_LOGGABLE_STR(addr)
-                 << " already in the group: " << group_id;
+      log::error("device {} already in the group: {}", addr, group_id);
       return group->GetGroupId();
     }
 
@@ -213,7 +216,7 @@ class DeviceGroupsImpl : public DeviceGroups {
 
       if (in.size() <
           GROUP_STORAGE_HEADER_SZ + (num_groups * GROUP_STORAGE_ENTRY_SZ)) {
-        LOG(ERROR) << "Invalid persistent storage data";
+        log::error("Invalid persistent storage data");
         return;
       }
 
@@ -284,13 +287,13 @@ class DeviceGroupsImpl : public DeviceGroups {
     auto group = find_device_group(group_id);
     if (group) {
       if (group->GetUuid() != uuid) {
-        LOG(ERROR) << __func__ << " group " << group_id
-                   << " exists but for different uuid: " << group->GetUuid()
-                   << ", user request uuid: " << uuid;
+        log::error(
+            "group {} exists but for different uuid: {}, user request uuid: {}",
+            group_id, group->GetUuid(), uuid);
         return nullptr;
       }
 
-      LOG(INFO) << __func__ << " group already exists: " << group_id;
+      log::info("group already exists: {}", group_id);
       return group;
     }
 
@@ -313,7 +316,7 @@ class DeviceGroupsImpl : public DeviceGroups {
     }
 
     if (group_id < 0) {
-      LOG(ERROR) << __func__ << " too many groups";
+      log::error("too many groups");
       return nullptr;
     }
 
@@ -328,6 +331,7 @@ class DeviceGroupsImpl : public DeviceGroups {
 };
 
 void DeviceGroups::Initialize(DeviceGroupsCallbacks* callbacks) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   if (instance == nullptr) {
     instance = new DeviceGroupsImpl(callbacks);
     return;
@@ -339,7 +343,7 @@ void DeviceGroups::Initialize(DeviceGroupsCallbacks* callbacks) {
 void DeviceGroups::AddFromStorage(const RawAddress& addr,
                                   const std::vector<uint8_t>& in) {
   if (!instance) {
-    LOG(ERROR) << __func__ << ": Not initialized yet";
+    log::error("Not initialized yet");
     return;
   }
 
@@ -349,7 +353,7 @@ void DeviceGroups::AddFromStorage(const RawAddress& addr,
 bool DeviceGroups::GetForStorage(const RawAddress& addr,
                                  std::vector<uint8_t>& out) {
   if (!instance) {
-    LOG(ERROR) << __func__ << ": Not initialized yet";
+    log::error("Not initialized yet");
     return false;
   }
 
@@ -357,6 +361,7 @@ bool DeviceGroups::GetForStorage(const RawAddress& addr,
 }
 
 void DeviceGroups::CleanUp(DeviceGroupsCallbacks* callbacks) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   if (!instance) return;
 
   if (instance->Clear(callbacks)) {
@@ -377,6 +382,7 @@ std::ostream& operator<<(std::ostream& out,
 }
 
 void DeviceGroups::DebugDump(int fd) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   dprintf(fd, "Device Groups Manager:\n");
   if (instance)
     instance->Dump(fd);

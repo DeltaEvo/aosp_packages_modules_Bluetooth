@@ -21,29 +21,15 @@
  *  mockcify.pl ver 0.2
  */
 
-#include <map>
 #include <string>
 
 // Original included files, if any
-// NOTE: Since this is a mock file with mock definitions some number of
-//       include files may not be required.  The include-what-you-use
-//       still applies, but crafting proper inclusion is out of scope
-//       for this effort.  This compilation unit may compile as-is, or
-//       may need attention to prune the inclusion set.
 #include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
 #include <frameworks/proto_logging/stats/enums/bluetooth/hci/enums.pb.h>
 
-#include "common/metrics.h"
-#include "main/shim/metrics_api.h"
-#include "main/shim/shim.h"
-#include "stack/include/stack_metrics_logging.h"
-#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 // Mocked compile conditionals, if any
-#ifndef UNUSED_ATTR
-#define UNUSED_ATTR
-#endif
 
 namespace test {
 namespace mock {
@@ -58,9 +44,10 @@ struct log_classic_pairing_event {
   std::function<void(const RawAddress& address, uint16_t handle,
                      uint32_t hci_cmd, uint16_t hci_event, uint16_t cmd_status,
                      uint16_t reason_code, int64_t event_value)>
-      body{[](const RawAddress& address, uint16_t handle, uint32_t hci_cmd,
-              uint16_t hci_event, uint16_t cmd_status, uint16_t reason_code,
-              int64_t event_value) {}};
+      body{[](const RawAddress& /* address */, uint16_t /* handle */,
+              uint32_t /* hci_cmd */, uint16_t /* hci_event */,
+              uint16_t /* cmd_status */, uint16_t /* reason_code */,
+              int64_t /* event_value */) {}};
   void operator()(const RawAddress& address, uint16_t handle, uint32_t hci_cmd,
                   uint16_t hci_event, uint16_t cmd_status, uint16_t reason_code,
                   int64_t event_value) {
@@ -80,10 +67,11 @@ struct log_link_layer_connection_event {
                      uint16_t link_type, uint32_t hci_cmd, uint16_t hci_event,
                      uint16_t hci_ble_event, uint16_t cmd_status,
                      uint16_t reason_code)>
-      body{[](const RawAddress* address, uint32_t connection_handle,
-              android::bluetooth::DirectionEnum direction, uint16_t link_type,
-              uint32_t hci_cmd, uint16_t hci_event, uint16_t hci_ble_event,
-              uint16_t cmd_status, uint16_t reason_code) {}};
+      body{[](const RawAddress* /* address */, uint32_t /* connection_handle */,
+              android::bluetooth::DirectionEnum /* direction */,
+              uint16_t /* link_type */, uint32_t /* hci_cmd */,
+              uint16_t /* hci_event */, uint16_t /* hci_ble_event */,
+              uint16_t /* cmd_status */, uint16_t /* reason_code */) {}};
   void operator()(const RawAddress* address, uint32_t connection_handle,
                   android::bluetooth::DirectionEnum direction,
                   uint16_t link_type, uint32_t hci_cmd, uint16_t hci_event,
@@ -102,9 +90,9 @@ struct log_smp_pairing_event {
   std::function<void(const RawAddress& address, uint16_t smp_cmd,
                      android::bluetooth::DirectionEnum direction,
                      uint16_t smp_fail_reason)>
-      body{[](const RawAddress& address, uint16_t smp_cmd,
-              android::bluetooth::DirectionEnum direction,
-              uint16_t smp_fail_reason) {}};
+      body{[](const RawAddress& /* address */, uint16_t /* smp_cmd */,
+              android::bluetooth::DirectionEnum /* direction */,
+              uint16_t /* smp_fail_reason */) {}};
   void operator()(const RawAddress& address, uint16_t smp_cmd,
                   android::bluetooth::DirectionEnum direction,
                   uint16_t smp_fail_reason) {
@@ -120,9 +108,9 @@ struct log_sdp_attribute {
   std::function<void(const RawAddress& address, uint16_t protocol_uuid,
                      uint16_t attribute_id, size_t attribute_size,
                      const char* attribute_value)>
-      body{[](const RawAddress& address, uint16_t protocol_uuid,
-              uint16_t attribute_id, size_t attribute_size,
-              const char* attribute_value) {}};
+      body{[](const RawAddress& /* address */, uint16_t /* protocol_uuid */,
+              uint16_t /* attribute_id */, size_t /* attribute_size */,
+              const char* /* attribute_value */) {}};
   void operator()(const RawAddress& address, uint16_t protocol_uuid,
                   uint16_t attribute_id, size_t attribute_size,
                   const char* attribute_value) {
@@ -143,12 +131,14 @@ struct log_manufacturer_info {
                      const std::string& manufacturer, const std::string& model,
                      const std::string& hardware_version,
                      const std::string& software_version)>
-      body2{[](const RawAddress& address,
-               android::bluetooth::AddressTypeEnum address_type,
-               android::bluetooth::DeviceInfoSrcEnum source_type,
-               const std::string& source_name, const std::string& manufacturer,
-               const std::string& model, const std::string& hardware_version,
-               const std::string& software_version) {}};
+      body2{[](const RawAddress& /* address */,
+               android::bluetooth::AddressTypeEnum /* address_type */,
+               android::bluetooth::DeviceInfoSrcEnum /* source_type */,
+               const std::string& /* source_name */,
+               const std::string& /* manufacturer */,
+               const std::string& /* model */,
+               const std::string& /* hardware_version */,
+               const std::string& /* software_version */) {}};
   void operator()(const RawAddress& address,
                   android::bluetooth::AddressTypeEnum address_type,
                   android::bluetooth::DeviceInfoSrcEnum source_type,
@@ -165,11 +155,13 @@ struct log_manufacturer_info {
                      const std::string& manufacturer, const std::string& model,
                      const std::string& hardware_version,
                      const std::string& software_version)>
-      body{[](const RawAddress& address,
-              android::bluetooth::DeviceInfoSrcEnum source_type,
-              const std::string& source_name, const std::string& manufacturer,
-              const std::string& model, const std::string& hardware_version,
-              const std::string& software_version) {}};
+      body{[](const RawAddress& /* address */,
+              android::bluetooth::DeviceInfoSrcEnum /* source_type */,
+              const std::string& /* source_name */,
+              const std::string& /* manufacturer */,
+              const std::string& /* model */,
+              const std::string& /* hardware_version */,
+              const std::string& /* software_version */) {}};
   void operator()(const RawAddress& address,
                   android::bluetooth::DeviceInfoSrcEnum source_type,
                   const std::string& source_name,
@@ -186,14 +178,40 @@ extern struct log_manufacturer_info log_manufacturer_info;
 struct log_counter_metrics {
   std::function<void(android::bluetooth::CodePathCounterKeyEnum key,
                      int64_t value)>
-      body{
-          [](android::bluetooth::CodePathCounterKeyEnum key, int64_t value) {}};
+      body{[](android::bluetooth::CodePathCounterKeyEnum /* key */,
+              int64_t /* value */) {}};
   void operator()(android::bluetooth::CodePathCounterKeyEnum key,
                   int64_t value) {
     body(key, value);
   };
 };
 extern struct log_counter_metrics log_counter_metrics;
+
+// Name: log_hfp_audio_packet_loss_stats
+struct log_hfp_audio_packet_loss_stats {
+  std::function<void(const RawAddress& address, int num_decoded_frames,
+                     double packet_loss_ratio, uint16_t codec_type)>
+      body{[](const RawAddress& /* address */, int /* num_decoded_frames */,
+              double /* packet_loss_ratio */, uint16_t /* codec_type */) {}};
+  void operator()(const RawAddress& address, int num_decoded_frames,
+                  double packet_loss_ratio, uint16_t codec_type) {
+    body(address, num_decoded_frames, packet_loss_ratio, codec_type);
+  };
+};
+extern struct log_hfp_audio_packet_loss_stats log_hfp_audio_packet_loss_stats;
+
+// Name: log_mmc_transcode_rtt_stats
+struct log_mmc_transcode_rtt_stats {
+  std::function<void(int maximum_rtt, double mean_rtt, int num_requests,
+                     int codec_type)>
+      body{[](int /* maximum_rtt */, double /* mean_rtt */,
+              int /* num_requests */, int /* codec_type */) {}};
+  void operator()(int maximum_rtt, double mean_rtt, int num_requests,
+                  int codec_type) {
+    body(maximum_rtt, mean_rtt, num_requests, codec_type);
+  };
+};
+extern struct log_mmc_transcode_rtt_stats log_mmc_transcode_rtt_stats;
 }  // namespace stack_metrics_logging
 }  // namespace mock
 }  // namespace test

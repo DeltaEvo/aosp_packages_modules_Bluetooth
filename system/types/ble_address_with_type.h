@@ -18,6 +18,8 @@
 
 #include <cstdint>
 #include <string>
+
+#include "types/bt_transport.h"
 #include "types/raw_address.h"
 
 #define BLE_ADDR_PUBLIC 0x00
@@ -105,7 +107,7 @@ struct tBLE_BD_ADDR {
   bool IsAddressResolvable() const {
     return ((bda.address)[0] & kResolvableAddressMask) == kResolvableAddressMsb;
   }
-  bool IsPublic() const { return type & 0x01; }
+  bool IsPublic() const { return !(type & 0x01); }
   bool IsResolvablePrivateAddress() const {
     return IsAddressResolvable() && IsRandomDeviceType();
   }
@@ -148,5 +150,75 @@ struct std::hash<tBLE_BD_ADDR> {
     return std::hash<uint64_t>{}(int_addr);
   }
 };
+
+struct tAclLinkSpec {
+  tBLE_BD_ADDR addrt;
+  tBT_TRANSPORT transport;
+
+  bool operator==(const tAclLinkSpec rhs) const {
+    if (rhs.addrt != addrt) return false;
+
+    if (rhs.transport == BT_TRANSPORT_AUTO || transport == BT_TRANSPORT_AUTO) {
+      return true;
+    }
+
+    return rhs.transport == transport;
+  }
+
+  bool operator!=(const tAclLinkSpec rhs) const { return !(*this == rhs); }
+
+  bool StrictlyEquals(const tAclLinkSpec rhs) const {
+    return rhs.addrt == addrt && rhs.transport == transport;
+  }
+
+  std::string ToString() const {
+    return std::string(addrt.ToString() + "[" + bt_transport_text(transport) +
+                       "]");
+  }
+
+  std::string ToStringForLogging() const {
+    return addrt.ToStringForLogging() + "[" + bt_transport_text(transport) +
+           "]";
+  }
+
+  std::string ToRedactedStringForLogging() const {
+    return addrt.ToRedactedStringForLogging() + "[" +
+           bt_transport_text(transport) + "]";
+  }
+};
+
+#if __has_include(<bluetooth/log.h>)
+#include <bluetooth/log.h>
+
+namespace bluetooth::os {
+bool should_log_be_redacted();
+}  // namespace bluetooth::os
+
+namespace fmt {
+template <>
+struct formatter<tBLE_BD_ADDR> : formatter<std::string> {
+  template <class Context>
+  typename Context::iterator format(const tBLE_BD_ADDR& address,
+                                    Context& ctx) const {
+    std::string repr = bluetooth::os::should_log_be_redacted()
+                           ? address.ToRedactedStringForLogging()
+                           : address.ToStringForLogging();
+    return fmt::formatter<std::string>::format(repr, ctx);
+  }
+};
+template <>
+struct formatter<tAclLinkSpec> : formatter<std::string> {
+  template <class Context>
+  typename Context::iterator format(const tAclLinkSpec& address,
+                                    Context& ctx) const {
+    std::string repr = bluetooth::os::should_log_be_redacted()
+                           ? address.ToRedactedStringForLogging()
+                           : address.ToStringForLogging();
+    return fmt::formatter<std::string>::format(repr, ctx);
+  }
+};
+}  // namespace fmt
+
+#endif  // __has_include(<bluetooth/log.h>
 
 #endif

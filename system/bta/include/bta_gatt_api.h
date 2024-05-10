@@ -27,12 +27,15 @@
 
 #include <base/functional/callback_forward.h>
 #include <base/strings/stringprintf.h>
+#include <bluetooth/log.h>
 
 #include <list>
 #include <string>
 #include <vector>
 
 #include "bta/gatt/database.h"
+#include "hardware/bt_gatt_types.h"
+#include "macros.h"
 #include "stack/include/gatt_api.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
@@ -74,10 +77,6 @@ typedef enum : uint8_t {
   BTA_GATTC_SUBRATE_CHG_EVT = 27,   /* Subrate Change event */
 } tBTA_GATTC_EVT;
 
-#define CASE_RETURN_TEXT(code) \
-  case code:                   \
-    return #code
-
 inline std::string gatt_client_event_text(const tBTA_GATTC_EVT& event) {
   switch (event) {
     CASE_RETURN_TEXT(BTA_GATTC_DEREG_EVT);
@@ -101,7 +100,6 @@ inline std::string gatt_client_event_text(const tBTA_GATTC_EVT& event) {
       return base::StringPrintf("UNKNOWN[%hhu]", event);
   }
 }
-#undef CASE_RETURN_TEXT
 
 typedef struct {
   uint16_t unit;  /* as UUIUD defined by SIG */
@@ -301,6 +299,33 @@ typedef void(tBTA_GATTC_CBACK)(tBTA_GATTC_EVT event, tBTA_GATTC* p_data);
 
 typedef uint8_t tBTA_GATTS_EVT;
 
+inline std::string gatt_server_event_text(const tBTA_GATTS_EVT& event) {
+  switch (event) {
+    CASE_RETURN_TEXT(BTA_GATTS_REG_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_READ_CHARACTERISTIC_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_READ_DESCRIPTOR_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_WRITE_CHARACTERISTIC_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_WRITE_DESCRIPTOR_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_EXEC_WRITE_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_MTU_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_CONF_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_DEREG_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_DELELTE_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_STOP_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_CONNECT_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_DISCONNECT_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_OPEN_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_CANCEL_OPEN_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_CLOSE_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_CONGEST_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_PHY_UPDATE_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_CONN_UPDATE_EVT);
+    CASE_RETURN_TEXT(BTA_GATTS_SUBRATE_CHG_EVT);
+    default:
+      return base::StringPrintf("UNKNOWN[%hhu]", event);
+  }
+}
+
 #define BTA_GATTS_INVALID_APP 0xff
 
 #define BTA_GATTS_INVALID_IF 0
@@ -434,7 +459,7 @@ typedef void(tBTA_GATTS_CBACK)(tBTA_GATTS_EVT event, tBTA_GATTS* p_data);
  * Returns          None
  *
  ******************************************************************************/
-extern void BTA_GATTC_Disable(void);
+void BTA_GATTC_Disable(void);
 
 using BtaAppRegisterCallback =
     base::Callback<void(uint8_t /* app_id */, uint8_t /* status */)>;
@@ -444,8 +469,8 @@ using BtaAppRegisterCallback =
  *module.
  * p_client_cb - pointer to the application callback function.
  **/
-extern void BTA_GATTC_AppRegister(tBTA_GATTC_CBACK* p_client_cb,
-                                  BtaAppRegisterCallback cb, bool eatt_support);
+void BTA_GATTC_AppRegister(tBTA_GATTC_CBACK* p_client_cb,
+                           BtaAppRegisterCallback cb, bool eatt_support);
 
 /*******************************************************************************
  *
@@ -459,7 +484,7 @@ extern void BTA_GATTC_AppRegister(tBTA_GATTC_CBACK* p_client_cb,
  * Returns          None
  *
  ******************************************************************************/
-extern void BTA_GATTC_AppDeregister(tGATT_IF client_if);
+void BTA_GATTC_AppDeregister(tGATT_IF client_if);
 
 /*******************************************************************************
  *
@@ -474,18 +499,15 @@ extern void BTA_GATTC_AppDeregister(tGATT_IF client_if);
  *                  initiating_phys: LE PHY to use, optional
  *
  ******************************************************************************/
-extern void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
-                           tBTM_BLE_CONN_TYPE connection_type,
-                           bool opportunistic);
-extern void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
-                           tBTM_BLE_CONN_TYPE connection_type,
-                           tBT_TRANSPORT transport, bool opportunistic,
-                           uint8_t initiating_phys);
-extern void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
-                           tBLE_ADDR_TYPE addr_type,
-                           tBTM_BLE_CONN_TYPE connection_type,
-                           tBT_TRANSPORT transport, bool opportunistic,
-                           uint8_t initiating_phys);
+void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
+                    tBTM_BLE_CONN_TYPE connection_type, bool opportunistic);
+void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
+                    tBTM_BLE_CONN_TYPE connection_type, tBT_TRANSPORT transport,
+                    bool opportunistic, uint8_t initiating_phys);
+void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
+                    tBLE_ADDR_TYPE addr_type,
+                    tBTM_BLE_CONN_TYPE connection_type, tBT_TRANSPORT transport,
+                    bool opportunistic, uint8_t initiating_phys);
 
 /*******************************************************************************
  *
@@ -501,8 +523,8 @@ extern void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_GATTC_CancelOpen(tGATT_IF client_if,
-                                 const RawAddress& remote_bda, bool is_direct);
+void BTA_GATTC_CancelOpen(tGATT_IF client_if, const RawAddress& remote_bda,
+                          bool is_direct);
 
 /*******************************************************************************
  *
@@ -515,7 +537,7 @@ extern void BTA_GATTC_CancelOpen(tGATT_IF client_if,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_GATTC_Close(uint16_t conn_id);
+void BTA_GATTC_Close(uint16_t conn_id);
 
 /*******************************************************************************
  *
@@ -533,15 +555,15 @@ extern void BTA_GATTC_Close(uint16_t conn_id);
  * Returns          None
  *
  ******************************************************************************/
-extern void BTA_GATTC_ServiceSearchRequest(uint16_t conn_id,
-                                           const bluetooth::Uuid* p_srvc_uuid);
+void BTA_GATTC_ServiceSearchRequest(uint16_t conn_id,
+                                    const bluetooth::Uuid* p_srvc_uuid);
 
 /**
  * This function is called to send "Find service by UUID" request. Used only for
  * PTS tests.
  */
-extern void BTA_GATTC_DiscoverServiceByUuid(uint16_t conn_id,
-                                            const bluetooth::Uuid& srvc_uuid);
+void BTA_GATTC_DiscoverServiceByUuid(uint16_t conn_id,
+                                     const bluetooth::Uuid& srvc_uuid);
 
 /*******************************************************************************
  *
@@ -555,7 +577,7 @@ extern void BTA_GATTC_DiscoverServiceByUuid(uint16_t conn_id,
  * Returns          returns list of gatt::Service or NULL.
  *
  ******************************************************************************/
-extern const std::list<gatt::Service>* BTA_GATTC_GetServices(uint16_t conn_id);
+const std::list<gatt::Service>* BTA_GATTC_GetServices(uint16_t conn_id);
 
 /*******************************************************************************
  *
@@ -570,8 +592,8 @@ extern const std::list<gatt::Service>* BTA_GATTC_GetServices(uint16_t conn_id);
  * Returns          returns pointer to gatt::Characteristic or NULL.
  *
  ******************************************************************************/
-extern const gatt::Characteristic* BTA_GATTC_GetCharacteristic(uint16_t conn_id,
-                                                               uint16_t handle);
+const gatt::Characteristic* BTA_GATTC_GetCharacteristic(uint16_t conn_id,
+                                                        uint16_t handle);
 
 /*******************************************************************************
  *
@@ -586,18 +608,18 @@ extern const gatt::Characteristic* BTA_GATTC_GetCharacteristic(uint16_t conn_id,
  * Returns          returns pointer to gatt::Descriptor or NULL.
  *
  ******************************************************************************/
-extern const gatt::Descriptor* BTA_GATTC_GetDescriptor(uint16_t conn_id,
-                                                       uint16_t handle);
+const gatt::Descriptor* BTA_GATTC_GetDescriptor(uint16_t conn_id,
+                                                uint16_t handle);
 
 /* Return characteristic that owns descriptor with handle equal to |handle|, or
  * NULL */
-extern const gatt::Characteristic* BTA_GATTC_GetOwningCharacteristic(
-    uint16_t conn_id, uint16_t handle);
+const gatt::Characteristic* BTA_GATTC_GetOwningCharacteristic(uint16_t conn_id,
+                                                              uint16_t handle);
 
 /* Return service that owns descriptor or characteristic with handle equal to
  * |handle|, or NULL */
-extern const gatt::Service* BTA_GATTC_GetOwningService(uint16_t conn_id,
-                                                       uint16_t handle);
+const gatt::Service* BTA_GATTC_GetOwningService(uint16_t conn_id,
+                                                uint16_t handle);
 
 /*******************************************************************************
  *
@@ -611,9 +633,9 @@ extern const gatt::Service* BTA_GATTC_GetOwningService(uint16_t conn_id,
  *                  count: number of elements in db.
  *
  ******************************************************************************/
-extern void BTA_GATTC_GetGattDb(uint16_t conn_id, uint16_t start_handle,
-                                uint16_t end_handle, btgatt_db_element_t** db,
-                                int* count);
+void BTA_GATTC_GetGattDb(uint16_t conn_id, uint16_t start_handle,
+                         uint16_t end_handle, btgatt_db_element_t** db,
+                         int* count);
 
 typedef void (*GATT_READ_OP_CB)(uint16_t conn_id, tGATT_STATUS status,
                                 uint16_t handle, uint16_t len, uint8_t* value,
@@ -623,7 +645,9 @@ typedef void (*GATT_WRITE_OP_CB)(uint16_t conn_id, tGATT_STATUS status,
                                  const uint8_t* value, void* data);
 typedef void (*GATT_CONFIGURE_MTU_OP_CB)(uint16_t conn_id, tGATT_STATUS status,
                                          void* data);
-
+typedef void (*GATT_READ_MULTI_OP_CB)(uint16_t conn_id, tGATT_STATUS status,
+                                      tBTA_GATTC_MULTI& handles, uint16_t len,
+                                      uint8_t* value, void* data);
 /*******************************************************************************
  *
  * Function         BTA_GATTC_ReadCharacteristic
@@ -715,7 +739,7 @@ void BTA_GATTC_WriteCharDescr(uint16_t conn_id, uint16_t handle,
  * Returns          None
  *
  ******************************************************************************/
-extern void BTA_GATTC_SendIndConfirm(uint16_t conn_id, uint16_t cid);
+void BTA_GATTC_SendIndConfirm(uint16_t conn_id, uint16_t cid);
 
 /*******************************************************************************
  *
@@ -731,8 +755,9 @@ extern void BTA_GATTC_SendIndConfirm(uint16_t conn_id, uint16_t cid);
  * Returns          OK if registration succeed, otherwise failed.
  *
  ******************************************************************************/
-extern tGATT_STATUS BTA_GATTC_RegisterForNotifications(
-    tGATT_IF client_if, const RawAddress& remote_bda, uint16_t handle);
+tGATT_STATUS BTA_GATTC_RegisterForNotifications(tGATT_IF client_if,
+                                                const RawAddress& remote_bda,
+                                                uint16_t handle);
 
 /*******************************************************************************
  *
@@ -748,8 +773,9 @@ extern tGATT_STATUS BTA_GATTC_RegisterForNotifications(
  * Returns          OK if deregistration succeed, otherwise failed.
  *
  ******************************************************************************/
-extern tGATT_STATUS BTA_GATTC_DeregisterForNotifications(
-    tGATT_IF client_if, const RawAddress& remote_bda, uint16_t handle);
+tGATT_STATUS BTA_GATTC_DeregisterForNotifications(tGATT_IF client_if,
+                                                  const RawAddress& remote_bda,
+                                                  uint16_t handle);
 
 /*******************************************************************************
  *
@@ -766,10 +792,9 @@ extern tGATT_STATUS BTA_GATTC_DeregisterForNotifications(
  * Returns          None
  *
  ******************************************************************************/
-extern void BTA_GATTC_PrepareWrite(uint16_t conn_id, uint16_t handle,
-                                   uint16_t offset, std::vector<uint8_t> value,
-                                   tGATT_AUTH_REQ auth_req,
-                                   GATT_WRITE_OP_CB callback, void* cb_data);
+void BTA_GATTC_PrepareWrite(uint16_t conn_id, uint16_t handle, uint16_t offset,
+                            std::vector<uint8_t> value, tGATT_AUTH_REQ auth_req,
+                            GATT_WRITE_OP_CB callback, void* cb_data);
 
 /*******************************************************************************
  *
@@ -784,7 +809,7 @@ extern void BTA_GATTC_PrepareWrite(uint16_t conn_id, uint16_t handle,
  * Returns          None
  *
  ******************************************************************************/
-extern void BTA_GATTC_ExecuteWrite(uint16_t conn_id, bool is_execute);
+void BTA_GATTC_ExecuteWrite(uint16_t conn_id, bool is_execute);
 
 /*******************************************************************************
  *
@@ -794,14 +819,16 @@ extern void BTA_GATTC_ExecuteWrite(uint16_t conn_id, bool is_execute);
  *                  characteristic descriptors.
  *
  * Parameters       conn_id - connectino ID.
- *                    p_read_multi - read multiple parameters.
+ *                  p_read_multi - read multiple parameters.
+ *                  variable_len - whether "read multi variable length" variant
+ *                                 shall be used.
  *
  * Returns          None
  *
  ******************************************************************************/
-extern void BTA_GATTC_ReadMultiple(uint16_t conn_id,
-                                   tBTA_GATTC_MULTI* p_read_multi,
-                                   tGATT_AUTH_REQ auth_req);
+void BTA_GATTC_ReadMultiple(uint16_t conn_id, tBTA_GATTC_MULTI& p_read_multi,
+                            bool variable_len, tGATT_AUTH_REQ auth_req,
+                            GATT_READ_MULTI_OP_CB callback, void* cb_data);
 
 /*******************************************************************************
  *
@@ -814,7 +841,7 @@ extern void BTA_GATTC_ReadMultiple(uint16_t conn_id,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_GATTC_Refresh(const RawAddress& remote_bda);
+void BTA_GATTC_Refresh(const RawAddress& remote_bda);
 
 /*******************************************************************************
  *
@@ -829,10 +856,9 @@ extern void BTA_GATTC_Refresh(const RawAddress& remote_bda);
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_GATTC_ConfigureMTU(uint16_t conn_id, uint16_t mtu);
-extern void BTA_GATTC_ConfigureMTU(uint16_t conn_id, uint16_t mtu,
-                                   GATT_CONFIGURE_MTU_OP_CB callback,
-                                   void* cb_data);
+void BTA_GATTC_ConfigureMTU(uint16_t conn_id, uint16_t mtu);
+void BTA_GATTC_ConfigureMTU(uint16_t conn_id, uint16_t mtu,
+                            GATT_CONFIGURE_MTU_OP_CB callback, void* cb_data);
 
 /*******************************************************************************
  *  BTA GATT Server API
@@ -849,7 +875,7 @@ extern void BTA_GATTC_ConfigureMTU(uint16_t conn_id, uint16_t mtu,
  * Returns          None
  *
  ******************************************************************************/
-extern void BTA_GATTS_Init();
+void BTA_GATTS_Init();
 
 /*******************************************************************************
  *
@@ -862,7 +888,7 @@ extern void BTA_GATTS_Init();
  * Returns          None
  *
  ******************************************************************************/
-extern void BTA_GATTS_Disable(void);
+void BTA_GATTS_Disable(void);
 
 /*******************************************************************************
  *
@@ -878,8 +904,8 @@ extern void BTA_GATTS_Disable(void);
  * Returns          None
  *
  ******************************************************************************/
-extern void BTA_GATTS_AppRegister(const bluetooth::Uuid& app_uuid,
-                                  tBTA_GATTS_CBACK* p_cback, bool eatt_support);
+void BTA_GATTS_AppRegister(const bluetooth::Uuid& app_uuid,
+                           tBTA_GATTS_CBACK* p_cback, bool eatt_support);
 
 /*******************************************************************************
  *
@@ -892,7 +918,7 @@ extern void BTA_GATTS_AppRegister(const bluetooth::Uuid& app_uuid,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_GATTS_AppDeregister(tGATT_IF server_if);
+void BTA_GATTS_AppDeregister(tGATT_IF server_if);
 
 /*******************************************************************************
  *
@@ -913,9 +939,9 @@ typedef base::Callback<void(tGATT_STATUS status, int server_if,
                             std::vector<btgatt_db_element_t> service)>
     BTA_GATTS_AddServiceCb;
 
-extern void BTA_GATTS_AddService(tGATT_IF server_if,
-                                 std::vector<btgatt_db_element_t> service,
-                                 BTA_GATTS_AddServiceCb cb);
+void BTA_GATTS_AddService(tGATT_IF server_if,
+                          std::vector<btgatt_db_element_t> service,
+                          BTA_GATTS_AddServiceCb cb);
 
 /*******************************************************************************
  *
@@ -930,7 +956,7 @@ extern void BTA_GATTS_AddService(tGATT_IF server_if,
  * Returns          returns none.
  *
  ******************************************************************************/
-extern void BTA_GATTS_DeleteService(uint16_t service_id);
+void BTA_GATTS_DeleteService(uint16_t service_id);
 
 /*******************************************************************************
  *
@@ -943,7 +969,7 @@ extern void BTA_GATTS_DeleteService(uint16_t service_id);
  * Returns          None
  *
  ******************************************************************************/
-extern void BTA_GATTS_StopService(uint16_t service_id);
+void BTA_GATTS_StopService(uint16_t service_id);
 
 /*******************************************************************************
  *
@@ -961,9 +987,9 @@ extern void BTA_GATTS_StopService(uint16_t service_id);
  * Returns          None
  *
  ******************************************************************************/
-extern void BTA_GATTS_HandleValueIndication(uint16_t conn_id, uint16_t attr_id,
-                                            std::vector<uint8_t> value,
-                                            bool need_confirm);
+void BTA_GATTS_HandleValueIndication(uint16_t conn_id, uint16_t attr_id,
+                                     std::vector<uint8_t> value,
+                                     bool need_confirm);
 
 /*******************************************************************************
  *
@@ -979,8 +1005,8 @@ extern void BTA_GATTS_HandleValueIndication(uint16_t conn_id, uint16_t attr_id,
  * Returns          None
  *
  ******************************************************************************/
-extern void BTA_GATTS_SendRsp(uint16_t conn_id, uint32_t trans_id,
-                              tGATT_STATUS status, tGATTS_RSP* p_msg);
+void BTA_GATTS_SendRsp(uint16_t conn_id, uint32_t trans_id, tGATT_STATUS status,
+                       tGATTS_RSP* p_msg);
 
 /*******************************************************************************
  *
@@ -991,13 +1017,16 @@ extern void BTA_GATTS_SendRsp(uint16_t conn_id, uint32_t trans_id,
  *
  * Parameters       server_if: server interface.
  *                  remote_bda: remote device BD address.
+ *                  addr_type: remote device address type
  *                  is_direct: direct connection or background auto connection
+ *                  transport: transport to use in this connection
  *
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_GATTS_Open(tGATT_IF server_if, const RawAddress& remote_bda,
-                           bool is_direct, tBT_TRANSPORT transport);
+void BTA_GATTS_Open(tGATT_IF server_if, const RawAddress& remote_bda,
+                    tBLE_ADDR_TYPE addr_type, bool is_direct,
+                    tBT_TRANSPORT transport);
 
 /*******************************************************************************
  *
@@ -1013,8 +1042,8 @@ extern void BTA_GATTS_Open(tGATT_IF server_if, const RawAddress& remote_bda,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_GATTS_CancelOpen(tGATT_IF server_if,
-                                 const RawAddress& remote_bda, bool is_direct);
+void BTA_GATTS_CancelOpen(tGATT_IF server_if, const RawAddress& remote_bda,
+                          bool is_direct);
 
 /*******************************************************************************
  *
@@ -1027,9 +1056,14 @@ extern void BTA_GATTS_CancelOpen(tGATT_IF server_if,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_GATTS_Close(uint16_t conn_id);
+void BTA_GATTS_Close(uint16_t conn_id);
 
 // Adds bonded device for GATT server tracking service changes
-extern void BTA_GATTS_InitBonded(void);
+void BTA_GATTS_InitBonded(void);
+
+namespace fmt {
+template <>
+struct formatter<tBTA_GATTC_EVT> : enum_formatter<tBTA_GATTC_EVT> {};
+}  // namespace fmt
 
 #endif /* BTA_GATT_API_H */

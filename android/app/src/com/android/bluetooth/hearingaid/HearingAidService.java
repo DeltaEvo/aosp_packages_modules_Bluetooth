@@ -29,10 +29,8 @@ import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUuid;
 import android.bluetooth.IBluetoothHearingAid;
 import android.content.AttributionSource;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.media.AudioDeviceCallback;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
@@ -48,14 +46,15 @@ import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.btservice.AudioRoutingManager;
 import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
-import com.android.bluetooth.btservice.ServiceFactory;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
+import com.android.bluetooth.flags.Flags;
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.modules.utils.SynchronousResultReceiver;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -64,10 +63,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Provides Bluetooth HearingAid profile, as a service in the Bluetooth application.
- * @hide
  */
 public class HearingAidService extends ProfileService {
-    private static final boolean DBG = true;
     private static final String TAG = "HearingAidService";
 
     // Timeout for state machine thread join, to prevent potential ANR.
@@ -80,7 +77,6 @@ public class HearingAidService extends ProfileService {
     private AdapterService mAdapterService;
     private DatabaseManager mDatabaseManager;
     private HandlerThread mStateMachinesThread;
-    private BluetoothDevice mPreviousAudioDevice;
     private BluetoothDevice mActiveDevice;
 
     @VisibleForTesting
@@ -95,8 +91,6 @@ public class HearingAidService extends ProfileService {
     private final Map<Long, Boolean> mHiSyncIdConnectedMap = new HashMap<>();
     private long mActiveDeviceHiSyncId = BluetoothHearingAid.HI_SYNC_ID_INVALID;
 
-    private BroadcastReceiver mBondStateChangedReceiver;
-    private BroadcastReceiver mConnectionStateChangedReceiver;
     private Handler mHandler = new Handler(Looper.getMainLooper());
     private final AudioManagerOnAudioDevicesAddedCallback mAudioManagerOnAudioDevicesAddedCallback =
             new AudioManagerOnAudioDevicesAddedCallback();
@@ -104,10 +98,12 @@ public class HearingAidService extends ProfileService {
             mAudioManagerOnAudioDevicesRemovedCallback =
             new AudioManagerOnAudioDevicesRemovedCallback();
 
-    private final ServiceFactory mFactory = new ServiceFactory();
+    public HearingAidService(Context ctx) {
+        super(ctx);
+    }
 
     public static boolean isEnabled() {
-        return BluetoothProperties.isProfileAshaCentralEnabled().orElse(false);
+        return BluetoothProperties.isProfileAshaCentralEnabled().orElse(true);
     }
 
     @Override
@@ -116,17 +112,8 @@ public class HearingAidService extends ProfileService {
     }
 
     @Override
-    protected void create() {
-        if (DBG) {
-            Log.d(TAG, "create()");
-        }
-    }
-
-    @Override
-    protected boolean start() {
-        if (DBG) {
-            Log.d(TAG, "start()");
-        }
+    public void start() {
+        Log.d(TAG, "start()");
         if (sHearingAidService != null) {
             throw new IllegalStateException("start() called twice");
         }
@@ -151,51 +138,26 @@ public class HearingAidService extends ProfileService {
         mDeviceCapabilitiesMap.clear();
         mHiSyncIdConnectedMap.clear();
 
-        // Setup broadcast receivers
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
-        mBondStateChangedReceiver = new BondStateChangedReceiver();
-        registerReceiver(mBondStateChangedReceiver, filter);
-        filter = new IntentFilter();
-        filter.addAction(BluetoothHearingAid.ACTION_CONNECTION_STATE_CHANGED);
-        mConnectionStateChangedReceiver = new ConnectionStateChangedReceiver();
-        registerReceiver(mConnectionStateChangedReceiver, filter);
-
         // Mark service as started
         setHearingAidService(this);
 
         // Initialize native interface
         mHearingAidNativeInterface.init();
-        mAdapterService.notifyActivityAttributionInfo(getAttributionSource(),
-                AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS);
-
-        return true;
     }
 
     @Override
-    protected boolean stop() {
-        if (DBG) {
-            Log.d(TAG, "stop()");
-        }
+    public void stop() {
+        Log.d(TAG, "stop()");
         if (sHearingAidService == null) {
             Log.w(TAG, "stop() called before start()");
-            return true;
+            return;
         }
-
-        mAdapterService.notifyActivityAttributionInfo(getAttributionSource(),
-                AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS);
         // Cleanup native interface
         mHearingAidNativeInterface.cleanup();
         mHearingAidNativeInterface = null;
 
         // Mark service as stopped
         setHearingAidService(null);
-
-        // Unregister broadcast receivers
-        unregisterReceiver(mBondStateChangedReceiver);
-        mBondStateChangedReceiver = null;
-        unregisterReceiver(mConnectionStateChangedReceiver);
-        mConnectionStateChangedReceiver = null;
 
         // Destroy state machines and stop handler thread
         synchronized (mStateMachines) {
@@ -221,6 +183,11 @@ public class HearingAidService extends ProfileService {
             }
         }
 
+        if (mHandler != null) {
+            mHandler.removeCallbacksAndMessages(null);
+            mHandler = null;
+        }
+
         mAudioManager.unregisterAudioDeviceCallback(mAudioManagerOnAudioDevicesAddedCallback);
         mAudioManager.unregisterAudioDeviceCallback(mAudioManagerOnAudioDevicesRemovedCallback);
 
@@ -228,15 +195,11 @@ public class HearingAidService extends ProfileService {
         mAudioManager = null;
         mHearingAidNativeInterface = null;
         mAdapterService = null;
-
-        return true;
     }
 
     @Override
-    protected void cleanup() {
-        if (DBG) {
-            Log.d(TAG, "cleanup()");
-        }
+    public void cleanup() {
+        Log.d(TAG, "cleanup()");
     }
 
     /**
@@ -258,9 +221,7 @@ public class HearingAidService extends ProfileService {
 
     @VisibleForTesting
     static synchronized void setHearingAidService(HearingAidService instance) {
-        if (DBG) {
-            Log.d(TAG, "setHearingAidService(): set to: " + instance);
-        }
+        Log.d(TAG, "setHearingAidService(): set to: " + instance);
         sHearingAidService = instance;
     }
 
@@ -274,9 +235,7 @@ public class HearingAidService extends ProfileService {
     public boolean connect(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED,
                 "Need BLUETOOTH_PRIVILEGED permission");
-        if (DBG) {
-            Log.d(TAG, "connect(): " + device);
-        }
+        Log.d(TAG, "connect(): " + device);
         if (device == null) {
             return false;
         }
@@ -342,9 +301,7 @@ public class HearingAidService extends ProfileService {
     public boolean disconnect(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED,
                 "Need BLUETOOTH_PRIVILEGED permission");
-        if (DBG) {
-            Log.d(TAG, "disconnect(): " + device);
-        }
+        Log.d(TAG, "disconnect(): " + device);
         if (device == null) {
             return false;
         }
@@ -372,7 +329,7 @@ public class HearingAidService extends ProfileService {
         return true;
     }
 
-    List<BluetoothDevice> getConnectedDevices() {
+    public List<BluetoothDevice> getConnectedDevices() {
         synchronized (mStateMachines) {
             List<BluetoothDevice> devices = new ArrayList<>();
             for (HearingAidStateMachine sm : mStateMachines.values()) {
@@ -527,9 +484,7 @@ public class HearingAidService extends ProfileService {
     public boolean setConnectionPolicy(BluetoothDevice device, int connectionPolicy) {
         enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED,
                 "Need BLUETOOTH_PRIVILEGED permission");
-        if (DBG) {
-            Log.d(TAG, "Saved connectionPolicy " + device + " = " + connectionPolicy);
-        }
+        Log.d(TAG, "Saved connectionPolicy " + device + " = " + connectionPolicy);
 
         if (!mDatabaseManager.setProfileConnectionPolicy(device, BluetoothProfile.HEARING_AID,
                   connectionPolicy)) {
@@ -553,7 +508,6 @@ public class HearingAidService extends ProfileService {
      *
      * @param device Bluetooth device
      * @return connection policy of the device
-     * @hide
      */
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public int getConnectionPolicy(BluetoothDevice device) {
@@ -609,25 +563,38 @@ public class HearingAidService extends ProfileService {
     }
 
     /**
+     * Remove the active device.
+     *
+     * @param stopAudio whether to stop current media playback.
+     * @return true on success, otherwise false
+     */
+    public boolean removeActiveDevice(boolean stopAudio) {
+        Log.d(TAG, "removeActiveDevice: stopAudio=" + stopAudio);
+        synchronized (mStateMachines) {
+            if (mActiveDeviceHiSyncId != BluetoothHearingAid.HI_SYNC_ID_INVALID) {
+                reportActiveDevice(null, stopAudio);
+                mActiveDeviceHiSyncId = BluetoothHearingAid.HI_SYNC_ID_INVALID;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Set the active device.
-     * @param device the new active device
+     *
+     * @param device the new active device. Should not be null.
      * @return true on success, otherwise false
      */
     public boolean setActiveDevice(BluetoothDevice device) {
-        if (DBG) {
-            Log.d(TAG, "setActiveDevice:" + device);
+        if (device == null) {
+            Log.e(TAG, "setActiveDevice: device should not be null!");
+            return removeActiveDevice(true);
         }
+        Log.d(TAG, "setActiveDevice: " + device);
         synchronized (mStateMachines) {
-            if (device == null) {
-                if (mActiveDeviceHiSyncId != BluetoothHearingAid.HI_SYNC_ID_INVALID) {
-                    reportActiveDevice(null);
-                    mActiveDeviceHiSyncId = BluetoothHearingAid.HI_SYNC_ID_INVALID;
-                }
-                return true;
-            }
-
             /* No action needed since this is the same device as previousely activated */
             if (device.equals(mActiveDevice)) {
+                Log.d(TAG, "setActiveDevice: The device is already active. Ignoring.");
                 return true;
             }
 
@@ -639,7 +606,7 @@ public class HearingAidService extends ProfileService {
                     BluetoothHearingAid.HI_SYNC_ID_INVALID);
             if (deviceHiSyncId != mActiveDeviceHiSyncId) {
                 mActiveDeviceHiSyncId = deviceHiSyncId;
-                reportActiveDevice(device);
+                reportActiveDevice(device, false);
             }
         }
         return true;
@@ -653,9 +620,6 @@ public class HearingAidService extends ProfileService {
      * is not active, it will be null on that position
      */
     public List<BluetoothDevice> getActiveDevices() {
-        if (DBG) {
-            Log.d(TAG, "getActiveDevices");
-        }
         ArrayList<BluetoothDevice> activeDevices = new ArrayList<>();
         activeDevices.add(null);
         activeDevices.add(null);
@@ -688,10 +652,8 @@ public class HearingAidService extends ProfileService {
             BluetoothDevice device = stackEvent.device;
             int capabilities = stackEvent.valueInt1;
             long hiSyncId = stackEvent.valueLong2;
-            if (DBG) {
-                Log.d(TAG, "Device available: device=" + device + " capabilities="
-                        + capabilities + " hiSyncId=" + hiSyncId);
-            }
+            Log.d(TAG, "Device available: device=" + device + " capabilities="
+                    + capabilities + " hiSyncId=" + hiSyncId);
             mDeviceCapabilitiesMap.put(device, capabilities);
             mDeviceHiSyncIdMap.put(device, hiSyncId);
             return;
@@ -721,6 +683,7 @@ public class HearingAidService extends ProfileService {
     }
 
     private void notifyActiveDeviceChanged() {
+        mAdapterService.handleActiveDeviceChange(BluetoothProfile.HEARING_AID, mActiveDevice);
         Intent intent = new Intent(BluetoothHearingAid.ACTION_ACTIVE_DEVICE_CHANGED);
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, mActiveDevice);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
@@ -734,11 +697,13 @@ public class HearingAidService extends ProfileService {
         public void onAudioDevicesRemoved(AudioDeviceInfo[] removedDevices) {
             for (AudioDeviceInfo deviceInfo : removedDevices) {
                 if (deviceInfo.getType() == AudioDeviceInfo.TYPE_HEARING_AID) {
-                    notifyActiveDeviceChanged();
-                    if (DBG) {
-                        Log.d(TAG, " onAudioDevicesRemoved: device type: " + deviceInfo.getType());
+                    Log.d(TAG, " onAudioDevicesRemoved: device type: " + deviceInfo.getType());
+                    if (mAudioManager != null) {
+                        notifyActiveDeviceChanged();
+                        mAudioManager.unregisterAudioDeviceCallback(this);
+                    } else {
+                        Log.w(TAG, "onAudioDevicesRemoved: mAudioManager is null");
                     }
-                    mAudioManager.unregisterAudioDeviceCallback(this);
                 }
             }
         }
@@ -750,11 +715,13 @@ public class HearingAidService extends ProfileService {
         public void onAudioDevicesAdded(AudioDeviceInfo[] addedDevices) {
             for (AudioDeviceInfo deviceInfo : addedDevices) {
                 if (deviceInfo.getType() == AudioDeviceInfo.TYPE_HEARING_AID) {
-                    notifyActiveDeviceChanged();
-                    if (DBG) {
-                        Log.d(TAG, " onAudioDevicesAdded: device type: " + deviceInfo.getType());
+                    Log.d(TAG, " onAudioDevicesAdded: device type: " + deviceInfo.getType());
+                    if (mAudioManager != null) {
+                        notifyActiveDeviceChanged();
+                        mAudioManager.unregisterAudioDeviceCallback(this);
+                    } else {
+                        Log.w(TAG, "onAudioDevicesAdded: mAudioManager is null");
                     }
-                    mAudioManager.unregisterAudioDeviceCallback(this);
                 }
             }
         }
@@ -776,9 +743,7 @@ public class HearingAidService extends ProfileService {
                         + MAX_HEARING_AID_STATE_MACHINES);
                 return null;
             }
-            if (DBG) {
-                Log.d(TAG, "Creating a new state machine for " + device);
-            }
+            Log.d(TAG, "Creating a new state machine for " + device);
             sm = HearingAidStateMachine.make(device, this,
                     mHearingAidNativeInterface, mStateMachinesThread.getLooper());
             mStateMachines.put(device, sm);
@@ -788,12 +753,27 @@ public class HearingAidService extends ProfileService {
 
     /**
      * Report the active device change to the active device manager and the media framework.
+     *
      * @param device the new active device; or null if no active device
+     * @param stopAudio whether to stop audio when device is null.
      */
-    private void reportActiveDevice(BluetoothDevice device) {
-        if (DBG) {
-            Log.d(TAG, "reportActiveDevice(" + device + ")");
+    private void reportActiveDevice(BluetoothDevice device, boolean stopAudio) {
+        Log.d(TAG, "reportActiveDevice: device=" + device + " stopAudio=" + stopAudio);
+
+        if (device != null && stopAudio) {
+            Log.e(TAG, "Illegal arguments: stopAudio should be false when device is not null!");
+            stopAudio = false;
         }
+
+        // Note: This is just a safety check for handling illegal call - setActiveDevice(null).
+        if (device == null && stopAudio
+                && getConnectionState(mActiveDevice) == BluetoothProfile.STATE_CONNECTED) {
+            Log.e(TAG, "Illegal arguments: stopAudio should be false when the active hearing aid "
+                    + "is still connected!");
+            stopAudio = false;
+        }
+
+        BluetoothDevice previousAudioDevice = mActiveDevice;
 
         mActiveDevice = device;
 
@@ -801,12 +781,8 @@ public class HearingAidService extends ProfileService {
                 BluetoothProfile.HEARING_AID, mAdapterService.obfuscateAddress(device),
                 mAdapterService.getMetricId(device));
 
-        boolean stopAudio = device == null
-                && (getConnectionState(mPreviousAudioDevice) != BluetoothProfile.STATE_CONNECTED);
-        if (DBG) {
-            Log.d(TAG, "Hearing Aid audio: " + mPreviousAudioDevice + " -> " + device
-                    + ". Stop audio: " + stopAudio);
-        }
+        Log.d(TAG, "Hearing Aid audio: " + previousAudioDevice + " -> " + device
+                + ". Stop audio: " + stopAudio);
 
         if (device != null) {
             mAudioManager.registerAudioDeviceCallback(mAudioManagerOnAudioDevicesAddedCallback,
@@ -816,40 +792,26 @@ public class HearingAidService extends ProfileService {
                     mHandler);
         }
 
-        mAudioManager.handleBluetoothActiveDeviceChanged(device, mPreviousAudioDevice,
+        mAudioManager.handleBluetoothActiveDeviceChanged(device, previousAudioDevice,
                 BluetoothProfileConnectionInfo.createHearingAidInfo(!stopAudio));
-        mPreviousAudioDevice = device;
     }
 
-    // Remove state machine if the bonding for a device is removed
-    private class BondStateChangedReceiver extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (!BluetoothDevice.ACTION_BOND_STATE_CHANGED.equals(intent.getAction())) {
-                return;
-            }
-            int state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE,
-                                           BluetoothDevice.ERROR);
-            BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-            Objects.requireNonNull(device, "ACTION_BOND_STATE_CHANGED with no EXTRA_DEVICE");
-            bondStateChanged(device, state);
-        }
+    /** Process a change in the bonding state for a device */
+    public void handleBondStateChanged(BluetoothDevice device, int fromState, int toState) {
+        mHandler.post(() -> bondStateChanged(device, toState));
     }
 
     /**
-     * Process a change in the bonding state for a device.
+     * Remove state machine if the bonding for a device is removed
      *
      * @param device the device whose bonding state has changed
-     * @param bondState the new bond state for the device. Possible values are:
-     * {@link BluetoothDevice#BOND_NONE},
-     * {@link BluetoothDevice#BOND_BONDING},
-     * {@link BluetoothDevice#BOND_BONDED}.
+     * @param bondState the new bond state for the device. Possible values are: {@link
+     *     BluetoothDevice#BOND_NONE}, {@link BluetoothDevice#BOND_BONDING}, {@link
+     *     BluetoothDevice#BOND_BONDED}.
      */
     @VisibleForTesting
     void bondStateChanged(BluetoothDevice device, int bondState) {
-        if (DBG) {
-            Log.d(TAG, "Bond state changed for device: " + device + " state: " + bondState);
-        }
+        Log.d(TAG, "Bond state changed for device: " + device + " state: " + bondState);
         // Remove state machine if the bonding for a device is removed
         if (bondState != BluetoothDevice.BOND_NONE) {
             return;
@@ -895,8 +857,6 @@ public class HearingAidService extends ProfileService {
         return result;
     }
 
-    @VisibleForTesting
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     synchronized void connectionStateChanged(BluetoothDevice device, int fromState,
                                                      int toState) {
         if ((device == null) || (fromState == toState)) {
@@ -918,33 +878,26 @@ public class HearingAidService extends ProfileService {
             }
         }
         if (fromState == BluetoothProfile.STATE_CONNECTED && getConnectedDevices().isEmpty()) {
-            setActiveDevice(null);
             long myHiSyncId = getHiSyncId(device);
             mHiSyncIdConnectedMap.put(myHiSyncId, false);
+            // ActiveDeviceManager will call removeActiveDevice().
         }
         // Check if the device is disconnected - if unbond, remove the state machine
         if (toState == BluetoothProfile.STATE_DISCONNECTED) {
             int bondState = mAdapterService.getBondState(device);
             if (bondState == BluetoothDevice.BOND_NONE) {
-                if (DBG) {
-                    Log.d(TAG, device + " is unbond. Remove state machine");
-                }
+                Log.d(TAG, device + " is unbond. Remove state machine");
                 removeStateMachine(device);
             }
         }
-    }
-
-    private class ConnectionStateChangedReceiver extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (!BluetoothHearingAid.ACTION_CONNECTION_STATE_CHANGED.equals(intent.getAction())) {
-                return;
-            }
-            BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-            int toState = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1);
-            int fromState = intent.getIntExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, -1);
-            connectionStateChanged(device, fromState, toState);
-        }
+        mAdapterService.notifyProfileConnectionStateChangeToGatt(
+                BluetoothProfile.HEARING_AID, fromState, toState);
+        mAdapterService
+                .getActiveDeviceManager()
+                .profileConnectionStateChanged(
+                        BluetoothProfile.HEARING_AID, device, fromState, toState);
+        mAdapterService.updateProfileConnectionAdapterProperties(
+                device, BluetoothProfile.HEARING_AID, toState, fromState);
     }
 
     /**
@@ -959,15 +912,17 @@ public class HearingAidService extends ProfileService {
 
         @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
         private HearingAidService getService(AttributionSource source) {
+            // Cache mService because it can change while getService is called b/327929337
+            HearingAidService service = mService;
             if (mIsTesting) {
-                return mService;
+                return service;
             }
-            if (!Utils.checkServiceAvailable(mService, TAG)
-                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
-                    || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG)
+                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return null;
             }
-            return mService;
+            return service;
         }
 
         BluetoothHearingAidBinder(HearingAidService svc) {
@@ -980,226 +935,166 @@ public class HearingAidService extends ProfileService {
         }
 
         @Override
-        public void connect(BluetoothDevice device, AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                HearingAidService service = getService(source);
-                boolean result = false;
-                if (service != null) {
-                    result = service.connect(device);
-                }
-                receiver.send(result);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public boolean connect(BluetoothDevice device, AttributionSource source) {
+            HearingAidService service = getService(source);
+            if (service == null) {
+                return false;
+            }
+
+            return service.connect(device);
+        }
+
+        @Override
+        public boolean disconnect(BluetoothDevice device, AttributionSource source) {
+            HearingAidService service = getService(source);
+            if (service == null) {
+                return false;
+            }
+
+            return service.disconnect(device);
+        }
+
+        @Override
+        public List<BluetoothDevice> getConnectedDevices(AttributionSource source) {
+            HearingAidService service = getService(source);
+            if (service == null) {
+                return Collections.emptyList();
+            }
+
+            return service.getConnectedDevices();
+        }
+
+        @Override
+        public List<BluetoothDevice> getDevicesMatchingConnectionStates(
+                int[] states, AttributionSource source) {
+            HearingAidService service = getService(source);
+            if (service == null) {
+                return Collections.emptyList();
+            }
+
+            return service.getDevicesMatchingConnectionStates(states);
+        }
+
+        @Override
+        public int getConnectionState(BluetoothDevice device, AttributionSource source) {
+            HearingAidService service = getService(source);
+            if (service == null) {
+                return BluetoothProfile.STATE_DISCONNECTED;
+            }
+
+            return service.getConnectionState(device);
+        }
+
+        @Override
+        public boolean setActiveDevice(BluetoothDevice device, AttributionSource source) {
+            HearingAidService service = getService(source);
+            if (service == null) {
+                return false;
+            }
+
+            if (Flags.audioRoutingCentralization()) {
+                return ((AudioRoutingManager) service.mAdapterService.getActiveDeviceManager())
+                        .activateDeviceProfile(device, BluetoothProfile.HEARING_AID)
+                        .join();
+            }
+            if (device == null) {
+                return service.removeActiveDevice(false);
+            } else {
+                return service.setActiveDevice(device);
             }
         }
 
         @Override
-        public void disconnect(BluetoothDevice device, AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                HearingAidService service = getService(source);
-                boolean result = false;
-                if (service != null) {
-                    result = service.disconnect(device);
-                }
-                receiver.send(result);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public List<BluetoothDevice> getActiveDevices(AttributionSource source) {
+            HearingAidService service = getService(source);
+            if (service == null) {
+                return Collections.emptyList();
             }
+
+            return service.getActiveDevices();
         }
 
         @Override
-        public void getConnectedDevices(AttributionSource source,
-               SynchronousResultReceiver receiver) {
-            try {
-                HearingAidService service = getService(source);
-                List<BluetoothDevice> devices = new ArrayList<>();
-                if (service != null) {
-                    devices = service.getConnectedDevices();
-                }
-                receiver.send(devices);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public boolean setConnectionPolicy(
+                BluetoothDevice device, int connectionPolicy, AttributionSource source) {
+            HearingAidService service = getService(source);
+            if (service == null) {
+                return false;
             }
+
+            return service.setConnectionPolicy(device, connectionPolicy);
         }
 
         @Override
-        public void getDevicesMatchingConnectionStates(int[] states,
-                AttributionSource source, SynchronousResultReceiver receiver) {
-            try {
-                HearingAidService service = getService(source);
-                List<BluetoothDevice> devices = new ArrayList<>();
-                if (service != null) {
-                    devices = service.getDevicesMatchingConnectionStates(states);
-                }
-                receiver.send(devices);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public int getConnectionPolicy(BluetoothDevice device, AttributionSource source) {
+            HearingAidService service = getService(source);
+            if (service == null) {
+                return BluetoothProfile.CONNECTION_POLICY_UNKNOWN;
             }
+
+            return service.getConnectionPolicy(device);
         }
 
         @Override
-        public void getConnectionState(BluetoothDevice device, AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                HearingAidService service = getService(source);
-                int state = BluetoothProfile.STATE_DISCONNECTED;
-                if (service != null) {
-                    state = service.getConnectionState(device);
-                }
-                receiver.send(state);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public void setVolume(int volume, AttributionSource source) {
+            HearingAidService service = getService(source);
+            if (service == null) {
+                return;
             }
+
+            service.setVolume(volume);
         }
 
         @Override
-        public void setActiveDevice(BluetoothDevice device, AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                HearingAidService service = getService(source);
-                boolean result = false;
-                if (service != null) {
-                    result = service.setActiveDevice(device);
-                }
-                receiver.send(result);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public long getHiSyncId(BluetoothDevice device, AttributionSource source) {
+            HearingAidService service = getService(source);
+            if (service == null) {
+                return BluetoothHearingAid.HI_SYNC_ID_INVALID;
             }
+
+            return service.getHiSyncId(device);
         }
 
         @Override
-        public void getActiveDevices(AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                HearingAidService service = getService(source);
-                List<BluetoothDevice> devices = new ArrayList<>();
-                if (service != null) {
-                    devices = service.getActiveDevices();
-                }
-                receiver.send(devices);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public int getDeviceSide(BluetoothDevice device, AttributionSource source) {
+            HearingAidService service = getService(source);
+            if (service == null) {
+                return BluetoothHearingAid.SIDE_UNKNOWN;
             }
+
+            int side = service.getCapabilities(device);
+            if (side != BluetoothHearingAid.SIDE_UNKNOWN) {
+                side &= 1;
+            }
+
+            return side;
         }
 
         @Override
-        public void setConnectionPolicy(BluetoothDevice device, int connectionPolicy,
-                AttributionSource source, SynchronousResultReceiver receiver) {
-            try {
-                HearingAidService service = getService(source);
-                boolean result = false;
-                if (service != null) {
-                    result = service.setConnectionPolicy(device, connectionPolicy);
-                }
-                receiver.send(result);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public int getDeviceMode(BluetoothDevice device, AttributionSource source) {
+            HearingAidService service = getService(source);
+            if (service == null) {
+                return BluetoothHearingAid.MODE_UNKNOWN;
             }
+
+            int mode = service.getCapabilities(device);
+            if (mode != BluetoothHearingAid.MODE_UNKNOWN) {
+                mode = mode >> 1 & 1;
+            }
+
+            return mode;
         }
 
         @Override
-        public void getConnectionPolicy(BluetoothDevice device, AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                HearingAidService service = getService(source);
-                int policy = BluetoothProfile.CONNECTION_POLICY_UNKNOWN;
-                if (service != null) {
-                    policy = service.getConnectionPolicy(device);
-                }
-                receiver.send(policy);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
+        public AdvertisementServiceData getAdvertisementServiceData(
+                BluetoothDevice device, AttributionSource source) {
+            if (!Utils.checkServiceAvailable(mService, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
+                    || !Utils.checkScanPermissionForDataDelivery(mService, source, TAG)) {
+                return null;
             }
-        }
 
-        @Override
-        public void setVolume(int volume, AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                HearingAidService service = getService(source);
-                if (service != null) {
-                    service.setVolume(volume);
-                }
-                receiver.send(null);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
-            }
-        }
-
-        @Override
-        public void getHiSyncId(BluetoothDevice device, AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                HearingAidService service = getService(source);
-                long id = BluetoothHearingAid.HI_SYNC_ID_INVALID;
-                if (service != null) {
-                    id = service.getHiSyncId(device);
-                }
-                receiver.send(id);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
-            }
-        }
-
-        @Override
-        public void getDeviceSide(BluetoothDevice device, AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                HearingAidService service = getService(source);
-                int side = BluetoothHearingAid.SIDE_UNKNOWN;
-                if (service != null) {
-                    side = service.getCapabilities(device);
-                    if (side != BluetoothHearingAid.SIDE_UNKNOWN) {
-                        side &= 1;
-                    }
-                }
-                receiver.send(side);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
-            }
-        }
-
-        @Override
-        public void getDeviceMode(BluetoothDevice device, AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                HearingAidService service = getService(source);
-                int mode = BluetoothHearingAid.MODE_UNKNOWN;
-                if (service != null) {
-                    mode = service.getCapabilities(device);
-                    if (mode != BluetoothHearingAid.MODE_UNKNOWN) {
-                        mode = mode >> 1 & 1;
-                    }
-                }
-                receiver.send(mode);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
-            }
-        }
-
-        @RequiresPermission(
-                allOf = {
-                    android.Manifest.permission.BLUETOOTH_SCAN,
-                    android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-                })
-        @Override
-        public void getAdvertisementServiceData(
-                BluetoothDevice device,
-                AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                if (!Utils.checkServiceAvailable(mService, TAG)
-                        || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
-                        || !Utils.checkScanPermissionForDataDelivery(mService, source, TAG)) {
-                    receiver.send(null);
-                    return;
-                }
-                receiver.send(mService.getAdvertisementServiceData(device, source));
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
-            }
+            return mService.getAdvertisementServiceData(device, source);
         }
     }
 

@@ -17,6 +17,7 @@
 package com.android.bluetooth.gatt;
 
 import static com.google.common.truth.Truth.assertThat;
+
 import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
@@ -33,10 +34,12 @@ import androidx.test.runner.AndroidJUnit4;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.util.UUID;
 
@@ -46,6 +49,8 @@ import java.util.UUID;
 @SmallTest
 @RunWith(AndroidJUnit4.class)
 public class DistanceMeasurementTrackerTest {
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock private DistanceMeasurementManager mDistanceMeasurementManager;
     @Mock private IDistanceMeasurementCallback mCallback;
     private DistanceMeasurementTracker mTracker;
@@ -60,13 +65,12 @@ public class DistanceMeasurementTrackerTest {
 
     @Before
     public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
         mUuid = UUID.randomUUID();
         mDevice = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(IDENTITY_ADDRESS);
         mParams = new DistanceMeasurementParams.Builder(mDevice)
-                .setDuration(TIMEOUT_S)
+                .setDurationSeconds(TIMEOUT_S)
                 .setFrequency(DistanceMeasurementParams.REPORT_FREQUENCY_LOW)
-                .setMethod(mMethod)
+                .setMethodId(mMethod)
                 .build();
         mTracker = new DistanceMeasurementTracker(
                 mDistanceMeasurementManager, mParams, IDENTITY_ADDRESS, mUuid, 1000, mCallback);

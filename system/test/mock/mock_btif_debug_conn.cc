@@ -19,21 +19,14 @@
  *   Functions generated:2
  */
 
-#include <map>
-#include <string>
-
 #include "btif/include/btif_debug_conn.h"
 #include "stack/include/gatt_api.h"
 #include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
-#ifndef UNUSED_ATTR
-#define UNUSED_ATTR
-#endif
-
-void btif_debug_conn_dump(int fd) { inc_func_call_count(__func__); }
-void btif_debug_conn_state(const RawAddress& bda,
-                           const btif_debug_conn_state_t state,
-                           const tGATT_DISCONN_REASON disconnect_reason) {
+void btif_debug_conn_dump(int /* fd */) { inc_func_call_count(__func__); }
+void btif_debug_conn_state(const RawAddress& /* bda */,
+                           const btif_debug_conn_state_t /* state */,
+                           const tGATT_DISCONN_REASON /* disconnect_reason */) {
   inc_func_call_count(__func__);
 }

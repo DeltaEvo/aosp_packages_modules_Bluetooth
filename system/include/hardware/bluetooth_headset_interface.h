@@ -63,10 +63,11 @@ class Interface {
    * Create an audio connection
    *
    * @param bd_addr remote device address
-   * @param focre_cvsd whether force to use fallback CVSD codec
+   * @param disabled_codecs bitset of disabled BTM_SCO_CODECs
    * @return BT_STATUS_SUCCESS on success
    */
-  virtual bt_status_t ConnectAudio(RawAddress* bd_addr, bool force_cvsd) = 0;
+  virtual bt_status_t ConnectAudio(RawAddress* bd_addr,
+                                   int disabled_codecs) = 0;
 
   /**
    * Close the audio connection
@@ -229,6 +230,17 @@ class Interface {
                                        RawAddress* bd_addr) = 0;
 
   /**
+   * Enable SWB
+   *
+   * @param swbCodec SWB Codec
+   * @param enable true to enable, false to disable
+   * @param bd_addr remote device address
+   * @return BT_STATUS_SUCCESS on success
+   */
+  virtual bt_status_t EnableSwb(bthf_swb_codec_t swbCodec, bool enable,
+                                RawAddress* bd_addr) = 0;
+
+  /**
    * Closes the interface.
    */
   virtual void Cleanup() = 0;
@@ -264,6 +276,11 @@ class Interface {
    * @param active_device_addr remote device address
    */
   virtual bt_status_t SetActiveDevice(RawAddress* active_device_addr) = 0;
+
+  /**
+   * Trigger a debug dump of the Headset Profile
+   */
+  virtual bt_status_t DebugDump() = 0;
 };
 
 }  // namespace headset

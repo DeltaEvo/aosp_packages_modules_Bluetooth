@@ -18,15 +18,16 @@
 
 #define LOG_TAG "bt_stack_config"
 
-#include "stack_config.h"
+#include "internal_include/stack_config.h"
 
-#include <base/logging.h>
+#include <bluetooth/log.h>
 
+#include "os/log.h"
 #include "osi/include/future.h"
-#include "osi/include/log.h"
+
+using namespace bluetooth;
 
 namespace {
-const char* TRACE_CONFIG_ENABLED_KEY = "TraceConf";
 const char* PTS_AVRCP_TEST = "PTS_AvrcpTest";
 const char* PTS_SECURE_ONLY_MODE = "PTS_SecurePairOnly";
 const char* PTS_LE_CONN_UPDATED_DISABLED = "PTS_DisableConnUpdates";
@@ -61,19 +62,19 @@ static std::unique_ptr<config_t> config;
 static future_t* init() {
 // TODO(armansito): Find a better way than searching by a hardcoded path.
 #if defined(TARGET_FLOSS)
-  const char* path = "/var/lib/bluetooth/bt_stack.conf";
-#elif defined(OS_GENERIC)
-  const char* path = "bt_stack.conf";
-#else  // !defined(OS_GENERIC)
+  const char* path = "/etc/bluetooth/bt_stack.conf";
+#elif defined(__ANDROID__)
   const char* path = "/apex/com.android.btservices/etc/bluetooth/bt_stack.conf";
-#endif  // defined(OS_GENERIC)
-  CHECK(path != NULL);
+#else   // !defined(__ANDROID__)
+  const char* path = "bt_stack.conf";
+#endif  // defined(__ANDROID__)
+  log::assert_that(path != NULL, "assert failed: path != NULL");
 
-  LOG_INFO("%s attempt to load stack conf from %s", __func__, path);
+  log::info("attempt to load stack conf from {}", path);
 
   config = config_new(path);
   if (!config) {
-    LOG_INFO("%s file >%s< not found", __func__, path);
+    log::info("file >{}< not found", path);
     config = config_new_empty();
   }
 
@@ -94,11 +95,6 @@ EXPORT_SYMBOL extern const module_t stack_config_module = {
     .dependencies = {NULL}};
 
 // Interface functions
-static bool get_trace_config_enabled(void) {
-  return config_get_bool(*config, CONFIG_DEFAULT_SECTION,
-                         TRACE_CONFIG_ENABLED_KEY, false);
-}
-
 static bool get_pts_avrcp_test(void) {
   return config_get_bool(*config, CONFIG_DEFAULT_SECTION, PTS_AVRCP_TEST,
                          false);
@@ -196,7 +192,7 @@ static bool get_pts_l2cap_ecoc_reconfigure(void) {
 
 static const std::string* get_pts_broadcast_audio_config_options(void) {
   if (!config) {
-    LOG_INFO("Config isn't ready, use default option");
+    log::info("Config isn't ready, use default option");
     return NULL;
   }
   return config_get_string(*config, CONFIG_DEFAULT_SECTION,
@@ -211,7 +207,6 @@ static bool get_pts_le_audio_disable_ases_before_stopping(void) {
 static config_t* get_all(void) { return config.get(); }
 
 const stack_config_t interface = {
-    get_trace_config_enabled,
     get_pts_avrcp_test,
     get_pts_secure_only_mode,
     get_pts_conn_updates_disabled,

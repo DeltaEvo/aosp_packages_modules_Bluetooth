@@ -14,9 +14,13 @@
 */
 package com.android.bluetooth.map;
 
+import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothProtoEnums;
 import android.util.Log;
 
+import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.SignedLongLong;
+import com.android.bluetooth.content_profiles.ContentProfileErrorReportUtils;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -28,6 +32,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
+// Next tag value for ContentProfileErrorReportUtils.report(): 1
 public class BluetoothMapConvoContactElement
         implements Comparable<BluetoothMapConvoContactElement> {
 
@@ -46,8 +51,6 @@ public class BluetoothMapConvoContactElement
     private static final String XML_ATT_UCI = "x_bt_uci";
     protected static final String XML_TAG_CONVOCONTACT = "convocontact";
     private static final String TAG = "BluetoothMapConvoContactElement";
-    private static final boolean D = false;
-    private static final boolean V = false;
 
     private String mUci = null;
     private String mName = null;
@@ -85,6 +88,11 @@ public class BluetoothMapConvoContactElement
             try {
                 this.mBtUid = SignedLongLong.fromString(btUid);
             } catch (UnsupportedEncodingException e) {
+                ContentProfileErrorReportUtils.report(
+                        BluetoothProfile.MAP,
+                        BluetoothProtoEnums.BLUETOOTH_MAP_CONVO_CONTACT_ELEMENT,
+                        BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
+                        0);
                 Log.w(TAG, e);
             }
         }
@@ -270,9 +278,7 @@ public class BluetoothMapConvoContactElement
             } else if (attributeName.equalsIgnoreCase(XML_ATT_PRIORITY)) {
                 newElement.setPriority(Integer.parseInt(attributeValue));
             } else {
-                if (D) {
-                    Log.i(TAG, "Unknown XML attribute: " + parser.getAttributeName(i));
-                }
+                Log.w(TAG, "Unknown XML attribute: " + parser.getAttributeName(i));
             }
         }
         parser.nextTag(); // Consume the end-tag

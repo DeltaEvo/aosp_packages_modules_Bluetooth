@@ -23,19 +23,9 @@
 
 #include <sys/types.h>
 
-#include <cstdint>
 #include <functional>
-#include <map>
-#include <string>
-
-#include "test/common/mock_functions.h"
 
 // Original included files, if any
-// NOTE: Since this is a mock file with mock definitions some number of
-//       include files may not be required.  The include-what-you-use
-//       still applies, but crafting proper inclusion is out of scope
-//       for this effort.  This compilation unit may compile as-is, or
-//       may need attention to prune from (or add to ) the inclusion set.
 
 // Mocked compile conditionals, if any
 
@@ -50,7 +40,7 @@ namespace osi_thread_scheduler {
 struct thread_scheduler_enable_real_time {
   bool return_value{false};
   std::function<bool(pid_t linux_tid)> body{
-      [this](pid_t linux_tid) { return return_value; }};
+      [this](pid_t /* linux_tid */) { return return_value; }};
   bool operator()(pid_t linux_tid) { return body(linux_tid); };
 };
 extern struct thread_scheduler_enable_real_time
@@ -62,7 +52,7 @@ extern struct thread_scheduler_enable_real_time
 struct thread_scheduler_get_priority_range {
   bool return_value{false};
   std::function<bool(int& min, int& max)> body{
-      [this](int& min, int& max) { return return_value; }};
+      [this](int& /* min */, int& /* max */) { return return_value; }};
   bool operator()(int& min, int& max) { return body(min, max); };
 };
 extern struct thread_scheduler_get_priority_range

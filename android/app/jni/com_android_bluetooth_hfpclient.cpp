@@ -17,11 +17,11 @@
 
 #define LOG_TAG "BluetoothHeadsetClientServiceJni"
 
+#include <shared_mutex>
+
 #include "com_android_bluetooth.h"
 #include "hardware/bt_hf_client.h"
-#include "utils/Log.h"
-
-#include <shared_mutex>
+#include "os/logging/log_adapter.h"
 
 namespace android {
 
@@ -60,7 +60,7 @@ static jbyteArray marshall_bda(const RawAddress* bd_addr) {
 
   jbyteArray addr = sCallbackEnv->NewByteArray(sizeof(RawAddress));
   if (!addr) {
-    ALOGE("Fail to new jbyteArray bd addr");
+    log::error("Fail to new jbyteArray bd addr");
     return NULL;
   }
   sCallbackEnv->SetByteArrayRegion(addr, 0, sizeof(RawAddress),
@@ -79,7 +79,7 @@ static void connection_state_cb(const RawAddress* bd_addr,
   ScopedLocalRef<jbyteArray> addr(sCallbackEnv.get(), marshall_bda(bd_addr));
   if (!addr.get()) return;
 
-  ALOGD("%s: state %d peer_feat %d chld_feat %d", __func__, state, peer_feat, chld_feat);
+  log::debug("state {} peer_feat {} chld_feat {}", state, peer_feat, chld_feat);
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onConnectionStateChanged,
                                (jint)state, (jint)peer_feat, (jint)chld_feat,
                                addr.get());
@@ -170,7 +170,7 @@ static void current_operator_cb(const RawAddress* bd_addr, const char* name) {
 
   const char null_str[] = "";
   if (!sCallbackEnv.isValidUtf(name)) {
-    ALOGE("%s: name is not a valid UTF string.", __func__);
+    log::error("name is not a valid UTF string.");
     name = null_str;
   }
 
@@ -201,9 +201,7 @@ static void callsetup_cb(const RawAddress* bd_addr,
   ScopedLocalRef<jbyteArray> addr(sCallbackEnv.get(), marshall_bda(bd_addr));
   if (!addr.get()) return;
 
-  ALOGD("callsetup_cb bdaddr %02x:%02x:%02x:%02x:%02x:%02x",
-        bd_addr->address[0], bd_addr->address[1], bd_addr->address[2],
-        bd_addr->address[3], bd_addr->address[4], bd_addr->address[5]);
+  log::debug("callsetup_cb bdaddr {}", *bd_addr);
 
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onCallSetup,
                                (jint)callsetup, addr.get());
@@ -245,7 +243,7 @@ static void clip_cb(const RawAddress* bd_addr, const char* number) {
 
   const char null_str[] = "";
   if (!sCallbackEnv.isValidUtf(number)) {
-    ALOGE("%s: number is not a valid UTF string.", __func__);
+    log::error("number is not a valid UTF string.");
     number = null_str;
   }
 
@@ -265,7 +263,7 @@ static void call_waiting_cb(const RawAddress* bd_addr, const char* number) {
 
   const char null_str[] = "";
   if (!sCallbackEnv.isValidUtf(number)) {
-    ALOGE("%s: number is not a valid UTF string.", __func__);
+    log::error("number is not a valid UTF string.");
     number = null_str;
   }
 
@@ -289,7 +287,7 @@ static void current_calls_cb(const RawAddress* bd_addr, int index,
 
   const char null_str[] = "";
   if (!sCallbackEnv.isValidUtf(number)) {
-    ALOGE("%s: number is not a valid UTF string.", __func__);
+    log::error("number is not a valid UTF string.");
     number = null_str;
   }
 
@@ -334,7 +332,7 @@ static void subscriber_info_cb(const RawAddress* bd_addr, const char* name,
 
   const char null_str[] = "";
   if (!sCallbackEnv.isValidUtf(name)) {
-    ALOGE("%s: name is not a valid UTF string.", __func__);
+    log::error("name is not a valid UTF string.");
     name = null_str;
   }
 
@@ -367,7 +365,7 @@ static void last_voice_tag_number_cb(const RawAddress* bd_addr,
 
   const char null_str[] = "";
   if (!sCallbackEnv.isValidUtf(number)) {
-    ALOGE("%s: number is not a valid UTF string.", __func__);
+    log::error("number is not a valid UTF string.");
     number = null_str;
   }
 
@@ -429,61 +427,25 @@ static bthf_client_callbacks_t sBluetoothHfpClientCallbacks = {
     unknown_event_cb,
 };
 
-static void classInitNative(JNIEnv* env, jclass clazz) {
-  method_onConnectionStateChanged =
-      env->GetMethodID(clazz, "onConnectionStateChanged", "(III[B)V");
-  method_onAudioStateChanged =
-      env->GetMethodID(clazz, "onAudioStateChanged", "(I[B)V");
-  method_onVrStateChanged =
-      env->GetMethodID(clazz, "onVrStateChanged", "(I[B)V");
-  method_onNetworkState = env->GetMethodID(clazz, "onNetworkState", "(I[B)V");
-  method_onNetworkRoaming = env->GetMethodID(clazz, "onNetworkRoaming", "(I[B)V");
-  method_onNetworkSignal = env->GetMethodID(clazz, "onNetworkSignal", "(I[B)V");
-  method_onBatteryLevel = env->GetMethodID(clazz, "onBatteryLevel", "(I[B)V");
-  method_onCurrentOperator =
-      env->GetMethodID(clazz, "onCurrentOperator", "(Ljava/lang/String;[B)V");
-  method_onCall = env->GetMethodID(clazz, "onCall", "(I[B)V");
-  method_onCallSetup = env->GetMethodID(clazz, "onCallSetup", "(I[B)V");
-  method_onCallHeld = env->GetMethodID(clazz, "onCallHeld", "(I[B)V");
-  method_onRespAndHold = env->GetMethodID(clazz, "onRespAndHold", "(I[B)V");
-  method_onClip = env->GetMethodID(clazz, "onClip", "(Ljava/lang/String;[B)V");
-  method_onCallWaiting =
-      env->GetMethodID(clazz, "onCallWaiting", "(Ljava/lang/String;[B)V");
-  method_onCurrentCalls =
-      env->GetMethodID(clazz, "onCurrentCalls", "(IIIILjava/lang/String;[B)V");
-  method_onVolumeChange = env->GetMethodID(clazz, "onVolumeChange", "(II[B)V");
-  method_onCmdResult = env->GetMethodID(clazz, "onCmdResult", "(II[B)V");
-  method_onSubscriberInfo =
-      env->GetMethodID(clazz, "onSubscriberInfo", "(Ljava/lang/String;I[B)V");
-  method_onInBandRing = env->GetMethodID(clazz, "onInBandRing", "(I[B)V");
-  method_onLastVoiceTagNumber =
-      env->GetMethodID(clazz, "onLastVoiceTagNumber", "(Ljava/lang/String;[B)V");
-  method_onRingIndication = env->GetMethodID(clazz, "onRingIndication", "([B)V");
-  method_onUnknownEvent =
-      env->GetMethodID(clazz, "onUnknownEvent", "(Ljava/lang/String;[B)V");
-
-  ALOGI("%s succeeds", __func__);
-}
-
 static void initializeNative(JNIEnv* env, jobject object) {
-  ALOGD("%s: HfpClient", __func__);
+  log::debug("HfpClient");
   std::unique_lock<std::shared_mutex> interface_lock(interface_mutex);
   std::unique_lock<std::shared_mutex> callbacks_lock(callbacks_mutex);
 
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == NULL) {
-    ALOGE("Bluetooth module is not loaded");
+    log::error("Bluetooth module is not loaded");
     return;
   }
 
   if (sBluetoothHfpClientInterface != NULL) {
-    ALOGW("Cleaning up Bluetooth HFP Client Interface before initializing");
+    log::warn("Cleaning up Bluetooth HFP Client Interface before initializing");
     sBluetoothHfpClientInterface->cleanup();
     sBluetoothHfpClientInterface = NULL;
   }
 
   if (mCallbacksObj != NULL) {
-    ALOGW("Cleaning up Bluetooth HFP Client callback object");
+    log::warn("Cleaning up Bluetooth HFP Client callback object");
     env->DeleteGlobalRef(mCallbacksObj);
     mCallbacksObj = NULL;
   }
@@ -492,14 +454,15 @@ static void initializeNative(JNIEnv* env, jobject object) {
       (bthf_client_interface_t*)btInf->get_profile_interface(
           BT_PROFILE_HANDSFREE_CLIENT_ID);
   if (sBluetoothHfpClientInterface == NULL) {
-    ALOGE("Failed to get Bluetooth HFP Client Interface");
+    log::error("Failed to get Bluetooth HFP Client Interface");
     return;
   }
 
   bt_status_t status =
       sBluetoothHfpClientInterface->init(&sBluetoothHfpClientCallbacks);
   if (status != BT_STATUS_SUCCESS) {
-    ALOGE("Failed to initialize Bluetooth HFP Client, status: %d", status);
+    log::error("Failed to initialize Bluetooth HFP Client, status: {}",
+               bt_status_text(status));
     sBluetoothHfpClientInterface = NULL;
     return;
   }
@@ -507,30 +470,31 @@ static void initializeNative(JNIEnv* env, jobject object) {
   mCallbacksObj = env->NewGlobalRef(object);
 }
 
-static void cleanupNative(JNIEnv* env, jobject object) {
+static void cleanupNative(JNIEnv* env, jobject /* object */) {
   std::unique_lock<std::shared_mutex> interface_lock(interface_mutex);
   std::unique_lock<std::shared_mutex> callbacks_lock(callbacks_mutex);
 
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == NULL) {
-    ALOGE("Bluetooth module is not loaded");
+    log::error("Bluetooth module is not loaded");
     return;
   }
 
   if (sBluetoothHfpClientInterface != NULL) {
-    ALOGW("Cleaning up Bluetooth HFP Client Interface...");
+    log::warn("Cleaning up Bluetooth HFP Client Interface...");
     sBluetoothHfpClientInterface->cleanup();
     sBluetoothHfpClientInterface = NULL;
   }
 
   if (mCallbacksObj != NULL) {
-    ALOGW("Cleaning up Bluetooth HFP Client callback object");
+    log::warn("Cleaning up Bluetooth HFP Client callback object");
     env->DeleteGlobalRef(mCallbacksObj);
     mCallbacksObj = NULL;
   }
 }
 
-static jboolean connectNative(JNIEnv* env, jobject object, jbyteArray address) {
+static jboolean connectNative(JNIEnv* env, jobject /* object */,
+                              jbyteArray address) {
   std::shared_lock<std::shared_mutex> lock(interface_mutex);
   if (!sBluetoothHfpClientInterface) return JNI_FALSE;
 
@@ -543,13 +507,13 @@ static jboolean connectNative(JNIEnv* env, jobject object, jbyteArray address) {
   bt_status_t status =
       sBluetoothHfpClientInterface->connect((const RawAddress*)addr);
   if (status != BT_STATUS_SUCCESS) {
-    ALOGE("Failed AG connection, status: %d", status);
+    log::error("Failed AG connection, status: {}", bt_status_text(status));
   }
   env->ReleaseByteArrayElements(address, addr, 0);
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static jboolean disconnectNative(JNIEnv* env, jobject object,
+static jboolean disconnectNative(JNIEnv* env, jobject /* object */,
                                  jbyteArray address) {
   std::shared_lock<std::shared_mutex> lock(interface_mutex);
   if (!sBluetoothHfpClientInterface) return JNI_FALSE;
@@ -563,13 +527,13 @@ static jboolean disconnectNative(JNIEnv* env, jobject object,
   bt_status_t status =
       sBluetoothHfpClientInterface->disconnect((const RawAddress*)addr);
   if (status != BT_STATUS_SUCCESS) {
-    ALOGE("Failed AG disconnection, status: %d", status);
+    log::error("Failed AG disconnection, status: {}", bt_status_text(status));
   }
   env->ReleaseByteArrayElements(address, addr, 0);
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static jboolean connectAudioNative(JNIEnv* env, jobject object,
+static jboolean connectAudioNative(JNIEnv* env, jobject /* object */,
                                    jbyteArray address) {
   std::shared_lock<std::shared_mutex> lock(interface_mutex);
   if (!sBluetoothHfpClientInterface) return JNI_FALSE;
@@ -583,13 +547,14 @@ static jboolean connectAudioNative(JNIEnv* env, jobject object,
   bt_status_t status =
       sBluetoothHfpClientInterface->connect_audio((const RawAddress*)addr);
   if (status != BT_STATUS_SUCCESS) {
-    ALOGE("Failed AG audio connection, status: %d", status);
+    log::error("Failed AG audio connection, status: {}",
+               bt_status_text(status));
   }
   env->ReleaseByteArrayElements(address, addr, 0);
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static jboolean disconnectAudioNative(JNIEnv* env, jobject object,
+static jboolean disconnectAudioNative(JNIEnv* env, jobject /* object */,
                                       jbyteArray address) {
   std::shared_lock<std::shared_mutex> lock(interface_mutex);
   if (!sBluetoothHfpClientInterface) return JNI_FALSE;
@@ -603,13 +568,14 @@ static jboolean disconnectAudioNative(JNIEnv* env, jobject object,
   bt_status_t status =
       sBluetoothHfpClientInterface->disconnect_audio((const RawAddress*)addr);
   if (status != BT_STATUS_SUCCESS) {
-    ALOGE("Failed AG audio disconnection, status: %d", status);
+    log::error("Failed AG audio disconnection, status: {}",
+               bt_status_text(status));
   }
   env->ReleaseByteArrayElements(address, addr, 0);
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static jboolean startVoiceRecognitionNative(JNIEnv* env, jobject object,
+static jboolean startVoiceRecognitionNative(JNIEnv* env, jobject /* object */,
                                             jbyteArray address) {
   std::shared_lock<std::shared_mutex> lock(interface_mutex);
   if (!sBluetoothHfpClientInterface) return JNI_FALSE;
@@ -623,13 +589,14 @@ static jboolean startVoiceRecognitionNative(JNIEnv* env, jobject object,
   bt_status_t status = sBluetoothHfpClientInterface->start_voice_recognition(
       (const RawAddress*)addr);
   if (status != BT_STATUS_SUCCESS) {
-    ALOGE("Failed to start voice recognition, status: %d", status);
+    log::error("Failed to start voice recognition, status: {}",
+               bt_status_text(status));
   }
   env->ReleaseByteArrayElements(address, addr, 0);
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static jboolean stopVoiceRecognitionNative(JNIEnv* env, jobject object,
+static jboolean stopVoiceRecognitionNative(JNIEnv* env, jobject /* object */,
                                            jbyteArray address) {
   std::shared_lock<std::shared_mutex> lock(interface_mutex);
   if (!sBluetoothHfpClientInterface) return JNI_FALSE;
@@ -643,14 +610,16 @@ static jboolean stopVoiceRecognitionNative(JNIEnv* env, jobject object,
   bt_status_t status = sBluetoothHfpClientInterface->stop_voice_recognition(
       (const RawAddress*)addr);
   if (status != BT_STATUS_SUCCESS) {
-    ALOGE("Failed to stop voice recognition, status: %d", status);
+    log::error("Failed to stop voice recognition, status: {}",
+               bt_status_text(status));
   }
   env->ReleaseByteArrayElements(address, addr, 0);
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static jboolean setVolumeNative(JNIEnv* env, jobject object, jbyteArray address,
-                                jint volume_type, jint volume) {
+static jboolean setVolumeNative(JNIEnv* env, jobject /* object */,
+                                jbyteArray address, jint volume_type,
+                                jint volume) {
   std::shared_lock<std::shared_mutex> lock(interface_mutex);
   if (!sBluetoothHfpClientInterface) return JNI_FALSE;
 
@@ -663,14 +632,14 @@ static jboolean setVolumeNative(JNIEnv* env, jobject object, jbyteArray address,
   bt_status_t status = sBluetoothHfpClientInterface->volume_control(
       (const RawAddress*)addr, (bthf_client_volume_type_t)volume_type, volume);
   if (status != BT_STATUS_SUCCESS) {
-    ALOGE("FAILED to control volume, status: %d", status);
+    log::error("FAILED to control volume, status: {}", bt_status_text(status));
   }
   env->ReleaseByteArrayElements(address, addr, 0);
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static jboolean dialNative(JNIEnv* env, jobject object, jbyteArray address,
-                           jstring number_str) {
+static jboolean dialNative(JNIEnv* env, jobject /* object */,
+                           jbyteArray address, jstring number_str) {
   std::shared_lock<std::shared_mutex> lock(interface_mutex);
   if (!sBluetoothHfpClientInterface) return JNI_FALSE;
 
@@ -689,7 +658,7 @@ static jboolean dialNative(JNIEnv* env, jobject object, jbyteArray address,
                                        number == nullptr ? "" : number);
 
   if (status != BT_STATUS_SUCCESS) {
-    ALOGE("Failed to dial, status: %d", status);
+    log::error("Failed to dial, status: {}", bt_status_text(status));
   }
   if (number != nullptr) {
     env->ReleaseStringUTFChars(number_str, number);
@@ -698,7 +667,7 @@ static jboolean dialNative(JNIEnv* env, jobject object, jbyteArray address,
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static jboolean dialMemoryNative(JNIEnv* env, jobject object,
+static jboolean dialMemoryNative(JNIEnv* env, jobject /* object */,
                                  jbyteArray address, jint location) {
   std::shared_lock<std::shared_mutex> lock(interface_mutex);
   if (!sBluetoothHfpClientInterface) return JNI_FALSE;
@@ -712,14 +681,15 @@ static jboolean dialMemoryNative(JNIEnv* env, jobject object,
   bt_status_t status = sBluetoothHfpClientInterface->dial_memory(
       (const RawAddress*)addr, (int)location);
   if (status != BT_STATUS_SUCCESS) {
-    ALOGE("Failed to dial from memory, status: %d", status);
+    log::error("Failed to dial from memory, status: {}",
+               bt_status_text(status));
   }
 
   env->ReleaseByteArrayElements(address, addr, 0);
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static jboolean handleCallActionNative(JNIEnv* env, jobject object,
+static jboolean handleCallActionNative(JNIEnv* env, jobject /* object */,
                                        jbyteArray address, jint action,
                                        jint index) {
   std::shared_lock<std::shared_mutex> lock(interface_mutex);
@@ -735,13 +705,14 @@ static jboolean handleCallActionNative(JNIEnv* env, jobject object,
       (const RawAddress*)addr, (bthf_client_call_action_t)action, (int)index);
 
   if (status != BT_STATUS_SUCCESS) {
-    ALOGE("Failed to enter private mode, status: %d", status);
+    log::error("Failed to enter private mode, status: {}",
+               bt_status_text(status));
   }
   env->ReleaseByteArrayElements(address, addr, 0);
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static jboolean queryCurrentCallsNative(JNIEnv* env, jobject object,
+static jboolean queryCurrentCallsNative(JNIEnv* env, jobject /* object */,
                                         jbyteArray address) {
   std::shared_lock<std::shared_mutex> lock(interface_mutex);
   if (!sBluetoothHfpClientInterface) return JNI_FALSE;
@@ -756,13 +727,15 @@ static jboolean queryCurrentCallsNative(JNIEnv* env, jobject object,
       (const RawAddress*)addr);
 
   if (status != BT_STATUS_SUCCESS) {
-    ALOGE("Failed to query current calls, status: %d", status);
+    log::error("Failed to query current calls, status: {}",
+               bt_status_text(status));
   }
   env->ReleaseByteArrayElements(address, addr, 0);
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static jboolean queryCurrentOperatorNameNative(JNIEnv* env, jobject object,
+static jboolean queryCurrentOperatorNameNative(JNIEnv* env,
+                                               jobject /* object */,
                                                jbyteArray address) {
   std::shared_lock<std::shared_mutex> lock(interface_mutex);
   if (!sBluetoothHfpClientInterface) return JNI_FALSE;
@@ -777,14 +750,15 @@ static jboolean queryCurrentOperatorNameNative(JNIEnv* env, jobject object,
       sBluetoothHfpClientInterface->query_current_operator_name(
           (const RawAddress*)addr);
   if (status != BT_STATUS_SUCCESS) {
-    ALOGE("Failed to query current operator name, status: %d", status);
+    log::error("Failed to query current operator name, status: {}",
+               bt_status_text(status));
   }
 
   env->ReleaseByteArrayElements(address, addr, 0);
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static jboolean retrieveSubscriberInfoNative(JNIEnv* env, jobject object,
+static jboolean retrieveSubscriberInfoNative(JNIEnv* env, jobject /* object */,
                                              jbyteArray address) {
   std::shared_lock<std::shared_mutex> lock(interface_mutex);
   if (!sBluetoothHfpClientInterface) return JNI_FALSE;
@@ -798,15 +772,16 @@ static jboolean retrieveSubscriberInfoNative(JNIEnv* env, jobject object,
   bt_status_t status = sBluetoothHfpClientInterface->retrieve_subscriber_info(
       (const RawAddress*)addr);
   if (status != BT_STATUS_SUCCESS) {
-    ALOGE("Failed to retrieve subscriber info, status: %d", status);
+    log::error("Failed to retrieve subscriber info, status: {}",
+               bt_status_text(status));
   }
 
   env->ReleaseByteArrayElements(address, addr, 0);
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static jboolean sendDtmfNative(JNIEnv* env, jobject object, jbyteArray address,
-                               jbyte code) {
+static jboolean sendDtmfNative(JNIEnv* env, jobject /* object */,
+                               jbyteArray address, jbyte code) {
   std::shared_lock<std::shared_mutex> lock(interface_mutex);
   if (!sBluetoothHfpClientInterface) return JNI_FALSE;
 
@@ -819,14 +794,15 @@ static jboolean sendDtmfNative(JNIEnv* env, jobject object, jbyteArray address,
   bt_status_t status = sBluetoothHfpClientInterface->send_dtmf(
       (const RawAddress*)addr, (char)code);
   if (status != BT_STATUS_SUCCESS) {
-    ALOGE("Failed to send DTMF, status: %d", status);
+    log::error("Failed to send DTMF, status: {}", bt_status_text(status));
   }
 
   env->ReleaseByteArrayElements(address, addr, 0);
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static jboolean requestLastVoiceTagNumberNative(JNIEnv* env, jobject object,
+static jboolean requestLastVoiceTagNumberNative(JNIEnv* env,
+                                                jobject /* object */,
                                                 jbyteArray address) {
   std::shared_lock<std::shared_mutex> lock(interface_mutex);
   if (!sBluetoothHfpClientInterface) return JNI_FALSE;
@@ -842,16 +818,17 @@ static jboolean requestLastVoiceTagNumberNative(JNIEnv* env, jobject object,
           (const RawAddress*)addr);
 
   if (status != BT_STATUS_SUCCESS) {
-    ALOGE("Failed to request last Voice Tag number, status: %d", status);
+    log::error("Failed to request last Voice Tag number, status: {}",
+               bt_status_text(status));
   }
 
   env->ReleaseByteArrayElements(address, addr, 0);
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static jboolean sendATCmdNative(JNIEnv* env, jobject object, jbyteArray address,
-                                jint cmd, jint val1, jint val2,
-                                jstring arg_str) {
+static jboolean sendATCmdNative(JNIEnv* env, jobject /* object */,
+                                jbyteArray address, jint cmd, jint val1,
+                                jint val2, jstring arg_str) {
   std::shared_lock<std::shared_mutex> lock(interface_mutex);
   if (!sBluetoothHfpClientInterface) return JNI_FALSE;
 
@@ -869,7 +846,7 @@ static jboolean sendATCmdNative(JNIEnv* env, jobject object, jbyteArray address,
       (const RawAddress*)addr, cmd, val1, val2, arg);
 
   if (status != BT_STATUS_SUCCESS) {
-    ALOGE("Failed to send cmd, status: %d", status);
+    log::error("Failed to send cmd, status: {}", bt_status_text(status));
   }
 
   if (arg != NULL) {
@@ -880,7 +857,7 @@ static jboolean sendATCmdNative(JNIEnv* env, jobject object, jbyteArray address,
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static jboolean sendAndroidAtNative(JNIEnv* env, jobject object,
+static jboolean sendAndroidAtNative(JNIEnv* env, jobject /* object */,
                                     jbyteArray address, jstring arg_str) {
   std::shared_lock<std::shared_mutex> lock(interface_mutex);
   if (!sBluetoothHfpClientInterface) return JNI_FALSE;
@@ -900,7 +877,7 @@ static jboolean sendAndroidAtNative(JNIEnv* env, jobject object,
       (const RawAddress*)addr, arg);
 
   if (status != BT_STATUS_SUCCESS) {
-    ALOGE("FAILED to control volume, status: %d", status);
+    log::error("FAILED to control volume, status: {}", bt_status_text(status));
   }
 
   if (arg != NULL) {
@@ -911,38 +888,72 @@ static jboolean sendAndroidAtNative(JNIEnv* env, jobject object,
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static JNINativeMethod sMethods[] = {
-    {"classInitNative", "()V", (void*)classInitNative},
-    {"initializeNative", "()V", (void*)initializeNative},
-    {"cleanupNative", "()V", (void*)cleanupNative},
-    {"connectNative", "([B)Z", (void*)connectNative},
-    {"disconnectNative", "([B)Z", (void*)disconnectNative},
-    {"connectAudioNative", "([B)Z", (void*)connectAudioNative},
-    {"disconnectAudioNative", "([B)Z", (void*)disconnectAudioNative},
-    {"startVoiceRecognitionNative", "([B)Z",
-     (void*)startVoiceRecognitionNative},
-    {"stopVoiceRecognitionNative", "([B)Z", (void*)stopVoiceRecognitionNative},
-    {"setVolumeNative", "([BII)Z", (void*)setVolumeNative},
-    {"dialNative", "([BLjava/lang/String;)Z", (void*)dialNative},
-    {"dialMemoryNative", "([BI)Z", (void*)dialMemoryNative},
-    {"handleCallActionNative", "([BII)Z", (void*)handleCallActionNative},
-    {"queryCurrentCallsNative", "([B)Z", (void*)queryCurrentCallsNative},
-    {"queryCurrentOperatorNameNative", "([B)Z",
-     (void*)queryCurrentOperatorNameNative},
-    {"retrieveSubscriberInfoNative", "([B)Z",
-     (void*)retrieveSubscriberInfoNative},
-    {"sendDtmfNative", "([BB)Z", (void*)sendDtmfNative},
-    {"requestLastVoiceTagNumberNative", "([B)Z",
-     (void*)requestLastVoiceTagNumberNative},
-    {"sendATCmdNative", "([BIIILjava/lang/String;)Z", (void*)sendATCmdNative},
-    {"sendAndroidAtNative", "([BLjava/lang/String;)Z",
-     (void*)sendAndroidAtNative},
-};
-
 int register_com_android_bluetooth_hfpclient(JNIEnv* env) {
-  return jniRegisterNativeMethods(
-      env, "com/android/bluetooth/hfpclient/NativeInterface",
-      sMethods, NELEM(sMethods));
+  const JNINativeMethod methods[] = {
+      {"initializeNative", "()V", (void*)initializeNative},
+      {"cleanupNative", "()V", (void*)cleanupNative},
+      {"connectNative", "([B)Z", (void*)connectNative},
+      {"disconnectNative", "([B)Z", (void*)disconnectNative},
+      {"connectAudioNative", "([B)Z", (void*)connectAudioNative},
+      {"disconnectAudioNative", "([B)Z", (void*)disconnectAudioNative},
+      {"startVoiceRecognitionNative", "([B)Z",
+       (void*)startVoiceRecognitionNative},
+      {"stopVoiceRecognitionNative", "([B)Z",
+       (void*)stopVoiceRecognitionNative},
+      {"setVolumeNative", "([BII)Z", (void*)setVolumeNative},
+      {"dialNative", "([BLjava/lang/String;)Z", (void*)dialNative},
+      {"dialMemoryNative", "([BI)Z", (void*)dialMemoryNative},
+      {"handleCallActionNative", "([BII)Z", (void*)handleCallActionNative},
+      {"queryCurrentCallsNative", "([B)Z", (void*)queryCurrentCallsNative},
+      {"queryCurrentOperatorNameNative", "([B)Z",
+       (void*)queryCurrentOperatorNameNative},
+      {"retrieveSubscriberInfoNative", "([B)Z",
+       (void*)retrieveSubscriberInfoNative},
+      {"sendDtmfNative", "([BB)Z", (void*)sendDtmfNative},
+      {"requestLastVoiceTagNumberNative", "([B)Z",
+       (void*)requestLastVoiceTagNumberNative},
+      {"sendATCmdNative", "([BIIILjava/lang/String;)Z", (void*)sendATCmdNative},
+      {"sendAndroidAtNative", "([BLjava/lang/String;)Z",
+       (void*)sendAndroidAtNative},
+  };
+  const int result = REGISTER_NATIVE_METHODS(
+      env, "com/android/bluetooth/hfpclient/NativeInterface", methods);
+  if (result != 0) {
+    return result;
+  }
+
+  const JNIJavaMethod javaMethods[] = {
+      {"onConnectionStateChanged", "(III[B)V",
+       &method_onConnectionStateChanged},
+      {"onAudioStateChanged", "(I[B)V", &method_onAudioStateChanged},
+      {"onVrStateChanged", "(I[B)V", &method_onVrStateChanged},
+      {"onNetworkState", "(I[B)V", &method_onNetworkState},
+      {"onNetworkRoaming", "(I[B)V", &method_onNetworkRoaming},
+      {"onNetworkSignal", "(I[B)V", &method_onNetworkSignal},
+      {"onBatteryLevel", "(I[B)V", &method_onBatteryLevel},
+      {"onCurrentOperator", "(Ljava/lang/String;[B)V",
+       &method_onCurrentOperator},
+      {"onCall", "(I[B)V", &method_onCall},
+      {"onCallSetup", "(I[B)V", &method_onCallSetup},
+      {"onCallHeld", "(I[B)V", &method_onCallHeld},
+      {"onRespAndHold", "(I[B)V", &method_onRespAndHold},
+      {"onClip", "(Ljava/lang/String;[B)V", &method_onClip},
+      {"onCallWaiting", "(Ljava/lang/String;[B)V", &method_onCallWaiting},
+      {"onCurrentCalls", "(IIIILjava/lang/String;[B)V", &method_onCurrentCalls},
+      {"onVolumeChange", "(II[B)V", &method_onVolumeChange},
+      {"onCmdResult", "(II[B)V", &method_onCmdResult},
+      {"onSubscriberInfo", "(Ljava/lang/String;I[B)V",
+       &method_onSubscriberInfo},
+      {"onInBandRing", "(I[B)V", &method_onInBandRing},
+      {"onLastVoiceTagNumber", "(Ljava/lang/String;[B)V",
+       &method_onLastVoiceTagNumber},
+      {"onRingIndication", "([B)V", &method_onRingIndication},
+      {"onUnknownEvent", "(Ljava/lang/String;[B)V", &method_onUnknownEvent},
+  };
+  GET_JAVA_METHODS(env, "com/android/bluetooth/hfpclient/NativeInterface",
+                   javaMethods);
+
+  return 0;
 }
 
 } /* namespace android */

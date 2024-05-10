@@ -21,10 +21,12 @@
 #include <limits>
 #include <optional>
 #include <type_traits>
+#include <vector>
 
 #include "base/functional/callback.h"
 #include "broadcaster_types.h"
 #include "bta_le_audio_broadcaster_api.h"
+#include "main/shim/le_advertising_manager.h"
 
 namespace {
 template <int S, typename StateT = uint8_t>
@@ -73,7 +75,7 @@ class StateMachine {
  *              The Broadcast Source may also transmit control parameters in
  *              control packets within the broadcast Audio Stream.
  */
-namespace le_audio {
+namespace bluetooth::le_audio {
 namespace broadcaster {
 
 class IBroadcastStateMachineCallbacks;
@@ -94,10 +96,12 @@ struct BigConfig {
 };
 
 struct BroadcastStateMachineConfig {
+  bool is_public;
   bluetooth::le_audio::BroadcastId broadcast_id;
+  std::string broadcast_name;
   uint8_t streaming_phy;
-  BroadcastCodecWrapper codec_wrapper;
-  BroadcastQosConfig qos_config;
+  BroadcastConfiguration config;
+  bluetooth::le_audio::PublicBroadcastAnnouncementData public_announcement;
   bluetooth::le_audio::BasicAudioAnnouncementData announcement;
   std::optional<bluetooth::le_audio::BroadcastCode> broadcast_code;
 };
@@ -107,8 +111,17 @@ class BroadcastStateMachine : public StateMachine<5> {
   static constexpr uint8_t kAdvSidUndefined = 0xFF;
   static constexpr uint8_t kPaIntervalMax = 0xA0; /* 160 * 0.625 = 100ms */
   static constexpr uint8_t kPaIntervalMin = 0x50; /* 80 * 0.625 = 50ms */
+  // LEA broadcast assigned register id, use positive number 0x1
+  // this should not matter since
+  // le_advertising_manager will maintain the reg_id together with client_id
+  // and java/jni is using negative number
+  static constexpr uint8_t kLeAudioBroadcastRegId = 0x1;
+  // Matching the ADDRESS_TYPE_* enums from Java
+  // ADDRESS_TYPE_RANDOM_NON_RESOLVABLE = 2
+  static constexpr int8_t kBroadcastAdvertisingType = 0x2;
 
-  static void Initialize(IBroadcastStateMachineCallbacks*);
+  static void Initialize(IBroadcastStateMachineCallbacks*,
+                         AdvertisingCallbacks* adv_callbacks);
   static std::unique_ptr<BroadcastStateMachine> CreateInstance(
       BroadcastStateMachineConfig msg);
 
@@ -138,7 +151,9 @@ class BroadcastStateMachine : public StateMachine<5> {
   virtual uint8_t GetPaInterval() const { return kPaIntervalMax; }
 
   virtual bool Initialize() = 0;
-  virtual const BroadcastCodecWrapper& GetCodecConfig() const = 0;
+  virtual const std::vector<BroadcastSubgroupCodecConfig>& GetCodecConfig()
+      const = 0;
+  virtual const BroadcastConfiguration& GetBroadcastConfig() const = 0;
   virtual std::optional<BigConfig> const& GetBigConfig() const = 0;
   virtual BroadcastStateMachineConfig const& GetStateMachineConfig() const = 0;
   virtual void RequestOwnAddress(
@@ -154,6 +169,17 @@ class BroadcastStateMachine : public StateMachine<5> {
   GetBroadcastAnnouncement() const = 0;
   virtual void UpdateBroadcastAnnouncement(
       bluetooth::le_audio::BasicAudioAnnouncementData announcement) = 0;
+  virtual bool IsPublicBroadcast() = 0;
+  virtual std::string GetBroadcastName() = 0;
+  virtual const bluetooth::le_audio::PublicBroadcastAnnouncementData&
+  GetPublicBroadcastAnnouncement() const = 0;
+  virtual void UpdatePublicBroadcastAnnouncement(
+      uint32_t broadcast_id, const std::string& broadcast_name,
+      const bluetooth::le_audio::PublicBroadcastAnnouncementData&
+          announcement) = 0;
+  virtual void OnCreateAnnouncement(uint8_t advertising_sid, int8_t tx_power,
+                                    uint8_t status) = 0;
+  virtual void OnEnableAnnouncement(bool enable, uint8_t status) = 0;
   void SetMuted(bool muted) { is_muted_ = muted; };
   bool IsMuted() const { return is_muted_; };
 
@@ -196,22 +222,26 @@ class IBroadcastStateMachineCallbacks {
 
 std::ostream& operator<<(
     std::ostream& os,
-    const le_audio::broadcaster::BroadcastStateMachine::Message& state);
+    const bluetooth::le_audio::broadcaster::BroadcastStateMachine::Message&
+        state);
 
 std::ostream& operator<<(
     std::ostream& os,
-    const le_audio::broadcaster::BroadcastStateMachine::State& state);
+    const bluetooth::le_audio::broadcaster::BroadcastStateMachine::State&
+        state);
 
 std::ostream& operator<<(
     std::ostream& os,
-    const le_audio::broadcaster::BroadcastStateMachine& machine);
-
-std::ostream& operator<<(std::ostream& os,
-                         const le_audio::broadcaster::BigConfig& machine);
+    const bluetooth::le_audio::broadcaster::BroadcastStateMachine& machine);
 
 std::ostream& operator<<(
     std::ostream& os,
-    const le_audio::broadcaster::BroadcastStateMachineConfig& machine);
+    const bluetooth::le_audio::broadcaster::BigConfig& machine);
+
+std::ostream& operator<<(
+    std::ostream& os,
+    const bluetooth::le_audio::broadcaster::BroadcastStateMachineConfig&
+        machine);
 
 } /* namespace broadcaster */
-} /* namespace le_audio */
+}  // namespace bluetooth::le_audio

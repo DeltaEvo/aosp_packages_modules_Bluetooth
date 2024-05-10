@@ -31,10 +31,12 @@ RUN apt-get update && \
     libdouble-conversion-dev \
     libevent-dev \
     libflatbuffers-dev \
+    libfmt-dev \
     libgl1-mesa-dev \
     libglib2.0-dev \
     libgtest-dev \
     libgmock-dev \
+    liblc3-dev \
     liblz4-tool \
     libncurses5 \
     libnss3-dev \
@@ -59,13 +61,14 @@ RUN apt-get update && \
 # Next install the Rust toolchain. Download the toolchain to the local folder
 # using curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs
 ADD rustup/rustup.sh /tmp
-RUN /tmp/rustup.sh -y --default-toolchain 1.60.0
+RUN /tmp/rustup.sh -y --default-toolchain 1.77.1
 
 # Add .cargo/bin to $PATH
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Install cargo packages required on build image.
-RUN cargo install cxxbridge-cmd --version 1.0.42
+RUN cargo install --locked cxxbridge-cmd@1.0.94 pdl-compiler@0.1.1 grpcio-compiler@0.13.0
+RUN cargo install --git https://android.googlesource.com/platform/build#8f9ca807 aconfig
 
 # Rename llvm packages. By default, they are named 11vm-ar-13, etc. which won't
 # work properly with the build.

@@ -18,7 +18,6 @@
 
 #include <cstdint>
 
-#include "stack/include/bt_types.h"
 #include "stack/include/btm_status.h"
 #include "types/raw_address.h"
 
@@ -86,6 +85,8 @@ typedef struct {
   uint8_t link_quality;
 } tBTM_LINK_QUALITY_RESULT;
 
-#define BTM_INQUIRY_STARTED 1
-#define BTM_INQUIRY_CANCELLED 2
-#define BTM_INQUIRY_COMPLETE 3
+enum class tBTM_INQUIRY_STATE : uint8_t {
+  BTM_INQUIRY_STARTED = 1,
+  BTM_INQUIRY_CANCELLED = 2,
+  BTM_INQUIRY_COMPLETE = 3,
+};

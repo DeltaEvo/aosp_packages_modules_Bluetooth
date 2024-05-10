@@ -21,12 +21,10 @@
 #include "bta/dm/bta_dm_int.h"
 #include "bta/hh/bta_hh_int.h"
 #include "bta/include/bta_hh_api.h"
+#include "bta/include/bta_le_audio_api.h"
 #include "osi/include/allocator.h"
 #include "test/common/mock_functions.h"
 #include "test/mock/mock_osi_allocator.h"
-
-uint8_t appl_trace_level = 0;
-uint8_t btif_trace_level = BT_TRACE_LEVEL_DEBUG;
 
 namespace {
 std::array<uint8_t, 32> data32 = {
@@ -80,7 +78,9 @@ TEST_F(BtaHhTest, bta_hh_ctrl_dat_act__BTA_HH_GET_RPT_EVT) {
                       .offset = 0,
                       .layer_specific = 0,
                   },
-              .addr = RawAddress::kEmpty,
+              .link_spec.addrt.bda = RawAddress::kEmpty,
+              .link_spec.addrt.type = BLE_ADDR_PUBLIC,
+              .link_spec.transport = BT_TRANSPORT_AUTO,
               .data = 32,
               .p_data = static_cast<BT_HDR*>(osi_calloc(32 + sizeof(BT_HDR))),
           },
@@ -104,6 +104,5 @@ TEST_F(BtaHhTest, bta_hh_ctrl_dat_act__BTA_HH_GET_RPT_EVT) {
   };
 
   bta_hh_ctrl_dat_act(&cb, &data);
-
-  ASSERT_EQ(get_func_call_count("bta_hh_co_get_rpt_rsp"), 1);
+  ASSERT_EQ(cb.w4_evt, BTA_HH_EMPTY_EVT);
 }

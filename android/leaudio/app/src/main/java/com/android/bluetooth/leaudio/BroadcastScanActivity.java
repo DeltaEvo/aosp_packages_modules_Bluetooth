@@ -17,8 +17,8 @@
 
 package com.android.bluetooth.leaudio;
 
-import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothLeAudioContentMetadata;
 import android.bluetooth.BluetoothLeBroadcastChannel;
 import android.bluetooth.BluetoothLeBroadcastMetadata;
 import android.bluetooth.BluetoothLeBroadcastSubgroup;
@@ -27,8 +27,7 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.EditText;
-import android.text.TextUtils;
-import android.view.LayoutInflater;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
@@ -37,9 +36,8 @@ import androidx.lifecycle.ViewModelProviders;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import java.util.Objects;
 import java.util.List;
-
+import java.util.Objects;
 
 public class BroadcastScanActivity extends AppCompatActivity {
     private BluetoothDevice device;
@@ -83,6 +81,27 @@ public class BroadcastScanActivity extends AppCompatActivity {
                 View alertView =
                         inflater.inflate(R.layout.broadcast_scan_add_encrypted_source_dialog,
                                          null);
+
+                boolean isPublic = broadcast.isPublicBroadcast();
+                TextView addr_text = alertView.findViewById(R.id.broadcast_with_pbp_text);
+                addr_text.setText("Broadcast with PBP: " + (isPublic ? "Yes" : "No"));
+
+                String name = broadcast.getBroadcastName();
+                addr_text = alertView.findViewById(R.id.broadcast_name_text);
+                if (isPublic && name != null) {
+                    addr_text.setText("Public Name: " + name);
+                } else {
+                    addr_text.setVisibility(View.INVISIBLE);
+                }
+
+                BluetoothLeAudioContentMetadata publicMetadata =
+                        broadcast.getPublicBroadcastMetadata();
+                addr_text = alertView.findViewById(R.id.public_program_info_text);
+                if (isPublic && publicMetadata != null) {
+                    addr_text.setText("Public Info: " + publicMetadata.getProgramInfo());
+                } else {
+                    addr_text.setVisibility(View.INVISIBLE);
+                }
 
                 final EditText channels_input_text =
                         alertView.findViewById(R.id.broadcast_channel_map);

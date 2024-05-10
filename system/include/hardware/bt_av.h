@@ -17,6 +17,7 @@
 #ifndef ANDROID_INCLUDE_BT_AV_H
 #define ANDROID_INCLUDE_BT_AV_H
 
+#include <bluetooth/log.h>
 #include <hardware/bluetooth.h>
 #include <raw_address.h>
 
@@ -61,7 +62,14 @@ typedef enum {
 
   BTAV_A2DP_CODEC_INDEX_SOURCE_MAX,
 
-  BTAV_A2DP_CODEC_INDEX_SINK_MIN = BTAV_A2DP_CODEC_INDEX_SOURCE_MAX,
+  // Range of codec indexes reserved for Offload codec extensibility.
+  // Indexes in this range will be allocated for offloaded codecs
+  // that the stack does not recognize.
+  BTAV_A2DP_CODEC_INDEX_SOURCE_EXT_MIN = BTAV_A2DP_CODEC_INDEX_SOURCE_MAX,
+  BTAV_A2DP_CODEC_INDEX_SOURCE_EXT_MAX =
+      BTAV_A2DP_CODEC_INDEX_SOURCE_EXT_MIN + 4,
+
+  BTAV_A2DP_CODEC_INDEX_SINK_MIN = BTAV_A2DP_CODEC_INDEX_SOURCE_EXT_MAX,
 
   // Add an entry for each sink codec here
   BTAV_A2DP_CODEC_INDEX_SINK_SBC = BTAV_A2DP_CODEC_INDEX_SINK_MIN,
@@ -71,9 +79,21 @@ typedef enum {
 
   BTAV_A2DP_CODEC_INDEX_SINK_MAX,
 
+  // Range of codec indexes reserved for Offload codec extensibility.
+  // Indexes in this range will be allocated for offloaded codecs
+  // that the stack does not recognize.
+  BTAV_A2DP_CODEC_INDEX_SINK_EXT_MIN = BTAV_A2DP_CODEC_INDEX_SINK_MAX,
+  BTAV_A2DP_CODEC_INDEX_SINK_EXT_MAX = BTAV_A2DP_CODEC_INDEX_SINK_EXT_MIN + 4,
+
   BTAV_A2DP_CODEC_INDEX_MIN = BTAV_A2DP_CODEC_INDEX_SOURCE_MIN,
-  BTAV_A2DP_CODEC_INDEX_MAX = BTAV_A2DP_CODEC_INDEX_SINK_MAX
+  BTAV_A2DP_CODEC_INDEX_MAX = BTAV_A2DP_CODEC_INDEX_SINK_EXT_MAX
 } btav_a2dp_codec_index_t;
+
+typedef struct {
+  btav_a2dp_codec_index_t codec_type;
+  uint64_t codec_id;
+  std::string codec_name;
+} btav_a2dp_codec_info_t;
 
 typedef enum {
   // Disable the codec.
@@ -148,48 +168,40 @@ struct btav_a2dp_codec_config_t {
   int64_t codec_specific_3;  // Codec-specific value 3
   int64_t codec_specific_4;  // Codec-specific value 4
 
-  std::string ToString() const {
-    std::string codec_name_str;
-
+  std::string CodecNameStr() const {
     switch (codec_type) {
       case BTAV_A2DP_CODEC_INDEX_SOURCE_SBC:
-        codec_name_str = "SBC";
-        break;
+        return "SBC";
       case BTAV_A2DP_CODEC_INDEX_SOURCE_AAC:
-        codec_name_str = "AAC";
-        break;
+        return "AAC";
       case BTAV_A2DP_CODEC_INDEX_SOURCE_APTX:
-        codec_name_str = "aptX";
-        break;
+        return "aptX";
       case BTAV_A2DP_CODEC_INDEX_SOURCE_APTX_HD:
-        codec_name_str = "aptX HD";
-        break;
+        return "aptX HD";
       case BTAV_A2DP_CODEC_INDEX_SOURCE_LDAC:
-        codec_name_str = "LDAC";
-        break;
+        return "LDAC";
       case BTAV_A2DP_CODEC_INDEX_SINK_SBC:
-        codec_name_str = "SBC (Sink)";
-        break;
+        return "SBC (Sink)";
       case BTAV_A2DP_CODEC_INDEX_SINK_AAC:
-        codec_name_str = "AAC (Sink)";
-        break;
+        return "AAC (Sink)";
       case BTAV_A2DP_CODEC_INDEX_SINK_LDAC:
-        codec_name_str = "LDAC (Sink)";
-        break;
+        return "LDAC (Sink)";
       case BTAV_A2DP_CODEC_INDEX_SOURCE_LC3:
-        codec_name_str = "LC3";
-        break;
+        return "LC3";
       case BTAV_A2DP_CODEC_INDEX_SINK_OPUS:
-        codec_name_str = "Opus (Sink)";
-        break;
+        return "Opus (Sink)";
       case BTAV_A2DP_CODEC_INDEX_SOURCE_OPUS:
-        codec_name_str = "Opus";
-        break;
+        return "Opus";
       case BTAV_A2DP_CODEC_INDEX_MAX:
-        codec_name_str = "Unknown(CODEC_INDEX_MAX)";
-        break;
+        return "Unknown(CODEC_INDEX_MAX)";
+      case BTAV_A2DP_CODEC_INDEX_SOURCE_EXT_MIN:
+      case BTAV_A2DP_CODEC_INDEX_SINK_EXT_MIN:
+        return "Unknown(CODEC_EXT)";
     }
+    return "Unknown";
+  }
 
+  std::string ToString() const {
     std::string sample_rate_str;
     AppendCapability(sample_rate_str,
                      (sample_rate == BTAV_A2DP_CODEC_SAMPLE_RATE_NONE), "NONE");
@@ -243,7 +255,7 @@ struct btav_a2dp_codec_config_t {
                      (channel_mode & BTAV_A2DP_CODEC_CHANNEL_MODE_STEREO),
                      "STEREO");
 
-    return "codec: " + codec_name_str +
+    return "codec: " + CodecNameStr() +
            " priority: " + std::to_string(codec_priority) +
            " sample_rate: " + sample_rate_str +
            " bits_per_sample: " + bits_per_sample_str +
@@ -252,6 +264,18 @@ struct btav_a2dp_codec_config_t {
            " codec_specific_2: " + std::to_string(codec_specific_2) +
            " codec_specific_3: " + std::to_string(codec_specific_3) +
            " codec_specific_4: " + std::to_string(codec_specific_4);
+  }
+
+  static std::string PrintCodecs(std::vector<btav_a2dp_codec_config_t> codecs) {
+    std::ostringstream oss;
+    for (size_t i = 0; i < codecs.size(); i++) {
+      oss << codecs[i].CodecNameStr();
+      if (i != (codecs.size() - 1)) {
+        oss << ", ";
+      }
+    }
+
+    return oss.str();
   }
 
  private:
@@ -353,7 +377,8 @@ typedef struct {
   bt_status_t (*init)(
       btav_source_callbacks_t* callbacks, int max_connected_audio_devices,
       const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
-      const std::vector<btav_a2dp_codec_config_t>& offloading_preference);
+      const std::vector<btav_a2dp_codec_config_t>& offloading_preference,
+      std::vector<btav_a2dp_codec_info_t>* supported_codecs);
 
   /** connect to headset */
   bt_status_t (*connect)(const RawAddress& bd_addr);
@@ -408,5 +433,31 @@ typedef struct {
 } btav_sink_interface_t;
 
 __END_DECLS
+
+namespace fmt {
+template <>
+struct formatter<btav_connection_state_t>
+    : enum_formatter<btav_connection_state_t> {};
+template <>
+struct formatter<btav_audio_state_t> : enum_formatter<btav_audio_state_t> {};
+template <>
+struct formatter<btav_a2dp_codec_bits_per_sample_t>
+    : enum_formatter<btav_a2dp_codec_bits_per_sample_t> {};
+template <>
+struct formatter<btav_a2dp_codec_priority_t>
+    : enum_formatter<btav_a2dp_codec_priority_t> {};
+template <>
+struct formatter<btav_a2dp_codec_index_t>
+    : enum_formatter<btav_a2dp_codec_index_t> {};
+template <>
+struct formatter<btav_a2dp_codec_sample_rate_t>
+    : enum_formatter<btav_a2dp_codec_sample_rate_t> {};
+template <>
+struct formatter<btav_a2dp_codec_channel_mode_t>
+    : enum_formatter<btav_a2dp_codec_channel_mode_t> {};
+template <>
+struct formatter<btav_a2dp_scmst_enable_status_t>
+    : enum_formatter<btav_a2dp_scmst_enable_status_t> {};
+}  // namespace fmt
 
 #endif /* ANDROID_INCLUDE_BT_AV_H */

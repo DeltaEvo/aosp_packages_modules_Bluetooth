@@ -20,31 +20,18 @@
 #include <base/location.h>
 #include <gtest/gtest.h>
 
-#include <chrono>
 #include <cstdint>
 #include <utility>
 #include <vector>
 
-#include "bta/sys/bta_sys.h"
+#include "common/init_flags.h"
 #include "test/common/mock_functions.h"
 
 using namespace std::chrono_literals;
 
-namespace {
-
-const char* test_flags[] = {
-    "INIT_logging_debug_enabled_for_all=true",
-    nullptr,
-};
-
-}  // namespace
-
 class BtaApiTest : public testing::Test {
  protected:
-  void SetUp() override {
-    reset_mock_function_count_map();
-    bluetooth::common::InitFlags::Load(test_flags);
-  }
+  void SetUp() override { reset_mock_function_count_map(); }
   void TearDown() override {}
 };
 

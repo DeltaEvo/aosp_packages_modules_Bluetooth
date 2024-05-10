@@ -22,7 +22,7 @@
 
 #include "le_audio_types.h"
 
-namespace le_audio {
+namespace bluetooth::le_audio {
 namespace client_parser {
 namespace pacs {
 
@@ -153,11 +153,11 @@ TEST(LeAudioClientParserTest, testParsePacsInvalidCapsLtvLen) {
       // Num records
       0x01,
       // Codec_ID
-      0x01,
-      0x03,
-      0x02,
-      0x05,
-      0x04,
+      0x06,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
       // Codec Spec. Caps. Len
       0x07,
       // Codec Spec. Caps.
@@ -177,11 +177,11 @@ TEST(LeAudioClientParserTest, testParsePacsInvalidCapsLtvLen) {
       // Num records
       0x01,
       // Codec_ID
-      0x01,
-      0x03,
-      0x02,
-      0x05,
-      0x04,
+      0x06,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
       // Codec Spec. Caps. Len
       0x07,
       // Codec Spec. Caps.
@@ -205,11 +205,11 @@ TEST(LeAudioClientParserTest, testParsePacsNullLtv) {
       // Num records
       0x01,
       // Codec_ID
-      0x01,
-      0x03,
-      0x02,
-      0x05,
-      0x04,
+      0x06,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
       // Codec Spec. Caps. Len
       0x0A,
       // Codec Spec. Caps.
@@ -229,9 +229,9 @@ TEST(LeAudioClientParserTest, testParsePacsNullLtv) {
   ASSERT_TRUE(ParsePacs(pac_recs, sizeof(value), value));
 
   ASSERT_EQ(pac_recs.size(), 1u);
-  ASSERT_EQ(pac_recs[0].codec_id.coding_format, 0x01u);
-  ASSERT_EQ(pac_recs[0].codec_id.vendor_company_id, 0x0203u);
-  ASSERT_EQ(pac_recs[0].codec_id.vendor_codec_id, 0x0405u);
+  ASSERT_EQ(pac_recs[0].codec_id.coding_format, 0x06u);
+  ASSERT_EQ(pac_recs[0].codec_id.vendor_company_id, 0x0000u);
+  ASSERT_EQ(pac_recs[0].codec_id.vendor_codec_id, 0x0000u);
 
   auto codec_spec_caps = pac_recs[0].codec_spec_caps.Values();
   ASSERT_EQ(codec_spec_caps.size(), 3u);
@@ -244,6 +244,12 @@ TEST(LeAudioClientParserTest, testParsePacsNullLtv) {
   ASSERT_EQ(codec_spec_caps[0x03u][1], 0x05u);
   ASSERT_EQ(codec_spec_caps.count(0x04u), 1u);
   ASSERT_EQ(codec_spec_caps[0x04u].size(), 0u);
+
+  // Validate the raw data from ltv matches the original pac record data buffer
+  // Add one redundant ltv length of 0, just like in the value[] above.
+  auto ltv_raw = pac_recs[0].codec_spec_caps.RawPacket();
+  ltv_raw.push_back(0x00);
+  ASSERT_EQ(ltv_raw, pac_recs[0].codec_spec_caps_raw);
 }
 
 TEST(LeAudioClientParserTest, testParsePacsEmptyMeta) {
@@ -253,11 +259,11 @@ TEST(LeAudioClientParserTest, testParsePacsEmptyMeta) {
       // Num records
       0x01,
       // Codec_ID
-      0x01,
-      0x03,
-      0x02,
-      0x05,
-      0x04,
+      0x06,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
       // Codec Spec. Caps. Len
       0x07,
       // Codec Spec. Caps.
@@ -274,9 +280,9 @@ TEST(LeAudioClientParserTest, testParsePacsEmptyMeta) {
   ASSERT_TRUE(ParsePacs(pac_recs, sizeof(value), value));
 
   ASSERT_EQ(pac_recs.size(), 1u);
-  ASSERT_EQ(pac_recs[0].codec_id.coding_format, 0x01u);
-  ASSERT_EQ(pac_recs[0].codec_id.vendor_company_id, 0x0203u);
-  ASSERT_EQ(pac_recs[0].codec_id.vendor_codec_id, 0x0405u);
+  ASSERT_EQ(pac_recs[0].codec_id.coding_format, 0x06u);
+  ASSERT_EQ(pac_recs[0].codec_id.vendor_company_id, 0x0000u);
+  ASSERT_EQ(pac_recs[0].codec_id.vendor_codec_id, 0x0000u);
 
   auto codec_spec_caps = pac_recs[0].codec_spec_caps.Values();
   ASSERT_EQ(codec_spec_caps.size(), 2u);
@@ -287,6 +293,10 @@ TEST(LeAudioClientParserTest, testParsePacsEmptyMeta) {
   ASSERT_EQ(codec_spec_caps[0x03u].size(), 2u);
   ASSERT_EQ(codec_spec_caps[0x03u][0], 0x04u);
   ASSERT_EQ(codec_spec_caps[0x03u][1], 0x05u);
+
+  // Validate the raw data from ltv matches the original pac record data buffer
+  ASSERT_EQ(pac_recs[0].codec_spec_caps.RawPacket(),
+            pac_recs[0].codec_spec_caps_raw);
 }
 
 TEST(LeAudioClientParserTest, testParsePacsInvalidMetaLength) {
@@ -325,7 +335,7 @@ TEST(LeAudioClientParserTest, testParsePacsValidMeta) {
       // Num records
       0x01,
       // Codec_ID
-      0x01, 0x03, 0x02, 0x05, 0x04,
+      0x06, 0x00, 0x00, 0x00, 0x00,
       // Codec Spec. Caps. Len
       0x07,
       // Codec Spec. Caps.
@@ -347,9 +357,9 @@ TEST(LeAudioClientParserTest, testParsePacsValidMeta) {
   ASSERT_TRUE(ParsePacs(pac_recs, sizeof(value), value));
 
   ASSERT_EQ(pac_recs.size(), 1u);
-  ASSERT_EQ(pac_recs[0].codec_id.coding_format, 0x01u);
-  ASSERT_EQ(pac_recs[0].codec_id.vendor_company_id, 0x0203u);
-  ASSERT_EQ(pac_recs[0].codec_id.vendor_codec_id, 0x0405u);
+  ASSERT_EQ(pac_recs[0].codec_id.coding_format, 0x06u);
+  ASSERT_EQ(pac_recs[0].codec_id.vendor_company_id, 0x0000u);
+  ASSERT_EQ(pac_recs[0].codec_id.vendor_codec_id, 0x0000u);
 
   auto codec_spec_caps = pac_recs[0].codec_spec_caps.Values();
   ASSERT_EQ(codec_spec_caps.size(), 2u);
@@ -366,6 +376,10 @@ TEST(LeAudioClientParserTest, testParsePacsValidMeta) {
   ASSERT_EQ(pac_recs[0].metadata[1], 0x02u);
   ASSERT_EQ(pac_recs[0].metadata[2], 0x01u);
   ASSERT_EQ(pac_recs[0].metadata[3], 0x00u);
+
+  // Validate the raw data from ltv matches the original pac record data buffer
+  ASSERT_EQ(pac_recs[0].codec_spec_caps.RawPacket(),
+            pac_recs[0].codec_spec_caps_raw);
 }
 
 TEST(LeAudioClientParserTest, testParsePacsInvalidNumRecords) {
@@ -410,7 +424,7 @@ TEST(LeAudioClientParserTest, testParsePacsMultipleRecords) {
       // Metadata Length
       0x00,
       // Codec_ID
-      0x06, 0x08, 0x07, 0x0A, 0x09,
+      0x06, 0x00, 0x00, 0x00, 0x00,
       // Codec Spec. Caps. Len
       0x03,
       // Codec Spec. Caps.
@@ -453,15 +467,15 @@ TEST(LeAudioClientParserTest, testParsePacsMultipleRecords) {
   ASSERT_EQ(record0.codec_id.coding_format, 0x01u);
   ASSERT_EQ(record0.codec_id.vendor_company_id, 0x0203u);
   ASSERT_EQ(record0.codec_id.vendor_codec_id, 0x0405u);
-  ASSERT_EQ(record0.codec_spec_caps.Size(), 0u);
+  ASSERT_EQ(record0.codec_spec_caps_raw.size(), 0u);
   ASSERT_EQ(record0.metadata.size(), 0u);
 
   // Verify 2nd record
   auto& record1 = pac_recs[1];
 
   ASSERT_EQ(record1.codec_id.coding_format, 0x06u);
-  ASSERT_EQ(record1.codec_id.vendor_company_id, 0x0708u);
-  ASSERT_EQ(record1.codec_id.vendor_codec_id, 0x090Au);
+  ASSERT_EQ(record1.codec_id.vendor_company_id, 0x0000u);
+  ASSERT_EQ(record1.codec_id.vendor_codec_id, 0x0000u);
 
   auto codec_spec_caps1 = record1.codec_spec_caps.Values();
   ASSERT_EQ(codec_spec_caps1.size(), 1u);
@@ -475,6 +489,9 @@ TEST(LeAudioClientParserTest, testParsePacsMultipleRecords) {
   ASSERT_EQ(record1.metadata[2], 0x01u);
   ASSERT_EQ(record1.metadata[3], 0x00u);
 
+  // Validate the raw data from ltv matches the original pac record data buffer
+  ASSERT_EQ(record1.codec_spec_caps.RawPacket(), record1.codec_spec_caps_raw);
+
   // Verify 3rd record
   auto& record2 = pac_recs[2];
 
@@ -482,21 +499,55 @@ TEST(LeAudioClientParserTest, testParsePacsMultipleRecords) {
   ASSERT_EQ(record2.codec_id.vendor_company_id, 0x1213u);
   ASSERT_EQ(record2.codec_id.vendor_codec_id, 0x1415u);
 
-  auto codec_spec_caps2 = record2.codec_spec_caps.Values();
-  ASSERT_EQ(codec_spec_caps2.size(), 2u);
-  ASSERT_EQ(codec_spec_caps2.count(0x12u), 1u);
-  ASSERT_EQ(codec_spec_caps2[0x12u].size(), 1u);
-  ASSERT_EQ(codec_spec_caps2[0x12u][0], 0x13u);
-  ASSERT_EQ(codec_spec_caps2.count(0x13u), 1u);
-  ASSERT_EQ(codec_spec_caps2[0x13u].size(), 2u);
-  ASSERT_EQ(codec_spec_caps2[0x13u][0], 0x14u);
-  ASSERT_EQ(codec_spec_caps2[0x13u][1], 0x15u);
+  // Codec is not known to use LTV format for codec specific parameters
+  ASSERT_EQ(record2.codec_spec_caps_raw.size(), 7u);
+  ASSERT_EQ(record2.codec_spec_caps.Size(), 0u);
+  ASSERT_EQ(0, memcmp(record2.codec_spec_caps_raw.data(), value + 28,
+                      record2.codec_spec_caps_raw.size()));
 
   ASSERT_EQ(record2.metadata.size(), 4u);
   ASSERT_EQ(record2.metadata[0], 0x03u);
   ASSERT_EQ(record2.metadata[1], 0x12u);
   ASSERT_EQ(record2.metadata[2], 0x11u);
   ASSERT_EQ(record2.metadata[3], 0x10u);
+}
+
+TEST(LeAudioClientParserTest, testParsePacsVendorCodecRecords) {
+  std::vector<struct types::acs_ac_record> pac_recs;
+
+  const uint8_t value[] = {
+      // Num records
+      0x01,
+      // Vendor Codec_ID
+      0x01,
+      0x03,
+      0x02,
+      0x05,
+      0x04,
+      // Codec Spec. Caps. Len
+      0x0A,
+      // Codec Spec. Caps. - proprietary format
+      0x01,
+      0x02,
+      0x03,
+      0x04,
+      0x05,
+      0x06,
+      0x07,
+      0x08,
+      0x09,
+      0x0A,
+      // Metadata Length
+      0x00,
+  };
+  ASSERT_TRUE(ParsePacs(pac_recs, sizeof(value), value));
+
+  ASSERT_EQ(pac_recs.size(), 1u);
+  ASSERT_EQ(pac_recs[0].codec_id.coding_format, 0x01u);
+  ASSERT_EQ(pac_recs[0].codec_id.vendor_company_id, 0x0203u);
+  ASSERT_EQ(pac_recs[0].codec_id.vendor_codec_id, 0x0405u);
+  ASSERT_TRUE(pac_recs[0].codec_spec_caps.IsEmpty());
+  ASSERT_EQ(0x0Au, pac_recs[0].codec_spec_caps_raw.size());
 }
 
 TEST(LeAudioClientParserTest, testParseAudioLocationsInvalidLength) {
@@ -522,7 +573,7 @@ TEST(LeAudioClientParserTest, testParseAudioLocations) {
 }
 
 TEST(LeAudioClientParserTest, testParseAvailableAudioContextsInvalidLength) {
-  acs_available_audio_contexts avail_contexts;
+  types::BidirectionalPair<types::AudioContexts> avail_contexts;
   const uint8_t value1[] = {
       // Sink available contexts
       0x01, 0x02,
@@ -530,12 +581,12 @@ TEST(LeAudioClientParserTest, testParseAvailableAudioContextsInvalidLength) {
   };
 
   ParseAvailableAudioContexts(avail_contexts, sizeof(value1), value1);
-  ASSERT_EQ(avail_contexts.snk_avail_cont.value(), 0u);
-  ASSERT_EQ(avail_contexts.src_avail_cont.value(), 0u);
+  ASSERT_EQ(avail_contexts.sink.value(), 0u);
+  ASSERT_EQ(avail_contexts.source.value(), 0u);
 }
 
 TEST(LeAudioClientParserTest, testParseAvailableAudioContexts) {
-  acs_available_audio_contexts avail_contexts;
+  types::BidirectionalPair<types::AudioContexts> avail_contexts;
   const uint8_t value1[] = {
       // Sink available contexts
       0x01,
@@ -546,12 +597,12 @@ TEST(LeAudioClientParserTest, testParseAvailableAudioContexts) {
   };
 
   ParseAvailableAudioContexts(avail_contexts, sizeof(value1), value1);
-  ASSERT_EQ(avail_contexts.snk_avail_cont.value(), 0x0201u);
-  ASSERT_EQ(avail_contexts.src_avail_cont.value(), 0x0403u);
+  ASSERT_EQ(avail_contexts.sink.value(), 0x0201u);
+  ASSERT_EQ(avail_contexts.source.value(), 0x0403u);
 }
 
 TEST(LeAudioClientParserTest, testParseSupportedAudioContextsInvalidLength) {
-  acs_supported_audio_contexts supp_contexts;
+  types::BidirectionalPair<types::AudioContexts> supp_contexts;
   const uint8_t value1[] = {
       // Sink supported contexts
       0x01, 0x02,
@@ -559,12 +610,12 @@ TEST(LeAudioClientParserTest, testParseSupportedAudioContextsInvalidLength) {
   };
 
   ParseSupportedAudioContexts(supp_contexts, sizeof(value1), value1);
-  ASSERT_EQ(supp_contexts.snk_supp_cont.value(), 0u);
-  ASSERT_EQ(supp_contexts.src_supp_cont.value(), 0u);
+  ASSERT_EQ(supp_contexts.sink.value(), 0u);
+  ASSERT_EQ(supp_contexts.source.value(), 0u);
 }
 
 TEST(LeAudioClientParserTest, testParseSupportedAudioContexts) {
-  acs_supported_audio_contexts supp_contexts;
+  types::BidirectionalPair<types::AudioContexts> supp_contexts;
   const uint8_t value1[] = {
       // Sink supported contexts
       0x01,
@@ -575,8 +626,8 @@ TEST(LeAudioClientParserTest, testParseSupportedAudioContexts) {
   };
 
   ParseSupportedAudioContexts(supp_contexts, sizeof(value1), value1);
-  ASSERT_EQ(supp_contexts.snk_supp_cont.value(), 0x0201u);
-  ASSERT_EQ(supp_contexts.src_supp_cont.value(), 0x0403u);
+  ASSERT_EQ(supp_contexts.sink.value(), 0x0201u);
+  ASSERT_EQ(supp_contexts.source.value(), 0x0403u);
 }
 
 }  // namespace pacs
@@ -1032,6 +1083,70 @@ TEST(LeAudioClientParserTest, testParseAseCtpNotification) {
   ASSERT_EQ(ntf.entries[1].reason, 0x03);
 }
 
+TEST(LeAudioClientParserTest, testParseAseCtpNotificationConfigurationIssue) {
+  ctp_ntf ntf;
+  const uint8_t value1[] = {
+      // Opcode
+      0x01,
+      // Number of ASEs
+      0x02,
+      // ASE ID
+      0x01,
+      // Response Code
+      0x07,
+      // Reason
+      0x01,
+      // ASE ID
+      0x03,
+      // Response Code
+      0x05,
+      // Reason
+      0x05,
+  };
+  ParseAseCtpNotification(ntf, sizeof(value1), value1);
+
+  ASSERT_EQ(ntf.op, 0x01u);
+  ASSERT_EQ(ntf.entries.size(), 2u);
+  ASSERT_EQ(ntf.entries[0].ase_id, 0x01u);
+  ASSERT_EQ(ntf.entries[0].response_code, 0x07u);
+  ASSERT_EQ(ntf.entries[0].reason, 0x01);
+  ASSERT_EQ(ntf.entries[1].ase_id, 0x03u);
+  ASSERT_EQ(ntf.entries[1].response_code, 0x05u);
+  ASSERT_EQ(ntf.entries[1].reason, 0x05);
+}
+
+TEST(LeAudioClientParserTest, testParseAseCtpNotificationMetadataIssue) {
+  ctp_ntf ntf;
+  const uint8_t value1[] = {
+      // Opcode
+      0x01,
+      // Number of ASEs
+      0x02,
+      // ASE ID
+      0x01,
+      // Response Code
+      0x0A,
+      // Reason
+      0x01,
+      // ASE ID
+      0x03,
+      // Response Code
+      0x0D,
+      // Reason
+      0xFF,
+  };
+  ParseAseCtpNotification(ntf, sizeof(value1), value1);
+
+  ASSERT_EQ(ntf.op, 0x01u);
+  ASSERT_EQ(ntf.entries.size(), 2u);
+  ASSERT_EQ(ntf.entries[0].ase_id, 0x01u);
+  ASSERT_EQ(ntf.entries[0].response_code, 0x0Au);
+  ASSERT_EQ(ntf.entries[0].reason, 0x01);
+  ASSERT_EQ(ntf.entries[1].ase_id, 0x03u);
+  ASSERT_EQ(ntf.entries[1].response_code, 0x0Du);
+  ASSERT_EQ(ntf.entries[1].reason, 0xFF);
+}
+
 TEST(LeAudioClientParserTest, testPrepareAseCtpCodecConfigEmpty) {
   std::vector<struct ctp_codec_conf> confs;
   std::vector<uint8_t> value;
@@ -1048,17 +1163,21 @@ TEST(LeAudioClientParserTest, testPrepareAseCtpCodecConfigSingle) {
   types::LeAudioCodecId codec_id{.coding_format = 0x06,
                                  .vendor_company_id = 0x0203,
                                  .vendor_codec_id = 0x0405};
-  types::LeAudioLc3Config codec_conf{.sampling_frequency = 0x10,
-                                     .frame_duration = 0x03,
-                                     .audio_channel_allocation = 0x04050607,
-                                     .octets_per_codec_frame = 0x0203};
+  types::LeAudioLtvMap codec_conf =
+      types::LeAudioLtvMap()
+          .Add(codec_spec_conf::kLeAudioLtvTypeSamplingFreq, (uint8_t)0x10)
+          .Add(codec_spec_conf::kLeAudioLtvTypeFrameDuration, (uint8_t)0x03)
+          .Add(codec_spec_conf::kLeAudioLtvTypeAudioChannelAllocation,
+               (uint32_t)0x04050607)
+          .Add(codec_spec_conf::kLeAudioLtvTypeOctetsPerCodecFrame,
+               (uint16_t)0x0203);
 
   confs.push_back(ctp_codec_conf{
       .ase_id = 0x05,
       .target_latency = 0x03,
       .target_phy = 0x02,
       .codec_id = codec_id,
-      .codec_config = codec_conf,
+      .codec_config = codec_conf.RawPacket(),
   });
   PrepareAseCtpCodecConfig(confs, value);
 
@@ -1104,17 +1223,21 @@ TEST(LeAudioClientParserTest, testPrepareAseCtpCodecConfigMultiple) {
   types::LeAudioCodecId codec_id{.coding_format = 0x06,
                                  .vendor_company_id = 0x0203,
                                  .vendor_codec_id = 0x0405};
-  types::LeAudioLc3Config codec_conf{.sampling_frequency = 0x10,
-                                     .frame_duration = 0x03,
-                                     .audio_channel_allocation = 0x04050607,
-                                     .octets_per_codec_frame = 0x0203};
+  types::LeAudioLtvMap codec_conf =
+      types::LeAudioLtvMap()
+          .Add(codec_spec_conf::kLeAudioLtvTypeSamplingFreq, (uint8_t)0x10)
+          .Add(codec_spec_conf::kLeAudioLtvTypeFrameDuration, (uint8_t)0x03)
+          .Add(codec_spec_conf::kLeAudioLtvTypeAudioChannelAllocation,
+               (uint32_t)0x04050607)
+          .Add(codec_spec_conf::kLeAudioLtvTypeOctetsPerCodecFrame,
+               (uint16_t)0x0203);
 
   confs.push_back(ctp_codec_conf{
       .ase_id = 0x05,
       .target_latency = 0x03,
       .target_phy = 0x02,
       .codec_id = codec_id,
-      .codec_config = codec_conf,
+      .codec_config = codec_conf.RawPacket(),
   });
   PrepareAseCtpCodecConfig(confs, value);
 
@@ -1155,17 +1278,21 @@ TEST(LeAudioClientParserTest, testPrepareAseCtpCodecConfigMultiple) {
   types::LeAudioCodecId codec_id2{.coding_format = 0x16,
                                   .vendor_company_id = 0x1213,
                                   .vendor_codec_id = 0x1415};
-  types::LeAudioLc3Config codec_conf2{.sampling_frequency = 0x11,
-                                      .frame_duration = 0x13,
-                                      .audio_channel_allocation = 0x14151617,
-                                      .octets_per_codec_frame = 0x1213};
+  types::LeAudioLtvMap codec_conf2 =
+      types::LeAudioLtvMap()
+          .Add(codec_spec_conf::kLeAudioLtvTypeSamplingFreq, (uint8_t)0x11)
+          .Add(codec_spec_conf::kLeAudioLtvTypeFrameDuration, (uint8_t)0x13)
+          .Add(codec_spec_conf::kLeAudioLtvTypeAudioChannelAllocation,
+               (uint32_t)0x14151617)
+          .Add(codec_spec_conf::kLeAudioLtvTypeOctetsPerCodecFrame,
+               (uint16_t)0x1213);
 
   confs.push_back(ctp_codec_conf{
       .ase_id = 0x15,
       .target_latency = 0x13,
       .target_phy = 0x01,
       .codec_id = codec_id2,
-      .codec_config = codec_conf2,
+      .codec_config = codec_conf2.RawPacket(),
   });
   PrepareAseCtpCodecConfig(confs, value);
 
@@ -1666,4 +1793,4 @@ TEST(LeAudioClientParserTest, testParseTmapRoleInvalidLen) {
 }  // namespace tmap
 
 }  // namespace client_parser
-}  // namespace le_audio
+}  // namespace bluetooth::le_audio

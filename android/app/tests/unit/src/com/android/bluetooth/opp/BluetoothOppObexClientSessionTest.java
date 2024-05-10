@@ -44,10 +44,12 @@ import com.android.obex.ClientSession;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -55,9 +57,10 @@ import java.io.OutputStream;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-
 @RunWith(AndroidJUnit4.class)
 public class BluetoothOppObexClientSessionTest {
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock
     BluetoothMethodProxy mMethodProxy;
 
@@ -69,7 +72,6 @@ public class BluetoothOppObexClientSessionTest {
 
     @Before
     public void setUp() throws IOException {
-        MockitoAnnotations.initMocks(this);
         mTargetContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
         mClientSession = new BluetoothOppObexClientSession(mTargetContext, mTransport);
 
@@ -135,7 +137,6 @@ public class BluetoothOppObexClientSessionTest {
         mClientSession.stop();
 
         BluetoothOppUtility.sSendFileMap.clear();
-
         assertThat(sessionCompletedLatch.await(3_000, TimeUnit.MILLISECONDS)).isTrue();
     }
 
@@ -162,8 +163,10 @@ public class BluetoothOppObexClientSessionTest {
         BluetoothOppSendFileInfo sendFileInfo = new BluetoothOppSendFileInfo(
                 filename, mimetype, totalBytes, null, status);
 
-        BluetoothOppObexClientSession.ClientThread thread = mClientSession.new ClientThread(
-                mTargetContext, mTransport, 0);
+        BluetoothOppObexClientSession.ClientThread thread =
+                mClientSession
+                .new ClientThread(
+                        mTargetContext, mTransport, 0, new Handler(Looper.getMainLooper()));
         InputStream is = mock(InputStream.class);
         OutputStream os = mock(OutputStream.class);
         doReturn(is).when(mTransport).openInputStream();
@@ -178,17 +181,21 @@ public class BluetoothOppObexClientSessionTest {
     @Test
     public void clientThreadInterrupt_sendMessageShareInterrupted() throws InterruptedException {
         CountDownLatch sessionInterruptLatch = new CountDownLatch(1);
-        mClientSession.mCallback = new Handler(Looper.getMainLooper()) {
-            @Override
-            public void handleMessage(Message msg) {
-                super.handleMessage(msg);
-                if (msg.what == MSG_SHARE_INTERRUPTED) {
-                    sessionInterruptLatch.countDown();
-                }
-            }
-        };
         BluetoothOppObexClientSession.ClientThread thread =
-                mClientSession.new ClientThread(mTargetContext, mTransport, 0);
+                mClientSession
+                .new ClientThread(
+                        mTargetContext,
+                        mTransport,
+                        0,
+                        new Handler(Looper.getMainLooper()) {
+                            @Override
+                            public void handleMessage(Message msg) {
+                                super.handleMessage(msg);
+                                if (msg.what == MSG_SHARE_INTERRUPTED) {
+                                    sessionInterruptLatch.countDown();
+                                }
+                            }
+                        });
         mClientSession.mWaitingForRemote = true;
         thread.interrupt();
         assertThat(sessionInterruptLatch.await(3_000, TimeUnit.MILLISECONDS)).isTrue();

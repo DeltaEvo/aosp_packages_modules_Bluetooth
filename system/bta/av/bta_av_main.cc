@@ -24,27 +24,34 @@
 
 #define LOG_TAG "bt_bta_av"
 
+#include <bluetooth/log.h>
+
 #include <cstdint>
 
-#include "bt_target.h"  // Must be first to define build configuration
 #include "bta/av/bta_av_int.h"
 #include "bta/include/bta_ar_api.h"
+#include "bta/include/bta_av_co.h"
 #include "bta/include/utl.h"
+#include "bta/sys/bta_sys.h"
 #include "btif/avrcp/avrcp_service.h"
+#include "btif/include/btif_av.h"
 #include "btif/include/btif_av_co.h"
 #include "btif/include/btif_config.h"
-#include "main/shim/dumpsys.h"
+#include "internal_include/bt_target.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
-#include "osi/include/osi.h"  // UNUSED_ATTR
 #include "osi/include/properties.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/btm_api.h"
+#include "stack/include/bt_uuid16.h"
+#include "stack/include/hci_error_code.h"
+#include "stack/include/sdp_api.h"
+#include "storage/config_keys.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
 
-#include <base/logging.h>
+using namespace bluetooth::legacy::stack::sdp;
+using namespace bluetooth;
 
 /*****************************************************************************
  * Constants and types
@@ -101,10 +108,12 @@ static void bta_av_ci_data(tBTA_AV_DATA* p_data);
 static void bta_av_rpc_conn(tBTA_AV_DATA* p_data);
 static void bta_av_api_to_ssm(tBTA_AV_DATA* p_data);
 
-static void bta_av_sco_chg_cback(tBTA_SYS_CONN_STATUS status, uint8_t id,
-                                 uint8_t app_id, const RawAddress& peer_addr);
-static void bta_av_sys_rs_cback(tBTA_SYS_CONN_STATUS status, uint8_t id,
-                                uint8_t app_id, const RawAddress& peer_addr);
+static void bta_av_sco_chg_cback(tBTA_SYS_CONN_STATUS status,
+                                 uint8_t num_sco_links, uint8_t app_id,
+                                 const RawAddress& peer_addr);
+static void bta_av_sys_rs_cback(tBTA_SYS_CONN_STATUS status, tHCI_ROLE new_role,
+                                tHCI_STATUS hci_status,
+                                const RawAddress& peer_addr);
 
 /*****************************************************************************
  * Global data
@@ -126,28 +135,43 @@ static const char* bta_av_st_code(uint8_t state);
  *
  ******************************************************************************/
 static void bta_av_api_enable(tBTA_AV_DATA* p_data) {
+  if (btif_av_src_sink_coexist_enabled() && bta_av_cb.features != 0) {
+    tBTA_AV_ENABLE enable;
+    tBTA_AV bta_av_data;
+    bta_av_cb.sink_features = p_data->api_enable.features;
+
+    enable.features = p_data->api_enable.features;
+    bta_av_data.enable = enable;
+    (*bta_av_cb.p_cback)(BTA_AV_ENABLE_EVT, &bta_av_data);
+
+    /* if this is source feature, then exchange them */
+    if (p_data->api_enable.features & BTA_AV_FEAT_SRC) {
+      tBTA_AV_FEAT tmp_feature = bta_av_cb.features;
+      bta_av_cb.features = bta_av_cb.sink_features;
+      bta_av_cb.sink_features = tmp_feature;
+    }
+    return;
+  }
+
   if (bta_av_cb.disabling) {
-    APPL_TRACE_WARNING(
-        "%s: previous (reg_audio=%#x) is still disabling (attempts=%d)",
-        __func__, bta_av_cb.reg_audio, bta_av_cb.enabling_attempts);
+    log::warn("previous (reg_audio={:#x}) is still disabling (attempts={})",
+              bta_av_cb.reg_audio, bta_av_cb.enabling_attempts);
     if (++bta_av_cb.enabling_attempts <= kEnablingAttemptsCountMaximum) {
       tBTA_AV_API_ENABLE* p_buf =
           (tBTA_AV_API_ENABLE*)osi_malloc(sizeof(tBTA_AV_API_ENABLE));
       memcpy(p_buf, &p_data->api_enable, sizeof(tBTA_AV_API_ENABLE));
-#if BASE_VER < 931007
-      bta_sys_sendmsg_delayed(p_buf, base::TimeDelta::FromMilliseconds(
-#else
-      bta_sys_sendmsg_delayed(p_buf, base::Milliseconds(
-#endif
-                                         kEnablingAttemptsIntervalMs));
+      bta_sys_sendmsg_delayed(
+          p_buf, std::chrono::milliseconds(kEnablingAttemptsIntervalMs));
       return;
     }
     if (bta_av_cb.sdp_a2dp_handle) {
-      SDP_DeleteRecord(bta_av_cb.sdp_a2dp_handle);
+      get_legacy_stack_sdp_api()->handle.SDP_DeleteRecord(
+          bta_av_cb.sdp_a2dp_handle);
       bta_sys_remove_uuid(UUID_SERVCLASS_AUDIO_SOURCE);
     }
     if (bta_av_cb.sdp_a2dp_snk_handle) {
-      SDP_DeleteRecord(bta_av_cb.sdp_a2dp_snk_handle);
+      get_legacy_stack_sdp_api()->handle.SDP_DeleteRecord(
+          bta_av_cb.sdp_a2dp_snk_handle);
       bta_sys_remove_uuid(UUID_SERVCLASS_AUDIO_SINK);
     }
     // deregister from AVDT
@@ -209,6 +233,7 @@ tBTA_AV_SCB* bta_av_addr_to_scb(const RawAddress& bd_addr) {
   return p_scb;
 }
 
+extern const RawAddress& btif_av_find_by_handle(tBTA_AV_HNDL bta_handle);
 int BTA_AvObtainPeerChannelIndex(const RawAddress& peer_address) {
   // Find the entry for the peer (if exists)
   tBTA_AV_SCB* p_scb = bta_av_addr_to_scb(peer_address);
@@ -223,6 +248,11 @@ int BTA_AvObtainPeerChannelIndex(const RawAddress& peer_address) {
       continue;
     }
     if (p_scb->PeerAddress().IsEmpty()) {
+      const RawAddress& btif_addr = btif_av_find_by_handle(p_scb->hndl);
+      if (!btif_addr.IsEmpty() && btif_addr != peer_address)  {
+        log::verbose("btif_addr = {}, index={}!", btif_addr.ToString(), index);
+        continue;
+      }
       return p_scb->hdi;
     }
   }
@@ -263,7 +293,7 @@ tBTA_AV_SCB* bta_av_hndl_to_scb(uint16_t handle) {
  ******************************************************************************/
 static tBTA_AV_SCB* bta_av_alloc_scb(tBTA_AV_CHNL chnl) {
   if (chnl != BTA_AV_CHNL_AUDIO) {
-    APPL_TRACE_ERROR("%s: bad channel: %d", __func__, chnl);
+    log::error("bad channel: {}", chnl);
     return nullptr;
   }
 
@@ -286,14 +316,36 @@ static tBTA_AV_SCB* bta_av_alloc_scb(tBTA_AV_CHNL chnl) {
   return nullptr;
 }
 
+static tBTA_AV_SCB* bta_av_find_scb(tBTA_AV_CHNL chnl, uint8_t app_id) {
+  if (chnl != BTA_AV_CHNL_AUDIO) {
+    log::error("bad channel: {}", chnl);
+    return nullptr;
+  }
+
+  for (int xx = 0; xx < BTA_AV_NUM_STRS; xx++) {
+    if ((bta_av_cb.p_scb[xx] != nullptr) &&
+        (bta_av_cb.p_scb[xx]->chnl == chnl) &&
+        (bta_av_cb.p_scb[xx]->app_id == app_id)) {
+      log::verbose("found at: {}", xx);
+      return bta_av_cb.p_scb[xx];
+    }
+  }
+
+  return nullptr;
+}
+
 void bta_av_free_scb(tBTA_AV_SCB* p_scb) {
   if (p_scb == nullptr) return;
   uint8_t scb_index = p_scb->hdi;
-  CHECK(scb_index < BTA_AV_NUM_STRS);
+  log::assert_that(scb_index < BTA_AV_NUM_STRS,
+                   "assert failed: scb_index < BTA_AV_NUM_STRS");
 
-  CHECK(p_scb == bta_av_cb.p_scb[scb_index]);
+  log::assert_that(p_scb == bta_av_cb.p_scb[scb_index],
+                   "assert failed: p_scb == bta_av_cb.p_scb[scb_index]");
   bta_av_cb.p_scb[scb_index] = nullptr;
   alarm_free(p_scb->avrc_ct_timer);
+  list_free(p_scb->a2dp_list);
+  p_scb->a2dp_list = NULL;
   // TODO: After tBTA_AV_SCB is changed to a proper class, the entry
   // here should be de-allocated by C++ 'delete' statement.
   osi_free(p_scb);
@@ -303,18 +355,17 @@ void tBTA_AV_SCB::OnConnected(const RawAddress& peer_address) {
   peer_address_ = peer_address;
 
   if (peer_address.IsEmpty()) {
-    LOG_ERROR("%s: Invalid peer address: %s", __func__,
-              ADDRESS_TO_LOGGABLE_CSTR(peer_address));
+    log::error("Invalid peer address: {}", peer_address);
     return;
   }
 
   // Read and restore the AVDTP version from local storage
   uint16_t avdtp_version = 0;
   size_t version_value_size = sizeof(avdtp_version);
-  if (!btif_config_get_bin(peer_address_.ToString(), AVDTP_VERSION_CONFIG_KEY,
+  if (!btif_config_get_bin(peer_address_.ToString(),
+                           BTIF_STORAGE_KEY_AVDTP_VERSION,
                            (uint8_t*)&avdtp_version, &version_value_size)) {
-    LOG_WARN("%s: Failed to read cached peer AVDTP version for %s", __func__,
-             ADDRESS_TO_LOGGABLE_CSTR(peer_address_));
+    log::warn("Failed to read cached peer AVDTP version for {}", peer_address_);
   } else {
     SetAvdtpVersion(avdtp_version);
   }
@@ -327,13 +378,13 @@ void tBTA_AV_SCB::OnDisconnected() {
 
 void tBTA_AV_SCB::SetAvdtpVersion(uint16_t avdtp_version) {
   avdtp_version_ = avdtp_version;
-  LOG_INFO("%s: AVDTP version for %s set to 0x%x", __func__,
-           ADDRESS_TO_LOGGABLE_CSTR(peer_address_), avdtp_version_);
+  log::info("AVDTP version for {} set to 0x{:x}", peer_address_,
+            avdtp_version_);
 }
 
 /*******************************************************************************
  ******************************************************************************/
-void bta_av_conn_cback(UNUSED_ATTR uint8_t handle, const RawAddress& bd_addr,
+void bta_av_conn_cback(uint8_t /* handle */, const RawAddress& bd_addr,
                        uint8_t event, tAVDT_CTRL* p_data, uint8_t scb_index) {
   uint16_t evt = 0;
   tBTA_AV_SCB* p_scb = NULL;
@@ -345,8 +396,7 @@ void bta_av_conn_cback(UNUSED_ATTR uint8_t handle, const RawAddress& bd_addr,
     if (event == AVDT_DISCONNECT_IND_EVT) {
       p_scb = bta_av_addr_to_scb(bd_addr);
     } else if (event == AVDT_CONNECT_IND_EVT) {
-      APPL_TRACE_DEBUG("%s: CONN_IND is ACP:%d", __func__,
-                       p_data->hdr.err_param);
+      log::verbose("CONN_IND is ACP:{}", p_data->hdr.err_param);
     }
 
     tBTA_AV_STR_MSG* p_msg =
@@ -357,11 +407,9 @@ void bta_av_conn_cback(UNUSED_ATTR uint8_t handle, const RawAddress& bd_addr,
     p_msg->bd_addr = bd_addr;
     p_msg->scb_index = scb_index;
     if (p_scb) {
-      APPL_TRACE_DEBUG("%s: bta_handle x%x, role x%x", __func__, p_scb->hndl,
-                       p_scb->role);
+      log::verbose("bta_handle x{:x}, role x{:x}", p_scb->hndl, p_scb->role);
     }
-    LOG_INFO("%s: conn_cback bd_addr: %s", __func__,
-             ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+    log::info("conn_cback bd_addr: {}, scb_index: {}", bd_addr, scb_index);
     bta_sys_sendmsg(p_msg);
   }
 }
@@ -375,9 +423,9 @@ void bta_av_conn_cback(UNUSED_ATTR uint8_t handle, const RawAddress& bd_addr,
  * Returns          void
  *
  ******************************************************************************/
-static void bta_av_a2dp_report_cback(UNUSED_ATTR uint8_t handle,
-                                     UNUSED_ATTR AVDT_REPORT_TYPE type,
-                                     UNUSED_ATTR tAVDT_REPORT_DATA* p_data) {
+static void bta_av_a2dp_report_cback(uint8_t /* handle */,
+                                     AVDT_REPORT_TYPE /* type */,
+                                     tAVDT_REPORT_DATA* /* p_data */) {
   /* Do not need to handle report data for now.
    * This empty function is here for conformance reasons. */
 }
@@ -394,41 +442,42 @@ static void bta_av_a2dp_report_cback(UNUSED_ATTR uint8_t handle,
  *
  ******************************************************************************/
 static void bta_av_api_register(tBTA_AV_DATA* p_data) {
-  tBTA_AV_REGISTER registr;
+  tBTA_AV_REGISTER reg_data;
   tBTA_AV_SCB* p_scb; /* stream control block */
   AvdtpRcb reg;
   AvdtpStreamConfig avdtp_stream_config;
   char* p_service_name;
   tBTA_UTL_COD cod;
+  uint8_t local_role = 0;
 
   if (bta_av_cb.disabling || (bta_av_cb.features == 0)) {
-    APPL_TRACE_WARNING(
-        "%s: AV instance (features=%#x, reg_audio=%#x) is not "
-        "ready for app_id %d",
-        __func__, bta_av_cb.features, bta_av_cb.reg_audio,
-        p_data->api_reg.app_id);
+    log::warn(
+        "AV instance (features={:#x}, reg_audio={:#x}) is not ready for app_id "
+        "{}",
+        bta_av_cb.features, bta_av_cb.reg_audio, p_data->api_reg.app_id);
     tBTA_AV_API_REG* p_buf =
         (tBTA_AV_API_REG*)osi_malloc(sizeof(tBTA_AV_API_REG));
     memcpy(p_buf, &p_data->api_reg, sizeof(tBTA_AV_API_REG));
     bta_sys_sendmsg_delayed(
-#if BASE_VER < 931007
-        p_buf, base::TimeDelta::FromMilliseconds(kEnablingAttemptsIntervalMs));
-#else
-        p_buf, base::Milliseconds(kEnablingAttemptsIntervalMs));
-#endif
+        p_buf, std::chrono::milliseconds(kEnablingAttemptsIntervalMs));
     return;
   }
 
   avdtp_stream_config.Reset();
+  if (btif_av_src_sink_coexist_enabled()) {
+    local_role = (p_data->api_reg.service_uuid == UUID_SERVCLASS_AUDIO_SINK)
+                     ? AVDT_TSEP_SNK
+                     : AVDT_TSEP_SRC;
+  }
 
-  registr.status = BTA_AV_FAIL_RESOURCES;
-  registr.app_id = p_data->api_reg.app_id;
-  registr.chnl = (tBTA_AV_CHNL)p_data->hdr.layer_specific;
+  reg_data.status = BTA_AV_FAIL_RESOURCES;
+  reg_data.app_id = p_data->api_reg.app_id;
+  reg_data.chnl = (tBTA_AV_CHNL)p_data->hdr.layer_specific;
 
   char avrcp_version[PROPERTY_VALUE_MAX] = {0};
   osi_property_get(AVRCP_VERSION_PROPERTY, avrcp_version,
                    AVRCP_DEFAULT_VERSION);
-  LOG_INFO("%s: AVRCP version used for sdp: \"%s\"", __func__, avrcp_version);
+  log::info("AVRCP version used for sdp: \"{}\"", avrcp_version);
 
   uint16_t profile_initialized = p_data->api_reg.service_uuid;
   if (profile_initialized == UUID_SERVCLASS_AUDIO_SINK) {
@@ -437,31 +486,39 @@ static void bta_av_api_register(tBTA_AV_DATA* p_data) {
     p_bta_av_cfg = &bta_av_cfg;
 
     if (!strncmp(AVRCP_1_3_STRING, avrcp_version, sizeof(AVRCP_1_3_STRING))) {
-      LOG_INFO("%s: AVRCP 1.3 capabilites used", __func__);
+      log::info("AVRCP 1.3 capabilites used");
       p_bta_av_cfg = &bta_av_cfg_compatibility;
     }
   }
 
-  APPL_TRACE_DEBUG("%s: profile: 0x%x", __func__, profile_initialized);
+  log::verbose("profile: 0x{:x}", profile_initialized);
   if (p_bta_av_cfg == NULL) {
-    APPL_TRACE_ERROR("%s: AV configuration is null!", __func__);
+    log::error("AV configuration is null!");
     return;
   }
 
   do {
-    p_scb = bta_av_alloc_scb(registr.chnl);
+    p_scb = nullptr;
+    if (btif_av_src_sink_coexist_enabled()) {
+      p_scb = bta_av_find_scb(reg_data.chnl, reg_data.app_id);
+    }
+    if (p_scb == nullptr) {
+      p_scb = bta_av_alloc_scb(reg_data.chnl);
+    }
     if (p_scb == NULL) {
-      APPL_TRACE_ERROR("%s: failed to alloc SCB", __func__);
+      log::error("failed to alloc SCB");
       break;
     }
 
-    registr.hndl = p_scb->hndl;
-    p_scb->app_id = registr.app_id;
+    reg_data.hndl = p_scb->hndl;
+    p_scb->app_id = reg_data.app_id;
 
     /* initialize the stream control block */
-    registr.status = BTA_AV_SUCCESS;
+    reg_data.status = BTA_AV_SUCCESS;
 
-    if (bta_av_cb.reg_audio == 0) {
+    if ((btif_av_src_sink_coexist_enabled() &&
+         !(bta_av_cb.reg_role & (1 << local_role))) ||
+        (!btif_av_src_sink_coexist_enabled() && bta_av_cb.reg_audio == 0)) {
       /* the first channel registered. register to AVDTP */
       reg.ctrl_mtu = 672;
       reg.ret_tout = BTA_AV_RET_TOUT;
@@ -481,11 +538,11 @@ static void bta_av_api_register(tBTA_AV_DATA* p_data) {
          * absolute volume.
          */
         if (is_new_avrcp_enabled()) {
-          APPL_TRACE_DEBUG("%s: newavrcp is the owner of the AVRCP Target SDP "
-              "record. Don't create the SDP record", __func__);
+          log::verbose(
+              "newavrcp is the owner of the AVRCP Target SDP record. Don't "
+              "create the SDP record");
         } else {
-          APPL_TRACE_DEBUG("%s: newavrcp is not enabled. Create SDP record",
-              __func__);
+          log::verbose("newavrcp is not enabled. Create SDP record");
 
           uint16_t profile_version = AVRC_REV_1_0;
           if (!strncmp(AVRCP_1_6_STRING, avrcp_version,
@@ -500,11 +557,18 @@ static void bta_av_api_register(tBTA_AV_DATA* p_data) {
           } else {
             profile_version = AVRC_REV_1_4;
           }
-
-          bta_ar_reg_avrc(
-              UUID_SERVCLASS_AV_REM_CTRL_TARGET, "AV Remote Control Target", NULL,
-              p_bta_av_cfg->avrc_tg_cat,
-              (bta_av_cb.features & BTA_AV_FEAT_BROWSE), profile_version);
+          if (btif_av_src_sink_coexist_enabled()) {
+            bta_ar_reg_avrc_for_src_sink_coexist(
+                UUID_SERVCLASS_AV_REM_CTRL_TARGET, "AV Remote Control Target",
+                NULL, p_bta_av_cfg->avrc_tg_cat,
+                static_cast<tBTA_SYS_ID>(BTA_ID_AV + local_role),
+                (bta_av_cb.features & BTA_AV_FEAT_BROWSE), profile_version);
+          } else {
+            bta_ar_reg_avrc(
+                UUID_SERVCLASS_AV_REM_CTRL_TARGET, "AV Remote Control Target",
+                NULL, p_bta_av_cfg->avrc_tg_cat,
+                (bta_av_cb.features & BTA_AV_FEAT_BROWSE), profile_version);
+          }
         }
       }
 
@@ -522,8 +586,7 @@ static void bta_av_api_register(tBTA_AV_DATA* p_data) {
     if (!(bta_av_cb.features & BTA_AV_FEAT_PROTECT)) {
       avdtp_stream_config.nsc_mask |= AvdtpStreamConfig::AVDT_NSC_SECURITY;
     }
-    APPL_TRACE_DEBUG("%s: nsc_mask: 0x%x", __func__,
-                     avdtp_stream_config.nsc_mask);
+    log::verbose("nsc_mask: 0x{:x}", avdtp_stream_config.nsc_mask);
 
     if (p_data->api_reg.p_service_name[0] == 0) {
       p_service_name = NULL;
@@ -564,9 +627,14 @@ static void bta_av_api_register(tBTA_AV_DATA* p_data) {
       codec_index_max = BTAV_A2DP_CODEC_INDEX_SINK_MAX;
     }
 
-    /* Initialize handles to zero */
-    for (int xx = 0; xx < BTAV_A2DP_CODEC_INDEX_MAX; xx++) {
-      p_scb->seps[xx].av_handle = 0;
+    if (btif_av_src_sink_coexist_enabled()) {
+      for (int xx = codec_index_min; xx < codec_index_max; xx++) {
+        p_scb->seps[xx].av_handle = 0;
+      }
+    } else {
+      for (int xx = 0; xx < BTAV_A2DP_CODEC_INDEX_MAX; xx++) {
+        p_scb->seps[xx].av_handle = 0;
+      }
     }
 
     /* keep the configuration in the stream control block */
@@ -575,6 +643,7 @@ static void bta_av_api_register(tBTA_AV_DATA* p_data) {
       btav_a2dp_codec_index_t codec_index =
           static_cast<btav_a2dp_codec_index_t>(i);
       if (!bta_av_co_is_supported_codec(codec_index)) {
+        log::warn("Skipping the codec index for codec index {}", i);
         continue;
       }
       if (!(*bta_av_a2dp_cos.init)(codec_index, &avdtp_stream_config.cfg)) {
@@ -582,9 +651,9 @@ static void bta_av_api_register(tBTA_AV_DATA* p_data) {
       }
       if (AVDT_CreateStream(p_scb->app_id, &p_scb->seps[codec_index].av_handle,
                             avdtp_stream_config) != AVDT_SUCCESS) {
-        APPL_TRACE_WARNING(
-            "%s: bta_handle=0x%x (app_id %d) failed to alloc an SEP index:%d",
-            __func__, p_scb->hndl, p_scb->app_id, codec_index);
+        log::warn(
+            "bta_handle=0x{:x} (app_id {}) failed to alloc an SEP index:{}",
+            p_scb->hndl, p_scb->app_id, codec_index);
         continue;
       }
       /* Save a copy of the codec */
@@ -601,18 +670,21 @@ static void bta_av_api_register(tBTA_AV_DATA* p_data) {
         p_scb->seps[codec_index].p_app_sink_data_cback = NULL;
       }
     }
-
-    if (!bta_av_cb.reg_audio) {
+    if ((btif_av_src_sink_coexist_enabled() &&
+         !(bta_av_cb.reg_role & (1 << local_role))) ||
+        (!btif_av_src_sink_coexist_enabled() && !bta_av_cb.reg_audio)) {
       bta_av_cb.sdp_a2dp_handle = 0;
       bta_av_cb.sdp_a2dp_snk_handle = 0;
       if (profile_initialized == UUID_SERVCLASS_AUDIO_SOURCE) {
         /* create the SDP records on the 1st audio channel */
-        bta_av_cb.sdp_a2dp_handle = SDP_CreateRecord();
+        bta_av_cb.sdp_a2dp_handle =
+            get_legacy_stack_sdp_api()->handle.SDP_CreateRecord();
         A2DP_AddRecord(UUID_SERVCLASS_AUDIO_SOURCE, p_service_name, NULL,
                        A2DP_SUPF_PLAYER, bta_av_cb.sdp_a2dp_handle);
         bta_sys_add_uuid(UUID_SERVCLASS_AUDIO_SOURCE);
       } else if (profile_initialized == UUID_SERVCLASS_AUDIO_SINK) {
-        bta_av_cb.sdp_a2dp_snk_handle = SDP_CreateRecord();
+        bta_av_cb.sdp_a2dp_snk_handle =
+            get_legacy_stack_sdp_api()->handle.SDP_CreateRecord();
         A2DP_AddRecord(UUID_SERVCLASS_AUDIO_SINK, p_service_name, NULL,
                        A2DP_SUPF_PLAYER, bta_av_cb.sdp_a2dp_snk_handle);
         bta_sys_add_uuid(UUID_SERVCLASS_AUDIO_SINK);
@@ -635,27 +707,58 @@ static void bta_av_api_register(tBTA_AV_DATA* p_data) {
          *
          * We create 1.4 for SINK since we support browsing.
          */
-        if (profile_initialized == UUID_SERVCLASS_AUDIO_SOURCE &&
-            !is_new_avrcp_enabled()) {
-          bta_ar_reg_avrc(UUID_SERVCLASS_AV_REMOTE_CONTROL, NULL, NULL,
-                          p_bta_av_cfg->avrc_ct_cat,
-                          (bta_av_cb.features & BTA_AV_FEAT_BROWSE),
-                          AVRC_REV_1_3);
-        } else if (profile_initialized == UUID_SERVCLASS_AUDIO_SINK) {
-          bta_ar_reg_avrc(UUID_SERVCLASS_AV_REMOTE_CONTROL, NULL, NULL,
-                          p_bta_av_cfg->avrc_ct_cat,
-                          (bta_av_cb.features & BTA_AV_FEAT_BROWSE),
-                          AVRC_REV_1_6);
+        if (btif_av_src_sink_coexist_enabled()) {
+          if (profile_initialized == UUID_SERVCLASS_AUDIO_SOURCE) {
+            bta_ar_reg_avrc_for_src_sink_coexist(
+                UUID_SERVCLASS_AV_REMOTE_CONTROL, NULL, NULL,
+                p_bta_av_cfg->avrc_ct_cat, BTA_ID_AV,
+                (bta_av_cb.features & BTA_AV_FEAT_BROWSE), AVRC_REV_1_5);
+          } else if (profile_initialized == UUID_SERVCLASS_AUDIO_SINK)
+            bta_ar_reg_avrc_for_src_sink_coexist(
+                UUID_SERVCLASS_AV_REMOTE_CONTROL, NULL, NULL,
+                p_bta_av_cfg->avrc_ct_cat, BTA_ID_AVK,
+                (bta_av_cb.features & BTA_AV_FEAT_BROWSE), AVRC_REV_1_5);
+        } else {
+          if (profile_initialized == UUID_SERVCLASS_AUDIO_SOURCE &&
+              !is_new_avrcp_enabled()) {
+            bta_ar_reg_avrc(UUID_SERVCLASS_AV_REMOTE_CONTROL, NULL, NULL,
+                            p_bta_av_cfg->avrc_ct_cat,
+                            (bta_av_cb.features & BTA_AV_FEAT_BROWSE),
+                            AVRC_REV_1_3);
+          } else if (profile_initialized == UUID_SERVCLASS_AUDIO_SINK)
+            bta_ar_reg_avrc(UUID_SERVCLASS_AV_REMOTE_CONTROL, NULL, NULL,
+                            p_bta_av_cfg->avrc_ct_cat,
+                            (bta_av_cb.features & BTA_AV_FEAT_BROWSE),
+                            AVRC_REV_1_6);
         }
       }
     }
     bta_av_cb.reg_audio |= BTA_AV_HNDL_TO_MSK(p_scb->hdi);
-    APPL_TRACE_DEBUG("%s: reg_audio: 0x%x", __func__, bta_av_cb.reg_audio);
+    log::verbose("reg_audio: 0x{:x}", bta_av_cb.reg_audio);
   } while (0);
+
+  if (btif_av_src_sink_coexist_enabled()) {
+    bta_av_cb.reg_role |= (1 << local_role);
+    reg_data.peer_sep = (profile_initialized == UUID_SERVCLASS_AUDIO_SOURCE)
+                           ? AVDT_TSEP_SNK
+                           : AVDT_TSEP_SRC;
+
+    /* there are too much check depend on it's only source */
+    if ((profile_initialized == UUID_SERVCLASS_AUDIO_SINK) &&
+        (bta_av_cb.reg_role & (1 << AVDT_TSEP_SRC))) {
+      p_bta_av_cfg = &bta_av_cfg;
+
+      if (!strncmp(AVRCP_1_3_STRING, avrcp_version,
+                   sizeof(AVRCP_1_3_STRING))) {  // ver if need
+        log::verbose("AVRCP 1.3 capabilites used");
+        p_bta_av_cfg = &bta_av_cfg_compatibility;
+      }
+    }
+  }
 
   /* call callback with register event */
   tBTA_AV bta_av_data;
-  bta_av_data.registr = registr;
+  bta_av_data.reg = reg_data;
   (*bta_av_cb.p_cback)(BTA_AV_REGISTER_EVT, &bta_av_data);
 }
 
@@ -714,7 +817,7 @@ static void bta_av_ci_data(tBTA_AV_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-static void bta_av_rpc_conn(UNUSED_ATTR tBTA_AV_DATA* p_data) {}
+static void bta_av_rpc_conn(tBTA_AV_DATA* /* p_data */) {}
 
 /*******************************************************************************
  *
@@ -743,8 +846,6 @@ static void bta_av_api_to_ssm(tBTA_AV_DATA* p_data) {
  *
  * Description      if this is audio channel, check if more than one audio
  *                  channel is connected & already started.
- *                  This function needs to be kept very similar to
- *                  bta_av_chk_2nd_start
  *
  * Returns          true, if need api_start
  *
@@ -770,12 +871,11 @@ bool bta_av_chk_start(tBTA_AV_SCB* p_scb) {
     }
   }
 
-  LOG_INFO(
-      "%s: peer %s channel:%d bta_av_cb.audio_open_cnt:%d role:0x%x "
-      "features:0x%x start:%s",
-      __func__, ADDRESS_TO_LOGGABLE_CSTR(p_scb->PeerAddress()), p_scb->chnl,
-      bta_av_cb.audio_open_cnt, p_scb->role, bta_av_cb.features,
-      logbool(start).c_str());
+  log::info(
+      "peer {} channel:{} bta_av_cb.audio_open_cnt:{} role:0x{:x} "
+      "features:0x{:x} start:{}",
+      p_scb->PeerAddress(), p_scb->chnl, bta_av_cb.audio_open_cnt, p_scb->role,
+      bta_av_cb.features, start);
   return start;
 }
 
@@ -794,7 +894,7 @@ void bta_av_restore_switch(void) {
   int i;
   uint8_t mask;
 
-  APPL_TRACE_DEBUG("%s: reg_audio: 0x%x", __func__, bta_av_cb.reg_audio);
+  log::verbose("reg_audio: 0x{:x}", bta_av_cb.reg_audio);
   for (i = 0; i < BTA_AV_NUM_STRS; i++) {
     mask = BTA_AV_HNDL_TO_MSK(i);
     if (p_cb->conn_audio == mask) {
@@ -815,17 +915,16 @@ void bta_av_restore_switch(void) {
  * Returns          (BTA_SYS_ROLE_CHANGE, new_role, hci_status, p_bda)
  *
  ******************************************************************************/
-static void bta_av_sys_rs_cback(UNUSED_ATTR tBTA_SYS_CONN_STATUS status,
-                                uint8_t id, uint8_t app_id,
+static void bta_av_sys_rs_cback(tBTA_SYS_CONN_STATUS /* status */,
+                                tHCI_ROLE new_role, tHCI_STATUS hci_status,
                                 const RawAddress& peer_addr) {
   int i;
   tBTA_AV_SCB* p_scb = NULL;
   tHCI_ROLE cur_role;
   uint8_t peer_idx = 0;
 
-  APPL_TRACE_DEBUG(
-      "%s: peer %s new_role:%d hci_status:0x%x bta_av_cb.rs_idx:%d", __func__,
-      ADDRESS_TO_LOGGABLE_CSTR(peer_addr), id, app_id, bta_av_cb.rs_idx);
+  log::verbose("peer {} new_role:{} hci_status:0x{:x} bta_av_cb.rs_idx:{}",
+               peer_addr, new_role, hci_status, bta_av_cb.rs_idx);
 
   for (i = 0; i < BTA_AV_NUM_STRS; i++) {
     /* loop through all the SCBs to find matching peer addresses and report the
@@ -835,14 +934,13 @@ static void bta_av_sys_rs_cback(UNUSED_ATTR tBTA_SYS_CONN_STATUS status,
     if (p_scb && p_scb->PeerAddress() == peer_addr) {
       tBTA_AV_ROLE_RES* p_buf =
           (tBTA_AV_ROLE_RES*)osi_malloc(sizeof(tBTA_AV_ROLE_RES));
-      APPL_TRACE_DEBUG(
-          "%s: peer %s found: new_role:%d, hci_status:0x%x bta_handle:0x%x",
-          __func__, ADDRESS_TO_LOGGABLE_CSTR(peer_addr), id, app_id,
-          p_scb->hndl);
+      log::verbose(
+          "peer {} found: new_role:{}, hci_status:0x{:x} bta_handle:0x{:x}",
+          peer_addr, new_role, hci_status, p_scb->hndl);
       p_buf->hdr.event = BTA_AV_ROLE_CHANGE_EVT;
       p_buf->hdr.layer_specific = p_scb->hndl;
-      p_buf->new_role = id;
-      p_buf->hci_status = app_id;
+      p_buf->new_role = new_role;
+      p_buf->hci_status = hci_status;
       bta_sys_sendmsg(p_buf);
 
       peer_idx = p_scb->hdi + 1; /* Handle index for the peer_addr */
@@ -850,7 +948,7 @@ static void bta_av_sys_rs_cback(UNUSED_ATTR tBTA_SYS_CONN_STATUS status,
   }
 
   /* restore role switch policy, if role switch failed */
-  if ((HCI_SUCCESS != app_id) &&
+  if ((HCI_SUCCESS != hci_status) &&
       (BTM_GetRole(peer_addr, &cur_role) == BTM_SUCCESS) &&
       (cur_role == HCI_ROLE_PERIPHERAL)) {
     BTM_unblock_role_switch_for(peer_addr);
@@ -864,18 +962,17 @@ static void bta_av_sys_rs_cback(UNUSED_ATTR tBTA_SYS_CONN_STATUS status,
       p_scb = bta_av_cb.p_scb[bta_av_cb.rs_idx - 1];
     }
     if (p_scb && p_scb->q_tag == BTA_AV_Q_TAG_OPEN) {
-      APPL_TRACE_DEBUG("%s: peer %s rs_idx:%d, bta_handle:0x%x q_tag:%d",
-                       __func__, ADDRESS_TO_LOGGABLE_CSTR(p_scb->PeerAddress()),
-                       bta_av_cb.rs_idx, p_scb->hndl, p_scb->q_tag);
+      log::verbose("peer {} rs_idx:{}, bta_handle:0x{:x} q_tag:{}",
+                   p_scb->PeerAddress(), bta_av_cb.rs_idx, p_scb->hndl,
+                   p_scb->q_tag);
 
-      if (HCI_SUCCESS == app_id || HCI_ERR_NO_CONNECTION == app_id) {
+      if (HCI_SUCCESS == hci_status || HCI_ERR_NO_CONNECTION == hci_status) {
         p_scb->q_info.open.switch_res = BTA_AV_RS_OK;
       } else {
-        APPL_TRACE_ERROR(
-            "%s: peer %s (p_scb peer %s) role switch failed: new_role:%d "
-            "hci_status:0x%x",
-            __func__, ADDRESS_TO_LOGGABLE_CSTR(peer_addr),
-            ADDRESS_TO_LOGGABLE_CSTR(p_scb->PeerAddress()), id, app_id);
+        log::error(
+            "peer {} (p_scb peer {}) role switch failed: new_role:{} "
+            "hci_status:0x{:x}",
+            peer_addr, p_scb->PeerAddress(), new_role, hci_status);
         p_scb->q_info.open.switch_res = BTA_AV_RS_FAIL;
       }
 
@@ -898,19 +995,19 @@ static void bta_av_sys_rs_cback(UNUSED_ATTR tBTA_SYS_CONN_STATUS status,
  * Returns          void
  *
  ******************************************************************************/
-static void bta_av_sco_chg_cback(tBTA_SYS_CONN_STATUS status, uint8_t id,
-                                 UNUSED_ATTR uint8_t app_id,
-                                 UNUSED_ATTR const RawAddress& peer_addr) {
+static void bta_av_sco_chg_cback(tBTA_SYS_CONN_STATUS status,
+                                 uint8_t num_sco_links, uint8_t /* app_id */,
+                                 const RawAddress& peer_addr) {
   tBTA_AV_SCB* p_scb;
   int i;
   tBTA_AV_API_STOP stop;
 
-  LOG(INFO) << __func__ << ": status=" << bta_sys_conn_status_text(status)
-            << ", num_links=" << +id;
-  if (id) {
+  log::info("status={}, num_links={}", bta_sys_conn_status_text(status),
+            num_sco_links);
+  if (num_sco_links) {
     bta_av_cb.sco_occupied = true;
-    LOG_DEBUG("SCO occupied peer:%s status:%s", ADDRESS_TO_LOGGABLE_CSTR(peer_addr),
-              bta_sys_conn_status_text(status).c_str());
+    log::debug("SCO occupied peer:{} status:{}", peer_addr,
+               bta_sys_conn_status_text(status));
 
     if (bta_av_cb.features & BTA_AV_FEAT_NO_SCO_SSPD) {
       return;
@@ -921,7 +1018,7 @@ static void bta_av_sco_chg_cback(tBTA_SYS_CONN_STATUS status, uint8_t id,
       p_scb = bta_av_cb.p_scb[i];
 
       if (p_scb && p_scb->co_started && (!p_scb->sco_suspend)) {
-        VLOG(1) << __func__ << ": suspending scb:" << i;
+        log::verbose("suspending scb:{}", i);
         /* scb is used and started, not suspended automatically */
         p_scb->sco_suspend = true;
         stop.flush = false;
@@ -932,8 +1029,8 @@ static void bta_av_sco_chg_cback(tBTA_SYS_CONN_STATUS status, uint8_t id,
     }
   } else {
     bta_av_cb.sco_occupied = false;
-    LOG_DEBUG("SCO unoccupied peer:%s status:%s", ADDRESS_TO_LOGGABLE_CSTR(peer_addr),
-              bta_sys_conn_status_text(status).c_str());
+    log::debug("SCO unoccupied peer:{} status:{}", peer_addr,
+               bta_sys_conn_status_text(status));
 
     if (bta_av_cb.features & BTA_AV_FEAT_NO_SCO_SSPD) {
       return;
@@ -944,7 +1041,7 @@ static void bta_av_sco_chg_cback(tBTA_SYS_CONN_STATUS status, uint8_t id,
 
       if (p_scb && p_scb->sco_suspend) /* scb is used and suspended for SCO */
       {
-        VLOG(1) << __func__ << ": starting scb:" << i;
+        log::verbose("starting scb:{}", i);
         bta_av_ssm_execute(p_scb, BTA_AV_AP_START_EVT, NULL);
       }
     }
@@ -1017,17 +1114,16 @@ bool bta_av_switch_if_needed(tBTA_AV_SCB* p_scb) {
 bool bta_av_link_role_ok(tBTA_AV_SCB* p_scb, uint8_t bits) {
   tHCI_ROLE role;
   if (BTM_GetRole(p_scb->PeerAddress(), &role) != BTM_SUCCESS) {
-    LOG_WARN("Unable to find link role for device:%s",
-             ADDRESS_TO_LOGGABLE_CSTR(p_scb->PeerAddress()));
+    log::warn("Unable to find link role for device:{}", p_scb->PeerAddress());
     return true;
   }
 
   if (role != HCI_ROLE_CENTRAL && (A2DP_BitsSet(bta_av_cb.conn_audio) > bits)) {
-    LOG_INFO(
-        "Switch link role to central peer:%s bta_handle:0x%x current_role:%s"
-        " conn_audio:0x%x bits:%d features:0x%x",
-        ADDRESS_TO_LOGGABLE_CSTR(p_scb->PeerAddress()), p_scb->hndl,
-        RoleText(role).c_str(), bta_av_cb.conn_audio, bits, bta_av_cb.features);
+    log::info(
+        "Switch link role to central peer:{} bta_handle:0x{:x} current_role:{} "
+        "conn_audio:0x{:x} bits:{} features:0x{:x}",
+        p_scb->PeerAddress(), p_scb->hndl, RoleText(role), bta_av_cb.conn_audio,
+        bits, bta_av_cb.features);
     const tBTM_STATUS status = BTM_SwitchRoleToCentral(p_scb->PeerAddress());
     switch (status) {
       case BTM_CMD_STARTED:
@@ -1037,15 +1133,14 @@ bool bta_av_link_role_ok(tBTA_AV_SCB* p_scb, uint8_t bits) {
         // Role switch can never happen, but indicate to caller
         // a result such that a timer will not start to repeatedly
         // try something not possible.
-        LOG_ERROR("Link can never role switch to central device:%s",
-                  ADDRESS_TO_LOGGABLE_CSTR(p_scb->PeerAddress()));
+        log::error("Link can never role switch to central device:{}",
+                   p_scb->PeerAddress());
         break;
       default:
         /* can not switch role on SCB - start the timer on SCB */
         p_scb->wait |= BTA_AV_WAIT_ROLE_SW_RES_START;
-        LOG_ERROR("Unable to switch role to central device:%s error:%s",
-                  ADDRESS_TO_LOGGABLE_CSTR(p_scb->PeerAddress()),
-                  btm_status_text(status).c_str());
+        log::error("Unable to switch role to central device:{} error:{}",
+                   p_scb->PeerAddress(), btm_status_text(status));
         return false;
     }
   }
@@ -1145,6 +1240,9 @@ static void bta_av_non_state_machine_event(uint16_t event,
     case BTA_AV_API_STOP_EVT:
       bta_av_api_to_ssm(p_data);
       break;
+    case BTA_AV_API_PEER_SEP_EVT:
+      bta_av_api_set_peer_sep(p_data);
+      break;
   }
 }
 
@@ -1204,9 +1302,9 @@ static void bta_av_better_state_machine(tBTA_AV_CB* p_cb, uint16_t event,
 }
 
 void bta_av_sm_execute(tBTA_AV_CB* p_cb, uint16_t event, tBTA_AV_DATA* p_data) {
-  APPL_TRACE_EVENT("%s: AV event=0x%x(%s) state=%d(%s)", __func__, event,
-                   bta_av_evt_code(event), p_cb->state,
-                   bta_av_st_code(p_cb->state));
+  log::verbose("AV event=0x{:x}({}) state={}({})", event,
+               bta_av_evt_code(event), p_cb->state,
+               bta_av_st_code(p_cb->state));
   bta_av_better_state_machine(p_cb, event, p_data);
 }
 
@@ -1220,22 +1318,22 @@ void bta_av_sm_execute(tBTA_AV_CB* p_cb, uint16_t event, tBTA_AV_DATA* p_data) {
  * Returns          bool
  *
  ******************************************************************************/
-bool bta_av_hdl_event(BT_HDR_RIGID* p_msg) {
+bool bta_av_hdl_event(const BT_HDR_RIGID* p_msg) {
   if (p_msg->event > BTA_AV_LAST_EVT) {
     return true; /* to free p_msg */
   }
   if (p_msg->event >= BTA_AV_FIRST_NSM_EVT) {
-    APPL_TRACE_VERBOSE("%s: AV nsm event=0x%x(%s)", __func__, p_msg->event,
-                       bta_av_evt_code(p_msg->event));
+    log::verbose("AV nsm event=0x{:x}({})", p_msg->event,
+                 bta_av_evt_code(p_msg->event));
     bta_av_non_state_machine_event(p_msg->event, (tBTA_AV_DATA*)p_msg);
   } else if (p_msg->event >= BTA_AV_FIRST_SM_EVT &&
              p_msg->event <= BTA_AV_LAST_SM_EVT) {
-    APPL_TRACE_VERBOSE("%s: AV sm event=0x%x(%s)", __func__, p_msg->event,
-                       bta_av_evt_code(p_msg->event));
+    log::verbose("AV sm event=0x{:x}({})", p_msg->event,
+                 bta_av_evt_code(p_msg->event));
     /* state machine events */
     bta_av_sm_execute(&bta_av_cb, p_msg->event, (tBTA_AV_DATA*)p_msg);
   } else {
-    APPL_TRACE_VERBOSE("%s: bta_handle=0x%x", __func__, p_msg->layer_specific);
+    log::verbose("bta_handle=0x{:x}", p_msg->layer_specific);
     /* stream state machine events */
     bta_av_ssm_execute(bta_av_hndl_to_scb(p_msg->layer_specific), p_msg->event,
                        (tBTA_AV_DATA*)p_msg);
@@ -1406,8 +1504,6 @@ const char* bta_av_evt_code(uint16_t evt_code) {
 }
 
 void bta_debug_av_dump(int fd) {
-  if (appl_trace_level < BT_TRACE_LEVEL_DEBUG) return;
-
   dprintf(fd, "\nBTA AV State:\n");
   dprintf(fd, "  State Machine State: %s\n", bta_av_st_code(bta_av_cb.state));
   dprintf(fd, "  SDP A2DP source handle: %d\n", bta_av_cb.sdp_a2dp_handle);

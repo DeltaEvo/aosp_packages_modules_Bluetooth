@@ -47,17 +47,11 @@ class BassUtils {
     }
 
     static void log(String msg) {
-        if (BassConstants.BASS_DBG) {
-            Log.d(TAG, msg);
-        }
+        Log.d(TAG, msg);
     }
 
     static void printByteArray(byte[] array) {
         log("Entire byte Array as string: " + Arrays.toString(array));
-        log("printitng byte by bte");
-        for (int i = 0; i < array.length; i++) {
-            log("array[" + i + "] :" + Byte.toUnsignedInt(array[i]));
-        }
     }
 
     static void reverse(byte[] address) {

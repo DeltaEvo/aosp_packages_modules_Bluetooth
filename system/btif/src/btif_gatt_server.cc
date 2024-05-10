@@ -27,50 +27,47 @@
 #define LOG_TAG "bt_btif_gatt"
 
 #include <base/functional/bind.h>
-#include <errno.h>
+#include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 #include <hardware/bluetooth.h>
 #include <hardware/bt_gatt.h>
-#include <stdio.h>
+#include <hardware/bt_gatt_types.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "bta_api.h"
+#include "bta/include/bta_sec_api.h"
 #include "bta_gatt_api.h"
 #include "btif_common.h"
-#include "btif_config.h"
-#include "btif_dm.h"
 #include "btif_gatt.h"
 #include "btif_gatt_util.h"
-#include "btif_storage.h"
-#include "btif_util.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
-#include "stack/include/btu.h"
+#include "stack/include/bt_uuid16.h"
+#include "stack/include/main_thread.h"
+#include "types/ble_address_with_type.h"
 #include "types/bluetooth/uuid.h"
 #include "types/bt_transport.h"
 #include "types/raw_address.h"
 
-extern bool btif_get_address_type(const RawAddress& bda,
-                                  tBLE_ADDR_TYPE* p_addr_type);
-extern bool btif_get_device_type(const RawAddress& bda, int* p_device_type);
+bool btif_get_address_type(const RawAddress& bda, tBLE_ADDR_TYPE* p_addr_type);
+bool btif_get_device_type(const RawAddress& bda, int* p_device_type);
 
 using base::Bind;
-using base::Owned;
 using bluetooth::Uuid;
 using std::vector;
+using namespace bluetooth;
 
 /*******************************************************************************
  *  Constants & Macros
  ******************************************************************************/
 
-#define CHECK_BTGATT_INIT()                             \
-  do {                                                  \
-    if (bt_gatt_callbacks == NULL) {                    \
-      LOG_WARN("%s: BTGATT not initialized", __func__); \
-      return BT_STATUS_NOT_READY;                       \
-    } else {                                            \
-      LOG_VERBOSE("%s", __func__);                      \
-    }                                                   \
+#define CHECK_BTGATT_INIT()                \
+  do {                                     \
+    if (bt_gatt_callbacks == NULL) {       \
+      log::warn("BTGATT not initialized"); \
+      return BT_STATUS_NOT_READY;          \
+    } else {                               \
+      log::verbose("");                    \
+    }                                      \
   } while (0)
 
 /*******************************************************************************
@@ -129,7 +126,7 @@ static void btapp_gatts_free_req_data(uint16_t event, tBTA_GATTS* p_data) {
 }
 
 static void btapp_gatts_handle_cback(uint16_t event, char* p_param) {
-  LOG_VERBOSE("%s: Event %d", __func__, event);
+  log::verbose("Event {}", event);
 
   tBTA_GATTS* p_data = (tBTA_GATTS*)p_param;
   switch (event) {
@@ -234,7 +231,7 @@ static void btapp_gatts_handle_cback(uint16_t event, char* p_param) {
     case BTA_GATTS_OPEN_EVT:
     case BTA_GATTS_CANCEL_OPEN_EVT:
     case BTA_GATTS_CLOSE_EVT:
-      LOG_INFO("%s: Empty event (%d)!", __func__, event);
+      log::info("Empty event ({})!", event);
       break;
 
     case BTA_GATTS_PHY_UPDATE_EVT:
@@ -258,7 +255,7 @@ static void btapp_gatts_handle_cback(uint16_t event, char* p_param) {
       break;
 
     default:
-      LOG_ERROR("%s: Unhandled event (%d)!", __func__, event);
+      log::error("Unhandled event ({})!", event);
       break;
   }
 
@@ -316,23 +313,56 @@ static void btif_gatts_open_impl(int server_if, const RawAddress& address,
         break;
 
       case BT_DEVICE_TYPE_DUMO:
-        if (transport_param == BT_TRANSPORT_LE)
-          transport = BT_TRANSPORT_LE;
-        else
-          transport = BT_TRANSPORT_BR_EDR;
+        transport = BT_TRANSPORT_BR_EDR;
         break;
     }
   }
 
   // Connect!
-  BTA_GATTS_Open(server_if, address, is_direct, transport);
+  BTA_GATTS_Open(server_if, address, BLE_ADDR_PUBLIC, is_direct, transport);
+}
+
+// Used instead of btif_gatts_open_impl if the flag
+// ble_gatt_server_use_address_type_in_connection is enabled.
+static void btif_gatts_open_impl_use_address_type(int server_if,
+                                                  const RawAddress& address,
+                                                  tBLE_ADDR_TYPE addr_type,
+                                                  bool is_direct,
+                                                  int transport_param) {
+  int device_type = BT_DEVICE_TYPE_UNKNOWN;
+  if (btif_get_address_type(address, &addr_type) &&
+      btif_get_device_type(address, &device_type) &&
+      device_type != BT_DEVICE_TYPE_BREDR) {
+    BTA_DmAddBleDevice(address, addr_type, device_type);
+  }
+
+  if (transport_param != BT_TRANSPORT_AUTO) {
+    log::info("addr_type:{}, transport_param:{}", addr_type, transport_param);
+    BTA_GATTS_Open(server_if, address, addr_type, is_direct, transport_param);
+    return;
+  }
+
+  tBT_TRANSPORT transport = (device_type == BT_DEVICE_TYPE_BREDR)
+                                ? BT_TRANSPORT_BR_EDR
+                                : BT_TRANSPORT_LE;
+  log::info("addr_type:{}, transport:{}", addr_type, transport);
+  BTA_GATTS_Open(server_if, address, addr_type, is_direct, transport);
 }
 
 static bt_status_t btif_gatts_open(int server_if, const RawAddress& bd_addr,
-                                   bool is_direct, int transport) {
+                                   uint8_t addr_type, bool is_direct,
+                                   int transport) {
   CHECK_BTGATT_INIT();
-  return do_in_jni_thread(
-      Bind(&btif_gatts_open_impl, server_if, bd_addr, is_direct, transport));
+
+  if (com::android::bluetooth::flags::
+          ble_gatt_server_use_address_type_in_connection()) {
+    return do_in_jni_thread(Bind(&btif_gatts_open_impl_use_address_type,
+                                 server_if, bd_addr, addr_type, is_direct,
+                                 transport));
+  } else {
+    return do_in_jni_thread(
+        Bind(&btif_gatts_open_impl, server_if, bd_addr, is_direct, transport));
+  }
 }
 
 static void btif_gatts_close_impl(int server_if, const RawAddress& address,
@@ -367,7 +397,7 @@ static void add_service_impl(int server_if,
   // refactored, and one can distinguish stack-internal aps from external apps
   if (service[0].uuid == Uuid::From16Bit(UUID_SERVCLASS_GATT_SERVER) ||
       service[0].uuid == Uuid::From16Bit(UUID_SERVCLASS_GAP_SERVER)) {
-    LOG_ERROR("%s: Attept to register restricted service", __func__);
+    log::error("Attept to register restricted service");
     HAL_CBACK(bt_gatt_callbacks, server->service_added_cb, BT_STATUS_FAIL,
               server_if, service.data(), service.size());
     return;
@@ -404,7 +434,7 @@ static bt_status_t btif_gatts_send_indication(int server_if,
                                               size_t length) {
   CHECK_BTGATT_INIT();
 
-  if (length > BTGATT_MAX_ATTR_LEN) length = BTGATT_MAX_ATTR_LEN;
+  if (length > GATT_MAX_ATTR_LEN) length = GATT_MAX_ATTR_LEN;
 
   return do_in_jni_thread(Bind(&BTA_GATTS_HandleValueIndication, conn_id,
                                attribute_handle,

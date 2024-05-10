@@ -24,32 +24,15 @@
 
 #include <cstdint>
 #include <functional>
-#include <map>
 #include <string>
 
 // Original included files, if any
-// NOTE: Since this is a mock file with mock definitions some number of
-//       include files may not be required.  The include-what-you-use
-//       still applies, but crafting proper inclusion is out of scope
-//       for this effort.  This compilation unit may compile as-is, or
-//       may need attention to prune from (or add to ) the inclusion set.
-#include <base/logging.h>
+
 #include <base/strings/string_number_conversions.h>
-#include <stdio.h>
 
 #include <string>
 
-#include "bt_target.h"
-#include "device/include/controller.h"
-#include "l2c_api.h"
-#include "main/shim/dumpsys.h"
-#include "osi/include/allocator.h"
-#include "osi/include/log.h"
-#include "stack/gatt/connection_manager.h"
-#include "stack/gatt/gatt_int.h"
-#include "stack/include/bt_hdr.h"
 #include "stack/include/gatt_api.h"
-#include "test/common/mock_functions.h"
 #include "types/bluetooth/uuid.h"
 #include "types/bt_transport.h"
 #include "types/raw_address.h"
@@ -64,13 +47,67 @@ namespace mock {
 namespace stack_gatt_api {
 
 // Shared state between mocked functions and tests
+// Name: GATTC_GetAndRemoveListOfConnIdsWaitingForMtuRequest
+// Params: RawAddress& remote_bda
+// Return: std::list<uint16_t>
+struct GATTC_GetAndRemoveListOfConnIdsWaitingForMtuRequest {
+  static std::list<uint16_t> return_value;
+  std::function<std::list<uint16_t>(const RawAddress& remote_bda)> body{
+      [](const RawAddress& /* remote_bda */) { return return_value; }};
+  std::list<uint16_t> operator()(const RawAddress& remote_bda) {
+    return body(remote_bda);
+  };
+};
+extern struct GATTC_GetAndRemoveListOfConnIdsWaitingForMtuRequest
+    GATTC_GetAndRemoveListOfConnIdsWaitingForMtuRequest;
+
+// Shared state between mocked functions and tests
+// Name: GATTC_ConfigureMTU
+// Params: RawAddress& remote_bda, tBT_TRANSPORT transport, uint16_t conn_id,
+//         uint16_t *current_mtu
+// Return: tGATTC_TryMtuRequestResult
+struct GATTC_TryMtuRequest {
+  static tGATTC_TryMtuRequestResult return_value;
+  std::function<tGATTC_TryMtuRequestResult(
+      const RawAddress& remote_bda, tBT_TRANSPORT transport, uint16_t conn_id,
+      uint16_t* current_mtu)>
+      body{[](const RawAddress& /* remote_bda */, tBT_TRANSPORT /* transport */,
+              uint16_t /* conn_id */,
+              uint16_t* /* current_mtu */) { return return_value; }};
+  tGATTC_TryMtuRequestResult operator()(const RawAddress& remote_bda,
+                                        tBT_TRANSPORT transport,
+                                        uint16_t conn_id,
+                                        uint16_t* current_mtu) {
+    return body(remote_bda, transport, conn_id, current_mtu);
+  };
+};
+extern struct GATTC_TryMtuRequest GATTC_TryMtuRequest;
+
+// Shared state between mocked functions and tests
+// Name: GATTC_ConfigureMTU
+// Params: RawAddress& remote_bda, tBT_TRANSPORT transport,
+//         uint16_t user_mtu
+// Return: void
+struct GATTC_UpdateUserAttMtuIfNeeded {
+  std::function<void(const RawAddress& remote_bda, tBT_TRANSPORT transport,
+                     uint16_t user_mtu)>
+      body{[](const RawAddress& /* remote_bda */, tBT_TRANSPORT /* transport */,
+              uint16_t /* user_mtu */) {}};
+  void operator()(const RawAddress& remote_bda, tBT_TRANSPORT transport,
+                  uint16_t user_mtu) {
+    body(remote_bda, transport, user_mtu);
+  };
+};
+extern struct GATTC_UpdateUserAttMtuIfNeeded GATTC_UpdateUserAttMtuIfNeeded;
+
+// Shared state between mocked functions and tests
 // Name: GATTC_ConfigureMTU
 // Params: uint16_t conn_id, uint16_t mtu
 // Return: tGATT_STATUS
 struct GATTC_ConfigureMTU {
   static tGATT_STATUS return_value;
   std::function<tGATT_STATUS(uint16_t conn_id, uint16_t mtu)> body{
-      [](uint16_t conn_id, uint16_t mtu) { return return_value; }};
+      [](uint16_t /* conn_id */, uint16_t /* mtu */) { return return_value; }};
   tGATT_STATUS operator()(uint16_t conn_id, uint16_t mtu) {
     return body(conn_id, mtu);
   };
@@ -84,9 +121,9 @@ struct GATTC_Discover {
   static tGATT_STATUS return_value;
   std::function<tGATT_STATUS(uint16_t conn_id, tGATT_DISC_TYPE disc_type,
                              uint16_t start_handle, uint16_t end_handle)>
-      body{[](uint16_t conn_id, tGATT_DISC_TYPE disc_type,
-              uint16_t start_handle,
-              uint16_t end_handle) { return return_value; }};
+      body{[](uint16_t /* conn_id */, tGATT_DISC_TYPE /* disc_type */,
+              uint16_t /* start_handle */,
+              uint16_t /* end_handle */) { return return_value; }};
   tGATT_STATUS operator()(uint16_t conn_id, tGATT_DISC_TYPE disc_type,
                           uint16_t start_handle, uint16_t end_handle) {
     return body(conn_id, disc_type, start_handle, end_handle);
@@ -100,7 +137,9 @@ extern struct GATTC_Discover GATTC_Discover;
 struct GATTC_ExecuteWrite {
   static tGATT_STATUS return_value;
   std::function<tGATT_STATUS(uint16_t conn_id, bool is_execute)> body{
-      [](uint16_t conn_id, bool is_execute) { return return_value; }};
+      [](uint16_t /* conn_id */, bool /* is_execute */) {
+        return return_value;
+      }};
   tGATT_STATUS operator()(uint16_t conn_id, bool is_execute) {
     return body(conn_id, is_execute);
   };
@@ -114,8 +153,8 @@ struct GATTC_Read {
   static tGATT_STATUS return_value;
   std::function<tGATT_STATUS(uint16_t conn_id, tGATT_READ_TYPE type,
                              tGATT_READ_PARAM* p_read)>
-      body{[](uint16_t conn_id, tGATT_READ_TYPE type,
-              tGATT_READ_PARAM* p_read) { return return_value; }};
+      body{[](uint16_t /* conn_id */, tGATT_READ_TYPE /* type */,
+              tGATT_READ_PARAM* /* p_read */) { return return_value; }};
   tGATT_STATUS operator()(uint16_t conn_id, tGATT_READ_TYPE type,
                           tGATT_READ_PARAM* p_read) {
     return body(conn_id, type, p_read);
@@ -129,7 +168,7 @@ extern struct GATTC_Read GATTC_Read;
 struct GATTC_SendHandleValueConfirm {
   static tGATT_STATUS return_value;
   std::function<tGATT_STATUS(uint16_t conn_id, uint16_t cid)> body{
-      [](uint16_t conn_id, uint16_t cid) { return return_value; }};
+      [](uint16_t /* conn_id */, uint16_t /* cid */) { return return_value; }};
   tGATT_STATUS operator()(uint16_t conn_id, uint16_t cid) {
     return body(conn_id, cid);
   };
@@ -143,9 +182,8 @@ struct GATTC_Write {
   static tGATT_STATUS return_value;
   std::function<tGATT_STATUS(uint16_t conn_id, tGATT_WRITE_TYPE type,
                              tGATT_VALUE* p_write)>
-      body{[](uint16_t conn_id, tGATT_WRITE_TYPE type, tGATT_VALUE* p_write) {
-        return return_value;
-      }};
+      body{[](uint16_t /* conn_id */, tGATT_WRITE_TYPE /* type */,
+              tGATT_VALUE* /* p_write */) { return return_value; }};
   tGATT_STATUS operator()(uint16_t conn_id, tGATT_WRITE_TYPE type,
                           tGATT_VALUE* p_write) {
     return body(conn_id, type, p_write);
@@ -160,9 +198,8 @@ struct GATTS_AddService {
   static tGATT_STATUS return_value;
   std::function<tGATT_STATUS(tGATT_IF gatt_if, btgatt_db_element_t* service,
                              int count)>
-      body{[](tGATT_IF gatt_if, btgatt_db_element_t* service, int count) {
-        return return_value;
-      }};
+      body{[](tGATT_IF /* gatt_if */, btgatt_db_element_t* /* service */,
+              int /* count */) { return return_value; }};
   tGATT_STATUS operator()(tGATT_IF gatt_if, btgatt_db_element_t* service,
                           int count) {
     return body(gatt_if, service, count);
@@ -176,9 +213,8 @@ extern struct GATTS_AddService GATTS_AddService;
 struct GATTS_DeleteService {
   static bool return_value;
   std::function<bool(tGATT_IF gatt_if, Uuid* p_svc_uuid, uint16_t svc_inst)>
-      body{[](tGATT_IF gatt_if, Uuid* p_svc_uuid, uint16_t svc_inst) {
-        return return_value;
-      }};
+      body{[](tGATT_IF /* gatt_if */, Uuid* /* p_svc_uuid */,
+              uint16_t /* svc_inst */) { return return_value; }};
   bool operator()(tGATT_IF gatt_if, Uuid* p_svc_uuid, uint16_t svc_inst) {
     return body(gatt_if, p_svc_uuid, svc_inst);
   };
@@ -192,8 +228,9 @@ struct GATTS_HandleValueIndication {
   static tGATT_STATUS return_value;
   std::function<tGATT_STATUS(uint16_t conn_id, uint16_t attr_handle,
                              uint16_t val_len, uint8_t* p_val)>
-      body{[](uint16_t conn_id, uint16_t attr_handle, uint16_t val_len,
-              uint8_t* p_val) { return return_value; }};
+      body{[](uint16_t /* conn_id */, uint16_t /* attr_handle */,
+              uint16_t /* val_len */,
+              uint8_t* /* p_val */) { return return_value; }};
   tGATT_STATUS operator()(uint16_t conn_id, uint16_t attr_handle,
                           uint16_t val_len, uint8_t* p_val) {
     return body(conn_id, attr_handle, val_len, p_val);
@@ -208,8 +245,9 @@ struct GATTS_HandleValueNotification {
   static tGATT_STATUS return_value;
   std::function<tGATT_STATUS(uint16_t conn_id, uint16_t attr_handle,
                              uint16_t val_len, uint8_t* p_val)>
-      body{[](uint16_t conn_id, uint16_t attr_handle, uint16_t val_len,
-              uint8_t* p_val) { return return_value; }};
+      body{[](uint16_t /* conn_id */, uint16_t /* attr_handle */,
+              uint16_t /* val_len */,
+              uint8_t* /* p_val */) { return return_value; }};
   tGATT_STATUS operator()(uint16_t conn_id, uint16_t attr_handle,
                           uint16_t val_len, uint8_t* p_val) {
     return body(conn_id, attr_handle, val_len, p_val);
@@ -223,7 +261,7 @@ extern struct GATTS_HandleValueNotification GATTS_HandleValueNotification;
 struct GATTS_NVRegister {
   static bool return_value;
   std::function<bool(tGATT_APPL_INFO* p_cb_info)> body{
-      [](tGATT_APPL_INFO* p_cb_info) { return return_value; }};
+      [](tGATT_APPL_INFO* /* p_cb_info */) { return return_value; }};
   bool operator()(tGATT_APPL_INFO* p_cb_info) { return body(p_cb_info); };
 };
 extern struct GATTS_NVRegister GATTS_NVRegister;
@@ -235,8 +273,9 @@ struct GATTS_SendRsp {
   static tGATT_STATUS return_value;
   std::function<tGATT_STATUS(uint16_t conn_id, uint32_t trans_id,
                              tGATT_STATUS status, tGATTS_RSP* p_msg)>
-      body{[](uint16_t conn_id, uint32_t trans_id, tGATT_STATUS status,
-              tGATTS_RSP* p_msg) { return return_value; }};
+      body{[](uint16_t /* conn_id */, uint32_t /* trans_id */,
+              tGATT_STATUS /* status */,
+              tGATTS_RSP* /* p_msg */) { return return_value; }};
   tGATT_STATUS operator()(uint16_t conn_id, uint32_t trans_id,
                           tGATT_STATUS status, tGATTS_RSP* p_msg) {
     return body(conn_id, trans_id, status, p_msg);
@@ -249,7 +288,7 @@ extern struct GATTS_SendRsp GATTS_SendRsp;
 // Return: void
 struct GATTS_StopService {
   std::function<void(uint16_t service_handle)> body{
-      [](uint16_t service_handle) {}};
+      [](uint16_t /* service_handle */) {}};
   void operator()(uint16_t service_handle) { body(service_handle); };
 };
 extern struct GATTS_StopService GATTS_StopService;
@@ -261,9 +300,8 @@ struct GATT_CancelConnect {
   static bool return_value;
   std::function<bool(tGATT_IF gatt_if, const RawAddress& bd_addr,
                      bool is_direct)>
-      body{[](tGATT_IF gatt_if, const RawAddress& bd_addr, bool is_direct) {
-        return return_value;
-      }};
+      body{[](tGATT_IF /* gatt_if */, const RawAddress& /* bd_addr */,
+              bool /* is_direct */) { return return_value; }};
   bool operator()(tGATT_IF gatt_if, const RawAddress& bd_addr, bool is_direct) {
     return body(gatt_if, bd_addr, is_direct);
   };
@@ -280,10 +318,10 @@ struct GATT_Connect {
                      tBLE_ADDR_TYPE addr_type, bool is_direct,
                      tBT_TRANSPORT transport, bool opportunistic,
                      uint8_t initiating_phys)>
-      body{[](tGATT_IF gatt_if, const RawAddress& bd_addr,
-              tBLE_ADDR_TYPE addr_type, bool is_direct, tBT_TRANSPORT transport,
-              bool opportunistic,
-              uint8_t initiating_phys) { return return_value; }};
+      body{[](tGATT_IF /* gatt_if */, const RawAddress& /* bd_addr */,
+              tBLE_ADDR_TYPE /* addr_type */, bool /* is_direct */,
+              tBT_TRANSPORT /* transport */, bool /* opportunistic */,
+              uint8_t /* initiating_phys */) { return return_value; }};
   bool operator()(tGATT_IF gatt_if, const RawAddress& bd_addr,
                   tBLE_ADDR_TYPE addr_type, bool is_direct,
                   tBT_TRANSPORT transport, bool opportunistic,
@@ -298,7 +336,7 @@ extern struct GATT_Connect GATT_Connect;
 // Params: tGATT_IF gatt_if
 // Return: void
 struct GATT_Deregister {
-  std::function<void(tGATT_IF gatt_if)> body{[](tGATT_IF gatt_if) {}};
+  std::function<void(tGATT_IF gatt_if)> body{[](tGATT_IF /* gatt_if */) {}};
   void operator()(tGATT_IF gatt_if) { body(gatt_if); };
 };
 extern struct GATT_Deregister GATT_Deregister;
@@ -309,7 +347,7 @@ extern struct GATT_Deregister GATT_Deregister;
 struct GATT_Disconnect {
   static tGATT_STATUS return_value;
   std::function<tGATT_STATUS(uint16_t conn_id)> body{
-      [](uint16_t conn_id) { return return_value; }};
+      [](uint16_t /* conn_id */) { return return_value; }};
   tGATT_STATUS operator()(uint16_t conn_id) { return body(conn_id); };
 };
 extern struct GATT_Disconnect GATT_Disconnect;
@@ -321,8 +359,9 @@ struct GATT_GetConnIdIfConnected {
   static bool return_value;
   std::function<bool(tGATT_IF gatt_if, const RawAddress& bd_addr,
                      uint16_t* p_conn_id, tBT_TRANSPORT transport)>
-      body{[](tGATT_IF gatt_if, const RawAddress& bd_addr, uint16_t* p_conn_id,
-              tBT_TRANSPORT transport) { return return_value; }};
+      body{[](tGATT_IF /* gatt_if */, const RawAddress& /* bd_addr */,
+              uint16_t* /* p_conn_id */,
+              tBT_TRANSPORT /* transport */) { return return_value; }};
   bool operator()(tGATT_IF gatt_if, const RawAddress& bd_addr,
                   uint16_t* p_conn_id, tBT_TRANSPORT transport) {
     return body(gatt_if, bd_addr, p_conn_id, transport);
@@ -337,8 +376,9 @@ struct GATT_GetConnectionInfor {
   static bool return_value;
   std::function<bool(uint16_t conn_id, tGATT_IF* p_gatt_if, RawAddress& bd_addr,
                      tBT_TRANSPORT* p_transport)>
-      body{[](uint16_t conn_id, tGATT_IF* p_gatt_if, RawAddress& bd_addr,
-              tBT_TRANSPORT* p_transport) { return return_value; }};
+      body{[](uint16_t /* conn_id */, tGATT_IF* /* p_gatt_if */,
+              RawAddress& /* bd_addr */,
+              tBT_TRANSPORT* /* p_transport */) { return return_value; }};
   bool operator()(uint16_t conn_id, tGATT_IF* p_gatt_if, RawAddress& bd_addr,
                   tBT_TRANSPORT* p_transport) {
     return body(conn_id, p_gatt_if, bd_addr, p_transport);
@@ -353,9 +393,9 @@ struct GATT_Register {
   static tGATT_IF return_value;
   std::function<tGATT_IF(const Uuid& app_uuid128, const std::string& name,
                          tGATT_CBACK* p_cb_info, bool eatt_support)>
-      body{[](const Uuid& app_uuid128, const std::string& name,
-              tGATT_CBACK* p_cb_info,
-              bool eatt_support) { return return_value; }};
+      body{[](const Uuid& /* app_uuid128 */, const std::string& /* name */,
+              tGATT_CBACK* /* p_cb_info */,
+              bool /* eatt_support */) { return return_value; }};
   tGATT_IF operator()(const Uuid& app_uuid128, const std::string& name,
                       tGATT_CBACK* p_cb_info, bool eatt_support) {
     return body(app_uuid128, name, p_cb_info, eatt_support);
@@ -369,8 +409,8 @@ extern struct GATT_Register GATT_Register;
 struct GATT_SetIdleTimeout {
   std::function<void(const RawAddress& bd_addr, uint16_t idle_tout,
                      tBT_TRANSPORT transport, bool is_active)>
-      body{[](const RawAddress& bd_addr, uint16_t idle_tout,
-              tBT_TRANSPORT transport, bool is_active) {}};
+      body{[](const RawAddress& /* bd_addr */, uint16_t /* idle_tout */,
+              tBT_TRANSPORT /* transport */, bool /* is_active */) {}};
   void operator()(const RawAddress& bd_addr, uint16_t idle_tout,
                   tBT_TRANSPORT transport, bool is_active) {
     body(bd_addr, idle_tout, transport, is_active);
@@ -382,7 +422,7 @@ extern struct GATT_SetIdleTimeout GATT_SetIdleTimeout;
 // Params: tGATT_IF gatt_if
 // Return: void
 struct GATT_StartIf {
-  std::function<void(tGATT_IF gatt_if)> body{[](tGATT_IF gatt_if) {}};
+  std::function<void(tGATT_IF gatt_if)> body{[](tGATT_IF /* gatt_if */) {}};
   void operator()(tGATT_IF gatt_if) { body(gatt_if); };
 };
 extern struct GATT_StartIf GATT_StartIf;
@@ -406,8 +446,8 @@ struct is_active_service {
   static bool return_value;
   std::function<bool(const Uuid& app_uuid128, Uuid* p_svc_uuid,
                      uint16_t start_handle)>
-      body{[](const Uuid& app_uuid128, Uuid* p_svc_uuid,
-              uint16_t start_handle) { return return_value; }};
+      body{[](const Uuid& /* app_uuid128 */, Uuid* /* p_svc_uuid */,
+              uint16_t /* start_handle */) { return return_value; }};
   bool operator()(const Uuid& app_uuid128, Uuid* p_svc_uuid,
                   uint16_t start_handle) {
     return body(app_uuid128, p_svc_uuid, start_handle);

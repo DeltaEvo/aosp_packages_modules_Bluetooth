@@ -26,13 +26,8 @@ import com.android.bluetooth.R;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 
-
 public class BluetoothMapSettings extends Activity {
-
     private static final String TAG = "BluetoothMapSettings";
-    private static final boolean D = BluetoothMapService.DEBUG;
-    private static final boolean V = BluetoothMapService.VERBOSE;
-
 
     BluetoothMapAccountLoader mLoader = new BluetoothMapAccountLoader(this);
     LinkedHashMap<BluetoothMapAccountItem, ArrayList<BluetoothMapAccountItem>> mGroups;

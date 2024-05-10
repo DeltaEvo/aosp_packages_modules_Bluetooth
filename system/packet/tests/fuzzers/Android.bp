@@ -14,11 +14,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
     srcs: [
         "avrcp_browse_packet_fuzzer.cc",
@@ -28,13 +29,19 @@ cc_fuzz {
     corpus: ["corpus/avrcp_browse_packets_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -45,11 +52,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
     //system/libbase/include/android-base"
     srcs: [
@@ -60,13 +68,19 @@ cc_fuzz {
     corpus: ["corpus/change_path_req_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -77,11 +91,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -92,13 +107,19 @@ cc_fuzz {
     corpus: ["corpus/get_capabilities_req_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -109,11 +130,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -124,13 +146,19 @@ cc_fuzz {
     corpus: ["corpus/get_capabilities_res_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -141,11 +169,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -156,13 +185,19 @@ cc_fuzz {
     corpus: ["corpus/get_item_attributes_req_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -173,11 +208,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -188,13 +224,19 @@ cc_fuzz {
     corpus: ["get_play_status_req_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -205,11 +247,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -220,13 +263,19 @@ cc_fuzz {
     corpus: ["corpus/get_total_number_of_items_req_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -237,11 +286,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -252,13 +302,19 @@ cc_fuzz {
     corpus: ["corpus/pass_through_packet_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -269,11 +325,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -284,13 +341,19 @@ cc_fuzz {
     corpus: ["corpus/play_item_packet_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -301,11 +364,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -316,13 +380,19 @@ cc_fuzz {
     corpus: ["corpus/register_notification_packet_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -333,11 +403,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -348,13 +419,19 @@ cc_fuzz {
     corpus: ["corpus/set_absolute_volume_packet_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -365,11 +442,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -380,13 +458,19 @@ cc_fuzz {
     corpus: ["corpus/set_addressed_player_packet_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -397,11 +481,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -412,13 +497,19 @@ cc_fuzz {
     corpus: ["corpus/set_browsed_player_req_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -429,11 +520,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -444,13 +536,19 @@ cc_fuzz {
     corpus: ["corpus/vendor_packet_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -461,11 +559,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -476,13 +575,19 @@ cc_fuzz {
     corpus: ["corpus/avrcp_packet_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -493,11 +598,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -508,13 +614,19 @@ cc_fuzz {
     corpus: ["corpus/reject_packet_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -525,11 +637,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -540,13 +653,19 @@ cc_fuzz {
     corpus: ["corpus/get_element_attributes_req_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -557,11 +676,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -572,13 +692,19 @@ cc_fuzz {
     corpus: ["corpus/change_path_res_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -589,11 +715,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -604,13 +731,19 @@ cc_fuzz {
     corpus: ["corpus/get_element_attributes_res_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -621,11 +754,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -636,13 +770,19 @@ cc_fuzz {
     corpus: ["corpus/get_folder_items_res_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -653,11 +793,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -668,13 +809,19 @@ cc_fuzz {
     corpus: ["corpus/get_folder_items_req_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -685,11 +832,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -700,13 +848,19 @@ cc_fuzz {
     corpus: ["corpus/get_item_attributes_res_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -717,11 +871,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -732,13 +887,19 @@ cc_fuzz {
     corpus: ["corpus/get_play_status_res_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -749,11 +910,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -764,13 +926,19 @@ cc_fuzz {
     corpus: ["corpus/get_total_number_of_items_res_corpus/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }
 
@@ -781,11 +949,12 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
         "packages/modules/Bluetooth/system/packet/tests",
         "packages/modules/Bluetooth/system/packet/tests/avrcp",
-        "packages/modules/Bluetooth/system/packet/base",
     ],
 
     srcs: [
@@ -796,12 +965,18 @@ cc_fuzz {
     corpus: ["corpus/set_browsed_player_res_fuzzer/*"],
 
     static_libs: [
-        "libgmock",
         "lib-bt-packets",
-        "lib-bt-packets-base",
         "lib-bt-packets-avrcp",
+        "lib-bt-packets-base",
+        "libbluetooth_log",
+        "libchrome",
+        "libgmock",
     ],
     cflags: [
-        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
     ],
 }

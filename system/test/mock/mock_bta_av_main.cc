@@ -20,82 +20,68 @@
  */
 
 #include <cstdint>
-#include <map>
-#include <string>
 
-#include "bt_target.h"
 #include "bta/av/bta_av_int.h"
-#include "bta/include/bta_ar_api.h"
-#include "bta/include/utl.h"
-#include "btif/avrcp/avrcp_service.h"
-#include "btif/include/btif_av_co.h"
-#include "btif/include/btif_config.h"
-#include "main/shim/dumpsys.h"
-#include "osi/include/log.h"
-#include "osi/include/osi.h"
-#include "osi/include/properties.h"
-#include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
 #include "test/common/mock_functions.h"
-#include "types/hci_role.h"
 #include "types/raw_address.h"
 
-#ifndef UNUSED_ATTR
-#define UNUSED_ATTR
-#endif
-
-bool bta_av_chk_start(tBTA_AV_SCB* p_scb) {
+bool bta_av_chk_start(tBTA_AV_SCB* /* p_scb */) {
   inc_func_call_count(__func__);
   return false;
 }
-bool bta_av_hdl_event(BT_HDR* p_msg) {
+bool bta_av_hdl_event(const BT_HDR_RIGID* /* p_msg */) {
   inc_func_call_count(__func__);
   return false;
 }
-bool bta_av_link_role_ok(tBTA_AV_SCB* p_scb, uint8_t bits) {
+bool bta_av_link_role_ok(tBTA_AV_SCB* /* p_scb */, uint8_t /* bits */) {
   inc_func_call_count(__func__);
   return false;
 }
-bool bta_av_switch_if_needed(tBTA_AV_SCB* p_scb) {
+bool bta_av_switch_if_needed(tBTA_AV_SCB* /* p_scb */) {
   inc_func_call_count(__func__);
   return false;
 }
-const char* bta_av_evt_code(uint16_t evt_code) {
+const char* bta_av_evt_code(uint16_t /* evt_code */) {
   inc_func_call_count(__func__);
   return nullptr;
 }
-int BTA_AvObtainPeerChannelIndex(const RawAddress& peer_address) {
+int BTA_AvObtainPeerChannelIndex(const RawAddress& /* peer_address */) {
   inc_func_call_count(__func__);
   return 0;
 }
-tBTA_AV_SCB* bta_av_addr_to_scb(const RawAddress& bd_addr) {
+tBTA_AV_SCB* bta_av_addr_to_scb(const RawAddress& /* bd_addr */) {
   inc_func_call_count(__func__);
   return nullptr;
 }
-tBTA_AV_SCB* bta_av_hndl_to_scb(uint16_t handle) {
+tBTA_AV_SCB* bta_av_hndl_to_scb(uint16_t /* handle */) {
   inc_func_call_count(__func__);
   return nullptr;
 }
-void bta_av_api_deregister(tBTA_AV_DATA* p_data) {
+void bta_av_api_deregister(tBTA_AV_DATA* /* p_data */) {
   inc_func_call_count(__func__);
 }
-void bta_av_conn_cback(UNUSED_ATTR uint8_t handle, const RawAddress& bd_addr,
-                       uint8_t event, tAVDT_CTRL* p_data, uint8_t scb_index) {
+void bta_av_conn_cback(uint8_t /* handle */, const RawAddress& /* bd_addr */,
+                       uint8_t /* event */, tAVDT_CTRL* /* p_data */,
+                       uint8_t /* scb_index */) {
   inc_func_call_count(__func__);
 }
-void bta_av_dup_audio_buf(tBTA_AV_SCB* p_scb, BT_HDR* p_buf) {
+void bta_av_dup_audio_buf(tBTA_AV_SCB* /* p_scb */, BT_HDR* /* p_buf */) {
   inc_func_call_count(__func__);
 }
-void bta_av_free_scb(tBTA_AV_SCB* p_scb) { inc_func_call_count(__func__); }
+void bta_av_free_scb(tBTA_AV_SCB* /* p_scb */) {
+  inc_func_call_count(__func__);
+}
 void bta_av_restore_switch(void) { inc_func_call_count(__func__); }
-void bta_av_sm_execute(tBTA_AV_CB* p_cb, uint16_t event, tBTA_AV_DATA* p_data) {
+void bta_av_sm_execute(tBTA_AV_CB* /* p_cb */, uint16_t /* event */,
+                       tBTA_AV_DATA* /* p_data */) {
   inc_func_call_count(__func__);
 }
-void bta_debug_av_dump(int fd) { inc_func_call_count(__func__); }
-void tBTA_AV_SCB::OnConnected(const RawAddress& peer_address) {
+void bta_debug_av_dump(int /* fd */) { inc_func_call_count(__func__); }
+void tBTA_AV_SCB::OnConnected(const RawAddress& /* peer_address */) {
   inc_func_call_count(__func__);
 }
 void tBTA_AV_SCB::OnDisconnected() { inc_func_call_count(__func__); }
-void tBTA_AV_SCB::SetAvdtpVersion(uint16_t avdtp_version) {
+void tBTA_AV_SCB::SetAvdtpVersion(uint16_t /* avdtp_version */) {
   inc_func_call_count(__func__);
 }

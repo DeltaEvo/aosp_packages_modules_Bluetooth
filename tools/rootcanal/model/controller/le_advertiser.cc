@@ -14,10 +14,21 @@
  * limitations under the License.
  */
 
-#include "le_advertiser.h"
+#include "model/controller/le_advertiser.h"
 
-#include "link_layer_controller.h"
+#include <array>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <utility>
+#include <vector>
+
+#include "hci/address_with_type.h"
 #include "log.h"
+#include "model/controller/link_layer_controller.h"
+#include "packets/hci_packets.h"
+#include "packets/link_layer_packets.h"
 
 using namespace bluetooth::hci;
 using namespace std::literals;
@@ -36,8 +47,10 @@ slots operator"" _slots(unsigned long long count) { return slots(count); }
 // =============================================================================
 
 // Vol 6, Part B § 4.4.2.4.3 High duty cycle connectable directed advertising.
+// NB: The interval is specified to be 3.75ms, but it does not make sense to
+// use this value with the timer tick at 5ms.
 const chrono::duration adv_direct_ind_high_timeout = 1280ms;
-const chrono::duration adv_direct_ind_high_interval = 3750us;
+const chrono::duration adv_direct_ind_high_interval = 10ms /*3750us*/;
 
 // Vol 6, Part B § 2.3.4.9 Host Advertising Data.
 const uint16_t max_legacy_advertising_pdu_size = 31;
@@ -57,9 +70,9 @@ ErrorCode LinkLayerController::LeSetAdvertisingParameters(
   // Legacy advertising commands are disallowed when extended advertising
   // commands were used since the last reset.
   if (!SelectLegacyAdvertising()) {
-    LOG_INFO(
-        "legacy advertising command rejected because extended advertising"
-        " is being used");
+    INFO(id_,
+         "legacy advertising command rejected because extended advertising"
+         " is being used");
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
@@ -78,17 +91,17 @@ ErrorCode LinkLayerController::LeSetAdvertisingParameters(
   // The Host shall not issue this command when advertising is enabled in the
   // Controller; if it is the Command Disallowed error code shall be used.
   if (legacy_advertiser_.advertising_enable) {
-    LOG_INFO("legacy advertising is enabled");
+    INFO(id_, "legacy advertising is enabled");
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
   // At least one channel bit shall be set in the
   // Advertising_Channel_Map parameter.
   if (advertising_channel_map == 0) {
-    LOG_INFO(
-        "advertising_channel_map (0x%04x) does not enable any"
-        " advertising channel",
-        advertising_channel_map);
+    INFO(id_,
+         "advertising_channel_map (0x{:04x}) does not enable any"
+         " advertising channel",
+         advertising_channel_map);
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -99,21 +112,21 @@ ErrorCode LinkLayerController::LeSetAdvertisingParameters(
   // error code.
   if (advertising_interval_min < 0x0020 || advertising_interval_min > 0x4000 ||
       advertising_interval_max < 0x0020 || advertising_interval_max > 0x4000) {
-    LOG_INFO(
-        "advertising_interval_min (0x%04x) and/or"
-        " advertising_interval_max (0x%04x) are outside the range"
-        " of supported values (0x0020 - 0x4000)",
-        advertising_interval_min, advertising_interval_max);
+    INFO(id_,
+         "advertising_interval_min (0x{:04x}) and/or"
+         " advertising_interval_max (0x{:04x}) are outside the range"
+         " of supported values (0x0020 - 0x4000)",
+         advertising_interval_min, advertising_interval_max);
     return ErrorCode::UNSUPPORTED_FEATURE_OR_PARAMETER_VALUE;
   }
 
   // The Advertising_Interval_Min shall be less than or equal to the
   // Advertising_Interval_Max.
   if (advertising_interval_min > advertising_interval_max) {
-    LOG_INFO(
-        "advertising_interval_min (0x%04x) is larger than"
-        " advertising_interval_max (0x%04x)",
-        advertising_interval_min, advertising_interval_max);
+    INFO(id_,
+         "advertising_interval_min (0x{:04x}) is larger than"
+         " advertising_interval_max (0x{:04x})",
+         advertising_interval_min, advertising_interval_max);
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -136,9 +149,9 @@ ErrorCode LinkLayerController::LeSetAdvertisingData(
   // Legacy advertising commands are disallowed when extended advertising
   // commands were used since the last reset.
   if (!SelectLegacyAdvertising()) {
-    LOG_INFO(
-        "legacy advertising command rejected because extended advertising"
-        " is being used");
+    INFO(id_,
+         "legacy advertising command rejected because extended advertising"
+         " is being used");
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
@@ -152,9 +165,9 @@ ErrorCode LinkLayerController::LeSetScanResponseData(
   // Legacy advertising commands are disallowed when extended advertising
   // commands were used since the last reset.
   if (!SelectLegacyAdvertising()) {
-    LOG_INFO(
-        "legacy advertising command rejected because extended advertising"
-        " is being used");
+    INFO(id_,
+         "legacy advertising command rejected because extended advertising"
+         " is being used");
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
@@ -167,14 +180,14 @@ ErrorCode LinkLayerController::LeSetAdvertisingEnable(bool advertising_enable) {
   // Legacy advertising commands are disallowed when extended advertising
   // commands were used since the last reset.
   if (!SelectLegacyAdvertising()) {
-    LOG_INFO(
-        "legacy advertising command rejected because extended advertising"
-        " is being used");
+    INFO(id_,
+         "legacy advertising command rejected because extended advertising"
+         " is being used");
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
   if (!advertising_enable) {
-    legacy_advertiser_.advertising_enable = false;
+    legacy_advertiser_.Disable();
     return ErrorCode::SUCCESS;
   }
 
@@ -201,9 +214,9 @@ ErrorCode LinkLayerController::LeSetAdvertisingEnable(bool advertising_enable) {
       // command, the Controller shall return the error code
       // Invalid HCI Command Parameters (0x12).
       if (random_address.GetAddress() == Address::kEmpty) {
-        LOG_INFO(
-            "own_address_type is Random_Device_Address but the Random_Address"
-            " has not been initialized");
+        INFO(id_,
+             "own_address_type is Random_Device_Address but the Random_Address"
+             " has not been initialized");
         return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
       }
       legacy_advertiser_.advertising_address = random_address;
@@ -224,10 +237,10 @@ ErrorCode LinkLayerController::LeSetAdvertisingEnable(bool advertising_enable) {
       if (resolvable_address) {
         legacy_advertiser_.advertising_address = resolvable_address.value();
       } else if (random_address.GetAddress() == Address::kEmpty) {
-        LOG_INFO(
-            "own_address_type is Resolvable_Or_Random_Address but the"
-            " Resolving_List does not contain a matching entry and the"
-            " Random_Address is not initialized");
+        INFO(id_,
+             "own_address_type is Resolvable_Or_Random_Address but the"
+             " Resolving_List does not contain a matching entry and the"
+             " Random_Address is not initialized");
         return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
       } else {
         legacy_advertiser_.advertising_address = random_address;
@@ -285,8 +298,8 @@ ErrorCode LinkLayerController::LeSetAdvertisingSetRandomAddress(
   // Unknown Advertising Identifier (0x42).
   // TODO(c++20) unordered_map<>::contains
   if (extended_advertisers_.count(advertising_handle) == 0) {
-    LOG_INFO("no advertising set defined with handle %02x",
-             static_cast<int>(advertising_handle));
+    INFO(id_, "no advertising set defined with handle {:02x}",
+         static_cast<int>(advertising_handle));
     return ErrorCode::UNKNOWN_ADVERTISING_IDENTIFIER;
   }
 
@@ -297,7 +310,7 @@ ErrorCode LinkLayerController::LeSetAdvertisingSetRandomAddress(
   // enabled, the Controller shall return the error code
   // Command Disallowed (0x0C).
   if (advertiser.advertising_enable) {
-    LOG_INFO("advertising is enabled for the specified advertising set");
+    INFO(id_, "advertising is enabled for the specified advertising set");
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
@@ -320,9 +333,9 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingParameters(
   // Extended advertising commands are disallowed when legacy advertising
   // commands were used since the last reset.
   if (!SelectExtendedAdvertising()) {
-    LOG_INFO(
-        "extended advertising command rejected because legacy advertising"
-        " is being used");
+    INFO(id_,
+         "extended advertising command rejected because legacy advertising"
+         " is being used");
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
@@ -350,10 +363,10 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingParameters(
   if (extended_advertisers_.count(advertising_handle) == 0) {
     if (extended_advertisers_.size() >=
         properties_.le_num_supported_advertising_sets) {
-      LOG_INFO(
-          "no advertising set defined with handle %02x and"
-          " cannot allocate any more advertisers",
-          static_cast<int>(advertising_handle));
+      INFO(id_,
+           "no advertising set defined with handle {:02x} and"
+           " cannot allocate any more advertisers",
+           static_cast<int>(advertising_handle));
       return ErrorCode::MEMORY_CAPACITY_EXCEEDED;
     }
   } else {
@@ -364,7 +377,7 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingParameters(
   // specified advertising set, the Controller shall return the error code
   // Command Disallowed (0x0C).
   if (advertiser.advertising_enable) {
-    LOG_INFO("advertising is enabled for the specified advertising set");
+    INFO(id_, "advertising is enabled for the specified advertising set");
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
@@ -385,10 +398,10 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingParameters(
       (raw_advertising_event_properties & ~0x10) !=
           static_cast<uint16_t>(
               LegacyAdvertisingEventProperties::ADV_NONCONN_IND)) {
-    LOG_INFO(
-        "advertising_event_properties (0x%02x) is legacy but does not"
-        " match valid legacy advertising event types",
-        raw_advertising_event_properties);
+    INFO(id_,
+         "advertising_event_properties (0x{:02x}) is legacy but does not"
+         " match valid legacy advertising event types",
+         raw_advertising_event_properties);
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -401,20 +414,20 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingParameters(
   // contains some, the Controller shall return the error code
   // Invalid HCI Command Parameters (0x12).
   if (!can_have_advertising_data && !advertiser.advertising_data.empty()) {
-    LOG_INFO(
-        "advertising_event_properties (0x%02x) specifies an event type"
-        " that does not support avertising data but the set contains some",
-        raw_advertising_event_properties);
+    INFO(id_,
+         "advertising_event_properties (0x{:02x}) specifies an event type"
+         " that does not support avertising data but the set contains some",
+         raw_advertising_event_properties);
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
   // Note: not explicitly specified in the specification but makes sense
   // in the context of the other checks.
   if (!scannable_advertising && !advertiser.scan_response_data.empty()) {
-    LOG_INFO(
-        "advertising_event_properties (0x%02x) specifies an event type"
-        " that does not support scan response data but the set contains some",
-        raw_advertising_event_properties);
+    INFO(id_,
+         "advertising_event_properties (0x{:02x}) specifies an event type"
+         " that does not support scan response data but the set contains some",
+         raw_advertising_event_properties);
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -425,11 +438,11 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingParameters(
       (advertiser.advertising_data.size() > max_legacy_advertising_pdu_size ||
        advertiser.scan_response_data.size() >
            max_legacy_advertising_pdu_size)) {
-    LOG_INFO(
-        "advertising_event_properties (0x%02x) is legacy and the"
-        " advertising data or scan response data exceeds the capacity"
-        " of legacy PDUs",
-        raw_advertising_event_properties);
+    INFO(id_,
+         "advertising_event_properties (0x{:02x}) is legacy and the"
+         " advertising data or scan response data exceeds the capacity"
+         " of legacy PDUs",
+         raw_advertising_event_properties);
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -437,10 +450,10 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingParameters(
   // The advertisement shall not be both connectable and scannable.
   if (extended_advertising && connectable_advertising &&
       scannable_advertising) {
-    LOG_INFO(
-        "advertising_event_properties (0x%02x) is extended and may not"
-        " be connectable and scannable at the same time",
-        raw_advertising_event_properties);
+    INFO(id_,
+         "advertising_event_properties (0x{:02x}) is extended and may not"
+         " be connectable and scannable at the same time",
+         raw_advertising_event_properties);
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -448,10 +461,10 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingParameters(
   // advertising interval) shall not be used (bit 3 = 0).
   if (extended_advertising && connectable_advertising && directed_advertising &&
       high_duty_cycle_advertising) {
-    LOG_INFO(
-        "advertising_event_properties (0x%02x) is extended and may not"
-        " be high-duty cycle directed connectable",
-        raw_advertising_event_properties);
+    INFO(id_,
+         "advertising_event_properties (0x{:02x}) is extended and may not"
+         " be high-duty cycle directed connectable",
+         raw_advertising_event_properties);
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -462,41 +475,41 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingParameters(
   // Parameter Value (0x11).
   if (primary_advertising_interval_min < 0x20 ||
       primary_advertising_interval_max < 0x20) {
-    LOG_INFO(
-        "primary_advertising_interval_min (0x%04x) and/or"
-        " primary_advertising_interval_max (0x%04x) are outside the range"
-        " of supported values (0x0020 - 0xffff)",
-        primary_advertising_interval_min, primary_advertising_interval_max);
+    INFO(id_,
+         "primary_advertising_interval_min (0x{:04x}) and/or"
+         " primary_advertising_interval_max (0x{:04x}) are outside the range"
+         " of supported values (0x0020 - 0xffff)",
+         primary_advertising_interval_min, primary_advertising_interval_max);
     return ErrorCode::UNSUPPORTED_FEATURE_OR_PARAMETER_VALUE;
   }
 
   // The Primary_Advertising_Interval_Min parameter shall be less than or equal
   // to the Primary_Advertising_Interval_Max parameter.
   if (primary_advertising_interval_min > primary_advertising_interval_max) {
-    LOG_INFO(
-        "primary_advertising_interval_min (0x%04x) is larger than"
-        " primary_advertising_interval_max (0x%04x)",
-        primary_advertising_interval_min, primary_advertising_interval_max);
+    INFO(id_,
+         "primary_advertising_interval_min (0x{:04x}) is larger than"
+         " primary_advertising_interval_max (0x{:04x})",
+         primary_advertising_interval_min, primary_advertising_interval_max);
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
   // At least one channel bit shall be set in the
   // Primary_Advertising_Channel_Map parameter.
   if (primary_advertising_channel_map == 0) {
-    LOG_INFO(
-        "primary_advertising_channel_map does not enable any"
-        " advertising channel");
+    INFO(id_,
+         "primary_advertising_channel_map does not enable any"
+         " advertising channel");
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
   // If legacy advertising PDUs are being used, the
   // Primary_Advertising_PHY shall indicate the LE 1M PHY.
   if (legacy_advertising && primary_advertising_phy != PrimaryPhyType::LE_1M) {
-    LOG_INFO(
-        "advertising_event_properties (0x%04x) is legacy but"
-        " primary_advertising_phy (%02x) is not LE 1M",
-        raw_advertising_event_properties,
-        static_cast<uint8_t>(primary_advertising_phy));
+    INFO(id_,
+         "advertising_event_properties (0x{:04x}) is legacy but"
+         " primary_advertising_phy ({:02x}) is not LE 1M",
+         raw_advertising_event_properties,
+         static_cast<uint8_t>(primary_advertising_phy));
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -506,10 +519,10 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingParameters(
   // return the error code Command Disallowed (0x0C).
   if (advertiser.constant_tone_extensions &&
       secondary_advertising_phy == SecondaryPhyType::LE_CODED) {
-    LOG_INFO(
-        "constant tone extensions are enabled but"
-        " secondary_advertising_phy (%02x) does not support them",
-        static_cast<uint8_t>(secondary_advertising_phy));
+    INFO(id_,
+         "constant tone extensions are enabled but"
+         " secondary_advertising_phy ({:02x}) does not support them",
+         static_cast<uint8_t>(secondary_advertising_phy));
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
@@ -520,11 +533,11 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingParameters(
   if (advertiser.periodic_advertising_enable &&
       (connectable_advertising || scannable_advertising || legacy_advertising ||
        anonymous_advertising)) {
-    LOG_INFO(
-        "periodic advertising is enabled for the specified advertising set"
-        " and advertising_event_properties (0x%02x) is either"
-        " connectable, scannable, legacy, or anonymous",
-        raw_advertising_event_properties);
+    INFO(id_,
+         "periodic advertising is enabled for the specified advertising set"
+         " and advertising_event_properties (0x{:02x}) is either"
+         " connectable, scannable, legacy, or anonymous",
+         raw_advertising_event_properties);
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -535,7 +548,7 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingParameters(
 #if 0
   if (advertiser.periodic_advertising_enable) {
     // TODO
-    LOG_INFO(
+    INFO(id_,
         "periodic advertising is enabled for the specified advertising set"
         " and the secondary PHY does not match the periodic"
         " advertising PHY");
@@ -554,9 +567,9 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingParameters(
       (advertiser.advertising_data.size() > max_extended_advertising_pdu_size ||
        advertiser.scan_response_data.size() >
            max_extended_advertising_pdu_size)) {
-    LOG_INFO(
-        "the advertising data contained in the set is larger than the"
-        " available PDU capacity");
+    INFO(id_,
+         "the advertising data contained in the set is larger than the"
+         " available PDU capacity");
     return ErrorCode::PACKET_TOO_LONG;
   }
 
@@ -589,9 +602,9 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingData(
   // Extended advertising commands are disallowed when legacy advertising
   // commands were used since the last reset.
   if (!SelectExtendedAdvertising()) {
-    LOG_INFO(
-        "extended advertising command rejected because legacy advertising"
-        " is being used");
+    INFO(id_,
+         "extended advertising command rejected because legacy advertising"
+         " is being used");
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
@@ -603,8 +616,8 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingData(
   // Unknown Advertising Identifier (0x42).
   // TODO(c++20) unordered_map<>::contains
   if (extended_advertisers_.count(advertising_handle) == 0) {
-    LOG_INFO("no advertising set defined with handle %02x",
-             static_cast<int>(advertising_handle));
+    INFO(id_, "no advertising set defined with handle {:02x}",
+         static_cast<int>(advertising_handle));
     return ErrorCode::UNKNOWN_ADVERTISING_IDENTIFIER;
   }
 
@@ -624,10 +637,10 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingData(
   // advertising data, the Controller shall return the error code
   // Invalid HCI Command Parameters (0x12).
   if (!can_have_advertising_data) {
-    LOG_INFO(
-        "advertising_event_properties (%02x) does not support"
-        " advertising data",
-        raw_advertising_event_properties);
+    INFO(id_,
+         "advertising_event_properties ({:02x}) does not support"
+         " advertising data",
+         raw_advertising_event_properties);
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -638,11 +651,11 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingData(
   if (advertising_event_properties.legacy_ &&
       (operation != Operation::COMPLETE_ADVERTISEMENT ||
        advertising_data.size() > max_legacy_advertising_pdu_size)) {
-    LOG_INFO(
-        "advertising_event_properties (%02x) is legacy and"
-        " and an incomplete operation was used or the advertising data"
-        " is larger than 31",
-        raw_advertising_event_properties);
+    INFO(id_,
+         "advertising_event_properties ({:02x}) is legacy and"
+         " and an incomplete operation was used or the advertising data"
+         " is larger than 31",
+         raw_advertising_event_properties);
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -656,11 +669,11 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingData(
   if (operation == Operation::UNCHANGED_DATA &&
       (!advertiser.advertising_enable || advertiser.advertising_data.empty() ||
        advertising_event_properties.legacy_ || !advertising_data.empty())) {
-    LOG_INFO(
-        "Unchanged_Data operation is used but advertising is disabled;"
-        " or the advertising set contains no data;"
-        " or the advertising set uses legacy PDUs;"
-        " or the advertising data is not empty");
+    INFO(id_,
+         "Unchanged_Data operation is used but advertising is disabled;"
+         " or the advertising set contains no data;"
+         " or the advertising set uses legacy PDUs;"
+         " or the advertising data is not empty");
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -669,10 +682,10 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingData(
   // Command Parameters (0x12).
   if (operation != Operation::COMPLETE_ADVERTISEMENT &&
       operation != Operation::UNCHANGED_DATA && advertising_data.empty()) {
-    LOG_INFO(
-        "operation (%02x) is not Complete_Advertisement or Unchanged_Data"
-        " but the advertising data is empty",
-        static_cast<int>(operation));
+    INFO(id_,
+         "operation ({:02x}) is not Complete_Advertisement or Unchanged_Data"
+         " but the advertising data is empty",
+         static_cast<int>(operation));
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -682,10 +695,10 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingData(
   if (advertiser.advertising_enable &&
       operation != Operation::COMPLETE_ADVERTISEMENT &&
       operation != Operation::UNCHANGED_DATA) {
-    LOG_INFO(
-        "operation (%02x) is used but advertising is enabled for the"
-        " specified advertising set",
-        static_cast<int>(operation));
+    INFO(id_,
+         "operation ({:02x}) is used but advertising is enabled for the"
+         " specified advertising set",
+         static_cast<int>(operation));
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
@@ -718,7 +731,7 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingData(
       break;
 
     default:
-      LOG_INFO("unknown operation (%x)", static_cast<int>(operation));
+      INFO(id_, "unknown operation ({})", static_cast<int>(operation));
       return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -730,11 +743,11 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingData(
   // Capacity Exceeded (0x07).
   if (advertiser.advertising_data.size() >
       properties_.le_max_advertising_data_length) {
-    LOG_INFO(
-        "the combined length %zu of the advertising data exceeds the"
-        " advertising set capacity %d",
-        advertiser.advertising_data.size(),
-        properties_.le_max_advertising_data_length);
+    INFO(id_,
+         "the combined length {} of the advertising data exceeds the"
+         " advertising set capacity {}",
+         advertiser.advertising_data.size(),
+         properties_.le_max_advertising_data_length);
     advertiser.advertising_data.clear();
     advertiser.partial_advertising_data = false;
     return ErrorCode::MEMORY_CAPACITY_EXCEEDED;
@@ -752,9 +765,9 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingData(
           advertising_event_properties);
   if (advertiser.advertising_enable &&
       advertiser.advertising_data.size() > max_advertising_data_length) {
-    LOG_INFO(
-        "the advertising data contained in the set is larger than the"
-        " available PDU capacity");
+    INFO(id_,
+         "the advertising data contained in the set is larger than the"
+         " available PDU capacity");
     advertiser.advertising_data.clear();
     advertiser.partial_advertising_data = false;
     return ErrorCode::PACKET_TOO_LONG;
@@ -771,9 +784,9 @@ ErrorCode LinkLayerController::LeSetExtendedScanResponseData(
   // Extended advertising commands are disallowed when legacy advertising
   // commands were used since the last reset.
   if (!SelectExtendedAdvertising()) {
-    LOG_INFO(
-        "extended advertising command rejected because legacy advertising"
-        " is being used");
+    INFO(id_,
+         "extended advertising command rejected because legacy advertising"
+         " is being used");
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
@@ -785,8 +798,8 @@ ErrorCode LinkLayerController::LeSetExtendedScanResponseData(
   // Unknown Advertising Identifier (0x42).
   // TODO(c++20) unordered_map<>::contains
   if (extended_advertisers_.count(advertising_handle) == 0) {
-    LOG_INFO("no advertising set defined with handle %02x",
-             static_cast<int>(advertising_handle));
+    INFO(id_, "no advertising set defined with handle {:02x}",
+         static_cast<int>(advertising_handle));
     return ErrorCode::UNKNOWN_ADVERTISING_IDENTIFIER;
   }
 
@@ -801,10 +814,10 @@ ErrorCode LinkLayerController::LeSetExtendedScanResponseData(
   // command other than to discard existing data, the Controller shall
   // return the error code Invalid HCI Command Parameters (0x12).
   if (!advertising_event_properties.scannable_ && !scan_response_data.empty()) {
-    LOG_INFO(
-        "advertising_event_properties (%02x) is not scannable"
-        " but the scan response data is not empty",
-        raw_advertising_event_properties);
+    INFO(id_,
+         "advertising_event_properties ({:02x}) is not scannable"
+         " but the scan response data is not empty",
+         raw_advertising_event_properties);
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -816,11 +829,11 @@ ErrorCode LinkLayerController::LeSetExtendedScanResponseData(
       advertising_event_properties.legacy_ &&
       (operation != Operation::COMPLETE_ADVERTISEMENT ||
        scan_response_data.size() > max_legacy_advertising_pdu_size)) {
-    LOG_INFO(
-        "advertising_event_properties (%02x) is scannable legacy"
-        " and an incomplete operation was used or the scan response data"
-        " is larger than 31",
-        raw_advertising_event_properties);
+    INFO(id_,
+         "advertising_event_properties ({:02x}) is scannable legacy"
+         " and an incomplete operation was used or the scan response data"
+         " is larger than 31",
+         raw_advertising_event_properties);
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -829,10 +842,10 @@ ErrorCode LinkLayerController::LeSetExtendedScanResponseData(
   // Invalid HCI Command Parameters (0x12).
   if (operation != Operation::COMPLETE_ADVERTISEMENT &&
       scan_response_data.empty()) {
-    LOG_INFO(
-        "operation (%02x) is not Complete_Advertisement but the"
-        " scan response data is empty",
-        static_cast<int>(operation));
+    INFO(id_,
+         "operation ({:02x}) is not Complete_Advertisement but the"
+         " scan response data is empty",
+         static_cast<int>(operation));
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -841,10 +854,10 @@ ErrorCode LinkLayerController::LeSetExtendedScanResponseData(
   // return the error code Command Disallowed (0x0C).
   if (advertiser.advertising_enable &&
       operation != Operation::COMPLETE_ADVERTISEMENT) {
-    LOG_INFO(
-        "operation (%02x) is used but advertising is enabled for the"
-        " specified advertising set",
-        static_cast<int>(operation));
+    INFO(id_,
+         "operation ({:02x}) is used but advertising is enabled for the"
+         " specified advertising set",
+         static_cast<int>(operation));
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
@@ -855,11 +868,11 @@ ErrorCode LinkLayerController::LeSetExtendedScanResponseData(
   if (advertiser.advertising_enable &&
       advertising_event_properties.scannable_ &&
       !advertising_event_properties.legacy_ && scan_response_data.empty()) {
-    LOG_INFO(
-        "advertising_event_properties (%02x) is scannable extended,"
-        " advertising is enabled for the specified advertising set"
-        " and the scan response data is empty",
-        raw_advertising_event_properties);
+    INFO(id_,
+         "advertising_event_properties ({:02x}) is scannable extended,"
+         " advertising is enabled for the specified advertising set"
+         " and the scan response data is empty",
+         raw_advertising_event_properties);
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
@@ -889,13 +902,13 @@ ErrorCode LinkLayerController::LeSetExtendedScanResponseData(
       break;
 
     case Operation::UNCHANGED_DATA:
-      LOG_INFO(
-          "the operation Unchanged_Data is only allowed"
-          " for Advertising_Data");
+      INFO(id_,
+           "the operation Unchanged_Data is only allowed"
+           " for Advertising_Data");
       return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
 
     default:
-      LOG_INFO("unknown operation (%x)", static_cast<int>(operation));
+      INFO(id_, "unknown operation ({})", static_cast<int>(operation));
       return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -907,9 +920,9 @@ ErrorCode LinkLayerController::LeSetExtendedScanResponseData(
   // Memory Capacity Exceeded (0x07).
   if (advertiser.scan_response_data.size() >
       properties_.le_max_advertising_data_length) {
-    LOG_INFO(
-        "the combined length of the scan response data exceeds the"
-        " advertising set capacity");
+    INFO(id_,
+         "the combined length of the scan response data exceeds the"
+         " advertising set capacity");
     advertiser.scan_response_data.clear();
     advertiser.partial_scan_response_data = false;
     return ErrorCode::MEMORY_CAPACITY_EXCEEDED;
@@ -925,9 +938,9 @@ ErrorCode LinkLayerController::LeSetExtendedScanResponseData(
   // the S=8 coding shall be assumed.
   if (advertiser.scan_response_data.size() >
       max_extended_advertising_pdu_size) {
-    LOG_INFO(
-        "the scan response data contained in the set is larger than the"
-        " available PDU capacity");
+    INFO(id_,
+         "the scan response data contained in the set is larger than the"
+         " available PDU capacity");
     advertiser.scan_response_data.clear();
     advertiser.partial_scan_response_data = false;
     return ErrorCode::PACKET_TOO_LONG;
@@ -942,9 +955,9 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingEnable(
   // Extended advertising commands are disallowed when legacy advertising
   // commands were used since the last reset.
   if (!SelectExtendedAdvertising()) {
-    LOG_INFO(
-        "extended advertising command rejected because legacy advertising"
-        " is being used");
+    INFO(id_,
+         "extended advertising command rejected because legacy advertising"
+         " is being used");
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
@@ -955,8 +968,8 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingEnable(
     // Advertising_Handle[i] arrayed parameter, then the Controller shall return
     // the error code Invalid HCI Command Parameters (0x12).
     if (used_advertising_handles[set.advertising_handle_]) {
-      LOG_INFO("advertising handle %02x is added more than once",
-               set.advertising_handle_);
+      INFO(id_, "advertising handle {:02x} is added more than once",
+           set.advertising_handle_);
       return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
     }
 
@@ -965,8 +978,8 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingEnable(
     // Unknown Advertising Identifier (0x42).
     if (extended_advertisers_.find(set.advertising_handle_) ==
         extended_advertisers_.end()) {
-      LOG_INFO("advertising handle %02x is not defined",
-               set.advertising_handle_);
+      INFO(id_, "advertising handle {:02x} is not defined",
+           set.advertising_handle_);
       return ErrorCode::UNKNOWN_ADVERTISING_IDENTIFIER;
     }
 
@@ -976,8 +989,8 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingEnable(
   // If Enable and Num_Sets are both set to
   // 0x00, then all advertising sets are disabled.
   if (!enable && sets.empty()) {
-    for (auto& advertiser : extended_advertisers_) {
-      advertiser.second.advertising_enable = false;
+    for (auto& [_, advertiser] : extended_advertisers_) {
+      advertiser.Disable();
     }
     return ErrorCode::SUCCESS;
   }
@@ -985,7 +998,7 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingEnable(
   // If Num_Sets is set to 0x00, the Controller shall return the error code
   // Invalid HCI Command Parameters (0x12).
   if (sets.empty()) {
-    LOG_INFO("enable is true but no advertising set is selected");
+    INFO(id_, "enable is true but no advertising set is selected");
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
@@ -993,7 +1006,7 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingEnable(
   if (!enable) {
     for (auto& set : sets) {
       auto& advertiser = extended_advertisers_[set.advertising_handle_];
-      advertiser.advertising_enable = false;
+      advertiser.Disable();
     }
     return ErrorCode::SUCCESS;
   }
@@ -1015,13 +1028,14 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingEnable(
     // If the advertising is high duty cycle connectable directed advertising,
     // then Duration[i] shall be less than or equal to 1.28 seconds and shall
     // not be equal to 0.
+    std::chrono::milliseconds duration =
+        std::chrono::milliseconds(set.duration_ * 10);
     if (connectable_advertising && directed_advertising &&
         high_duty_cycle_advertising &&
-        (set.duration_ == 0 ||
-         slots(set.duration_) > adv_direct_ind_high_timeout)) {
-      LOG_INFO(
-          "extended advertising is high duty cycle connectable directed"
-          " but the duration is either 0 or larger than 1.28 seconds");
+        (set.duration_ == 0 || duration > adv_direct_ind_high_timeout)) {
+      INFO(id_,
+           "extended advertising is high duty cycle connectable directed"
+           " but the duration is either 0 or larger than 1.28 seconds");
       return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
     }
 
@@ -1030,9 +1044,9 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingEnable(
     // Command Disallowed (0x0C).
     if (advertiser.partial_advertising_data ||
         advertiser.partial_scan_response_data) {
-      LOG_INFO(
-          "advertising set contains partial advertising"
-          " or scan response data");
+      INFO(id_,
+           "advertising set contains partial advertising"
+           " or scan response data");
       return ErrorCode::COMMAND_DISALLOWED;
     }
 
@@ -1041,9 +1055,9 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingEnable(
     // error code Command Disallowed (0x0C).
     if (extended_advertising && scannable_advertising &&
         advertiser.scan_response_data.empty()) {
-      LOG_INFO(
-          "advertising set uses scannable extended advertising PDUs"
-          " but no scan response data is provided");
+      INFO(id_,
+           "advertising set uses scannable extended advertising PDUs"
+           " but no scan response data is provided");
       return ErrorCode::COMMAND_DISALLOWED;
     }
 
@@ -1055,9 +1069,9 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingEnable(
         advertiser.advertising_data.size() >
             ExtendedAdvertiser::GetMaxAdvertisingDataLength(
                 advertising_event_properties)) {
-      LOG_INFO(
-          "advertising set uses connectable extended advertising PDUs"
-          " but the advertising data does not fit in AUX_ADV_IND PDUs");
+      INFO(id_,
+           "advertising set uses connectable extended advertising PDUs"
+           " but the advertising data does not fit in AUX_ADV_IND PDUs");
       return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
     }
 
@@ -1071,9 +1085,9 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingEnable(
                                      max_extended_advertising_pdu_size ||
                                  advertiser.scan_response_data.size() >
                                      max_extended_advertising_pdu_size)) {
-      LOG_INFO(
-          "advertising set uses extended advertising PDUs"
-          " but the advertising data does not fit in advertising PDUs");
+      INFO(id_,
+           "advertising set uses extended advertising PDUs"
+           " but the advertising data does not fit in advertising PDUs");
       return ErrorCode::PACKET_TOO_LONG;
     }
 
@@ -1102,7 +1116,8 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingEnable(
         // command, the Controller shall return the error code
         // Invalid HCI Command Parameters (0x12).
         if (random_address.GetAddress() == Address::kEmpty) {
-          LOG_INFO(
+          INFO(
+              id_,
               "own_address_type is Random_Device_Address but the Random_Address"
               " has not been initialized");
           return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
@@ -1125,15 +1140,28 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingEnable(
         if (resolvable_address) {
           advertiser.advertising_address = resolvable_address.value();
         } else if (random_address.GetAddress() == Address::kEmpty) {
-          LOG_INFO(
-              "own_address_type is Resolvable_Or_Random_Address but the"
-              " Resolving_List does not contain a matching entry and the"
-              " Random_Address is not initialized");
+          INFO(id_,
+               "own_address_type is Resolvable_Or_Random_Address but the"
+               " Resolving_List does not contain a matching entry and the"
+               " Random_Address is not initialized");
           return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
         } else {
           advertiser.advertising_address = random_address;
         }
         break;
+    }
+
+    // If an IRK is available in the Link Layer Resolving List for the peer
+    // device, then the target’s device address (TargetA field) shall
+    // use a resolvable private address. If an IRK is not available in the
+    // Link Layer Resolving List or the IRK is set to zero for the peer device,
+    // then the target’s device address (TargetA field) shall use the Identity
+    // Address when entering the Advertising State and using connectable
+    // directed events.
+    if (advertiser.IsDirected()) {
+      advertiser.target_address =
+          GenerateResolvablePrivateAddress(peer_address, IrkSelection::Peer)
+              .value_or(peer_address);
     }
   }
 
@@ -1141,10 +1169,17 @@ ErrorCode LinkLayerController::LeSetExtendedAdvertisingEnable(
     ExtendedAdvertiser& advertiser =
         extended_advertisers_[set.advertising_handle_];
 
+    advertiser.max_extended_advertising_events =
+        set.max_extended_advertising_events_;
     advertiser.num_completed_extended_advertising_events = 0;
-    advertiser.advertising_enable = true;
-    advertiser.next_event = std::chrono::steady_clock::now() +
-                            advertiser.primary_advertising_interval;
+    advertiser.Enable();
+    if (set.duration_ > 0) {
+      std::chrono::milliseconds duration =
+          std::chrono::milliseconds(set.duration_ * 10);
+      advertiser.timeout = std::chrono::steady_clock::now() + duration;
+    } else {
+      advertiser.timeout.reset();
+    }
   }
 
   return ErrorCode::SUCCESS;
@@ -1158,8 +1193,8 @@ ErrorCode LinkLayerController::LeRemoveAdvertisingSet(
   // Unknown Advertising Identifier (0x42).
   auto advertiser = extended_advertisers_.find(advertising_handle);
   if (advertiser == extended_advertisers_.end()) {
-    LOG_INFO("no advertising set defined with handle %02x",
-             static_cast<int>(advertising_handle));
+    INFO(id_, "no advertising set defined with handle {:02x}",
+         static_cast<int>(advertising_handle));
     return ErrorCode::UNKNOWN_ADVERTISING_IDENTIFIER;
   }
 
@@ -1167,8 +1202,8 @@ ErrorCode LinkLayerController::LeRemoveAdvertisingSet(
   // enabled, then the Controller shall return the error code
   // Command Disallowed (0x0C).
   if (advertiser->second.advertising_enable) {
-    LOG_INFO("the advertising set defined with handle %02x is enabled",
-             static_cast<int>(advertising_handle));
+    INFO(id_, "the advertising set defined with handle {:02x} is enabled",
+         static_cast<int>(advertising_handle));
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
@@ -1182,8 +1217,8 @@ ErrorCode LinkLayerController::LeClearAdvertisingSets() {
   // then the Controller shall return the error code Command Disallowed (0x0C).
   for (auto& advertiser : extended_advertisers_) {
     if (advertiser.second.advertising_enable) {
-      LOG_INFO("the advertising set with handle %02x is enabled",
-               static_cast<int>(advertiser.second.advertising_enable));
+      INFO(id_, "the advertising set with handle {:02x} is enabled",
+           static_cast<int>(advertiser.second.advertising_enable));
       return ErrorCode::COMMAND_DISALLOWED;
     }
   }
@@ -1288,6 +1323,310 @@ uint16_t ExtendedAdvertiser::GetRawAdvertisingEventProperties(
 }
 
 // =============================================================================
+//  Periodic Advertising Commands
+// =============================================================================
+
+// HCI LE Set Periodic Advertising Parameters command (Vol 4, Part E § 7.8.61).
+ErrorCode LinkLayerController::LeSetPeriodicAdvertisingParameters(
+    uint8_t advertising_handle, uint16_t periodic_advertising_interval_min,
+    uint16_t periodic_advertising_interval_max, bool /*include_tx_power*/) {
+  // The Advertising_Handle parameter identifies the advertising set whose
+  // periodic advertising parameters are being configured. If the corresponding
+  // advertising set does not already exist, then the Controller shall return
+  // the error code Unknown Advertising Identifier (0x42).
+  // TODO(c++20) unordered_map<>::contains
+  if (extended_advertisers_.count(advertising_handle) == 0) {
+    INFO(id_, "no advertising set defined with handle {:02x}",
+         static_cast<int>(advertising_handle));
+    return ErrorCode::UNKNOWN_ADVERTISING_IDENTIFIER;
+  }
+
+  ExtendedAdvertiser& advertiser = extended_advertisers_[advertising_handle];
+
+  // The Periodic_Advertising_Interval_Min parameter shall be less than or
+  // equal to the Periodic_Advertising_Interval_Max parameter.
+  if (periodic_advertising_interval_min < 0x6 ||
+      periodic_advertising_interval_max < 0x6 ||
+      periodic_advertising_interval_max < periodic_advertising_interval_min) {
+    INFO(id_, "invalid periodic advertising interval range {:04x} - {:04x}",
+         periodic_advertising_interval_min, periodic_advertising_interval_max);
+    return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
+  }
+
+  // If the advertising set identified by the Advertising_Handle specified
+  // scannable, connectable, legacy, or anonymous advertising, the Controller
+  // shall return the error code Invalid HCI Command Parameters (0x12).
+  if (advertiser.advertising_event_properties.connectable_ ||
+      advertiser.advertising_event_properties.scannable_ ||
+      advertiser.advertising_event_properties.legacy_ ||
+      advertiser.advertising_event_properties.anonymous_) {
+    INFO(id_,
+         "the periodic advertising set {:02x} specifies scannable,"
+         " connectable, legacy or anonymous advertising",
+         static_cast<int>(advertising_handle));
+    return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
+  }
+
+  // If the Host issues this command when periodic advertising is enabled for
+  // the specified advertising set, the Controller shall return the error code
+  // Command Disallowed (0x0C).
+  if (advertiser.periodic_advertising_enable) {
+    INFO(id_, "periodic advertising is enabled for the set {:02x}",
+         static_cast<int>(advertising_handle));
+    return ErrorCode::COMMAND_DISALLOWED;
+  }
+
+  // If the Advertising_Handle does not identify an advertising set that is
+  // already configured for periodic advertising and the Controller is unable
+  // to support more periodic advertising at present, the Controller shall
+  // return the error code Memory Capacity Exceeded (0x07)
+  // TODO: add controller configuration for maximum number of periodic
+  // advertising sets.
+
+  // If the advertising set already contains periodic advertising data and the
+  // length of the data is greater than the maximum that the Controller can
+  // transmit within a periodic advertising interval of
+  // Periodic_Advertising_Interval_Max, the Controller shall return the error
+  // code Packet Too Long (0x45).
+  if (advertiser.periodic_advertising_data.size() >
+      ExtendedAdvertiser::GetMaxPeriodicAdvertisingDataLength(
+          slots(periodic_advertising_interval_max))) {
+    INFO(id_,
+         "the length of the periodic advertising data exceeds the maximum"
+         " that the controller can transmit within the maximum periodic"
+         " advertising interval");
+    return ErrorCode::PACKET_TOO_LONG;
+  }
+
+  advertiser.periodic_advertising_interval =
+      slots(periodic_advertising_interval_max);
+  return ErrorCode::SUCCESS;
+}
+
+// HCI LE Set Periodic Advertising Data command (Vol 4, Part E § 7.8.62).
+ErrorCode LinkLayerController::LeSetPeriodicAdvertisingData(
+    uint8_t advertising_handle, bluetooth::hci::Operation operation,
+    const std::vector<uint8_t>& advertising_data) {
+  // If the advertising set corresponding to the Advertising_Handle parameter
+  // does not exist, then the Controller shall return the error code
+  // Unknown Advertising Identifier (0x42).
+  // TODO(c++20) unordered_map<>::contains
+  if (extended_advertisers_.count(advertising_handle) == 0) {
+    INFO(id_, "no advertising set defined with handle {:02x}",
+         static_cast<int>(advertising_handle));
+    return ErrorCode::UNKNOWN_ADVERTISING_IDENTIFIER;
+  }
+
+  ExtendedAdvertiser& advertiser = extended_advertisers_[advertising_handle];
+
+  // If the advertising set has not been configured for periodic advertising,
+  // then the Controller shall return the error code Command Disallowed (0x0C).
+  if (advertiser.periodic_advertising_interval.count() == 0) {
+    INFO(id_, "periodic advertising is not configured for the set {:02x}",
+         static_cast<int>(advertising_handle));
+    return ErrorCode::COMMAND_DISALLOWED;
+  }
+
+  // If periodic advertising is currently enabled for the specified advertising
+  // set and Operation does not have the value 0x03 or 0x04, then the Controller
+  // shall return the error code Command Disallowed (0x0C).
+  if (advertiser.periodic_advertising_enable &&
+      operation != Operation::COMPLETE_ADVERTISEMENT &&
+      operation != Operation::UNCHANGED_DATA) {
+    INFO(id_,
+         "periodic advertising is enabled and the operation is not"
+         " Complete_Advertisement or Unchanged_Data");
+    return ErrorCode::COMMAND_DISALLOWED;
+  }
+
+  // If Operation is not 0x03 or 0x04 and Advertising_Data_Length is zero,
+  // then the Controller shall return the error code
+  // Invalid HCI Command Parameters (0x12).
+  if (advertising_data.empty() &&
+      operation != Operation::COMPLETE_ADVERTISEMENT &&
+      operation != Operation::UNCHANGED_DATA) {
+    INFO(id_,
+         "periodic advertising data is empty is enabled and the operation"
+         " is not Complete_Advertisement or Unchanged_Data");
+    return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
+  }
+
+  // If Operation is 0x04 and:
+  // • periodic advertising is currently disabled for the advertising set;
+  // • the periodic advertising set contains no data; or
+  // • Advertising_Data_Length is not zero;
+  // then the Controller shall return the error code
+  // Invalid HCI Command Parameters (0x12).
+  if (operation == Operation::UNCHANGED_DATA &&
+      (!advertiser.periodic_advertising_enable ||
+       advertiser.periodic_advertising_data.empty() ||
+       !advertising_data.empty())) {
+    INFO(
+        id_,
+        "Unchanged_Data operation is used but periodic advertising is disabled;"
+        " or the periodic advertising set contains no data;"
+        " or the advertising data is not empty");
+    return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
+  }
+
+  switch (operation) {
+    case Operation::INTERMEDIATE_FRAGMENT:
+      advertiser.periodic_advertising_data.insert(
+          advertiser.periodic_advertising_data.end(), advertising_data.begin(),
+          advertising_data.end());
+      advertiser.partial_periodic_advertising_data = true;
+      break;
+
+    case Operation::FIRST_FRAGMENT:
+      advertiser.periodic_advertising_data = advertising_data;
+      advertiser.partial_periodic_advertising_data = true;
+      break;
+
+    case Operation::LAST_FRAGMENT:
+      advertiser.periodic_advertising_data.insert(
+          advertiser.periodic_advertising_data.end(), advertising_data.begin(),
+          advertising_data.end());
+      advertiser.partial_periodic_advertising_data = false;
+      break;
+
+    case Operation::COMPLETE_ADVERTISEMENT:
+      advertiser.periodic_advertising_data = advertising_data;
+      advertiser.partial_periodic_advertising_data = false;
+      break;
+
+    case Operation::UNCHANGED_DATA:
+      break;
+
+    default:
+      INFO(id_, "unknown operation ({})", static_cast<int>(operation));
+      return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
+  }
+
+  // If the combined length of the data exceeds the capacity of the advertising
+  // set identified by the Advertising_Handle parameter or the amount of memory
+  // currently available, all the data shall be discarded and the Controller
+  // shall return the error code Memory Capacity Exceeded (0x07).
+  if (advertiser.periodic_advertising_data.size() >
+      properties_.le_max_advertising_data_length) {
+    INFO(id_,
+         "the length of the combined periodic advertising data exceeds"
+         " the maximum advertising data length");
+    advertiser.periodic_advertising_data.clear();
+    advertiser.partial_periodic_advertising_data = false;
+    return ErrorCode::MEMORY_CAPACITY_EXCEEDED;
+  }
+
+  // If the combined length of the data is greater than the maximum that the
+  // Controller can transmit within the current periodic advertising interval
+  // for the advertising set, all the data shall be discarded and the
+  // Controller shall return the error code Packet Too Long (0x45).
+  if (advertiser.periodic_advertising_data.size() >
+      ExtendedAdvertiser::GetMaxPeriodicAdvertisingDataLength(
+          advertiser.periodic_advertising_interval)) {
+    INFO(id_,
+         "the length of the combined periodic advertising data exceeds"
+         " the maximum that the controller can transmit within the current"
+         " periodic advertising interval");
+    advertiser.periodic_advertising_data.clear();
+    advertiser.partial_periodic_advertising_data = false;
+    return ErrorCode::PACKET_TOO_LONG;
+  }
+
+  return ErrorCode::SUCCESS;
+}
+
+// HCI LE Set Periodic Advertising Enable command (Vol 4, Part E § 7.8.63).
+ErrorCode LinkLayerController::LeSetPeriodicAdvertisingEnable(
+    bool enable, bool include_adi, uint8_t advertising_handle) {
+  // If the advertising set corresponding to the Advertising_Handle parameter
+  // does not exist, the Controller shall return the error code Unknown
+  // Advertising Identifier (0x42).
+  // TODO(c++20) unordered_map<>::contains
+  if (extended_advertisers_.count(advertising_handle) == 0) {
+    INFO(id_, "no advertising set defined with handle {:02x}",
+         static_cast<int>(advertising_handle));
+    return ErrorCode::UNKNOWN_ADVERTISING_IDENTIFIER;
+  }
+
+  ExtendedAdvertiser& advertiser = extended_advertisers_[advertising_handle];
+
+  if (!enable) {
+    advertiser.DisablePeriodic();
+    return ErrorCode::SUCCESS;
+  }
+
+  // If bit 0 of Enable is set to 1 (periodic advertising is enabled) and the
+  // advertising set contains partial periodic advertising data, the Controller
+  // shall return the error code Command Disallowed (0x0C).
+  if (advertiser.partial_periodic_advertising_data) {
+    INFO(id_, "the advertising set contains partial periodic advertising data");
+    return ErrorCode::COMMAND_DISALLOWED;
+  }
+
+  // If bit 0 of Enable is set to 1 and the Host has not issued the
+  // HCI_LE_Set_Periodic_Advertising_Parameters command for the advertising set,
+  // the Controller shall either use vendor-specified parameters or return the
+  // error code Command Disallowed (0x0C).
+  if (advertiser.periodic_advertising_interval.count() == 0) {
+    INFO(id_, "periodic advertising is not configured for the set {:02x}",
+         static_cast<int>(advertising_handle));
+    return ErrorCode::COMMAND_DISALLOWED;
+  }
+
+  // If bit 0 of Enable is set to 1 and the length of the periodic advertising
+  // data is greater than the maximum that the Controller can transmit within
+  // the chosen periodic advertising interval, the Controller shall return the
+  // error code Packet Too Long (0x45).
+  if (advertiser.periodic_advertising_data.size() >
+      ExtendedAdvertiser::GetMaxPeriodicAdvertisingDataLength(
+          advertiser.periodic_advertising_interval)) {
+    INFO(id_,
+         "the length of the combined periodic advertising data exceeds"
+         " the maximum that the controller can transmit within the current"
+         " periodic advertising interval");
+    return ErrorCode::PACKET_TOO_LONG;
+  }
+
+  // If bit 0 of Enable is set to 1 and the advertising set identified by the
+  // Advertising_Handle specified scannable, connectable, legacy, or anonymous
+  // advertising, the Controller shall return the error code
+  // Command Disallowed (0x0C).
+  if (advertiser.advertising_event_properties.connectable_ ||
+      advertiser.advertising_event_properties.scannable_ ||
+      advertiser.advertising_event_properties.legacy_ ||
+      advertiser.advertising_event_properties.anonymous_) {
+    INFO(id_,
+         "the periodic advertising set {:02x} specifies scannable,"
+         " connectable, legacy or anonymous advertising",
+         static_cast<int>(advertising_handle));
+    return ErrorCode::COMMAND_DISALLOWED;
+  }
+
+  // If bit 1 of Enable is set to 1 and the Controller does not support the
+  // Periodic Advertising ADI Support feature, the Controller shall return an
+  // error which should use the error code Unsupported Feature or
+  // Parameter Value (0x11).
+  if (include_adi && !properties_.SupportsLLFeature(
+                         LLFeaturesBits::PERIODIC_ADVERTISING_ADI_SUPPORT)) {
+    INFO(id_,
+         "include ADI is true but the controller does not support the"
+         " Periodic Advertising ADI Supported feature",
+         static_cast<int>(advertising_handle));
+    return ErrorCode::UNSUPPORTED_FEATURE_OR_PARAMETER_VALUE;
+  }
+
+  advertiser.EnablePeriodic();
+  return ErrorCode::SUCCESS;
+}
+
+uint16_t ExtendedAdvertiser::GetMaxPeriodicAdvertisingDataLength(
+    slots /*periodic_advertising_interval*/) {
+  // TODO: evaluate the maximum length of the advertising PDU that can
+  // be physically sent in the advertising interval.
+  return max_extended_advertising_pdu_size;
+}
+
+// =============================================================================
 //  Advertising Routines
 // =============================================================================
 
@@ -1306,7 +1645,7 @@ void LinkLayerController::LeAdvertising() {
     // HCI_LE_Connection_Complete or HCI_LE_Enhanced_Connection_Complete
     // event shall be generated with the Status code set to
     // Advertising Timeout (0x3C).
-    LOG_INFO("Directed Advertising Timeout");
+    INFO(id_, "Directed Advertising Timeout");
     legacy_advertiser_.Disable();
 
     // TODO: The PTS tool expects an LE_Connection_Complete event in this
@@ -1337,7 +1676,8 @@ void LinkLayerController::LeAdvertising() {
   // Generate Link Layer Advertising events when advertising is enabled
   // and a full interval has passed since the last event.
   if (legacy_advertiser_.IsEnabled() && now >= legacy_advertiser_.next_event) {
-    legacy_advertiser_.next_event += legacy_advertiser_.advertising_interval;
+    legacy_advertiser_.next_event =
+        now + legacy_advertiser_.advertising_interval;
     model::packets::LegacyAdvertisingType type;
     bool attach_advertising_data = true;
     switch (legacy_advertiser_.advertising_type) {
@@ -1374,7 +1714,7 @@ void LinkLayerController::LeAdvertising() {
   for (auto& [_, advertiser] : extended_advertisers_) {
     // Extended Advertising Timeouts
 
-    if (advertiser.IsEnabled() && advertiser.timeout &&
+    if (advertiser.IsEnabled() && advertiser.timeout.has_value() &&
         now >= advertiser.timeout.value()) {
       // If the Duration[i] parameter is set to a value other than 0x0000, an
       // HCI_LE_Advertising_Set_Terminated event shall be generated when the
@@ -1386,7 +1726,7 @@ void LinkLayerController::LeAdvertising() {
       // set to the error code Advertising Timeout (0x3C) may be generated
       // instead of or in addition to the HCI_LE_Advertising_Set_Terminated
       // event.
-      LOG_INFO("Extended Advertising Timeout");
+      INFO(id_, "Extended Advertising Timeout");
       advertiser.Disable();
 
       bool high_duty_cycle_connectable_directed_advertising =
@@ -1412,9 +1752,16 @@ void LinkLayerController::LeAdvertising() {
       }
 
       if (IsLeEventUnmasked(SubeventCode::ADVERTISING_SET_TERMINATED)) {
+        // The parameter Num_Completed_Extended_Advertising_Events is set
+        // only when Max_Extended_Advertising_Events was configured as
+        // non-zero in the advertising parameters.
+        uint8_t num_completed_extended_advertising_events =
+            advertiser.max_extended_advertising_events != 0
+                ? advertiser.num_completed_extended_advertising_events
+                : 0;
         send_event_(bluetooth::hci::LeAdvertisingSetTerminatedBuilder::Create(
             ErrorCode::ADVERTISING_TIMEOUT, advertiser.advertising_handle, 0,
-            advertiser.num_completed_extended_advertising_events));
+            num_completed_extended_advertising_events));
       }
     }
 
@@ -1425,7 +1772,7 @@ void LinkLayerController::LeAdvertising() {
       // other than 0x00, an HCI_LE_Advertising_Set_Terminated event shall be
       // generated when the maximum number of extended advertising events has
       // been transmitted by the Controller.
-      LOG_INFO("Max Extended Advertising count reached");
+      INFO(id_, "Max Extended Advertising count reached");
       advertiser.Disable();
 
       if (IsLeEventUnmasked(SubeventCode::ADVERTISING_SET_TERMINATED)) {
@@ -1464,7 +1811,8 @@ void LinkLayerController::LeAdvertising() {
             type = model::packets::LegacyAdvertisingType::ADV_NONCONN_IND;
             break;
           default:
-            LOG_ALWAYS_FATAL(
+            FATAL(
+                id_,
                 "unexpected raw advertising event properties;"
                 " please check the extended advertising parameter validation");
             break;
@@ -1493,13 +1841,33 @@ void LinkLayerController::LeAdvertising() {
                 advertiser.advertising_event_properties.scannable_,
                 advertiser.advertising_event_properties.directed_,
                 advertiser.advertising_sid, advertiser.advertising_tx_power,
-                static_cast<model::packets::PrimaryPhyType>(
+                static_cast<model::packets::PhyType>(
                     advertiser.primary_advertising_phy),
-                static_cast<model::packets::SecondaryPhyType>(
+                static_cast<model::packets::PhyType>(
                     advertiser.secondary_advertising_phy),
+                advertiser.periodic_advertising_interval.count(),
                 advertiser.advertising_data),
             advertiser.advertising_tx_power);
       }
+    }
+
+    // Periodic Advertising Event
+
+    // Generate Link Layer Advertising events when advertising is enabled
+    // and a full interval has passed since the last event.
+    if (advertiser.IsPeriodicEnabled() &&
+        now >= advertiser.next_periodic_event) {
+      advertiser.next_periodic_event +=
+          advertiser.periodic_advertising_interval;
+      SendLeLinkLayerPacket(
+          model::packets::LePeriodicAdvertisingPduBuilder::Create(
+              advertiser.advertising_address.GetAddress(), Address(),
+              static_cast<model::packets::AddressType>(
+                  advertiser.advertising_address.GetAddressType()),
+              advertiser.advertising_sid, advertiser.advertising_tx_power,
+              advertiser.periodic_advertising_interval.count(),
+              advertiser.periodic_advertising_data),
+          advertiser.advertising_tx_power);
     }
   }
 }

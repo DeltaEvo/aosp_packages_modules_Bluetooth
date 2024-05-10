@@ -16,15 +16,16 @@
  *
  ******************************************************************************/
 
-#include <base/logging.h>
-#include <base/strings/stringprintf.h>
+#include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 #include <string.h>
 
-#include "bt_target.h"
-#include "device/include/controller.h"
 #include "gap_api.h"
+#include "hci/controller_interface.h"
+#include "internal_include/bt_target.h"
 #include "l2c_api.h"
 #include "l2cdefs.h"
+#include "main/shim/entry.h"
 #include "osi/include/allocator.h"
 #include "osi/include/fixed_queue.h"
 #include "osi/include/mutex.h"
@@ -32,7 +33,7 @@
 #include "stack/include/bt_hdr.h"
 #include "types/raw_address.h"
 
-using base::StringPrintf;
+using namespace bluetooth;
 
 /* Define the GAP Connection Control Block */
 typedef struct {
@@ -103,6 +104,8 @@ static tGAP_CCB* gap_allocate_ccb(void);
 static void gap_release_ccb(tGAP_CCB* p_ccb);
 static void gap_checks_con_flags(tGAP_CCB* p_ccb);
 
+bool BTM_UseLeLink(const RawAddress& bd_addr);
+
 /*******************************************************************************
  *
  * Function         gap_conn_init
@@ -170,8 +173,6 @@ uint16_t GAP_ConnOpen(const char* p_serv_name, uint8_t service_id,
   tGAP_CCB* p_ccb;
   uint16_t cid;
 
-  DVLOG(1) << "GAP_CONN - Open Request";
-
   /* Allocate a new CCB. Return if none available. */
   p_ccb = gap_allocate_ccb();
   if (p_ccb == NULL) return (GAP_INVALID_HANDLE);
@@ -197,8 +198,8 @@ uint16_t GAP_ConnOpen(const char* p_serv_name, uint8_t service_id,
   /* A client MUST have specified a bd addr to connect with */
   if (!p_ccb->rem_addr_specified && !is_server) {
     gap_release_ccb(p_ccb);
-    LOG(ERROR)
-        << "GAP ERROR: Client must specify a remote BD ADDR to connect to!";
+    log::error(
+        "GAP ERROR: Client must specify a remote BD ADDR to connect to!");
     return (GAP_INVALID_HANDLE);
   }
 
@@ -210,16 +211,14 @@ uint16_t GAP_ConnOpen(const char* p_serv_name, uint8_t service_id,
     p_ccb->local_coc_cfg.credits = L2CA_LeCreditDefault();
     p_ccb->local_coc_cfg.mtu = p_cfg->mtu;
 
-    uint16_t max_mps = controller_get_interface()->get_acl_data_size_ble();
+    uint16_t max_mps = bluetooth::shim::GetController()
+                           ->GetLeBufferSize()
+                           .le_data_packet_length_;
     if (le_mps > max_mps) {
-      LOG(INFO) << "Limiting MPS to one buffer size - " << max_mps;
+      log::info("Limiting MPS to one buffer size - {}", max_mps);
       le_mps = max_mps;
     }
     p_ccb->local_coc_cfg.mps = le_mps;
-
-    VLOG(2) << __func__ << ": credits=" << p_ccb->local_coc_cfg.credits
-            << ", mps=" << p_ccb->local_coc_cfg.mps
-            << ", mtu=" << p_ccb->local_coc_cfg.mtu;
   }
 
   p_ccb->p_callback = p_cb;
@@ -245,8 +244,7 @@ uint16_t GAP_ConnOpen(const char* p_serv_name, uint8_t service_id,
         L2CA_Register2(psm, conn.reg_info, false /* enable_snoop */,
                        &p_ccb->ertm_info, L2CAP_SDU_LENGTH_MAX, 0, security);
     if (p_ccb->psm == 0) {
-      LOG(ERROR) << StringPrintf("%s: Failure registering PSM 0x%04x", __func__,
-                                 psm);
+      log::error("Failure registering PSM 0x{:04x}", psm);
       gap_release_ccb(p_ccb);
       return (GAP_INVALID_HANDLE);
     }
@@ -256,8 +254,7 @@ uint16_t GAP_ConnOpen(const char* p_serv_name, uint8_t service_id,
     p_ccb->psm =
         L2CA_RegisterLECoc(psm, conn.reg_info, security, p_ccb->local_coc_cfg);
     if (p_ccb->psm == 0) {
-      LOG(ERROR) << StringPrintf("%s: Failure registering PSM 0x%04x", __func__,
-                                 psm);
+      log::error("Failure registering PSM 0x{:04x}", psm);
       gap_release_ccb(p_ccb);
       return (GAP_INVALID_HANDLE);
     }
@@ -317,8 +314,6 @@ uint16_t GAP_ConnOpen(const char* p_serv_name, uint8_t service_id,
  ******************************************************************************/
 uint16_t GAP_ConnClose(uint16_t gap_handle) {
   tGAP_CCB* p_ccb = gap_find_ccb_by_handle(gap_handle);
-
-  DVLOG(1) << StringPrintf("GAP_CONN - close  handle: 0x%x", gap_handle);
 
   if (p_ccb) {
     /* Check if we have a connection ID */
@@ -393,10 +388,6 @@ uint16_t GAP_ConnReadData(uint16_t gap_handle, uint8_t* p_data,
 
   mutex_global_unlock();
 
-  DVLOG(1) << StringPrintf(
-      "GAP_ConnReadData - rx_queue_size left=%d, *p_len=%d",
-      p_ccb->rx_queue_size, *p_len);
-
   return (BT_PASS);
 }
 
@@ -425,9 +416,6 @@ int GAP_GetRxQueueCnt(uint16_t handle, uint32_t* p_rx_queue_count) {
       rc = GAP_INVALID_HANDLE;
   } else
     rc = GAP_INVALID_HANDLE;
-
-  DVLOG(1) << StringPrintf("GAP_GetRxQueueCnt - rc = 0x%04x, rx_queue_count=%d",
-                           rc, *p_rx_queue_count);
 
   return (rc);
 }
@@ -491,8 +479,6 @@ uint16_t GAP_ConnWriteData(uint16_t gap_handle, BT_HDR* msg) {
     return GAP_ERR_ILL_PARM;
   }
 
-  DVLOG(1) << StringPrintf("GAP_WriteData %d bytes", msg->len);
-
   fixed_queue_enqueue(p_ccb->tx_queue, msg);
 
   if (!gap_try_write_queued_data(p_ccb)) return GAP_ERR_BAD_STATE;
@@ -516,14 +502,9 @@ uint16_t GAP_ConnWriteData(uint16_t gap_handle, BT_HDR* msg) {
 const RawAddress* GAP_ConnGetRemoteAddr(uint16_t gap_handle) {
   tGAP_CCB* p_ccb = gap_find_ccb_by_handle(gap_handle);
 
-  DVLOG(1) << __func__ << " gap_handle = " << gap_handle;
-
   if ((p_ccb) && (p_ccb->con_state > GAP_CCB_STATE_LISTENING)) {
-    DVLOG(1) << __func__ << " BDA: "
-             << ADDRESS_TO_LOGGABLE_STR(p_ccb->rem_dev_address);
     return &p_ccb->rem_dev_address;
   } else {
-    DVLOG(1) << __func__ << " return Error ";
     return nullptr;
   }
 }
@@ -585,7 +566,6 @@ void gap_tx_complete_ind(uint16_t l2cap_cid, uint16_t sdu_sent) {
   if (p_ccb == NULL) return;
 
   if ((p_ccb->con_state == GAP_CCB_STATE_CONNECTED) && (sdu_sent == 0xFFFF)) {
-    DVLOG(1) << StringPrintf("%s: GAP_EVT_TX_EMPTY", __func__);
     p_ccb->p_callback(p_ccb->gap_handle, GAP_EVT_TX_EMPTY, nullptr);
   }
 }
@@ -614,13 +594,13 @@ static void gap_connect_ind(const RawAddress& bd_addr, uint16_t l2cap_cid,
   }
 
   if (xx == GAP_MAX_CONNECTIONS) {
-    LOG(WARNING) << "*******";
-    LOG(WARNING) << "WARNING: GAP Conn Indication for Unexpected Bd "
-                    "Addr...Disconnecting";
-    LOG(WARNING) << "*******";
+    log::warn("*******");
+    log::warn(
+        "WARNING: GAP Conn Indication for Unexpected Bd Addr...Disconnecting");
+    log::warn("*******");
 
     /* Disconnect because it is an unexpected connection */
-    if (p_ccb->transport == BT_TRANSPORT_LE) {
+    if (BTM_UseLeLink(bd_addr)) {
       L2CA_DisconnectLECocReq(l2cap_cid);
     } else {
       L2CA_DisconnectReq(l2cap_cid);
@@ -646,9 +626,6 @@ static void gap_connect_ind(const RawAddress& bd_addr, uint16_t l2cap_cid,
     p_ccb->con_flags |= GAP_CCB_FLAGS_MY_CFG_DONE;
     gap_checks_con_flags(p_ccb);
   }
-
-  DVLOG(1) << StringPrintf("GAP_CONN - Rcvd L2CAP conn ind, CID: 0x%x",
-                           p_ccb->connection_id);
 }
 
 /*******************************************************************************
@@ -662,12 +639,20 @@ static void gap_connect_ind(const RawAddress& bd_addr, uint16_t l2cap_cid,
  *
  ******************************************************************************/
 static void gap_checks_con_flags(tGAP_CCB* p_ccb) {
-  DVLOG(1) << __func__ << " conn_flags:0x" << +p_ccb->con_flags;
   /* if all the required con_flags are set, report the OPEN event now */
   if ((p_ccb->con_flags & GAP_CCB_FLAGS_CONN_DONE) == GAP_CCB_FLAGS_CONN_DONE) {
+    tGAP_CB_DATA* cb_data_ptr = nullptr;
+    tGAP_CB_DATA cb_data;
+    uint16_t l2cap_remote_cid;
+    if (com::android::bluetooth::flags::bt_socket_api_l2cap_cid() &&
+        L2CA_GetPeerChannelId(p_ccb->connection_id, &l2cap_remote_cid)) {
+      cb_data.l2cap_cids.local_cid = p_ccb->connection_id;
+      cb_data.l2cap_cids.remote_cid = l2cap_remote_cid;
+      cb_data_ptr = &cb_data;
+    }
     p_ccb->con_state = GAP_CCB_STATE_CONNECTED;
 
-    p_ccb->p_callback(p_ccb->gap_handle, GAP_EVT_CONN_OPENED, nullptr);
+    p_ccb->p_callback(p_ccb->gap_handle, GAP_EVT_CONN_OPENED, cb_data_ptr);
   }
 }
 
@@ -823,8 +808,6 @@ static void gap_config_cfm(uint16_t l2cap_cid, uint16_t initiator,
 static void gap_disconnect_ind(uint16_t l2cap_cid, bool ack_needed) {
   tGAP_CCB* p_ccb;
 
-  DVLOG(1) << StringPrintf("GAP_CONN - Rcvd L2CAP disc, CID: 0x%x", l2cap_cid);
-
   /* Find CCB based on CID */
   p_ccb = gap_find_ccb_by_cid(l2cap_cid);
   if (p_ccb == NULL) return;
@@ -856,10 +839,8 @@ static void gap_data_ind(uint16_t l2cap_cid, BT_HDR* p_msg) {
     fixed_queue_enqueue(p_ccb->rx_queue, p_msg);
 
     p_ccb->rx_queue_size += p_msg->len;
-    /*
-    DVLOG(1) << StringPrintf ("gap_data_ind - rx_queue_size=%d, msg len=%d",
-                                   p_ccb->rx_queue_size, p_msg->len);
-     */
+    // log::verbose("gap_data_ind - rx_queue_size={}, msg len={}",
+    //              p_ccb->rx_queue_size, p_msg->len);
 
     p_ccb->p_callback(p_ccb->gap_handle, GAP_EVT_CONN_DATA_AVAIL, nullptr);
   } else {
@@ -876,9 +857,6 @@ static void gap_data_ind(uint16_t l2cap_cid, BT_HDR* p_msg) {
  *
  ******************************************************************************/
 static void gap_congestion_ind(uint16_t lcid, bool is_congested) {
-  DVLOG(1) << StringPrintf("GAP_CONN - Rcvd L2CAP Is Congested (%d), CID: 0x%x",
-                           is_congested, lcid);
-
   tGAP_CCB* p_ccb = gap_find_ccb_by_cid(lcid); /* Find CCB based on CID */
   if (!p_ccb) return;
 
@@ -1002,8 +980,6 @@ static void gap_release_ccb(tGAP_CCB* p_ccb) {
   for (uint16_t i = 0; i < GAP_MAX_CONNECTIONS; i++, p_ccb_local++) {
     if ((p_ccb_local->con_state != GAP_CCB_STATE_IDLE) &&
         (p_ccb_local->psm == p_ccb->psm)) {
-      DVLOG(1) << __func__ << " : " << +p_ccb_local->psm
-               << " PSM is still in use, do not deregister";
       return;
     }
   }
@@ -1014,7 +990,7 @@ static void gap_release_ccb(tGAP_CCB* p_ccb) {
   if (p_ccb->transport == BT_TRANSPORT_LE) L2CA_DeregisterLECoc(p_ccb->psm);
 }
 
-extern void gap_attr_db_init(void);
+void gap_attr_db_init(void);
 
 /*
  * This routine should not be called except once per stack invocation.

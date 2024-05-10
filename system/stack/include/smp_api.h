@@ -26,9 +26,8 @@
 
 #include <cstdint>
 
-#include "bt_target.h"
 #include "smp_api_types.h"
-#include "types/bt_transport.h"
+#include "types/ble_address_with_type.h"
 #include "types/raw_address.h"
 
 /*****************************************************************************
@@ -45,19 +44,7 @@
  * Returns          void
  *
  ******************************************************************************/
-extern void SMP_Init(void);
-
-/*******************************************************************************
- *
- * Function         SMP_SetTraceLevel
- *
- * Description      This function sets the trace level for SMP.  If called with
- *                  a value of 0xFF, it simply returns the current trace level.
- *
- * Returns          The new or current trace level
- *
- ******************************************************************************/
-extern uint8_t SMP_SetTraceLevel(uint8_t new_level);
+void SMP_Init(uint8_t init_security_mode);
 
 /*******************************************************************************
  *
@@ -68,7 +55,7 @@ extern uint8_t SMP_SetTraceLevel(uint8_t new_level);
  * Returns          void
  *
  ******************************************************************************/
-extern bool SMP_Register(tSMP_CALLBACK* p_cback);
+bool SMP_Register(tSMP_CALLBACK* p_cback);
 
 /*******************************************************************************
  *
@@ -79,9 +66,8 @@ extern bool SMP_Register(tSMP_CALLBACK* p_cback);
  * Returns          SMP_STARTED if bond started, else otherwise exception.
  *
  ******************************************************************************/
-extern tSMP_STATUS SMP_Pair(const RawAddress& bd_addr);
-extern tSMP_STATUS SMP_Pair(const RawAddress& bd_addr,
-                            tBLE_ADDR_TYPE addr_type);
+tSMP_STATUS SMP_Pair(const RawAddress& bd_addr);
+tSMP_STATUS SMP_Pair(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type);
 
 /*******************************************************************************
  *
@@ -93,7 +79,7 @@ extern tSMP_STATUS SMP_Pair(const RawAddress& bd_addr,
  *                  failure.
  *
  ******************************************************************************/
-extern tSMP_STATUS SMP_BR_PairWith(const RawAddress& bd_addr);
+tSMP_STATUS SMP_BR_PairWith(const RawAddress& bd_addr);
 
 /*******************************************************************************
  *
@@ -104,7 +90,7 @@ extern tSMP_STATUS SMP_BR_PairWith(const RawAddress& bd_addr);
  * Returns          true - pairing cancelled
  *
  ******************************************************************************/
-extern bool SMP_PairCancel(const RawAddress& bd_addr);
+bool SMP_PairCancel(const RawAddress& bd_addr);
 
 /*******************************************************************************
  *
@@ -120,7 +106,7 @@ extern bool SMP_PairCancel(const RawAddress& bd_addr);
  * Returns          None
  *
  ******************************************************************************/
-extern void SMP_SecurityGrant(const RawAddress& bd_addr, tSMP_STATUS res);
+void SMP_SecurityGrant(const RawAddress& bd_addr, tSMP_STATUS res);
 
 /*******************************************************************************
  *
@@ -136,8 +122,7 @@ extern void SMP_SecurityGrant(const RawAddress& bd_addr, tSMP_STATUS res);
  *                             BTM_MAX_PASSKEY_VAL(999999(0xF423F)).
  *
  ******************************************************************************/
-extern void SMP_PasskeyReply(const RawAddress& bd_addr, uint8_t res,
-                             uint32_t passkey);
+void SMP_PasskeyReply(const RawAddress& bd_addr, uint8_t res, uint32_t passkey);
 
 /*******************************************************************************
  *
@@ -151,7 +136,7 @@ extern void SMP_PasskeyReply(const RawAddress& bd_addr, uint8_t res,
  *                  res          - comparison result SMP_SUCCESS if success
  *
  ******************************************************************************/
-extern void SMP_ConfirmReply(const RawAddress& bd_addr, uint8_t res);
+void SMP_ConfirmReply(const RawAddress& bd_addr, uint8_t res);
 
 /*******************************************************************************
  *
@@ -165,8 +150,8 @@ extern void SMP_ConfirmReply(const RawAddress& bd_addr, uint8_t res);
  *                  p_data      - SM Randomizer  C.
  *
  ******************************************************************************/
-extern void SMP_OobDataReply(const RawAddress& bd_addr, tSMP_STATUS res,
-                             uint8_t len, uint8_t* p_data);
+void SMP_OobDataReply(const RawAddress& bd_addr, tSMP_STATUS res, uint8_t len,
+                      uint8_t* p_data);
 
 /*******************************************************************************
  *
@@ -178,7 +163,7 @@ extern void SMP_OobDataReply(const RawAddress& bd_addr, tSMP_STATUS res,
  * Parameters:      p_data      - pointer to the data
  *
  ******************************************************************************/
-extern void SMP_SecureConnectionOobDataReply(uint8_t* p_data);
+void SMP_SecureConnectionOobDataReply(uint8_t* p_data);
 
 /*******************************************************************************
  *
@@ -191,7 +176,7 @@ extern void SMP_SecureConnectionOobDataReply(uint8_t* p_data);
  *                  state machine, false otherwise
  *
  ******************************************************************************/
-extern bool SMP_CrLocScOobData();
+bool SMP_CrLocScOobData();
 
 /*******************************************************************************
  *
@@ -200,13 +185,27 @@ extern bool SMP_CrLocScOobData();
  * Description      This function is called to clear out the OOB stored locally.
  *
  ******************************************************************************/
-extern void SMP_ClearLocScOobData();
+void SMP_ClearLocScOobData();
+
+/*******************************************************************************
+ *
+ * Function         SMP_SirkConfirmDeviceReply
+ *
+ * Description      This function is called after Security Manager submitted
+ *                  verification of device with CSIP.
+ *
+ * Parameters:      bd_addr      - Address of the device with which verification
+ *                                 was requested
+ *                  res          - comparison result SMP_SUCCESS if success
+ *
+ ******************************************************************************/
+void SMP_SirkConfirmDeviceReply(const RawAddress& bd_addr, uint8_t res);
 
 // Called when LTK request is received from controller.
-extern bool smp_proc_ltk_request(const RawAddress& bda);
+bool smp_proc_ltk_request(const RawAddress& bda);
 
 // Called when link is encrypted and notified to peripheral device.
 // Proceed to send LTK, DIV and ER to central if bonding the devices.
-extern void smp_link_encrypted(const RawAddress& bda, uint8_t encr_enable);
+void smp_link_encrypted(const RawAddress& bda, uint8_t encr_enable);
 
 #endif /* SMP_API_H */

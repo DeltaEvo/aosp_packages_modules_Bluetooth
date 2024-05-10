@@ -16,11 +16,18 @@
 
 #pragma once
 
+#include <bluetooth/log.h>
+
 #include <cstdint>
 
+#include "internal_include/bt_target.h"
+#include "macros.h"
 #include "osi/include/alarm.h"
+#include "stack/btm/btm_eir.h"
 #include "stack/include/bt_device_type.h"
+#include "stack/include/bt_name.h"
 #include "stack/include/btm_api_types.h"
+#include "stack/include/btm_status.h"
 #include "types/ble_address_with_type.h"
 #include "types/raw_address.h"
 
@@ -86,13 +93,14 @@ enum : uint16_t {
 };
 
 /* Define inquiry results mode */
-enum : uint8_t {
+typedef enum : uint8_t {
   BTM_INQ_RESULT_STANDARD = 0,
   BTM_INQ_RESULT_WITH_RSSI = 1,
   BTM_INQ_RESULT_EXTENDED = 2,
   /* RSSI value not supplied (ignore it) */
   BTM_INQ_RES_IGNORE_RSSI = 0x7f,
-};
+} tBTM_INQ_RESULT;
+constexpr size_t kMaxNumberInquiryResults = BTM_INQ_RESULT_EXTENDED + 1;
 
 /* These are the fields returned in each device's response to the inquiry.  It
  * is returned in the results callback if registered.
@@ -154,10 +162,8 @@ typedef struct {
                                required to be done. Having the flag here avoid
                                duplicate store of inquiry results */
   uint16_t remote_name_len;
-  tBTM_BD_NAME remote_name;
-  uint8_t remote_name_state;
+  BD_NAME remote_name;
   uint8_t remote_name_type;
-
 } tBTM_INQ_INFO;
 
 typedef struct {
@@ -181,16 +187,48 @@ typedef struct /* contains the parameters passed to the inquiry functions */
 
 /* Structure returned with inquiry complete callback */
 typedef struct {
-  tBTM_STATUS status;
+  // Possible inquiry completion status
+  enum STATUS {
+    CANCELED,      // Expected user API cancel
+    TIMER_POPPED,  // Expected controller initiated timeout
+    NOT_STARTED,   // Unexpected controller unable to execute inquiry command
+    SSP_ACTIVE,    // Unexpected secure simple pairing is operational
+  };
+  STATUS status;
+  tHCI_STATUS hci_status;
   uint8_t num_resp; /* Number of results from the current inquiry */
+  unsigned resp_type[kMaxNumberInquiryResults];
+  long long start_time_ms;
 } tBTM_INQUIRY_CMPL;
 
-typedef struct {
-  tBTM_CMPL_CB* p_remname_cmpl_cb;
+inline std::string btm_inquiry_cmpl_status_text(
+    const tBTM_INQUIRY_CMPL::STATUS& status) {
+  switch (status) {
+    CASE_RETURN_TEXT(tBTM_INQUIRY_CMPL::CANCELED);
+    CASE_RETURN_TEXT(tBTM_INQUIRY_CMPL::TIMER_POPPED);
+    CASE_RETURN_TEXT(tBTM_INQUIRY_CMPL::NOT_STARTED);
+    CASE_RETURN_TEXT(tBTM_INQUIRY_CMPL::SSP_ACTIVE);
+    default:
+      return std::string("UNKNOWN[") + std::to_string(status) +
+             std::string("]");
+  }
+}
 
-#define BTM_EXT_RMT_NAME_TIMEOUT_MS (40 * 1000) /* 40 seconds */
+/* Structure returned with remote name  request */
+typedef struct {
+  tBTM_STATUS status;
+  RawAddress bd_addr;
+  BD_NAME remote_bd_name;
+  tHCI_STATUS hci_status;
+} tBTM_REMOTE_DEV_NAME;
+
+typedef void(tBTM_NAME_CMPL_CB)(const tBTM_REMOTE_DEV_NAME*);
+
+struct tBTM_INQUIRY_VAR_ST {
+  tBTM_NAME_CMPL_CB* p_remname_cmpl_cb;
 
   alarm_t* remote_name_timer;
+  alarm_t* classic_inquiry_timer;
 
   uint16_t discoverable_mode;
   uint16_t connectable_mode;
@@ -204,16 +242,13 @@ typedef struct {
   RawAddress remname_bda; /* Name of bd addr for active remote name request */
 #define BTM_RMT_NAME_EXT 0x1 /* Initiated through API */
   bool remname_active; /* State of a remote name request by external API */
+  tBT_DEVICE_TYPE remname_dev_type; /* Whether it's LE or BREDR name request */
 
   tBTM_CMPL_CB* p_inq_cmpl_cb;
   tBTM_INQ_RESULTS_CB* p_inq_results_cb;
   uint32_t inq_counter; /* Counter incremented each time an inquiry completes */
   /* Used for determining whether or not duplicate devices */
   /* have responded to the same inquiry */
-  tINQ_BDADDR* p_bd_db;    /* Pointer to memory that holds bdaddrs */
-  uint16_t num_bd_entries; /* Number of entries in database */
-  uint16_t max_bd_entries; /* Maximum number of entries that can be stored */
-  tINQ_DB_ENT inq_db[BTM_INQ_DB_SIZE];
   tBTM_INQ_PARMS inqparms; /* Contains the parameters for the current inquiry */
   tBTM_INQUIRY_CMPL
       inq_cmpl_info; /* Status and number of responses from the last inquiry */
@@ -230,34 +265,55 @@ typedef struct {
 
   uint8_t state;      /* Current state that the inquiry process is in */
   uint8_t inq_active; /* Bit Mask indicating type of inquiry is active */
-  bool no_inc_ssp;    /* true, to stop inquiry on incoming SSP */
+
+  bool registered_for_hci_events;
 
   void Init() {
+    p_remname_cmpl_cb = nullptr;
+
     alarm_free(remote_name_timer);
+    alarm_free(classic_inquiry_timer);
     remote_name_timer = alarm_new("btm_inq.remote_name_timer");
-    no_inc_ssp = BTM_NO_SSP_ON_INQUIRY;
+    classic_inquiry_timer = alarm_new("btm_inq.classic_inquiry_timer");
+
+    discoverable_mode = BTM_NON_DISCOVERABLE;
+    connectable_mode = BTM_NON_CONNECTABLE;
+
+    page_scan_window = HCI_DEF_PAGESCAN_WINDOW;
+    page_scan_period = HCI_DEF_PAGESCAN_INTERVAL;
+    inq_scan_window = HCI_DEF_INQUIRYSCAN_WINDOW;
+    inq_scan_period = HCI_DEF_INQUIRYSCAN_INTERVAL;
+    inq_scan_type = BTM_SCAN_TYPE_STANDARD;
+    page_scan_type = HCI_DEF_SCAN_TYPE;
+
+    remname_bda = {};
+    remname_active = false;
+    remname_dev_type = BT_DEVICE_TYPE_UNKNOWN;
+
+    p_inq_cmpl_cb = nullptr;
+    p_inq_results_cb = nullptr;
+
+    inq_counter = 0;
+    inqparms = {};
+    inq_cmpl_info = {};
+
+    per_min_delay = 0;
+    per_max_delay = 0;
+    state = BTM_INQ_INACTIVE_STATE;
+    inq_active = 0;
+    registered_for_hci_events = false;
   }
-  void Free() { alarm_free(remote_name_timer); }
+  void Free() {
+    alarm_free(remote_name_timer);
+    alarm_free(classic_inquiry_timer);
+  }
+};
 
-} tBTM_INQUIRY_VAR_ST;
+bool btm_inq_find_bdaddr(const RawAddress& p_bda);
+tINQ_DB_ENT* btm_inq_db_find(const RawAddress& p_bda);
 
-/* Structure returned with remote name  request */
-typedef struct {
-  tBTM_STATUS status;
-  RawAddress bd_addr;
-  uint16_t length;
-  BD_NAME remote_bd_name;
-  tHCI_STATUS hci_status;
-} tBTM_REMOTE_DEV_NAME;
-
-typedef union /* contains the inquiry filter condition */
-{
-  RawAddress bdaddr_cond;
-  tBTM_COD_COND cod_cond;
-} tBTM_INQ_FILT_COND;
-
-#define BTM_INQ_RESULT_BR 0x01
-#define BTM_INQ_RESULT_BLE 0x02
-
-extern bool btm_inq_find_bdaddr(const RawAddress& p_bda);
-extern tINQ_DB_ENT* btm_inq_db_find(const RawAddress& p_bda);
+namespace fmt {
+template <>
+struct formatter<tBTM_INQUIRY_CMPL::STATUS>
+    : enum_formatter<tBTM_INQUIRY_CMPL::STATUS> {};
+}  // namespace fmt

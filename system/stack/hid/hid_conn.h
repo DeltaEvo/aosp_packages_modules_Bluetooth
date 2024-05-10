@@ -26,7 +26,9 @@
 #define HID_CONN_H
 
 #include <base/strings/stringprintf.h>
+#include <bluetooth/log.h>
 
+#include "macros.h"
 #include "osi/include/alarm.h"
 
 typedef enum : uint8_t {
@@ -44,10 +46,6 @@ typedef enum : uint8_t {
 typedef struct hid_conn {
   tHID_CONN_STATE conn_state;
 
-#define CASE_RETURN_TEXT(code) \
-  case code:                   \
-    return #code
-
   static inline std::string state_text(const tHID_CONN_STATE& state) {
     switch (state) {
       CASE_RETURN_TEXT(HID_CONN_STATE_UNUSED);
@@ -61,7 +59,6 @@ typedef struct hid_conn {
         return base::StringPrintf("UNKNOWN[%hhu]", state);
     }
   }
-#undef CASE_RETURN_TEXT
 
 #define HID_CONN_FLAGS_IS_ORIG (0x01)
 #define HID_CONN_FLAGS_CONGESTED (0x20)
@@ -80,5 +77,10 @@ typedef struct hid_conn {
 #define HID_NOSEC_CHN 2
 
 #define HIDD_SEC_CHN 3
+
+namespace fmt {
+template <>
+struct formatter<tHID_CONN_STATE> : enum_formatter<tHID_CONN_STATE> {};
+}  // namespace fmt
 
 #endif

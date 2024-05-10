@@ -13,23 +13,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <map>
-#include <string>
 
 #include "bta/include/bta_le_audio_api.h"
 #include "test/common/mock_functions.h"
 
 bool LeAudioHalVerifier::SupportsLeAudio() {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
   return true;
 }
 
 bool LeAudioHalVerifier::SupportsLeAudioHardwareOffload() {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
   return true;
 }
 
 bool LeAudioHalVerifier::SupportsLeAudioBroadcast() {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
+  return true;
+}
+
+bool LeAudioHalVerifier::SupportsStreamActiveApi() {
+  inc_func_call_count(__func__);
   return true;
 }

@@ -29,6 +29,8 @@ import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.PowerExemptionManager.TEMPORARY_ALLOW_LIST_TYPE_FOREGROUND_SERVICE_ALLOWED;
 import static android.permission.PermissionManager.PERMISSION_HARD_DENIED;
 
+import static com.android.modules.utils.build.SdkLevel.isAtLeastV;
+
 import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -40,18 +42,14 @@ import android.bluetooth.BluetoothDevice;
 import android.companion.AssociationInfo;
 import android.companion.CompanionDeviceManager;
 import android.content.AttributionSource;
-import android.content.BroadcastReceiver;
 import android.content.ContentValues;
 import android.content.Context;
-import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
-import android.os.Bundle;
-import android.os.Handler;
 import android.os.ParcelUuid;
 import android.os.PowerExemptionManager;
 import android.os.Process;
@@ -63,10 +61,11 @@ import android.provider.DeviceConfig;
 import android.provider.Telephony;
 import android.util.Log;
 
-import androidx.annotation.RequiresApi;
+import androidx.annotation.VisibleForTesting;
 
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
+import com.android.bluetooth.flags.Flags;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -74,6 +73,7 @@ import org.xmlpull.v1.XmlPullParserException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.Charset;
@@ -81,23 +81,35 @@ import java.nio.charset.CharsetDecoder;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-/**
- * @hide
- */
 public final class Utils {
     private static final String TAG = "BluetoothUtils";
     private static final int MICROS_PER_UNIT = 625;
     private static final String PTS_TEST_MODE_PROPERTY = "persist.bluetooth.pts";
+
+    private static final String ENABLE_DUAL_MODE_AUDIO =
+            "persist.bluetooth.enable_dual_mode_audio";
+    private static boolean sDualModeEnabled =
+            SystemProperties.getBoolean(ENABLE_DUAL_MODE_AUDIO, false);
+
+    private static final String ENABLE_SCO_MANAGED_BY_AUDIO = "bluetooth.sco.managed_by_audio";
+
+    private static boolean isScoManagedByAudioEnabled =
+            SystemProperties.getBoolean(ENABLE_SCO_MANAGED_BY_AUDIO, false);
+
     private static final String KEY_TEMP_ALLOW_LIST_DURATION_MS = "temp_allow_list_duration_ms";
     private static final long DEFAULT_TEMP_ALLOW_LIST_DURATION_MS = 20_000;
 
     static final int BD_ADDR_LEN = 6; // bytes
     static final int BD_UUID_LEN = 16; // bytes
+
+    /** Thread pool to handle background and outgoing blocking task */
+    public static final ExecutorService BackgroundExecutor = Executors.newSingleThreadExecutor();
 
     /*
      * Special character
@@ -109,6 +121,7 @@ public final class Utils {
      */
     public static final char PAUSE = ',';
     public static final char WAIT = ';';
+    public static final String PAIRING_UI_PROPERTY = "bluetooth.pairing_ui_package.name";
 
     private static boolean isPause(char c) {
         return c == 'p' || c == 'P';
@@ -116,6 +129,65 @@ public final class Utils {
 
     private static boolean isToneWait(char c) {
         return c == 'w' || c == 'W';
+    }
+
+    /**
+     * Check if dual mode audio is enabled. This is set via the system property
+     * persist.bluetooth.enable_dual_mode_audio.
+     * <p>
+     * When set to {@code false}, we will not connect A2DP and HFP on a dual mode (BR/EDR + BLE)
+     * device. We will only attempt to use BLE Audio in this scenario.
+     * <p>
+     * When set to {@code true}, we will connect all the supported audio profiles
+     * (A2DP, HFP, and LE Audio) at the same time. In this state, we will respect calls to
+     * profile-specific APIs (e.g. if a SCO API is invoked, we will route audio over HFP). If no
+     * profile-specific API is invoked to route audio (e.g. Telecom routed phone calls, media,
+     * game audio, etc.), then audio will be routed in accordance with the preferred audio profiles
+     * for the remote device. You can get the preferred audio profiles for a remote device by
+     * calling {@link BluetoothAdapter#getPreferredAudioProfiles(BluetoothDevice)}.
+     *
+     * @return true if dual mode audio is enabled, false otherwise
+     */
+    public static boolean isDualModeAudioEnabled() {
+        Log.i(TAG, "Dual mode enable state is: " + sDualModeEnabled);
+        return sDualModeEnabled;
+    }
+
+    /**
+     * Check if SCO managed by Audio is enabled. This is set via the system property
+     * bluetooth.sco.managed_by_audio.
+     *
+     * <p>When set to {@code false}, Bluetooth will managed the start and end of the SCO.
+     *
+     * <p>When set to {@code true}, Audio will manage the start and end of the SCO through HAL.
+     *
+     * @return true if SCO managed by Audio is enabled, false otherwise
+     */
+    public static boolean isScoManagedByAudioEnabled() {
+        if (Flags.isScoManagedByAudio()) {
+            Log.d(TAG, "isScoManagedByAudioEnabled state is: " + isScoManagedByAudioEnabled);
+            if (isScoManagedByAudioEnabled && !isAtLeastV()) {
+                Log.e(TAG, "isScoManagedByAudio should not be enabled before Android V");
+                return false;
+            }
+            return isScoManagedByAudioEnabled;
+        }
+        return false;
+    }
+
+    @VisibleForTesting
+    public static void setIsScoManagedByAudioEnabled(boolean enabled) {
+        Log.i(TAG, "Updating isScoManagedByAudioEnabled for testing to: " + enabled);
+        isScoManagedByAudioEnabled = enabled;
+    }
+
+    /**
+     * Only exposed for testing, do not invoke this method outside of tests.
+     * @param enabled true if the dual mode state is enabled, false otherwise
+     */
+    public static void setDualModeAudioStateForTesting(boolean enabled) {
+        Log.i(TAG, "Updating dual mode audio state for testing to: " + enabled);
+        sDualModeEnabled = enabled;
     }
 
     public static @Nullable String getName(@Nullable BluetoothDevice device) {
@@ -142,6 +214,76 @@ public final class Utils {
 
         return String.format("%02X:%02X:%02X:%02X:%02X:%02X", address[0], address[1], address[2],
                 address[3], address[4], address[5]);
+    }
+
+    public static String getRedactedAddressStringFromByte(byte[] address) {
+        if (address == null || address.length != BD_ADDR_LEN) {
+            return null;
+        }
+
+        return String.format("XX:XX:XX:XX:%02X:%02X", address[4], address[5]);
+    }
+
+    /**
+     * Returns the correct device address to be used for connections over BR/EDR transport.
+     *
+     * @param address the device address for which to obtain the connection address
+     * @param service the adapter service to make the identity address retrieval call
+     * @return either identity address or device address in String format
+     */
+    public static String getBrEdrAddress(String address, AdapterService service) {
+        String identity = service.getIdentityAddress(address);
+        return identity != null ? identity : address;
+    }
+
+    /**
+     * Returns the correct device address to be used for connections over BR/EDR transport.
+     *
+     * @param device the device for which to obtain the connection address
+     * @return either identity address or device address in String format
+     */
+    public static String getBrEdrAddress(BluetoothDevice device) {
+        final AdapterService service = AdapterService.getAdapterService();
+        final String address = device.getAddress();
+        String identity = service != null ? service.getIdentityAddress(address) : null;
+        return identity != null ? identity : address;
+    }
+
+    /**
+     * Returns the correct device address to be used for connections over BR/EDR transport.
+     *
+     * @param device the device for which to obtain the connection address
+     * @param service the adapter service to make the identity address retrieval call
+     * @return either identity address or device address in String format
+     */
+    public static String getBrEdrAddress(BluetoothDevice device, AdapterService service) {
+        final String address = device.getAddress();
+        String identity = service.getIdentityAddress(address);
+        return identity != null ? identity : address;
+    }
+
+    /**
+     * @see #getByteBrEdrAddress(AdapterService, BluetoothDevice)
+     */
+    public static byte[] getByteBrEdrAddress(BluetoothDevice device) {
+        return getByteBrEdrAddress(AdapterService.getAdapterService(), device);
+    }
+
+    /**
+     * Returns the correct device address to be used for connections over BR/EDR transport.
+     *
+     * @param service the provided AdapterService
+     * @param device the device for which to obtain the connection address
+     * @return either identity address or device address as a byte array
+     */
+    public static byte[] getByteBrEdrAddress(AdapterService service, BluetoothDevice device) {
+        // If dual mode device bonded over BLE first, BR/EDR address will be identity address
+        // Otherwise, BR/EDR address will be same address as in BluetoothDevice#getAddress
+        byte[] address = service.getByteIdentityAddress(device);
+        if (address == null) {
+            address = getByteAddress(device);
+        }
+        return address;
     }
 
     public static byte[] getByteAddress(BluetoothDevice device) {
@@ -356,44 +498,32 @@ public final class Utils {
                     + " is inaccurate for calling uid " + callingUid);
         }
 
-        for (AssociationInfo association : getCdmAssociations(cdm)) {
+        for (AssociationInfo association : cdm.getAllAssociations()) {
             if (association.getPackageName().equals(callingPackage)
-                    && !association.isSelfManaged() && device.getAddress() != null
+                    && !association.isSelfManaged()
+                    && device.getAddress() != null
                     && association.getDeviceMacAddress() != null
-                    && device.getAddress().equalsIgnoreCase(
-                            association.getDeviceMacAddress().toString())) {
+                    && device.getAddress()
+                            .equalsIgnoreCase(association.getDeviceMacAddress().toString())) {
                 return true;
             }
         }
-        throw new SecurityException("The application with package name " + callingPackage
-                + " does not have a CDM association with the Bluetooth Device");
-    }
-
-    /**
-     * Obtains the complete list of registered CDM associations.
-     *
-     * @param cdm the CompanionDeviceManager object
-     * @return the list of AssociationInfo objects
-     */
-    @RequiresPermission("android.permission.MANAGE_COMPANION_DEVICES")
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    // TODO(b/193460475): Android Lint handles change from SystemApi to public incorrectly.
-    // CompanionDeviceManager#getAllAssociations() is public in U,
-    // but existed in T as an identical SystemApi.
-    @SuppressLint("NewApi")
-    public static List<AssociationInfo> getCdmAssociations(CompanionDeviceManager cdm) {
-        return cdm.getAllAssociations();
+        throw new SecurityException(
+                "The application with package name "
+                        + callingPackage
+                        + " does not have a CDM association with the Bluetooth Device");
     }
 
     /**
      * Verifies whether the calling package name matches the calling app uid
+     *
      * @param context the Bluetooth AdapterService context
      * @param callingPackage the calling application package name
      * @param callingUid the calling application uid
      * @return {@code true} if the package name matches the calling app uid, {@code false} otherwise
      */
-    public static boolean isPackageNameAccurate(Context context, String callingPackage,
-            int callingUid) {
+    public static boolean isPackageNameAccurate(
+            Context context, String callingPackage, int callingUid) {
         UserHandle callingUser = UserHandle.getUserHandleForUid(callingUid);
 
         // Verifies the integrity of the calling package name
@@ -932,6 +1062,9 @@ public final class Utils {
         return (int) (TimeUnit.MILLISECONDS.toMicros(milliseconds) / MICROS_PER_UNIT);
     }
 
+    private static boolean sIsInstrumentationTestModeCacheSet = false;
+    private static boolean sInstrumentationTestModeCache = false;
+
     /**
      * Check if we are running in BluetoothInstrumentationTest context by trying to load
      * com.android.bluetooth.FileSystemWriteTest. If we are not in Instrumentation test mode, this
@@ -942,11 +1075,16 @@ public final class Utils {
      * @return true if in BluetoothInstrumentationTest, false otherwise
      */
     public static boolean isInstrumentationTestMode() {
-        try {
-            return Class.forName("com.android.bluetooth.FileSystemWriteTest") != null;
-        } catch (ClassNotFoundException exception) {
-            return false;
+        if (!sIsInstrumentationTestModeCacheSet) {
+            try {
+                sInstrumentationTestModeCache =
+                        Class.forName("com.android.bluetooth.FileSystemWriteTest") != null;
+            } catch (ClassNotFoundException exception) {
+                sInstrumentationTestModeCache = false;
+            }
+            sIsInstrumentationTestModeCacheSet = true;
         }
+        return sInstrumentationTestModeCache;
     }
 
     /**
@@ -1051,19 +1189,8 @@ public final class Utils {
     }
 
     /**
-     * Returns bundled broadcast options.
-     */
-    // TODO(b/193460475): Remove when tooling supports SystemApi to public API.
-    @SuppressLint("NewApi")
-    public static @NonNull Bundle getTempAllowlistBroadcastOptions() {
-        return getTempBroadcastOptions().toBundle();
-    }
-
-    /**
      * Returns broadcast options.
      */
-    // TODO(b/193460475): Remove when tooling supports SystemApi to public API.
-    @SuppressLint("NewApi")
     public static @NonNull BroadcastOptions getTempBroadcastOptions() {
         final BroadcastOptions bOptions = BroadcastOptions.makeBasic();
         // Use the Bluetooth process identity to pass permission check when reading DeviceConfig
@@ -1081,34 +1208,6 @@ public final class Utils {
     }
 
     /**
-     * Sends the {@code intent} as a broadcast in the provided {@code context} to receivers that
-     * have been granted the specified {@code receiverPermission} with the {@link BroadcastOptions}
-     * {@code options}.
-     *
-     * @see Context#sendBroadcast(Intent, String, Bundle)
-     */
-    // TODO(b/193460475): Remove when tooling supports SystemApi to public API.
-    @SuppressLint("NewApi")
-    public static void sendBroadcast(@NonNull Context context, @NonNull Intent intent,
-            @Nullable String receiverPermission, @Nullable Bundle options) {
-        context.sendBroadcast(intent, receiverPermission, options);
-    }
-
-    /**
-     * @see Context#sendOrderedBroadcast(Intent, String, Bundle, BroadcastReceiver, Handler,
-     *          int, String, Bundle)
-     */
-    // TODO(b/193460475): Remove when tooling supports SystemApi to public API.
-    @SuppressLint("NewApi")
-    public static void sendOrderedBroadcast(@NonNull Context context, @NonNull Intent intent,
-            @Nullable String receiverPermission, @Nullable Bundle options,
-            @Nullable BroadcastReceiver resultReceiver, @Nullable Handler scheduler,
-            int initialCode, @Nullable String initialData, @Nullable Bundle initialExtras) {
-        context.sendOrderedBroadcast(intent, receiverPermission, options, resultReceiver, scheduler,
-                initialCode, initialData, initialExtras);
-    }
-
-    /**
      * Checks that value is present as at least one of the elements of the array.
      * @param array the array to check in
      * @param value the value to check for
@@ -1120,5 +1219,108 @@ public final class Utils {
             if (Objects.equals(element, value)) return true;
         }
         return false;
+    }
+
+    /**
+     * CCC descriptor short integer value to string.
+     * @param cccValue the short value of CCC descriptor
+     * @return String value representing CCC state
+     */
+    public static String cccIntToStr(Short cccValue) {
+        String string = "";
+
+        if (cccValue == 0) {
+            return string += "NO SUBSCRIPTION";
+        }
+
+        if (BigInteger.valueOf(cccValue).testBit(0)) {
+            string += "NOTIFICATION";
+        }
+        if (BigInteger.valueOf(cccValue).testBit(1)) {
+            string += string.isEmpty() ? "INDICATION" : "|INDICATION";
+        }
+
+        return string;
+    }
+
+    /**
+     * Check if BLE is supported by this platform
+     * @param context current device context
+     * @return true if BLE is supported, false otherwise
+     */
+    public static boolean isBleSupported(Context context) {
+        return context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE);
+    }
+
+    /**
+     * Check if this is an automotive device
+     * @param context current device context
+     * @return true if this Android device is an automotive device, false otherwise
+     */
+    public static boolean isAutomotive(Context context) {
+        return context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE);
+    }
+
+    /**
+     * Check if this is a watch device
+     * @param context current device context
+     * @return true if this Android device is a watch device, false otherwise
+     */
+    public static boolean isWatch(Context context) {
+        return context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH);
+    }
+
+    /**
+     * Check if this is a TV device
+     * @param context current device context
+     * @return true if this Android device is a TV device, false otherwise
+     */
+    public static boolean isTv(Context context) {
+        PackageManager pm = context.getPackageManager();
+        return pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION)
+                || pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK);
+    }
+
+    /**
+     * Returns the longest prefix of a string for which the UTF-8 encoding fits into the given
+     * number of bytes, with the additional guarantee that the string is not truncated in the middle
+     * of a valid surrogate pair.
+     *
+     * <p>Unpaired surrogates are counted as taking 3 bytes of storage. However, a subsequent
+     * attempt to actually encode a string containing unpaired surrogates is likely to be rejected
+     * by the UTF-8 implementation.
+     *
+     * <p>(copied from framework/base/core/java/android/text/TextUtils.java)
+     *
+     * @param str a string
+     * @param maxbytes the maximum number of UTF-8 encoded bytes
+     * @return the beginning of the string, so that it uses at most maxbytes bytes in UTF-8
+     * @throws IndexOutOfBoundsException if maxbytes is negative
+     */
+    public static String truncateStringForUtf8Storage(String str, int maxbytes) {
+        if (maxbytes < 0) {
+            throw new IndexOutOfBoundsException();
+        }
+
+        int bytes = 0;
+        for (int i = 0, len = str.length(); i < len; i++) {
+            char c = str.charAt(i);
+            if (c < 0x80) {
+                bytes += 1;
+            } else if (c < 0x800) {
+                bytes += 2;
+            } else if (c < Character.MIN_SURROGATE
+                    || c > Character.MAX_SURROGATE
+                    || str.codePointAt(i) < Character.MIN_SUPPLEMENTARY_CODE_POINT) {
+                bytes += 3;
+            } else {
+                bytes += 4;
+                i += (bytes > maxbytes) ? 0 : 1;
+            }
+            if (bytes > maxbytes) {
+                return str.substring(0, i);
+            }
+        }
+        return str;
     }
 }

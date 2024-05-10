@@ -16,19 +16,18 @@
 
 #include "hci/remote_name_request.h"
 
+#include <com_android_bluetooth_flags.h>
+#include <flag_macros.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <chrono>
 #include <future>
-#include <map>
 #include <tuple>
+#include <utility>
 
-#include "common/bind.h"
-#include "common/init_flags.h"
 #include "hci/address.h"
-#include "hci/controller_mock.h"
 #include "hci/hci_layer_fake.h"
 #include "os/thread.h"
 
@@ -65,7 +64,7 @@ MATCHER_P(IsSetWithValue, matcher, "Future is not set with value") {
 class RemoteNameRequestModuleTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    test_hci_layer_ = new TestHciLayer;
+    test_hci_layer_ = new HciLayerFake;
     fake_registry_.InjectTestModule(&HciLayer::Factory, test_hci_layer_);
 
     fake_registry_.Start<RemoteNameRequestModule>(&thread_);
@@ -87,18 +86,19 @@ class RemoteNameRequestModuleTest : public ::testing::Test {
 
   template <typename... T>
   common::ContextualOnceCallback<void(T...)> impossibleCallback() {
-    return client_handler_->BindOnce([](T... args) { ADD_FAILURE(); });
+    return client_handler_->BindOnce([](T... /* args */) { ADD_FAILURE(); });
   }
 
   template <typename... T>
   common::ContextualOnceCallback<void(T...)> emptyCallback() {
-    return client_handler_->BindOnce([](T... args) {});
+    return client_handler_->BindOnce([](T... /* args */) {});
   }
 
   template <typename... T>
   common::ContextualOnceCallback<void(T...)> promiseCallback(std::promise<void> promise) {
     return client_handler_->BindOnce(
-        [](std::promise<void> promise, T... args) { promise.set_value(); }, std::move(promise));
+        [](std::promise<void> promise, T... /* args */) { promise.set_value(); },
+        std::move(promise));
   }
 
   template <typename... T>
@@ -119,7 +119,7 @@ class RemoteNameRequestModuleTest : public ::testing::Test {
 
   TestModuleRegistry fake_registry_;
   os::Thread& thread_ = fake_registry_.GetTestThread();
-  TestHciLayer* test_hci_layer_ = nullptr;
+  HciLayerFake* test_hci_layer_ = nullptr;
   RemoteNameRequestModule* remote_name_request_module_ = nullptr;
   os::Handler* client_handler_ = nullptr;
 };
@@ -253,7 +253,7 @@ TEST_F(RemoteNameRequestModuleTest, SendCommandThenCancelItCallback) {
       future, IsSetWithValue(Eq(std::make_tuple(ErrorCode::UNKNOWN_CONNECTION, remote_name1))));
 }
 
-// TODO(aryarahul) - unify TestHciLayer so this test can be run
+// TODO(aryarahul) - unify HciLayerFake so this test can be run
 TEST_F(RemoteNameRequestModuleTest, DISABLED_SendCommandThenCancelItCallbackInteropWorkaround) {
   // Some controllers INCORRECTLY give us an ACL Connection Complete event, rather than a Remote
   // Name Request Complete event, if we issue a cancellation. We should nonetheless handle this
@@ -325,6 +325,36 @@ TEST_F(RemoteNameRequestModuleTest, SendCommandThenCancelItCallbackInteropWorkar
       future,
       IsSetWithValue(
           Eq(std::make_tuple(ErrorCode::UNKNOWN_CONNECTION, std::array<uint8_t, 248>{}))));
+}
+
+TEST_F(RemoteNameRequestModuleTest, SendCommandThenCancelItCancelFails) {
+  auto promise = std::promise<std::tuple<ErrorCode, std::array<uint8_t, 248>>>{};
+  auto future = promise.get_future();
+
+  // start a remote name request
+  remote_name_request_module_->StartRemoteNameRequest(
+      address1,
+      RemoteNameRequestBuilder::Create(
+          address1, PageScanRepetitionMode::R0, 3, ClockOffsetValid::INVALID),
+      emptyCallback<ErrorCode>(),
+      impossibleCallback<uint64_t>(),
+      capturingPromiseCallback<ErrorCode, std::array<uint8_t, 248>>(std::move(promise)));
+
+  // we successfully start
+  test_hci_layer_->GetCommand();
+  test_hci_layer_->IncomingEvent(RemoteNameRequestStatusBuilder::Create(ErrorCode::SUCCESS, 1));
+
+  // but then the request is cancelled successfully (the status doesn't matter)
+  remote_name_request_module_->CancelRemoteNameRequest(address1);
+  test_hci_layer_->GetCommand();
+  test_hci_layer_->IncomingEvent(RemoteNameRequestCancelCompleteBuilder::Create(
+      1, ErrorCode::INVALID_HCI_COMMAND_PARAMETERS, address1));
+
+  // we expect the name callback to be invoked nonetheless
+  EXPECT_THAT(
+      future,
+      IsSetWithValue(Eq(
+          std::make_tuple(ErrorCode::INVALID_HCI_COMMAND_PARAMETERS, std::array<uint8_t, 248>{}))));
 }
 
 TEST_F(RemoteNameRequestModuleTest, HostSupportedEvents) {
@@ -627,6 +657,49 @@ TEST_F(RemoteNameRequestModuleTest, FailToSendCommandThenDequeueNext) {
   auto rnr_command = RemoteNameRequestView::Create(DiscoveryCommandView::Create(discovery_command));
   ASSERT_TRUE(rnr_command.IsValid());
   EXPECT_EQ(rnr_command.GetBdAddr(), address2);
+}
+
+#define MY_PACKAGE com::android::bluetooth::flags
+
+TEST_F_WITH_FLAGS(
+    RemoteNameRequestModuleTest,
+    CancelJustWhenRNREventReturns,
+    REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(MY_PACKAGE, rnr_cancel_before_event_race))) {
+  auto promise = std::promise<std::tuple<ErrorCode, std::array<uint8_t, 248>>>{};
+  auto future = promise.get_future();
+
+  // start a remote name request
+  remote_name_request_module_->StartRemoteNameRequest(
+      address1,
+      RemoteNameRequestBuilder::Create(
+          address1, PageScanRepetitionMode::R0, 3, ClockOffsetValid::INVALID),
+      emptyCallback<ErrorCode>(),
+      impossibleCallback<uint64_t>(),
+      capturingPromiseCallback<ErrorCode, std::array<uint8_t, 248>>(std::move(promise)));
+
+  // we successfully start
+  test_hci_layer_->GetCommand();
+
+  auto promise2 = std::promise<void>();
+  auto future2 = promise2.get_future();
+  client_handler_->Post(base::BindOnce(
+      [](RemoteNameRequestModule* remote_name_request_module,
+         HciLayerFake* test_hci_layer,
+         std::promise<void> promise2) {
+        // but then the request is cancelled successfully (the status doesn't matter)
+        remote_name_request_module->CancelRemoteNameRequest(address1);
+
+        // Send an rnr event completed with page timeout status
+        test_hci_layer->IncomingEvent(
+            RemoteNameRequestStatusBuilder::Create(ErrorCode::PAGE_TIMEOUT, 1));
+
+        promise2.set_value();
+      },
+      remote_name_request_module_,
+      test_hci_layer_,
+      std::move(promise2)));
+
+  future2.wait();
 }
 
 }  // namespace

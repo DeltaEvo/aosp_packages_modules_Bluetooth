@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "gd/rust/topshim/gatt/gatt_ble_scanner_shim.h"
+#include "rust/topshim/gatt/gatt_ble_scanner_shim.h"
 
 #include <base/functional/bind.h>
 #include <base/functional/callback.h>
@@ -40,12 +40,13 @@ namespace rusty = ::bluetooth::topshim::rust;
 namespace internal {
 ApcfCommand ConvertApcfFromRust(const RustApcfCommand& command) {
   // Copy vectors + arrays
-  std::vector<uint8_t> name, data, data_mask;
+  std::vector<uint8_t> name, data, data_mask, meta_data;
   std::array<uint8_t, 16> irk;
   std::copy(command.name.begin(), command.name.end(), std::back_inserter(name));
   std::copy(command.data.begin(), command.data.end(), std::back_inserter(data));
   std::copy(command.data_mask.begin(), command.data_mask.end(), std::back_inserter(data_mask));
   std::copy(command.irk.begin(), command.irk.end(), std::begin(irk));
+  std::copy(command.meta_data.begin(), command.meta_data.end(), std::back_inserter(meta_data));
 
   ApcfCommand converted = {
       .type = command.type_,
@@ -59,6 +60,8 @@ ApcfCommand ConvertApcfFromRust(const RustApcfCommand& command) {
       .org_id = command.org_id,
       .tds_flags = command.tds_flags,
       .tds_flags_mask = command.tds_flags_mask,
+      .meta_data_type = command.meta_data_type,
+      .meta_data = meta_data,
       .ad_type = command.ad_type,
       .data = data,
       .data_mask = data_mask,
@@ -106,13 +109,22 @@ std::vector<MsftAdvMonitorPattern> ConvertAdvMonitorPatterns(const ::rust::Vec<R
   return converted;
 }
 
+MsftAdvMonitorAddress ConvertAdvMonitorAddress(RustMsftAdvMonitorAddress rust_addr_info) {
+  MsftAdvMonitorAddress addr_info;
+  addr_info.addr_type = rust_addr_info.addr_type;
+  addr_info.bd_addr = rust_addr_info.bd_addr;
+  return addr_info;
+}
+
 MsftAdvMonitor ConvertAdvMonitor(const RustMsftAdvMonitor& monitor) {
   MsftAdvMonitor converted = {
       .rssi_threshold_high = monitor.rssi_high_threshold,
       .rssi_threshold_low = monitor.rssi_low_threshold,
       .rssi_threshold_low_time_interval = monitor.rssi_low_timeout,
       .rssi_sampling_period = monitor.rssi_sampling_period,
+      .condition_type = monitor.condition_type,
       .patterns = ConvertAdvMonitorPatterns(monitor.patterns),
+      .addr_info = ConvertAdvMonitorAddress(monitor.addr_info),
   };
   return converted;
 }
@@ -172,6 +184,7 @@ void BleScannerIntf::OnScanResult(
 
 void BleScannerIntf::OnTrackAdvFoundLost(AdvertisingTrackInfo ati) {
   rusty::RustAdvertisingTrackInfo rust_info = {
+      .monitor_handle = ati.monitor_handle,
       .scanner_id = ati.scanner_id,
       .filter_index = ati.filter_index,
       .advertiser_state = ati.advertiser_state,
@@ -248,6 +261,8 @@ void BleScannerIntf::ScanFilterEnable(bool enable) {
   scanner_intf_->ScanFilterEnable(enable, base::Bind(&BleScannerIntf::OnEnableCallback, base::Unretained(this)));
 }
 
+#if TARGET_FLOSS
+
 bool BleScannerIntf::IsMsftSupported() {
   return scanner_intf_->IsMsftSupported();
 }
@@ -268,11 +283,29 @@ void BleScannerIntf::MsftAdvMonitorEnable(uint32_t call_id, bool enable) {
       enable, base::Bind(&BleScannerIntf::OnMsftAdvMonitorEnableCallback, base::Unretained(this), call_id));
 }
 
-void BleScannerIntf::SetScanParameters(uint8_t scanner_id, uint16_t scan_interval, uint16_t scan_window) {
+#else
+
+bool BleScannerIntf::IsMsftSupported() {
+  return false;
+}
+void BleScannerIntf::MsftAdvMonitorAdd(uint32_t, const RustMsftAdvMonitor&) {}
+void BleScannerIntf::MsftAdvMonitorRemove(uint32_t, uint8_t) {}
+void BleScannerIntf::MsftAdvMonitorEnable(uint32_t, bool) {}
+
+#endif
+
+void BleScannerIntf::SetScanParameters(
+    uint8_t scanner_id,
+    uint8_t scan_type,
+    uint16_t scan_interval,
+    uint16_t scan_window,
+    uint8_t scan_phy) {
   scanner_intf_->SetScanParameters(
       scanner_id,
+      scan_type,
       scan_interval,
       scan_window,
+      scan_phy,
       base::Bind(&BleScannerIntf::OnStatusCallback, base::Unretained(this), scanner_id));
 }
 
@@ -354,6 +387,7 @@ void BleScannerIntf::OnFilterConfigCallback(
   rusty::gdscan_filter_config_callback(filter_index, filt_type, avbl_space, action, btm_status);
 }
 
+#if TARGET_FLOSS
 void BleScannerIntf::OnMsftAdvMonitorAddCallback(uint32_t call_id, uint8_t monitor_handle, uint8_t status) {
   rusty::gdscan_msft_adv_monitor_add_callback(call_id, monitor_handle, status);
 }
@@ -365,6 +399,7 @@ void BleScannerIntf::OnMsftAdvMonitorRemoveCallback(uint32_t call_id, uint8_t st
 void BleScannerIntf::OnMsftAdvMonitorEnableCallback(uint32_t call_id, uint8_t status) {
   rusty::gdscan_msft_adv_monitor_enable_callback(call_id, status);
 }
+#endif
 
 void BleScannerIntf::OnPeriodicSyncStarted(
     int,

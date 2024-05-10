@@ -1,13 +1,11 @@
+#include "osi/include/fixed_queue.h"
+
 #include <gtest/gtest.h>
 
 #include <climits>
 
-#include "AllocationTestHarness.h"
-
 #include "osi/include/allocator.h"
-#include "osi/include/fixed_queue.h"
 #include "osi/include/future.h"
-#include "osi/include/osi.h"
 #include "osi/include/thread.h"
 
 static const size_t TEST_QUEUE_SIZE = 10;
@@ -37,7 +35,7 @@ static bool is_fd_readable(int fd) {
 }
 
 // Function for performing dequeue operations from the queue when is ready
-static void fixed_queue_ready(fixed_queue_t* queue, UNUSED_ATTR void* context) {
+static void fixed_queue_ready(fixed_queue_t* queue, void* /* context */) {
   void* msg = fixed_queue_try_dequeue(queue);
   EXPECT_TRUE(msg != NULL);
   future_ready(received_message_future, msg);
@@ -49,7 +47,7 @@ static void test_queue_entry_free_cb(void* data) {
   test_queue_entry_free_counter++;
 }
 
-class FixedQueueTest : public AllocationTestHarness {};
+class FixedQueueTest : public ::testing::Test {};
 
 TEST_F(FixedQueueTest, test_fixed_queue_new_free) {
   fixed_queue_t* queue;

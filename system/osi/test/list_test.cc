@@ -1,13 +1,10 @@
+#include "osi/include/list.h"
+
 #include <gtest/gtest.h>
 
-#include <base/logging.h>
-
-#include "AllocationTestHarness.h"
-
-#include "osi/include/list.h"
 #include "osi/include/osi.h"
 
-class ListTest : public AllocationTestHarness {};
+class ListTest : public ::testing::Test {};
 
 TEST_F(ListTest, test_new_free_simple) {
   list_t* list = list_new(NULL);
@@ -145,8 +142,8 @@ TEST_F(ListTest, test_list_next) {
 }
 
 static bool list_callback_sum(void* data, void* context) {
-  CHECK(data);
-  CHECK(context);
+  EXPECT_NE(data, nullptr);
+  EXPECT_NE(context, nullptr);
   int* sum = (int*)context;
   int* value = (int*)data;
   *sum += *value;
@@ -154,8 +151,8 @@ static bool list_callback_sum(void* data, void* context) {
 }
 
 static bool list_callback_find_int(void* data, void* context) {
-  CHECK(data);
-  CHECK(context);
+  EXPECT_NE(data, nullptr);
+  EXPECT_NE(context, nullptr);
   return (*(int*)data != *(int*)context);
 }
 

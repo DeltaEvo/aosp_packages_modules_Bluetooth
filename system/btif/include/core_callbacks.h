@@ -39,8 +39,8 @@ struct EventCallbacks {
   void (*invoke_discovery_state_changed_cb)(bt_discovery_state_t state);
   void (*invoke_pin_request_cb)(RawAddress bd_addr, bt_bdname_t bd_name,
                                 uint32_t cod, bool min_16_digit);
-  void (*invoke_ssp_request_cb)(RawAddress bd_addr, bt_bdname_t bd_name,
-                                uint32_t cod, bt_ssp_variant_t pairing_variant,
+  void (*invoke_ssp_request_cb)(RawAddress bd_addr,
+                                bt_ssp_variant_t pairing_variant,
                                 uint32_t pass_key);
   void (*invoke_oob_data_request_cb)(tBT_TRANSPORT t, bool valid, Octet16 c,
                                      Octet16 r, RawAddress raw_address,
@@ -58,6 +58,7 @@ struct EventCallbacks {
                                       bt_conn_direction_t direction,
                                       uint16_t acl_handle);
   void (*invoke_thread_evt_cb)(bt_cb_thread_evt event);
+  void (*invoke_le_test_mode_cb)(bt_status_t status, uint16_t count);
   void (*invoke_energy_info_cb)(bt_activity_energy_info energy_info,
                                 bt_uid_traffic_t* uid_data);
   void (*invoke_link_quality_report_cb)(uint64_t timestamp, int report_id,
@@ -65,8 +66,8 @@ struct EventCallbacks {
                                         int retransmission_count,
                                         int packets_not_receive_count,
                                         int negative_acknowledgement_count);
+  void (*invoke_key_missing_cb)(RawAddress bd_addr);
 
-  EventCallbacks(const EventCallbacks&) = delete;
   EventCallbacks& operator=(const EventCallbacks&) = delete;
 };
 
@@ -106,13 +107,11 @@ struct CodecInterface {
 // that profiles can register themselves to.
 struct HACK_ProfileInterface {
   // HID hacks
-  bt_status_t (*btif_hh_connect)(const RawAddress* bd_addr);
-  bt_status_t (*btif_hh_virtual_unplug)(const RawAddress* bd_addr);
-  tBTA_HH_STATUS (*bta_hh_read_ssr_param)(const RawAddress& bd_addr,
+  bt_status_t (*btif_hh_connect)(const tAclLinkSpec& link_spec);
+  bt_status_t (*btif_hh_virtual_unplug)(const tAclLinkSpec& link_spec);
+  tBTA_HH_STATUS (*bta_hh_read_ssr_param)(const tAclLinkSpec& link_spec,
                                           uint16_t* p_max_ssr_lat,
                                           uint16_t* p_min_ssr_tout);
-  bool (*bta_hh_le_is_hh_gatt_if)(tGATT_IF client_if);
-  void (*bta_hh_cleanup_disable)(tBTA_HH_STATUS status);
 
   // AVDTP hacks
   void (*btif_av_set_dynamic_audio_buffer_size)(
@@ -127,7 +126,6 @@ struct HACK_ProfileInterface {
   // AVRCP hacks
   uint16_t (*AVRC_GetProfileVersion)();
 
-  HACK_ProfileInterface(const HACK_ProfileInterface&) = delete;
   HACK_ProfileInterface& operator=(const HACK_ProfileInterface&) = delete;
 };
 
@@ -139,6 +137,7 @@ struct CoreInterface {
 
   // codecs
   CodecInterface* msbcCodec;
+  CodecInterface* lc3Codec;
 
   // DO NOT add any more methods here
   HACK_ProfileInterface* profileSpecific_HACK;
@@ -151,10 +150,12 @@ struct CoreInterface {
 
   CoreInterface(EventCallbacks* eventCallbacks,
                 ConfigInterface* configInterface, CodecInterface* msbcCodec,
+                CodecInterface* lc3Codec,
                 HACK_ProfileInterface* profileSpecific_HACK)
       : events{eventCallbacks},
         config{configInterface},
         msbcCodec{msbcCodec},
+        lc3Codec{lc3Codec},
         profileSpecific_HACK{profileSpecific_HACK} {};
 
   CoreInterface(const CoreInterface&) = delete;

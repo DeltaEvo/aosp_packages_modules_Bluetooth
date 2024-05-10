@@ -16,8 +16,6 @@
 
 #pragma once
 
-#include <set>
-#include <unordered_map>
 #include <vector>
 
 #include "stack/include/bt_hdr.h"
@@ -195,10 +193,9 @@ extern std::vector<uint16_t> L2CA_ConnectCreditBasedReq(
  *
  ******************************************************************************/
 
-extern bool L2CA_ConnectCreditBasedRsp(const RawAddress& p_bd_addr, uint8_t id,
-                                       std::vector<uint16_t>& accepted_lcids,
-                                       uint16_t result,
-                                       tL2CAP_LE_CFG_INFO* p_cfg);
+bool L2CA_ConnectCreditBasedRsp(const RawAddress& p_bd_addr, uint8_t id,
+                                std::vector<uint16_t>& accepted_lcids,
+                                uint16_t result, tL2CAP_LE_CFG_INFO* p_cfg);
 
 /*******************************************************************************
  *
@@ -256,18 +253,6 @@ bool L2CA_GetRemoteCid(uint16_t lcid, uint16_t* rcid);
  ******************************************************************************/
 bool L2CA_SetIdleTimeoutByBdAddr(const RawAddress& bd_addr, uint16_t timeout,
                                  tBT_TRANSPORT transport);
-
-/*******************************************************************************
- *
- * Function         L2CA_SetTraceLevel
- *
- * Description      This function sets the trace level for L2CAP. If called with
- *                  a value of 0xFF, it simply reads the current trace level.
- *
- * Returns          the new (current) trace level
- *
- ******************************************************************************/
-uint8_t L2CA_SetTraceLevel(uint8_t trace_level);
 
 /*******************************************************************************
  *
@@ -405,10 +390,6 @@ void L2CA_LeConnectionUpdate(const RawAddress& rem_bda, uint16_t min_int,
                              uint16_t timeout, uint16_t min_ce_len,
                              uint16_t max_ce_len);
 
-// When GATT discovery is in progress, use the minimal connection interval, and
-// reject remote connection updates, until done.
-bool L2CA_EnableUpdateBleConnParams(const RawAddress& rem_bda, bool enable);
-
 /*******************************************************************************
  *
  * Function         L2CA_SetLeGattTimeout
@@ -434,20 +415,19 @@ bool L2CA_UpdateBleConnParams(const RawAddress& rem_bda, uint16_t min_int,
                               uint16_t max_int, uint16_t latency,
                               uint16_t timeout, uint16_t min_ce_len,
                               uint16_t max_ce_len);
+/* When called with lock=true, LE connection parameters will be locked on
+ * fastest value, and we won't accept request to change it from remote. When
+ * called with lock=false, parameters are relaxed.
+ */
+void L2CA_LockBleConnParamsForServiceDiscovery(const RawAddress& rem_bda,
+                                               bool lock);
 
-/*******************************************************************************
- *
- *  Function        L2CA_EnableUpdateBleConnParams
- *
- *  Description     Update BLE connection parameters.
- *
- *  Parameters:     BD Address of remote
- *                  enable flag
- *
- *  Return value:   true if update started
- *
- ******************************************************************************/
-bool L2CA_EnableUpdateBleConnParams(const RawAddress& rem_bda, bool enable);
+/* When called with lock=true, LE connection parameters will be locked on
+ * fastest value, and we won't accept request to change it from remote. When
+ * called with lock=false, parameters are relaxed.
+ */
+void L2CA_LockBleConnParamsForProfileConnection(const RawAddress& rem_bda,
+                                                bool lock);
 
 /*******************************************************************************
  *
@@ -469,9 +449,6 @@ void L2CA_ConnectForSecurity(const RawAddress& bd_addr);
 
 // Set bonding state to acquire/release link refcount
 void L2CA_SetBondingState(const RawAddress& p_bd_addr, bool is_bonding);
-
-// Indicated by shim stack manager that GD L2cap is enabled but Security is not
-void L2CA_UseLegacySecurityModule();
 
 void L2CA_SwitchRoleToCentral(const RawAddress& addr);
 

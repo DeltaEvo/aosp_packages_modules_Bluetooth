@@ -24,34 +24,16 @@
 
 #include <cstdint>
 #include <functional>
-#include <map>
-#include <string>
-
-#include "test/common/mock_functions.h"
 
 // Original included files, if any
-// NOTE: Since this is a mock file with mock definitions some number of
-//       include files may not be required.  The include-what-you-use
-//       still applies, but crafting proper inclusion is out of scope
-//       for this effort.  This compilation unit may compile as-is, or
-//       may need attention to prune from (or add to ) the inclusion set.
-#include <base/logging.h>
-
-#include <mutex>
 #include <vector>
 
-#include "bt_target.h"
 #include "bta/include/bta_av_api.h"
-#include "bta/include/bta_av_ci.h"
-#include "btif/include/btif_a2dp_source.h"
-#include "btif/include/btif_av.h"
 #include "include/hardware/bt_av.h"
-#include "osi/include/osi.h"
 #include "stack/include/a2dp_codec_api.h"
 #include "stack/include/a2dp_error_codes.h"
 #include "stack/include/avdt_api.h"
 #include "stack/include/bt_hdr.h"
-#include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
 // Original usings
@@ -69,7 +51,8 @@ namespace btif_co_bta_av_co {
 struct bta_av_co_audio_close {
   std::function<void(tBTA_AV_HNDL bta_av_handle,
                      const RawAddress& peer_address)>
-      body{[](tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address) {}};
+      body{[](tBTA_AV_HNDL /* bta_av_handle */,
+              const RawAddress& /* peer_address */) {}};
   void operator()(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address) {
     body(bta_av_handle, peer_address);
   };
@@ -82,8 +65,8 @@ extern struct bta_av_co_audio_close bta_av_co_audio_close;
 struct bta_av_co_audio_delay {
   std::function<void(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
                      uint16_t delay)>
-      body{[](tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
-              uint16_t delay) {}};
+      body{[](tBTA_AV_HNDL /* bta_av_handle */,
+              const RawAddress& /* peer_address */, uint16_t /* delay */) {}};
   void operator()(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
                   uint16_t delay) {
     body(bta_av_handle, peer_address, delay);
@@ -99,9 +82,10 @@ struct bta_av_co_audio_disc_res {
   std::function<void(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
                      uint8_t num_seps, uint8_t num_sinks, uint8_t num_sources,
                      uint16_t uuid_local)>
-      body{[](tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
-              uint8_t num_seps, uint8_t num_sinks, uint8_t num_sources,
-              uint16_t uuid_local) {}};
+      body{[](tBTA_AV_HNDL /* bta_av_handle */,
+              const RawAddress& /* peer_address */, uint8_t /* num_seps */,
+              uint8_t /* num_sinks */, uint8_t /* num_sources */,
+              uint16_t /* uuid_local */) {}};
   void operator()(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
                   uint8_t num_seps, uint8_t num_sinks, uint8_t num_sources,
                   uint16_t uuid_local) {
@@ -117,7 +101,8 @@ extern struct bta_av_co_audio_disc_res bta_av_co_audio_disc_res;
 struct bta_av_co_audio_drop {
   std::function<void(tBTA_AV_HNDL bta_av_handle,
                      const RawAddress& peer_address)>
-      body{[](tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address) {}};
+      body{[](tBTA_AV_HNDL /* bta_av_handle */,
+              const RawAddress& /* peer_address */) {}};
   void operator()(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address) {
     body(bta_av_handle, peer_address);
   };
@@ -134,10 +119,11 @@ struct bta_av_co_audio_getconfig {
       tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
       uint8_t* p_codec_info, uint8_t* p_sep_info_idx, uint8_t seid,
       uint8_t* p_num_protect, uint8_t* p_protect_info)>
-      body{[](tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
-              uint8_t* p_codec_info, uint8_t* p_sep_info_idx, uint8_t seid,
-              uint8_t* p_num_protect,
-              uint8_t* p_protect_info) { return return_value; }};
+      body{[](tBTA_AV_HNDL /* bta_av_handle */,
+              const RawAddress& /* peer_address */, uint8_t* /* p_codec_info */,
+              uint8_t* /* p_sep_info_idx */, uint8_t /* seid */,
+              uint8_t* /* p_num_protect */,
+              uint8_t* /* p_protect_info */) { return return_value; }};
   tA2DP_STATUS operator()(tBTA_AV_HNDL bta_av_handle,
                           const RawAddress& peer_address, uint8_t* p_codec_info,
                           uint8_t* p_sep_info_idx, uint8_t seid,
@@ -155,9 +141,8 @@ struct bta_av_co_audio_init {
   static bool return_value;
   std::function<bool(btav_a2dp_codec_index_t codec_index,
                      AvdtpSepConfig* p_cfg)>
-      body{[](btav_a2dp_codec_index_t codec_index, AvdtpSepConfig* p_cfg) {
-        return return_value;
-      }};
+      body{[](btav_a2dp_codec_index_t /* codec_index */,
+              AvdtpSepConfig* /* p_cfg */) { return return_value; }};
   bool operator()(btav_a2dp_codec_index_t codec_index, AvdtpSepConfig* p_cfg) {
     return body(codec_index, p_cfg);
   };
@@ -170,8 +155,8 @@ extern struct bta_av_co_audio_init bta_av_co_audio_init;
 struct bta_av_co_audio_open {
   std::function<void(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
                      uint16_t mtu)>
-      body{[](tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
-              uint16_t mtu) {}};
+      body{[](tBTA_AV_HNDL /* bta_av_handle */,
+              const RawAddress& /* peer_address */, uint16_t /* mtu */) {}};
   void operator()(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
                   uint16_t mtu) {
     body(bta_av_handle, peer_address, mtu);
@@ -188,10 +173,11 @@ struct bta_av_co_audio_setconfig {
                      const uint8_t* p_codec_info, uint8_t seid,
                      uint8_t num_protect, const uint8_t* p_protect_info,
                      uint8_t t_local_sep, uint8_t avdt_handle)>
-      body{[](tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
-              const uint8_t* p_codec_info, uint8_t seid, uint8_t num_protect,
-              const uint8_t* p_protect_info, uint8_t t_local_sep,
-              uint8_t avdt_handle) {}};
+      body{[](tBTA_AV_HNDL /* bta_av_handle */,
+              const RawAddress& /* peer_address */,
+              const uint8_t* /* p_codec_info */, uint8_t /* seid */,
+              uint8_t /* num_protect */, const uint8_t* /* p_protect_info */,
+              uint8_t /* t_local_sep */, uint8_t /* avdt_handle */) {}};
   void operator()(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
                   const uint8_t* p_codec_info, uint8_t seid,
                   uint8_t num_protect, const uint8_t* p_protect_info,
@@ -208,7 +194,7 @@ extern struct bta_av_co_audio_setconfig bta_av_co_audio_setconfig;
 struct bta_av_co_audio_source_data_path {
   static BT_HDR* return_value;
   std::function<BT_HDR*(const uint8_t* p_codec_info, uint32_t* p_timestamp)>
-      body{[](const uint8_t* p_codec_info, uint32_t* p_timestamp) {
+      body{[](const uint8_t* /* p_codec_info */, uint32_t* /* p_timestamp */) {
         return return_value;
       }};
   BT_HDR* operator()(const uint8_t* p_codec_info, uint32_t* p_timestamp) {
@@ -223,8 +209,10 @@ extern struct bta_av_co_audio_source_data_path bta_av_co_audio_source_data_path;
 struct bta_av_co_audio_start {
   std::function<void(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
                      const uint8_t* p_codec_info, bool* p_no_rtp_header)>
-      body{[](tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
-              const uint8_t* p_codec_info, bool* p_no_rtp_header) {}};
+      body{[](tBTA_AV_HNDL /* bta_av_handle */,
+              const RawAddress& /* peer_address */,
+              const uint8_t* /* p_codec_info */,
+              bool* /* p_no_rtp_header */) {}};
   void operator()(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
                   const uint8_t* p_codec_info, bool* p_no_rtp_header) {
     body(bta_av_handle, peer_address, p_codec_info, p_no_rtp_header);
@@ -238,7 +226,8 @@ extern struct bta_av_co_audio_start bta_av_co_audio_start;
 struct bta_av_co_audio_stop {
   std::function<void(tBTA_AV_HNDL bta_av_handle,
                      const RawAddress& peer_address)>
-      body{[](tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address) {}};
+      body{[](tBTA_AV_HNDL /* bta_av_handle */,
+              const RawAddress& /* peer_address */) {}};
   void operator()(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address) {
     body(bta_av_handle, peer_address);
   };
@@ -251,25 +240,14 @@ extern struct bta_av_co_audio_stop bta_av_co_audio_stop;
 struct bta_av_co_audio_update_mtu {
   std::function<void(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
                      uint16_t mtu)>
-      body{[](tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
-              uint16_t mtu) {}};
+      body{[](tBTA_AV_HNDL /* bta_av_handle */,
+              const RawAddress& /* peer_address */, uint16_t /* mtu */) {}};
   void operator()(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
                   uint16_t mtu) {
     body(bta_av_handle, peer_address, mtu);
   };
 };
 extern struct bta_av_co_audio_update_mtu bta_av_co_audio_update_mtu;
-
-// Name: bta_av_co_get_decoder_interface
-// Params: void
-// Return: const tA2DP_DECODER_INTERFACE*
-struct bta_av_co_get_decoder_interface {
-  static const tA2DP_DECODER_INTERFACE* return_value;
-  std::function<const tA2DP_DECODER_INTERFACE*(void)> body{
-      [](void) { return return_value; }};
-  const tA2DP_DECODER_INTERFACE* operator()(void) { return body(); };
-};
-extern struct bta_av_co_get_decoder_interface bta_av_co_get_decoder_interface;
 
 // Name: bta_av_co_get_encoder_effective_frame_size
 // Params:
@@ -299,8 +277,8 @@ extern struct bta_av_co_get_encoder_interface bta_av_co_get_encoder_interface;
 struct bta_av_co_get_peer_params {
   std::function<void(const RawAddress& peer_address,
                      tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_params)>
-      body{[](const RawAddress& peer_address,
-              tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_params) {}};
+      body{[](const RawAddress& /* peer_address */,
+              tA2DP_ENCODER_INIT_PEER_PARAMS* /* p_peer_params */) {}};
   void operator()(const RawAddress& peer_address,
                   tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_params) {
     body(peer_address, p_peer_params);
@@ -314,7 +292,7 @@ extern struct bta_av_co_get_peer_params bta_av_co_get_peer_params;
 struct bta_av_co_get_scmst_info {
   static btav_a2dp_scmst_info_t return_value;
   std::function<btav_a2dp_scmst_info_t(const RawAddress& peer_address)> body{
-      [](const RawAddress& peer_address) { return return_value; }};
+      [](const RawAddress& /* peer_address */) { return return_value; }};
   btav_a2dp_scmst_info_t operator()(const RawAddress& peer_address) {
     return body(peer_address);
   };
@@ -326,12 +304,14 @@ extern struct bta_av_co_get_scmst_info bta_av_co_get_scmst_info;
 // Return: void
 struct bta_av_co_init {
   std::function<void(
-      const std::vector<btav_a2dp_codec_config_t>& codec_priorities)>
-      body{
-          [](const std::vector<btav_a2dp_codec_config_t>& codec_priorities) {}};
-  void operator()(
-      const std::vector<btav_a2dp_codec_config_t>& codec_priorities) {
-    body(codec_priorities);
+      const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
+      std::vector<btav_a2dp_codec_info_t>* supported_codecs)>
+      body{[](const std::vector<
+                  btav_a2dp_codec_config_t>& /* codec_priorities */,
+              std::vector<btav_a2dp_codec_info_t>* /* supported_codecs */) {}};
+  void operator()(const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
+                  std::vector<btav_a2dp_codec_info_t>* supported_codecs) {
+    body(codec_priorities, supported_codecs);
   };
 };
 extern struct bta_av_co_init bta_av_co_init;
@@ -342,7 +322,7 @@ extern struct bta_av_co_init bta_av_co_init;
 struct bta_av_co_is_supported_codec {
   static bool return_value;
   std::function<bool(btav_a2dp_codec_index_t codec_index)> body{
-      [](btav_a2dp_codec_index_t codec_index) { return return_value; }};
+      [](btav_a2dp_codec_index_t /* codec_index */) { return return_value; }};
   bool operator()(btav_a2dp_codec_index_t codec_index) {
     return body(codec_index);
   };
@@ -355,7 +335,7 @@ extern struct bta_av_co_is_supported_codec bta_av_co_is_supported_codec;
 struct bta_av_co_set_active_peer {
   static bool return_value;
   std::function<bool(const RawAddress& peer_address)> body{
-      [](const RawAddress& peer_address) { return return_value; }};
+      [](const RawAddress& /* peer_address */) { return return_value; }};
   bool operator()(const RawAddress& peer_address) {
     return body(peer_address);
   };
@@ -368,7 +348,7 @@ extern struct bta_av_co_set_active_peer bta_av_co_set_active_peer;
 struct bta_av_co_set_codec_audio_config {
   static bool return_value;
   std::function<bool(const btav_a2dp_codec_config_t& codec_audio_config)> body{
-      [](const btav_a2dp_codec_config_t& codec_audio_config) {
+      [](const btav_a2dp_codec_config_t& /* codec_audio_config */) {
         return return_value;
       }};
   bool operator()(const btav_a2dp_codec_config_t& codec_audio_config) {
@@ -385,9 +365,9 @@ struct bta_av_co_set_codec_user_config {
   std::function<bool(const RawAddress& peer_address,
                      const btav_a2dp_codec_config_t& codec_user_config,
                      bool* p_restart_output)>
-      body{[](const RawAddress& peer_address,
-              const btav_a2dp_codec_config_t& codec_user_config,
-              bool* p_restart_output) { return return_value; }};
+      body{[](const RawAddress& /* peer_address */,
+              const btav_a2dp_codec_config_t& /* codec_user_config */,
+              bool* /* p_restart_output */) { return return_value; }};
   bool operator()(const RawAddress& peer_address,
                   const btav_a2dp_codec_config_t& codec_user_config,
                   bool* p_restart_output) {
@@ -412,7 +392,7 @@ extern struct bta_av_get_a2dp_current_codec bta_av_get_a2dp_current_codec;
 struct bta_av_get_a2dp_peer_current_codec {
   static A2dpCodecConfig* return_value;
   std::function<A2dpCodecConfig*(const RawAddress& peer_address)> body{
-      [](const RawAddress& peer_address) { return return_value; }};
+      [](const RawAddress& /* peer_address */) { return return_value; }};
   A2dpCodecConfig* operator()(const RawAddress& peer_address) {
     return body(peer_address);
   };
@@ -424,7 +404,7 @@ extern struct bta_av_get_a2dp_peer_current_codec
 // Params: int fd
 // Return: void
 struct btif_a2dp_codec_debug_dump {
-  std::function<void(int fd)> body{[](int fd) {}};
+  std::function<void(int fd)> body{[](int /* fd */) {}};
   void operator()(int fd) { body(fd); };
 };
 extern struct btif_a2dp_codec_debug_dump btif_a2dp_codec_debug_dump;

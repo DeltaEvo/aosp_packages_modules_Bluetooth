@@ -4,7 +4,7 @@ use btstack::suspend::{ISuspend, ISuspendCallback, SuspendType};
 use btstack::RPCProxy;
 use dbus::nonblock::SyncConnection;
 use dbus_macros::{dbus_method, generate_dbus_exporter, generate_dbus_interface_client};
-use dbus_projection::{impl_dbus_arg_enum, ClientDBusProxy};
+use dbus_projection::prelude::*;
 use num_traits::{FromPrimitive, ToPrimitive};
 use std::sync::Arc;
 
@@ -44,7 +44,7 @@ impl SuspendDBus {
 
 #[generate_dbus_interface_client(SuspendDBusRPC)]
 impl ISuspend for SuspendDBus {
-    #[dbus_method("RegisterCallback")]
+    #[dbus_method("RegisterCallback", DBusLog::Disable)]
     fn register_callback(&mut self, callback: Box<dyn ISuspendCallback + Send>) -> bool {
         dbus_generated!()
     }
@@ -76,9 +76,9 @@ impl RPCProxy for ISuspendCallbackDBus {}
 )]
 impl ISuspendCallback for ISuspendCallbackDBus {
     #[dbus_method("OnCallbackRegistered")]
-    fn on_callback_registered(&self, callback_id: u32) {}
+    fn on_callback_registered(&mut self, callback_id: u32) {}
     #[dbus_method("OnSuspendReady")]
-    fn on_suspend_ready(&self, suspend_id: i32) {}
+    fn on_suspend_ready(&mut self, suspend_id: i32) {}
     #[dbus_method("OnResumed")]
-    fn on_resumed(&self, suspend_id: i32) {}
+    fn on_resumed(&mut self, suspend_id: i32) {}
 }

@@ -28,10 +28,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 
 final class BluetoothPbapRequestPullPhoneBook extends BluetoothPbapRequest {
-
-    private static final boolean VDBG = Utils.VDBG;
-
-    private static final String TAG = "BtPbapReqPullPhoneBook";
+    private static final String TAG = "PbapClient.PullPb";
 
     private static final String TYPE = "x-bt/phonebook";
 
@@ -93,17 +90,15 @@ final class BluetoothPbapRequestPullPhoneBook extends BluetoothPbapRequest {
 
     @Override
     protected void readResponse(InputStream stream) throws IOException {
-        if (VDBG) Log.v(TAG, "readResponse");
+        Log.v(TAG, "readResponse");
 
         mResponse = new BluetoothPbapVcardList(mAccount, stream, mFormat);
-        if (VDBG) {
-            Log.d(TAG, "Read " + mResponse.getCount() + " entries.");
-        }
+        Log.d(TAG, "Read " + mResponse.getCount() + " entries");
     }
 
     @Override
     protected void readResponseHeaders(HeaderSet headerset) {
-        if (VDBG) Log.v(TAG, "readResponseHeaders");
+        Log.v(TAG, "readResponseHeaders");
 
         ObexAppParameters oap = ObexAppParameters.fromHeaderSet(headerset);
 

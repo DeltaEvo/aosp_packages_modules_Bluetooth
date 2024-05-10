@@ -19,6 +19,7 @@ package com.android.bluetooth.avrcpcontroller;
 import android.support.v4.media.session.PlaybackStateCompat;
 import android.util.Log;
 import android.util.SparseArray;
+import android.util.SparseIntArray;
 
 import com.android.internal.annotations.VisibleForTesting;
 
@@ -33,13 +34,8 @@ class PlayerApplicationSettings {
     /*
      * Values for SetPlayerApplicationSettings from AVRCP Spec V1.6 Appendix F.
      */
-    static final byte EQUALIZER_STATUS = 0x01;
     static final byte REPEAT_STATUS = 0x02;
     static final byte SHUFFLE_STATUS = 0x03;
-    static final byte SCAN_STATUS = 0x04;
-
-    private static final byte JNI_EQUALIZER_STATUS_OFF = 0x01;
-    private static final byte JNI_EQUALIZER_STATUS_ON = 0x02;
 
     @VisibleForTesting
     static final byte JNI_REPEAT_STATUS_OFF = 0x01;
@@ -57,17 +53,13 @@ class PlayerApplicationSettings {
     @VisibleForTesting
     static final byte JNI_SHUFFLE_STATUS_GROUP_SHUFFLE = 0x03;
 
-    private static final byte JNI_SCAN_STATUS_OFF = 0x01;
-    private static final byte JNI_SCAN_STATUS_ALL_TRACK_SCAN = 0x02;
-    private static final byte JNI_SCAN_STATUS_GROUP_SCAN = 0x03;
-
     @VisibleForTesting
     static final byte JNI_STATUS_INVALID = -1;
 
     /*
      * Hash map of current settings.
      */
-    private SparseArray<Integer> mSettings = new SparseArray<>();
+    private SparseIntArray mSettings = new SparseIntArray();
 
     /*
      * Hash map of supported values, a setting should be supported by the remote in order to enable
@@ -128,8 +120,7 @@ class PlayerApplicationSettings {
     }
 
     public int getSetting(int settingType) {
-        if (null == mSettings.get(settingType)) return -1;
-        return mSettings.get(settingType);
+        return mSettings.get(settingType, -1);
     }
 
     // Convert a native Attribute Id/Value pair into the AVRCP equivalent value.
@@ -183,5 +174,41 @@ class PlayerApplicationSettings {
             }
         }
         return JNI_STATUS_INVALID;
+    }
+
+    public static String repeatStatusToString(int repeatMode) {
+        switch (repeatMode) {
+            case PlaybackStateCompat.REPEAT_MODE_ALL:
+                return "ALL";
+            case PlaybackStateCompat.REPEAT_MODE_GROUP:
+                return "GROUP";
+            case PlaybackStateCompat.REPEAT_MODE_NONE:
+                return "NONE";
+            case PlaybackStateCompat.REPEAT_MODE_ONE:
+                return "ONE";
+            default:
+                return "Unsupported";
+        }
+    }
+
+    public static String shuffleStatusToString(int shuffleMode) {
+        switch (shuffleMode) {
+            case PlaybackStateCompat.SHUFFLE_MODE_NONE:
+                return "NONE";
+            case PlaybackStateCompat.SHUFFLE_MODE_ALL:
+                return "ALL";
+            case PlaybackStateCompat.SHUFFLE_MODE_GROUP:
+                return "GROUP";
+            default:
+                return "Unsupported";
+        }
+    }
+
+    @Override
+    public String toString() {
+        return "<PlayerApplicationSettings"
+                + " repeat=" + repeatStatusToString(getSetting(REPEAT_STATUS))
+                + " shuffle=" + shuffleStatusToString(getSetting(SHUFFLE_STATUS))
+                + ">";
     }
 }

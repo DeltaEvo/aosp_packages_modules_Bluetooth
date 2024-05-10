@@ -15,7 +15,10 @@ cc_fuzz {
         "fuzz_ringbuffer.cc",
     ],
     static_libs: [
-        "libosi",
+        "libbase",
+        "libbluetooth_log",
+        "libchrome",
         "liblog",
+        "libosi",
     ],
 }

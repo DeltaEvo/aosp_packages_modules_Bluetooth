@@ -16,48 +16,83 @@
 
 package android.bluetooth;
 
+import static com.google.common.truth.Truth.assertThat;
+
 import android.os.ParcelUuid;
-import android.test.suitebuilder.annotation.SmallTest;
 
-import junit.framework.TestCase;
+import com.google.common.truth.Expect;
 
-/**
- * Unit test cases for {@link BluetoothUuid}.
- */
-public class BluetoothUuidTest extends TestCase {
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
-    @SmallTest
-    public void testUuidParser() {
-        byte[] uuid16 = new byte[] {
-                0x0B, 0x11 };
-        assertEquals(ParcelUuid.fromString("0000110B-0000-1000-8000-00805F9B34FB"),
-                BluetoothUuid.parseUuidFrom(uuid16));
+/** Unit test cases for {@link BluetoothUuid}. */
+@RunWith(JUnit4.class)
+public class BluetoothUuidTest {
 
-        byte[] uuid32 = new byte[] {
-                0x0B, 0x11, 0x33, (byte) 0xFE };
-        assertEquals(ParcelUuid.fromString("FE33110B-0000-1000-8000-00805F9B34FB"),
-                BluetoothUuid.parseUuidFrom(uuid32));
+    @Rule public Expect expect = Expect.create();
 
-        byte[] uuid128 = new byte[] {
-                0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-                0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, (byte) 0xFF };
-        assertEquals(ParcelUuid.fromString("FF0F0E0D-0C0B-0A09-0807-060504030201"),
-                BluetoothUuid.parseUuidFrom(uuid128));
+    @Test
+    public void testUuid16Parser() {
+        byte[] uuid16 = new byte[] {0x0B, 0x11};
+        assertThat(BluetoothUuid.parseUuidFrom(uuid16))
+                .isEqualTo(ParcelUuid.fromString("0000110B-0000-1000-8000-00805F9B34FB"));
     }
 
-    @SmallTest
+    @Test
+    public void testUuid32Parser() {
+        byte[] uuid32 = new byte[] {0x0B, 0x11, 0x33, (byte) 0xFE};
+        assertThat(BluetoothUuid.parseUuidFrom(uuid32))
+                .isEqualTo(ParcelUuid.fromString("FE33110B-0000-1000-8000-00805F9B34FB"));
+    }
+
+    @Test
+    public void testUuid128Parser() {
+        byte[] uuid128 =
+                new byte[] {
+                    0x01,
+                    0x02,
+                    0x03,
+                    0x04,
+                    0x05,
+                    0x06,
+                    0x07,
+                    0x08,
+                    0x09,
+                    0x0A,
+                    0x0B,
+                    0x0C,
+                    0x0D,
+                    0x0E,
+                    0x0F,
+                    (byte) 0xFF
+                };
+        assertThat(BluetoothUuid.parseUuidFrom(uuid128))
+                .isEqualTo(ParcelUuid.fromString("FF0F0E0D-0C0B-0A09-0807-060504030201"));
+    }
+
+    @Test
     public void testUuidType() {
-        assertTrue(BluetoothUuid.is16BitUuid(
-                ParcelUuid.fromString("0000110B-0000-1000-8000-00805F9B34FB")));
-        assertFalse(BluetoothUuid.is32BitUuid(
-                ParcelUuid.fromString("0000110B-0000-1000-8000-00805F9B34FB")));
-
-        assertFalse(BluetoothUuid.is16BitUuid(
-                ParcelUuid.fromString("FE33110B-0000-1000-8000-00805F9B34FB")));
-        assertTrue(BluetoothUuid.is32BitUuid(
-                ParcelUuid.fromString("FE33110B-0000-1000-8000-00805F9B34FB")));
-        assertFalse(BluetoothUuid.is32BitUuid(
-                ParcelUuid.fromString("FE33110B-1000-1000-8000-00805F9B34FB")));
-
+        expect.that(
+                        BluetoothUuid.is16BitUuid(
+                                ParcelUuid.fromString("0000110B-0000-1000-8000-00805F9B34FB")))
+                .isTrue();
+        expect.that(
+                        BluetoothUuid.is32BitUuid(
+                                ParcelUuid.fromString("0000110B-0000-1000-8000-00805F9B34FB")))
+                .isFalse();
+        expect.that(
+                        BluetoothUuid.is16BitUuid(
+                                ParcelUuid.fromString("FE33110B-0000-1000-8000-00805F9B34FB")))
+                .isFalse();
+        expect.that(
+                        BluetoothUuid.is32BitUuid(
+                                ParcelUuid.fromString("FE33110B-0000-1000-8000-00805F9B34FB")))
+                .isTrue();
+        expect.that(
+                        BluetoothUuid.is32BitUuid(
+                                ParcelUuid.fromString("FE33110B-1000-1000-8000-00805F9B34FB")))
+                .isFalse();
     }
 }

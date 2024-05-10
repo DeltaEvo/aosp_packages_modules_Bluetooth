@@ -16,16 +16,17 @@
 
 package android.bluetooth.le;
 
-import android.test.suitebuilder.annotation.SmallTest;
+import static org.junit.Assert.assertThrows;
 
-import junit.framework.TestCase;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
-/**
- * Test for Bluetooth LE {@link ScanSettings}.
- */
-public class ScanSettingsTest extends TestCase {
+/** Test for Bluetooth LE {@link ScanSettings}. */
+@RunWith(JUnit4.class)
+public class ScanSettingsTest {
 
-    @SmallTest
+    @Test
     public void testCallbackType() {
         ScanSettings.Builder builder = new ScanSettings.Builder();
         builder.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES);
@@ -35,88 +36,71 @@ public class ScanSettingsTest extends TestCase {
         builder.setCallbackType(
                 ScanSettings.CALLBACK_TYPE_FIRST_MATCH | ScanSettings.CALLBACK_TYPE_MATCH_LOST);
 
-        try {
-            builder.setCallbackType(
-                    ScanSettings.CALLBACK_TYPE_ALL_MATCHES | ScanSettings.CALLBACK_TYPE_MATCH_LOST);
-            fail("should have thrown IllegalArgumentException!");
-        } catch (IllegalArgumentException e) {
-            // nothing to do
-        }
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        builder.setCallbackType(
+                                ScanSettings.CALLBACK_TYPE_ALL_MATCHES
+                                        | ScanSettings.CALLBACK_TYPE_MATCH_LOST));
 
-        try {
-            builder.setCallbackType(
-                    ScanSettings.CALLBACK_TYPE_ALL_MATCHES
-                            | ScanSettings.CALLBACK_TYPE_FIRST_MATCH);
-            fail("should have thrown IllegalArgumentException!");
-        } catch (IllegalArgumentException e) {
-            // nothing to do
-        }
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        builder.setCallbackType(
+                                ScanSettings.CALLBACK_TYPE_ALL_MATCHES
+                                        | ScanSettings.CALLBACK_TYPE_FIRST_MATCH));
 
-        try {
-            builder.setCallbackType(
-                    ScanSettings.CALLBACK_TYPE_ALL_MATCHES
-                            | ScanSettings.CALLBACK_TYPE_ALL_MATCHES_AUTO_BATCH);
-            fail("should have thrown IllegalArgumentException!");
-        } catch (IllegalArgumentException e) {
-            // nothing to do
-        }
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        builder.setCallbackType(
+                                ScanSettings.CALLBACK_TYPE_ALL_MATCHES
+                                        | ScanSettings.CALLBACK_TYPE_ALL_MATCHES_AUTO_BATCH));
 
-        try {
-            builder.setCallbackType(
-                    ScanSettings.CALLBACK_TYPE_ALL_MATCHES
-                    | ScanSettings.CALLBACK_TYPE_FIRST_MATCH
-                    | ScanSettings.CALLBACK_TYPE_MATCH_LOST);
-            fail("should have thrown IllegalArgumentException!");
-        } catch (IllegalArgumentException e) {
-            // nothing to do
-        }
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        builder.setCallbackType(
+                                ScanSettings.CALLBACK_TYPE_ALL_MATCHES
+                                        | ScanSettings.CALLBACK_TYPE_FIRST_MATCH
+                                        | ScanSettings.CALLBACK_TYPE_MATCH_LOST));
 
-        try {
-            builder.setCallbackType(
-                    ScanSettings.CALLBACK_TYPE_ALL_MATCHES_AUTO_BATCH
-                            | ScanSettings.CALLBACK_TYPE_MATCH_LOST);
-            fail("should have thrown IllegalArgumentException!");
-        } catch (IllegalArgumentException e) {
-            // nothing to do
-        }
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        builder.setCallbackType(
+                                ScanSettings.CALLBACK_TYPE_ALL_MATCHES_AUTO_BATCH
+                                        | ScanSettings.CALLBACK_TYPE_MATCH_LOST));
 
-        try {
-            builder.setCallbackType(
-                    ScanSettings.CALLBACK_TYPE_ALL_MATCHES_AUTO_BATCH
-                            | ScanSettings.CALLBACK_TYPE_FIRST_MATCH);
-            fail("should have thrown IllegalArgumentException!");
-        } catch (IllegalArgumentException e) {
-            // nothing to do
-        }
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        builder.setCallbackType(
+                                ScanSettings.CALLBACK_TYPE_ALL_MATCHES_AUTO_BATCH
+                                        | ScanSettings.CALLBACK_TYPE_FIRST_MATCH));
 
-        try {
-            builder.setCallbackType(
-                    ScanSettings.CALLBACK_TYPE_ALL_MATCHES_AUTO_BATCH
-                            | ScanSettings.CALLBACK_TYPE_FIRST_MATCH
-                            | ScanSettings.CALLBACK_TYPE_MATCH_LOST);
-            fail("should have thrown IllegalArgumentException!");
-        } catch (IllegalArgumentException e) {
-            // nothing to do
-        }
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        builder.setCallbackType(
+                                ScanSettings.CALLBACK_TYPE_ALL_MATCHES_AUTO_BATCH
+                                        | ScanSettings.CALLBACK_TYPE_FIRST_MATCH
+                                        | ScanSettings.CALLBACK_TYPE_MATCH_LOST));
 
-        try {
-            builder.setCallbackType(
-                    ScanSettings.CALLBACK_TYPE_ALL_MATCHES
-                            | ScanSettings.CALLBACK_TYPE_ALL_MATCHES_AUTO_BATCH
-                            | ScanSettings.CALLBACK_TYPE_FIRST_MATCH
-                            | ScanSettings.CALLBACK_TYPE_MATCH_LOST);
-            fail("should have thrown IllegalArgumentException!");
-        } catch (IllegalArgumentException e) {
-            // nothing to do
-        }
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        builder.setCallbackType(
+                                ScanSettings.CALLBACK_TYPE_ALL_MATCHES
+                                        | ScanSettings.CALLBACK_TYPE_ALL_MATCHES_AUTO_BATCH
+                                        | ScanSettings.CALLBACK_TYPE_FIRST_MATCH
+                                        | ScanSettings.CALLBACK_TYPE_MATCH_LOST));
 
-        try {
-            builder.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES_AUTO_BATCH)
-                    .setReportDelay(0)
-                    .build();
-            fail("should have thrown IllegalArgumentException!");
-        } catch (IllegalArgumentException e) {
-            // nothing to do
-        }
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        builder.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES_AUTO_BATCH)
+                                .setReportDelay(0)
+                                .build());
     }
 }

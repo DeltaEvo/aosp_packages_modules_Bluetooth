@@ -15,14 +15,14 @@
  */
 #pragma once
 
+#include <bluetooth/log.h>
+
 #include <map>
-#include <mutex>
-#include <set>
 #include <variant>
 
 #include "common/callback.h"
 #include "hci/address_with_type.h"
-#include "hci/hci_layer.h"
+#include "hci/octets.h"
 #include "os/alarm.h"
 
 namespace bluetooth {
@@ -44,7 +44,7 @@ class LeAddressManager {
       common::Callback<void(std::unique_ptr<CommandBuilder>)> enqueue_command,
       os::Handler* handler,
       Address public_address,
-      uint8_t connect_list_size,
+      uint8_t accept_list_size,
       uint8_t resolving_list_size);
   virtual ~LeAddressManager();
 
@@ -60,7 +60,7 @@ class LeAddressManager {
   void SetPrivacyPolicyForInitiatorAddress(
       AddressPolicy address_policy,
       AddressWithType fixed_address,
-      crypto_toolbox::Octet16 rotation_irk,
+      Octet16 rotation_irk,
       bool supports_ble_privacy,
       std::chrono::milliseconds minimum_rotation_time,
       std::chrono::milliseconds maximum_rotation_time);
@@ -68,7 +68,7 @@ class LeAddressManager {
   void SetPrivacyPolicyForInitiatorAddressForTest(
       AddressPolicy address_policy,
       AddressWithType fixed_address,
-      crypto_toolbox::Octet16 rotation_irk,
+      Octet16 rotation_irk,
       std::chrono::milliseconds minimum_rotation_time,
       std::chrono::milliseconds maximum_rotation_time);
   AddressPolicy GetAddressPolicy();
@@ -86,13 +86,13 @@ class LeAddressManager {
 
   uint8_t GetFilterAcceptListSize();
   uint8_t GetResolvingListSize();
-  void AddDeviceToFilterAcceptList(FilterAcceptListAddressType connect_list_address_type, Address address);
+  void AddDeviceToFilterAcceptList(FilterAcceptListAddressType accept_list_address_type, Address address);
   void AddDeviceToResolvingList(
       PeerAddressType peer_identity_address_type,
       Address peer_identity_address,
       const std::array<uint8_t, 16>& peer_irk,
       const std::array<uint8_t, 16>& local_irk);
-  void RemoveDeviceFromFilterAcceptList(FilterAcceptListAddressType connect_list_address_type, Address address);
+  void RemoveDeviceFromFilterAcceptList(FilterAcceptListAddressType accept_list_address_type, Address address);
   void RemoveDeviceFromResolvingList(PeerAddressType peer_identity_address_type, Address peer_identity_address);
   void ClearFilterAcceptList();
   void ClearResolvingList();
@@ -104,36 +104,20 @@ class LeAddressManager {
     return cached_commands_.size();
   }
 
-  std::vector<int> GetRegisteredClientStates() const {
-    std::vector<int> client_states(registered_clients_.size());
-    for (const auto& client : registered_clients_) {
-      client_states.push_back(static_cast<int>(client.second));
-    }
-    return client_states;
-  }
-
-  AddressPolicy GetAddressPolicy() const {
-    return address_policy_;
-  }
-
  protected:
   AddressPolicy address_policy_ = AddressPolicy::POLICY_NOT_SET;
   std::chrono::milliseconds minimum_rotation_time_;
   std::chrono::milliseconds maximum_rotation_time_;
 
  private:
-  enum ClientState {
-    WAITING_FOR_PAUSE,
-    PAUSED,
-    WAITING_FOR_RESUME,
-    RESUMED,
-  };
+  enum class ClientState;
+  std::string ClientStateText(const ClientState cs);
 
   enum CommandType {
     ROTATE_RANDOM_ADDRESS,
-    ADD_DEVICE_TO_CONNECT_LIST,
-    REMOVE_DEVICE_FROM_CONNECT_LIST,
-    CLEAR_CONNECT_LIST,
+    ADD_DEVICE_TO_ACCEPT_LIST,
+    REMOVE_DEVICE_FROM_ACCEPT_LIST,
+    CLEAR_ACCEPT_LIST,
     ADD_DEVICE_TO_RESOLVING_LIST,
     REMOVE_DEVICE_FROM_RESOLVING_LIST,
     CLEAR_RESOLVING_LIST,
@@ -145,7 +129,7 @@ class LeAddressManager {
   struct RotateRandomAddressCommand {};
 
   struct UpdateIRKCommand {
-    crypto_toolbox::Octet16 rotation_irk;
+    Octet16 rotation_irk;
     std::chrono::milliseconds minimum_rotation_time;
     std::chrono::milliseconds maximum_rotation_time;
   };
@@ -187,9 +171,9 @@ class LeAddressManager {
   AddressWithType cached_address_;
   Address public_address_;
   std::unique_ptr<os::Alarm> address_rotation_alarm_;
-  crypto_toolbox::Octet16 rotation_irk_;
-  const uint8_t connect_list_size_;
-  const uint8_t resolving_list_size_;
+  Octet16 rotation_irk_;
+  uint8_t accept_list_size_;
+  uint8_t resolving_list_size_;
   std::queue<Command> cached_commands_;
   bool supports_ble_privacy_{false};
 };

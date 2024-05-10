@@ -16,32 +16,43 @@
 
 #include "test/common/mock_functions.h"
 
+#include <bluetooth/log.h>
+
 #include <map>
+#include <mutex>
 
-#include "osi/include/log.h"
-
-std::map<std::string, int> mock_function_count_map;
+std::mutex mutex_{};
 
 static std::map<std::string, int>& _get_func_call_count_map() {
-  // TODO(265217208) return singleton map instead
-  // static std::map<std::string, int> mock_function_count_map;
+  static std::map<std::string, int> mock_function_count_map;
   return mock_function_count_map;
 }
 
 int get_func_call_count(const char* fn) {
+  std::lock_guard<std::mutex> lock(mutex_);
   return _get_func_call_count_map()[fn];
 }
-void inc_func_call_count(const char* fn) { _get_func_call_count_map()[fn]++; }
+void inc_func_call_count(const char* fn) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  _get_func_call_count_map()[fn]++;
+}
 
-void reset_mock_function_count_map() { _get_func_call_count_map().clear(); }
+void reset_mock_function_count_map() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  _get_func_call_count_map().clear();
+}
 
-int get_func_call_size() { return _get_func_call_count_map().size(); }
+int get_func_call_size() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return _get_func_call_count_map().size();
+}
 
 void dump_mock_function_count_map() {
-  LOG_INFO("Mock function count map size:%zu",
-           _get_func_call_count_map().size());
+  std::lock_guard<std::mutex> lock(mutex_);
+  bluetooth::log::info("Mock function count map size:{}",
+                       _get_func_call_count_map().size());
 
   for (const auto& it : _get_func_call_count_map()) {
-    LOG_INFO("function:%s: call_count:%d", it.first.c_str(), it.second);
+    bluetooth::log::info("function:{}: call_count:{}", it.first, it.second);
   }
 }

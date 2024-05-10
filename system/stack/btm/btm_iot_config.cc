@@ -16,12 +16,18 @@
  *
  ******************************************************************************/
 
-#include "bt_target.h"
+#define LOG_TAG "btm_iot"
+
+#include <bluetooth/log.h>
+
 #include "btif/include/btif_storage.h"
-#include "btif/include/btif_util.h"
 #include "btm_ble_api.h"
-#include "btm_int_types.h"
 #include "device/include/device_iot_config.h"
+#include "internal_include/bt_target.h"
+#include "os/log.h"
+#include "stack/acl/acl.h"
+
+using namespace bluetooth;
 
 /*******************************************************************************
  *
@@ -51,9 +57,9 @@ void btm_iot_save_remote_properties(tACL_CONN* p_acl_cb) {
                              sizeof(cod), &cod);
   if (btif_storage_get_remote_device_property(&p_acl_cb->remote_addr,
                                               &prop_name) == BT_STATUS_SUCCESS)
-    BTIF_TRACE_DEBUG("%s cod retrieved from storage is 0x%06x", __func__, cod);
+    log::verbose("cod retrieved from storage is 0x{:06x}", cod);
   if (cod == 0) {
-    BTIF_TRACE_DEBUG("%s cod is 0, set as unclassified", __func__);
+    log::verbose("cod is 0, set as unclassified");
     cod = (0x1F) << 8;
   }
 

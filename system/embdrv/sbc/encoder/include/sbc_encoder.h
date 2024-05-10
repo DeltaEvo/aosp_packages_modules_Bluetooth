@@ -28,9 +28,7 @@
 #define ENCODER_VERSION "0025"
 
 #include <stdbool.h>
-#include <string.h>
-
-#include "bt_target.h"
+#include <stdint.h>
 
 /*DEFINES*/
 #ifndef FALSE
@@ -163,8 +161,6 @@
   (SBC_MAX_NUM_FRAME * SBC_MAX_NUM_OF_BLOCKS * SBC_MAX_NUM_OF_CHANNELS * \
    SBC_MAX_NUM_OF_SUBBANDS)
 
-#include "sbc_types.h"
-
 typedef struct SBC_ENC_PARAMS_TAG {
   int16_t s16SamplingFreq;  /* 16k, 32k, 44.1k or 48k*/
   int16_t s16ChannelMode;   /* mono, dual, streo or joint streo*/
@@ -201,9 +197,9 @@ extern "C" {
 
 /* Encode the frame using SBC. The output is written into |output|. Return
  * number of bytes written. */
-extern uint32_t SBC_Encode(SBC_ENC_PARAMS* strEncParams, int16_t* input,
-                           uint8_t* output);
-extern void SBC_Encoder_Init(SBC_ENC_PARAMS* strEncParams);
+uint32_t SBC_Encode(SBC_ENC_PARAMS* strEncParams, int16_t* input,
+                    uint8_t* output);
+void SBC_Encoder_Init(SBC_ENC_PARAMS* strEncParams);
 
 #ifdef __cplusplus
 }

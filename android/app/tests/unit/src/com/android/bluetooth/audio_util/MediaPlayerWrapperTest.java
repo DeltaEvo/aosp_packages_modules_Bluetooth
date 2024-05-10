@@ -21,7 +21,6 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.*;
 
 import android.content.Context;
-import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -42,12 +41,14 @@ import com.android.bluetooth.TestUtils;
 
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -69,6 +70,8 @@ public class MediaPlayerWrapperTest {
 
     @Captor ArgumentCaptor<MediaController.Callback> mControllerCbs;
     @Captor ArgumentCaptor<MediaData> mMediaUpdateData;
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock Log.TerribleFailureHandler mFailHandler;
     @Mock MediaController mMockController;
     @Mock MediaPlayerWrapper.Callback mTestCbs;
@@ -90,7 +93,6 @@ public class MediaPlayerWrapperTest {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
 
         mTestResources = TestUtils.getTestApplicationResources(
                 InstrumentationRegistry.getTargetContext());
@@ -378,6 +380,38 @@ public class MediaPlayerWrapperTest {
     }
 
     @Test
+    public void testNullPlayback() {
+        // Create the wrapper object and register the looper with the timeout handler
+        TestLooperManager looperManager = new TestLooperManager(mThread.getLooper());
+        MediaPlayerWrapper wrapper =
+                MediaPlayerWrapperFactory.wrap(mMockContext, mMockController, mThread.getLooper());
+        wrapper.registerCallback(mTestCbs);
+
+        // Return null when getting the queue
+        doReturn(null).when(mMockController).getQueue();
+
+        // Grab the callbacks the wrapper registered with the controller
+        verify(mMockController).registerCallback(mControllerCbs.capture(), any());
+        MediaController.Callback controllerCallbacks = mControllerCbs.getValue();
+
+        // Update Metadata returned by controller
+        mTestState.setState(PlaybackState.STATE_PLAYING, 1000, 1.0f);
+        doReturn(mTestState.build()).when(mMockController).getPlaybackState();
+
+        // Call the callback
+        controllerCallbacks.onPlaybackStateChanged(null);
+
+        // Assert that the metadata returned by getPlaybackState() is used instead of null
+
+        verify(mTestCbs, times(1)).mediaUpdatedCallback(mMediaUpdateData.capture());
+        MediaData data = mMediaUpdateData.getValue();
+        Assert.assertEquals(
+                "Returned PlaybackState is incorrect",
+                data.state.toString(),
+                mTestState.build().toString());
+    }
+
+    @Test
     public void testNullQueue() {
         // Create the wrapper object and register the looper with the timeout handler
         TestLooperManager looperManager = new TestLooperManager(mThread.getLooper());
@@ -412,15 +446,42 @@ public class MediaPlayerWrapperTest {
                 MediaPlayerWrapperFactory.wrap(mMockContext, mMockController, mThread.getLooper());
         wrapper.registerCallback(mTestCbs);
 
+        // Remove the current metadata so it does not override the default duration.
+        doReturn(null).when(mMockController).getMetadata();
+
         // Call getCurrentQueue() multiple times.
         for (int i = 0; i < 3; i++) {
-            Assert.assertEquals(wrapper.getCurrentQueue(),
-                    Util.toMetadataList(mMockContext, getQueueFromDescriptions(mTestQueue)));
+            Assert.assertEquals(
+                    Util.toMetadataList(mMockContext, getQueueFromDescriptions(mTestQueue)),
+                    wrapper.getCurrentQueue());
         }
+
+        doReturn(mTestMetadata.build()).when(mMockController).getMetadata();
 
         // Verify that getQueue() was only called twice. Once on creation and once during
         // registration
         verify(mMockController, times(2)).getQueue();
+    }
+
+    /*
+     * This test checks if the currently playing song queue duration is completed
+     * by the MediaController Metadata.
+     */
+    @Test
+    public void testQueueMetadata() {
+        MediaPlayerWrapper wrapper =
+                MediaPlayerWrapperFactory.wrap(mMockContext, mMockController, mThread.getLooper());
+
+        doReturn(null).when(mMockController).getMetadata();
+        Assert.assertFalse(Util.toMetadata(mMockContext, mTestMetadata.build()).duration
+                .equals(wrapper.getCurrentQueue().get(0).duration));
+        doReturn(mTestMetadata.build()).when(mMockController).getMetadata();
+        Assert.assertEquals(Util.toMetadata(mMockContext, mTestMetadata.build()).duration,
+                wrapper.getCurrentQueue().get(0).duration);
+        // The MediaController Metadata should still not be equal to the queue
+        // as the track count is different and should not be overridden.
+        Assert.assertFalse(Util.toMetadata(mMockContext, mTestMetadata.build())
+                .equals(wrapper.getCurrentQueue().get(0)));
     }
 
     /*

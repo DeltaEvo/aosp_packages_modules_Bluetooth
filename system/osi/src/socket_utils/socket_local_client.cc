@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <errno.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -110,7 +109,7 @@ error:
  * Used by AndroidSocketImpl
  */
 int osi_socket_local_client_connect(int fd, const char* name, int namespaceId,
-                                    int type UNUSED_ATTR) {
+                                    int /* type */) {
   struct sockaddr_un addr;
   socklen_t alen;
   int err;

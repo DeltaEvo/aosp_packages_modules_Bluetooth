@@ -29,9 +29,13 @@ filegroup {
 genrule {
     name: "BluetoothGeneratedBundlerSchema_h_bfbs",
     visibility: [
+        "//packages/modules/Bluetooth/system/bta",
+        "//packages/modules/Bluetooth/system/btif",
+        "//packages/modules/Bluetooth/system/btm",
         "//packages/modules/Bluetooth/system/gd",
         "//packages/modules/Bluetooth/system/main",
         "//packages/modules/Bluetooth/system/rust",
+        "//packages/modules/Bluetooth/system/stack",
     ],
     tools: [
         "flatc",
@@ -41,14 +45,14 @@ genrule {
         "bundler_schema.fbs",
     ],
     out: [
-        "bundler_schema_generated.h", "bundler_schema.bfbs",
+        "bundler_schema.bfbs",
+        "bundler_schema_generated.h",
     ],
 }
 
 cc_defaults {
     name: "bluetooth_flatbuffer_bundler_defaults",
-    defaults: ["fluoride_common_options"],
-    cpp_std: "c++17",
+    defaults: ["bluetooth_cflags"],
     generated_headers: [
         "BluetoothGeneratedBundlerSchema_h_bfbs",
     ],
@@ -68,6 +72,7 @@ cc_binary_host {
     defaults: [
         "bluetooth_flatbuffer_bundler_defaults",
     ],
+    cflags: ["-Wno-unused-parameter"],
 }
 
 cc_test_host {
@@ -84,4 +89,5 @@ cc_test_host {
     test_options: {
         unit_test: true,
     },
+    cflags: ["-Wno-unused-parameter"],
 }

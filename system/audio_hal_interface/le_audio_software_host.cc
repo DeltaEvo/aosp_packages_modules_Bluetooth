@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-#include "audio_hal_interface/hal_version_manager.h"
 #include "audio_hal_interface/le_audio_software.h"
 #include "bta/le_audio/codec_manager.h"
 
@@ -24,9 +23,12 @@ namespace audio {
 
 namespace le_audio {
 
-std::vector<::le_audio::set_configurations::AudioSetConfiguration>
-get_offload_capabilities() {
-  return std::vector<::le_audio::set_configurations::AudioSetConfiguration>(0);
+OffloadCapabilities get_offload_capabilities() {
+  return {
+      std::vector<
+          bluetooth::le_audio::set_configurations::AudioSetConfiguration>(0),
+      std::vector<
+          bluetooth::le_audio::set_configurations::AudioSetConfiguration>(0)};
 }
 
 LeAudioClientInterface* LeAudioClientInterface::Get() { return nullptr; }
@@ -46,7 +48,7 @@ LeAudioClientInterface::Sink* LeAudioClientInterface::GetSink(
 }
 
 void LeAudioClientInterface::Sink::UpdateBroadcastAudioConfigToHal(
-    ::le_audio::broadcast_offload_config const& config) {
+    ::bluetooth::le_audio::broadcast_offload_config const& config) {
   return;
 }
 
@@ -71,6 +73,8 @@ bool LeAudioClientInterface::ReleaseSource(
     LeAudioClientInterface::Source* source) {
   return false;
 }
+
+void LeAudioClientInterface::SetAllowedDsaModes(DsaModes dsa_modes) { return; }
 
 }  // namespace le_audio
 }  // namespace audio

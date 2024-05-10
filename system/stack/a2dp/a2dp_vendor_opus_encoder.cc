@@ -15,26 +15,23 @@
  */
 
 #define LOG_TAG "a2dp_vendor_opus_encoder"
-#define ATRACE_TAG ATRACE_TAG_AUDIO
 
 #include "a2dp_vendor_opus_encoder.h"
 
-#ifndef OS_GENERIC
-#include <cutils/trace.h>
-#endif
+#include <bluetooth/log.h>
 #include <dlfcn.h>
-#include <inttypes.h>
 #include <opus.h>
-#include <stdio.h>
 #include <string.h>
 
 #include "a2dp_vendor.h"
 #include "a2dp_vendor_opus.h"
 #include "common/time_util.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
 #include "osi/include/osi.h"
 #include "stack/include/bt_hdr.h"
+
+using namespace bluetooth;
 
 typedef struct {
   uint32_t sample_rate;
@@ -112,12 +109,8 @@ void a2dp_vendor_opus_encoder_cleanup(void) {
       bluetooth::common::time_get_os_boottime_us();
 
   a2dp_opus_encoder_cb.timestamp = 0;
-
-#if (BTA_AV_CO_CP_SCMS_T == TRUE)
-  a2dp_opus_encoder_cb.use_SCMS_T = true;
-#else
   a2dp_opus_encoder_cb.use_SCMS_T = false;
-#endif
+
   return;
 }
 
@@ -146,7 +139,7 @@ void a2dp_vendor_opus_encoder_init(
   a2dp_opus_encoder_cb.opus_handle =
       static_cast<OpusEncoder*>(osi_malloc(size));
   if (a2dp_opus_encoder_cb.opus_handle == nullptr) {
-    LOG_ERROR("failed to allocate opus encoder handle");
+    log::error("failed to allocate opus encoder handle");
     return;
   }
 
@@ -155,9 +148,9 @@ void a2dp_vendor_opus_encoder_init(
       A2DP_OPUS_CODEC_OUTPUT_CHS, OPUS_APPLICATION_AUDIO);
 
   if (error_val != OPUS_OK) {
-    LOG_ERROR(
-        "failed to init opus encoder (handle size %d, sampling rate %d, "
-        "output chs %d, error %d)",
+    log::error(
+        "failed to init opus encoder (handle size {}, sampling rate {}, output "
+        "chs {}, error {})",
         size, A2DP_OPUS_CODEC_DEFAULT_SAMPLERATE, A2DP_OPUS_CODEC_OUTPUT_CHS,
         error_val);
     osi_free(a2dp_opus_encoder_cb.opus_handle);
@@ -177,10 +170,8 @@ bool A2dpCodecConfigOpusSource::updateEncoderUserConfig(
     const tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_params, bool* p_restart_input,
     bool* p_restart_output, bool* p_config_updated) {
   if (a2dp_opus_encoder_cb.peer_mtu == 0) {
-    LOG_ERROR(
-        "Cannot update the codec encoder for %s: "
-        "invalid peer MTU",
-        name().c_str());
+    log::error("Cannot update the codec encoder for {}: invalid peer MTU",
+               name());
     return false;
   }
 
@@ -205,16 +196,16 @@ static bool a2dp_vendor_opus_encoder_update(uint16_t peer_mtu,
 
   if (!a2dp_opus_encoder_cb.has_opus_handle ||
       a2dp_opus_encoder_cb.opus_handle == NULL) {
-    LOG_ERROR("Cannot get Opus encoder handle");
+    log::error("Cannot get Opus encoder handle");
     return false;
   }
-  CHECK(a2dp_opus_encoder_cb.opus_handle != nullptr);
+  log::assert_that(
+      a2dp_opus_encoder_cb.opus_handle != nullptr,
+      "assert failed: a2dp_opus_encoder_cb.opus_handle != nullptr");
 
   if (!a2dp_codec_config->copyOutOtaCodecConfig(codec_info)) {
-    LOG_ERROR(
-        "Cannot update the codec encoder for %s: "
-        "invalid codec config",
-        a2dp_codec_config->name().c_str());
+    log::error("Cannot update the codec encoder for {}: invalid codec config",
+               a2dp_codec_config->name());
     return false;
   }
   const uint8_t* p_codec_info = codec_info;
@@ -228,9 +219,9 @@ static bool a2dp_vendor_opus_encoder_update(uint16_t peer_mtu,
       a2dp_codec_config->getAudioBitsPerSample();
   p_feeding_params->channel_count =
       A2DP_VendorGetTrackChannelCountOpus(p_codec_info);
-  LOG_INFO("sample_rate=%u bits_per_sample=%u channel_count=%u",
-           p_feeding_params->sample_rate, p_feeding_params->bits_per_sample,
-           p_feeding_params->channel_count);
+  log::info("sample_rate={} bits_per_sample={} channel_count={}",
+            p_feeding_params->sample_rate, p_feeding_params->bits_per_sample,
+            p_feeding_params->channel_count);
 
   // The codec parameters
   p_encoder_params->sample_rate =
@@ -253,12 +244,12 @@ static bool a2dp_vendor_opus_encoder_update(uint16_t peer_mtu,
   // Set the bitrate quality mode index
   if (codec_config.codec_specific_3 != 0) {
     p_encoder_params->quality_mode_index = codec_config.codec_specific_3 % 10;
-    LOG_INFO("setting bitrate quality mode to %d",
-             p_encoder_params->quality_mode_index);
+    log::info("setting bitrate quality mode to {}",
+              p_encoder_params->quality_mode_index);
   } else {
     p_encoder_params->quality_mode_index = 5;
-    LOG_INFO("setting bitrate quality mode to default %d",
-             p_encoder_params->quality_mode_index);
+    log::info("setting bitrate quality mode to default {}",
+              p_encoder_params->quality_mode_index);
   }
 
   error = opus_encoder_ctl(
@@ -266,19 +257,19 @@ static bool a2dp_vendor_opus_encoder_update(uint16_t peer_mtu,
       OPUS_SET_COMPLEXITY(p_encoder_params->quality_mode_index));
 
   if (error != OPUS_OK) {
-    LOG_ERROR("failed to set encoder bitrate quality setting");
+    log::error("failed to set encoder bitrate quality setting");
     return false;
   }
 
   p_encoder_params->pcm_wlength =
       a2dp_opus_encoder_cb.feeding_params.bits_per_sample >> 3;
 
-  LOG_INFO("setting bitrate to %d", p_encoder_params->bitrate);
+  log::info("setting bitrate to {}", p_encoder_params->bitrate);
   error = opus_encoder_ctl(a2dp_opus_encoder_cb.opus_handle,
                            OPUS_SET_BITRATE(p_encoder_params->bitrate));
 
   if (error != OPUS_OK) {
-    LOG_ERROR("failed to set encoder bitrate");
+    log::error("failed to set encoder bitrate");
     return false;
   }
 
@@ -400,7 +391,7 @@ static void a2dp_opus_encode_frames(uint8_t nb_frame) {
         packet = (unsigned char*)(p_buf + 1) + p_buf->offset + p_buf->len;
 
         if (a2dp_opus_encoder_cb.opus_handle == NULL) {
-          LOG_ERROR("invalid OPUS handle");
+          log::error("invalid OPUS handle");
           a2dp_opus_encoder_cb.stats.media_read_total_dropped_packets++;
           osi_free(p_buf);
           return;
@@ -412,7 +403,7 @@ static void a2dp_opus_encode_frames(uint8_t nb_frame) {
                         packet, (BT_DEFAULT_BUFFER_SIZE - p_buf->offset));
 
         if (written <= 0) {
-          LOG_ERROR("OPUS encoding error");
+          log::error("OPUS encoding error");
           a2dp_opus_encoder_cb.stats.media_read_total_dropped_packets++;
           osi_free(p_buf);
           return;
@@ -423,7 +414,7 @@ static void a2dp_opus_encode_frames(uint8_t nb_frame) {
         nb_frame--;
         p_buf->layer_specific += out_frames;  // added a frame to the buffer
       } else {
-        LOG_WARN("Opus src buffer underflow %d", nb_frame);
+        log::warn("Opus src buffer underflow {}", nb_frame);
         a2dp_opus_encoder_cb.opus_feeding_state.counter +=
             nb_frame * opus_frame_size *
             a2dp_opus_encoder_cb.feeding_params.channel_count *
@@ -441,7 +432,12 @@ static void a2dp_opus_encode_frames(uint8_t nb_frame) {
        */
       *((uint32_t*)(p_buf + 1)) = a2dp_opus_encoder_cb.timestamp;
 
-      a2dp_opus_encoder_cb.timestamp += p_buf->layer_specific * opus_frame_size;
+      // Timestamp will wrap over to 0 if stream continues on long enough
+      // (>25H @ 48KHz). The parameters are promoted to 64bit to ensure that
+      // no unsigned overflow is triggered as ubsan is always enabled.
+      a2dp_opus_encoder_cb.timestamp =
+          ((uint64_t)a2dp_opus_encoder_cb.timestamp +
+           (p_buf->layer_specific * opus_frame_size)) & UINT32_MAX;
 
       uint8_t done_nb_frame = remain_nb_frame - nb_frame;
       remain_nb_frame = nb_frame;

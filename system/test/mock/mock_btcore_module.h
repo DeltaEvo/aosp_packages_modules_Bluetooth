@@ -21,32 +21,10 @@
  *  mockcify.pl ver 0.3.0
  */
 
-#include <cstdint>
 #include <functional>
-#include <map>
-#include <string>
-
-#include "test/common/mock_functions.h"
 
 // Original included files, if any
-// NOTE: Since this is a mock file with mock definitions some number of
-//       include files may not be required.  The include-what-you-use
-//       still applies, but crafting proper inclusion is out of scope
-//       for this effort.  This compilation unit may compile as-is, or
-//       may need attention to prune from (or add to ) the inclusion set.
-#include <base/logging.h>
-#include <dlfcn.h>
-#include <string.h>
-
-#include <mutex>
-#include <unordered_map>
-
 #include "btcore/include/module.h"
-#include "check.h"
-#include "common/message_loop_thread.h"
-#include "osi/include/allocator.h"
-#include "osi/include/log.h"
-#include "osi/include/osi.h"
 
 // Mocked compile conditionals, if any
 
@@ -61,7 +39,7 @@ namespace btcore_module {
 struct get_module {
   const module_t* return_value{0};
   std::function<const module_t*(const char* name)> body{
-      [this](const char* name) { return return_value; }};
+      [this](const char* /* name */) { return return_value; }};
   const module_t* operator()(const char* name) { return body(name); };
 };
 extern struct get_module get_module;
@@ -71,7 +49,7 @@ extern struct get_module get_module;
 // Return: void
 struct module_clean_up {
   std::function<void(const module_t* module)> body{
-      [](const module_t* module) {}};
+      [](const module_t* /* module */) {}};
   void operator()(const module_t* module) { body(module); };
 };
 extern struct module_clean_up module_clean_up;
@@ -82,7 +60,7 @@ extern struct module_clean_up module_clean_up;
 struct module_init {
   bool return_value{false};
   std::function<bool(const module_t* module)> body{
-      [this](const module_t* module) { return return_value; }};
+      [this](const module_t* /* module */) { return return_value; }};
   bool operator()(const module_t* module) { return body(module); };
 };
 extern struct module_init module_init;
@@ -110,7 +88,7 @@ extern struct module_management_stop module_management_stop;
 // Return: void
 struct module_shut_down {
   std::function<void(const module_t* module)> body{
-      [](const module_t* module) {}};
+      [](const module_t* /* module */) {}};
   void operator()(const module_t* module) { body(module); };
 };
 extern struct module_shut_down module_shut_down;
@@ -121,7 +99,7 @@ extern struct module_shut_down module_shut_down;
 struct module_start_up {
   bool return_value{false};
   std::function<bool(const module_t* module)> body{
-      [this](const module_t* module) { return return_value; }};
+      [this](const module_t* /* module */) { return return_value; }};
   bool operator()(const module_t* module) { return body(module); };
 };
 extern struct module_start_up module_start_up;

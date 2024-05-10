@@ -19,24 +19,30 @@ cc_defaults {
 
 cc_fuzz {
     name: "a2dp_codec_fuzz",
+    static_libs: ["libchrome"],
     defaults: ["libbt-stack_fuzz_codec_defaults"],
     srcs: [
         "fuzz_a2dp_codec.cc",
     ],
+    cflags: ["-Wno-unused-parameter"],
 }
 
 cc_fuzz {
     name: "a2dp_codec_info_fuzz",
+    static_libs: ["libchrome"],
     defaults: ["libbt-stack_fuzz_codec_defaults"],
     srcs: [
         "fuzz_a2dp_codec_info.cc",
     ],
+    cflags: ["-Wno-unused-parameter"],
 }
 
 cc_fuzz {
     name: "a2dp_codec_cfg_fuzz",
+    static_libs: ["libchrome"],
     defaults: ["libbt-stack_fuzz_codec_defaults"],
     srcs: [
         "fuzz_a2dp_codec_config.cc",
     ],
+    cflags: ["-Wno-unused-parameter"],
 }

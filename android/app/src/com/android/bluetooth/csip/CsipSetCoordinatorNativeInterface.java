@@ -32,15 +32,12 @@ import java.util.UUID;
  */
 public class CsipSetCoordinatorNativeInterface {
     private static final String TAG = "CsipSetCoordinatorNativeInterface";
-    private static final boolean DBG = false;
     private BluetoothAdapter mAdapter;
 
-    @GuardedBy("INSTANCE_LOCK") private static CsipSetCoordinatorNativeInterface sInstance;
-    private static final Object INSTANCE_LOCK = new Object();
+    @GuardedBy("INSTANCE_LOCK")
+    private static CsipSetCoordinatorNativeInterface sInstance;
 
-    static {
-        classInitNative();
-    }
+    private static final Object INSTANCE_LOCK = new Object();
 
     private CsipSetCoordinatorNativeInterface() {
         mAdapter = BluetoothAdapter.getDefaultAdapter();
@@ -58,6 +55,14 @@ public class CsipSetCoordinatorNativeInterface {
                 sInstance = new CsipSetCoordinatorNativeInterface();
             }
             return sInstance;
+        }
+    }
+
+    /** Set singleton instance. */
+    @VisibleForTesting
+    public static void setInstance(CsipSetCoordinatorNativeInterface instance) {
+        synchronized (INSTANCE_LOCK) {
+            sInstance = instance;
         }
     }
 
@@ -140,9 +145,7 @@ public class CsipSetCoordinatorNativeInterface {
         event.device = getDevice(address);
         event.valueInt1 = state;
 
-        if (DBG) {
-            Log.d(TAG, "onConnectionStateChanged: " + event);
-        }
+        Log.d(TAG, "onConnectionStateChanged: " + event);
         sendMessageToService(event);
     }
 
@@ -159,9 +162,7 @@ public class CsipSetCoordinatorNativeInterface {
         event.valueInt3 = rank;
         event.valueUuid1 = uuid;
 
-        if (DBG) {
-            Log.d(TAG, "onDeviceAvailable: " + event);
-        }
+        Log.d(TAG, "onDeviceAvailable: " + event);
         sendMessageToService(event);
     }
 
@@ -178,9 +179,7 @@ public class CsipSetCoordinatorNativeInterface {
                 CsipSetCoordinatorStackEvent.EVENT_TYPE_SET_MEMBER_AVAILABLE);
         event.device = getDevice(address);
         event.valueInt1 = groupId;
-        if (DBG) {
-            Log.d(TAG, "onSetMemberAvailable: " + event);
-        }
+        Log.d(TAG, "onSetMemberAvailable: " + event);
         sendMessageToService(event);
     }
 
@@ -199,9 +198,7 @@ public class CsipSetCoordinatorNativeInterface {
         event.valueInt1 = groupId;
         event.valueInt2 = status;
         event.valueBool1 = locked;
-        if (DBG) {
-            Log.d(TAG, "onGroupLockChanged: " + event);
-        }
+        Log.d(TAG, "onGroupLockChanged: " + event);
         sendMessageToService(event);
     }
 
@@ -216,7 +213,6 @@ public class CsipSetCoordinatorNativeInterface {
     }
 
     // Native methods that call into the JNI interface
-    private static native void classInitNative();
     private native void initNative();
     private native void cleanupNative();
     private native boolean connectNative(byte[] address);

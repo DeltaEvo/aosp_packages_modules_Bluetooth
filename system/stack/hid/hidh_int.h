@@ -27,6 +27,7 @@
 
 #include <cstdint>
 
+#include "internal_include/bt_target.h"
 #include "stack/hid/hid_conn.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/hidh_api.h"
@@ -60,16 +61,15 @@ typedef struct host_ctb {
   tSDP_DISCOVERY_DB* p_sdp_db;
   tHID_DEV_SDP_INFO sdp_rec;
   bool reg_flag;
-  uint8_t trace_level;
 } tHID_HOST_CTB;
 
-extern tHID_STATUS hidh_conn_snd_data(uint8_t dhandle, uint8_t trans_type,
-                                      uint8_t param, uint16_t data,
-                                      uint8_t rpt_id, BT_HDR* buf);
-extern tHID_STATUS hidh_conn_reg(void);
-extern void hidh_conn_dereg(void);
-extern tHID_STATUS hidh_conn_disconnect(uint8_t dhandle);
-extern tHID_STATUS hidh_conn_initiate(uint8_t dhandle);
+tHID_STATUS hidh_conn_snd_data(uint8_t dhandle, uint8_t trans_type,
+                               uint8_t param, uint16_t data, uint8_t rpt_id,
+                               BT_HDR* buf);
+tHID_STATUS hidh_conn_reg(void);
+void hidh_conn_dereg(void);
+tHID_STATUS hidh_conn_disconnect(uint8_t dhandle);
+tHID_STATUS hidh_conn_initiate(uint8_t dhandle);
 
 /******************************************************************************
  * Main Control Block

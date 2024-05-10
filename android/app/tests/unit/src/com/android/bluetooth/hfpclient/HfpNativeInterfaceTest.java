@@ -18,6 +18,7 @@ package com.android.bluetooth.hfpclient;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -26,14 +27,18 @@ import com.android.bluetooth.btservice.AdapterService;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 public class HfpNativeInterfaceTest {
     private static final byte[] TEST_DEVICE_ADDRESS =
             new byte[] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock
     HeadsetClientService mService;
     @Mock
@@ -43,7 +48,6 @@ public class HfpNativeInterfaceTest {
 
     @Before
     public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
         when(mService.isAvailable()).thenReturn(true);
         HeadsetClientService.setHeadsetClientService(mService);
         TestUtils.setAdapterService(mAdapterService);
@@ -307,5 +311,11 @@ public class HfpNativeInterfaceTest {
         verify(mService).messageFromNative(event.capture());
         assertThat(event.getValue().type).isEqualTo(StackEvent.EVENT_TYPE_UNKNOWN_EVENT);
         assertThat(event.getValue().valueString).isEqualTo(eventString);
+    }
+
+    @Test
+    public void testSendAndroidAt() {
+        // If the device is null, should return False
+        assertThat(mNativeInterface.sendAndroidAt(null, anyString())).isEqualTo(false);
     }
 }

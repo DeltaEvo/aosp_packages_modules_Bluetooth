@@ -18,8 +18,9 @@
 
 #include <cstdint>
 
-#include "stack/include/bt_types.h"
 #include "stack/include/hci_error_code.h"
+#include "types/ble_address_with_type.h"
+#include "types/hci_role.h"
 #include "types/raw_address.h"
 
 void acl_ble_enhanced_connection_complete(
@@ -34,8 +35,8 @@ void acl_ble_enhanced_connection_complete_from_shim(
     const RawAddress& local_rpa, const RawAddress& peer_rpa,
     tBLE_ADDR_TYPE peer_addr_type, bool can_read_discoverable_characteristics);
 void acl_ble_connection_fail(const tBLE_BD_ADDR& address_with_type,
-                             uint16_t handle, bool enhanced, tHCI_STATUS status,
-                             bool locally_initiated);
+                             uint16_t handle, bool enhanced,
+                             tHCI_STATUS status);
 void acl_ble_update_event_received(tHCI_STATUS status, uint16_t handle,
                                    uint16_t interval, uint16_t latency,
                                    uint16_t timeout);

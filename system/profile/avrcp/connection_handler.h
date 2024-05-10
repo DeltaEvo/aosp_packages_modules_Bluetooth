@@ -18,8 +18,10 @@
 
 #include <base/functional/bind.h>
 #include <base/memory/weak_ptr.h>
+
 #include <map>
 #include <memory>
+#include <vector>
 
 #include "avrcp_internal.h"
 #include "packet/avrcp/avrcp_packet.h"
@@ -50,7 +52,8 @@ class ConnectionHandler {
    * A reference to the new Avrcp device is located in the shared_ptr.
    * If there was an issue during connection the pointer value will be null.
    */
-  using ConnectionCallback = base::Callback<void(std::shared_ptr<Device>)>;
+  using ConnectionCallback =
+      base::RepeatingCallback<void(std::shared_ptr<Device>)>;
 
   /**
    * Initializes the singleton instance and sets up SDP. Also Opens the
@@ -127,6 +130,8 @@ class ConnectionHandler {
    */
   static void InitForTesting(ConnectionHandler* handler);
 
+  virtual void RegisterVolChanged(const RawAddress& bdaddr);
+
  private:
   AvrcpInterface* avrc_;
   SdpInterface* sdp_;
@@ -166,6 +171,13 @@ class ConnectionHandler {
   // Callback for when sending a response to a device
   void SendMessage(uint8_t handle, uint8_t label, bool browse,
                    std::unique_ptr<::bluetooth::PacketBuilder> message);
+
+  // Check peer role: audio src or sink. If any role supported send
+  // delayed a2dp connect request
+  bool SdpLookupAudioRole(uint16_t handle);
+  void SdpLookupAudioRoleCb(uint16_t handle, bool found,
+                            tA2DP_Service* p_service,
+                            const RawAddress& peer_address);
 
   base::WeakPtrFactory<ConnectionHandler> weak_ptr_factory_;
 };

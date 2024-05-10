@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <bluetooth/log.h>
+
 namespace bluetooth {
 namespace headset {
 
@@ -55,6 +57,19 @@ typedef enum { BTHF_NREC_STOP, BTHF_NREC_START } bthf_nrec_t;
 
 /* WBS codec setting */
 typedef enum { BTHF_WBS_NONE, BTHF_WBS_NO, BTHF_WBS_YES } bthf_wbs_config_t;
+
+/* SWB codec */
+typedef enum {
+  BTHF_SWB_CODEC_LC3 = 0,
+  BTHF_SWB_CODEC_VENDOR_APTX
+} bthf_swb_codec_t;
+
+/* SWB codec setting */
+typedef enum {
+  BTHF_SWB_NONE,
+  BTHF_SWB_NO,
+  BTHF_SWB_YES,
+} bthf_swb_config_t;
 
 /* CHLD - Call held handling */
 typedef enum {
@@ -124,3 +139,36 @@ typedef enum {
 
 }  // namespace headset
 }  // namespace bluetooth
+
+namespace fmt {
+template <>
+struct formatter<bluetooth::headset::bthf_connection_state_t>
+    : enum_formatter<bluetooth::headset::bthf_connection_state_t> {};
+template <>
+struct formatter<bluetooth::headset::bthf_audio_state_t>
+    : enum_formatter<bluetooth::headset::bthf_audio_state_t> {};
+template <>
+struct formatter<bluetooth::headset::bthf_call_addrtype_t>
+    : enum_formatter<bluetooth::headset::bthf_call_addrtype_t> {};
+template <>
+struct formatter<bluetooth::headset::bthf_call_mode_t>
+    : enum_formatter<bluetooth::headset::bthf_call_mode_t> {};
+template <>
+struct formatter<bluetooth::headset::bthf_call_state_t>
+    : enum_formatter<bluetooth::headset::bthf_call_state_t> {};
+template <>
+struct formatter<bluetooth::headset::bthf_call_direction_t>
+    : enum_formatter<bluetooth::headset::bthf_call_direction_t> {};
+template <>
+struct formatter<bluetooth::headset::bthf_hf_ind_type_t>
+    : enum_formatter<bluetooth::headset::bthf_hf_ind_type_t> {};
+template <>
+struct formatter<bluetooth::headset::bthf_wbs_config_t>
+    : enum_formatter<bluetooth::headset::bthf_wbs_config_t> {};
+template <>
+struct formatter<bluetooth::headset::bthf_swb_codec_t>
+    : enum_formatter<bluetooth::headset::bthf_swb_codec_t> {};
+template <>
+struct formatter<bluetooth::headset::bthf_swb_config_t>
+    : enum_formatter<bluetooth::headset::bthf_swb_config_t> {};
+}  // namespace fmt

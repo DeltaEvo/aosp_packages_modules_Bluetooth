@@ -20,13 +20,12 @@
  *  mockcify.pl ver 0.5.0
  */
 
-#include <cstdint>
-#include <functional>
-#include <map>
-#include <string>
-
 // Mock include file to share data between tests and mock
 #include "test/mock/mock_btif_co_bta_av_co.h"
+
+#include <cstdint>
+
+#include "test/common/mock_functions.h"
 
 // Original usings
 
@@ -49,7 +48,6 @@ struct bta_av_co_audio_source_data_path bta_av_co_audio_source_data_path;
 struct bta_av_co_audio_start bta_av_co_audio_start;
 struct bta_av_co_audio_stop bta_av_co_audio_stop;
 struct bta_av_co_audio_update_mtu bta_av_co_audio_update_mtu;
-struct bta_av_co_get_decoder_interface bta_av_co_get_decoder_interface;
 struct bta_av_co_get_encoder_effective_frame_size
     bta_av_co_get_encoder_effective_frame_size;
 struct bta_av_co_get_encoder_interface bta_av_co_get_encoder_interface;
@@ -73,11 +71,9 @@ namespace test {
 namespace mock {
 namespace btif_co_bta_av_co {
 
-tA2DP_STATUS bta_av_co_audio_getconfig::return_value = 0;
+tA2DP_STATUS bta_av_co_audio_getconfig::return_value = A2DP_SUCCESS;
 bool bta_av_co_audio_init::return_value = false;
 BT_HDR* bta_av_co_audio_source_data_path::return_value = nullptr;
-const tA2DP_DECODER_INTERFACE* bta_av_co_get_decoder_interface::return_value =
-    nullptr;
 int bta_av_co_get_encoder_effective_frame_size::return_value = 0;
 const tA2DP_ENCODER_INTERFACE* bta_av_co_get_encoder_interface::return_value =
     nullptr;
@@ -180,10 +176,6 @@ void bta_av_co_audio_update_mtu(tBTA_AV_HNDL bta_av_handle,
   test::mock::btif_co_bta_av_co::bta_av_co_audio_update_mtu(bta_av_handle,
                                                             peer_address, mtu);
 }
-const tA2DP_DECODER_INTERFACE* bta_av_co_get_decoder_interface(void) {
-  inc_func_call_count(__func__);
-  return test::mock::btif_co_bta_av_co::bta_av_co_get_decoder_interface();
-}
 int bta_av_co_get_encoder_effective_frame_size() {
   inc_func_call_count(__func__);
   return test::mock::btif_co_bta_av_co::
@@ -205,9 +197,11 @@ btav_a2dp_scmst_info_t bta_av_co_get_scmst_info(
   return test::mock::btif_co_bta_av_co::bta_av_co_get_scmst_info(peer_address);
 }
 void bta_av_co_init(
-    const std::vector<btav_a2dp_codec_config_t>& codec_priorities) {
+    const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
+    std::vector<btav_a2dp_codec_info_t>* supported_codecs) {
   inc_func_call_count(__func__);
-  test::mock::btif_co_bta_av_co::bta_av_co_init(codec_priorities);
+  test::mock::btif_co_bta_av_co::bta_av_co_init(codec_priorities,
+                                                supported_codecs);
 }
 bool bta_av_co_is_supported_codec(btav_a2dp_codec_index_t codec_index) {
   inc_func_call_count(__func__);
