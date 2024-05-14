@@ -28,13 +28,13 @@
 #include <com_android_bluetooth_flags.h>
 
 #include "internal_include/bt_target.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "smp_int.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/l2c_api.h"
+#include "stack/include/l2cdefs.h"
 #include "types/raw_address.h"
 
 using namespace bluetooth;
@@ -224,12 +224,10 @@ static void smp_data_received(uint16_t channel, const RawAddress& bd_addr,
 static void smp_tx_complete_callback(uint16_t cid, uint16_t num_pkt) {
   tSMP_CB* p_cb = &smp_cb;
 
-#ifndef TARGET_FLOSS
   if (!com::android::bluetooth::flags::l2cap_tx_complete_cb_info()) {
     log::verbose("Exit since l2cap_tx_complete_cb_info is disabled");
     return;
   }
-#endif
 
   log::verbose("l2cap_tx_complete_cb_info is enabled, continue");
   if (p_cb->total_tx_unacked >= num_pkt) {
