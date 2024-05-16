@@ -34,7 +34,6 @@
 #include "core_callbacks.h"
 #include "hci/hci_interface.h"
 #include "hci/hci_packets.h"
-#include "hci/vendor_specific_event_manager_interface.h"
 #include "internal_include/bt_trace.h"
 #include "main/shim/entry.h"
 #include "osi/include/properties.h"
@@ -52,7 +51,7 @@ using bluetooth::common::LeakyBondedQueue;
 using std::chrono::system_clock;
 
 // The instance of BQR event queue
-static std::unique_ptr<LeakyBondedQueue<BqrVseSubEvt>> kpBqrEventQueue;
+static LeakyBondedQueue<BqrVseSubEvt> kpBqrEventQueue{kBqrEventQueueSize};
 
 static uint16_t vendor_cap_supported_version;
 
@@ -385,8 +384,7 @@ void EnableBtQualityReport(common::PostableContext* to_bind) {
     bqr_config.report_interval_multiple =
         static_cast<uint32_t>(atoi(bqr_prop_interval_multiple));
     register_vse();
-    kpBqrEventQueue =
-        std::make_unique<LeakyBondedQueue<BqrVseSubEvt>>(kBqrEventQueueSize);
+    kpBqrEventQueue.Clear();
   } else {
     bqr_config.report_action = REPORT_ACTION_CLEAR;
     bqr_config.quality_event_mask = kQualityEventMaskAllOff;
@@ -721,7 +719,7 @@ static void AddLinkQualityEventToQueue(uint8_t length,
     log::warn("failed to deliver BQR, bqrItf is NULL");
   }
 
-  kpBqrEventQueue->Enqueue(p_bqr_event.release());
+  kpBqrEventQueue.Enqueue(p_bqr_event.release());
 }
 
 static int OpenLmpLlTraceLogFile();
@@ -818,13 +816,13 @@ static int OpenBtSchedulingTraceLogFile() {
 void DebugDump(int fd) {
   dprintf(fd, "\nBT Quality Report Events: \n");
 
-  if (kpBqrEventQueue->Empty()) {
+  if (kpBqrEventQueue.Empty()) {
     dprintf(fd, "Event queue is empty.\n");
     return;
   }
 
-  while (!kpBqrEventQueue->Empty()) {
-    std::unique_ptr<BqrVseSubEvt> p_event(kpBqrEventQueue->Dequeue());
+  while (!kpBqrEventQueue.Empty()) {
+    std::unique_ptr<BqrVseSubEvt> p_event(kpBqrEventQueue.Dequeue());
 
     bool warning = (p_event->bqr_link_quality_event_.rssi < kCriWarnRssi ||
                     p_event->bqr_link_quality_event_.unused_afh_channel_count >
@@ -983,13 +981,13 @@ static void vendor_specific_event_callback(
 }
 
 void register_vse() {
-  bluetooth::shim::GetVendorSpecificEventManager()->RegisterEventHandler(
+  bluetooth::shim::GetHciLayer()->RegisterVendorSpecificEventHandler(
       hci::VseSubeventCode::BQR_EVENT,
       to_bind_->Bind(vendor_specific_event_callback));
 }
 
 void unregister_vse() {
-  bluetooth::shim::GetVendorSpecificEventManager()->UnregisterEventHandler(
+  bluetooth::shim::GetHciLayer()->UnregisterVendorSpecificEventHandler(
       hci::VseSubeventCode::BQR_EVENT);
 }
 

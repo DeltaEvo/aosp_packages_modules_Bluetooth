@@ -95,6 +95,7 @@ import android.os.Message;
 import android.os.ParcelUuid;
 import android.os.Parcelable;
 import android.os.PowerManager;
+import android.os.Process;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.SystemClock;
@@ -347,11 +348,13 @@ public class AdapterService extends Service {
     };
 
     static {
-        Log.d(TAG, "Loading JNI Library");
-        if (Utils.isInstrumentationTestMode()) {
-            Log.w(TAG, "App is instrumented. Skip loading the native");
-        } else {
-            System.loadLibrary("bluetooth_jni");
+        if (!Flags.avoidStaticLoadingOfNative()) {
+            Log.d(TAG, "Loading JNI Library");
+            if (Utils.isInstrumentationTestMode()) {
+                Log.w(TAG, "App is instrumented. Skip loading the native");
+            } else {
+                System.loadLibrary("bluetooth_jni");
+            }
         }
     }
 
@@ -678,6 +681,14 @@ public class AdapterService extends Service {
                 getApplicationContext()
                         .getPackageManager()
                         .hasSystemFeature(PackageManager.FEATURE_LEANBACK_ONLY);
+        if (Flags.avoidStaticLoadingOfNative()) {
+            if (Utils.isInstrumentationTestMode()) {
+                Log.w(TAG, "This Bluetooth App is instrumented. ** Skip loading the native **");
+            } else {
+                Log.d(TAG, "Loading JNI Library");
+                System.loadLibrary("bluetooth_jni");
+            }
+        }
         mNativeInterface.init(
                 this,
                 mAdapterProperties,
@@ -786,6 +797,10 @@ public class AdapterService extends Service {
     @Override
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public boolean onUnbind(Intent intent) {
+        if (Flags.explicitKillFromSystemServer()) {
+            Log.d(TAG, "onUnbind()");
+            return super.onUnbind(intent);
+        }
         Log.d(TAG, "onUnbind() - calling cleanup");
         cleanup();
         return super.onUnbind(intent);
@@ -794,6 +809,9 @@ public class AdapterService extends Service {
     @Override
     public void onDestroy() {
         Log.d(TAG, "onDestroy()");
+        if (Flags.explicitKillFromSystemServer()) {
+            return;
+        }
         if (!isMock()) {
             // TODO(b/27859763)
             Log.i(TAG, "Force exit to cleanup internal state in Bluetooth stack");
@@ -1414,9 +1432,12 @@ public class AdapterService extends Service {
             mBluetoothSocketManagerBinder = null;
         }
 
-        if (mBinder != null) {
-            mBinder.cleanup();
-            mBinder = null; // Do not remove. Otherwise Binder leak!
+        if (!Flags.explicitKillFromSystemServer()) {
+            // Bluetooth will be killed, no need to cleanup binder
+            if (mBinder != null) {
+                mBinder.cleanup();
+                mBinder = null; // Do not remove. Otherwise Binder leak!
+            }
         }
 
         mPreferredAudioProfilesCallbacks.kill();
@@ -2196,9 +2217,12 @@ public class AdapterService extends Service {
      * <p>Otherwise, a memory leak can occur from repeated starting/stopping the service...Please
      * refer to android.os.Binder for further details on why an inner instance class should be
      * avoided.
+     *
+     * <p>TODO: b/339548431 -- Delete this comment as it does not apply when we get killed
      */
     @VisibleForTesting
     public static class AdapterServiceBinder extends IBluetooth.Stub {
+        // TODO: b/339548431 move variable to final
         private AdapterService mService;
 
         AdapterServiceBinder(AdapterService svc) {
@@ -2220,13 +2244,30 @@ public class AdapterService extends Service {
 
         @Override
         public int getState() {
-            // don't check caller, may be called from system UI
             AdapterService service = getService();
             if (service == null) {
                 return BluetoothAdapter.STATE_OFF;
             }
 
             return service.getState();
+        }
+
+        @Override
+        public void killBluetoothProcess() {
+            mService.enforceCallingPermission(
+                    android.Manifest.permission.BLUETOOTH_PRIVILEGED, null);
+
+            // Post on the main handler to be sure the cleanup has completed before calling exit
+            mService.mHandler.post(
+                    () -> {
+                        if (Flags.killInsteadOfExit()) {
+                            Log.i(TAG, "killBluetoothProcess: Calling killProcess(myPid())");
+                            Process.killProcess(Process.myPid());
+                        } else {
+                            Log.i(TAG, "killBluetoothProcess: Calling System.exit");
+                            System.exit(0);
+                        }
+                    });
         }
 
         @Override
@@ -2454,6 +2495,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
+            Log.i(TAG, "startDiscovery: from " + Utils.getUidPidString());
             return service.startDiscovery(attributionSource);
         }
 
@@ -2467,7 +2509,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
-            Log.d(TAG, "cancelDiscovery");
+            Log.i(TAG, "cancelDiscovery: from " + Utils.getUidPidString());
             return service.mNativeInterface.cancelDiscovery();
         }
 
@@ -2587,6 +2629,14 @@ public class AdapterService extends Service {
             // BluetoothDevice#createBond requires BLUETOOTH_ADMIN only.
             service.enforceBluetoothPrivilegedPermissionIfNeeded(remoteP192Data, remoteP256Data);
 
+            Log.i(
+                    TAG,
+                    "createBond: device="
+                            + device
+                            + ", transport="
+                            + transport
+                            + ", from "
+                            + Utils.getUidPidString());
             return service.createBond(
                     device,
                     transport,
@@ -2608,6 +2658,8 @@ public class AdapterService extends Service {
 
             enforceBluetoothPrivilegedPermission(service);
 
+            Log.i(TAG, "cancelBondProcess: device=" + device + ", from " + Utils.getUidPidString());
+
             DeviceProperties deviceProp = service.mRemoteDevices.getDeviceProperties(device);
             if (deviceProp != null) {
                 deviceProp.setBondingInitiatedLocally(false);
@@ -2625,6 +2677,8 @@ public class AdapterService extends Service {
                             service, attributionSource, "AdapterService removeBond")) {
                 return false;
             }
+
+            Log.i(TAG, "removeBond: device=" + device + ", from " + Utils.getUidPidString());
 
             DeviceProperties deviceProp = service.mRemoteDevices.getDeviceProperties(device);
             if (deviceProp == null || deviceProp.getBondState() != BluetoothDevice.BOND_BONDED) {
@@ -2763,6 +2817,12 @@ public class AdapterService extends Service {
                     || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return false;
             }
+            Log.i(
+                    TAG,
+                    "removeActiveDevice: profiles="
+                            + profiles
+                            + ", from "
+                            + Utils.getUidPidString());
             return service.setActiveDevice(null, profiles);
         }
 
@@ -2777,6 +2837,15 @@ public class AdapterService extends Service {
             }
 
             enforceBluetoothPrivilegedPermission(service);
+
+            Log.i(
+                    TAG,
+                    "setActiveDevice: device="
+                            + device
+                            + ", profiles="
+                            + profiles
+                            + ", from "
+                            + Utils.getUidPidString());
 
             return service.setActiveDevice(device, profiles);
         }
@@ -2817,6 +2886,13 @@ public class AdapterService extends Service {
 
             enforceBluetoothPrivilegedPermission(service);
 
+            Log.i(
+                    TAG,
+                    "connectAllEnabledProfiles: device="
+                            + device
+                            + ", from "
+                            + Utils.getUidPidString());
+
             try {
                 return service.connectAllEnabledProfiles(device);
             } catch (Exception e) {
@@ -2847,6 +2923,13 @@ public class AdapterService extends Service {
             }
 
             enforceBluetoothPrivilegedPermission(service);
+
+            Log.i(
+                    TAG,
+                    "disconnectAllEnabledProfiles: device="
+                            + device
+                            + ", from "
+                            + Utils.getUidPidString());
 
             try {
                 return service.disconnectAllEnabledProfiles(device);
@@ -2977,6 +3060,15 @@ public class AdapterService extends Service {
             if (transport != TRANSPORT_AUTO) {
                 enforceBluetoothPrivilegedPermission(service);
             }
+
+            Log.i(
+                    TAG,
+                    "fetchRemoteUuids: device="
+                            + device
+                            + ", transport="
+                            + transport
+                            + ", from "
+                            + Utils.getUidPidString());
 
             service.mRemoteDevices.fetchUuids(device, transport);
             MetricsLogger.getInstance().cacheCount(BluetoothProtoEnums.SDP_FETCH_UUID_REQUEST, 1);
@@ -6758,6 +6850,7 @@ public class AdapterService extends Service {
         }
     }
 
+    // TODO: b/339548431 delete isMock
     // Returns if this is a mock object. This is currently used in testing so that we may not call
     // System.exit() while finalizing the object. Otherwise GC of mock objects unfortunately ends up
     // calling finalize() which in turn calls System.exit() and the process crashes.
