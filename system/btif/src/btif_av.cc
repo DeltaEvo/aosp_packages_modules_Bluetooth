@@ -2434,6 +2434,9 @@ bool BtifAvStateMachine::StateOpened::ProcessEvent(uint32_t event,
     case BTIF_AV_ACL_DISCONNECTED:
       break;  // Ignore
 
+    // Event sent by the Bluetooth Audio HAL to a source A2DP stack
+    // when a stream is ready to play. The stack shall send AVDTP Start to the
+    // remote device to start the stream.
     case BTIF_AV_START_STREAM_REQ_EVT: {
       log::info("Peer {} : event={} flags={}", peer_.PeerAddress(),
                 BtifAvEvent::EventName(event), peer_.FlagsToString());
@@ -2449,6 +2452,10 @@ bool BtifAvStateMachine::StateOpened::ProcessEvent(uint32_t event,
       peer_.SetFlags(BtifAvPeer::kFlagPendingStart);
     } break;
 
+    // Event sent by lower layer to indicate that the AVDTP stream is started.
+    // May be initiated by the remote device to start a stream, in this case the
+    // event is ignored by source A2DP, and the stack shall immediately suspend
+    // the stream.
     case BTA_AV_START_EVT: {
       log::info(
           "Peer {} : event={} status={} suspending={} initiator={} flags={}",
@@ -2475,13 +2482,14 @@ bool BtifAvStateMachine::StateOpened::ProcessEvent(uint32_t event,
           should_suspend = true;
         }
 
-        // If peer is A2DP Source, do ACK commands to audio HAL and start
-        // media task
-        if (btif_a2dp_on_started(
-                peer_.PeerAddress(), &p_av->start,
-                peer_.IsSource() ? A2dpType::kSink : A2dpType::kSource)) {
-          // Only clear pending flag after acknowledgement
-          peer_.ClearFlags(BtifAvPeer::kFlagPendingStart);
+        // Invoke the started handler only when initiator.
+        if (!com::android::bluetooth::flags::a2dp_ignore_started_when_responder() ||
+            peer_.CheckFlags(BtifAvPeer::kFlagPendingStart)) {
+          if (btif_a2dp_on_started(
+                  peer_.PeerAddress(), &p_av->start, A2dpType::kSource)) {
+            // Only clear pending flag after acknowledgement
+            peer_.ClearFlags(BtifAvPeer::kFlagPendingStart);
+          }
         }
       }
 
