@@ -88,7 +88,11 @@ static void hidd_check_config_done() {
 
     // send outstanding data on intr
     if (hd_cb.pending_data) {
-      L2CA_DataWrite(p_hcon->intr_cid, hd_cb.pending_data);
+      if (L2CA_DataWrite(p_hcon->intr_cid, hd_cb.pending_data) !=
+          L2CAP_DW_SUCCESS) {
+        log::warn("Unable to write L2CAP data cid:{} len:{}", p_hcon->intr_cid,
+                  hd_cb.pending_data->len);
+      }
       hd_cb.pending_data = NULL;
     }
   }
@@ -114,7 +118,9 @@ static void hidd_l2cif_connect_ind(const RawAddress& bd_addr, uint16_t cid,
 
   if (!hd_cb.allow_incoming) {
     log::warn("incoming connections not allowed, rejecting");
-    L2CA_DisconnectReq(cid);
+    if (!L2CA_DisconnectReq(cid)) {
+      log::warn("Unable to disconnect L2CAP peer:{} cid:{}", p_dev->addr, cid);
+    }
 
     return;
   }
@@ -152,7 +158,9 @@ static void hidd_l2cif_connect_ind(const RawAddress& bd_addr, uint16_t cid,
   }
 
   if (!accept) {
-    L2CA_DisconnectReq(cid);
+    if (!L2CA_DisconnectReq(cid)) {
+      log::warn("Unable to disconnect L2CAP cid:{}", cid);
+    }
     return;
   }
 
@@ -348,7 +356,9 @@ static void hidd_l2cif_disconnect_ind(uint16_t cid, bool ack_needed) {
 }
 
 static void hidd_l2cif_disconnect(uint16_t cid) {
-  L2CA_DisconnectReq(cid);
+  if (!L2CA_DisconnectReq(cid)) {
+    log::warn("Unable to disconnect L2CAP cid:{}", cid);
+  }
 
   log::verbose("cid={:04x}", cid);
 
@@ -366,7 +376,9 @@ static void hidd_l2cif_disconnect(uint16_t cid) {
     p_hcon->intr_cid = 0;
 
     // now disconnect CTRL
-    L2CA_DisconnectReq(p_hcon->ctrl_cid);
+    if (!L2CA_DisconnectReq(p_hcon->ctrl_cid)) {
+      log::warn("Unable to disconnect L2CAP cid:{}", p_hcon->ctrl_cid);
+    }
     p_hcon->ctrl_cid = 0;
   }
 
@@ -688,7 +700,11 @@ tHID_STATUS hidd_conn_disconnect(void) {
 
     /* Set l2cap idle timeout to 0 (so ACL link is disconnected
      * immediately after last channel is closed) */
-    L2CA_SetIdleTimeoutByBdAddr(hd_cb.device.addr, 0, BT_TRANSPORT_BR_EDR);
+    if (!L2CA_SetIdleTimeoutByBdAddr(hd_cb.device.addr, 0,
+                                     BT_TRANSPORT_BR_EDR)) {
+      log::warn("Unable to set L2CAP idle timeout peer:{} transport:{}",
+                hd_cb.device.addr, BT_TRANSPORT_BR_EDR);
+    }
 
     if (p_hcon->intr_cid) {
       hidd_l2cif_disconnect(p_hcon->intr_cid);

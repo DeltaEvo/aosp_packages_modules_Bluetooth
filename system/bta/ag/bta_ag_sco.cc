@@ -31,6 +31,7 @@
 #include "audio_hal_interface/hfp_client_interface.h"
 #include "bta/ag/bta_ag_int.h"
 #include "bta_ag_swb_aptx.h"
+#include "btm_status.h"
 #include "common/init_flags.h"
 #include "hci/controller_interface.h"
 #include "internal_include/bt_target.h"
@@ -42,6 +43,7 @@
 #include "stack/btm/btm_sco.h"
 #include "stack/btm/btm_sco_hfp_hal.h"
 #include "stack/include/btm_api.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/main_thread.h"
 #include "types/raw_address.h"
 
@@ -174,7 +176,9 @@ static void bta_ag_sco_conn_cback(uint16_t sco_idx) {
     /* no match found; disconnect sco, init sco variables */
     bta_ag_cb.sco.p_curr_scb = nullptr;
     bta_ag_cb.sco.state = BTA_AG_SCO_SHUTDOWN_ST;
-    BTM_RemoveSco(sco_idx);
+    if (get_btm_client_interface().sco.BTM_RemoveSco(sco_idx) != BTM_SUCCESS) {
+      log::warn("Unable to remove SCO idx:{}", sco_idx);
+    }
   }
 }
 
@@ -193,12 +197,12 @@ static void bta_ag_sco_disc_cback(uint16_t sco_idx) {
 
   log::debug("sco_idx: 0x{:x} sco.state:{}", sco_idx,
              sco_state_text(static_cast<tSCO_STATE>(bta_ag_cb.sco.state)));
-  log::debug("scb[0] in_use:{} sco_idx: 0x{:x} sco state:{}",
+  log::debug("scb[0] in_use:{} sco_idx: 0x{:x} ag state:{}",
              bta_ag_cb.scb[0].in_use, bta_ag_cb.scb[0].sco_idx,
-             sco_state_text(static_cast<tSCO_STATE>(bta_ag_cb.scb[0].state)));
-  log::debug("scb[1] in_use:{} sco_idx:0x{:x} sco state:{}",
+             bta_ag_state_str(bta_ag_cb.scb[0].state));
+  log::debug("scb[1] in_use:{} sco_idx:0x{:x} ag state:{}",
              bta_ag_cb.scb[1].in_use, bta_ag_cb.scb[1].sco_idx,
-             sco_state_text(static_cast<tSCO_STATE>(bta_ag_cb.scb[1].state)));
+             bta_ag_state_str(bta_ag_cb.scb[1].state));
 
   /* match callback to scb */
   if (bta_ag_cb.sco.p_curr_scb != nullptr && bta_ag_cb.sco.p_curr_scb->in_use) {
@@ -241,7 +245,7 @@ static void bta_ag_sco_disc_cback(uint16_t sco_idx) {
          * |BTA_AG_OPEN_ST|, which has the same value as |BTA_AG_SCO_CODEC_ST|
          */
         if (!com::android::bluetooth::flags::fix_hfp_qual_1_9()) {
-          bta_ag_cb.sco.p_curr_scb->state = BTA_AG_SCO_CODEC_ST;
+          bta_ag_cb.sco.p_curr_scb->state = (tBTA_AG_STATE)BTA_AG_SCO_CODEC_ST;
         }
         if (bta_ag_cb.sco.p_curr_scb->inuse_codec == UUID_CODEC_LC3) {
           if (bta_ag_cb.sco.p_curr_scb->codec_lc3_settings ==
@@ -288,7 +292,7 @@ static void bta_ag_sco_disc_cback(uint16_t sco_idx) {
           bta_ag_cb.sco.p_curr_scb->retransmission_effort_retries == 0) {
         bta_ag_cb.sco.p_curr_scb->retransmission_effort_retries++;
         if (!com::android::bluetooth::flags::fix_hfp_qual_1_9()) {
-          bta_ag_cb.sco.p_curr_scb->state = BTA_AG_SCO_CODEC_ST;
+          bta_ag_cb.sco.p_curr_scb->state = (tBTA_AG_STATE)BTA_AG_SCO_CODEC_ST;
         }
         log::warn("eSCO/SCO failed to open, retry with retransmission_effort");
       } else {
@@ -554,7 +558,10 @@ void bta_ag_create_sco(tBTA_AG_SCB* p_scb, bool is_orig) {
   if (is_orig) {
     bta_ag_cb.sco.is_local = true;
     /* Set eSCO Mode */
-    BTM_SetEScoMode(&params);
+    if (get_btm_client_interface().sco.BTM_SetEScoMode(&params) !=
+        BTM_SUCCESS) {
+      log::warn("Unable to set ESCO mode");
+    }
     bta_ag_cb.sco.p_curr_scb = p_scb;
     /* save the current codec as sco_codec can be updated while SCO is open. */
     p_scb->inuse_codec = esco_codec;
@@ -572,7 +579,10 @@ void bta_ag_create_sco(tBTA_AG_SCB* p_scb, bool is_orig) {
         &p_scb->peer_addr, false, params.packet_types, &p_scb->sco_idx,
         bta_ag_sco_conn_cback, bta_ag_sco_disc_cback);
     if (btm_status == BTM_CMD_STARTED) {
-      BTM_RegForEScoEvts(p_scb->sco_idx, bta_ag_esco_connreq_cback);
+      if (get_btm_client_interface().sco.BTM_RegForEScoEvts(
+              p_scb->sco_idx, bta_ag_esco_connreq_cback) != BTM_SUCCESS) {
+        log::warn("Unable to register for ESCO events");
+      }
     }
     log::debug("Listening AG SCO inx 0x{:04x} status:{} pkt types 0x{:04x}",
                p_scb->sco_idx, btm_status_text(btm_status),

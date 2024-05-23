@@ -155,15 +155,12 @@ class Host(
             stateFlow.filter { it == BluetoothAdapter.STATE_OFF }.first()
         }
 
-        // TODO: b/234892968
-        delay(3000L)
-
         bluetoothAdapter.enable()
         stateFlow.filter { it == BluetoothAdapter.STATE_ON }.first()
     }
 
     override fun factoryReset(request: Empty, responseObserver: StreamObserver<Empty>) {
-        grpcUnary<Empty>(scope, responseObserver, 30) {
+        grpcUnary<Empty>(scope, responseObserver, timeout = 30) {
             Log.i(TAG, "factoryReset")
 
             // remove bond for each device to avoid auto connection if remote resets faster

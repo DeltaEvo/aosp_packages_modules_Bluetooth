@@ -55,3 +55,23 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "a2dp_ignore_started_when_responder"
+    namespace: "bluetooth"
+    description: "Ignore the event BTA_AV_START_EVT when source and responder"
+    bug : "341178856"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "avrcp_sdp_records"
+    namespace: "bluetooth"
+    description: "Update SDP records for AVRC"
+    bug: "341353017"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
