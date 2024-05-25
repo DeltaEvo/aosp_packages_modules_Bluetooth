@@ -1019,7 +1019,8 @@ static std::string locationToString(uint32_t location) {
 }
 
 void LeAudioDevice::Dump(int fd) {
-  uint16_t acl_handle = BTM_GetHCIConnHandle(address_, BT_TRANSPORT_LE);
+  uint16_t acl_handle =
+          get_btm_client_interface().peer.BTM_GetHCIConnHandle(address_, BT_TRANSPORT_LE);
   std::string snk_location = locationToString(snk_audio_locations_.to_ulong());
   std::string src_location = locationToString(src_audio_locations_.to_ulong());
 
@@ -1065,7 +1066,7 @@ void LeAudioDevice::DisconnectAcl(void) {
   if (conn_id_ == GATT_INVALID_CONN_ID) return;
 
   uint16_t acl_handle =
-      BTM_GetHCIConnHandle(address_, BT_TRANSPORT_LE);
+          get_btm_client_interface().peer.BTM_GetHCIConnHandle(address_, BT_TRANSPORT_LE);
   if (acl_handle != HCI_INVALID_HANDLE) {
     acl_disconnect_from_handle(acl_handle, HCI_ERR_PEER_USER,
                                "bta::bluetooth::le_audio::client disconnect");

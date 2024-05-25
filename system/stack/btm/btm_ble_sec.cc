@@ -87,8 +87,10 @@ void BTM_SecAddBleDevice(const RawAddress& bd_addr, tBT_DEVICE_TYPE dev_type,
     p_dev_rec = btm_sec_allocate_dev_rec();
 
     p_dev_rec->bd_addr = bd_addr;
-    p_dev_rec->hci_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_BR_EDR);
-    p_dev_rec->ble_hci_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
+    p_dev_rec->hci_handle =
+            get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_BR_EDR);
+    p_dev_rec->ble_hci_handle =
+            get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
 
     /* update conn params, use default value for background connection params */
     p_dev_rec->conn_params.min_conn_int = BTM_BLE_CONN_PARAM_UNDEF;
@@ -611,7 +613,8 @@ tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr,
     return BTM_WRONG_MODE;
   }
 
-  uint16_t hci_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
+  uint16_t hci_handle =
+          get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
 
   if (!acl_peer_supports_ble_packet_extension(hci_handle)) {
     log::info("Remote device unable to support le packet extension");

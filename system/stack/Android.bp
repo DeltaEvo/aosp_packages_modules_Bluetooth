@@ -1073,6 +1073,7 @@ cc_test {
     ],
     srcs: [
         ":TestCommonMainHandler",
+        ":TestMockStackBtmInterface",
         "gatt/connection_manager.cc",
         "test/common/mock_btm_api_layer.cc",
         "test/gatt_connection_manager_test.cc",

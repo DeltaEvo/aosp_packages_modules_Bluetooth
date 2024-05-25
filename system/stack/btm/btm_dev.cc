@@ -47,6 +47,7 @@
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_octets.h"
 #include "stack/include/btm_ble_privacy.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_log_history.h"
 #include "types/raw_address.h"
 
@@ -93,7 +94,8 @@ void BTM_SecAddDevice(const RawAddress& bd_addr, DEV_CLASS dev_class,
         bd_addr, fmt::join(dev_class, ""), key_type);
 
     p_dev_rec->bd_addr = bd_addr;
-    p_dev_rec->hci_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_BR_EDR);
+    p_dev_rec->hci_handle =
+            get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_BR_EDR);
 
     /* use default value for background connection params */
     /* update conn params, use default value for background connection params */
@@ -275,8 +277,10 @@ tBTM_SEC_DEV_REC* btm_sec_alloc_dev(const RawAddress& bd_addr) {
 
   p_dev_rec->bd_addr = bd_addr;
 
-  p_dev_rec->ble_hci_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
-  p_dev_rec->hci_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_BR_EDR);
+  p_dev_rec->ble_hci_handle =
+          get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
+  p_dev_rec->hci_handle =
+          get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_BR_EDR);
 
   return (p_dev_rec);
 }

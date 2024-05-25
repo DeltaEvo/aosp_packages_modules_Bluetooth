@@ -1579,7 +1579,8 @@ tBTM_STATUS btm_sec_l2cap_access_req_by_requirement(
   /* Find or get oldest record */
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_or_alloc_dev(bd_addr);
 
-  p_dev_rec->hci_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_BR_EDR);
+  p_dev_rec->hci_handle =
+          get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_BR_EDR);
 
   if ((!is_originator) && (security_required & BTM_SEC_MODE4_LEVEL4)) {
     bool local_supports_sc =

@@ -38,6 +38,10 @@ void bluetooth::manager::SetMockBtmInterface(
                                                            tBT_TRANSPORT transport) {
     return btm_interface->IsPhy2mSupported(remote_bda, transport);
   };
+  mock_btm_client_interface.peer.BTM_GetHCIConnHandle = [](RawAddress const& bd_addr,
+                                                           tBT_TRANSPORT transport) -> uint16_t {
+    return btm_interface->GetHCIConnHandle(bd_addr, transport);
+  };
 }
 
 bool BTM_IsLinkKeyKnown(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
@@ -81,12 +85,6 @@ tBTM_SEC_DEV_REC* btm_find_dev(const RawAddress& bd_addr) {
 void BTM_RequestPeerSCA(RawAddress const& bd_addr, tBT_TRANSPORT transport) {
   log::assert_that(btm_interface != nullptr, "Mock btm interface not set!");
   btm_interface->RequestPeerSCA(bd_addr, transport);
-}
-
-uint16_t BTM_GetHCIConnHandle(RawAddress const& bd_addr,
-                              tBT_TRANSPORT transport) {
-  log::assert_that(btm_interface != nullptr, "Mock btm interface not set!");
-  return btm_interface->GetHCIConnHandle(bd_addr, transport);
 }
 
 void acl_disconnect_from_handle(uint16_t handle, tHCI_STATUS reason,

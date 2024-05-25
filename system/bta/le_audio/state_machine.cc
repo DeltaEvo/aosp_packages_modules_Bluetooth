@@ -30,15 +30,14 @@
 #include "common/strings.h"
 #include "devices.h"
 #include "hci/hci_packets.h"
-#include "hcimsgs.h"
 #include "internal_include/bt_trace.h"
 #include "le_audio_health_status.h"
 #include "le_audio_log_history.h"
 #include "le_audio_types.h"
-#include "os/log.h"
 #include "osi/include/alarm.h"
 #include "osi/include/osi.h"
 #include "osi/include/properties.h"
+#include "stack/include/btm_client_interface.h"
 
 // clang-format off
 /* ASCS state machine 1.0
@@ -1682,8 +1681,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       if (ases_pair.sink) ases_pair.sink->cis_state = CisState::CONNECTING;
       if (ases_pair.source) ases_pair.source->cis_state = CisState::CONNECTING;
 
-      uint16_t acl_handle =
-          BTM_GetHCIConnHandle(leAudioDevice->address_, BT_TRANSPORT_LE);
+      uint16_t acl_handle = get_btm_client_interface().peer.BTM_GetHCIConnHandle(
+              leAudioDevice->address_, BT_TRANSPORT_LE);
       conn_pairs.push_back({.cis_conn_handle = ase->cis_conn_hdl,
                             .acl_conn_handle = acl_handle});
       log::info("cis handle: 0x{:04x}, acl handle: 0x{:04x}", ase->cis_conn_hdl,
@@ -1732,8 +1731,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         if (ases_pair.source)
           ases_pair.source->cis_state = CisState::CONNECTING;
 
-        uint16_t acl_handle =
-            BTM_GetHCIConnHandle(leAudioDevice->address_, BT_TRANSPORT_LE);
+        uint16_t acl_handle = get_btm_client_interface().peer.BTM_GetHCIConnHandle(
+                leAudioDevice->address_, BT_TRANSPORT_LE);
         conn_pairs.push_back({.cis_conn_handle = ase->cis_conn_hdl,
                               .acl_conn_handle = acl_handle});
         log::debug("cis handle: {} acl handle : 0x{:x}", ase->cis_conn_hdl,
