@@ -51,7 +51,7 @@
 #include "internal_include/bt_target.h"
 #include "stack/btm/btm_sco_hfp_hal.h"
 #include "stack/include/bt_uuid16.h"
-#include "stack/include/btm_api.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_log_history.h"
 #include "types/raw_address.h"
 
@@ -1579,7 +1579,8 @@ bt_status_t HeadsetInterface::SetActiveDevice(RawAddress* active_device_addr) {
 
 bt_status_t HeadsetInterface::DebugDump() {
   CHECK_BTHF_INIT();
-  tBTM_SCO_DEBUG_DUMP debug_dump = BTM_GetScoDebugDump();
+  tBTM_SCO_DEBUG_DUMP debug_dump =
+      get_btm_client_interface().sco.BTM_GetScoDebugDump();
   bt_hf_callbacks->DebugDumpCallback(
       debug_dump.is_active, debug_dump.codec_id,
       debug_dump.total_num_decoded_frames, debug_dump.pkt_loss_ratio,
