@@ -42,7 +42,6 @@
 #include "stack/include/acl_api.h"
 #include "stack/include/acl_api_types.h"
 #include "stack/include/bt_types.h"
-#include "stack/include/btm_api.h"
 #include "stack/include/btm_ble_privacy.h"
 #include "stack/include/btm_inq.h"
 #include "stack/include/btm_status.h"

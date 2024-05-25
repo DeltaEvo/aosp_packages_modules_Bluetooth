@@ -37,6 +37,7 @@
 #include <vector>
 
 #include "bta/include/bta_hearing_aid_api.h"
+#include "types/ble_address_with_type.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 

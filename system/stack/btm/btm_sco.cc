@@ -52,7 +52,6 @@
 #include "stack/btm/btm_sec.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_dev_class.h"
-#include "stack/include/btm_api.h"
 #include "stack/include/btm_api_types.h"
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_log_history.h"

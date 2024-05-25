@@ -18,12 +18,14 @@
 
 #include <gmock/gmock.h>
 
+#include <cstdint>
 #include <optional>
 
 #include "bt_octets.h"
-#include "btm_api.h"
+#include "stack/btm/neighbor_inquiry.h"
 #include "stack/btm/security_device_record.h"
 #include "types/ble_address_with_type.h"
+#include "types/bt_transport.h"
 #include "types/raw_address.h"
 
 namespace bluetooth {

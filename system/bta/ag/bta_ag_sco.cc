@@ -39,7 +39,6 @@
 #include "stack/btm/btm_int_types.h"
 #include "stack/btm/btm_sco.h"
 #include "stack/btm/btm_sco_hfp_hal.h"
-#include "stack/include/btm_api.h"
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_status.h"
 #include "stack/include/main_thread.h"

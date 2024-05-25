@@ -21,7 +21,6 @@
 
 #include <cstdint>
 
-#include "btm_api.h"
 #include "l2c_api.h"
 #include "l2cdefs.h"
 #include "profiles_api.h"

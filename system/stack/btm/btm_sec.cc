@@ -59,7 +59,6 @@
 #include "stack/include/bt_dev_class.h"
 #include "stack/include/bt_psm_types.h"
 #include "stack/include/bt_types.h"
-#include "stack/include/btm_api.h"
 #include "stack/include/btm_ble_addr.h"
 #include "stack/include/btm_ble_api.h"
 #include "stack/include/btm_ble_privacy.h"
