@@ -4744,7 +4744,9 @@ tBTM_STATUS btm_sec_execute_procedure(tBTM_SEC_DEV_REC* p_dev_rec) {
  *
  ******************************************************************************/
 static bool btm_sec_start_get_name(tBTM_SEC_DEV_REC* p_dev_rec) {
-  if (!BTM_IsDeviceUp()) return false;
+  if (!get_btm_client_interface().local.BTM_IsDeviceUp()) {
+    return false;
+  }
 
   p_dev_rec->sec_rec.sec_state = BTM_SEC_STATE_GETTING_NAME;
 
