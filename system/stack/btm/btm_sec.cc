@@ -831,7 +831,8 @@ tBTM_STATUS btm_sec_bond_by_transport(const RawAddress& bd_addr,
        * -> RNR (to learn if peer is 2.1)
        * RNR when no ACL causes HCI_RMT_HOST_SUP_FEAT_NOTIFY_EVT */
       btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_GET_REM_NAME);
-      status = BTM_ReadRemoteDeviceName(bd_addr, NULL, BT_TRANSPORT_BR_EDR);
+      status = get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
+          bd_addr, NULL, BT_TRANSPORT_BR_EDR);
     } else {
       /* We are accepting connection request from peer */
       btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_WAIT_PIN_REQ);
@@ -2449,8 +2450,9 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
       }
     } else {
       log::warn("wrong BDA, retry with pairing BDA");
-      if (BTM_ReadRemoteDeviceName(btm_sec_cb.pairing_bda, NULL,
-                                   BT_TRANSPORT_BR_EDR) != BTM_CMD_STARTED) {
+      if (get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
+              btm_sec_cb.pairing_bda, NULL, BT_TRANSPORT_BR_EDR) !=
+          BTM_CMD_STARTED) {
         log::error("failed to start remote name request");
         NotifyBondingChange(*p_dev_rec, HCI_ERR_MEMORY_FULL);
       };
@@ -3692,8 +3694,8 @@ void btm_sec_connected(const RawAddress& bda, uint16_t handle,
             /* remote device name is unknowm, start getting remote name first */
 
             btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_GET_REM_NAME);
-            if (BTM_ReadRemoteDeviceName(p_dev_rec->bd_addr, NULL,
-                                         BT_TRANSPORT_BR_EDR) !=
+            if (get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
+                    p_dev_rec->bd_addr, NULL, BT_TRANSPORT_BR_EDR) !=
                 BTM_CMD_STARTED) {
               log::error("cannot read remote name");
               btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_IDLE);
@@ -3727,8 +3729,8 @@ void btm_sec_connected(const RawAddress& bda, uint16_t handle,
       if (BTM_SEC_IS_SM4_UNKNOWN(p_dev_rec->sm4)) {
         /* Try again: RNR when no ACL causes HCI_RMT_HOST_SUP_FEAT_NOTIFY_EVT */
         btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_GET_REM_NAME);
-        if (BTM_ReadRemoteDeviceName(bda, NULL, BT_TRANSPORT_BR_EDR) !=
-            BTM_CMD_STARTED) {
+        if (get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
+                bda, NULL, BT_TRANSPORT_BR_EDR) != BTM_CMD_STARTED) {
           log::error("cannot read remote name");
           btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_IDLE);
         }
