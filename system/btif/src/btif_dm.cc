@@ -981,8 +981,8 @@ static void btif_dm_pin_req_evt(tBTA_DM_PIN_REQ* p_pin_req) {
   int dev_type;
 
   /* Remote properties update */
-  if (BTM_GetPeerDeviceTypeFromFeatures(p_pin_req->bd_addr) ==
-      BT_DEVICE_TYPE_DUMO) {
+  if (get_btm_client_interface().peer.BTM_GetPeerDeviceTypeFromFeatures(
+          p_pin_req->bd_addr) == BT_DEVICE_TYPE_DUMO) {
     dev_type = BT_DEVICE_TYPE_DUMO;
   } else if (!btif_get_device_type(p_pin_req->bd_addr, &dev_type)) {
     // Failed to get device type, defaulting to BR/EDR.
@@ -1075,8 +1075,8 @@ static void btif_dm_ssp_cfm_req_evt(tBTA_DM_SP_CFM_REQ* p_ssp_cfm_req) {
                p_ssp_cfm_req->bd_addr, p_ssp_cfm_req->just_works,
                p_ssp_cfm_req->loc_auth_req, p_ssp_cfm_req->rmt_auth_req);
   /* Remote properties update */
-  if (BTM_GetPeerDeviceTypeFromFeatures(p_ssp_cfm_req->bd_addr) ==
-      BT_DEVICE_TYPE_DUMO) {
+  if (get_btm_client_interface().peer.BTM_GetPeerDeviceTypeFromFeatures(
+          p_ssp_cfm_req->bd_addr) == BT_DEVICE_TYPE_DUMO) {
     dev_type = BT_DEVICE_TYPE_DUMO;
   } else if (!btif_get_device_type(p_ssp_cfm_req->bd_addr, &dev_type)) {
     // Failed to get device type, defaulting to BR/EDR.
@@ -1143,8 +1143,8 @@ static void btif_dm_ssp_key_notif_evt(tBTA_DM_SP_KEY_NOTIF* p_ssp_key_notif) {
   log::verbose("addr:{}", p_ssp_key_notif->bd_addr);
 
   /* Remote properties update */
-  if (BTM_GetPeerDeviceTypeFromFeatures(p_ssp_key_notif->bd_addr) ==
-      BT_DEVICE_TYPE_DUMO) {
+  if (get_btm_client_interface().peer.BTM_GetPeerDeviceTypeFromFeatures(
+          p_ssp_key_notif->bd_addr) == BT_DEVICE_TYPE_DUMO) {
     dev_type = BT_DEVICE_TYPE_DUMO;
   } else if (!btif_get_device_type(p_ssp_key_notif->bd_addr, &dev_type)) {
     // Failed to get device type, defaulting to BR/EDR.
@@ -1237,7 +1237,8 @@ static void btif_dm_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
     btif_storage_set_remote_addr_type(&bd_addr, p_auth_cmpl->addr_type);
 
     int dev_type;
-    if (BTM_GetPeerDeviceTypeFromFeatures(bd_addr) == BT_DEVICE_TYPE_DUMO) {
+    if (get_btm_client_interface().peer.BTM_GetPeerDeviceTypeFromFeatures(
+            bd_addr) == BT_DEVICE_TYPE_DUMO) {
       dev_type = BT_DEVICE_TYPE_DUMO;
     } else {
       dev_type = p_auth_cmpl->dev_type;
