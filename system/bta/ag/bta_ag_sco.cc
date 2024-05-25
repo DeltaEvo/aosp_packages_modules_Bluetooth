@@ -236,7 +236,8 @@ static void bta_ag_sco_disc_cback(uint16_t sco_idx) {
       /* Bypass vendor specific and voice settings if enhanced eSCO supported */
       if (!(bluetooth::shim::GetController()->IsSupported(
               bluetooth::hci::OpCode::ENHANCED_SETUP_SYNCHRONOUS_CONNECTION))) {
-        BTM_WriteVoiceSettings(BTM_VOICE_SETTING_CVSD);
+        get_btm_client_interface().sco.BTM_WriteVoiceSettings(
+            BTM_VOICE_SETTING_CVSD);
       }
 
       /* If SCO open was initiated by AG and failed for mSBC T2, try mSBC T1
