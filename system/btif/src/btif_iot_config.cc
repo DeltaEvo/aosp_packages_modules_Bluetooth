@@ -21,9 +21,8 @@
 #include "bta_sec_api.h"
 #include "btif_storage.h"
 #include "device/include/device_iot_config.h"
-#include "internal_include/bt_target.h"
-#include "os/log.h"
 #include "stack/include/btm_ble_api.h"
+#include "stack/include/btm_client_interface.h"
 
 using namespace bluetooth;
 
@@ -135,8 +134,8 @@ void btif_iot_update_remote_info(tBTA_DM_AUTH_CMPL* p_auth_cmpl, bool is_ble,
                                  (int)p_auth_cmpl->addr_type);
 
   // save remote versions to iot conf file
-  btm_status = BTM_ReadRemoteVersion(p_auth_cmpl->bd_addr, &lmp_ver, &mfct_set,
-                                     &lmp_subver);
+  btm_status = get_btm_client_interface().peer.BTM_ReadRemoteVersion(
+      p_auth_cmpl->bd_addr, &lmp_ver, &mfct_set, &lmp_subver);
 
   if (btm_status == BTM_SUCCESS) {
     DEVICE_IOT_CONFIG_ADDR_SET_INT(p_auth_cmpl->bd_addr,

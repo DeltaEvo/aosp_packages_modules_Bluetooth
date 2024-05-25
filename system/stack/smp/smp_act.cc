@@ -36,7 +36,7 @@
 #include "stack/btm/btm_sec.h"
 #include "stack/include/bt_octets.h"
 #include "stack/include/bt_types.h"
-#include "stack/include/btm_api.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_log_history.h"
 #include "stack/include/smp_api_types.h"
 #include "types/raw_address.h"
@@ -191,8 +191,8 @@ void smp_send_app_cback(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
             p_cb->loc_auth_req |= SMP_SC_SUPPORT_BIT;
           }
 
-          if (!BTM_ReadRemoteVersion(p_cb->pairing_bda, &remote_lmp_version,
-                                     nullptr, nullptr)) {
+          if (!get_btm_client_interface().peer.BTM_ReadRemoteVersion(
+                  p_cb->pairing_bda, &remote_lmp_version, nullptr, nullptr)) {
             log::warn("SMP Unable to determine remote_lmp_version:{}",
                       remote_lmp_version);
           }

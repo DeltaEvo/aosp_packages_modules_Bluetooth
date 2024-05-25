@@ -36,15 +36,13 @@
 
 #include "bta/gatt/bta_gattc_int.h"
 #include "bta/gatt/database.h"
-#include "common/init_flags.h"
 #include "device/include/interop.h"
 #include "internal_include/bt_target.h"
-#include "internal_include/bt_trace.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/gatt_api.h"
 #include "stack/include/sdp_api.h"
 #include "types/bluetooth/uuid.h"
@@ -164,7 +162,8 @@ RobustCachingSupport GetRobustCachingSupport(const tBTA_GATTC_CLCB* p_clcb,
   }
 
   if (p_clcb->transport == BT_TRANSPORT_LE &&
-      !BTM_IsRemoteVersionReceived(p_clcb->bda)) {
+      !get_btm_client_interface().ble.BTM_IsRemoteVersionReceived(
+          p_clcb->bda)) {
     log::info("version info is not ready yet");
     return RobustCachingSupport::W4_REMOTE_VERSION;
   }
@@ -175,7 +174,8 @@ RobustCachingSupport GetRobustCachingSupport(const tBTA_GATTC_CLCB* p_clcb,
   // embedded device having LMP version lower than 5.1 (0x0a), it does not
   // support GATT Caching.
   uint8_t lmp_version = 0;
-  if (!BTM_ReadRemoteVersion(p_clcb->bda, &lmp_version, nullptr, nullptr)) {
+  if (!get_btm_client_interface().peer.BTM_ReadRemoteVersion(
+          p_clcb->bda, &lmp_version, nullptr, nullptr)) {
     log::warn("Could not read remote version for {}", p_clcb->bda);
   }
 
