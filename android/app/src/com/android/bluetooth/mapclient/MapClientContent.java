@@ -269,6 +269,11 @@ class MapClientContent {
         values.put(Sms.SEEN, seen);
 
         Uri results = mResolver.insert(contentUri, values);
+        if (results == null) {
+            error("Failed to get SMS URI, insert failed. Dropping message.");
+            return;
+        }
+
         mHandleToUriMap.put(handle, results);
         mUriToHandleMap.put(results, new MessageStatus(handle, readStatus));
         debug("Map InsertedThread" + results);
@@ -375,19 +380,25 @@ class MapClientContent {
             values.put(Mms.MESSAGE_SIZE, mmsBmessage.getSize());
 
             Uri results = mResolver.insert(contentUri, values);
+            if (results == null) {
+                error("Failed to get MMS entry URI. Cannot store MMS parts. Dropping message.");
+                return;
+            }
+
             mHandleToUriMap.put(handle, results);
             mUriToHandleMap.put(results, new MessageStatus(handle, read));
 
             debug("Map InsertedThread" + results);
 
+            // Some Messenger Applications don't listen to address table changes and only listen
+            // for message content changes. Adding the address parts first makes it so they're
+            // already in the tables when a given app syncs due to content updates. Otherwise, we
+            // risk a race where the address content may not be ready.
+            storeAddressPart(message, results);
+
             for (MimePart part : mmsBmessage.getMimeParts()) {
                 storeMmsPart(part, results);
             }
-
-            storeAddressPart(message, results);
-
-            values.put(Mms.Part.CONTENT_TYPE, "plain/text");
-            values.put(Mms.SUBSCRIPTION_ID, mSubscriptionId);
         } catch (Exception e) {
             error("Error while storing MMS: " + e.toString());
             throw e;
@@ -406,6 +417,12 @@ class MapClientContent {
 
         Uri contentUri = Uri.parse(messageUri.toString() + "/part");
         Uri results = mResolver.insert(contentUri, values);
+
+        if (results == null) {
+            warn("failed to insert MMS part");
+            return null;
+        }
+
         debug("Inserted" + results);
         return results;
     }
@@ -415,17 +432,23 @@ class MapClientContent {
         Uri contentUri = Uri.parse(messageUri.toString() + "/addr");
         String originator = getOriginatorNumber(message);
         values.put(Mms.Addr.CHARSET, DEFAULT_CHARSET);
-
         values.put(Mms.Addr.ADDRESS, originator);
         values.put(Mms.Addr.TYPE, ORIGINATOR_ADDRESS_TYPE);
-        mResolver.insert(contentUri, values);
+
+        Uri results = mResolver.insert(contentUri, values);
+        if (results == null) {
+            warn("failed to insert originator address");
+        }
 
         Set<String> messageContacts = new ArraySet<>();
         getRecipientsFromMessage(message, messageContacts);
         for (String recipient : messageContacts) {
             values.put(Mms.Addr.ADDRESS, recipient);
             values.put(Mms.Addr.TYPE, RECIPIENT_ADDRESS_TYPE);
-            mResolver.insert(contentUri, values);
+            results = mResolver.insert(contentUri, values);
+            if (results == null) {
+                warn("failed to insert recipient address");
+            }
         }
     }
 

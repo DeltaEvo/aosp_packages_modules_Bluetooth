@@ -942,8 +942,10 @@ uint32_t gatt_add_sdp_record(const Uuid& uuid, uint16_t start_hdl,
   switch (uuid.GetShortestRepresentationSize()) {
     case Uuid::kNumBytes16: {
       uint16_t tmp = uuid.As16Bit();
-      get_legacy_stack_sdp_api()->handle.SDP_AddServiceClassIdList(sdp_handle,
-                                                                   1, &tmp);
+      if (!get_legacy_stack_sdp_api()->handle.SDP_AddServiceClassIdList(
+              sdp_handle, 1, &tmp)) {
+        log::warn("Unable to add SDP attribute for 16 bit uuid");
+      }
       break;
     }
 
@@ -951,18 +953,24 @@ uint32_t gatt_add_sdp_record(const Uuid& uuid, uint16_t start_hdl,
       UINT8_TO_BE_STREAM(p, (UUID_DESC_TYPE << 3) | SIZE_FOUR_BYTES);
       uint32_t tmp = uuid.As32Bit();
       UINT32_TO_BE_STREAM(p, tmp);
-      get_legacy_stack_sdp_api()->handle.SDP_AddAttribute(
-          sdp_handle, ATTR_ID_SERVICE_CLASS_ID_LIST, DATA_ELE_SEQ_DESC_TYPE,
-          (uint32_t)(p - buff), buff);
+      if (!get_legacy_stack_sdp_api()->handle.SDP_AddAttribute(
+              sdp_handle, ATTR_ID_SERVICE_CLASS_ID_LIST, DATA_ELE_SEQ_DESC_TYPE,
+              (uint32_t)(p - buff), buff)) {
+        log::warn("Unable to add SDP attribute for 32 bit uuid handle:{}",
+                  sdp_handle);
+      }
       break;
     }
 
     case Uuid::kNumBytes128:
       UINT8_TO_BE_STREAM(p, (UUID_DESC_TYPE << 3) | SIZE_SIXTEEN_BYTES);
       ARRAY_TO_BE_STREAM(p, uuid.To128BitBE().data(), (int)Uuid::kNumBytes128);
-      get_legacy_stack_sdp_api()->handle.SDP_AddAttribute(
-          sdp_handle, ATTR_ID_SERVICE_CLASS_ID_LIST, DATA_ELE_SEQ_DESC_TYPE,
-          (uint32_t)(p - buff), buff);
+      if (!get_legacy_stack_sdp_api()->handle.SDP_AddAttribute(
+              sdp_handle, ATTR_ID_SERVICE_CLASS_ID_LIST, DATA_ELE_SEQ_DESC_TYPE,
+              (uint32_t)(p - buff), buff)) {
+        log::warn("Unable to add SDP attribute for 128 bit uuid handle:{}",
+                  sdp_handle);
+      }
       break;
   }
 
@@ -976,13 +984,17 @@ uint32_t gatt_add_sdp_record(const Uuid& uuid, uint16_t start_hdl,
   proto_elem_list[1].params[0] = start_hdl;
   proto_elem_list[1].params[1] = end_hdl;
 
-  get_legacy_stack_sdp_api()->handle.SDP_AddProtocolList(sdp_handle, 2,
-                                                         proto_elem_list);
+  if (!get_legacy_stack_sdp_api()->handle.SDP_AddProtocolList(
+          sdp_handle, 2, proto_elem_list)) {
+    log::warn("Unable to add SDP protocol list for l2cap and att");
+  }
 
   /* Make the service browseable */
   uint16_t list = UUID_SERVCLASS_PUBLIC_BROWSE_GROUP;
-  get_legacy_stack_sdp_api()->handle.SDP_AddUuidSequence(
-      sdp_handle, ATTR_ID_BROWSE_GROUP_LIST, 1, &list);
+  if (!get_legacy_stack_sdp_api()->handle.SDP_AddUuidSequence(
+          sdp_handle, ATTR_ID_BROWSE_GROUP_LIST, 1, &list)) {
+    log::warn("Unable to add SDP uuid sequence public browse group");
+  }
 
   return (sdp_handle);
 }

@@ -334,7 +334,7 @@ void bta_ag_disc_fail(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& /* data */) {
  ******************************************************************************/
 void bta_ag_open_fail(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
   /* call open cback w. failure */
-  log::debug("state [0x{:02x}]", p_scb->state);
+  log::debug("state {}", bta_ag_state_str(p_scb->state));
   bta_ag_cback_open(p_scb, data.api_open.bd_addr, BTA_AG_FAIL_RESOURCES);
 }
 
@@ -352,6 +352,9 @@ void bta_ag_rfc_fail(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& /* data */) {
   log::info("reset p_scb with index={}", bta_ag_scb_to_idx(p_scb));
   RawAddress peer_addr = p_scb->peer_addr;
   /* reinitialize stuff */
+  if (com::android::bluetooth::flags::reset_ag_state_on_collision()) {
+    p_scb->state = BTA_AG_INIT_ST;
+  }
   p_scb->conn_handle = 0;
   p_scb->conn_service = 0;
   p_scb->peer_features = 0;
@@ -462,7 +465,10 @@ void bta_ag_rfc_close(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& /* data */) {
   }
   /* else close port and deallocate scb */
   else {
-    RFCOMM_RemoveServer(p_scb->conn_handle);
+    if (RFCOMM_RemoveServer(p_scb->conn_handle) != PORT_SUCCESS) {
+      log::warn("Unable to remove RFCOMM server peer:{} handle:{}",
+                p_scb->peer_addr, p_scb->conn_handle);
+    };
     bta_ag_scb_dealloc(p_scb);
   }
 }
@@ -702,7 +708,9 @@ void bta_ag_rfc_data(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& /* data */) {
 void bta_ag_start_close(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
   /* Take the link out of sniff and set L2C idle time to 0 */
   bta_dm_pm_active(p_scb->peer_addr);
-  L2CA_SetIdleTimeoutByBdAddr(p_scb->peer_addr, 0, BT_TRANSPORT_BR_EDR);
+  if (!L2CA_SetIdleTimeoutByBdAddr(p_scb->peer_addr, 0, BT_TRANSPORT_BR_EDR)) {
+    log::warn("Unable to set idle timeout peer:{}", p_scb->peer_addr);
+  }
 
   /* if SCO is open close SCO and wait on RFCOMM close */
   if (bta_ag_sco_is_open(p_scb)) {
@@ -905,8 +913,11 @@ void bta_ag_handle_collision(tBTA_AG_SCB* p_scb,
                              const tBTA_AG_DATA& /* data */) {
   /* Cancel SDP if it had been started. */
   if (p_scb->p_disc_db) {
-    get_legacy_stack_sdp_api()->service.SDP_CancelServiceSearch(
-        p_scb->p_disc_db);
+    if (!get_legacy_stack_sdp_api()->service.SDP_CancelServiceSearch(
+            p_scb->p_disc_db)) {
+      log::warn("Unable to cancel SDP service discovery search peer:{}",
+                p_scb->peer_addr);
+    }
     bta_ag_free_db(p_scb, tBTA_AG_DATA::kEmpty);
   }
 

@@ -31,12 +31,10 @@
 #include "connection_manager.h"
 #include "device/include/interop.h"
 #include "internal_include/bt_target.h"
-#include "internal_include/bt_trace.h"
 #include "internal_include/stack_config.h"
 #include "l2c_api.h"
 #include "main/shim/acl_api.h"
 #include "osi/include/allocator.h"
-#include "osi/include/osi.h"
 #include "osi/include/properties.h"
 #include "rust/src/connection/ffi/connection_shim.h"
 #include "stack/arbiter/acl_arbiter.h"
@@ -49,6 +47,7 @@
 #include "stack/include/bt_psm_types.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/l2cap_acl_interface.h"
+#include "stack/include/l2cdefs.h"
 #include "stack/include/srvc_api.h"  // tDIS_VALUE
 #include "types/raw_address.h"
 
@@ -270,7 +269,10 @@ bool gatt_disconnect(tGATT_TCB* p_tcb) {
 
   if (p_tcb->att_lcid == L2CAP_ATT_CID) {
     if (ch_state == GATT_CH_OPEN) {
-      L2CA_RemoveFixedChnl(L2CAP_ATT_CID, p_tcb->peer_bda);
+      if (!L2CA_RemoveFixedChnl(L2CAP_ATT_CID, p_tcb->peer_bda)) {
+        log::warn("Unable to remove L2CAP ATT fixed channel peer:{}",
+                  p_tcb->peer_bda);
+      }
       gatt_set_ch_state(p_tcb, GATT_CH_CLOSING);
     } else {
       if (bluetooth::common::init_flags::
@@ -790,7 +792,9 @@ static void gatt_l2cif_connect_ind_cback(const RawAddress& bd_addr,
 
   /* If we reject the connection, send DisconnectReq */
   if (result != L2CAP_CONN_OK) {
-    L2CA_DisconnectReq(lcid);
+    if (!L2CA_DisconnectReq(lcid)) {
+      log::warn("Unable to disconnect L2CAP peer:{} cid:{}", bd_addr, lcid);
+    }
     return;
   }
 
@@ -884,7 +888,9 @@ void gatt_l2cif_disconnect_ind_cback(uint16_t lcid, bool ack_needed) {
 }
 
 static void gatt_l2cif_disconnect(uint16_t lcid) {
-  L2CA_DisconnectReq(lcid);
+  if (!L2CA_DisconnectReq(lcid)) {
+    log::warn("Unable to disconnect L2CAP cid:{}", lcid);
+  }
 
   /* look up clcb for this channel */
   tGATT_TCB* p_tcb = gatt_find_tcb_by_cid(lcid);

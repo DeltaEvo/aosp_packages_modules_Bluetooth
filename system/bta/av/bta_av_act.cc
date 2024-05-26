@@ -23,7 +23,7 @@
  *
  ******************************************************************************/
 
-#define LOG_TAG "bt_bta_av"
+#define LOG_TAG "bluetooth-a2dp"
 
 #include <bluetooth/log.h>
 
@@ -183,7 +183,9 @@ static void bta_av_close_all_rc(tBTA_AV_CB* p_cb) {
  ******************************************************************************/
 static void bta_av_del_sdp_rec(uint32_t* p_sdp_handle) {
   if (*p_sdp_handle != 0) {
-    get_legacy_stack_sdp_api()->handle.SDP_DeleteRecord(*p_sdp_handle);
+    if (!get_legacy_stack_sdp_api()->handle.SDP_DeleteRecord(*p_sdp_handle)) {
+      log::warn("Unable to delete SDP record:{}", *p_sdp_handle);
+    }
     *p_sdp_handle = 0;
   }
 }
@@ -1212,10 +1214,16 @@ void bta_av_stream_chg(tBTA_AV_SCB* p_scb, bool started) {
 
   if (started) {
     /* Let L2CAP know this channel is processed with high priority */
-    L2CA_SetAclPriority(p_scb->PeerAddress(), L2CAP_PRIORITY_HIGH);
+    if (!L2CA_SetAclPriority(p_scb->PeerAddress(), L2CAP_PRIORITY_HIGH)) {
+      log::warn("Unable to set L2CAP acl high priority peer:{}",
+                p_scb->PeerAddress());
+    }
   } else {
     /* Let L2CAP know this channel is processed with low priority */
-    L2CA_SetAclPriority(p_scb->PeerAddress(), L2CAP_PRIORITY_NORMAL);
+    if (!L2CA_SetAclPriority(p_scb->PeerAddress(), L2CAP_PRIORITY_NORMAL)) {
+      log::warn("Unable to set L2CAP acl normal priority peer:{}",
+                p_scb->PeerAddress());
+    }
   }
 }
 
@@ -1462,7 +1470,10 @@ void bta_av_api_disconnect(tBTA_AV_DATA* p_data) {
  *
  ******************************************************************************/
 void bta_av_set_use_latency_mode(tBTA_AV_SCB* p_scb, bool use_latency_mode) {
-  L2CA_UseLatencyMode(p_scb->PeerAddress(), use_latency_mode);
+  if (!L2CA_UseLatencyMode(p_scb->PeerAddress(), use_latency_mode)) {
+    log::warn("Unable to set L2CAP latenty mode peer:{} use_latency_mode:{}",
+              p_scb->PeerAddress(), use_latency_mode);
+  }
 }
 
 /*******************************************************************************
@@ -1481,7 +1492,10 @@ void bta_av_api_set_latency(tBTA_AV_DATA* p_data) {
   tL2CAP_LATENCY latency = p_data->api_set_latency.is_low_latency
                                ? L2CAP_LATENCY_LOW
                                : L2CAP_LATENCY_NORMAL;
-  L2CA_SetAclLatency(p_scb->PeerAddress(), latency);
+  if (!L2CA_SetAclLatency(p_scb->PeerAddress(), latency)) {
+    log::warn("Unable to set L2CAP latenty mode peer:{} use_latency_mode:{}",
+              p_scb->PeerAddress(), latency);
+  }
 }
 
 /**
@@ -1776,8 +1790,11 @@ static void bta_av_store_peer_rc_version() {
     if ((get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
             p_rec, ATTR_ID_BT_PROFILE_DESC_LIST)) != NULL) {
       /* get profile version (if failure, version parameter is not updated) */
-      get_legacy_stack_sdp_api()->record.SDP_FindProfileVersionInRec(
-          p_rec, UUID_SERVCLASS_AV_REMOTE_CONTROL, &peer_rc_version);
+      if (!get_legacy_stack_sdp_api()->record.SDP_FindProfileVersionInRec(
+              p_rec, UUID_SERVCLASS_AV_REMOTE_CONTROL, &peer_rc_version)) {
+        log::warn("Unable to find AVRC profile version in record peer:{}",
+                  p_rec->remote_bd_addr);
+      }
     }
     if (peer_rc_version != 0)
       DEVICE_IOT_CONFIG_ADDR_SET_HEX_IF_GREATER(
@@ -1791,8 +1808,11 @@ static void bta_av_store_peer_rc_version() {
     if ((get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
             p_rec, ATTR_ID_BT_PROFILE_DESC_LIST)) != NULL) {
       /* get profile version (if failure, version parameter is not updated) */
-      get_legacy_stack_sdp_api()->record.SDP_FindProfileVersionInRec(
-          p_rec, UUID_SERVCLASS_AV_REMOTE_CONTROL, &peer_rc_version);
+      if (!get_legacy_stack_sdp_api()->record.SDP_FindProfileVersionInRec(
+              p_rec, UUID_SERVCLASS_AV_REMOTE_CONTROL, &peer_rc_version)) {
+        log::warn("Unable to find SDP profile version in record peer:{}",
+                  p_rec->remote_bd_addr);
+      }
     }
     if (peer_rc_version != 0)
       DEVICE_IOT_CONFIG_ADDR_SET_HEX_IF_GREATER(
@@ -1845,8 +1865,11 @@ tBTA_AV_FEAT bta_av_check_peer_features(uint16_t service_uuid) {
     if ((get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
             p_rec, ATTR_ID_BT_PROFILE_DESC_LIST)) != NULL) {
       /* get profile version (if failure, version parameter is not updated) */
-      get_legacy_stack_sdp_api()->record.SDP_FindProfileVersionInRec(
-          p_rec, UUID_SERVCLASS_AV_REMOTE_CONTROL, &peer_rc_version);
+      if (!get_legacy_stack_sdp_api()->record.SDP_FindProfileVersionInRec(
+              p_rec, UUID_SERVCLASS_AV_REMOTE_CONTROL, &peer_rc_version)) {
+        log::warn("Unable to find AVRC profile version in record peer:{}",
+                  p_rec->remote_bd_addr);
+      }
       log::verbose("peer_rc_version 0x{:x}", peer_rc_version);
 
       if (peer_rc_version >= AVRC_REV_1_3)
@@ -2128,8 +2151,11 @@ void bta_av_rc_disc_done_all(tBTA_AV_DATA* /* p_data */) {
             p_rec, ATTR_ID_BT_PROFILE_DESC_LIST) != NULL) {
       /* get profile version (if failure, version parameter is not updated) */
       uint16_t peer_rc_version = 0xFFFF;  // Don't change the AVRCP version
-      get_legacy_stack_sdp_api()->record.SDP_FindProfileVersionInRec(
-          p_rec, UUID_SERVCLASS_AV_REMOTE_CONTROL, &peer_rc_version);
+      if (!get_legacy_stack_sdp_api()->record.SDP_FindProfileVersionInRec(
+              p_rec, UUID_SERVCLASS_AV_REMOTE_CONTROL, &peer_rc_version)) {
+        log::warn("Unable to find SDP in record peer:{}",
+                  p_rec->remote_bd_addr);
+      }
       if (peer_rc_version <= AVRC_REV_1_3) {
         log::verbose("Using AVRCP 1.3 Capabilities with remote device");
         p_bta_av_cfg = &bta_av_cfg_compatibility;
@@ -2320,8 +2346,11 @@ void bta_av_rc_disc_done(tBTA_AV_DATA* p_data) {
             p_rec, ATTR_ID_BT_PROFILE_DESC_LIST) != NULL) {
       /* get profile version (if failure, version parameter is not updated) */
       uint16_t peer_rc_version = 0xFFFF;  // Don't change the AVRCP version
-      get_legacy_stack_sdp_api()->record.SDP_FindProfileVersionInRec(
-          p_rec, UUID_SERVCLASS_AV_REMOTE_CONTROL, &peer_rc_version);
+      if (!get_legacy_stack_sdp_api()->record.SDP_FindProfileVersionInRec(
+              p_rec, UUID_SERVCLASS_AV_REMOTE_CONTROL, &peer_rc_version)) {
+        log::warn("Unable to find AVRCP version peer:{}",
+                  p_rec->remote_bd_addr);
+      }
       if (peer_rc_version <= AVRC_REV_1_3) {
         log::verbose("Using AVRCP 1.3 Capabilities with remote device");
         p_bta_av_cfg = &bta_av_cfg_compatibility;

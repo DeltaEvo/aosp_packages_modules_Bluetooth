@@ -32,10 +32,8 @@
 #include <string>
 
 #include "internal_include/bt_target.h"
-#include "internal_include/bt_trace.h"
 #include "internal_include/stack_config.h"
 #include "l2c_api.h"
-#include "os/log.h"
 #include "os/system_properties.h"
 #include "osi/include/allocator.h"
 #include "rust/src/connection/ffi/connection_shim.h"
@@ -46,6 +44,7 @@
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/l2cap_acl_interface.h"
+#include "stack/include/l2cdefs.h"
 #include "stack/include/sdp_api.h"
 #include "types/bluetooth/uuid.h"
 #include "types/bt_transport.h"
@@ -420,7 +419,9 @@ void GATTS_StopService(uint16_t service_handle) {
   }
 
   if (it->sdp_handle) {
-    get_legacy_stack_sdp_api()->handle.SDP_DeleteRecord(it->sdp_handle);
+    if (!get_legacy_stack_sdp_api()->handle.SDP_DeleteRecord(it->sdp_handle)) {
+      log::warn("Unable to delete record handle:{}", it->sdp_handle);
+    }
   }
 
   gatt_cb.srv_list_info->erase(it);
@@ -1188,8 +1189,12 @@ void GATT_SetIdleTimeout(const RawAddress& bd_addr, uint16_t idle_tout,
     }
 
     if (idle_tout == GATT_LINK_IDLE_TIMEOUT_WHEN_NO_APP) {
-      L2CA_SetIdleTimeoutByBdAddr(
-          p_tcb->peer_bda, GATT_LINK_IDLE_TIMEOUT_WHEN_NO_APP, BT_TRANSPORT_LE);
+      if (!L2CA_SetIdleTimeoutByBdAddr(p_tcb->peer_bda,
+                                       GATT_LINK_IDLE_TIMEOUT_WHEN_NO_APP,
+                                       BT_TRANSPORT_LE)) {
+        log::warn("Unable to set L2CAP link idle timeout peer:{} transport:{}",
+                  p_tcb->peer_bda, bt_transport_text(transport));
+      }
     }
   }
 

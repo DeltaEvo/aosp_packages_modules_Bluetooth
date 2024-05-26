@@ -283,6 +283,7 @@ struct UHid {
     pub handle: UHidHfp,
     pub volume: u8,
     pub muted: bool,
+    pub is_open: bool,
 }
 
 pub struct BluetoothMedia {
@@ -723,12 +724,7 @@ impl BluetoothMedia {
                             self.start_sco_call_impl(addr.to_string(), false, HfpCodecBitId::NONE);
                         }
 
-                        if self.should_insert_call_when_sco_start(addr) {
-                            info!(
-                                "[{}]: UHID creation skipped due to interop workaround",
-                                DisplayAddress(&addr)
-                            );
-                        } else {
+                        if self.phone_ops_enabled {
                             self.uhid_create(addr);
                         }
                     }
@@ -767,14 +763,7 @@ impl BluetoothMedia {
                         if self.should_insert_call_when_sco_start(addr) {
                             // This triggers a +CIEV command to set the call status for HFP devices.
                             // It is required for some devices to provide sound.
-                            self.phone_state.num_active += 1;
-                            self.call_list.push(CallInfo {
-                                index: self.new_call_index(),
-                                dir_incoming: false,
-                                state: CallState::Active,
-                                number: "".into(),
-                            });
-                            self.phone_state_change("".into());
+                            self.place_active_call();
                         }
                     }
                     BthfAudioState::Disconnected => {
@@ -1187,6 +1176,7 @@ impl BluetoothMedia {
                 ),
                 volume: 15, // By default use maximum volume in case microphone gain has not been received
                 muted: false,
+                is_open: false,
             },
         );
     }
@@ -1208,6 +1198,29 @@ impl BluetoothMedia {
         }
     }
 
+    fn uhid_send_input_event_report(&mut self, addr: &RawAddress, data: u8) {
+        if !self.phone_ops_enabled {
+            return;
+        }
+        if let Some(uhid) = self.uhid.get_mut(addr) {
+            info!(
+                "[{}]: UHID: Send telephony hid input report. hook_switch({}), mute({}), drop({})",
+                DisplayAddress(&addr),
+                (data & UHID_INPUT_HOOK_SWITCH) != 0,
+                (data & UHID_INPUT_PHONE_MUTE) != 0,
+                (data & UHID_INPUT_DROP) != 0,
+            );
+            match uhid.handle.send_input(data) {
+                Err(e) => log::error!(
+                    "[{}]: UHID: Fail to send hid input report. err:{}",
+                    DisplayAddress(&addr),
+                    e
+                ),
+                Ok(_) => (),
+            };
+        }
+    }
+
     fn uhid_send_hook_switch_input_report(&mut self, addr: &RawAddress, hook: bool) {
         if !self.phone_ops_enabled {
             return;
@@ -1223,22 +1236,7 @@ impl BluetoothMedia {
             if uhid.muted {
                 data |= UHID_INPUT_PHONE_MUTE;
             }
-            info!(
-                "[{}]: UHID: Send hook-switch({}) hid input report. phone_mute({})",
-                DisplayAddress(&addr),
-                hook,
-                uhid.muted
-            );
-            match uhid.handle.send_input(data) {
-                Err(e) => log::error!(
-                    "[{}]: UHID: Fail to send hook-switch({}) hid input report. phone_mute({}) err:{}",
-                    DisplayAddress(&addr),
-                    hook,
-                    uhid.muted,
-                    e
-                ),
-                Ok(_) => (),
-            };
+            self.uhid_send_input_event_report(&addr, data);
         };
     }
     fn uhid_send_phone_mute_input_report(&mut self, addr: &RawAddress, muted: bool) {
@@ -1252,25 +1250,26 @@ impl BluetoothMedia {
             if call_active {
                 data |= UHID_INPUT_HOOK_SWITCH;
             }
-            if muted {
-                data |= UHID_INPUT_PHONE_MUTE;
-            }
             info!(
                 "[{}]: UHID: Send phone_mute({}) hid input report. hook-switch({})",
                 DisplayAddress(&addr),
                 muted,
                 call_active
             );
-            match uhid.handle.send_input(data) {
-                Err(e) => log::error!(
-                    "[{}]: UHID: Fail to send phone_mute({}) hid input report. hook-switch({}) err:{}",
-                    DisplayAddress(&addr),
-                    muted,
-                    call_active,
-                    e
-                ),
-                Ok(_) => (),
-            };
+            if muted {
+                data |= UHID_INPUT_PHONE_MUTE;
+                self.uhid_send_input_event_report(&addr, data);
+            } else {
+                // We follow the same pattern as the USB headset, which sends an
+                // additional phone mute=1 event when unmuting the microphone.
+                // Based on our testing, Some applications do not respond to phone
+                // mute=0 and treat the phone mute=1 event as a toggle rather than
+                // an on off control.
+                data |= UHID_INPUT_PHONE_MUTE;
+                self.uhid_send_input_event_report(&addr, data);
+                data &= !UHID_INPUT_PHONE_MUTE;
+                self.uhid_send_input_event_report(&addr, data);
+            }
         };
     }
 
@@ -1320,8 +1319,11 @@ impl BluetoothMedia {
             } else if call_state == UHID_OUTPUT_RING {
                 self.incoming_call_impl("".into());
             } else if call_state == UHID_OUTPUT_OFF_HOOK {
-                self.dialing_call_impl("".into(), None);
-                self.answer_call_impl();
+                if self.phone_state.state == CallState::Incoming {
+                    self.answer_call_impl();
+                } else if self.phone_state.state == CallState::Idle {
+                    self.place_active_call();
+                }
                 self.uhid_send_hook_switch_input_report(&addr, true);
             }
         }
@@ -1335,15 +1337,28 @@ impl BluetoothMedia {
             }
             Some(addr) => addr,
         };
+        let uhid = match self.uhid.get_mut(&addr) {
+            Some(uhid) => uhid,
+            None => {
+                warn!("[{}]: UHID: No valid UHID", DisplayAddress(&addr));
+                return;
+            }
+        };
 
-        debug!("[{}]: UHID: Telephony use: {}", DisplayAddress(&addr), state);
-        if state == false {
-            // As there's a HID call for each WebHID call, even if it has been answered in the app
-            // or pre-exists, and that an app which disconnects from WebHID may not have trigger
-            // the UHID_OUTPUT_NONE, we need to remove all pending HID calls on telephony use
-            // release to keep lower HF layer in sync and not prevent A2DP streaming
-            self.hangup_call_impl();
-        }
+        uhid.is_open = state;
+
+        info!("[{}]: UHID: floss telephony device is open: {}", DisplayAddress(&addr), state);
+        // A hangup call is necessary both when opening and closing the UHID device,
+        // although for different reasons:
+        //  - On open: To prevent conflicts with existing SCO calls in CRAS and establish
+        //             a clean environment for Bluetooth Telephony operations.
+        //  - On close: As there's a HID call for each WebHID call, even if it has been
+        //              answered in the app or pre-exists, and that an app which disconnects
+        //              from WebHID may not have trigger the UHID_OUTPUT_NONE, we need to
+        //              remove all pending HID calls on telephony use release to keep lower
+        //              HF layer in sync and not prevent A2DP streaming.
+        self.hangup_call_impl();
+
         self.telephony_callbacks.lock().unwrap().for_all_callbacks(|callback| {
             callback.on_telephony_use(address.to_string(), state);
         });
@@ -2222,6 +2237,16 @@ impl BluetoothMedia {
         self.avrcp.as_mut().unwrap().add_player(&name, browsing_supported);
     }
 
+    // This function determines if it's safe to send a +CIEV command to an HFP device when SCO starts.
+
+    // The +CIEV command should NOT be sent if:
+    //  - MPS qualification mode is enabled, as it may cause qualification failures.
+    //  - Uhid device is open, as it may conflict with ongoing telephony operations.
+
+    // The +CIEV command is safe to send if:
+    //  - Both MPS qualification and Bluetooth telephony are disabled.
+    //  - Uhid device is closed, preventing any telephony conflicts.
+    //  - The headset is listed in interop_database.conf, indicating it requires +CIEV for audio.
     fn should_insert_call_when_sco_start(&self, address: RawAddress) -> bool {
         if self.mps_qualification_enabled {
             return false;
@@ -2229,7 +2254,43 @@ impl BluetoothMedia {
         if !self.phone_ops_enabled {
             return true;
         }
+
+        match self.uhid.get(&address) {
+            Some(uhid) => {
+                if !uhid.is_open {
+                    return true;
+                }
+            }
+            None => {
+                return true;
+            }
+        };
+
         return interop_insert_call_when_sco_start(address);
+    }
+    // Places an active call into the call list and triggers a headset update (+CIEV).
+    // Preconditions:
+    //   - No active calls in progress (phone_state.num_active == 0)
+    //   - Phone state is idle (phone_state.state == CallState::Idle)
+    fn place_active_call(&mut self) {
+        if self.phone_state.num_active != 0 {
+            warn!("Unexpected usage. phone_state.num_active can only be 0 when calling place_active_call");
+            return;
+        }
+
+        if self.phone_state.state != CallState::Idle {
+            warn!("Unexpected usage. phone_state.state can only be idle when calling place_active_call");
+            return;
+        }
+
+        self.call_list.push(CallInfo {
+            index: 1,
+            dir_incoming: false,
+            state: CallState::Active,
+            number: "".into(),
+        });
+        self.phone_state.num_active = 1;
+        self.phone_state_change("".into());
     }
 }
 
@@ -2992,13 +3053,8 @@ impl IBluetoothTelephony for BluetoothMedia {
         if self.hfp_audio_state.keys().any(|addr| self.should_insert_call_when_sco_start(*addr))
             && self.hfp_audio_state.values().any(|x| x == &BthfAudioState::Connected)
         {
-            self.call_list.push(CallInfo {
-                index: 1,
-                dir_incoming: false,
-                state: CallState::Active,
-                number: "".into(),
-            });
-            self.phone_state.num_active = 1;
+            self.place_active_call();
+            return;
         }
 
         self.phone_state_change("".into());
@@ -3022,13 +3078,8 @@ impl IBluetoothTelephony for BluetoothMedia {
         if self.hfp_audio_state.keys().any(|addr| self.should_insert_call_when_sco_start(*addr))
             && self.hfp_audio_state.values().any(|x| x == &BthfAudioState::Connected)
         {
-            self.call_list.push(CallInfo {
-                index: 1,
-                dir_incoming: false,
-                state: CallState::Active,
-                number: "".into(),
-            });
-            self.phone_state.num_active = 1;
+            self.place_active_call();
+            return;
         }
 
         self.phone_state_change("".into());

@@ -123,7 +123,7 @@ class Host(
 
         // Add all intent actions to be listened.
         val intentFilter = IntentFilter()
-        intentFilter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+        intentFilter.addAction(BluetoothAdapter.ACTION_BLE_STATE_CHANGED)
         intentFilter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
         intentFilter.addAction(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED)
         intentFilter.addAction(BluetoothDevice.ACTION_PAIRING_REQUEST)
@@ -147,7 +147,7 @@ class Host(
 
         val stateFlow =
             flow
-                .filter { it.getAction() == BluetoothAdapter.ACTION_STATE_CHANGED }
+                .filter { it.getAction() == BluetoothAdapter.ACTION_BLE_STATE_CHANGED }
                 .map { it.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR) }
 
         if (bluetoothAdapter.isEnabled) {
@@ -155,15 +155,12 @@ class Host(
             stateFlow.filter { it == BluetoothAdapter.STATE_OFF }.first()
         }
 
-        // TODO: b/234892968
-        delay(3000L)
-
         bluetoothAdapter.enable()
         stateFlow.filter { it == BluetoothAdapter.STATE_ON }.first()
     }
 
     override fun factoryReset(request: Empty, responseObserver: StreamObserver<Empty>) {
-        grpcUnary<Empty>(scope, responseObserver, 30) {
+        grpcUnary<Empty>(scope, responseObserver, timeout = 30) {
             Log.i(TAG, "factoryReset")
 
             // remove bond for each device to avoid auto connection if remote resets faster
@@ -173,7 +170,7 @@ class Host(
 
             val stateFlow =
                 flow
-                    .filter { it.getAction() == BluetoothAdapter.ACTION_STATE_CHANGED }
+                    .filter { it.getAction() == BluetoothAdapter.ACTION_BLE_STATE_CHANGED }
                     .map { it.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR) }
 
             initiatedConnection.clear()

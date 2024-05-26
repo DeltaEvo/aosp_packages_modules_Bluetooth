@@ -105,12 +105,15 @@ cc_defaults {
         host: {
             srcs: [
                 ":BluetoothHalSources_hci_host",
+                ":BluetoothHalSources_ranging_host",
                 ":BluetoothOsSources_host",
+                ":BluetoothSyspropsSources",
             ],
         },
         android: {
             srcs: [
                 ":BluetoothHalSources_hci_android_hidl",
+                ":BluetoothHalSources_ranging_android",
                 ":BluetoothOsSources_android",
             ],
             shared_libs: [
@@ -126,6 +129,7 @@ cc_defaults {
             ],
             whole_static_libs: [
                 "android.hardware.bluetooth-V1-ndk",
+                "android.hardware.bluetooth.ranging-V1-ndk",
             ],
         },
     },
@@ -142,7 +146,6 @@ cc_defaults {
         ":BluetoothPacketSources",
         ":BluetoothSecuritySources",
         ":BluetoothStorageSources",
-        ":BluetoothSyspropsSources",
         "module.cc",
         "module_dumper.cc",
         "stack_manager.cc",
@@ -175,6 +178,7 @@ cc_defaults {
         "libbluetooth_crypto_toolbox",
         "libbluetooth_log",
         "libbluetooth_rust_interop",
+        "libbt-common",
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
@@ -241,6 +245,7 @@ cc_library {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbt-common",
         "libchrome",
         "libosi",
     ],
@@ -262,6 +267,7 @@ cc_library {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbt-common",
         "libchrome",
         "libosi",
     ],
@@ -316,6 +322,7 @@ cc_binary {
         "libbluetooth_ras_pdl",
         "libbluetooth_rust_interop",
         "libbluetooth_smp_pdl",
+        "libbt-common",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libchrome",
@@ -429,11 +436,11 @@ cc_test {
             srcs: [
                 ":BluetoothHalTestSources_hci_host",
                 ":BluetoothOsTestSources_host",
+                ":BluetoothSyspropsUnitTestSources",
             ],
         },
         android: {
             srcs: [
-                ":BluetoothHalTestSources_hci_android_hidl",
                 ":BluetoothOsTestSources_android",
             ],
             static_libs: [
@@ -484,6 +491,7 @@ cc_test {
         "libbluetooth_ras_pdl",
         "libbluetooth_rust_interop",
         "libbluetooth_smp_pdl",
+        "libbt-common",
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
@@ -632,6 +640,7 @@ cc_defaults {
         "libbluetooth_gd_fuzzing",
         "libbluetooth_log",
         "libbluetooth_rust_interop",
+        "libbt-common",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libchrome",
