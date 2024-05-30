@@ -792,9 +792,9 @@ void bta_jv_free_scn(tBTA_JV_CONN_TYPE type /* One of BTA_JV_CONN_TYPE_ */,
  * Returns      void
  *
  ******************************************************************************/
-static void bta_jv_start_discovery_cback(const RawAddress& bd_addr,
-                                         tSDP_RESULT result,
-                                         const void* user_data) {
+static void bta_jv_start_discovery_cback(uint32_t rfcomm_slot_id,
+                                         const RawAddress& bd_addr,
+                                         tSDP_RESULT result) {
   if (!bta_jv_cb.sdp_cb.sdp_active) {
     log::warn(
         "Received unexpected service discovery callback bd_addr:{} result:{}",
@@ -809,7 +809,6 @@ static void bta_jv_start_discovery_cback(const RawAddress& bd_addr,
   }
 
   if (bta_jv_cb.p_dm_cback) {
-    const uint32_t rfcomm_slot_id = *static_cast<const uint32_t*>(user_data);
     tBTA_JV bta_jv = {
         .disc_comp =
             {
@@ -855,8 +854,6 @@ static void bta_jv_start_discovery_cback(const RawAddress& bd_addr,
         "result:{}",
         bd_addr, sdp_result_text(result));
   }
-  // User data memory is allocated in `bta_jv_start_discovery`
-  osi_free(const_cast<void*>(user_data));
   bta_jv_cb.sdp_cb = {};
 }
 
@@ -905,16 +902,10 @@ void bta_jv_start_discovery(const RawAddress& bd_addr, uint16_t num_uuid,
       .uuid = uuid_list[0],
   };
 
-  // NOTE: This gets freed on the callback or when discovery failed to start
-  uint32_t* rfcomm_slot_id_copy = (uint32_t*)osi_malloc(sizeof(uint32_t));
-  *rfcomm_slot_id_copy = rfcomm_slot_id;
-
-  // user_data memory is freed in `bta_jv_start_discovery_cback` callback
   if (!get_legacy_stack_sdp_api()->service.SDP_ServiceSearchAttributeRequest2(
-          bd_addr, p_bta_jv_cfg->p_sdp_db, bta_jv_start_discovery_cback,
-          (const void*)rfcomm_slot_id_copy)) {
+          bd_addr, p_bta_jv_cfg->p_sdp_db,
+          base::BindRepeating(&bta_jv_start_discovery_cback, rfcomm_slot_id))) {
     bta_jv_cb.sdp_cb = {};
-    osi_free(rfcomm_slot_id_copy);
     log::warn(
         "Unable to original service discovery bd_addr:{} num:uuid:{} "
         "rfcomm_slot_id:{}",
@@ -1381,10 +1372,10 @@ static int bta_jv_port_data_co_cback(uint16_t port_handle, uint8_t* buf,
  * Returns      void
  *
  ******************************************************************************/
-static void bta_jv_port_mgmt_cl_cback(uint32_t code, uint16_t port_handle) {
+static void bta_jv_port_mgmt_cl_cback(const tPORT_RESULT code,
+                                      uint16_t port_handle) {
   tBTA_JV_RFC_CB* p_cb = bta_jv_rfc_port_to_cb(port_handle);
   tBTA_JV_PCB* p_pcb = bta_jv_rfc_port_to_pcb(port_handle);
-  tBTA_JV evt_data;
   RawAddress rem_bda = RawAddress::kEmpty;
   uint16_t lcid;
   tBTA_JV_RFCOMM_CBACK* p_cback; /* the callback function */
@@ -1407,19 +1398,26 @@ static void bta_jv_port_mgmt_cl_cback(uint32_t code, uint16_t port_handle) {
   }
 
   if (code == PORT_SUCCESS) {
-    evt_data.rfc_open.handle = p_cb->handle;
-    evt_data.rfc_open.status = tBTA_JV_STATUS::SUCCESS;
-    evt_data.rfc_open.rem_bda = rem_bda;
+    tBTA_JV evt_data = {
+        .rfc_open =
+            {
+                .status = tBTA_JV_STATUS::SUCCESS,
+                .handle = p_cb->handle,
+                .rem_bda = rem_bda,
+            },
+    };
     p_pcb->state = BTA_JV_ST_CL_OPEN;
     p_cb->p_cback(BTA_JV_RFCOMM_OPEN_EVT, &evt_data, p_pcb->rfcomm_slot_id);
   } else {
-    evt_data.rfc_close.handle = p_cb->handle;
-    evt_data.rfc_close.status = tBTA_JV_STATUS::FAILURE;
-    evt_data.rfc_close.port_status = code;
-    evt_data.rfc_close.async = true;
-    if (p_pcb->state == BTA_JV_ST_CL_CLOSING) {
-      evt_data.rfc_close.async = false;
-    }
+    tBTA_JV evt_data = {
+        .rfc_close =
+            {
+                .status = tBTA_JV_STATUS::FAILURE,
+                .port_status = code,
+                .handle = p_cb->handle,
+                .async = (p_pcb->state == BTA_JV_ST_CL_CLOSING) ? false : true,
+            },
+    };
     // p_pcb->state = BTA_JV_ST_NONE;
     // p_pcb->cong = false;
     p_cback = p_cb->p_cback;
@@ -1597,7 +1595,8 @@ void bta_jv_rfcomm_close(uint32_t handle, uint32_t rfcomm_slot_id) {
  * Returns      void
  *
  ******************************************************************************/
-static void bta_jv_port_mgmt_sr_cback(uint32_t code, uint16_t port_handle) {
+static void bta_jv_port_mgmt_sr_cback(const tPORT_RESULT code,
+                                      uint16_t port_handle) {
   tBTA_JV_PCB* p_pcb = bta_jv_rfc_port_to_pcb(port_handle);
   tBTA_JV_RFC_CB* p_cb = bta_jv_rfc_port_to_cb(port_handle);
   tBTA_JV evt_data;
@@ -2083,9 +2082,10 @@ static void bta_jv_reset_sniff_timer(tBTA_JV_PM_CB* p_cb) {
 
 namespace bluetooth::legacy::testing {
 
-void bta_jv_start_discovery_cback(const RawAddress& bd_addr, tSDP_RESULT result,
-                                  const void* user_data) {
-  ::bta_jv_start_discovery_cback(bd_addr, result, user_data);
+void bta_jv_start_discovery_cback(uint32_t rfcomm_slot_id,
+                                  const RawAddress& bd_addr,
+                                  tSDP_RESULT result) {
+  ::bta_jv_start_discovery_cback(rfcomm_slot_id, bd_addr, result);
 }
 
 }  // namespace bluetooth::legacy::testing

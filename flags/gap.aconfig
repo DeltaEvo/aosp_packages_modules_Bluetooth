@@ -178,16 +178,6 @@ flag {
 }
 
 flag {
-    name: "gatt_server_add_handler_to_run_callbacks_on"
-    namespace: "bluetooth"
-    description: "Make BluetoothGattServer able to run callbacks on specified Handler"
-    bug: "333332161"
-    metadata {
-        purpose: PURPOSE_BUGFIX
-    }
-}
-
-flag {
     name: "gatt_rediscover_on_canceled"
     namespace: "bluetooth"
     description: "Re-initiate discovery if the previous discovery is canceled for multiple GATT clients"
@@ -202,6 +192,16 @@ flag {
     namespace: "bluetooth"
     description: "Use uid instead of the first package name for fetching the importance of clients"
     bug: "336965663"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "sec_dont_clear_keys_on_encryption_err"
+    namespace: "bluetooth"
+    description: "Do not clear security record on encryption error"
+    bug: "342521414"
     metadata {
         purpose: PURPOSE_BUGFIX
     }

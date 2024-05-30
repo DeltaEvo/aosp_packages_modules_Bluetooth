@@ -25,6 +25,7 @@
 
 #define LOG_TAG "bt_bta_gattc"
 
+#include <base/functional/bind.h>
 #include <base/strings/string_number_conversions.h>
 #include <base/strings/stringprintf.h>
 #include <bluetooth/log.h>
@@ -205,9 +206,8 @@ RobustCachingSupport GetRobustCachingSupport(const tBTA_GATTC_CLCB* p_clcb,
 }
 
 /** Start primary service discovery */
-tGATT_STATUS bta_gattc_discover_pri_service(uint16_t conn_id,
-                                            tBTA_GATTC_SERV* p_server_cb,
-                                            tGATT_DISC_TYPE disc_type) {
+[[nodiscard]] tGATT_STATUS bta_gattc_discover_pri_service(
+    uint16_t conn_id, tBTA_GATTC_SERV* p_server_cb, tGATT_DISC_TYPE disc_type) {
   tBTA_GATTC_CLCB* p_clcb = bta_gattc_find_clcb_by_conn_id(conn_id);
   if (!p_clcb) return GATT_ERROR;
 
@@ -235,7 +235,10 @@ static void bta_gattc_explore_next_service(uint16_t conn_id,
     log::verbose("Start service discovery");
 
     /* start discovering included services */
-    GATTC_Discover(conn_id, GATT_DISC_INC_SRVC, service.first, service.second);
+    if (GATTC_Discover(conn_id, GATT_DISC_INC_SRVC, service.first,
+                       service.second) != GATT_SUCCESS) {
+      log::warn("Unable to discover GATT client conn_id:{}", conn_id);
+    }
     return;
   }
   // No more services to discover
@@ -252,7 +255,10 @@ static void bta_gattc_explore_next_service(uint16_t conn_id,
     if (p_srvc_cb->read_multiple_not_supported || descriptors.size() == 1) {
       tGATT_READ_PARAM read_param{.by_handle = {.auth_req = GATT_AUTH_REQ_NONE,
                                                 .handle = descriptors.front()}};
-      GATTC_Read(conn_id, GATT_READ_BY_HANDLE, &read_param);
+      if (GATTC_Read(conn_id, GATT_READ_BY_HANDLE, &read_param) !=
+          GATT_SUCCESS) {
+        log::warn("Unable to read GATT client conn_id:{}", conn_id);
+      }
       // asynchronous continuation in bta_gattc_op_cmpl_during_discovery
       return;
     }
@@ -271,7 +277,9 @@ static void bta_gattc_explore_next_service(uint16_t conn_id,
     read_param.read_multiple.auth_req = GATT_AUTH_REQ_NONE;
     memcpy(&read_param.read_multiple.handles, descriptors.data(),
            sizeof(uint16_t) * num_handles);
-    GATTC_Read(conn_id, GATT_READ_MULTIPLE, &read_param);
+    if (GATTC_Read(conn_id, GATT_READ_MULTIPLE, &read_param) != GATT_SUCCESS) {
+      log::warn("Unable to read GATT client conn_id:{}", conn_id);
+    }
 
     // asynchronous continuation in bta_gattc_op_cmpl_during_discovery
     return;
@@ -330,7 +338,7 @@ void bta_gattc_start_disc_char_dscp(uint16_t conn_id,
   }
 
   if (GATTC_Discover(conn_id, GATT_DISC_CHAR_DSCPT, range.first,
-                     range.second) != 0) {
+                     range.second) != GATT_SUCCESS) {
     goto descriptor_discovery_done;
   }
   return;
@@ -342,9 +350,9 @@ descriptor_discovery_done:
 }
 
 /* Process the discovery result from sdp */
-void bta_gattc_sdp_callback(const RawAddress& /* bd_addr */,
-                            tSDP_STATUS sdp_status, const void* user_data) {
-  tBTA_GATTC_CB_DATA* cb_data = (tBTA_GATTC_CB_DATA*)user_data;
+void bta_gattc_sdp_callback(tBTA_GATTC_CB_DATA* cb_data,
+                            const RawAddress& /* bd_addr */,
+                            tSDP_STATUS sdp_status) {
   tBTA_GATTC_SERV* p_srvc_cb = bta_gattc_find_scb_by_cid(cb_data->sdp_conn_id);
 
   if (p_srvc_cb == nullptr) {
@@ -440,8 +448,8 @@ static tGATT_STATUS bta_gattc_sdp_service_disc(uint16_t conn_id,
   };
 
   if (!get_legacy_stack_sdp_api()->service.SDP_ServiceSearchAttributeRequest2(
-          p_server_cb->server_bda, cb_data->p_sdp_db, &bta_gattc_sdp_callback,
-          const_cast<const void*>(static_cast<void*>(cb_data)))) {
+          p_server_cb->server_bda, cb_data->p_sdp_db,
+          base::BindRepeating(bta_gattc_sdp_callback, cb_data))) {
     log::warn("Unable to start SDP service search attribute request peer:{}",
               p_server_cb->server_bda);
     osi_free(cb_data);
@@ -556,7 +564,10 @@ void bta_gattc_disc_cmpl_cback(uint16_t conn_id, tGATT_DISC_TYPE disc_type,
     case GATT_DISC_INC_SRVC: {
       auto& service = p_srvc_cb->pending_discovery.CurrentlyExploredService();
       /* start discovering characteristic */
-      GATTC_Discover(conn_id, GATT_DISC_CHAR, service.first, service.second);
+      if (GATTC_Discover(conn_id, GATT_DISC_CHAR, service.first,
+                         service.second) != GATT_SUCCESS) {
+        log::warn("Unable to discover GATT client conn_id:{}", conn_id);
+      }
       break;
     }
 

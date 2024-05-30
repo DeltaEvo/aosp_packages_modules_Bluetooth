@@ -1263,7 +1263,14 @@ void BTM_PasskeyReqReply(tBTM_STATUS res, const RawAddress& bd_addr,
  *                  LM
  *
  ******************************************************************************/
-void BTM_ReadLocalOobData(void) { btsnd_hcic_read_local_oob_data(); }
+void BTM_ReadLocalOobData(void) {
+  if (com::android::bluetooth::flags::use_local_oob_extended_command() &&
+      bluetooth::shim::GetController()->SupportsSecureConnections()) {
+    btsnd_hcic_read_local_oob_extended_data();
+  } else {
+    btsnd_hcic_read_local_oob_data();
+  }
+}
 
 /*******************************************************************************
  *
@@ -2052,7 +2059,7 @@ void btm_sec_dev_reset(void) {
                    "only controllers with SSP is supported");
 
   /* set the default IO capabilities */
-  btm_sec_cb.devcb.loc_io_caps = btif_storage_get_local_io_caps();
+  btm_sec_cb.devcb.loc_io_caps = BTM_IO_CAP_IO;
   /* add mx service to use no security */
   BTM_SetSecurityLevel(false, "RFC_MUX", BTM_SEC_SERVICE_RFC_MUX,
                        BTM_SEC_NONE, BT_PSM_RFCOMM, BTM_SEC_PROTO_RFCOMM, 0);
@@ -3264,8 +3271,14 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
   if (transport == BT_TRANSPORT_LE) {
     if (status == HCI_ERR_KEY_MISSING || status == HCI_ERR_AUTH_FAILURE ||
         status == HCI_ERR_ENCRY_MODE_NOT_ACCEPTABLE) {
-      p_dev_rec->sec_rec.sec_flags &= ~(BTM_SEC_LE_LINK_KEY_KNOWN);
-      p_dev_rec->sec_rec.ble_keys.key_type = BTM_LE_KEY_NONE;
+      if (com::android::bluetooth::flags::
+              sec_dont_clear_keys_on_encryption_err()) {
+        log::error("{} encrypt failure status 0x{:x}", p_dev_rec->bd_addr,
+                   status);
+      } else {
+        p_dev_rec->sec_rec.sec_flags &= ~(BTM_SEC_LE_LINK_KEY_KNOWN);
+        p_dev_rec->sec_rec.ble_keys.key_type = BTM_LE_KEY_NONE;
+      }
     }
     p_dev_rec->sec_rec.sec_status = status;
     btm_ble_link_encrypted(p_dev_rec->ble.pseudo_addr, encr_enable);
