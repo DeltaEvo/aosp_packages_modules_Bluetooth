@@ -4,7 +4,13 @@ package pandora;
 
 option java_outer_classname = "HidProto";
 
+import "google/protobuf/empty.proto";
+
 service HID {
+  // Connect HID Host
+  rpc ConnectHost(google.protobuf.Empty) returns (google.protobuf.Empty);
+  // Disconnect HID Host
+  rpc DisconnectHost(google.protobuf.Empty) returns (google.protobuf.Empty);
   // Send a SET_REPORT command, acting as a HID host, to a connected HID device
   rpc SendHostReport(SendHostReportRequest) returns (SendHostReportResponse);
 }
