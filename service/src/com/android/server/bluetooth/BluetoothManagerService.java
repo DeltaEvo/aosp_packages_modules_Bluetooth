@@ -127,36 +127,25 @@ class BluetoothManagerService {
     private static final int ACTIVE_LOG_MAX_SIZE = 20;
     private static final int CRASH_LOG_MAX_SIZE = 100;
 
+    // See android.os.Build.HW_TIMEOUT_MULTIPLIER. This should not be set on real hw
+    private static final int HW_MULTIPLIER = SystemProperties.getInt("ro.hw_timeout_multiplier", 1);
+
     // Maximum msec to wait for a bind
-    private static final int TIMEOUT_BIND_MS =
-            3000 * SystemProperties.getInt("ro.hw_timeout_multiplier", 1);
+    private static final int TIMEOUT_BIND_MS = 4000 * HW_MULTIPLIER;
 
     // Timeout value for synchronous binder call
-    private static final Duration SYNC_CALLS_TIMEOUT =
-            Duration.ofSeconds(3 * SystemProperties.getInt("ro.hw_timeout_multiplier", 1));
-
-    /**
-     * @return timeout value for synchronous binder call
-     */
-    private static Duration getSyncTimeout() {
-        return SYNC_CALLS_TIMEOUT;
-    }
+    private static final Duration STATE_TIMEOUT = Duration.ofSeconds(4 * HW_MULTIPLIER);
 
     // Maximum msec to wait for service restart
-    private static final int SERVICE_RESTART_TIME_MS =
-            400 * SystemProperties.getInt("ro.hw_timeout_multiplier", 1);
+    private static final int SERVICE_RESTART_TIME_MS = 400 * HW_MULTIPLIER;
     // Maximum msec to wait for restart due to error
-    private static final int ERROR_RESTART_TIME_MS =
-            3000 * SystemProperties.getInt("ro.hw_timeout_multiplier", 1);
+    private static final int ERROR_RESTART_TIME_MS = 3000 * HW_MULTIPLIER;
     // Maximum msec to delay MESSAGE_USER_SWITCHED
-    private static final int USER_SWITCHED_TIME_MS =
-            200 * SystemProperties.getInt("ro.hw_timeout_multiplier", 1);
+    private static final int USER_SWITCHED_TIME_MS = 200 * HW_MULTIPLIER;
     // Delay for the addProxy function in msec
-    private static final int ADD_PROXY_DELAY_MS =
-            100 * SystemProperties.getInt("ro.hw_timeout_multiplier", 1);
+    private static final int ADD_PROXY_DELAY_MS = 100 * HW_MULTIPLIER;
     // Delay for retrying enable and disable in msec
-    private static final int ENABLE_DISABLE_DELAY_MS =
-            300 * SystemProperties.getInt("ro.hw_timeout_multiplier", 1);
+    private static final int ENABLE_DISABLE_DELAY_MS = 300 * HW_MULTIPLIER;
 
     @VisibleForTesting static final int MESSAGE_ENABLE = 1;
     @VisibleForTesting static final int MESSAGE_DISABLE = 2;
@@ -274,8 +263,7 @@ class BluetoothManagerService {
     private boolean mEnableExternal = false;
 
     // Map of apps registered to keep BLE scanning on.
-    private Map<IBinder, ClientDeathRecipient> mBleApps =
-            new ConcurrentHashMap<IBinder, ClientDeathRecipient>();
+    private Map<IBinder, ClientDeathRecipient> mBleApps = new ConcurrentHashMap<>();
 
     private final BluetoothAdapterState mState = new BluetoothAdapterState();
 
@@ -630,7 +618,11 @@ class BluetoothManagerService {
         mHandler = new BluetoothHandler(mLooper);
 
         // Observe BLE scan only mode settings change.
-        registerForBleScanModeChange();
+        if (Flags.respectBleScanSetting()) {
+            BleScanSettingListener.initialize(mLooper, mContentResolver, this::onBleScanDisabled);
+        } else {
+            registerForBleScanModeChange();
+        }
 
         // Disable ASHA if BLE is not supported, overriding any system property
         if (!isBleSupported(mContext)) {
@@ -701,6 +693,30 @@ class BluetoothManagerService {
                 Counter.logIncrement("bluetooth.value_auto_on_supported");
             }
         }
+    }
+
+    private Unit onBleScanDisabled() {
+        if (mState.oneOf(STATE_OFF, STATE_BLE_TURNING_OFF)) {
+            Log.i(TAG, "onBleScanDisabled: Nothing to do, Bluetooth is already turning off");
+            return Unit.INSTANCE;
+        }
+        clearBleApps();
+        try {
+            mAdapter.unregAllGattClient(mContext.getAttributionSource());
+        } catch (RemoteException e) {
+            Log.e(TAG, "onBleScanDisabled: unregAllGattClient failed", e);
+        }
+        if (mState.oneOf(STATE_BLE_ON)) {
+            Log.i(TAG, "onBleScanDisabled: Shutting down BLE_ON mode");
+            try {
+                mAdapter.stopBle(mContext.getAttributionSource());
+            } catch (RemoteException e) {
+                Log.e(TAG, "onBleScanDisabled: stopBle failed", e);
+            }
+        } else {
+            Log.i(TAG, "onBleScanDisabled: Bluetooth is not in BLE_ON, staying on");
+        }
+        return Unit.INSTANCE;
     }
 
     IBluetoothManager.Stub getBinder() {
@@ -885,6 +901,12 @@ class BluetoothManagerService {
                 return false;
             }
         }
+        if (Flags.respectBleScanSetting()) {
+            if (SatelliteModeListener.isOn()) {
+                return false;
+            }
+            return BleScanSettingListener.isScanAllowed();
+        }
         try {
             return Settings.Global.getInt(
                             mContentResolver, Settings.Global.BLE_SCAN_ALWAYS_AVAILABLE)
@@ -1003,6 +1025,11 @@ class BluetoothManagerService {
             return false;
         }
 
+        if (Flags.respectBleScanSetting() && !BleScanSettingListener.isScanAllowed()) {
+            Log.d(TAG, "enableBle: not enabling - Scan mode is not allowed.");
+            return false;
+        }
+
         // TODO(b/262605980): enableBle/disableBle should be on handler thread
         updateBleAppCount(token, true, packageName);
 
@@ -1030,7 +1057,8 @@ class BluetoothManagerService {
                         + (" isBinding=" + isBinding())
                         + (" mState=" + mState));
 
-        if (isSatelliteModeOn()) {
+        // Remove this with flag, preventing a "disable" make no sense, even in satellite mode
+        if (!Flags.respectBleScanSetting() && isSatelliteModeOn()) {
             Log.d(TAG, "disableBle: not disabling - satellite mode is on.");
             return false;
         }
@@ -1111,7 +1139,9 @@ class BluetoothManagerService {
             }
             boolean airplaneDoesNotAllowBleOn =
                     Flags.airplaneModeXBleOn() && AirplaneModeListener.isOn();
-            if (!airplaneDoesNotAllowBleOn && isBleAppPresent()) {
+            boolean scanIsAllowed =
+                    !Flags.respectBleScanSetting() || BleScanSettingListener.isScanAllowed();
+            if (!airplaneDoesNotAllowBleOn && isBleAppPresent() && scanIsAllowed) {
                 // Need to stay at BLE ON. Disconnect all Gatt connections
                 Log.i(TAG, "sendBrEdrDownCallback: Staying in BLE_ON");
                 mAdapter.unregAllGattClient(mContext.getAttributionSource());
@@ -2106,11 +2136,11 @@ class BluetoothManagerService {
     }
 
     boolean waitForManagerState(int state) {
-        return mState.waitForState(getSyncTimeout(), state);
+        return mState.waitForState(STATE_TIMEOUT, state);
     }
 
     private boolean waitForState(int... states) {
-        return mState.waitForState(getSyncTimeout(), states);
+        return mState.waitForState(STATE_TIMEOUT, states);
     }
 
     private void sendDisableMsg(int reason) {

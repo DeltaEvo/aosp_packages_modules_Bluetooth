@@ -82,19 +82,29 @@ int port_open_continue(tPORT* p_port) {
   /* Connection is up and we know local and remote features, select MTU */
   port_select_mtu(p_port);
 
-  if (p_mcb->state == RFC_MX_STATE_CONNECTED) {
-    RFCOMM_ParameterNegotiationRequest(p_mcb, p_port->dlci, p_port->mtu);
-  } else if ((p_mcb->state == RFC_MX_STATE_IDLE) ||
-             (p_mcb->state == RFC_MX_STATE_DISC_WAIT_UA)) {
-    // In RFC_MX_STATE_IDLE state, MX state machine will create connection
-    // In RFC_MX_STATE_DISC_WAIT_UA state, MX state machine will recreate
-    // connection after disconnecting is completed
-    RFCOMM_StartReq(p_mcb);
-  } else {
-    // MX state machine ignores RFC_MX_EVENT_START_REQ in these states
-    // When it enters RFC_MX_STATE_CONNECTED, it will check any openning ports
-    log::verbose("port_open_continue: mx state({}) mx channel is opening",
-                 p_mcb->state);
+  switch (p_mcb->state) {
+    case RFC_MX_STATE_CONNECTED:
+      RFCOMM_ParameterNegotiationRequest(p_mcb, p_port->dlci, p_port->mtu);
+      log::verbose("Multiplexer already connected peer:{} state:{} cid:{}",
+                   p_port->bd_addr, p_mcb->state, p_mcb->lcid);
+      break;
+
+    case RFC_MX_STATE_IDLE:
+    case RFC_MX_STATE_DISC_WAIT_UA:
+      // In RFC_MX_STATE_IDLE state, MX state machine will create connection
+      // In RFC_MX_STATE_DISC_WAIT_UA state, MX state machine will recreate
+      // connection after disconnecting is completed
+      RFCOMM_StartReq(p_mcb);
+      log::verbose("Starting multiplexer connect peer:{} state:{} cid:{}",
+                   p_port->bd_addr, p_mcb->state, p_mcb->lcid);
+      break;
+
+    default:
+      // MX state machine ignores RFC_MX_EVENT_START_REQ in these states
+      // When it enters RFC_MX_STATE_CONNECTED, it will check any opening ports
+      log::verbose("Ignoring RFC_MX_EVENT_START_REQ peer:{} state:{} cid:{}",
+                   p_port->bd_addr, p_mcb->state, p_mcb->lcid);
+      break;
   }
   return (PORT_SUCCESS);
 }
@@ -204,15 +214,8 @@ void PORT_StartCnf(tRFC_MCB* p_mcb, uint16_t result) {
         log::verbose("dlci {}", p_port->dlci);
         RFCOMM_ParameterNegotiationRequest(p_mcb, p_port->dlci, p_port->mtu);
       } else {
-        log::warn("failed result:{}", result);
-
-        /* Warning: result is also set to 4 when l2cap connection
-           fails due to l2cap connect cnf (no_resources) */
-        if (result == HCI_ERR_PAGE_TIMEOUT) {
-          p_port->error = PORT_PAGE_TIMEOUT;
-        } else {
-          p_port->error = PORT_START_FAILED;
-        }
+        log::warn("Unable start configuration dlci:{} result:{}", p_port->dlci,
+                  result);
 
         rfc_release_multiplexer_channel(p_mcb);
 
@@ -472,7 +475,8 @@ void PORT_DlcEstablishCnf(tRFC_MCB* p_mcb, uint8_t dlci, uint16_t mtu,
   if (!p_port) return;
 
   if (result != RFCOMM_SUCCESS) {
-    p_port->error = PORT_START_FAILED;
+    log::warn("Unable to establish configuration dlci:{} result:{}", dlci,
+              result);
     port_rfc_closed(p_port, PORT_START_FAILED);
     log_counter_metrics(
         android::bluetooth::CodePathCounterKeyEnum::RFCOMM_PORT_START_FAILED,
@@ -559,8 +563,7 @@ void PORT_PortNegCnf(tRFC_MCB* p_mcb, uint8_t dlci, tPORT_STATE* /* p_pars */,
   }
   /* Port negotiation failed. Drop the connection */
   if (result != RFCOMM_SUCCESS) {
-    p_port->error = PORT_PORT_NEG_FAILED;
-
+    log::warn("Unable to negotiate port state dlci:{} result:{}", dlci, result);
     RFCOMM_DlcReleaseReq(p_mcb, p_port->dlci);
 
     port_rfc_closed(p_port, PORT_PORT_NEG_FAILED);
@@ -1014,7 +1017,11 @@ void port_rfc_closed(tPORT* p_port, uint8_t res) {
   if ((p_port->p_callback != NULL) && events)
     p_port->p_callback(events, p_port->handle);
 
-  if (p_port->p_mgmt_callback) p_port->p_mgmt_callback(res, p_port->handle);
+  if (p_port->p_mgmt_callback) {
+    uint32_t res2 = res;
+    if (res2 >= PORT_ERR_MAX) res2 = PORT_ERR_MAX;
+    p_port->p_mgmt_callback(static_cast<tPORT_RESULT>(res2), p_port->handle);
+  }
 
   p_port->rfc.state = RFC_STATE_CLOSED;
 
