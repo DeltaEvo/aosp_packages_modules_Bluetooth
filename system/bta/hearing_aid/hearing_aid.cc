@@ -1100,7 +1100,17 @@ class HearingAidImpl : public HearingAid {
                              : BTM_SEC_SERVICE_HEARING_AID_RIGHT;
     uint16_t gap_handle = GAP_ConnOpen(
         "", service_id, false, &hearingDevice->address, psm, 514 /* MPS */,
-        &cfg_info, nullptr, BTM_SEC_NONE /* TODO: request security ? */,
+        &cfg_info, nullptr,
+        /// b/309483354:
+        /// Encryption needs to be explicitly requested at channel
+        /// establishment even though validation is performed in this module
+        /// because of re-connection logic present in the L2CAP module.
+        /// The L2CAP will automatically reconnect the LE-ACL link on
+        /// disconnection when there is a pending channel request,
+        /// which invalidates all encryption checks performed here.
+        com::android::bluetooth::flags::asha_asrc()
+            ? BTM_SEC_IN_ENCRYPT | BTM_SEC_OUT_ENCRYPT
+            : BTM_SEC_NONE,
         HearingAidImpl::GapCallbackStatic, BT_TRANSPORT_LE);
 
     if (gap_handle == GAP_INVALID_HANDLE) {
