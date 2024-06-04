@@ -584,9 +584,10 @@ void L2CA_DeregisterLECoc(uint16_t psm);
  *                  L2CAP_DW_FAILED, if error
  *
  ******************************************************************************/
-[[nodiscard]] uint8_t L2CA_DataWrite(uint16_t cid, BT_HDR* p_data);
+[[nodiscard]] tL2CAP_DW_RESULT L2CA_DataWrite(uint16_t cid, BT_HDR* p_data);
 
-[[nodiscard]] uint8_t L2CA_LECocDataWrite(uint16_t cid, BT_HDR* p_data);
+[[nodiscard]] tL2CAP_DW_RESULT L2CA_LECocDataWrite(uint16_t cid,
+                                                   BT_HDR* p_data);
 
 /*******************************************************************************
  *
@@ -809,9 +810,9 @@ typedef struct {
  *                  L2CAP_DW_FAILED,  if error
  *
  ******************************************************************************/
-[[nodiscard]] uint16_t L2CA_SendFixedChnlData(uint16_t fixed_cid,
-                                              const RawAddress& rem_bda,
-                                              BT_HDR* p_buf);
+[[nodiscard]] tL2CAP_DW_RESULT L2CA_SendFixedChnlData(uint16_t fixed_cid,
+                                                      const RawAddress& rem_bda,
+                                                      BT_HDR* p_buf);
 
 /*******************************************************************************
  *

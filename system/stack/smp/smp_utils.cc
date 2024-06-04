@@ -351,7 +351,7 @@ void smp_log_metrics(const RawAddress& bd_addr, bool is_outgoing,
  *
  ******************************************************************************/
 bool smp_send_msg_to_L2CAP(const RawAddress& rem_bda, BT_HDR* p_toL2CAP) {
-  uint16_t l2cap_ret;
+  tL2CAP_DW_RESULT l2cap_ret;
   uint16_t fixed_cid = L2CAP_SMP_CID;
 
   if (smp_cb.smp_over_br) {
