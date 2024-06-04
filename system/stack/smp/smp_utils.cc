@@ -368,7 +368,7 @@ bool smp_send_msg_to_L2CAP(const RawAddress& rem_bda, BT_HDR* p_toL2CAP) {
     /* Unacked needs to be incremented before calling SendFixedChnlData */
     smp_cb.total_tx_unacked++;
     l2cap_ret = L2CA_SendFixedChnlData(fixed_cid, rem_bda, p_toL2CAP);
-    if (l2cap_ret == tL2CAP_DW_RESULT::L2CAP_DW_FAILED) {
+    if (l2cap_ret == tL2CAP_DW_RESULT::FAILED) {
       smp_cb.total_tx_unacked--;
       log::error("SMP failed to pass msg to L2CAP");
       return false;
@@ -378,7 +378,7 @@ bool smp_send_msg_to_L2CAP(const RawAddress& rem_bda, BT_HDR* p_toL2CAP) {
   }
 
   l2cap_ret = L2CA_SendFixedChnlData(fixed_cid, rem_bda, p_toL2CAP);
-  if (l2cap_ret == tL2CAP_DW_RESULT::L2CAP_DW_FAILED) {
+  if (l2cap_ret == tL2CAP_DW_RESULT::FAILED) {
     log::error("SMP failed to pass msg to L2CAP");
     return false;
   } else {

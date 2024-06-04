@@ -53,9 +53,9 @@
 
 /* result code for L2CA_DataWrite() */
 enum class tL2CAP_DW_RESULT : uint8_t {
-  L2CAP_DW_FAILED = 0,
-  L2CAP_DW_SUCCESS = 1,
-  L2CAP_DW_CONGESTED = 2,
+  FAILED = 0,
+  SUCCESS = 1,
+  CONGESTED = 2,
 };
 
 /* Values for priority parameter to L2CA_SetAclPriority */

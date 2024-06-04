@@ -89,7 +89,7 @@ static void hidd_check_config_done() {
     // send outstanding data on intr
     if (hd_cb.pending_data) {
       if (L2CA_DataWrite(p_hcon->intr_cid, hd_cb.pending_data) !=
-          tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS) {
+          tL2CAP_DW_RESULT::SUCCESS) {
         log::warn("Unable to write L2CAP data cid:{} len:{}", p_hcon->intr_cid,
                   hd_cb.pending_data->len);
       }
@@ -822,7 +822,7 @@ tHID_STATUS hidd_conn_send_data(uint8_t channel, uint8_t msg_type,
 
   log::verbose("report sent");
 
-  if (L2CA_DataWrite(cid, p_buf) == tL2CAP_DW_RESULT::L2CAP_DW_FAILED) {
+  if (L2CA_DataWrite(cid, p_buf) == tL2CAP_DW_RESULT::FAILED) {
     log_counter_metrics(android::bluetooth::CodePathCounterKeyEnum::
                             HIDD_ERR_CONGESTED_AT_DATA_WRITE,
                         1);

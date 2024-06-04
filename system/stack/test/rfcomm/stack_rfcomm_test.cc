@@ -179,7 +179,7 @@ class StackRfcommTest : public Test {
     BT_HDR* ua_channel_0 = AllocateWrappedOutgoingL2capAclPacket(
         CreateQuickUaPacket(RFCOMM_MX_DLCI, lcid, acl_handle));
     EXPECT_CALL(l2cap_interface_, DataWrite(lcid, BtHdrEqual(ua_channel_0)))
-        .WillOnce(Return(tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS));
+        .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
     // Packet should be freed by RFCOMM
     l2cap_appl_info_.pL2CA_DataInd_Cb(lcid, sabm_channel_0);
     osi_free(ua_channel_0);
@@ -200,7 +200,7 @@ class StackRfcommTest : public Test {
                             lcid, acl_handle));
     EXPECT_CALL(l2cap_interface_,
                 DataWrite(lcid, BtHdrEqual(uih_pn_rsp_to_peer)))
-        .WillOnce(Return(tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS));
+        .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
     // uih_pn_cmd_from_peer should be freed by this method
     l2cap_appl_info_.pL2CA_DataInd_Cb(lcid, uih_pn_cmd_from_peer);
     osi_free(uih_pn_rsp_to_peer);
@@ -228,7 +228,7 @@ class StackRfcommTest : public Test {
     BT_HDR* ua_channel_dlci = AllocateWrappedOutgoingL2capAclPacket(
         CreateQuickUaPacket(GetDlci(false, scn), lcid, acl_handle));
     EXPECT_CALL(l2cap_interface_, DataWrite(lcid, BtHdrEqual(ua_channel_dlci)))
-        .WillOnce(Return(tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS));
+        .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
     ASSERT_TRUE(security_callback);
     security_callback(peer_addr, BT_TRANSPORT_BR_EDR, p_port, BTM_SUCCESS);
     osi_free(ua_channel_dlci);
@@ -244,13 +244,13 @@ class StackRfcommTest : public Test {
     // We also have to do modem configuration ourself
     EXPECT_CALL(l2cap_interface_,
                 DataWrite(lcid, BtHdrEqual(uih_msc_response_to_peer)))
-        .WillOnce(Return(tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS));
+        .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
     BT_HDR* uih_msc_cmd_to_peer = AllocateWrappedOutgoingL2capAclPacket(
         CreateQuickMscPacket(false, GetDlci(false, scn), lcid, acl_handle, true,
                              false, true, true, false, true));
     EXPECT_CALL(l2cap_interface_,
                 DataWrite(lcid, BtHdrEqual(uih_msc_cmd_to_peer)))
-        .WillOnce(Return(tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS));
+        .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
     // uih_msc_cmd_from_peer should be freed by this method
     l2cap_appl_info_.pL2CA_DataInd_Cb(lcid, uih_msc_cmd_from_peer);
     osi_free(uih_msc_response_to_peer);
@@ -281,7 +281,7 @@ class StackRfcommTest : public Test {
     } else {
       EXPECT_CALL(l2cap_interface_,
                   DataWrite(lcid, BtHdrEqual(uih_pn_channel_3)))
-          .WillOnce(Return(tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS));
+          .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
     }
     ASSERT_EQ(RFCOMM_CreateConnectionWithSecurity(uuid, scn, false, mtu,
                                                   peer_bd_addr, client_handle,
@@ -317,7 +317,7 @@ class StackRfcommTest : public Test {
     BT_HDR* sabm_channel_0 = AllocateWrappedOutgoingL2capAclPacket(
         CreateQuickSabmPacket(RFCOMM_MX_DLCI, lcid, acl_handle));
     EXPECT_CALL(l2cap_interface_, DataWrite(lcid, BtHdrEqual(sabm_channel_0)))
-        .WillOnce(Return(tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS));
+        .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
     l2cap_appl_info_.pL2CA_ConfigInd_Cb(lcid, &cfg_req);
     osi_free(sabm_channel_0);
   }
@@ -340,7 +340,7 @@ class StackRfcommTest : public Test {
               RFCOMM_K_MAX, lcid, acl_handle));
       EXPECT_CALL(l2cap_interface_,
                   DataWrite(lcid, BtHdrEqual(uih_pn_channel_3)))
-          .WillOnce(Return(tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS));
+          .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
       l2cap_appl_info_.pL2CA_DataInd_Cb(lcid, ua_channel_0);
       osi_free(uih_pn_channel_3);
     }
@@ -367,7 +367,7 @@ class StackRfcommTest : public Test {
     BT_HDR* sabm_channel_3 = AllocateWrappedOutgoingL2capAclPacket(
         CreateQuickSabmPacket(GetDlci(false, scn), lcid, acl_handle));
     EXPECT_CALL(l2cap_interface_, DataWrite(lcid, BtHdrEqual(sabm_channel_3)))
-        .WillOnce(Return(tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS));
+        .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
     ASSERT_TRUE(security_callback);
     security_callback(peer_addr, BT_TRANSPORT_BR_EDR, p_port, BTM_SUCCESS);
     osi_free(sabm_channel_3);
@@ -382,7 +382,7 @@ class StackRfcommTest : public Test {
         CreateQuickMscPacket(true, GetDlci(false, scn), lcid, acl_handle, true,
                              false, true, true, false, true));
     EXPECT_CALL(l2cap_interface_, DataWrite(lcid, BtHdrEqual(uih_msc_cmd)))
-        .WillOnce(Return(tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS));
+        .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
     BT_HDR* ua_channel_3 = AllocateWrappedIncomingL2capAclPacket(
         CreateQuickUaPacket(GetDlci(false, scn), lcid, acl_handle));
     l2cap_appl_info_.pL2CA_DataInd_Cb(lcid, ua_channel_3);
@@ -405,7 +405,7 @@ class StackRfcommTest : public Test {
                              false, true, true, false, true));
     EXPECT_CALL(l2cap_interface_,
                 DataWrite(lcid, BtHdrEqual(uih_msc_response_to_peer)))
-        .WillOnce(Return(tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS));
+        .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
     l2cap_appl_info_.pL2CA_DataInd_Cb(lcid, uih_msc_cmd_from_peer);
     osi_free(uih_msc_response_to_peer);
   }
@@ -421,7 +421,7 @@ class StackRfcommTest : public Test {
                               credits, message));
     uint16_t transmitted_length = 0;
     EXPECT_CALL(l2cap_interface_, DataWrite(lcid, BtHdrEqual(data_packet)))
-        .WillOnce(Return(tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS));
+        .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
     ASSERT_EQ(PORT_WriteData(port_handle, message.data(), message.size(),
                              &transmitted_length),
               PORT_SUCCESS);
@@ -795,7 +795,7 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
   BT_HDR* ua_channel_0 = AllocateWrappedOutgoingL2capAclPacket(
       CreateQuickUaPacket(RFCOMM_MX_DLCI, new_lcid, acl_handle));
   EXPECT_CALL(l2cap_interface_, DataWrite(new_lcid, BtHdrEqual(ua_channel_0)))
-      .WillOnce(Return(tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS));
+      .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
   // And immediately try to configure test_peer_scn
   BT_HDR* uih_pn_cmd_to_peer = AllocateWrappedOutgoingL2capAclPacket(
       CreateQuickPnPacket(false, GetDlci(true, test_peer_scn), true, test_mtu,
@@ -803,7 +803,7 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
                           new_lcid, acl_handle));
   EXPECT_CALL(l2cap_interface_,
               DataWrite(new_lcid, BtHdrEqual(uih_pn_cmd_to_peer)))
-      .WillOnce(Return(tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS));
+      .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
   // Packet should be freed by this method
   l2cap_appl_info_.pL2CA_DataInd_Cb(new_lcid, sabm_channel_0);
   osi_free(ua_channel_0);
@@ -823,7 +823,7 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
   EXPECT_CALL(l2cap_interface_,
               DataWrite(new_lcid, BtHdrEqual(uih_pn_rsp_to_peer)))
       .Times(1)
-      .WillOnce(Return(tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS));
+      .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
   l2cap_appl_info_.pL2CA_DataInd_Cb(new_lcid, uih_pn_cmd_from_peer);
   osi_free(uih_pn_rsp_to_peer);
 
@@ -851,7 +851,7 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
       AllocateWrappedOutgoingL2capAclPacket(CreateQuickUaPacket(
           GetDlci(false, test_server_scn), new_lcid, acl_handle));
   EXPECT_CALL(l2cap_interface_, DataWrite(new_lcid, BtHdrEqual(ua_server_scn)))
-      .WillOnce(Return(tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS));
+      .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
   // Callback should come from server port instead, client port will timeout
   // in 20 seconds
   EXPECT_CALL(rfcomm_callback_,
@@ -870,13 +870,13 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
   // MPX_CTRL Modem Status Response (MSC)
   EXPECT_CALL(l2cap_interface_,
               DataWrite(new_lcid, BtHdrEqual(uih_msc_rsp_to_peer)))
-      .WillOnce(Return(tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS));
+      .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
   BT_HDR* uih_msc_cmd_to_peer = AllocateWrappedOutgoingL2capAclPacket(
       CreateQuickMscPacket(false, GetDlci(false, test_server_scn), new_lcid,
                            acl_handle, true, false, true, true, false, true));
   EXPECT_CALL(l2cap_interface_,
               DataWrite(new_lcid, BtHdrEqual(uih_msc_cmd_to_peer)))
-      .WillOnce(Return(tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS));
+      .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
   l2cap_appl_info_.pL2CA_DataInd_Cb(new_lcid, uih_msc_cmd_from_peer);
   osi_free(uih_msc_rsp_to_peer);
   osi_free(uih_msc_cmd_to_peer);
