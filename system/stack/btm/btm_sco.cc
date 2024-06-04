@@ -1795,21 +1795,31 @@ tBTM_SCO_DEBUG_DUMP BTM_GetScoDebugDump() {
 
   tBTM_SCO_CODEC_TYPE codec_type = active_sco->get_codec_type();
   debug_dump.codec_id = sco_codec_type_to_id(codec_type);
-  if (debug_dump.codec_id != UUID_CODEC_MSBC &&
-      debug_dump.codec_id != UUID_CODEC_LC3)
+  if (debug_dump.codec_id !=
+          static_cast<std::underlying_type_t<tBTA_AG_UUID_CODEC>>(
+              tBTA_AG_UUID_CODEC::UUID_CODEC_MSBC) &&
+      debug_dump.codec_id !=
+          static_cast<std::underlying_type_t<tBTA_AG_UUID_CODEC>>(
+              tBTA_AG_UUID_CODEC::UUID_CODEC_LC3))
     return debug_dump;
 
-  auto fill_plc_stats = debug_dump.codec_id == UUID_CODEC_LC3
-                            ? &bluetooth::audio::sco::swb::fill_plc_stats
-                            : &bluetooth::audio::sco::wbs::fill_plc_stats;
+  auto fill_plc_stats =
+      debug_dump.codec_id ==
+              static_cast<std::underlying_type_t<tBTA_AG_UUID_CODEC>>(
+                  tBTA_AG_UUID_CODEC::UUID_CODEC_LC3)
+          ? &bluetooth::audio::sco::swb::fill_plc_stats
+          : &bluetooth::audio::sco::wbs::fill_plc_stats;
 
   if (!fill_plc_stats(&debug_dump.total_num_decoded_frames,
                       &debug_dump.pkt_loss_ratio))
     return debug_dump;
 
-  auto get_pkt_status = debug_dump.codec_id == UUID_CODEC_LC3
-                            ? &bluetooth::audio::sco::swb::get_pkt_status
-                            : &bluetooth::audio::sco::wbs::get_pkt_status;
+  auto get_pkt_status =
+      debug_dump.codec_id ==
+              static_cast<std::underlying_type_t<tBTA_AG_UUID_CODEC>>(
+                  tBTA_AG_UUID_CODEC::UUID_CODEC_LC3)
+          ? &bluetooth::audio::sco::swb::get_pkt_status
+          : &bluetooth::audio::sco::wbs::get_pkt_status;
 
   tBTM_SCO_PKT_STATUS* pkt_status = get_pkt_status();
   if (pkt_status == nullptr) return debug_dump;
