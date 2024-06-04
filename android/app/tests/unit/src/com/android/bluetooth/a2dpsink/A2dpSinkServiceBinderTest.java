@@ -33,7 +33,6 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
-
 public class A2dpSinkServiceBinderTest {
     @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
 
@@ -80,7 +79,7 @@ public class A2dpSinkServiceBinderTest {
 
     @Test
     public void getDevicesMatchingConnectionStates() {
-        int[] states = new int[] {BluetoothProfile.STATE_CONNECTED };
+        int[] states = new int[] {BluetoothProfile.STATE_CONNECTED};
         AttributionSource source = new AttributionSource.Builder(0).build();
 
         mBinder.getDevicesMatchingConnectionStates(states, source);

@@ -18,7 +18,6 @@ package com.android.bluetooth.pbapclient;
 
 import static com.google.common.truth.Truth.assertThat;
 
-
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
@@ -42,8 +41,11 @@ public class BluetoothPbapObexAuthenticatorTest {
     @Test
     public void onAuthenticationChallenge() {
         // Note: onAuthenticationChallenge() does not use any arguments
-        PasswordAuthentication passwordAuthentication = mAuthenticator.onAuthenticationChallenge(
-                /*description=*/ null, /*isUserIdRequired=*/ false, /*isFullAccess=*/ false);
+        PasswordAuthentication passwordAuthentication =
+                mAuthenticator.onAuthenticationChallenge(
+                        /* description= */ null,
+                        /* isUserIdRequired= */ false,
+                        /* isFullAccess= */ false);
 
         assertThat(passwordAuthentication.getPassword())
                 .isEqualTo(mAuthenticator.mSessionKey.getBytes());

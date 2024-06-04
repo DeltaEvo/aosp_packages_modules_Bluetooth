@@ -42,7 +42,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-
 /**
  * Public API for the Bluetooth GATT Profile.
  *
@@ -368,6 +367,7 @@ public final class BluetoothGatt implements BluetoothProfile {
                                 "onClientConnectionState() -"
                                         + (" status=" + status)
                                         + (" clientIf=" + clientIf)
+                                        + (" connected=" + connected)
                                         + (" device=" + address));
                     }
                     if (!address.equals(mDevice.getAddress())) {
