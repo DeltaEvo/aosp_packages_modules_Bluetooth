@@ -860,28 +860,29 @@ tBTM_STATUS BTM_CancelRemoteDeviceName(void) {
   bool is_le;
 
   /* Make sure there is not already one in progress */
-  if (btm_cb.btm_inq_vars.remname_active) {
-    if (com::android::bluetooth::flags::rnr_store_device_type()) {
-      is_le = (btm_cb.btm_inq_vars.remname_dev_type == BT_DEVICE_TYPE_BLE);
-    } else {
-      is_le = BTM_UseLeLink(btm_cb.btm_inq_vars.remname_bda);
-    }
-
-    if (is_le) {
-      /* Cancel remote name request for LE device, and process remote name
-       * callback. */
-      btm_inq_rmt_name_failed_cancelled();
-    } else {
-      bluetooth::shim::ACL_CancelRemoteNameRequest(
-          btm_cb.btm_inq_vars.remname_bda);
-      if (com::android::bluetooth::flags::rnr_reset_state_at_cancel()) {
-        btm_process_remote_name(&btm_cb.btm_inq_vars.remname_bda, nullptr, 0,
-                                HCI_ERR_UNSPECIFIED);
-      }
-    }
-    return (BTM_CMD_STARTED);
-  } else
+  if (!btm_cb.btm_inq_vars.remname_active) {
     return (BTM_WRONG_MODE);
+  }
+
+  if (com::android::bluetooth::flags::rnr_store_device_type()) {
+    is_le = (btm_cb.btm_inq_vars.remname_dev_type == BT_DEVICE_TYPE_BLE);
+  } else {
+    is_le = BTM_UseLeLink(btm_cb.btm_inq_vars.remname_bda);
+  }
+
+  if (is_le) {
+    /* Cancel remote name request for LE device, and process remote name
+     * callback. */
+    btm_inq_rmt_name_failed_cancelled();
+  } else {
+    bluetooth::shim::ACL_CancelRemoteNameRequest(
+        btm_cb.btm_inq_vars.remname_bda);
+    if (com::android::bluetooth::flags::rnr_reset_state_at_cancel()) {
+      btm_process_remote_name(&btm_cb.btm_inq_vars.remname_bda, nullptr, 0,
+                              HCI_ERR_UNSPECIFIED);
+    }
+  }
+  return (BTM_CMD_STARTED);
 }
 
 /*******************************************************************************
