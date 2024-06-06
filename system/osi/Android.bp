@@ -57,7 +57,6 @@ cc_library_static {
         "src/hash_map_utils.cc",
         "src/list.cc",
         "src/mutex.cc",
-        "src/osi.cc",
         "src/properties.cc",
         "src/reactor.cc",
         "src/ringbuffer.cc",
@@ -96,6 +95,7 @@ cc_library_static {
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
         "server_configurable_flags",
+        "libaconfig_storage_read_api_cc",
     ],
 }
 
@@ -117,7 +117,6 @@ cc_test {
         "test/hash_map_utils_test.cc",
         "test/list_test.cc",
         "test/properties_test.cc",
-        "test/rand_test.cc",
         "test/reactor_test.cc",
         "test/ringbuffer_test.cc",
         "test/stack_power_telemetry_test.cc",
@@ -132,6 +131,7 @@ cc_test {
         "libcutils",
         "liblog",
         "server_configurable_flags",
+        "libaconfig_storage_read_api_cc",
     ],
     local_include_dirs: [
         "include_internal",

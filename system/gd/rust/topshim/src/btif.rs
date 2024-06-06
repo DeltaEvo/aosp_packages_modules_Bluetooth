@@ -15,9 +15,7 @@ use std::mem;
 use std::os::raw::c_char;
 use std::sync::{Arc, Mutex};
 use std::vec::Vec;
-use topshim_macros::cb_variant;
-
-use cxx::{type_id, ExternType};
+use topshim_macros::{cb_variant, gen_cxx_extern_trivial};
 
 #[derive(Clone, Debug, FromPrimitive, ToPrimitive, PartialEq, PartialOrd)]
 #[repr(u32)]
@@ -418,13 +416,6 @@ pub type BtLocalLeFeatures = bindings::bt_local_le_features_t;
 pub type BtPinCode = bindings::bt_pin_code_t;
 pub type BtRemoteVersion = bindings::bt_remote_version_t;
 pub type BtVendorProductInfo = bindings::bt_vendor_product_info_t;
-pub type Uuid = bindings::bluetooth::Uuid;
-pub type Uuid128Bit = bindings::bluetooth::Uuid_UUID128Bit;
-
-unsafe impl ExternType for Uuid {
-    type Id = type_id!("bluetooth::topshim::rust::Uuid");
-    type Kind = cxx::kind::Trivial;
-}
 
 impl TryFrom<Uuid> for Vec<u8> {
     type Error = &'static str;
@@ -480,29 +471,92 @@ impl Hash for Uuid {
 }
 
 impl Uuid {
+    const BASE_UUID_NUM: u128 = 0x0000000000001000800000805f9b34fbu128;
+    const BASE_UUID_MASK: u128 = !(0xffffffffu128 << 96);
+
     /// Creates a Uuid from little endian slice of bytes
     pub fn try_from_little_endian(value: &[u8]) -> std::result::Result<Uuid, &'static str> {
         Uuid::try_from(value.iter().rev().cloned().collect::<Vec<u8>>())
     }
 
-    /// Formats this UUID to a human-readable representation.
-    pub fn format(uuid: &Uuid128Bit, f: &mut Formatter) -> Result {
-        write!(f, "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-            uuid[0], uuid[1], uuid[2], uuid[3],
-            uuid[4], uuid[5],
-            uuid[6], uuid[7],
-            uuid[8], uuid[9],
-            uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15])
-    }
-
     pub fn empty() -> Uuid {
         unsafe { bindings::bluetooth::Uuid_kEmpty }
     }
+
+    pub fn from_string<S: Into<String>>(raw: S) -> Option<Self> {
+        let raw: String = raw.into();
+
+        let raw = raw.chars().filter(|c| c.is_digit(16)).collect::<String>();
+        let s = raw.as_str();
+        if s.len() != 32 {
+            return None;
+        }
+
+        let mut uu = [0; 16];
+        for i in 0..16 {
+            uu[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok()?;
+        }
+
+        Some(uu.into())
+    }
+
+    /// Parses an 128-bit UUID into a byte array of shortest representation.
+    pub fn get_shortest_slice(&self) -> &[u8] {
+        if self.in_16bit_uuid_range() {
+            &self.uu[2..4]
+        } else if self.in_32bit_uuid_range() {
+            &self.uu[0..4]
+        } else {
+            &self.uu[..]
+        }
+    }
+
+    /// Checks whether the UUID value is in the 16-bit Bluetooth UUID range.
+    fn in_16bit_uuid_range(&self) -> bool {
+        if !self.in_32bit_uuid_range() {
+            return false;
+        }
+        self.uu[0] == 0 && self.uu[1] == 0
+    }
+
+    /// Checks whether the UUID value is in the 32-bit Bluetooth UUID range.
+    fn in_32bit_uuid_range(&self) -> bool {
+        let num = u128::from_be_bytes(self.uu);
+        (num & Self::BASE_UUID_MASK) == Self::BASE_UUID_NUM
+    }
 }
 
+/// Formats this UUID to a human-readable representation.
 impl Display for Uuid {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        Uuid::format(&self.uu, f)
+        write!(
+            f,
+            "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+            self.uu[0], self.uu[1], self.uu[2], self.uu[3],
+            self.uu[4], self.uu[5],
+            self.uu[6], self.uu[7],
+            self.uu[8], self.uu[9],
+            self.uu[10], self.uu[11], self.uu[12], self.uu[13], self.uu[14], self.uu[15]
+        )
+    }
+}
+
+/// UUID that is safe to display in logs.
+pub struct DisplayUuid<'a>(pub &'a Uuid);
+impl<'a> Display for DisplayUuid<'a> {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(
+            f,
+            "{:02x}{:02x}{:02x}{:02x}-xxxx-xxxx-xxxx-xxxx{:02x}{:02x}{:02x}{:02x}",
+            self.0.uu[0],
+            self.0.uu[1],
+            self.0.uu[2],
+            self.0.uu[3],
+            self.0.uu[12],
+            self.0.uu[13],
+            self.0.uu[14],
+            self.0.uu[15]
+        )
     }
 }
 
@@ -867,27 +921,30 @@ mod ffi {
     }
 }
 
-/// The RawAddress directly exported from the bindings.
+/// Generate impl cxx::ExternType for RawAddress and Uuid.
 ///
-/// To make use of RawAddress in cxx::bridge C++ blocks,
+/// To make use of RawAddress and Uuid in cxx::bridge C++ blocks,
 /// include the following snippet in the ffi module.
 /// ```ignore
 /// #[cxx::bridge(namespace = bluetooth::topshim::rust)]
 /// mod ffi {
 ///     unsafe extern "C++" {
-///         include!("gd/rust/topshim/common/type_alias.h");
+///         include!("types/raw_address.h");
+///         include!("types/bluetooth/uuid.h");
+///
+///         #[namespace = ""]
 ///         type RawAddress = crate::btif::RawAddress;
+///
+///         #[namespace = "bluetooth"]
+///         type Uuid = crate::btif::Uuid;
 ///     }
 ///     // Place you shared stuff here.
 /// }
 /// ```
+#[gen_cxx_extern_trivial]
 pub type RawAddress = bindings::RawAddress;
-pub type OobData = bindings::bt_oob_data_s;
-
-unsafe impl ExternType for RawAddress {
-    type Id = type_id!("bluetooth::topshim::rust::RawAddress");
-    type Kind = cxx::kind::Trivial;
-}
+#[gen_cxx_extern_trivial]
+pub type Uuid = bindings::bluetooth::Uuid;
 
 impl Hash for RawAddress {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -897,7 +954,7 @@ impl Hash for RawAddress {
 
 impl ToString for RawAddress {
     fn to_string(&self) -> String {
-        String::from(format!(
+        format!(
             "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
             self.address[0],
             self.address[1],
@@ -905,7 +962,7 @@ impl ToString for RawAddress {
             self.address[3],
             self.address[4],
             self.address[5]
-        ))
+        )
     }
 }
 
@@ -963,6 +1020,8 @@ impl<'a> Display for DisplayAddress<'a> {
         }
     }
 }
+
+pub type OobData = bindings::bt_oob_data_s;
 
 /// An enum representing `bt_callbacks_t` from btif.
 #[derive(Clone, Debug)]
@@ -1545,6 +1604,24 @@ mod tests {
         assert_eq!(
             format!("{}", DisplayAddress(&RawAddress::from_string("11:35:11:35:11:35").unwrap())),
             String::from("xx:xx:xx:xx:11:35")
+        );
+    }
+
+    #[test]
+    fn test_get_shortest_slice() {
+        let uuid_16 = Uuid::from_string("0000fef3-0000-1000-8000-00805f9b34fb").unwrap();
+        assert_eq!(uuid_16.get_shortest_slice(), [0xfe, 0xf3]);
+
+        let uuid_32 = Uuid::from_string("00112233-0000-1000-8000-00805f9b34fb").unwrap();
+        assert_eq!(uuid_32.get_shortest_slice(), [0x00, 0x11, 0x22, 0x33]);
+
+        let uuid_128 = Uuid::from_string("00112233-4455-6677-8899-aabbccddeeff").unwrap();
+        assert_eq!(
+            uuid_128.get_shortest_slice(),
+            [
+                0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+                0xee, 0xff
+            ]
         );
     }
 }

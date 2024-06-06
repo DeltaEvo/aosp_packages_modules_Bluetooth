@@ -23,7 +23,6 @@ import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.after;
@@ -62,8 +61,7 @@ import org.mockito.junit.MockitoRule;
 @LargeTest
 @RunWith(JUnit4.class)
 public class BatteryStateMachineTest {
-    @Rule
-    public final MockitoRule mockito = MockitoJUnit.rule();
+    @Rule public final MockitoRule mockito = MockitoJUnit.rule();
 
     private BluetoothAdapter mAdapter;
     private Context mTargetContext;
@@ -90,8 +88,9 @@ public class BatteryStateMachineTest {
         // Set up thread and looper
         mHandlerThread = new HandlerThread("BatteryStateMachineTestHandlerThread");
         mHandlerThread.start();
-        mBatteryStateMachine = new StubBatteryStateMachine(mTestDevice,
-                mBatteryService, mHandlerThread.getLooper());
+        mBatteryStateMachine =
+                new StubBatteryStateMachine(
+                        mTestDevice, mBatteryService, mHandlerThread.getLooper());
         // Override the timeout value to speed up the test
         mBatteryStateMachine.sConnectTimeoutMs = CONNECTION_TIMEOUT_MS;
         mBatteryStateMachine.start();
@@ -105,13 +104,11 @@ public class BatteryStateMachineTest {
         reset(mBatteryService);
     }
 
-    /**
-     * Test that default state is disconnected
-     */
+    /** Test that default state is disconnected */
     @Test
     public void testDefaultDisconnectedState() {
-        Assert.assertEquals(BluetoothProfile.STATE_DISCONNECTED,
-                mBatteryStateMachine.getConnectionState());
+        Assert.assertEquals(
+                BluetoothProfile.STATE_DISCONNECTED, mBatteryStateMachine.getConnectionState());
     }
 
     /**
@@ -127,9 +124,7 @@ public class BatteryStateMachineTest {
         mBatteryStateMachine.mShouldAllowGatt = allow;
     }
 
-    /**
-     * Test that an incoming connection with policy forbidding connection is rejected
-     */
+    /** Test that an incoming connection with policy forbidding connection is rejected */
     @Test
     public void testOkToConnectFails() {
         allowConnection(false);
@@ -142,7 +137,8 @@ public class BatteryStateMachineTest {
                 .handleConnectionStateChanged(any(BatteryStateMachine.class), anyInt(), anyInt());
 
         // Check that we are in Disconnected state
-        Assert.assertThat(mBatteryStateMachine.getCurrentState(),
+        Assert.assertThat(
+                mBatteryStateMachine.getCurrentState(),
                 IsInstanceOf.instanceOf(BatteryStateMachine.Disconnected.class));
     }
 
@@ -158,7 +154,8 @@ public class BatteryStateMachineTest {
                 .handleConnectionStateChanged(any(BatteryStateMachine.class), anyInt(), anyInt());
 
         // Check that we are in Disconnected state
-        Assert.assertThat(mBatteryStateMachine.getCurrentState(),
+        Assert.assertThat(
+                mBatteryStateMachine.getCurrentState(),
                 IsInstanceOf.instanceOf(BatteryStateMachine.Disconnected.class));
         assertNull(mBatteryStateMachine.mBluetoothGatt);
     }
@@ -172,11 +169,13 @@ public class BatteryStateMachineTest {
         mBatteryStateMachine.sendMessage(BatteryStateMachine.CONNECT);
 
         verify(mBatteryService, timeout(TIMEOUT_MS))
-                .handleConnectionStateChanged(any(BatteryStateMachine.class),
+                .handleConnectionStateChanged(
+                        any(BatteryStateMachine.class),
                         eq(BluetoothProfile.STATE_DISCONNECTED),
                         eq(BluetoothProfile.STATE_CONNECTING));
 
-        Assert.assertThat(mBatteryStateMachine.getCurrentState(),
+        Assert.assertThat(
+                mBatteryStateMachine.getCurrentState(),
                 IsInstanceOf.instanceOf(BatteryStateMachine.Connecting.class));
 
         assertNotNull(mBatteryStateMachine.mGattCallback);
@@ -184,11 +183,13 @@ public class BatteryStateMachineTest {
                 GATT_SUCCESS, BluetoothProfile.STATE_CONNECTED);
 
         verify(mBatteryService, timeout(TIMEOUT_MS))
-                .handleConnectionStateChanged(any(BatteryStateMachine.class),
+                .handleConnectionStateChanged(
+                        any(BatteryStateMachine.class),
                         eq(BluetoothProfile.STATE_CONNECTING),
                         eq(BluetoothProfile.STATE_CONNECTED));
 
-        Assert.assertThat(mBatteryStateMachine.getCurrentState(),
+        Assert.assertThat(
+                mBatteryStateMachine.getCurrentState(),
                 IsInstanceOf.instanceOf(BatteryStateMachine.Connected.class));
     }
 
@@ -200,14 +201,16 @@ public class BatteryStateMachineTest {
         mBatteryStateMachine.sendMessage(BatteryStateMachine.CONNECT);
 
         verify(mBatteryService, timeout(TIMEOUT_MS))
-                .handleConnectionStateChanged(any(BatteryStateMachine.class),
+                .handleConnectionStateChanged(
+                        any(BatteryStateMachine.class),
                         eq(BluetoothProfile.STATE_DISCONNECTED),
                         eq(BluetoothProfile.STATE_CONNECTING));
 
         mBatteryStateMachine.sendMessage(BatteryStateMachine.DISCONNECT);
 
         verify(mBatteryService, timeout(TIMEOUT_MS))
-                .handleConnectionStateChanged(any(BatteryStateMachine.class),
+                .handleConnectionStateChanged(
+                        any(BatteryStateMachine.class),
                         eq(BluetoothProfile.STATE_CONNECTING),
                         eq(BluetoothProfile.STATE_DISCONNECTED));
     }
@@ -262,8 +265,7 @@ public class BatteryStateMachineTest {
         reconnect();
 
         int badState = -1;
-        mBatteryStateMachine.sendMessage(
-                BatteryStateMachine.CONNECTION_STATE_CHANGED, badState);
+        mBatteryStateMachine.sendMessage(BatteryStateMachine.CONNECTION_STATE_CHANGED, badState);
 
         assertThat(mBatteryStateMachine.getCurrentState())
                 .isInstanceOf(BatteryStateMachine.Connected.class);
@@ -294,11 +296,7 @@ public class BatteryStateMachineTest {
         allowConnection(true);
         allowConnectGatt(true);
 
-        try {
-            mBatteryStateMachine.updateBatteryLevel(new byte[0]);
-        } catch (Exception ex) {
-            fail();
-        }
+        mBatteryStateMachine.updateBatteryLevel(new byte[0]);
 
         verify(mBatteryService, after(WAIT_MS).never())
                 .handleBatteryChanged(any(BluetoothDevice.class), anyInt());
@@ -378,4 +376,3 @@ public class BatteryStateMachineTest {
         }
     }
 }
-

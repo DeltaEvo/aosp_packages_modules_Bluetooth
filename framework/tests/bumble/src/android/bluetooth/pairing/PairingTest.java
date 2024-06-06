@@ -65,13 +65,6 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.hamcrest.MockitoHamcrest;
 
-import java.time.Duration;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-
 import pandora.GattProto;
 import pandora.HostProto.AdvertiseRequest;
 import pandora.HostProto.AdvertiseResponse;
@@ -81,6 +74,13 @@ import pandora.SecurityProto.PairingEvent;
 import pandora.SecurityProto.PairingEventAnswer;
 import pandora.SecurityProto.SecureRequest;
 import pandora.SecurityProto.SecureResponse;
+
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 @RunWith(AndroidJUnit4.class)
 public class PairingTest {
@@ -355,10 +355,10 @@ public class PairingTest {
                         .next();
 
         // Todo: Unexpected empty ACTION_UUID intent is generated
-        verifyIntentReceived(hasAction(BluetoothDevice.ACTION_UUID));
+        verifyIntentReceivedUnordered(hasAction(BluetoothDevice.ACTION_UUID));
 
         // Wait for connection on Android
-        verifyIntentReceived(
+        verifyIntentReceivedUnordered(
                 hasAction(BluetoothDevice.ACTION_ACL_CONNECTED),
                 hasExtra(BluetoothDevice.EXTRA_TRANSPORT, BluetoothDevice.TRANSPORT_LE));
 
