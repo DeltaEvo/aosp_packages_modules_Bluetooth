@@ -87,6 +87,16 @@ flag {
 }
 
 flag {
+    name: "stop_on_offload_fail"
+    namespace: "bluetooth"
+    description: "Stop instead of disconnecting AVDT when offload fails"
+    bug: "345709100"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
     name: "a2dp_aidl_encoding_interval"
     namespace: "bluetooth"
     description: "Configure the data interval in audio BT HAL's PcmConfig"
