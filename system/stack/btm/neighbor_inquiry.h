@@ -27,7 +27,6 @@
 #include "stack/include/bt_name.h"
 #include "stack/include/btm_api_types.h"
 #include "stack/include/hci_error_code.h"
-#include "stack/rnr/remote_name_request.h"
 #include "types/ble_address_with_type.h"
 #include "types/raw_address.h"
 
@@ -211,8 +210,6 @@ struct tBTM_INQUIRY_VAR_ST {
   uint16_t inq_scan_type;
   uint16_t page_scan_type; /* current page scan type */
 
-  bluetooth::rnr::RemoteNameRequest rnr;
-
   tBTM_CMPL_CB* p_inq_cmpl_cb;
   tBTM_INQ_RESULTS_CB* p_inq_results_cb;
   uint32_t inq_counter; /* Counter incremented each time an inquiry completes */
@@ -238,12 +235,8 @@ struct tBTM_INQUIRY_VAR_ST {
   bool registered_for_hci_events;
 
   void Init() {
-    alarm_free(rnr.remote_name_timer);
     alarm_free(classic_inquiry_timer);
 
-    rnr = {};
-
-    rnr.remote_name_timer = alarm_new("rnr.remote_name_timer");
     classic_inquiry_timer = alarm_new("btm_inq.classic_inquiry_timer");
 
     discoverable_mode = BTM_NON_DISCOVERABLE;
@@ -269,10 +262,7 @@ struct tBTM_INQUIRY_VAR_ST {
     inq_active = 0;
     registered_for_hci_events = false;
   }
-  void Free() {
-    alarm_free(rnr.remote_name_timer);
-    alarm_free(classic_inquiry_timer);
-  }
+  void Free() { alarm_free(classic_inquiry_timer); }
 };
 
 bool btm_inq_find_bdaddr(const RawAddress& p_bda);

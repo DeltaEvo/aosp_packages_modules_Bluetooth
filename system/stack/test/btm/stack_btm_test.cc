@@ -304,6 +304,4 @@ TEST_F(StackBtmWithInitFreeTest, is_disconnect_reason_valid) {
   }
 }
 
-TEST_F(StackBtmWithInitFreeTest, Init) {
-  ASSERT_FALSE(btm_cb.btm_inq_vars.rnr.remname_active);
-}
+TEST_F(StackBtmWithInitFreeTest, Init) { ASSERT_FALSE(btm_cb.rnr.remname_active); }

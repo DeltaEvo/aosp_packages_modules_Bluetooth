@@ -859,14 +859,14 @@ tBTM_STATUS BTM_CancelRemoteDeviceName(void) {
   bool is_le;
 
   /* Make sure there is not already one in progress */
-  if (!btm_cb.btm_inq_vars.rnr.remname_active) {
+  if (!btm_cb.rnr.remname_active) {
     return (BTM_WRONG_MODE);
   }
 
   if (com::android::bluetooth::flags::rnr_store_device_type()) {
-    is_le = (btm_cb.btm_inq_vars.rnr.remname_dev_type == BT_DEVICE_TYPE_BLE);
+    is_le = (btm_cb.rnr.remname_dev_type == BT_DEVICE_TYPE_BLE);
   } else {
-    is_le = BTM_UseLeLink(btm_cb.btm_inq_vars.rnr.remname_bda);
+    is_le = BTM_UseLeLink(btm_cb.rnr.remname_bda);
   }
 
   if (is_le) {
@@ -874,11 +874,9 @@ tBTM_STATUS BTM_CancelRemoteDeviceName(void) {
      * callback. */
     btm_inq_rmt_name_failed_cancelled();
   } else {
-    bluetooth::shim::ACL_CancelRemoteNameRequest(
-        btm_cb.btm_inq_vars.rnr.remname_bda);
+    bluetooth::shim::ACL_CancelRemoteNameRequest(btm_cb.rnr.remname_bda);
     if (com::android::bluetooth::flags::rnr_reset_state_at_cancel()) {
-      btm_process_remote_name(&btm_cb.btm_inq_vars.rnr.remname_bda, nullptr, 0,
-                              HCI_ERR_UNSPECIFIED);
+      btm_process_remote_name(&btm_cb.rnr.remname_bda, nullptr, 0, HCI_ERR_UNSPECIFIED);
     }
   }
   return (BTM_CMD_STARTED);
@@ -1049,18 +1047,18 @@ void btm_inq_db_reset(void) {
 
   /* Cancel a remote name request if active, and notify the caller (if waiting)
    */
-  if (btm_cb.btm_inq_vars.rnr.remname_active) {
-    alarm_cancel(btm_cb.btm_inq_vars.rnr.remote_name_timer);
-    btm_cb.btm_inq_vars.rnr.remname_active = false;
-    btm_cb.btm_inq_vars.rnr.remname_bda = RawAddress::kEmpty;
-    btm_cb.btm_inq_vars.rnr.remname_dev_type = BT_DEVICE_TYPE_UNKNOWN;
+  if (btm_cb.rnr.remname_active) {
+    alarm_cancel(btm_cb.rnr.remote_name_timer);
+    btm_cb.rnr.remname_active = false;
+    btm_cb.rnr.remname_bda = RawAddress::kEmpty;
+    btm_cb.rnr.remname_dev_type = BT_DEVICE_TYPE_UNKNOWN;
 
-    if (btm_cb.btm_inq_vars.rnr.p_remname_cmpl_cb) {
+    if (btm_cb.rnr.p_remname_cmpl_cb) {
       rem_name.status = BTM_DEV_RESET;
       rem_name.hci_status = HCI_SUCCESS;
 
-      (*btm_cb.btm_inq_vars.rnr.p_remname_cmpl_cb)(&rem_name);
-      btm_cb.btm_inq_vars.rnr.p_remname_cmpl_cb = NULL;
+      (*btm_cb.rnr.p_remname_cmpl_cb)(&rem_name);
+      btm_cb.rnr.p_remname_cmpl_cb = NULL;
     }
   }
 
@@ -1876,7 +1874,7 @@ tBTM_STATUS btm_initiate_rem_name(const RawAddress& remote_bda,
                                   tBTM_NAME_CMPL_CB* p_cb) {
   /*** Make sure the device is ready ***/
   if (!BTM_IsDeviceUp()) return (BTM_WRONG_MODE);
-  if (btm_cb.btm_inq_vars.rnr.remname_active) {
+  if (btm_cb.rnr.remname_active) {
     return (BTM_BUSY);
   } else {
     /* If the database entry exists for the device, use its clock offset */
@@ -1915,15 +1913,14 @@ tBTM_STATUS btm_initiate_rem_name(const RawAddress& remote_bda,
           clock_offset);
     }
 
-    btm_cb.btm_inq_vars.rnr.p_remname_cmpl_cb = p_cb;
-    btm_cb.btm_inq_vars.rnr.remname_bda = remote_bda;
-    btm_cb.btm_inq_vars.rnr.remname_dev_type = BT_DEVICE_TYPE_BREDR;
-    btm_cb.btm_inq_vars.rnr.remname_active = true;
+    btm_cb.rnr.p_remname_cmpl_cb = p_cb;
+    btm_cb.rnr.remname_bda = remote_bda;
+    btm_cb.rnr.remname_dev_type = BT_DEVICE_TYPE_BREDR;
+    btm_cb.rnr.remname_active = true;
 
-    alarm_set_on_mloop(btm_cb.btm_inq_vars.rnr.remote_name_timer, timeout_ms,
-                       btm_inq_remote_name_timer_timeout, NULL);
+    alarm_set_on_mloop(btm_cb.rnr.remote_name_timer, timeout_ms, btm_inq_remote_name_timer_timeout,
+                       NULL);
 
-    btm_cb.btm_inq_vars.rnr.remname_active = true;
     return BTM_CMD_STARTED;
   }
 }
@@ -1950,26 +1947,24 @@ void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn,
 
   bool on_le_link;
   if (com::android::bluetooth::flags::rnr_store_device_type()) {
-    on_le_link =
-        (btm_cb.btm_inq_vars.rnr.remname_dev_type == BT_DEVICE_TYPE_BLE);
+    on_le_link = (btm_cb.rnr.remname_dev_type == BT_DEVICE_TYPE_BLE);
   } else {
-    on_le_link = BTM_UseLeLink(btm_cb.btm_inq_vars.rnr.remname_bda);
+    on_le_link = BTM_UseLeLink(btm_cb.rnr.remname_bda);
   }
 
   /* If the inquire BDA and remote DBA are the same, then stop the timer and set
    * the active to false */
-  if (btm_cb.btm_inq_vars.rnr.remname_active) {
-    if (rem_name.bd_addr == RawAddress::kEmpty ||
-        rem_name.bd_addr == btm_cb.btm_inq_vars.rnr.remname_bda) {
+  if (btm_cb.rnr.remname_active) {
+    if (rem_name.bd_addr == RawAddress::kEmpty || rem_name.bd_addr == btm_cb.rnr.remname_bda) {
       log::info(
           "RNR received expected name bd_addr:{} hci_status:{} le_link:{}",
           rem_name.bd_addr.ToRedactedStringForLogging(),
           hci_status_code_text(hci_status), on_le_link);
 
       if (on_le_link && hci_status == HCI_ERR_UNSPECIFIED) {
-        btm_ble_cancel_remote_name(btm_cb.btm_inq_vars.rnr.remname_bda);
+        btm_ble_cancel_remote_name(btm_cb.rnr.remname_bda);
       }
-      alarm_cancel(btm_cb.btm_inq_vars.rnr.remote_name_timer);
+      alarm_cancel(btm_cb.rnr.remote_name_timer);
       /* Clean up and return the status if the command was not successful */
       /* Note: If part of the inquiry, the name is not stored, and the    */
       /*       inquiry complete callback is called.                       */
@@ -1987,12 +1982,12 @@ void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn,
         }
       }
       /* Reset the remote BDA and call callback if possible */
-      btm_cb.btm_inq_vars.rnr.remname_active = false;
-      btm_cb.btm_inq_vars.rnr.remname_bda = RawAddress::kEmpty;
-      btm_cb.btm_inq_vars.rnr.remname_dev_type = BT_DEVICE_TYPE_UNKNOWN;
+      btm_cb.rnr.remname_active = false;
+      btm_cb.rnr.remname_bda = RawAddress::kEmpty;
+      btm_cb.rnr.remname_dev_type = BT_DEVICE_TYPE_UNKNOWN;
 
-      tBTM_NAME_CMPL_CB* p_cb = btm_cb.btm_inq_vars.rnr.p_remname_cmpl_cb;
-      btm_cb.btm_inq_vars.rnr.p_remname_cmpl_cb = nullptr;
+      tBTM_NAME_CMPL_CB* p_cb = btm_cb.rnr.p_remname_cmpl_cb;
+      btm_cb.rnr.p_remname_cmpl_cb = nullptr;
       if (p_cb) (p_cb)(&rem_name);
     } else {
       log::warn("RNR received UNKNOWN name bd_addr:{} hci_status:{} le_link:{}",
@@ -2001,12 +1996,11 @@ void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn,
     }
   } else {
     log::info(
-        "RNR received UNEXPECTED name bd_addr:{} inq_addr:{} hci_status:{} "
-        "le_link:{} rnr_active:{}",
-        rem_name.bd_addr.ToRedactedStringForLogging(),
-        btm_cb.btm_inq_vars.rnr.remname_bda.ToRedactedStringForLogging(),
-        hci_status_code_text(hci_status), on_le_link,
-        btm_cb.btm_inq_vars.rnr.remname_active);
+            "RNR received UNEXPECTED name bd_addr:{} inq_addr:{} hci_status:{} "
+            "le_link:{} rnr_active:{}",
+            rem_name.bd_addr.ToRedactedStringForLogging(),
+            btm_cb.rnr.remname_bda.ToRedactedStringForLogging(), hci_status_code_text(hci_status),
+            on_le_link, btm_cb.rnr.remname_active);
   }
 }
 
@@ -2026,11 +2020,10 @@ void btm_inq_remote_name_timer_timeout(void* /* data */) {
  *
  ******************************************************************************/
 void btm_inq_rmt_name_failed_cancelled(void) {
-  log::error("remname_active={}", btm_cb.btm_inq_vars.rnr.remname_active);
+  log::error("remname_active={}", btm_cb.rnr.remname_active);
 
-  if (btm_cb.btm_inq_vars.rnr.remname_active) {
-    btm_process_remote_name(&btm_cb.btm_inq_vars.rnr.remname_bda, NULL, 0,
-                            HCI_ERR_UNSPECIFIED);
+  if (btm_cb.rnr.remname_active) {
+    btm_process_remote_name(&btm_cb.rnr.remname_bda, NULL, 0, HCI_ERR_UNSPECIFIED);
   }
 
   btm_sec_rmt_name_request_complete(NULL, NULL, HCI_ERR_UNSPECIFIED);
