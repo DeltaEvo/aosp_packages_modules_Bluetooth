@@ -48,10 +48,9 @@ import androidx.test.runner.AndroidJUnit4;
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.CompanionManager;
+import com.android.bluetooth.flags.Flags;
 import com.android.bluetooth.le_scan.ScanManager;
 import com.android.bluetooth.le_scan.TransitionalScanHelper;
-
-import com.android.bluetooth.flags.Flags;
 
 import org.junit.After;
 import org.junit.Before;
@@ -70,9 +69,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/**
- * Test cases for {@link GattService}.
- */
+/** Test cases for {@link GattService}. */
 @SmallTest
 @RunWith(AndroidJUnit4.class)
 public class GattServiceTest {
@@ -121,7 +118,8 @@ public class GattServiceTest {
         GattObjectsFactory.setInstanceForTesting(mFactory);
         doReturn(mNativeInterface).when(mFactory).getNativeInterface();
         doReturn(mScanManager).when(mFactory).createScanManager(any(), any(), any(), any(), any());
-        doReturn(mDistanceMeasurementManager).when(mFactory)
+        doReturn(mDistanceMeasurementManager)
+                .when(mFactory)
                 .createDistanceMeasurementManager(any());
 
         mAdapter = BluetoothAdapter.getDefaultAdapter();
@@ -131,8 +129,10 @@ public class GattServiceTest {
         when(mAdapterService.getResources()).thenReturn(mResources);
         when(mResources.getInteger(anyInt())).thenReturn(0);
         when(mAdapterService.getSharedPreferences(anyString(), anyInt()))
-                .thenReturn(InstrumentationRegistry.getTargetContext()
-                        .getSharedPreferences("GattServiceTestPrefs", Context.MODE_PRIVATE));
+                .thenReturn(
+                        InstrumentationRegistry.getTargetContext()
+                                .getSharedPreferences(
+                                        "GattServiceTestPrefs", Context.MODE_PRIVATE));
 
         TestUtils.mockGetSystemService(
                 mAdapterService, Context.LOCATION_SERVICE, LocationManager.class);
@@ -206,10 +206,10 @@ public class GattServiceTest {
         Integer connId = 1;
         doReturn(connId).when(mClientMap).connIdByAddress(clientIf, address);
 
-        mService.clientSetPreferredPhy(clientIf, address, txPhy, rxPhy, phyOptions,
-                mAttributionSource);
-        verify(mNativeInterface).gattClientSetPreferredPhy(clientIf, address, txPhy, rxPhy,
-                phyOptions);
+        mService.clientSetPreferredPhy(
+                clientIf, address, txPhy, rxPhy, phyOptions, mAttributionSource);
+        verify(mNativeInterface)
+                .gattClientSetPreferredPhy(clientIf, address, txPhy, rxPhy, phyOptions);
     }
 
     @Test
@@ -218,19 +218,27 @@ public class GattServiceTest {
         String address = REMOTE_DEVICE_ADDRESS;
 
         int connectionPriority = BluetoothGatt.CONNECTION_PRIORITY_HIGH;
-        mService.connectionParameterUpdate(clientIf, address, connectionPriority,
-                mAttributionSource);
+        mService.connectionParameterUpdate(
+                clientIf, address, connectionPriority, mAttributionSource);
 
         connectionPriority = BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER;
-        mService.connectionParameterUpdate(clientIf, address, connectionPriority,
-                mAttributionSource);
+        mService.connectionParameterUpdate(
+                clientIf, address, connectionPriority, mAttributionSource);
 
         connectionPriority = BluetoothGatt.CONNECTION_PRIORITY_BALANCED;
-        mService.connectionParameterUpdate(clientIf, address, connectionPriority,
-                mAttributionSource);
+        mService.connectionParameterUpdate(
+                clientIf, address, connectionPriority, mAttributionSource);
 
-        verify(mNativeInterface, times(3)).gattConnectionParameterUpdate(eq(clientIf),
-                eq(address), anyInt(), anyInt(), anyInt(), anyInt(), eq(0), eq(0));
+        verify(mNativeInterface, times(3))
+                .gattConnectionParameterUpdate(
+                        eq(clientIf),
+                        eq(address),
+                        anyInt(),
+                        anyInt(),
+                        anyInt(),
+                        anyInt(),
+                        eq(0),
+                        eq(0));
     }
 
     @Test
@@ -248,11 +256,19 @@ public class GattServiceTest {
         boolean opportunistic = true;
         int phy = 3;
 
-        mService.clientConnect(clientIf, address, addressType, isDirect, transport,
-                opportunistic, phy, mAttributionSource);
+        mService.clientConnect(
+                clientIf,
+                address,
+                addressType,
+                isDirect,
+                transport,
+                opportunistic,
+                phy,
+                mAttributionSource);
 
-        verify(mNativeInterface).gattClientConnect(clientIf, address, addressType,
-                isDirect, transport, opportunistic, phy);
+        verify(mNativeInterface)
+                .gattClientConnect(
+                        clientIf, address, addressType, isDirect, transport, opportunistic, phy);
     }
 
     @Test
@@ -323,7 +339,7 @@ public class GattServiceTest {
         int[] states = new int[] {BluetoothProfile.STATE_CONNECTED};
 
         BluetoothDevice testDevice = mAdapter.getRemoteDevice("00:01:02:03:04:05");
-        BluetoothDevice[] bluetoothDevices = new BluetoothDevice[]{testDevice};
+        BluetoothDevice[] bluetoothDevices = new BluetoothDevice[] {testDevice};
         doReturn(bluetoothDevices).when(mAdapterService).getBondedDevices();
 
         Set<String> connectedDevices = new HashSet<>();
@@ -348,8 +364,9 @@ public class GattServiceTest {
         boolean eattSupport = true;
 
         mService.registerClient(uuid, callback, eattSupport, mAttributionSource);
-        verify(mNativeInterface).gattClientRegisterApp(uuid.getLeastSignificantBits(),
-                uuid.getMostSignificantBits(), eattSupport);
+        verify(mNativeInterface)
+                .gattClientRegisterApp(
+                        uuid.getLeastSignificantBits(), uuid.getMostSignificantBits(), eattSupport);
     }
 
     @Test
@@ -387,11 +404,16 @@ public class GattServiceTest {
         Integer connId = 1;
         doReturn(connId).when(mClientMap).connIdByAddress(clientIf, address);
 
-        mService.readUsingCharacteristicUuid(clientIf, address, uuid, startHandle, endHandle,
-                authReq, mAttributionSource);
-        verify(mNativeInterface).gattClientReadUsingCharacteristicUuid(connId,
-                uuid.getLeastSignificantBits(), uuid.getMostSignificantBits(), startHandle,
-                endHandle, authReq);
+        mService.readUsingCharacteristicUuid(
+                clientIf, address, uuid, startHandle, endHandle, authReq, mAttributionSource);
+        verify(mNativeInterface)
+                .gattClientReadUsingCharacteristicUuid(
+                        connId,
+                        uuid.getLeastSignificantBits(),
+                        uuid.getMostSignificantBits(),
+                        startHandle,
+                        endHandle,
+                        authReq);
     }
 
     @Test
@@ -406,8 +428,9 @@ public class GattServiceTest {
         Integer connId = 1;
         doReturn(connId).when(mClientMap).connIdByAddress(clientIf, address);
 
-        int writeCharacteristicResult = mService.writeCharacteristic(clientIf, address, handle,
-                writeType, authReq, value, mAttributionSource);
+        int writeCharacteristicResult =
+                mService.writeCharacteristic(
+                        clientIf, address, handle, writeType, authReq, value, mAttributionSource);
         assertThat(writeCharacteristicResult)
                 .isEqualTo(BluetoothStatusCodes.ERROR_DEVICE_NOT_CONNECTED);
     }
@@ -461,8 +484,8 @@ public class GattServiceTest {
 
         mService.registerForNotification(clientIf, address, handle, enable, mAttributionSource);
 
-        verify(mNativeInterface).gattClientRegisterForNotifications(clientIf, address, handle,
-                enable);
+        verify(mNativeInterface)
+                .gattClientRegisterForNotifications(clientIf, address, handle, enable);
     }
 
     @Test
@@ -498,13 +521,27 @@ public class GattServiceTest {
         int minConnectionEventLen = 7;
         int maxConnectionEventLen = 8;
 
-        mService.leConnectionUpdate(clientIf, address, minInterval, maxInterval,
-                peripheralLatency, supervisionTimeout, minConnectionEventLen,
-                maxConnectionEventLen, mAttributionSource);
+        mService.leConnectionUpdate(
+                clientIf,
+                address,
+                minInterval,
+                maxInterval,
+                peripheralLatency,
+                supervisionTimeout,
+                minConnectionEventLen,
+                maxConnectionEventLen,
+                mAttributionSource);
 
-        verify(mNativeInterface).gattConnectionParameterUpdate(clientIf, address, minInterval,
-                maxInterval, peripheralLatency, supervisionTimeout, minConnectionEventLen,
-                maxConnectionEventLen);
+        verify(mNativeInterface)
+                .gattConnectionParameterUpdate(
+                        clientIf,
+                        address,
+                        minInterval,
+                        maxInterval,
+                        peripheralLatency,
+                        supervisionTimeout,
+                        minConnectionEventLen,
+                        maxConnectionEventLen);
     }
 
     @Test
@@ -541,10 +578,10 @@ public class GattServiceTest {
         int rxPhy = 1;
         int phyOptions = 3;
 
-        mService.serverSetPreferredPhy(serverIf, address, txPhy, rxPhy, phyOptions,
-                mAttributionSource);
-        verify(mNativeInterface).gattServerSetPreferredPhy(serverIf, address, txPhy, rxPhy,
-                phyOptions);
+        mService.serverSetPreferredPhy(
+                serverIf, address, txPhy, rxPhy, phyOptions, mAttributionSource);
+        verify(mNativeInterface)
+                .gattServerSetPreferredPhy(serverIf, address, txPhy, rxPhy, phyOptions);
     }
 
     @Test
@@ -590,8 +627,8 @@ public class GattServiceTest {
         int duration = 3;
         int maxExtAdvEvents = 4;
 
-        mService.enableAdvertisingSet(advertiserId, enable, duration, maxExtAdvEvents,
-                mAttributionSource);
+        mService.enableAdvertisingSet(
+                advertiserId, enable, duration, maxExtAdvEvents, mAttributionSource);
     }
 
     @Test
@@ -622,10 +659,11 @@ public class GattServiceTest {
     public void startDistanceMeasurement() {
         UUID uuid = UUID.randomUUID();
         BluetoothDevice device = mAdapter.getRemoteDevice("00:01:02:03:04:05");
-        DistanceMeasurementParams params = new DistanceMeasurementParams.Builder(device)
-                .setDurationSeconds(123)
-                .setFrequency(DistanceMeasurementParams.REPORT_FREQUENCY_LOW)
-                .build();
+        DistanceMeasurementParams params =
+                new DistanceMeasurementParams.Builder(device)
+                        .setDurationSeconds(123)
+                        .setFrequency(DistanceMeasurementParams.REPORT_FREQUENCY_LOW)
+                        .build();
         IDistanceMeasurementCallback callback = mock(IDistanceMeasurementCallback.class);
         mService.startDistanceMeasurement(uuid, params, callback);
         verify(mDistanceMeasurementManager).startDistanceMeasurement(uuid, params, callback);

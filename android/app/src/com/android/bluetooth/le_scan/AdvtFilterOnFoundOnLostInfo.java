@@ -17,6 +17,7 @@
 package com.android.bluetooth.le_scan;
 
 import android.annotation.Nullable;
+import android.bluetooth.BluetoothDevice;
 
 public class AdvtFilterOnFoundOnLostInfo {
     private int mClientIf;
@@ -38,9 +39,20 @@ public class AdvtFilterOnFoundOnLostInfo {
     private int mRssiValue;
     private int mTimeStamp;
 
-    public AdvtFilterOnFoundOnLostInfo(int clientIf, int advPktLen, byte[] advPkt, int scanRspLen,
-            byte[] scanRsp, int filtIndex, int advState, int advInfoPresent, String address,
-            int addrType, int txPower, int rssiValue, int timeStamp) {
+    public AdvtFilterOnFoundOnLostInfo(
+            int clientIf,
+            int advPktLen,
+            byte[] advPkt,
+            int scanRspLen,
+            byte[] scanRsp,
+            int filtIndex,
+            int advState,
+            int advInfoPresent,
+            String address,
+            int addrType,
+            int txPower,
+            int rssiValue,
+            int timeStamp) {
 
         mClientIf = clientIf;
         mAdvPktLen = advPktLen;
@@ -89,6 +101,7 @@ public class AdvtFilterOnFoundOnLostInfo {
         return mAddress;
     }
 
+    @BluetoothDevice.AddressType
     public int getAddressType() {
         return mAddrType;
     }
@@ -118,6 +131,4 @@ public class AdvtFilterOnFoundOnLostInfo {
         }
         return result;
     }
-
 }
-

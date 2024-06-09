@@ -33,6 +33,7 @@ java_defaults {
         "frameworks-base-testutils",
         "gson",
         "mockito-target",
+        "platform-parametric-runner-lib",
         "platform-test-annotations",
         "truth",
     ],
@@ -52,6 +53,20 @@ java_defaults {
         "general-tests",
         "mts-bluetooth",
     ],
+
+    errorprone: {
+        enabled: true,
+        javacflags: [
+            "-Xep:AlmostJavadoc:ERROR",
+            "-Xep:CatchFail:ERROR",
+            "-Xep:EmptyCatch:ERROR",
+            "-Xep:InvalidInlineTag:ERROR",
+            "-Xep:NonApiType:ERROR",
+            "-Xep:UnnecessaryAssignment:ERROR",
+            "-Xep:UnnecessaryAsync:ERROR",
+            "-Xep:UnusedMethod:ERROR",
+        ],
+    },
 
     instrumentation_for: "Bluetooth",
 }

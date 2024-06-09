@@ -17,13 +17,17 @@
 package com.android.bluetooth.hid;
 
 import static org.mockito.Mockito.verify;
-import android.platform.test.flag.junit.SetFlagsRule;
+
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
+import android.platform.test.flag.junit.SetFlagsRule;
+
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
+
 import com.android.bluetooth.flags.Flags;
+
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -40,8 +44,7 @@ public class HidHostServiceBinderTest {
 
     @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
 
-    @Mock
-    private HidHostService mService;
+    @Mock private HidHostService mService;
 
     BluetoothDevice mRemoteDevice;
 
@@ -71,8 +74,8 @@ public class HidHostServiceBinderTest {
     public void getConnectedDevices_callsServiceMethod() {
         mBinder.getConnectedDevices(null);
 
-        verify(mService).getDevicesMatchingConnectionStates(
-                new int[] { BluetoothProfile.STATE_CONNECTED });
+        verify(mService)
+                .getDevicesMatchingConnectionStates(new int[] {BluetoothProfile.STATE_CONNECTED});
     }
 
     @Test

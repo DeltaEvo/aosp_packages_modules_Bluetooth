@@ -138,8 +138,8 @@ void gatt_init(void) {
       osi_property_get_bool("bluetooth.gatt.over_bredr.enabled", true);
   /* Now, register with L2CAP for ATT PSM over BR/EDR */
   if (gatt_cb.over_br_enabled &&
-      !L2CA_Register2(BT_PSM_ATT, dyn_info, false /* enable_snoop */, nullptr,
-                      GATT_MAX_MTU_SIZE, 0, BTM_SEC_NONE)) {
+      !L2CA_RegisterWithSecurity(BT_PSM_ATT, dyn_info, false /* enable_snoop */,
+                                 nullptr, GATT_MAX_MTU_SIZE, 0, BTM_SEC_NONE)) {
     log::error("ATT Dynamic Registration failed");
   }
 
@@ -217,12 +217,13 @@ void gatt_free(void) {
  ******************************************************************************/
 bool gatt_connect(const RawAddress& rem_bda, tBLE_ADDR_TYPE addr_type,
                   tGATT_TCB* p_tcb, tBT_TRANSPORT transport,
-                  uint8_t initiating_phys, tGATT_IF gatt_if) {
+                  uint8_t /* initiating_phys */, tGATT_IF gatt_if) {
   if (gatt_get_ch_state(p_tcb) != GATT_CH_OPEN)
     gatt_set_ch_state(p_tcb, GATT_CH_CONN);
 
   if (transport != BT_TRANSPORT_LE) {
-    p_tcb->att_lcid = L2CA_ConnectReq2(BT_PSM_ATT, rem_bda, BTM_SEC_NONE);
+    p_tcb->att_lcid =
+        L2CA_ConnectReqWithSecurity(BT_PSM_ATT, rem_bda, BTM_SEC_NONE);
     return p_tcb->att_lcid != 0;
   }
 
@@ -466,7 +467,7 @@ bool gatt_act_connect(tGATT_REG* p_reg, const RawAddress& bd_addr,
 }
 
 namespace connection_manager {
-void on_connection_timed_out(uint8_t app_id, const RawAddress& address) {
+void on_connection_timed_out(uint8_t /* app_id */, const RawAddress& address) {
   if (com::android::bluetooth::flags::enumerate_gatt_errors()) {
     gatt_le_connect_cback(L2CAP_ATT_CID, address, false, 0x08, BT_TRANSPORT_LE);
   } else {
@@ -478,9 +479,9 @@ void on_connection_timed_out(uint8_t app_id, const RawAddress& address) {
 /** This callback function is called by L2CAP to indicate that the ATT fixed
  * channel for LE is connected (conn = true)/disconnected (conn = false).
  */
-static void gatt_le_connect_cback(uint16_t chan, const RawAddress& bd_addr,
-                                  bool connected, uint16_t reason,
-                                  tBT_TRANSPORT transport) {
+static void gatt_le_connect_cback(uint16_t /* chan */,
+                                  const RawAddress& bd_addr, bool connected,
+                                  uint16_t reason, tBT_TRANSPORT transport) {
   tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(bd_addr, transport);
   bool check_srv_chg = false;
   tGATTS_SRV_CHG* p_srv_chg_clt = NULL;
@@ -527,7 +528,7 @@ static void gatt_le_connect_cback(uint16_t chan, const RawAddress& bd_addr,
   else {
     p_tcb = gatt_allocate_tcb_by_bdaddr(bd_addr, BT_TRANSPORT_LE);
     if (!p_tcb) {
-      log::error("CCB max out, no rsources");
+      log::error("CCB max out, no resources");
       if (com::android::bluetooth::flags::
               gatt_drop_acl_on_out_of_resources_fix()) {
         log::error("Disconnecting address:{} due to out of resources.",
@@ -738,9 +739,8 @@ static void gatt_le_cong_cback(const RawAddress& remote_bda, bool congested) {
  * Returns          void
  *
  ******************************************************************************/
-static void gatt_le_data_ind(uint16_t chan, const RawAddress& bd_addr,
+static void gatt_le_data_ind(uint16_t /* chan */, const RawAddress& bd_addr,
                              BT_HDR* p_buf) {
-
   /* Find CCB based on bd addr */
   tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(bd_addr, BT_TRANSPORT_LE);
   if (p_tcb) {
@@ -772,7 +772,7 @@ static void gatt_le_data_ind(uint16_t chan, const RawAddress& bd_addr,
  ******************************************************************************/
 static void gatt_l2cif_connect_ind_cback(const RawAddress& bd_addr,
                                          uint16_t lcid, uint16_t /* psm */,
-                                         uint8_t id) {
+                                         uint8_t /* id */) {
   uint8_t result = L2CAP_CONN_OK;
   log::info("Connection indication cid = {}", lcid);
 
@@ -804,7 +804,7 @@ static void gatt_l2cif_connect_ind_cback(const RawAddress& bd_addr,
   gatt_set_ch_state(p_tcb, GATT_CH_CFG);
 }
 
-static void gatt_on_l2cap_error(uint16_t lcid, uint16_t result) {
+static void gatt_on_l2cap_error(uint16_t lcid, uint16_t /* result */) {
   tGATT_TCB* p_tcb = gatt_find_tcb_by_cid(lcid);
   if (p_tcb == nullptr) return;
   if (gatt_get_ch_state(p_tcb) == GATT_CH_CONN) {
@@ -834,7 +834,7 @@ static void gatt_l2cif_connect_cfm_cback(uint16_t lcid, uint16_t result) {
 }
 
 /** This is the L2CAP config confirm callback function */
-void gatt_l2cif_config_cfm_cback(uint16_t lcid, uint16_t initiator,
+void gatt_l2cif_config_cfm_cback(uint16_t lcid, uint16_t /* initiator */,
                                  tL2CAP_CFG_INFO* p_cfg) {
   gatt_l2cif_config_ind_cback(lcid, p_cfg);
 
@@ -874,8 +874,7 @@ void gatt_l2cif_config_ind_cback(uint16_t lcid, tL2CAP_CFG_INFO* p_cfg) {
 }
 
 /** This is the L2CAP disconnect indication callback function */
-void gatt_l2cif_disconnect_ind_cback(uint16_t lcid, bool ack_needed) {
-
+void gatt_l2cif_disconnect_ind_cback(uint16_t lcid, bool /* ack_needed */) {
   /* look up clcb for this channel */
   tGATT_TCB* p_tcb = gatt_find_tcb_by_cid(lcid);
   if (!p_tcb) return;
@@ -1002,7 +1001,7 @@ void gatt_consolidate(const RawAddress& identity_addr, const RawAddress& rpa) {
 }
 /*******************************************************************************
  *
- * Function         gatt_le_data_ind
+ * Function         gatt_data_process
  *
  * Description      This function is called when data is received from L2CAP.
  *                  if we are the originator of the connection, we are the ATT
@@ -1066,7 +1065,7 @@ void gatt_add_a_bonded_dev_for_srv_chg(const RawAddress& bda) {
                                           NULL);
 }
 
-/** This function is called to send a service chnaged indication to the
+/** This function is called to send a service changed indication to the
  * specified bd address */
 void gatt_send_srv_chg_ind(const RawAddress& peer_bda) {
   static const uint16_t sGATT_DEFAULT_START_HANDLE =
@@ -1098,7 +1097,7 @@ void gatt_send_srv_chg_ind(const RawAddress& peer_bda) {
   }
 }
 
-/** Check sending service chnaged Indication is required or not if required then
+/** Check sending service changed Indication is required or not if required then
  * send the Indication */
 void gatt_chk_srv_chg(tGATTS_SRV_CHG* p_srv_chg_clt) {
   log::verbose("srv_changed={}", p_srv_chg_clt->srv_changed);

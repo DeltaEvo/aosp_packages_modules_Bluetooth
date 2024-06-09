@@ -22,11 +22,11 @@ import static org.junit.Assert.assertThrows;
 
 import com.google.common.primitives.Bytes;
 
-import java.util.Random;
-
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+
+import java.util.Random;
 
 @RunWith(JUnit4.class)
 public class BaseDataTest {
@@ -102,7 +102,7 @@ public class BaseDataTest {
 
         BaseData data = BaseData.parseBaseData(serviceData);
         BaseData.BaseInformation level = data.getLevelOne();
-        assertThat(level.presentationDelay).isEqualTo(new byte[] { 0x01, 0x02, 0x03 });
+        assertThat(level.presentationDelay).isEqualTo(new byte[] {0x01, 0x02, 0x03});
         assertThat(level.numSubGroups).isEqualTo(1);
 
         assertThat(data.getLevelTwo().size()).isEqualTo(1);

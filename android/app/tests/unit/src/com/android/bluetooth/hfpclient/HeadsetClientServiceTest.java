@@ -17,7 +17,6 @@
 package com.android.bluetooth.hfpclient;
 
 import static android.content.pm.PackageManager.FEATURE_WATCH;
-import java.util.concurrent.TimeUnit;
 
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyInt;
@@ -55,6 +54,8 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
+
+import java.util.concurrent.TimeUnit;
 
 @MediumTest
 @RunWith(AndroidJUnit4.class)
@@ -119,10 +120,7 @@ public class HeadsetClientServiceTest {
 
         // Expect send BIEV to state machine
         verify(mStateMachine, timeout(STANDARD_WAIT_MILLIS).times(1))
-                .sendMessage(
-                    eq(HeadsetClientStateMachine.SEND_BIEV),
-                    eq(2),
-                    anyInt());
+                .sendMessage(eq(HeadsetClientStateMachine.SEND_BIEV), eq(2), anyInt());
     }
 
     @Test
@@ -140,10 +138,7 @@ public class HeadsetClientServiceTest {
 
         // Expect send BIEV to state machine
         verify(mStateMachine, timeout(STANDARD_WAIT_MILLIS).times(1))
-                .sendMessage(
-                    eq(HeadsetClientStateMachine.SEND_BIEV),
-                    eq(2),
-                    anyInt());
+                .sendMessage(eq(HeadsetClientStateMachine.SEND_BIEV), eq(2), anyInt());
     }
 
     @Test
