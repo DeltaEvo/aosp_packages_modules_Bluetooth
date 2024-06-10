@@ -2124,17 +2124,30 @@ public class LeAudioService extends ProfileService {
                         + ", mExposedActiveDevice: "
                         + mExposedActiveDevice);
 
+        LeAudioGroupDescriptor groupDescriptor = getGroupDescriptor(currentlyActiveGroupId);
         if (isBroadcastActive()
                 && currentlyActiveGroupId == LE_AUDIO_GROUP_ID_INVALID
-                && mUnicastGroupIdDeactivatedForBroadcastTransition != LE_AUDIO_GROUP_ID_INVALID
-                && groupId != LE_AUDIO_GROUP_ID_INVALID) {
+                && mUnicastGroupIdDeactivatedForBroadcastTransition != LE_AUDIO_GROUP_ID_INVALID) {
             // If broadcast is ongoing and need to update unicast fallback active group
             // we need to update the cached group id and skip changing the active device
             updateFallbackUnicastGroupIdForBroadcast(groupId);
+
+            /* In case of removing fallback unicast group, monitoring input device should be
+             * removed from active devices.
+             */
+            if (groupDescriptor != null && groupId == LE_AUDIO_GROUP_ID_INVALID) {
+                updateActiveDevices(
+                        groupId,
+                        groupDescriptor.mDirection,
+                        AUDIO_DIRECTION_NONE,
+                        false,
+                        groupDescriptor.mHasFallbackDeviceWhenGettingInactive,
+                        false);
+            }
+
             return true;
         }
 
-        LeAudioGroupDescriptor groupDescriptor = getGroupDescriptor(currentlyActiveGroupId);
         if (groupDescriptor != null && groupId == currentlyActiveGroupId) {
             /* Make sure active group is already exposed to audio framework.
              * If not, lets wait for it and don't sent additional intent.
