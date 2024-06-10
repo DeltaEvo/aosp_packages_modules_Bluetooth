@@ -331,7 +331,9 @@ struct CoreInterfaceImpl : bluetooth::core::CoreInterface {
     }
   }
 
-  void onLinkDown(const RawAddress& bd_addr) override {
+  void onLinkDown(const RawAddress& bd_addr, tBT_TRANSPORT transport) override {
+    if (transport != BT_TRANSPORT_BR_EDR) return;
+
     if (com::android::bluetooth::flags::a2dp_concurrent_source_sink()) {
       btif_av_acl_disconnected(bd_addr, A2dpType::kSource);
       btif_av_acl_disconnected(bd_addr, A2dpType::kSink);

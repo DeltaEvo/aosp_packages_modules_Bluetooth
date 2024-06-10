@@ -146,7 +146,8 @@ struct CoreInterface {
   virtual bt_status_t toggleProfile(tBTA_SERVICE_ID service_id,
                                     bool enable) = 0;
   virtual void removeDeviceFromProfiles(const RawAddress& bd_addr) = 0;
-  virtual void onLinkDown(const RawAddress& bd_addr) = 0;
+  virtual void onLinkDown(const RawAddress& bd_addr,
+                          tBT_TRANSPORT transport) = 0;
 
   CoreInterface(EventCallbacks* eventCallbacks,
                 ConfigInterface* configInterface, CodecInterface* msbcCodec,
