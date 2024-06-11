@@ -90,6 +90,10 @@ void IsoManager::DisconnectCis(uint16_t cis_handle, uint8_t reason) {
   pimpl_->iso_impl_->disconnect_cis(cis_handle, reason);
 }
 
+int IsoManager::GetNumberOfActiveIso() {
+  return pimpl_->iso_impl_->get_number_of_active_iso();
+}
+
 void IsoManager::SetupIsoDataPath(
     uint16_t iso_handle, struct iso_manager::iso_data_path_params path_params) {
   pimpl_->iso_impl_->setup_iso_data_path(iso_handle, std::move(path_params));

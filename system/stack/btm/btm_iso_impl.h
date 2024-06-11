@@ -342,6 +342,12 @@ struct iso_impl {
                        hci_reason_code_text((tHCI_REASON)(reason)).c_str()));
   }
 
+  int get_number_of_active_iso() {
+    int num_iso = conn_hdl_to_cis_map_.size() + conn_hdl_to_bis_map_.size();
+    log::info("Current number of active_iso is {}", num_iso);
+    return num_iso;
+  }
+
   void on_setup_iso_data_path(uint8_t* stream, uint16_t /* len */) {
     uint8_t status;
     uint16_t conn_handle;
