@@ -74,7 +74,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.StringWriter;
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -788,7 +788,7 @@ public class BluetoothMapContentObserver {
             }
         }
 
-        public byte[] encode() throws UnsupportedEncodingException {
+        public byte[] encode() {
             StringWriter sw = new StringWriter();
             XmlSerializer xmlEvtReport = Xml.newSerializer();
 
@@ -915,7 +915,7 @@ public class BluetoothMapContentObserver {
 
             Log.v(TAG, sw.toString());
 
-            return sw.toString().getBytes("UTF-8");
+            return sw.toString().getBytes(StandardCharsets.UTF_8);
         }
     }
 
@@ -994,7 +994,7 @@ public class BluetoothMapContentObserver {
             if (mMnsClient.isValidMnsRecord()) {
                 msg.what = BluetoothMnsObexClient.MSG_MNS_NOTIFICATION_REGISTRATION;
             } else {
-                // Trigger SDP Search and notificaiton registration , if SDP record not found.
+                // Trigger SDP Search and notification registration , if SDP record not found.
                 msg.what = BluetoothMnsObexClient.MSG_MNS_SDP_SEARCH_REGISTRATION;
                 if (mMnsClient.mMnsLstRegRqst != null
                         && (mMnsClient.mMnsLstRegRqst.isSearchInProgress())) {
@@ -1304,17 +1304,7 @@ public class BluetoothMapContentObserver {
             }
         }
 
-        try {
-            mMnsClient.sendEvent(evt.encode(), mMasId);
-        } catch (UnsupportedEncodingException ex) {
-            ContentProfileErrorReportUtils.report(
-                    BluetoothProfile.MAP,
-                    BluetoothProtoEnums.BLUETOOTH_MAP_CONTENT_OBSERVER,
-                    BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
-                    8);
-            /* do nothing */
-            Log.w(TAG, "Exception encoding sendEvent response", ex);
-        }
+        mMnsClient.sendEvent(evt.encode(), mMasId);
     }
 
     @VisibleForTesting
@@ -1680,7 +1670,7 @@ public class BluetoothMapContentObserver {
                                 if (threadId == DELETED_THREAD_ID) { // Message deleted
                                     // TODO:
                                     // We shall only use the folder attribute, but can't remember
-                                    // wether to set it to "deleted" or the name of the folder
+                                    // whether to set it to "deleted" or the name of the folder
                                     // from which the message have been deleted.
                                     // "old_folder" used only for MessageShift event
                                     Event evt =
@@ -2648,7 +2638,7 @@ public class BluetoothMapContentObserver {
                         /* Update the folder ID to avoid triggering an event for MCE
                          * initiated actions. */
                         /* UPDATE: Actually the BT-Spec. states that an undelete is a move of the
-                         * message to INBOX - clearified in errata 5591.
+                         * message to INBOX - clarified in errata 5591.
                          * Therefore we update the cache to INBOX-folderId - to trigger a message
                          * shift event to the old-folder. */
                         if (inboxFolder != null) {
@@ -2771,7 +2761,7 @@ public class BluetoothMapContentObserver {
                             // after undelete.
                             // We do this by changing the cached folder value to being inbox - hence
                             // the event handler will se the update as the message have been shifted
-                            // from INBOX to old-folder. (Errata 5591 clearifies this)
+                            // from INBOX to old-folder. (Errata 5591 clarifies this)
                             msg.type = Mms.MESSAGE_BOX_INBOX;
                         }
                     }
@@ -2864,7 +2854,7 @@ public class BluetoothMapContentObserver {
                              * after undelete.
                              * We do this by changing the cached folder value to being inbox - hence
                              * the event handler will se the update as the message have been shifted
-                             * from INBOX to old-folder. (Errata 5591 clearifies this)
+                             * from INBOX to old-folder. (Errata 5591 clarifies this)
                              * */
                             msg.type = Sms.MESSAGE_TYPE_INBOX;
                         }
@@ -3618,7 +3608,7 @@ public class BluetoothMapContentObserver {
                         }
                         values.put(Mms.Part.FILENAME, "smil.xml");
                         values.put(Mms.Part.NAME, "smil.xml");
-                        values.put(Mms.Part.TEXT, new String(part.mData, "UTF-8"));
+                        values.put(Mms.Part.TEXT, new String(part.mData, StandardCharsets.UTF_8));
 
                         uri = Uri.parse(Mms.CONTENT_URI + "/" + handle + "/part");
                         uri = mResolver.insert(uri, values);
@@ -3638,13 +3628,6 @@ public class BluetoothMapContentObserver {
                     }
                 }
             }
-        } catch (UnsupportedEncodingException e) {
-            ContentProfileErrorReportUtils.report(
-                    BluetoothProfile.MAP,
-                    BluetoothProtoEnums.BLUETOOTH_MAP_CONTENT_OBSERVER,
-                    BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
-                    26);
-            Log.w(TAG, e);
         } catch (IOException e) {
             ContentProfileErrorReportUtils.report(
                     BluetoothProfile.MAP,

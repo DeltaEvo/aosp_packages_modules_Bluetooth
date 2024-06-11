@@ -20,7 +20,7 @@ import com.android.bluetooth.DeviceWorkArounds;
 import com.android.bluetooth.map.BluetoothMapSmsPdu.SmsPdu;
 import com.android.bluetooth.map.BluetoothMapUtils.TYPE;
 
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -76,7 +76,7 @@ public class BluetoothMapbMessageSms extends BluetoothMapbMessage {
     }
 
     @Override
-    public byte[] encode() throws UnsupportedEncodingException {
+    public byte[] encode() {
         List<byte[]> bodyFragments = new ArrayList<>();
 
         /* Store the messages in an ArrayList to be able to handle the different message types in
@@ -107,12 +107,13 @@ public class BluetoothMapbMessageSms extends BluetoothMapbMessage {
                 while ((tmpBody.charAt(tmpBody.length() - trailingLF - 1)) == '\n') trailingLF++;
                 tmpBody = tmpBody.substring(0, (tmpBody.length() - trailingLF));
             }
-            bodyFragments.add(tmpBody.getBytes("UTF-8"));
+            bodyFragments.add(tmpBody.getBytes(StandardCharsets.UTF_8));
         } else if (mSmsBodyPdus != null && mSmsBodyPdus.size() > 0) {
             for (SmsPdu pdu : mSmsBodyPdus) {
                 // This cannot(must not) contain END:MSG
                 bodyFragments.add(
-                        encodeBinary(pdu.getData(), pdu.getScAddress()).getBytes("UTF-8"));
+                        encodeBinary(pdu.getData(), pdu.getScAddress())
+                                .getBytes(StandardCharsets.UTF_8));
             }
         } else {
             bodyFragments.add(new byte[0]); // An empty message - no text

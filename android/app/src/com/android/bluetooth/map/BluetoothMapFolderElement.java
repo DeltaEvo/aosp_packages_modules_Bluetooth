@@ -30,7 +30,7 @@ import org.xmlpull.v1.XmlSerializer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Locale;
 
@@ -50,9 +50,9 @@ public class BluetoothMapFolderElement implements Comparable<BluetoothMapFolderE
 
     private static final String TAG = "BluetoothMapFolderElement";
 
-    public BluetoothMapFolderElement(String name, BluetoothMapFolderElement parrent) {
+    public BluetoothMapFolderElement(String name, BluetoothMapFolderElement parent) {
         this.mName = name;
-        this.mParent = parrent;
+        this.mParent = parent;
         mSubFolders = new HashMap<String, BluetoothMapFolderElement>();
     }
 
@@ -260,7 +260,7 @@ public class BluetoothMapFolderElement implements Comparable<BluetoothMapFolderE
         return mSubFolders.get(folderName.toLowerCase());
     }
 
-    public byte[] encode(int offset, int count) throws UnsupportedEncodingException {
+    public byte[] encode(int offset, int count) {
         StringWriter sw = new StringWriter();
         XmlSerializer xmlMsgElement = Xml.newSerializer();
         int i, stopIndex;
@@ -315,7 +315,7 @@ public class BluetoothMapFolderElement implements Comparable<BluetoothMapFolderE
             Log.w(TAG, e);
             throw new IllegalArgumentException("error encoding folderElement");
         }
-        return sw.toString().getBytes("UTF-8");
+        return sw.toString().getBytes(StandardCharsets.UTF_8);
     }
 
     /* The functions below are useful for implementing a MAP client, reusing the object.

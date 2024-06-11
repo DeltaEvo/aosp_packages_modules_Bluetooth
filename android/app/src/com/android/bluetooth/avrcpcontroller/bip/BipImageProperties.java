@@ -27,7 +27,7 @@ import org.xmlpull.v1.XmlSerializer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -198,7 +198,7 @@ public class BipImageProperties {
                                     new BipAttachmentFormat(
                                             contentType, charset, name, size, created, modified));
                         } else {
-                            warn("Unrecognized tag in x-bt/img-properties object: " + tag);
+                            Log.w(TAG, "Unrecognized tag in x-bt/img-properties object: " + tag);
                         }
                         break;
                     case XmlPullParser.END_TAG:
@@ -208,9 +208,9 @@ public class BipImageProperties {
             }
             return;
         } catch (XmlPullParserException e) {
-            error("XML parser error when parsing XML", e);
+            Log.e(TAG, "XML parser error when parsing XML", e);
         } catch (IOException e) {
-            error("I/O error when parsing XML", e);
+            Log.e(TAG, "I/O error when parsing XML", e);
         }
         throw new ParseException("Failed to parse image-properties from stream");
     }
@@ -317,7 +317,7 @@ public class BipImageProperties {
                 BipPixel pixel = format.getPixel();
                 int size = format.getSize();
                 if (encoding == null || pixel == null) {
-                    error("Native format " + format.toString() + " is invalid.");
+                    Log.e(TAG, "Native format " + format.toString() + " is invalid.");
                     continue;
                 }
                 xmlMsgElement.startTag(null, "native");
@@ -335,7 +335,7 @@ public class BipImageProperties {
                 int maxSize = format.getMaxSize();
                 BipTransformation trans = format.getTransformation();
                 if (encoding == null || pixel == null) {
-                    error("Variant format " + format.toString() + " is invalid.");
+                    Log.e(TAG, "Variant format " + format.toString() + " is invalid.");
                     continue;
                 }
                 xmlMsgElement.startTag(null, "variant");
@@ -358,7 +358,7 @@ public class BipImageProperties {
                 BipDateTime created = format.getCreatedDate();
                 BipDateTime modified = format.getModifiedDate();
                 if (contentType == null || name == null) {
-                    error("Attachment format " + format.toString() + " is invalid.");
+                    Log.e(TAG, "Attachment format " + format.toString() + " is invalid.");
                     continue;
                 }
                 xmlMsgElement.startTag(null, "attachment");
@@ -383,11 +383,11 @@ public class BipImageProperties {
             xmlMsgElement.endDocument();
             return writer.toString();
         } catch (IllegalArgumentException e) {
-            error("Falied to serialize ImageProperties", e);
+            Log.e(TAG, "Failed to serialize ImageProperties", e);
         } catch (IllegalStateException e) {
-            error("Falied to serialize ImageProperties", e);
+            Log.e(TAG, "Failed to serialize ImageProperties", e);
         } catch (IOException e) {
-            error("Falied to serialize ImageProperties", e);
+            Log.e(TAG, "Failed to serialize ImageProperties", e);
         }
         return null;
     }
@@ -402,11 +402,7 @@ public class BipImageProperties {
     public byte[] serialize() {
         if (!isValid()) return null;
         String s = toString();
-        try {
-            return s != null ? s.getBytes("UTF-8") : null;
-        } catch (UnsupportedEncodingException e) {
-            return null;
-        }
+        return s != null ? s.getBytes(StandardCharsets.UTF_8) : null;
     }
 
     /**
@@ -418,17 +414,5 @@ public class BipImageProperties {
      */
     public boolean isValid() {
         return sVersion.equals(mVersion) && mImageHandle != null && mHasThumbnailFormat;
-    }
-
-    private static void warn(String msg) {
-        Log.w(TAG, msg);
-    }
-
-    private static void error(String msg) {
-        Log.e(TAG, msg);
-    }
-
-    private static void error(String msg, Throwable e) {
-        Log.e(TAG, msg, e);
     }
 }

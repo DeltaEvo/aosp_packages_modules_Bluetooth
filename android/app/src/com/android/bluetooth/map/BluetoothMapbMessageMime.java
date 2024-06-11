@@ -27,6 +27,7 @@ import com.android.bluetooth.content_profiles.ContentProfileErrorReportUtils;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -53,7 +54,6 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
                                             * jpeg data or the text.getBytes("utf-8") */
 
         public String getDataAsString() {
-            String result = null;
             String charset = mCharsetName;
             // Figure out if we support the charset, else fall back to UTF-8, as this is what
             // the MAP specification suggest to use, and is compatible with US-ASCII.
@@ -77,7 +77,7 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
                 }
             }
             try {
-                result = new String(mData, charset);
+                return new String(mData, charset);
             } catch (UnsupportedEncodingException e) {
                 ContentProfileErrorReportUtils.report(
                         BluetoothProfile.MAP,
@@ -85,23 +85,11 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
                         BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
                         1);
                 /* This cannot happen unless Charset.isSupported() is out of sync with String */
-                try {
-                    result = new String(mData, "UTF-8");
-                } catch (UnsupportedEncodingException e2) {
-                    ContentProfileErrorReportUtils.report(
-                            BluetoothProfile.MAP,
-                            BluetoothProtoEnums.BLUETOOTH_MAP_BMESSAGE_MIME,
-                            BluetoothStatsLog
-                                    .BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
-                            2);
-                    Log.e(TAG, "getDataAsString: " + e);
-                }
+                return new String(mData, StandardCharsets.UTF_8);
             }
-            return result;
         }
 
-        public void encode(StringBuilder sb, String boundaryTag, boolean last)
-                throws UnsupportedEncodingException {
+        public void encode(StringBuilder sb, String boundaryTag, boolean last) {
             sb.append("--").append(boundaryTag).append("\r\n");
             if (mContentType != null) {
                 sb.append("Content-Type: ").append(mContentType);
@@ -127,8 +115,8 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
                 if (mContentType != null
                         && (mContentType.toUpperCase().contains("TEXT")
                                 || mContentType.toUpperCase().contains("SMIL"))) {
-                    String text = new String(mData, "UTF-8");
-                    if (text.getBytes().length == text.getBytes("UTF-8").length) {
+                    String text = new String(mData, StandardCharsets.UTF_8);
+                    if (text.getBytes().length == text.getBytes(StandardCharsets.UTF_8).length) {
                         /* Add the header split empty line */
                         sb.append("Content-Transfer-Encoding: 8BIT\r\n\r\n");
                     } else {
@@ -148,10 +136,10 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
             }
         }
 
-        public void encodePlainText(StringBuilder sb) throws UnsupportedEncodingException {
+        public void encodePlainText(StringBuilder sb) {
             if (mContentType != null && mContentType.toUpperCase().contains("TEXT")) {
-                String text = new String(mData, "UTF-8");
-                if (text.getBytes().length != text.getBytes("UTF-8").length) {
+                String text = new String(mData, StandardCharsets.UTF_8);
+                if (text.getBytes().length != text.getBytes(StandardCharsets.UTF_8).length) {
                     text = BluetoothMapUtils.encodeQuotedPrintable(mData);
                 }
                 sb.append(text).append("\r\n");
@@ -420,7 +408,7 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
         sb.append("\r\n");
     }
 
-    public void encodeHeaders(StringBuilder sb) throws UnsupportedEncodingException {
+    public void encodeHeaders(StringBuilder sb) {
         /* TODO: From RFC-4356 - about the RFC-(2)822 headers:
          *    "Current Internet Message format requires that only 7-bit US-ASCII
          *     characters be present in headers.  Non-7-bit characters in an address
@@ -522,7 +510,7 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
      * */
 
     /** Encode the bMessage as a Mime message(MMS/IM) */
-    public byte[] encodeMime() throws UnsupportedEncodingException {
+    public byte[] encodeMime() {
         ArrayList<byte[]> bodyFragments = new ArrayList<byte[]>();
         StringBuilder sb = new StringBuilder();
         int count = 0;
@@ -551,7 +539,7 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
         if (mimeBody != null) {
             // Replace any occurrences of END:MSG with \END:MSG
             String tmpBody = mimeBody.replaceAll("END:MSG", "/END\\:MSG");
-            bodyFragments.add(tmpBody.getBytes("UTF-8"));
+            bodyFragments.add(tmpBody.getBytes(StandardCharsets.UTF_8));
         } else {
             bodyFragments.add(new byte[0]);
         }
@@ -751,19 +739,8 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
             return BluetoothMapUtils.quotedPrintableToUtf8(body, charset);
         } else {
             // TODO: handle other encoding types? - here we simply store the string data as bytes
-            try {
-
-                return body.getBytes("UTF-8");
-            } catch (UnsupportedEncodingException e) {
-                ContentProfileErrorReportUtils.report(
-                        BluetoothProfile.MAP,
-                        BluetoothProtoEnums.BLUETOOTH_MAP_BMESSAGE_MIME,
-                        BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
-                        6);
-                // This will never happen, as UTF-8 is mandatory on Android platforms
-            }
+            return body.getBytes(StandardCharsets.UTF_8);
         }
-        return null;
     }
 
     private void parseMime(String message) {
@@ -842,7 +819,7 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
     }
 
     @Override
-    public byte[] encode() throws UnsupportedEncodingException {
+    public byte[] encode() {
         return encodeMime();
     }
 }

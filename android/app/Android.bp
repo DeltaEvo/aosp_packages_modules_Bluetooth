@@ -332,6 +332,7 @@ android_app {
             "-Xep:NonApiType:ERROR",
             "-Xep:NonCanonicalType:ERROR",
             "-Xep:ReturnAtTheEndOfVoidFunction:ERROR",
+            "-Xep:StringCharset:ERROR",
             "-Xep:UnusedMethod:ERROR",
             "-Xep:UnusedVariable:ERROR",
             "-XepExcludedPaths:.*/srcjars/.*", // Exclude generated files

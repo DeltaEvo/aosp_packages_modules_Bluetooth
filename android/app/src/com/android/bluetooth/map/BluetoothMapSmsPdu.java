@@ -33,6 +33,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -379,13 +380,12 @@ public class BluetoothMapSmsPdu {
             Log.v(TAG, "userDataMsgOffset:" + mUserDataMsgOffset);
         }
 
-        private void gsmWriteDate(ByteArrayOutputStream header, long time)
-                throws UnsupportedEncodingException {
+        private void gsmWriteDate(ByteArrayOutputStream header, long time) {
             SimpleDateFormat format = new SimpleDateFormat("yyMMddHHmmss");
             Date date = new Date(time);
             String timeStr = format.format(date); // Format to YYMMDDTHHMMSS UTC time
             Log.v(TAG, "Generated time string: " + timeStr);
-            byte[] timeChars = timeStr.getBytes("US-ASCII");
+            byte[] timeChars = timeStr.getBytes(StandardCharsets.US_ASCII);
 
             for (int i = 0, n = timeStr.length(); i < n; i += 2) {
                 header.write(

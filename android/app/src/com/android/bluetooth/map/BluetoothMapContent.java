@@ -59,6 +59,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -3280,7 +3281,7 @@ public class BluetoothMapContent {
             if (summary != null && cs != null && !cs.equals("UTF-8")) {
                 try {
                     // TODO: Not sure this is how to convert to UTF-8
-                    summary = new String(summary.getBytes(cs), "UTF-8");
+                    summary = new String(summary.getBytes(cs), StandardCharsets.UTF_8);
                 } catch (UnsupportedEncodingException e) {
                     ContentProfileErrorReportUtils.report(
                             BluetoothProfile.MAP,
@@ -3899,33 +3900,23 @@ public class BluetoothMapContent {
                     if (!part.mContentType.toUpperCase().contains("TEXT")
                             && !message.getIncludeAttachments()) {
                         StringBuilder sb = new StringBuilder();
-                        try {
-                            part.encodePlainText(sb);
-                            // Each time {@code encodePlainText} is called, it adds {@code "\r\n"}
-                            // to the string. {@code encodePlainText} is called here to replace
-                            // an image with a string, but later on, when we encode the entire
-                            // bMessage in {@link BluetoothMapbMessageMime#encode()},
-                            // {@code encodePlainText} will be called again on this {@code
-                            // MimePart} (as text this time), adding a second {@code "\r\n"}. So
-                            // we remove the extra newline from the end.
-                            int newlineIndex = sb.lastIndexOf("\r\n");
-                            if (newlineIndex != -1) sb.delete(newlineIndex, newlineIndex + 4);
-                            text = sb.toString();
-                            part.mContentType = "text";
-                        } catch (UnsupportedEncodingException e) {
-                            ContentProfileErrorReportUtils.report(
-                                    BluetoothProfile.MAP,
-                                    BluetoothProtoEnums.BLUETOOTH_MAP_CONTENT,
-                                    BluetoothStatsLog
-                                            .BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
-                                    6);
-                            Log.d(TAG, "extractMmsParts", e);
-                        }
+                        part.encodePlainText(sb);
+                        // Each time {@code encodePlainText} is called, it adds {@code "\r\n"}
+                        // to the string. {@code encodePlainText} is called here to replace
+                        // an image with a string, but later on, when we encode the entire
+                        // bMessage in {@link BluetoothMapbMessageMime#encode()},
+                        // {@code encodePlainText} will be called again on this {@code
+                        // MimePart} (as text this time), adding a second {@code "\r\n"}. So
+                        // we remove the extra newline from the end.
+                        int newlineIndex = sb.lastIndexOf("\r\n");
+                        if (newlineIndex != -1) sb.delete(newlineIndex, newlineIndex + 4);
+                        text = sb.toString();
+                        part.mContentType = "text";
                     }
 
                     try {
                         if (text != null) {
-                            part.mData = text.getBytes("UTF-8");
+                            part.mData = text.getBytes(StandardCharsets.UTF_8);
                             part.mCharsetName = "utf-8";
                         } else {
                             part.mData =
@@ -4255,12 +4246,9 @@ public class BluetoothMapContent {
      * @param id the content provider id for the message to fetch.
      * @param appParams The application parameter object received from the client.
      * @return a byte[] containing the utf-8 encoded bMessage to send to the client.
-     * @throws UnsupportedEncodingException if UTF-8 is not supported, which is guaranteed to be
-     *     supported on an android device
      */
     public byte[] getIMMessage(
-            long id, BluetoothMapAppParams appParams, BluetoothMapFolderElement folderElement)
-            throws UnsupportedEncodingException {
+            long id, BluetoothMapAppParams appParams, BluetoothMapFolderElement folderElement) {
         long threadId, folderId;
 
         if (appParams.getCharset() == MAP_MESSAGE_CHARSET_NATIVE) {
@@ -4324,7 +4312,7 @@ public class BluetoothMapContent {
                 MimePart part = message.addMimePart();
                 part.mData =
                         c.getString((c.getColumnIndex(BluetoothMapContract.MessageColumns.BODY)))
-                                .getBytes("UTF-8");
+                                .getBytes(StandardCharsets.UTF_8);
                 part.mCharsetName = "utf-8";
                 part.mContentId = "0";
                 part.mContentType = "text/plain";

@@ -27,7 +27,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -391,21 +391,11 @@ public abstract class BluetoothMapbMessage {
          * @return the next line of text, or null at end of file, or if UTF-8 is not supported.
          */
         public String getLine() {
-            try {
-                byte[] line = getLineAsBytes();
-                if (line.length == 0) {
-                    return null;
-                } else {
-                    return new String(line, "UTF-8");
-                }
-            } catch (UnsupportedEncodingException e) {
-                ContentProfileErrorReportUtils.report(
-                        BluetoothProfile.MAP,
-                        BluetoothProtoEnums.BLUETOOTH_MAP_BMESSAGE,
-                        BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
-                        1);
-                Log.w(TAG, e);
+            byte[] line = getLineAsBytes();
+            if (line.length == 0) {
                 return null;
+            } else {
+                return new String(line, StandardCharsets.UTF_8);
             }
         }
 
@@ -755,7 +745,7 @@ public abstract class BluetoothMapbMessage {
      */
     public abstract void parseMsgInit();
 
-    public abstract byte[] encode() throws UnsupportedEncodingException;
+    public abstract byte[] encode();
 
     public void setStatus(boolean read) {
         if (read) {
@@ -936,7 +926,7 @@ public abstract class BluetoothMapbMessage {
         return out;
     }
 
-    public byte[] encodeGeneric(List<byte[]> bodyFragments) throws UnsupportedEncodingException {
+    public byte[] encodeGeneric(List<byte[]> bodyFragments) {
         StringBuilder sb = new StringBuilder(256);
         byte[] msgStart, msgEnd;
         sb.append("BEGIN:BMSG").append("\r\n");
@@ -986,14 +976,14 @@ public abstract class BluetoothMapbMessage {
         sb.append("LENGTH:").append(length).append("\r\n");
 
         // Extract the initial part of the bMessage string
-        msgStart = sb.toString().getBytes("UTF-8");
+        msgStart = sb.toString().getBytes(StandardCharsets.UTF_8);
 
         sb = new StringBuilder(31);
         sb.append("END:BBODY").append("\r\n");
         sb.append("END:BENV").append("\r\n");
         sb.append("END:BMSG").append("\r\n");
 
-        msgEnd = sb.toString().getBytes("UTF-8");
+        msgEnd = sb.toString().getBytes(StandardCharsets.UTF_8);
 
         try {
 
@@ -1002,13 +992,13 @@ public abstract class BluetoothMapbMessage {
             stream.write(msgStart);
 
             for (byte[] fragment : bodyFragments) {
-                stream.write("BEGIN:MSG\r\n".getBytes("UTF-8"));
+                stream.write("BEGIN:MSG\r\n".getBytes(StandardCharsets.UTF_8));
                 stream.write(fragment);
-                stream.write("\r\nEND:MSG\r\n".getBytes("UTF-8"));
+                stream.write("\r\nEND:MSG\r\n".getBytes(StandardCharsets.UTF_8));
             }
             stream.write(msgEnd);
 
-            Log.v(TAG, stream.toString("UTF-8"));
+            Log.v(TAG, stream.toString(StandardCharsets.UTF_8));
             return stream.toByteArray();
         } catch (IOException e) {
             ContentProfileErrorReportUtils.report(
