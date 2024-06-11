@@ -71,6 +71,7 @@ use num_traits::{FromPrimitive, ToPrimitive};
 
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
+use std::fs::File;
 use std::sync::Arc;
 
 use btstack::bluetooth_qa::IBluetoothQACallback;
@@ -2727,7 +2728,7 @@ impl IBluetoothMedia for BluetoothMediaDBus {
     }
 
     #[dbus_method("StartAudioRequest")]
-    fn start_audio_request(&mut self) -> bool {
+    fn start_audio_request(&mut self, connection_listener: File) -> bool {
         dbus_generated!()
     }
 
@@ -2737,7 +2738,7 @@ impl IBluetoothMedia for BluetoothMediaDBus {
     }
 
     #[dbus_method("StopAudioRequest")]
-    fn stop_audio_request(&mut self) {
+    fn stop_audio_request(&mut self, connection_listener: File) {
         dbus_generated!()
     }
 
@@ -2747,6 +2748,7 @@ impl IBluetoothMedia for BluetoothMediaDBus {
         address: RawAddress,
         sco_offload: bool,
         disabled_codecs: HfpCodecBitId,
+        connection_listener: File,
     ) -> bool {
         dbus_generated!()
     }
@@ -2757,7 +2759,7 @@ impl IBluetoothMedia for BluetoothMediaDBus {
     }
 
     #[dbus_method("StopScoCall")]
-    fn stop_sco_call(&mut self, address: RawAddress) {
+    fn stop_sco_call(&mut self, address: RawAddress, connection_listener: File) {
         dbus_generated!()
     }
 
