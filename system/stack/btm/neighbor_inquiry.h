@@ -26,7 +26,8 @@
 #include "stack/include/bt_device_type.h"
 #include "stack/include/bt_name.h"
 #include "stack/include/btm_api_types.h"
-#include "stack/include/btm_status.h"
+#include "stack/include/hci_error_code.h"
+#include "stack/rnr/remote_name_request.h"
 #include "types/ble_address_with_type.h"
 #include "types/raw_address.h"
 
@@ -198,16 +199,6 @@ inline std::string btm_inquiry_cmpl_status_text(
   }
 }
 
-/* Structure returned with remote name  request */
-typedef struct {
-  tBTM_STATUS status;
-  RawAddress bd_addr;
-  BD_NAME remote_bd_name;
-  tHCI_STATUS hci_status;
-} tBTM_REMOTE_DEV_NAME;
-
-typedef void(tBTM_NAME_CMPL_CB)(const tBTM_REMOTE_DEV_NAME*);
-
 struct tBTM_INQUIRY_VAR_ST {
   alarm_t* classic_inquiry_timer;
 
@@ -220,16 +211,7 @@ struct tBTM_INQUIRY_VAR_ST {
   uint16_t inq_scan_type;
   uint16_t page_scan_type; /* current page scan type */
 
-  struct {
-    tBTM_NAME_CMPL_CB* p_remname_cmpl_cb{nullptr};
-    alarm_t* remote_name_timer{nullptr};
-    RawAddress
-        remname_bda{}; /* Name of bd addr for active remote name request */
-    bool remname_active{
-        false}; /* State of a remote name request by external API */
-    tBT_DEVICE_TYPE remname_dev_type{
-        BT_DEVICE_TYPE_UNKNOWN}; /* Whether it's LE or BREDR name request */
-  } rnr;
+  bluetooth::rnr::RemoteNameRequest rnr;
 
   tBTM_CMPL_CB* p_inq_cmpl_cb;
   tBTM_INQ_RESULTS_CB* p_inq_results_cb;
