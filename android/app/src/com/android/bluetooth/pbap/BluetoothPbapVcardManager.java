@@ -52,6 +52,7 @@ import com.android.vcard.VCardPhoneNumberTranslationCallback;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 
 // Next tag value for ContentProfileErrorReportUtils.report(): 22
 public class BluetoothPbapVcardManager {
@@ -230,7 +231,7 @@ public class BluetoothPbapVcardManager {
     @VisibleForTesting static final int CALLS_NAME_COLUMN_INDEX = 1;
     @VisibleForTesting static final int CALLS_NUMBER_PRESENTATION_COLUMN_INDEX = 2;
 
-    public final ArrayList<String> loadCallHistoryList(final int type) {
+    public final List<String> loadCallHistoryList(final int type) {
         final Uri myUri = CallLog.Calls.CONTENT_URI;
         String selection = BluetoothPbapObexServer.createSelectionPara(type);
         String[] projection =
@@ -280,8 +281,8 @@ public class BluetoothPbapVcardManager {
         return list;
     }
 
-    public final ArrayList<String> getPhonebookNameList(final int orderByWhat) {
-        ArrayList<String> nameList = new ArrayList<String>();
+    public final List<String> getPhonebookNameList(final int orderByWhat) {
+        List<String> nameList = new ArrayList<String>();
         // Owner vCard enhancement. Use "ME" profile if configured
         String ownerName = null;
         if (BluetoothPbapConfig.useProfileForOwnerVcard()) {
@@ -339,14 +340,14 @@ public class BluetoothPbapVcardManager {
         return nameList;
     }
 
-    final ArrayList<String> getSelectedPhonebookNameList(
+    final List<String> getSelectedPhonebookNameList(
             final int orderByWhat,
             final boolean vcardType21,
             int needSendBody,
             int pbSize,
             byte[] selector,
             String vCardSelectorOperator) {
-        ArrayList<String> nameList = new ArrayList<String>();
+        List<String> nameList = new ArrayList<String>();
         PropertySelector vcardselector = new PropertySelector(selector);
         int vcardType;
 
@@ -479,8 +480,8 @@ public class BluetoothPbapVcardManager {
         return nameList;
     }
 
-    public final ArrayList<String> getContactNamesByNumber(final String phoneNumber) {
-        ArrayList<String> nameList = new ArrayList<String>();
+    public final List<String> getContactNamesByNumber(final String phoneNumber) {
+        List<String> nameList = new ArrayList<String>();
 
         Cursor contactCursor = null;
         Uri uri = null;
@@ -1447,7 +1448,7 @@ public class BluetoothPbapVcardManager {
      * given cursor is sorted by CONTACT_ID.
      */
     private static void appendDistinctNameIdList(
-            ArrayList<String> resultList, String defaultName, Cursor cursor) {
+            List<String> resultList, String defaultName, Cursor cursor) {
         final int contactIdColumn = cursor.getColumnIndex(Data.CONTACT_ID);
         final int idColumn = cursor.getColumnIndex(Data._ID);
         final int nameColumn = cursor.getColumnIndex(Data.DISPLAY_NAME);

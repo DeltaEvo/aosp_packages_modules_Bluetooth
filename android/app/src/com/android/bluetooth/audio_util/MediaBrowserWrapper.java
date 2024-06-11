@@ -31,6 +31,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Handles API calls to a MediaBrowser.
@@ -41,7 +42,6 @@ import java.util.List;
  * callback when it gets the answer from MediaBrowser.
  */
 class MediaBrowserWrapper {
-
     private static final String TAG = MediaBrowserWrapper.class.getSimpleName();
 
     /**
@@ -86,8 +86,7 @@ class MediaBrowserWrapper {
 
     // GetFolderItems also works with a callback, so we need to store all requests made before we
     // got the results and prevent new subscriptions.
-    private final HashMap<String, ArrayList<GetFolderItemsCallback>> mSubscribedIds =
-            new HashMap<>();
+    private final Map<String, List<GetFolderItemsCallback>> mSubscribedIds = new HashMap<>();
 
     private final Runnable mDisconnectRunnable = () -> _disconnect();
 
@@ -328,7 +327,7 @@ class MediaBrowserWrapper {
             mRunHandler.postDelayed(mTimeoutRunnable, BROWSER_DISCONNECT_TIMEOUT.toMillis());
         }
 
-        private void executeCallbacks(String parentId, ArrayList<ListItem> browsableContent) {
+        private void executeCallbacks(String parentId, List<ListItem> browsableContent) {
             if (mCallbacksExecuted) {
                 return;
             }
@@ -353,8 +352,7 @@ class MediaBrowserWrapper {
 
         @Override
         public void onChildrenLoaded(String parentId, List<MediaItem> children) {
-
-            ArrayList<ListItem> browsableContent = new ArrayList<>();
+            List<ListItem> browsableContent = new ArrayList<>();
 
             for (MediaItem item : children) {
                 if (item.isBrowsable()) {

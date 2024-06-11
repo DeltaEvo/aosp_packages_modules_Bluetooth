@@ -21,7 +21,6 @@ import android.os.RemoteException;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /** GATT Profile Native Interface to/from JNI. */
@@ -133,7 +132,7 @@ public class GattNativeInterface {
         return getGattService().getSampleGattDbElement();
     }
 
-    void onGetGattDb(int connId, ArrayList<GattDbElement> db) throws RemoteException {
+    void onGetGattDb(int connId, List<GattDbElement> db) throws RemoteException {
         getGattService().onGetGattDb(connId, db);
     }
 

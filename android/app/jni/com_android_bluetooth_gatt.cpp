@@ -2882,7 +2882,7 @@ static int register_com_android_bluetooth_gatt_(JNIEnv* env) {
       {"onClientCongestion", "(IZ)V", &method_onClientCongestion},
       {"getSampleGattDbElement", "()Lcom/android/bluetooth/gatt/GattDbElement;",
        &method_getSampleGattDbElement},
-      {"onGetGattDb", "(ILjava/util/ArrayList;)V", &method_onGetGattDb},
+      {"onGetGattDb", "(ILjava/util/List;)V", &method_onGetGattDb},
       {"onClientPhyRead", "(ILjava/lang/String;III)V", &method_onClientPhyRead},
       {"onClientPhyUpdate", "(IIII)V", &method_onClientPhyUpdate},
       {"onClientConnUpdate", "(IIIII)V", &method_onClientConnUpdate},

@@ -47,6 +47,7 @@ import java.text.StringCharacterIterator;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 
 // Next tag value for ContentProfileErrorReportUtils.report(): 34
 public class BluetoothPbapObexServer extends ServerRequestHandler {
@@ -893,7 +894,7 @@ public class BluetoothPbapObexServer extends ServerRequestHandler {
             }
             // Call history listing request
         } else {
-            ArrayList<String> nameList = mVcardManager.loadCallHistoryList(appParamValue.needTag);
+            List<String> nameList = mVcardManager.loadCallHistoryList(appParamValue.needTag);
             int requestSize =
                     nameList.size() >= appParamValue.maxListCount
                             ? appParamValue.maxListCount
@@ -930,7 +931,7 @@ public class BluetoothPbapObexServer extends ServerRequestHandler {
             ContactsType contactType) {
         int itemsFound = 0;
 
-        ArrayList<String> nameList = null;
+        List<String> nameList = null;
         if (mVcardSelector) {
             if (contactType == ContactsType.TYPE_PHONEBOOK) {
                 nameList =
@@ -971,10 +972,10 @@ public class BluetoothPbapObexServer extends ServerRequestHandler {
                         + appParamValue.searchValue);
 
         if (type.equals("number")) {
-            ArrayList<Integer> savedPosList = new ArrayList<>();
-            ArrayList<String> selectedNameList = new ArrayList<String>();
+            List<Integer> savedPosList = new ArrayList<>();
+            List<String> selectedNameList = new ArrayList<String>();
             // query the number, to get the names
-            ArrayList<String> names = new ArrayList<>();
+            List<String> names = new ArrayList<>();
             if (contactType == ContactsType.TYPE_PHONEBOOK) {
                 names = mVcardManager.getContactNamesByNumber(appParamValue.searchValue);
             } else if (contactType == ContactsType.TYPE_SIM) {
@@ -1005,8 +1006,8 @@ public class BluetoothPbapObexServer extends ServerRequestHandler {
             }
 
         } else {
-            ArrayList<Integer> savedPosList = new ArrayList<>();
-            ArrayList<String> selectedNameList = new ArrayList<String>();
+            List<Integer> savedPosList = new ArrayList<>();
+            List<String> selectedNameList = new ArrayList<String>();
             if (appParamValue.searchValue != null) {
                 compareValue = appParamValue.searchValue.trim().toLowerCase();
             }

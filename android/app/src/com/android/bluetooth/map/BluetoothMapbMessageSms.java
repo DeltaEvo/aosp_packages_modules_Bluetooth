@@ -22,13 +22,14 @@ import com.android.bluetooth.map.BluetoothMapUtils.TYPE;
 
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
+import java.util.List;
 
 public class BluetoothMapbMessageSms extends BluetoothMapbMessage {
 
-    private ArrayList<SmsPdu> mSmsBodyPdus = null;
+    private List<SmsPdu> mSmsBodyPdus = null;
     private String mSmsBody = null;
 
-    public void setSmsBodyPdus(ArrayList<SmsPdu> smsBodyPdus) {
+    public void setSmsBodyPdus(List<SmsPdu> smsBodyPdus) {
         this.mSmsBodyPdus = smsBodyPdus;
         this.mCharset = null;
         if (smsBodyPdus.size() > 0) {
@@ -76,7 +77,7 @@ public class BluetoothMapbMessageSms extends BluetoothMapbMessage {
 
     @Override
     public byte[] encode() throws UnsupportedEncodingException {
-        ArrayList<byte[]> bodyFragments = new ArrayList<byte[]>();
+        List<byte[]> bodyFragments = new ArrayList<>();
 
         /* Store the messages in an ArrayList to be able to handle the different message types in
         a generic way.

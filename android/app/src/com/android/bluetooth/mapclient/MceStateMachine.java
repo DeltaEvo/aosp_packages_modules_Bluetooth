@@ -64,7 +64,6 @@ import com.android.vcard.VCardEntry;
 import com.android.vcard.VCardProperty;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -918,7 +917,7 @@ class MceStateMachine extends StateMachine {
                                             : "null list")
                                     : "null request"));
 
-            ArrayList<com.android.bluetooth.mapclient.Message> messageListing = request.getList();
+            List<com.android.bluetooth.mapclient.Message> messageListing = request.getList();
             if (messageListing != null) {
                 // Message listings by spec arrive ordered newest first but we wish to broadcast as
                 // oldest first. Iterate in reverse order so we initiate requests oldest first.
@@ -1117,7 +1116,7 @@ class MceStateMachine extends StateMachine {
                         mmsBmessage.parseMsgPart(message.getBodyContent());
                         intent.putExtra(
                                 android.content.Intent.EXTRA_TEXT, mmsBmessage.getMessageAsText());
-                        ArrayList<VCardEntry> recipients = message.getRecipients();
+                        List<VCardEntry> recipients = message.getRecipients();
                         if (recipients != null && !recipients.isEmpty()) {
                             intent.putExtra(
                                     android.content.Intent.EXTRA_CC, getRecipientsUri(recipients));
@@ -1154,7 +1153,7 @@ class MceStateMachine extends StateMachine {
          * Retrieves the URIs of all the participants of a group conversation, besides the sender of
          * the message.
          */
-        private String[] getRecipientsUri(ArrayList<VCardEntry> recipients) {
+        private String[] getRecipientsUri(List<VCardEntry> recipients) {
             Set<String> uris = new HashSet<>();
 
             for (VCardEntry recipient : recipients) {

@@ -31,6 +31,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -169,12 +170,12 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
 
     private long mDate = INVALID_VALUE;
     private String mSubject = null;
-    private ArrayList<Rfc822Token> mFrom = null; // Shall not be empty
-    private ArrayList<Rfc822Token> mSender = null; // Shall not be empty
-    private ArrayList<Rfc822Token> mTo = null; // Shall not be empty
-    private ArrayList<Rfc822Token> mCc = null; // Can be empty
-    private ArrayList<Rfc822Token> mBcc = null; // Can be empty
-    private ArrayList<Rfc822Token> mReplyTo = null; // Can be empty
+    private List<Rfc822Token> mFrom = null; // Shall not be empty
+    private List<Rfc822Token> mSender = null; // Shall not be empty
+    private List<Rfc822Token> mTo = null; // Shall not be empty
+    private List<Rfc822Token> mCc = null; // Can be empty
+    private List<Rfc822Token> mBcc = null; // Can be empty
+    private List<Rfc822Token> mReplyTo = null; // Can be empty
     private String mMessageId = null;
     private ArrayList<MimePart> mParts = null;
     private String mContentType = null;
@@ -194,7 +195,7 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
     /**
      * @return the parts
      */
-    public ArrayList<MimePart> getMimeParts() {
+    public List<MimePart> getMimeParts() {
         return mParts;
     }
 
@@ -244,11 +245,11 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
         this.mSubject = subject;
     }
 
-    public ArrayList<Rfc822Token> getFrom() {
+    public List<Rfc822Token> getFrom() {
         return mFrom;
     }
 
-    public void setFrom(ArrayList<Rfc822Token> from) {
+    public void setFrom(List<Rfc822Token> from) {
         this.mFrom = from;
     }
 
@@ -259,11 +260,11 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
         this.mFrom.add(new Rfc822Token(name, address, null));
     }
 
-    public ArrayList<Rfc822Token> getSender() {
+    public List<Rfc822Token> getSender() {
         return mSender;
     }
 
-    public void setSender(ArrayList<Rfc822Token> sender) {
+    public void setSender(List<Rfc822Token> sender) {
         this.mSender = sender;
     }
 
@@ -274,11 +275,11 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
         this.mSender.add(new Rfc822Token(name, address, null));
     }
 
-    public ArrayList<Rfc822Token> getTo() {
+    public List<Rfc822Token> getTo() {
         return mTo;
     }
 
-    public void setTo(ArrayList<Rfc822Token> to) {
+    public void setTo(List<Rfc822Token> to) {
         this.mTo = to;
     }
 
@@ -289,11 +290,11 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
         this.mTo.add(new Rfc822Token(name, address, null));
     }
 
-    public ArrayList<Rfc822Token> getCc() {
+    public List<Rfc822Token> getCc() {
         return mCc;
     }
 
-    public void setCc(ArrayList<Rfc822Token> cc) {
+    public void setCc(List<Rfc822Token> cc) {
         this.mCc = cc;
     }
 
@@ -304,11 +305,11 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
         this.mCc.add(new Rfc822Token(name, address, null));
     }
 
-    public ArrayList<Rfc822Token> getBcc() {
+    public List<Rfc822Token> getBcc() {
         return mBcc;
     }
 
-    public void setBcc(ArrayList<Rfc822Token> bcc) {
+    public void setBcc(List<Rfc822Token> bcc) {
         this.mBcc = bcc;
     }
 
@@ -319,11 +320,11 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
         this.mBcc.add(new Rfc822Token(name, address, null));
     }
 
-    public ArrayList<Rfc822Token> getReplyTo() {
+    public List<Rfc822Token> getReplyTo() {
         return mReplyTo;
     }
 
-    public void setReplyTo(ArrayList<Rfc822Token> replyTo) {
+    public void setReplyTo(List<Rfc822Token> replyTo) {
         this.mReplyTo = replyTo;
     }
 
@@ -397,7 +398,7 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
      * @param addresses the reformatted address substrings to encode.
      */
     public void encodeHeaderAddresses(
-            StringBuilder sb, String headerName, ArrayList<Rfc822Token> addresses) {
+            StringBuilder sb, String headerName, List<Rfc822Token> addresses) {
         /* TODO: Do we need to encode the addresses if they contain illegal characters?
          * This depends of the outcome of errata 4176. The current spec. states to use UTF-8
          * where possible, but the RFCs states to use US-ASCII for the headers - hence encoding

@@ -82,6 +82,7 @@ import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -3073,7 +3074,7 @@ public class BluetoothMapContentObserver {
             String emailBaseUri)
             throws IllegalArgumentException, RemoteException, IOException {
         Log.d(TAG, "pushMessage");
-        ArrayList<BluetoothMapbMessage.VCard> recipientList = msg.getRecipients();
+        List<BluetoothMapbMessage.VCard> recipientList = msg.getRecipients();
         int transparent =
                 (ap.getTransparent() == BluetoothMapAppParams.INVALID_VALUE_PARAMETER)
                         ? 0
@@ -3204,7 +3205,7 @@ public class BluetoothMapContentObserver {
         } else if (msg.getType().equals(TYPE.MMS) && (recipientList.size() > 1)) {
             // Group MMS
             String folder = folderElement.getName();
-            ArrayList<String> telNums = new ArrayList<String>();
+            List<String> telNums = new ArrayList<String>();
             for (BluetoothMapbMessage.VCard recipient : recipientList) {
                 // Only send the message to the top level recipient
                 if (recipient.getEnvLevel() == 0) {
@@ -3236,7 +3237,7 @@ public class BluetoothMapContentObserver {
                             && (((BluetoothMapbMessageMime) msg).getTextOnly())) {
                         msgBody = ((BluetoothMapbMessageMime) msg).getMessageAsText();
                         SmsManager smsMng = SmsManager.getDefault();
-                        ArrayList<String> parts = smsMng.divideMessage(msgBody);
+                        List<String> parts = smsMng.divideMessage(msgBody);
                         int smsParts = parts.size();
                         if (smsParts <= CONVERT_MMS_TO_SMS_PART_COUNT) {
                             Log.d(
@@ -3734,15 +3735,15 @@ public class BluetoothMapContentObserver {
 
     public void sendMessage(PushMsgInfo msgInfo, String msgBody) {
         SmsManager smsMng = SmsManager.getDefault();
-        ArrayList<String> parts = smsMng.divideMessage(msgBody);
+        List<String> parts = smsMng.divideMessage(msgBody);
         msgInfo.parts = parts.size();
         // We add a time stamp to differentiate delivery reports from each other for resent messages
         msgInfo.timestamp = Calendar.getInstance().getTimeInMillis();
         msgInfo.partsDelivered = 0;
         msgInfo.partsSent = 0;
 
-        ArrayList<PendingIntent> deliveryIntents = new ArrayList<PendingIntent>(msgInfo.parts);
-        ArrayList<PendingIntent> sentIntents = new ArrayList<PendingIntent>(msgInfo.parts);
+        List<PendingIntent> deliveryIntents = new ArrayList<PendingIntent>(msgInfo.parts);
+        List<PendingIntent> sentIntents = new ArrayList<PendingIntent>(msgInfo.parts);
 
         /*       We handle the SENT intent in the MAP service, as this object
          *       is destroyed at disconnect, hence if a disconnect occur while sending

@@ -62,6 +62,7 @@ import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 // Next tag value for ContentProfileErrorReportUtils.report(): 15
 public class BluetoothMapContent {
@@ -617,7 +618,7 @@ public class BluetoothMapContent {
                                         + " Changing size to 1");
                         size = 1;
                     }
-                    // TODO: Add handling of attachemnt mime types
+                    // TODO: Add handling of attachment mime types
                 }
             } else if (fi.mMsgType == FilterInfo.TYPE_EMAIL) {
                 int attachment = c.getInt(fi.mMessageColAttachment);
@@ -2948,7 +2949,7 @@ public class BluetoothMapContent {
 
     /**
      * Refreshes the entire list of SMS/MMS conversation version counters. Use it to generate a new
-     * ConvoListVersinoCounter in mSmsMmsConvoListVersion
+     * ConvoListVersionCounter in mSmsMmsConvoListVersion
      *
      * @return true if a list change has been detected
      */
@@ -2965,7 +2966,7 @@ public class BluetoothMapContent {
                 cursor.moveToPosition(-1);
                 synchronized (getSmsMmsConvoList()) {
                     int size = Math.max(getSmsMmsConvoList().size(), cursor.getCount());
-                    HashMap<Long, BluetoothMapConvoListingElement> newList =
+                    Map<Long, BluetoothMapConvoListingElement> newList =
                             new HashMap<Long, BluetoothMapConvoListingElement>(size);
                     while (cursor.moveToNext()) {
                         // TODO: Extract to function, that can be called at listing, which returns
@@ -3069,7 +3070,7 @@ public class BluetoothMapContent {
                 synchronized (getImEmailConvoList()) {
                     int size = Math.max(getImEmailConvoList().size(), imEmailCursor.getCount());
                     boolean convoChanged = false;
-                    HashMap<Long, BluetoothMapConvoListingElement> newList =
+                    Map<Long, BluetoothMapConvoListingElement> newList =
                             new HashMap<Long, BluetoothMapConvoListingElement>(size);
                     while (isValid) {
                         long id = imEmailCursor.getLong(fi.mConvoColConvoId);
@@ -4402,19 +4403,19 @@ public class BluetoothMapContent {
         return this.mRemoteFeatureMask;
     }
 
-    HashMap<Long, BluetoothMapConvoListingElement> getSmsMmsConvoList() {
+    Map<Long, BluetoothMapConvoListingElement> getSmsMmsConvoList() {
         return mMasInstance.getSmsMmsConvoList();
     }
 
-    void setSmsMmsConvoList(HashMap<Long, BluetoothMapConvoListingElement> smsMmsConvoList) {
+    void setSmsMmsConvoList(Map<Long, BluetoothMapConvoListingElement> smsMmsConvoList) {
         mMasInstance.setSmsMmsConvoList(smsMmsConvoList);
     }
 
-    HashMap<Long, BluetoothMapConvoListingElement> getImEmailConvoList() {
+    Map<Long, BluetoothMapConvoListingElement> getImEmailConvoList() {
         return mMasInstance.getImEmailConvoList();
     }
 
-    void setImEmailConvoList(HashMap<Long, BluetoothMapConvoListingElement> imEmailConvoList) {
+    void setImEmailConvoList(Map<Long, BluetoothMapConvoListingElement> imEmailConvoList) {
         mMasInstance.setImEmailConvoList(imEmailConvoList);
     }
 }

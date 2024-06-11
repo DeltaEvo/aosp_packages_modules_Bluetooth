@@ -25,6 +25,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.MissingResourceException;
@@ -57,8 +58,8 @@ class BaseData {
     private static final int CODEC_AUDIO_FRAME_DURATION_10MS = 0x01;
 
     private final BaseInformation mLevelOne;
-    private final ArrayList<BaseInformation> mLevelTwo;
-    private final ArrayList<BaseInformation> mLevelThree;
+    private final List<BaseInformation> mLevelTwo;
+    private final List<BaseInformation> mLevelThree;
 
     private int mNumBISIndices = 0;
 
@@ -185,8 +186,8 @@ class BaseData {
 
     BaseData(
             BaseInformation levelOne,
-            ArrayList<BaseInformation> levelTwo,
-            ArrayList<BaseInformation> levelThree,
+            List<BaseInformation> levelTwo,
+            List<BaseInformation> levelThree,
             int numOfBISIndices) {
         mLevelOne = levelOne;
         mLevelTwo = levelTwo;
@@ -200,8 +201,8 @@ class BaseData {
             throw new IllegalArgumentException("Basedata: serviceData is null");
         }
         BaseInformation levelOne = new BaseInformation();
-        ArrayList<BaseInformation> levelTwo = new ArrayList<BaseInformation>();
-        ArrayList<BaseInformation> levelThree = new ArrayList<BaseInformation>();
+        List<BaseInformation> levelTwo = new ArrayList<>();
+        List<BaseInformation> levelThree = new ArrayList<>();
         int numOfBISIndices = 0;
         log("BASE input" + Arrays.toString(serviceData));
 
@@ -291,7 +292,7 @@ class BaseData {
     }
 
     static void consolidateBaseofLevelTwo(
-            ArrayList<BaseInformation> levelTwo, ArrayList<BaseInformation> levelThree) {
+            List<BaseInformation> levelTwo, List<BaseInformation> levelThree) {
         int startIdx = 0;
         int children = 0;
         for (int i = 0; i < levelTwo.size(); i++) {
@@ -350,8 +351,8 @@ class BaseData {
     }
 
     static void consolidateBaseofLevelThree(
-            ArrayList<BaseInformation> levelTwo,
-            ArrayList<BaseInformation> levelThree,
+            List<BaseInformation> levelTwo,
+            List<BaseInformation> levelThree,
             int parentSubgroup,
             int startIdx,
             int numNodes) {
@@ -387,11 +388,11 @@ class BaseData {
         return mLevelOne;
     }
 
-    public ArrayList<BaseInformation> getLevelTwo() {
+    public List<BaseInformation> getLevelTwo() {
         return mLevelTwo;
     }
 
-    public ArrayList<BaseInformation> getLevelThree() {
+    public List<BaseInformation> getLevelThree() {
         return mLevelThree;
     }
 
@@ -403,7 +404,7 @@ class BaseData {
         return ret;
     }
 
-    public ArrayList<BaseInformation> getBISIndexInfos() {
+    public List<BaseInformation> getBISIndexInfos() {
         return mLevelThree;
     }
 

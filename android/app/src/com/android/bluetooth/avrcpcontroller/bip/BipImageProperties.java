@@ -29,6 +29,7 @@ import java.io.InputStream;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -142,10 +143,10 @@ public class BipImageProperties {
     private boolean mHasThumbnailFormat = false;
 
     /** The various sets of available formats. */
-    private ArrayList<BipImageFormat> mNativeFormats;
+    private List<BipImageFormat> mNativeFormats;
 
-    private ArrayList<BipImageFormat> mVariantFormats;
-    private ArrayList<BipAttachmentFormat> mAttachments;
+    private List<BipImageFormat> mVariantFormats;
+    private List<BipAttachmentFormat> mAttachments;
 
     private BipImageProperties() {
         mVersion = sVersion;
@@ -226,15 +227,15 @@ public class BipImageProperties {
         return mFriendlyName;
     }
 
-    public ArrayList<BipImageFormat> getNativeFormats() {
+    public List<BipImageFormat> getNativeFormats() {
         return mNativeFormats;
     }
 
-    public ArrayList<BipImageFormat> getVariantFormats() {
+    public List<BipImageFormat> getVariantFormats() {
         return mVariantFormats;
     }
 
-    public ArrayList<BipAttachmentFormat> getAttachments() {
+    public List<BipAttachmentFormat> getAttachments() {
         return mAttachments;
     }
 

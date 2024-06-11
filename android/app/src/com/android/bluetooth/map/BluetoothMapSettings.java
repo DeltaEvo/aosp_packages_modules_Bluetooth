@@ -23,14 +23,14 @@ import android.widget.ExpandableListView;
 
 import com.android.bluetooth.R;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 public class BluetoothMapSettings extends Activity {
     private static final String TAG = "BluetoothMapSettings";
 
     BluetoothMapAccountLoader mLoader = new BluetoothMapAccountLoader(this);
-    LinkedHashMap<BluetoothMapAccountItem, ArrayList<BluetoothMapAccountItem>> mGroups;
+    Map<BluetoothMapAccountItem, List<BluetoothMapAccountItem>> mGroups;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {

@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
+import java.util.List;
 
 // Next tag value for ContentProfileErrorReportUtils.report(): 10
 public abstract class BluetoothMapbMessage {
@@ -53,8 +54,8 @@ public abstract class BluetoothMapbMessage {
 
     private int mBMsgLength = INVALID_VALUE;
 
-    private ArrayList<VCard> mOriginator = null;
-    private ArrayList<VCard> mRecipient = null;
+    private List<VCard> mOriginator = null;
+    private List<VCard> mRecipient = null;
 
     public static class VCard {
         /* VCARD attributes */
@@ -250,10 +251,10 @@ public abstract class BluetoothMapbMessage {
         static VCard parseVcard(BMsgReader reader, int envLevel) {
             String formattedName = null;
             String name = null;
-            ArrayList<String> phoneNumbers = null;
-            ArrayList<String> emailAddresses = null;
-            ArrayList<String> btUids = null;
-            ArrayList<String> btUcis = null;
+            List<String> phoneNumbers = null;
+            List<String> emailAddresses = null;
+            List<String> btUids = null;
+            List<String> btUcis = null;
             String[] parts;
             String line = reader.getLineEnforce();
 
@@ -791,7 +792,7 @@ public abstract class BluetoothMapbMessage {
         this.mEncoding = encoding;
     }
 
-    public ArrayList<VCard> getOriginators() {
+    public List<VCard> getOriginators() {
         return mOriginator;
     }
 
@@ -841,7 +842,7 @@ public abstract class BluetoothMapbMessage {
         mOriginator.add(new VCard(name, phoneNumbers, emailAddresses));
     }
 
-    public ArrayList<VCard> getRecipients() {
+    public List<VCard> getRecipients() {
         return mRecipient;
     }
 
@@ -935,8 +936,7 @@ public abstract class BluetoothMapbMessage {
         return out;
     }
 
-    public byte[] encodeGeneric(ArrayList<byte[]> bodyFragments)
-            throws UnsupportedEncodingException {
+    public byte[] encodeGeneric(List<byte[]> bodyFragments) throws UnsupportedEncodingException {
         StringBuilder sb = new StringBuilder(256);
         byte[] msgStart, msgEnd;
         sb.append("BEGIN:BMSG").append("\r\n");
