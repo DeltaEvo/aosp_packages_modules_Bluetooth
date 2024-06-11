@@ -377,7 +377,7 @@ public class MediaPlayerList {
                 sendFolderUpdate(false, true, false);
             }
         } else {
-            /** M: Fix PTS AVRCP/TG/MCN/CB/BI-02-C fail @{ */
+            // Fix PTS AVRCP/TG/MCN/CB/BI-02-C
             if (Utils.isPtsTestMode()) {
                 d("PTS test mode: getPlayerRoot");
                 BrowsedPlayerWrapper wrapper = mBrowsablePlayers.get(BLUETOOTH_PLAYER_ID + 1);
@@ -394,9 +394,6 @@ public class MediaPlayerList {
                         });
                 return;
             }
-            /**
-             * @}
-             */
             cb.run(playerId, playerId == BLUETOOTH_PLAYER_ID, "", mBrowsablePlayers.size());
         }
     }
@@ -661,7 +658,7 @@ public class MediaPlayerList {
         Log.d(TAG, "getFolderItems(): playerId=" + playerId + ", mediaId=" + mediaId);
 
         if (!Flags.browsingRefactor() && Utils.isPtsTestMode()) {
-            /** M: Fix PTS AVRCP/TG/MCN/CB/BI-02-C fail @{ */
+            // Fix PTS AVRCP/TG/MCN/CB/BI-02-C
             d("PTS test mode: getFolderItems");
             BrowsedPlayerWrapper wrapper = mBrowsablePlayers.get(BLUETOOTH_PLAYER_ID + 1);
             String itemId = mediaId;
@@ -679,9 +676,6 @@ public class MediaPlayerList {
                         cb.run(mediaId, results);
                     });
             return;
-            /**
-             * @}
-             */
         }
 
         // The device is requesting the content of the root folder. This folder contains a list of

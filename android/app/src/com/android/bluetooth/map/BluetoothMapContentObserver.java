@@ -3453,7 +3453,7 @@ public class BluetoothMapContentObserver {
     }
 
     private long pushMmsToFolder(int folder, String[] toAddress, BluetoothMapbMessageMime msg) {
-        /**
+        /*
          * strategy: 1) parse msg into parts + header 2) create thread id (abuse the ease of adding
          * an SMS to get id for thread) 3) push parts into content://mms/parts/ table 3)
          */

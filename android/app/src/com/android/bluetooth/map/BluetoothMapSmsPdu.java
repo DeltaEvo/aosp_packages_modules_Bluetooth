@@ -826,7 +826,7 @@ public class BluetoothMapSmsPdu {
 
     private static int[] getTableFromByteArray(byte[] data) {
         ByteArrayInputStream inStream = new ByteArrayInputStream(data);
-        /** tableValue[0]: languageTable tableValue[1]: languageShiftTable */
+        /* tableValue[0]: languageTable tableValue[1]: languageShiftTable */
         int[] tableValue = new int[2];
         while (inStream.available() > 0) {
             int id = inStream.read();

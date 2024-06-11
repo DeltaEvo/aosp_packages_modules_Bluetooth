@@ -331,6 +331,7 @@ android_app {
             "-Xep:MockNotUsedInProduction:ERROR",
             "-Xep:NonApiType:ERROR",
             "-Xep:NonCanonicalType:ERROR",
+            "-Xep:NotJavadoc:ERROR",
             "-Xep:ReturnAtTheEndOfVoidFunction:ERROR",
             "-Xep:StringCaseLocaleUsage:ERROR",
             "-Xep:StringCharset:ERROR",

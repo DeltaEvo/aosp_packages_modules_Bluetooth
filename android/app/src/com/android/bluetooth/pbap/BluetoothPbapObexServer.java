@@ -1509,7 +1509,7 @@ public class BluetoothPbapObexServer extends ServerRequestHandler {
 
         int requestSize =
                 pbSize >= appParamValue.maxListCount ? appParamValue.maxListCount : pbSize;
-        /**
+        /*
          * startIndex (resp., lastIndex) corresponds to the index of the first (resp., last) vcard
          * entry in the phonebook object. PBAP v1.2.3: only pb starts indexing at 0.vcf (owner
          * card), the other phonebook objects (e.g., fav) start at 1.vcf. Additionally, the owner
