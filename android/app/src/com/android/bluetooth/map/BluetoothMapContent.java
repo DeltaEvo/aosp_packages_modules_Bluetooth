@@ -51,6 +51,7 @@ import com.android.internal.annotations.VisibleForTesting;
 
 import com.google.android.mms.pdu.CharacterSets;
 import com.google.android.mms.pdu.PduHeaders;
+import com.google.common.base.Ascii;
 
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
@@ -148,7 +149,7 @@ public class BluetoothMapContent {
                     Mms.MESSAGE_TYPE,
                     PduHeaders.MESSAGE_TYPE_NOTIFICATION_IND);
 
-    public static final String INSERT_ADDRES_TOKEN = "insert-address-token";
+    private static final String INSERT_ADDRESS_TOKEN = "insert-address-token";
 
     private final Context mContext;
     private final ContentResolver mResolver;
@@ -1480,7 +1481,7 @@ public class BluetoothMapContent {
             if (c != null) {
                 if (c.moveToFirst()) {
                     addr = c.getString(colIndex);
-                    if (INSERT_ADDRES_TOKEN.equals(addr)) {
+                    if (INSERT_ADDRESS_TOKEN.equals(addr)) {
                         addr = "";
                     }
                 }
@@ -3755,7 +3756,7 @@ public class BluetoothMapContent {
             if (c.moveToFirst()) {
                 do {
                     String address = c.getString(c.getColumnIndex(Mms.Addr.ADDRESS));
-                    if (address.equals(INSERT_ADDRES_TOKEN)) {
+                    if (address.equals(INSERT_ADDRESS_TOKEN)) {
                         continue;
                     }
                     Integer type = c.getInt(c.getColumnIndex(Mms.Addr.TYPE));
@@ -3897,7 +3898,7 @@ public class BluetoothMapContent {
                     // according to spec, "charset" should not be set. However, if the attachment
                     // is replaced with a text string, the bMessage now contains text and should
                     // have charset set to UTF-8 according to spec.
-                    if (!part.mContentType.toUpperCase().contains("TEXT")
+                    if (!Ascii.toUpperCase(part.mContentType).contains("TEXT")
                             && !message.getIncludeAttachments()) {
                         StringBuilder sb = new StringBuilder();
                         part.encodePlainText(sb);

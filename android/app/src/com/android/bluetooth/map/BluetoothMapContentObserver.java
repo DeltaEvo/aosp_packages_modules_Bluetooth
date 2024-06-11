@@ -66,6 +66,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.obex.ResponseCodes;
 
 import com.google.android.mms.pdu.PduHeaders;
+import com.google.common.base.Ascii;
 
 import org.xmlpull.v1.XmlSerializer;
 
@@ -3549,7 +3550,7 @@ public class BluetoothMapContentObserver {
                     count++;
                     values.clear();
                     if (part.mContentType != null
-                            && part.mContentType.toUpperCase().contains("TEXT")) {
+                            && Ascii.toUpperCase(part.mContentType).contains("TEXT")) {
                         values.put(Mms.Part.CONTENT_TYPE, "text/plain");
                         values.put(Mms.Part.CHARSET, 106);
                         if (part.mPartName != null) {
@@ -3589,7 +3590,7 @@ public class BluetoothMapContentObserver {
                         Log.v(TAG, "Added TEXT part");
 
                     } else if (part.mContentType != null
-                            && part.mContentType.toUpperCase().contains("SMIL")) {
+                            && Ascii.toUpperCase(part.mContentType).contains("SMIL")) {
                         values.put(Mms.Part.SEQ, -1);
                         values.put(Mms.Part.CONTENT_TYPE, "application/smil");
                         if (part.mContentId != null) {

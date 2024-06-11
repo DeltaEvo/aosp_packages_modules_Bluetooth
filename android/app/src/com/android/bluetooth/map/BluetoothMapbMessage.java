@@ -24,6 +24,8 @@ import com.android.bluetooth.content_profiles.ContentProfileErrorReportUtils;
 import com.android.bluetooth.map.BluetoothMapUtils.TYPE;
 import com.android.internal.annotations.VisibleForTesting;
 
+import com.google.common.base.Ascii;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -424,7 +426,7 @@ public abstract class BluetoothMapbMessage {
             String line = getLine();
             if (line == null || subString == null) {
                 throw new IllegalArgumentException("Line or substring is null");
-            } else if (!line.toUpperCase().contains(subString.toUpperCase())) {
+            } else if (!Ascii.toUpperCase(line).contains(Ascii.toUpperCase(subString))) {
                 throw new IllegalArgumentException(
                         "Expected \"" + subString + "\" in: \"" + line + "\"");
             }
@@ -437,11 +439,11 @@ public abstract class BluetoothMapbMessage {
          */
         public void expect(String subString, String subString2) throws IllegalArgumentException {
             String line = getLine();
-            if (!line.toUpperCase().contains(subString.toUpperCase())) {
+            if (!Ascii.toUpperCase(line).contains(Ascii.toUpperCase(subString))) {
                 throw new IllegalArgumentException(
                         "Expected \"" + subString + "\" in: \"" + line + "\"");
             }
-            if (!line.toUpperCase().contains(subString2.toUpperCase())) {
+            if (!Ascii.toUpperCase(line).contains(Ascii.toUpperCase(subString2))) {
                 throw new IllegalArgumentException(
                         "Expected \"" + subString + "\" in: \"" + line + "\"");
             }

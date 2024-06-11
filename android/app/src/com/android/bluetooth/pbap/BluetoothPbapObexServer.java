@@ -39,6 +39,8 @@ import com.android.obex.Operation;
 import com.android.obex.ResponseCodes;
 import com.android.obex.ServerRequestHandler;
 
+import com.google.common.base.Ascii;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
@@ -1009,7 +1011,7 @@ public class BluetoothPbapObexServer extends ServerRequestHandler {
             List<Integer> savedPosList = new ArrayList<>();
             List<String> selectedNameList = new ArrayList<String>();
             if (appParamValue.searchValue != null) {
-                compareValue = appParamValue.searchValue.trim().toLowerCase();
+                compareValue = Ascii.toLowerCase(appParamValue.searchValue.trim());
             }
 
             for (int pos = 0; pos < listSize; pos++) {
@@ -1021,8 +1023,8 @@ public class BluetoothPbapObexServer extends ServerRequestHandler {
 
                 if (appParamValue.searchValue != null) {
                     if (appParamValue.searchValue.isEmpty()
-                            || ((currentValue.toLowerCase())
-                                    .startsWith(compareValue.toLowerCase()))) {
+                            || Ascii.toLowerCase(currentValue)
+                                    .startsWith(Ascii.toLowerCase(compareValue))) {
                         selectedNameList.add(currentValue);
                         savedPosList.add(pos);
                     }

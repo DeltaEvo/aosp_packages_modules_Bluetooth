@@ -157,6 +157,7 @@ import com.android.modules.utils.BytesMatcher;
 
 import libcore.util.SneakyThrow;
 
+import com.google.common.base.Ascii;
 import com.google.protobuf.InvalidProtocolBufferException;
 
 import java.io.FileDescriptor;
@@ -4794,7 +4795,7 @@ public class AdapterService extends Service {
 
     public String getIdentityAddress(String address) {
         BluetoothDevice device =
-                BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address.toUpperCase());
+                BluetoothAdapter.getDefaultAdapter().getRemoteDevice(Ascii.toUpperCase(address));
         DeviceProperties deviceProp = mRemoteDevices.getDeviceProperties(device);
         if (deviceProp != null && deviceProp.getIdentityAddress() != null) {
             return deviceProp.getIdentityAddress();

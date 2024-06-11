@@ -24,6 +24,8 @@ import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.content_profiles.ContentProfileErrorReportUtils;
 import com.android.bluetooth.mapapi.BluetoothMapContract;
 
+import com.google.common.base.Ascii;
+
 import java.io.ByteArrayOutputStream;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
@@ -641,7 +643,7 @@ public class BluetoothMapUtils {
         if (charset == null) {
             charset = "UTF-8";
         } else {
-            charset = charset.toUpperCase();
+            charset = Ascii.toUpperCase(charset);
             try {
                 if (!Charset.isSupported(charset)) {
                     charset = "UTF-8";

@@ -105,6 +105,7 @@ java_sdk_library {
             "-Xep:NonApiType:ERROR",
             "-Xep:NonCanonicalType:ERROR",
             "-Xep:ReturnAtTheEndOfVoidFunction:ERROR",
+            "-Xep:StringCaseLocaleUsage:ERROR",
             "-Xep:StringCharset:ERROR",
             "-Xep:UnnecessaryAssignment:ERROR",
             "-Xep:UnnecessaryAsync:ERROR",
