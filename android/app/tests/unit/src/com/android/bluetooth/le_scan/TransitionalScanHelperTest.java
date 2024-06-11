@@ -85,8 +85,7 @@ public class TransitionalScanHelperTest {
     private TransitionalScanHelper mScanHelper;
     @Mock private TransitionalScanHelper.ScannerMap mScannerMap;
 
-    @Mock
-    private TransitionalScanHelper.ScannerMap.App mApp;
+    @Mock private ContextMap.App mApp;
 
     @Mock private TransitionalScanHelper.PendingIntentInfo mPiInfo;
     @Mock private PeriodicScanManager mPeriodicScanManager;
@@ -101,7 +100,8 @@ public class TransitionalScanHelperTest {
 
     @Mock private Resources mResources;
     @Mock private AdapterService mAdapterService;
-    @Mock private GattObjectsFactory mFactory;
+    @Mock private GattObjectsFactory mGattObjectsFactory;
+    @Mock private ScanObjectsFactory mScanObjectsFactory;
     @Mock private GattNativeInterface mNativeInterface;
     private CompanionManager mBtCompanionManager;
 
@@ -110,10 +110,13 @@ public class TransitionalScanHelperTest {
         MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
 
-        GattObjectsFactory.setInstanceForTesting(mFactory);
-        doReturn(mNativeInterface).when(mFactory).getNativeInterface();
-        doReturn(mScanManager).when(mFactory).createScanManager(any(), any(), any(), any(), any());
-        doReturn(mPeriodicScanManager).when(mFactory).createPeriodicScanManager(any());
+        GattObjectsFactory.setInstanceForTesting(mGattObjectsFactory);
+        ScanObjectsFactory.setInstanceForTesting(mScanObjectsFactory);
+        doReturn(mNativeInterface).when(mGattObjectsFactory).getNativeInterface();
+        doReturn(mScanManager)
+                .when(mScanObjectsFactory)
+                .createScanManager(any(), any(), any(), any(), any());
+        doReturn(mPeriodicScanManager).when(mScanObjectsFactory).createPeriodicScanManager(any());
 
         mAdapter = BluetoothAdapter.getDefaultAdapter();
         mAttributionSource = mAdapter.getAttributionSource();
@@ -150,6 +153,7 @@ public class TransitionalScanHelperTest {
 
         TestUtils.clearAdapterService(mAdapterService);
         GattObjectsFactory.setInstanceForTesting(null);
+        ScanObjectsFactory.setInstanceForTesting(null);
     }
 
     @Test
