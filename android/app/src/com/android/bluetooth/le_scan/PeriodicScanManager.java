@@ -43,8 +43,9 @@ public class PeriodicScanManager {
 
     private final BluetoothAdapter mAdapter;
     private final PeriodicScanNativeInterface mNativeInterface;
-    Map<IBinder, SyncInfo> mSyncs = new ConcurrentHashMap<>();
-    Map<IBinder, SyncTransferInfo> mSyncTransfers = Collections.synchronizedMap(new HashMap<>());
+    private final Map<IBinder, SyncInfo> mSyncs = new ConcurrentHashMap<>();
+    private final Map<IBinder, SyncTransferInfo> mSyncTransfers =
+            Collections.synchronizedMap(new HashMap<>());
     static int sTempRegistrationId = -1;
 
     /** Constructor of {@link PeriodicScanManager}. */

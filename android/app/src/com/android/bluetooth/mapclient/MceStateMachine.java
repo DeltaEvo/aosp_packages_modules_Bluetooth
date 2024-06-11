@@ -56,6 +56,7 @@ import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.flags.Flags;
 import com.android.bluetooth.map.BluetoothMapbMessageMime;
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.State;
 import com.android.internal.util.StateMachine;
@@ -148,6 +149,10 @@ class MceStateMachine extends StateMachine {
     private HashMap<Bmessage, PendingIntent> mSentReceiptRequested = new HashMap<>(MAX_MESSAGES);
     private HashMap<Bmessage, PendingIntent> mDeliveryReceiptRequested =
             new HashMap<>(MAX_MESSAGES);
+
+    private final Object mLock = new Object();
+
+    @GuardedBy("mLock")
     private Bmessage.Type mDefaultMessageType = Bmessage.Type.SMS_CDMA;
 
     // The amount of time for MCE to search for remote device's own phone number before:
@@ -472,7 +477,7 @@ class MceStateMachine extends StateMachine {
     }
 
     Bmessage.Type getDefaultMessageType() {
-        synchronized (mDefaultMessageType) {
+        synchronized (mLock) {
             if (Utils.isPtsTestMode()) {
                 int messageType = SystemProperties.getInt(SEND_MESSAGE_TYPE, -1);
                 if (messageType > 0 && messageType < Bmessage.Type.values().length) {
@@ -485,7 +490,7 @@ class MceStateMachine extends StateMachine {
 
     void setDefaultMessageType(SdpMasRecord sdpMasRecord) {
         int supportedMessageTypes = sdpMasRecord.getSupportedMessageTypes();
-        synchronized (mDefaultMessageType) {
+        synchronized (mLock) {
             if ((supportedMessageTypes & SdpMasRecord.MessageType.MMS) > 0) {
                 mDefaultMessageType = Bmessage.Type.MMS;
             } else if ((supportedMessageTypes & SdpMasRecord.MessageType.SMS_CDMA) > 0) {
