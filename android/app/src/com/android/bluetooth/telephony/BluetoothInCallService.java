@@ -16,12 +16,15 @@
 
 package com.android.bluetooth.telephony;
 
+import static java.util.Objects.requireNonNull;
+
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothHeadset;
 import android.bluetooth.BluetoothLeCall;
 import android.bluetooth.BluetoothLeCallControl;
+import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -142,6 +145,8 @@ public class BluetoothInCallService extends InCallService {
     protected boolean mOnCreateCalled = false;
 
     private int mMaxNumberOfCalls = 0;
+
+    private BluetoothAdapter mAdapter = null;
 
     /**
      * Listens to connections and disconnections of bluetooth headsets. We need to save the current
@@ -735,10 +740,9 @@ public class BluetoothInCallService extends InCallService {
     public void onCreate() {
         Log.d(TAG, "onCreate");
         super.onCreate();
-        BluetoothAdapter.getDefaultAdapter()
-                .getProfileProxy(this, mProfileListener, BluetoothProfile.HEADSET);
-        BluetoothAdapter.getDefaultAdapter()
-                .getProfileProxy(this, mProfileListener, BluetoothProfile.LE_CALL_CONTROL);
+        mAdapter = requireNonNull(getSystemService(BluetoothManager.class)).getAdapter();
+        mAdapter.getProfileProxy(this, mProfileListener, BluetoothProfile.HEADSET);
+        mAdapter.getProfileProxy(this, mProfileListener, BluetoothProfile.LE_CALL_CONTROL);
         mBluetoothAdapterReceiver = new BluetoothAdapterReceiver();
         IntentFilter intentFilter = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
         intentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
@@ -768,12 +772,12 @@ public class BluetoothInCallService extends InCallService {
             mBluetoothAdapterReceiver = null;
         }
         if (mBluetoothHeadset != null) {
-            mBluetoothHeadset.closeBluetoothHeadsetProxy(this);
+            mBluetoothHeadset.closeBluetoothHeadsetProxy(mAdapter);
             mBluetoothHeadset = null;
         }
         if (mBluetoothLeCallControl != null) {
             mBluetoothLeCallControl.unregisterBearer();
-            mBluetoothLeCallControl.closeBluetoothLeCallControlProxy(this);
+            mBluetoothLeCallControl.closeBluetoothLeCallControlProxy(mAdapter);
         }
         mProfileListener = null;
         sInstance = null;

@@ -16,11 +16,10 @@
 
 package com.android.bluetooth.hfp;
 
+import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadset;
-import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
-import android.content.Context;
 
 import java.util.List;
 
@@ -39,11 +38,8 @@ public class BluetoothHeadsetProxy {
         mBluetoothHeadset = headset;
     }
 
-    public void closeBluetoothHeadsetProxy(Context context) {
-        final BluetoothManager btManager = context.getSystemService(BluetoothManager.class);
-        if (btManager != null) {
-            btManager.getAdapter().closeProfileProxy(BluetoothProfile.HEADSET, mBluetoothHeadset);
-        }
+    public void closeBluetoothHeadsetProxy(BluetoothAdapter adapter) {
+        adapter.closeProfileProxy(BluetoothProfile.HEADSET, mBluetoothHeadset);
     }
 
     public void clccResponse(
