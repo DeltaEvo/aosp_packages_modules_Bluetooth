@@ -90,6 +90,7 @@ cc_defaults {
         "libbtif-core",
         "libc++fs",
         "libcom.android.sysprop.bluetooth.wrapped",
+        "libexpresslog",
         "libflatbuffers-cpp",
         "libg722codec",
         "libgmock",
@@ -97,6 +98,8 @@ cc_defaults {
         "libopus",
         "libosi",
         "libstatslog_bt",
+        "libstatslog_express",
+        "libtextclassifier_hash_static",
     ],
     header_libs: [
         "libbluetooth_headers",
