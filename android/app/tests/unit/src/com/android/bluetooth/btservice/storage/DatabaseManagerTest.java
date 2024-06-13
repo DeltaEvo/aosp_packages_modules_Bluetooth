@@ -43,8 +43,8 @@ import androidx.room.Room;
 import androidx.room.testing.MigrationTestHelper;
 import androidx.sqlite.db.SupportSQLiteDatabase;
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory;
-import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
+import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.TestUtils;
@@ -117,11 +117,15 @@ public final class DatabaseManagerTest {
         // Create a memory database for DatabaseManager instead of use a real database.
         mDatabase =
                 Room.inMemoryDatabaseBuilder(
-                                InstrumentationRegistry.getTargetContext(), MetadataDatabase.class)
+                                InstrumentationRegistry.getInstrumentation().getTargetContext(),
+                                MetadataDatabase.class)
                         .build();
 
         when(mAdapterService.getPackageManager())
-                .thenReturn(InstrumentationRegistry.getTargetContext().getPackageManager());
+                .thenReturn(
+                        InstrumentationRegistry.getInstrumentation()
+                                .getTargetContext()
+                                .getPackageManager());
 
         mDatabaseManager = new DatabaseManager(mAdapterService);
 
@@ -502,7 +506,6 @@ public final class DatabaseManagerTest {
 
     @Test
     public void testSetGetAudioPolicyMetaData() {
-        int badKey = 100;
         BluetoothSinkAudioPolicy value =
                 new BluetoothSinkAudioPolicy.Builder()
                         .setCallEstablishPolicy(BluetoothSinkAudioPolicy.POLICY_ALLOWED)
@@ -1192,8 +1195,6 @@ public final class DatabaseManagerTest {
 
     @Test
     public void testDatabaseMigration_105_106() throws IOException {
-        String testString = "TEST STRING";
-
         // Create a database with version 105
         SupportSQLiteDatabase db = testHelper.createDatabase(DB_NAME, 105);
 
@@ -1222,8 +1223,6 @@ public final class DatabaseManagerTest {
 
     @Test
     public void testDatabaseMigration_106_107() throws IOException {
-        String testString = "TEST STRING";
-
         // Create a database with version 106
         SupportSQLiteDatabase db = testHelper.createDatabase(DB_NAME, 106);
 
@@ -1252,7 +1251,6 @@ public final class DatabaseManagerTest {
 
     @Test
     public void testDatabaseMigration_107_108() throws IOException {
-        String testString = "TEST STRING";
         // Create a database with version 107
         SupportSQLiteDatabase db = testHelper.createDatabase(DB_NAME, 107);
         // insert a device to the database
@@ -1277,7 +1275,6 @@ public final class DatabaseManagerTest {
 
     @Test
     public void testDatabaseMigration_108_109() throws IOException {
-        String testString = "TEST STRING";
         // Create a database with version 108
         SupportSQLiteDatabase db = testHelper.createDatabase(DB_NAME, 108);
         // insert a device to the database
@@ -1302,7 +1299,6 @@ public final class DatabaseManagerTest {
 
     @Test
     public void testDatabaseMigration_109_110() throws IOException {
-        String testString = "TEST STRING";
         // Create a database with version 109
         SupportSQLiteDatabase db = testHelper.createDatabase(DB_NAME, 109);
         // insert a device to the database
@@ -1327,7 +1323,6 @@ public final class DatabaseManagerTest {
 
     @Test
     public void testDatabaseMigration_111_112() throws IOException {
-        String testString = "TEST STRING";
         // Create a database with version 111
         SupportSQLiteDatabase db = testHelper.createDatabase(DB_NAME, 111);
         // insert a device to the database

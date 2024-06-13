@@ -31,8 +31,7 @@
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
-bt_status_t do_in_jni_thread(const base::Location& from_here,
-                             base::OnceClosure task);
+bt_status_t do_in_jni_thread(base::OnceClosure task);
 
 namespace {
 std::optional<RawAddress> AddressOfConnection(uint16_t conn_id) {
@@ -65,20 +64,27 @@ void GattServerCallbacks::OnServerRead(uint16_t conn_id, uint32_t trans_id,
 
   switch (attr_type) {
     case AttributeBackingType::CHARACTERISTIC:
-      do_in_jni_thread(
-          FROM_HERE,
-          base::BindOnce(callbacks.request_read_characteristic_cb, conn_id,
-                         trans_id, addr.value(), attr_handle, offset, is_long));
+      do_in_jni_thread(base::BindOnce(callbacks.request_read_characteristic_cb,
+                                      conn_id, trans_id, addr.value(),
+                                      attr_handle, offset, is_long));
       break;
     case AttributeBackingType::DESCRIPTOR:
-      do_in_jni_thread(
-          FROM_HERE,
-          base::BindOnce(callbacks.request_read_descriptor_cb, conn_id,
-                         trans_id, addr.value(), attr_handle, offset, is_long));
+      do_in_jni_thread(base::BindOnce(callbacks.request_read_descriptor_cb,
+                                      conn_id, trans_id, addr.value(),
+                                      attr_handle, offset, is_long));
       break;
     default:
       log::fatal("Unexpected backing type {}", attr_type);
   }
+}
+
+static void request_write_with_vec(request_write_callback cb, int conn_id,
+                                   int trans_id, const RawAddress& bda,
+                                   int attr_handle, int offset, bool need_rsp,
+                                   bool is_prep,
+                                   const std::vector<uint8_t>& value) {
+  cb(conn_id, trans_id, bda, attr_handle, offset, need_rsp, is_prep,
+     value.data(), value.size());
 }
 
 void GattServerCallbacks::OnServerWrite(
@@ -93,25 +99,20 @@ void GattServerCallbacks::OnServerWrite(
     return;
   }
 
-  auto buf = new uint8_t[value.size()];
-  std::copy(value.begin(), value.end(), buf);
+  auto buf = std::vector<uint8_t>(value.begin(), value.end());
 
   switch (attr_type) {
     case AttributeBackingType::CHARACTERISTIC:
-      do_in_jni_thread(
-          FROM_HERE,
-          base::BindOnce(callbacks.request_write_characteristic_cb, conn_id,
-                         trans_id, addr.value(), attr_handle, offset,
-                         need_response, is_prepare, base::Owned(buf),
-                         value.size()));
+      do_in_jni_thread(base::BindOnce(
+          request_write_with_vec, callbacks.request_write_characteristic_cb,
+          conn_id, trans_id, addr.value(), attr_handle, offset, need_response,
+          is_prepare, std::move(buf)));
       break;
     case AttributeBackingType::DESCRIPTOR:
-      do_in_jni_thread(
-          FROM_HERE,
-          base::BindOnce(callbacks.request_write_descriptor_cb, conn_id,
-                         trans_id, addr.value(), attr_handle, offset,
-                         need_response, is_prepare, base::Owned(buf),
-                         value.size()));
+      do_in_jni_thread(base::BindOnce(
+          request_write_with_vec, callbacks.request_write_descriptor_cb,
+          conn_id, trans_id, addr.value(), attr_handle, offset, need_response,
+          is_prepare, std::move(buf)));
       break;
     default:
       log::fatal("Unexpected backing type {}", attr_type);
@@ -121,7 +122,7 @@ void GattServerCallbacks::OnServerWrite(
 void GattServerCallbacks::OnIndicationSentConfirmation(uint16_t conn_id,
                                                        int status) const {
   do_in_jni_thread(
-      FROM_HERE, base::BindOnce(callbacks.indication_sent_cb, conn_id, status));
+      base::BindOnce(callbacks.indication_sent_cb, conn_id, status));
 }
 
 void GattServerCallbacks::OnExecute(uint16_t conn_id, uint32_t trans_id,
@@ -133,8 +134,7 @@ void GattServerCallbacks::OnExecute(uint16_t conn_id, uint32_t trans_id,
     return;
   }
 
-  do_in_jni_thread(FROM_HERE,
-                   base::BindOnce(callbacks.request_exec_write_cb, conn_id,
+  do_in_jni_thread(base::BindOnce(callbacks.request_exec_write_cb, conn_id,
                                   trans_id, addr.value(), execute));
 }
 

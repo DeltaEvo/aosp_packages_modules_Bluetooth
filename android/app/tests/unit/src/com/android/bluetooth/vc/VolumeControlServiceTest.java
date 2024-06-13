@@ -36,8 +36,8 @@ import android.os.Looper;
 import android.os.ParcelUuid;
 import android.platform.test.flag.junit.SetFlagsRule;
 
-import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
+import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.rule.ServiceTestRule;
 import androidx.test.runner.AndroidJUnit4;
 
@@ -101,7 +101,7 @@ public class VolumeControlServiceTest {
 
     @Before
     public void setUp() throws Exception {
-        mTargetContext = InstrumentationRegistry.getTargetContext();
+        mTargetContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
         if (Looper.myLooper() == null) {
             Looper.prepare();
@@ -483,14 +483,13 @@ public class VolumeControlServiceTest {
 
         // stack event: CONNECTION_STATE_DISCONNECTING - state machine should not be created
         generateUnexpectedConnectionMessageFromNative(
-                mDevice, BluetoothProfile.STATE_DISCONNECTING, BluetoothProfile.STATE_DISCONNECTED);
+                mDevice, BluetoothProfile.STATE_DISCONNECTING);
         Assert.assertEquals(
                 BluetoothProfile.STATE_DISCONNECTED, mService.getConnectionState(mDevice));
         Assert.assertFalse(mService.getDevices().contains(mDevice));
 
         // stack event: CONNECTION_STATE_DISCONNECTED - state machine should not be created
-        generateUnexpectedConnectionMessageFromNative(
-                mDevice, BluetoothProfile.STATE_DISCONNECTED, BluetoothProfile.STATE_DISCONNECTED);
+        generateUnexpectedConnectionMessageFromNative(mDevice, BluetoothProfile.STATE_DISCONNECTED);
         Assert.assertEquals(
                 BluetoothProfile.STATE_DISCONNECTED, mService.getConnectionState(mDevice));
         Assert.assertFalse(mService.getDevices().contains(mDevice));
@@ -998,7 +997,6 @@ public class VolumeControlServiceTest {
 
         Assert.assertTrue(mServiceBinder.isVolumeOffsetAvailable(mDevice, mAttributionSource));
 
-        int defaultNumberOfInstances = 0;
         int numberOfInstances =
                 mServiceBinder.getNumberOfVolumeOffsetInstances(mDevice, mAttributionSource);
         Assert.assertEquals(2, numberOfInstances);
@@ -1465,7 +1463,7 @@ public class VolumeControlServiceTest {
     }
 
     private void generateUnexpectedConnectionMessageFromNative(
-            BluetoothDevice device, int newConnectionState, int oldConnectionState) {
+            BluetoothDevice device, int newConnectionState) {
         VolumeControlStackEvent stackEvent =
                 new VolumeControlStackEvent(
                         VolumeControlStackEvent.EVENT_TYPE_CONNECTION_STATE_CHANGED);

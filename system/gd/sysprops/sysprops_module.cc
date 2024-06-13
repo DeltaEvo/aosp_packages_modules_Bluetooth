@@ -110,6 +110,8 @@ void SyspropsModule::parse_config(std::string file_path) {
       "bluetooth.core.le.connection_scan_window_coded_fast",
       "bluetooth.core.le.connection_scan_interval_slow",
       "bluetooth.core.le.connection_scan_window_slow",
+      "bluetooth.core.le.connection_scan_interval_system_suspend",
+      "bluetooth.core.le.connection_scan_window_system_suspend",
       "bluetooth.core.le.inquiry_scan_interval",
       "bluetooth.core.le.inquiry_scan_window",
       "bluetooth.core.le.adv_mon_scan_interval",
@@ -119,6 +121,7 @@ void SyspropsModule::parse_config(std::string file_path) {
       "bluetooth.core.le.vendor_capabilities.enabled",
       // LE Audio
       "bluetooth.le_audio.enable_le_audio_only",
+      "bluetooth.leaudio.dual_bidirection_swb.supported",
       // SCO
       "bluetooth.sco.disable_enhanced_connection",
       "bluetooth.sco.swb_supported",

@@ -26,8 +26,8 @@ import android.bluetooth.BluetoothProfile;
 import android.content.Context;
 import android.content.Intent;
 
-import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
+import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.TestUtils;
@@ -46,8 +46,6 @@ import org.mockito.junit.MockitoRule;
 @MediumTest
 @RunWith(AndroidJUnit4.class)
 public class SapServiceTest {
-    private static final int TIMEOUT_MS = 5_000;
-
     private SapService mService = null;
     private BluetoothAdapter mAdapter = null;
     private Context mTargetContext;
@@ -60,7 +58,7 @@ public class SapServiceTest {
 
     @Before
     public void setUp() throws Exception {
-        mTargetContext = InstrumentationRegistry.getTargetContext();
+        mTargetContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
         TestUtils.setAdapterService(mAdapterService);
         mService = new SapService(mTargetContext);
         mService.start();

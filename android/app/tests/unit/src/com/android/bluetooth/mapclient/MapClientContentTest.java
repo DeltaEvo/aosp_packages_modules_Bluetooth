@@ -47,8 +47,6 @@ import android.util.Log;
 import androidx.test.filters.MediumTest;
 import androidx.test.runner.AndroidJUnit4;
 
-import com.android.bluetooth.btservice.AdapterService;
-import com.android.bluetooth.btservice.storage.DatabaseManager;
 import com.android.vcard.VCardConstants;
 import com.android.vcard.VCardEntry;
 import com.android.vcard.VCardProperty;
@@ -79,7 +77,6 @@ public class MapClientContentTest {
     private BluetoothAdapter mAdapter;
     private BluetoothDevice mTestDevice;
 
-    private Handler mHandler;
     private Bmessage mTestMessage1;
     private Bmessage mTestMessage2;
     private Long mTestMessage1Timestamp = 1234L;
@@ -90,15 +87,10 @@ public class MapClientContentTest {
 
     private VCardEntry mOriginator;
 
-    private ArgumentCaptor<Uri> mUriArgument = ArgumentCaptor.forClass(Uri.class);
-
     private MapClientContent mMapClientContent;
 
     @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
 
-    @Mock private AdapterService mAdapterService;
-    @Mock private DatabaseManager mDatabaseManager;
-    @Mock private MapClientService mMockMapClientService;
     @Mock private Context mMockContext;
     @Mock private MapClientContent.Callbacks mCallbacks;
 
@@ -536,7 +528,7 @@ public class MapClientContentTest {
         mTestMessage2.addRecipient(mOriginator);
     }
 
-    public class FakeContentProvider extends MockContentProvider {
+    static class FakeContentProvider extends MockContentProvider {
 
         Map<Uri, ContentValues> mContentValues = new HashMap<>();
 
@@ -593,7 +585,7 @@ public class MapClientContentTest {
         }
     }
 
-    public class MissingContentProvider extends FakeContentProvider {
+    public static class MissingContentProvider extends FakeContentProvider {
         MissingContentProvider(Context context) {
             super(context);
         }

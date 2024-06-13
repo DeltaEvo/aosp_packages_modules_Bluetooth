@@ -74,20 +74,6 @@ flag {
 }
 
 flag {
-    name: "delay_bonding_when_busy"
-    namespace: "bluetooth"
-    description: "Fix bonding failure due to native stack being busy"
-    bug: "316927319"
-}
-
-flag {
-    name: "le_audio_fast_bond_params"
-    namespace: "bluetooth"
-    description: "Faster LE Audio devices connection"
-    bug: "319405267"
-}
-
-flag {
     name: "le_audio_dev_type_detection_fix"
     namespace: "bluetooth"
     description: "Better LE Audio devices detection"
@@ -345,6 +331,16 @@ flag {
     namespace: "bluetooth"
     description: "Request streaming would be send without available cotext validation"
     bug: "336466406"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "leaudio_synchronize_start"
+    namespace: "bluetooth"
+    description: "Do not post on main looper when starting le_audio"
+    bug: "341385684"
     metadata {
         purpose: PURPOSE_BUGFIX
     }

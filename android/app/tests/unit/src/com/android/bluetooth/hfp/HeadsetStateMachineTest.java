@@ -87,7 +87,6 @@ public class HeadsetStateMachineTest {
 
     @Rule public final SetFlagsRule mSetFlagsRule = new SetFlagsRule();
 
-    private Context mTargetContext;
     private BluetoothAdapter mAdapter;
     private HandlerThread mHandlerThread;
     private HeadsetStateMachine mHeadsetStateMachine;
@@ -111,7 +110,6 @@ public class HeadsetStateMachineTest {
 
     @Before
     public void setUp() throws Exception {
-        mTargetContext = InstrumentationRegistry.getTargetContext();
         // Setup mocks and test assets
         TestUtils.setAdapterService(mAdapterService);
         // Stub system interface
@@ -591,6 +589,27 @@ public class HeadsetStateMachineTest {
         Assert.assertThat(
                 mHeadsetStateMachine.getCurrentState(),
                 IsInstanceOf.instanceOf(HeadsetStateMachine.AudioConnecting.class));
+    }
+
+    /**
+     * Test state transition from Connected to AudioConnecting state via CONNECT_AUDIO message when
+     * ScoManagedByAudioEnabled
+     */
+    @Test
+    public void testStateTransition_ConnectedToAudioConnecting_ConnectAudio_ScoManagedbyAudio() {
+        mSetFlagsRule.enableFlags(Flags.FLAG_IS_SCO_MANAGED_BY_AUDIO);
+        Utils.setIsScoManagedByAudioEnabled(true);
+
+        setUpConnectedState();
+        // Send CONNECT_AUDIO message
+        mHeadsetStateMachine.sendMessage(HeadsetStateMachine.CONNECT_AUDIO, mTestDevice);
+        // verify no native connect audio
+        verify(mNativeInterface, never()).connectAudio(mTestDevice);
+        TestUtils.waitForLooperToFinishScheduledTask(mHandlerThread.getLooper());
+        Assert.assertThat(
+                mHeadsetStateMachine.getCurrentState(),
+                IsInstanceOf.instanceOf(HeadsetStateMachine.AudioConnecting.class));
+        Utils.setIsScoManagedByAudioEnabled(false);
     }
 
     /**

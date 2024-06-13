@@ -29,8 +29,8 @@ import android.os.Looper;
 import android.os.ParcelUuid;
 import android.os.RemoteException;
 
-import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
+import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.TestUtils;
@@ -68,10 +68,8 @@ public class CsipSetCoordinatorServiceTest {
     private BluetoothDevice mTestDevice2;
     private BluetoothDevice mTestDevice3;
     private CsipSetCoordinatorService mService;
-    private HashMap<BluetoothDevice, LinkedBlockingQueue<Intent>> mTestDeviceQueueMap;
     private HashMap<BluetoothDevice, LinkedBlockingQueue<Intent>> mIntentQueue;
     private BroadcastReceiver mCsipSetCoordinatorIntentReceiver;
-    private CsipSetCoordinatorStateMachine mCsipSetCoordinatorStateMachine;
     private static final int TIMEOUT_MS = 1000;
 
     @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
@@ -89,7 +87,7 @@ public class CsipSetCoordinatorServiceTest {
             System.setProperty("dexmaker.share_classloader", "true");
         }
 
-        mTargetContext = InstrumentationRegistry.getTargetContext();
+        mTargetContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
         if (Looper.myLooper() == null) {
             Looper.prepare();
         }
@@ -298,7 +296,6 @@ public class CsipSetCoordinatorServiceTest {
         int group_size = 0x01;
         long uuidLsb = 0x01;
         long uuidMsb = 0x01;
-        UUID uuid = new UUID(uuidMsb, uuidLsb);
 
         doCallRealMethod()
                 .when(mCsipSetCoordinatorNativeInterface)
@@ -348,7 +345,6 @@ public class CsipSetCoordinatorServiceTest {
         int group_size = 0x01;
         long uuidLsb = 0x01;
         long uuidMsb = 0x01;
-        UUID uuid = new UUID(uuidMsb, uuidLsb);
 
         doCallRealMethod()
                 .when(mCsipSetCoordinatorNativeInterface)

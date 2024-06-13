@@ -65,10 +65,7 @@ import java.util.List;
 @RunWith(AndroidJUnit4.class)
 public class AvrcpControllerServiceTest {
     private static final String REMOTE_DEVICE_ADDRESS = "00:00:00:00:00:00";
-    private static final byte[] REMOTE_DEVICE_ADDRESS_AS_ARRAY = new byte[] {0, 0, 0, 0, 0, 0};
     private static final String REMOTE_DEVICE_ADDRESS_2 = "11:11:11:11:11:11";
-    private static final byte[] REMOTE_DEVICE_ADDRESS_AS_ARRAY_2 =
-            new byte[] {11, 11, 11, 11, 11, 11};
 
     @Rule public final SetFlagsRule mSetFlagsRule = new SetFlagsRule();
 
@@ -86,12 +83,8 @@ public class AvrcpControllerServiceTest {
     @Mock private AvrcpControllerStateMachine mStateMachine2;
     @Mock private AvrcpControllerNativeInterface mNativeInterface;
 
-    @Mock private Resources mMockResources;
-
     private BluetoothDevice mRemoteDevice;
     private BluetoothDevice mRemoteDevice2;
-
-    @Mock private AvrcpControllerStateMachine mAvrcpStateMachine;
 
     @Before
     public void setUp() throws Exception {
@@ -105,8 +98,6 @@ public class AvrcpControllerServiceTest {
         assertThat(mAdapter).isNotNull();
         // Set a mock A2dpSinkService for audio focus calls
         A2dpSinkService.setA2dpSinkService(mA2dpSinkService);
-        when(mMockResources.getBoolean(R.bool.a2dp_sink_automatically_request_audio_focus))
-                .thenReturn(true);
 
         mRemoteDevice = mAdapter.getRemoteDevice(REMOTE_DEVICE_ADDRESS);
         mService.mDeviceStateMap.put(mRemoteDevice, mStateMachine);

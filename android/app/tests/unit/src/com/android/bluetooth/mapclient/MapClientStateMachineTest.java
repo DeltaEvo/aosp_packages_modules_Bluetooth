@@ -92,8 +92,6 @@ public class MapClientStateMachineTest {
 
     @Rule public final SetFlagsRule mSetFlagsRule = new SetFlagsRule();
 
-    private static final String FOLDER_SENT = "sent";
-
     private static final int ASYNC_CALL_TIMEOUT_MILLIS = 100;
     private static final int DISCONNECT_TIMEOUT = 3000;
 
@@ -362,7 +360,7 @@ public class MapClientStateMachineTest {
 
         // Send an empty notification event, verify the mMceStateMachine is still connected
         Message notification = Message.obtain(mHandler, MceStateMachine.MSG_NOTIFICATION);
-        mMceStateMachine.getCurrentState().processMessage(msg);
+        mMceStateMachine.getCurrentState().processMessage(notification);
         Assert.assertEquals(BluetoothProfile.STATE_CONNECTED, mMceStateMachine.getState());
     }
 
@@ -497,8 +495,6 @@ public class MapClientStateMachineTest {
         TestUtils.waitForLooperToFinishScheduledTask(mMceStateMachine.getHandler().getLooper());
         Assert.assertEquals(BluetoothProfile.STATE_CONNECTED, mMceStateMachine.getState());
 
-        RequestPushMessage testRequest =
-                new RequestPushMessage(FOLDER_SENT, mTestIncomingSmsBmessage, null, false, false);
         when(mMockRequestPushMessage.getMsgHandle()).thenReturn(mTestMessageSmsHandle);
         when(mMockRequestPushMessage.getBMsg()).thenReturn(mTestIncomingSmsBmessage);
         Message msgSent =
@@ -1241,7 +1237,7 @@ public class MapClientStateMachineTest {
         mMceStateMachine.sendSdpResult(MceStateMachine.SDP_SUCCESS, record);
     }
 
-    private class MockSmsContentProvider extends MockContentProvider {
+    private static class MockSmsContentProvider extends MockContentProvider {
         Map<Uri, ContentValues> mContentValues = new HashMap<>();
         int mInsertOperationCount = 0;
 
