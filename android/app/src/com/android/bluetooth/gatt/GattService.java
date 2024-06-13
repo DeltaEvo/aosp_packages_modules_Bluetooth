@@ -241,12 +241,11 @@ public class GattService extends ProfileService {
             Log.w(TAG, "stop() called before start()");
             return;
         }
-
         if (Flags.scanManagerRefactor()) {
             setGattService(null);
+        } else {
+            mTransitionalScanHelper.stop();
         }
-
-        mTransitionalScanHelper.stop();
         mAdvertiserMap.clear();
         mClientMap.clear();
         if (Flags.gattCleanupRestrictedHandles()) {
@@ -271,7 +270,9 @@ public class GattService extends ProfileService {
         if (mDistanceMeasurementManager != null) {
             mDistanceMeasurementManager.cleanup();
         }
-        mTransitionalScanHelper.cleanup();
+        if (!Flags.scanManagerRefactor()) {
+            mTransitionalScanHelper.cleanup();
+        }
     }
 
     /** This is only used when Flags.scanManagerRefactor() is true. */
@@ -306,7 +307,8 @@ public class GattService extends ProfileService {
                         new Handler(getMainLooper()) {
                             public void handleMessage(Message msg) {
                                 synchronized (mTestModeLock) {
-                                    if (!GattService.this.isTestModeEnabled()) {
+                                    if (!GattService.this.isTestModeEnabled()
+                                            || Flags.scanManagerRefactor()) {
                                         return;
                                     }
                                     for (String test : TEST_MODE_BEACONS) {
