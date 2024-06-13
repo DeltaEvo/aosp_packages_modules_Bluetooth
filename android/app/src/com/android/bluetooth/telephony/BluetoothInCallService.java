@@ -122,9 +122,8 @@ public class BluetoothInCallService extends InCallService {
     @VisibleForTesting BluetoothLeCallControlProxy mBluetoothLeCallControl;
     private ExecutorService mExecutor;
 
-    @VisibleForTesting public TelephonyManager mTelephonyManager;
-
-    @VisibleForTesting public TelecomManager mTelecomManager;
+    private TelephonyManager mTelephonyManager;
+    private TelecomManager mTelecomManager;
 
     @VisibleForTesting
     public final HashMap<Integer, CallStateCallback> mCallbacks = new HashMap<>();
@@ -334,10 +333,7 @@ public class BluetoothInCallService extends InCallService {
     @Override
     public IBinder onBind(Intent intent) {
         Log.i(TAG, "onBind. Intent: " + intent);
-        IBinder binder = super.onBind(intent);
-        mTelephonyManager = getSystemService(TelephonyManager.class);
-        mTelecomManager = getSystemService(TelecomManager.class);
-        return binder;
+        return super.onBind(intent);
     }
 
     @Override
@@ -367,8 +363,6 @@ public class BluetoothInCallService extends InCallService {
         mBluetoothHeadset = headset;
         mBluetoothLeCallControl = leCallControl;
         attachBaseContext(context);
-        mTelephonyManager = getSystemService(TelephonyManager.class);
-        mTelecomManager = getSystemService(TelecomManager.class);
     }
 
     public static BluetoothInCallService getInstance() {
@@ -736,6 +730,8 @@ public class BluetoothInCallService extends InCallService {
         Log.d(TAG, "onCreate");
         super.onCreate();
         mAdapter = requireNonNull(getSystemService(BluetoothManager.class)).getAdapter();
+        mTelephonyManager = getSystemService(TelephonyManager.class);
+        mTelecomManager = getSystemService(TelecomManager.class);
         mAdapter.getProfileProxy(this, mProfileListener, BluetoothProfile.HEADSET);
         mAdapter.getProfileProxy(this, mProfileListener, BluetoothProfile.LE_CALL_CONTROL);
         mBluetoothAdapterReceiver = new BluetoothAdapterReceiver();
