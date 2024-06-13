@@ -514,11 +514,7 @@ public class BluetoothInCallService extends InCallService {
                 }
             }
             if (TextUtils.isEmpty(address)) {
-                if (mTelephonyManager == null) {
-                    address = null;
-                } else {
-                    address = mTelephonyManager.getLine1Number();
-                }
+                address = mTelephonyManager.getLine1Number();
                 if (address == null) address = "";
             }
             return address;
@@ -730,8 +726,8 @@ public class BluetoothInCallService extends InCallService {
         Log.d(TAG, "onCreate");
         super.onCreate();
         mAdapter = requireNonNull(getSystemService(BluetoothManager.class)).getAdapter();
-        mTelephonyManager = getSystemService(TelephonyManager.class);
-        mTelecomManager = getSystemService(TelecomManager.class);
+        mTelephonyManager = requireNonNull(getSystemService(TelephonyManager.class));
+        mTelecomManager = requireNonNull(getSystemService(TelecomManager.class));
         mAdapter.getProfileProxy(this, mProfileListener, BluetoothProfile.HEADSET);
         mAdapter.getProfileProxy(this, mProfileListener, BluetoothProfile.LE_CALL_CONTROL);
         mBluetoothAdapterReceiver = new BluetoothAdapterReceiver();
@@ -826,10 +822,6 @@ public class BluetoothInCallService extends InCallService {
                 for (BluetoothCall bluetoothCall : mBluetoothCallHashMap.values()) {
                     if (bluetoothCall.getHandle() == null) {
                         Log.w(TAG, "call id: " + bluetoothCall.getId() + " handle is null");
-                        continue;
-                    }
-                    if (mTelephonyManager == null) {
-                        Log.w(TAG, "mTelephonyManager is null");
                         continue;
                     }
                     boolean isSame =
@@ -1533,10 +1525,6 @@ public class BluetoothInCallService extends InCallService {
 
             if (account == null) {
                 // Second, Try to get the label for the default Phone Account.
-                if (mTelecomManager == null) {
-                    Log.w(TAG, "mTelecomManager is null");
-                    return null;
-                }
                 List<PhoneAccountHandle> handles =
                         mTelecomManager.getPhoneAccountsSupportingScheme(PhoneAccount.SCHEME_TEL);
                 while (handles.iterator().hasNext()) {
@@ -1569,7 +1557,7 @@ public class BluetoothInCallService extends InCallService {
     public void setBluetoothLeCallControl(BluetoothLeCallControlProxy bluetoothTbs) {
         mBluetoothLeCallControl = bluetoothTbs;
 
-        if ((mBluetoothLeCallControl) != null && (mTelecomManager != null)) {
+        if ((mBluetoothLeCallControl) != null) {
             mBluetoothLeCallControl.registerBearer(
                     TAG,
                     new ArrayList<String>(Arrays.asList("tel")),
