@@ -295,7 +295,9 @@ static void sync_lockstate_on_connect(btif_hh_device_t* p_dev) {
   if (keylockstates) {
     log::verbose("Sending hid report to kernel indicating lock key state 0x{:x}", keylockstates);
     usleep(200000);
-    toggle_os_keylockstates(p_dev->uhid.fd, keylockstates);
+    int fd = (com::android::bluetooth::flags::hid_report_queuing() ? p_dev->internal_send_fd
+                                                                   : p_dev->uhid.fd);
+    toggle_os_keylockstates(fd, keylockstates);
   } else {
     log::verbose("NOT sending hid report to kernel indicating lock key state 0x{:x}",
                  keylockstates);
@@ -557,8 +559,11 @@ static void hh_open_handler(tBTA_HH_CONN& conn) {
 
   log::info("Found device, getting dscp info for handle {}", conn.handle);
 
-  p_dev->link_spec = conn.link_spec;
-  p_dev->dev_status = BTHH_CONN_STATE_CONNECTED;
+  if (!com::android::bluetooth::flags::hid_report_queuing()) {
+    // link_spec and status is to be set in bta_hh_co_open instead.
+    p_dev->link_spec = conn.link_spec;
+    p_dev->dev_status = BTHH_CONN_STATE_CONNECTED;
+  }
   hh_connect_complete(conn.handle, conn.link_spec, BTIF_HH_DEV_CONNECTED);
   // Send set_idle if the peer_device is a keyboard
   if (check_cod_hid_major(conn.link_spec.addrt.bda, COD_HID_KEYBOARD) ||
@@ -686,7 +691,9 @@ void btif_hh_remove_device(const tAclLinkSpec& link_spec) {
     bta_hh_co_close(p_dev);
     p_dev->dev_status = BTHH_CONN_STATE_UNKNOWN;
     p_dev->dev_handle = BTA_HH_INVALID_HANDLE;
-    p_dev->uhid.ready_for_data = false;
+    if (!com::android::bluetooth::flags::hid_report_queuing()) {
+      p_dev->uhid.ready_for_data = false;
+    }
   }
 }
 
@@ -1000,8 +1007,10 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
                    p_data->dev_status.handle);
       p_dev = btif_hh_find_connected_dev_by_handle(p_data->dev_status.handle);
       if (p_dev != NULL) {
+        int fd = (com::android::bluetooth::flags::hid_report_queuing() ? p_dev->internal_send_fd
+                                                                       : p_dev->uhid.fd);
         BTHH_STATE_UPDATE(p_dev->link_spec, BTHH_CONN_STATE_DISCONNECTING);
-        log::verbose("uhid fd={} local_vup={}", p_dev->uhid.fd, p_dev->local_vup);
+        log::verbose("uhid fd={} local_vup={}", fd, p_dev->local_vup);
         btif_hh_stop_vup_timer(p_dev->link_spec);
         /* If this is a locally initiated VUP, remove the bond as ACL got
          *  disconnected while VUP being processed.
@@ -1131,7 +1140,9 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
         return;
       }
 
-      if (p_dev->uhid.fd < 0) {
+      int fd = (com::android::bluetooth::flags::hid_report_queuing() ? p_dev->internal_send_fd
+                                                                     : p_dev->uhid.fd);
+      if (fd < 0) {
         log::error("BTA_HH_GET_DSCP_EVT: failed to find the uhid driver...");
         return;
       }
@@ -2042,8 +2053,10 @@ static void cleanup(void) {
   }
   for (i = 0; i < BTIF_HH_MAX_HID; i++) {
     p_dev = &btif_hh_cb.devices[i];
-    if (p_dev->dev_status != BTHH_CONN_STATE_UNKNOWN && p_dev->uhid.fd >= 0) {
-      log::verbose("Closing uhid fd = {}", p_dev->uhid.fd);
+    int fd = (com::android::bluetooth::flags::hid_report_queuing() ? p_dev->internal_send_fd
+                                                                   : p_dev->uhid.fd);
+    if (p_dev->dev_status != BTHH_CONN_STATE_UNKNOWN && fd >= 0) {
+      log::verbose("Closing uhid fd = {}", fd);
       bta_hh_co_close(p_dev);
     }
   }
@@ -2126,10 +2139,11 @@ void DumpsysHid(int fd) {
   for (unsigned i = 0; i < BTIF_HH_MAX_HID; i++) {
     const btif_hh_device_t* p_dev = &btif_hh_cb.devices[i];
     if (p_dev->link_spec.addrt.bda != RawAddress::kEmpty) {
-      LOG_DUMPSYS(fd, "  %u: addr:%s fd:%d state:%s ready:%s thread_id:%d handle:%d", i,
-                  p_dev->link_spec.ToRedactedStringForLogging().c_str(), p_dev->uhid.fd,
+      int fd = (com::android::bluetooth::flags::hid_report_queuing() ? p_dev->internal_send_fd
+                                                                     : p_dev->uhid.fd);
+      LOG_DUMPSYS(fd, "  %u: addr:%s fd:%d state:%s thread_id:%d handle:%d", i,
+                  p_dev->link_spec.ToRedactedStringForLogging().c_str(), fd,
                   bthh_connection_state_text(p_dev->dev_status).c_str(),
-                  (p_dev->uhid.ready_for_data) ? ("T") : ("F"),
                   static_cast<int>(p_dev->hh_poll_thread_id), p_dev->dev_handle);
     }
   }
