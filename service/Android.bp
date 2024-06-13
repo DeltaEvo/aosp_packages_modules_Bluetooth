@@ -140,6 +140,7 @@ java_library {
         "framework-bluetooth",
     ],
 
+    sdk_version: "system_server_current",
     min_sdk_version: "Tiramisu",
     apex_available: ["com.android.btservices"],
     visibility: ["//packages/modules/Bluetooth/apex"],
@@ -226,4 +227,5 @@ android_robolectric_test {
     sdk_version: "module_current",
     upstream: true,
     test_suites: ["general-tests"],
+    strict_mode: false,
 }
