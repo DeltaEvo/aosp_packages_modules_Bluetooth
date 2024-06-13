@@ -63,8 +63,6 @@ import com.android.bluetooth.btservice.RemoteDevices.DeviceProperties;
 import com.android.bluetooth.flags.Flags;
 import com.android.modules.utils.build.SdkLevel;
 
-import com.google.common.collect.EvictingQueue;
-
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -99,9 +97,6 @@ class AdapterProperties {
 
     private CopyOnWriteArrayList<BluetoothDevice> mBondedDevices =
             new CopyOnWriteArrayList<BluetoothDevice>();
-
-    private static final int SCAN_MODE_CHANGES_MAX_SIZE = 10;
-    private EvictingQueue<String> mScanModeChanges;
 
     private int mProfilesConnecting, mProfilesConnected, mProfilesDisconnecting;
     private final HashMap<Integer, Pair<Integer, Integer>> mProfileConnectionState =
@@ -220,7 +215,6 @@ class AdapterProperties {
     AdapterProperties(AdapterService service) {
         mService = service;
         mAdapter = BluetoothAdapter.getDefaultAdapter();
-        mScanModeChanges = EvictingQueue.create(SCAN_MODE_CHANGES_MAX_SIZE);
         invalidateBluetoothCaches();
     }
 
@@ -290,7 +284,6 @@ class AdapterProperties {
         }
         mService = null;
         mBondedDevices.clear();
-        mScanModeChanges.clear();
         invalidateBluetoothCaches();
     }
 
@@ -349,38 +342,6 @@ class AdapterProperties {
                                             name, BLUETOOTH_NAME_MAX_LENGTH_BYTES)
                                     .getBytes());
         }
-    }
-
-    /**
-     * @return the mScanMode
-     */
-    int getScanMode() {
-        return mScanMode;
-    }
-
-    /**
-     * Set the local adapter property - scanMode
-     *
-     * @param scanMode the ScanMode to set, valid values are: { BluetoothAdapter.SCAN_MODE_NONE,
-     *     BluetoothAdapter.SCAN_MODE_CONNECTABLE,
-     *     BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE, }
-     */
-    boolean setScanMode(int scanMode) {
-        addScanChangeLog(scanMode);
-        synchronized (mObject) {
-            return mService.getNative()
-                    .setAdapterProperty(
-                            AbstractionLayer.BT_PROPERTY_ADAPTER_SCAN_MODE,
-                            Utils.intToByteArray(AdapterService.convertScanModeToHal(scanMode)));
-        }
-    }
-
-    private void addScanChangeLog(int scanMode) {
-        String time = Utils.getLocalTimeString();
-        String uidPid = Utils.getUidPidString();
-        String scanModeString = dumpScanMode(scanMode);
-
-        mScanModeChanges.add(time + " (" + uidPid + ") " + scanModeString);
     }
 
     /**
@@ -1017,16 +978,6 @@ class AdapterProperties {
                         }
                         debugLog("BT Class:" + mBluetoothClass);
                         break;
-                    case AbstractionLayer.BT_PROPERTY_ADAPTER_SCAN_MODE:
-                        int mode = Utils.byteArrayToInt(val, 0);
-                        mScanMode = AdapterService.convertScanModeFromHal(mode);
-                        intent = new Intent(BluetoothAdapter.ACTION_SCAN_MODE_CHANGED);
-                        intent.putExtra(BluetoothAdapter.EXTRA_SCAN_MODE, mScanMode);
-                        intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
-                        mService.sendBroadcast(
-                                intent, BLUETOOTH_SCAN, Utils.getTempBroadcastOptions().toBundle());
-                        debugLog("Scan Mode:" + mScanMode);
-                        break;
                     case AbstractionLayer.BT_PROPERTY_UUIDS:
                         mUuids = Utils.byteArrayToUuid(val);
                         break;
@@ -1184,18 +1135,9 @@ class AdapterProperties {
             mProfilesConnected = 0;
             mProfilesConnecting = 0;
             mProfilesDisconnecting = 0;
-            // adapterPropertyChangedCallback has already been received.  Set the scan mode.
-            setScanMode(BluetoothAdapter.SCAN_MODE_CONNECTABLE);
             // This keeps NV up-to date on first-boot after flash.
             setDiscoverableTimeout(mDiscoverableTimeout);
         }
-    }
-
-    void onBleDisable() {
-        // Sequence BLE_ON to STATE_OFF - that is _complete_ OFF state.
-        debugLog("onBleDisable");
-        // Set the scan_mode to NONE (no incoming connections).
-        setScanMode(BluetoothAdapter.SCAN_MODE_NONE);
     }
 
     void discoveryStateChangeCallback(int state) {
@@ -1236,7 +1178,6 @@ class AdapterProperties {
         writer.println(TAG);
         writer.println("  " + "Name: " + getName());
         writer.println("  " + "Address: " + Utils.getAddressStringFromByte(mAddress));
-        writer.println("  " + "ScanMode: " + dumpScanMode(getScanMode()));
         writer.println("  " + "ConnectionState: " + dumpConnectionState(getConnectionState()));
         writer.println("  " + "State: " + BluetoothAdapter.nameForState(getState()));
         writer.println("  " + "MaxConnectedAudioDevices: " + getMaxConnectedAudioDevices());
@@ -1280,11 +1221,6 @@ class AdapterProperties {
             }
         }
         writer.println(sb.toString());
-
-        writer.println("  " + "Scan Mode Changes:");
-        for (String log : mScanModeChanges) {
-            writer.println("    " + log);
-        }
     }
 
     private String dumpDeviceType(int deviceType) {
@@ -1314,19 +1250,6 @@ class AdapterProperties {
                 return "STATE_CONNECTED";
             default:
                 return "Unknown Connection State " + state;
-        }
-    }
-
-    private String dumpScanMode(int scanMode) {
-        switch (scanMode) {
-            case BluetoothAdapter.SCAN_MODE_NONE:
-                return "SCAN_MODE_NONE";
-            case BluetoothAdapter.SCAN_MODE_CONNECTABLE:
-                return "SCAN_MODE_CONNECTABLE";
-            case BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE:
-                return "SCAN_MODE_CONNECTABLE_DISCOVERABLE";
-            default:
-                return "Unknown Scan Mode " + scanMode;
         }
     }
 

@@ -58,11 +58,6 @@ std::map<::bt_property_type_t, std::function<headless::bt_property_t*(
            return new headless::property::void_t(data, len,
                                                  BT_PROPERTY_SERVICE_RECORD);
          }},
-        {BT_PROPERTY_ADAPTER_SCAN_MODE,
-         [](const uint8_t* data, const size_t len) -> headless::bt_property_t* {
-           return new headless::property::void_t(data, len,
-                                                 BT_PROPERTY_ADAPTER_SCAN_MODE);
-         }},
         {BT_PROPERTY_ADAPTER_BONDED_DEVICES,
          [](const uint8_t* data, const size_t len) -> headless::bt_property_t* {
            return new headless::property::void_t(
