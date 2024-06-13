@@ -148,12 +148,7 @@ public class BluetoothInCallService extends InCallService {
 
     private BluetoothAdapter mAdapter = null;
 
-    /**
-     * Listens to connections and disconnections of bluetooth headsets. We need to save the current
-     * bluetooth headset so that we know where to send BluetoothCall updates.
-     */
-    @VisibleForTesting
-    public BluetoothProfile.ServiceListener mProfileListener =
+    private final BluetoothProfile.ServiceListener mProfileListener =
             new BluetoothProfile.ServiceListener() {
                 @Override
                 public void onServiceConnected(int profile, BluetoothProfile proxy) {
@@ -779,7 +774,6 @@ public class BluetoothInCallService extends InCallService {
             mBluetoothLeCallControl.unregisterBearer();
             mBluetoothLeCallControl.closeBluetoothLeCallControlProxy(mAdapter);
         }
-        mProfileListener = null;
         sInstance = null;
         mCallbacks.clear();
         mBluetoothCallHashMap.clear();
