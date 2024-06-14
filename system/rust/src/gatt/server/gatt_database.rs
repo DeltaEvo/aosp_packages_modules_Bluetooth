@@ -521,7 +521,6 @@ mod test {
             mock_datastore::{MockDatastore, MockDatastoreEvents},
             mock_raw_datastore::{MockRawDatastore, MockRawDatastoreEvents},
         },
-        packets::AttAttributeDataChild,
         utils::task::block_on_locally,
     };
 
@@ -578,11 +577,9 @@ mod test {
         );
         assert_eq!(
             service_value,
-            AttAttributeDataChild::GattServiceDeclarationValue(
-                GattServiceDeclarationValueBuilder { uuid: SERVICE_TYPE.into() }
-            )
-            .to_vec()
-            .map_err(|_| AttErrorCode::UNLIKELY_ERROR)
+            GattServiceDeclarationValueBuilder { uuid: SERVICE_TYPE.into() }
+                .to_vec()
+                .map_err(|_| AttErrorCode::UNLIKELY_ERROR)
         );
     }
 
@@ -717,22 +714,20 @@ mod test {
 
         assert_eq!(
             characteristic_decl,
-            AttAttributeDataChild::GattCharacteristicDeclarationValue(
-                GattCharacteristicDeclarationValueBuilder {
-                    properties: GattCharacteristicPropertiesBuilder {
-                        read: 1,
-                        broadcast: 0,
-                        write_without_response: 0,
-                        write: 1,
-                        notify: 0,
-                        indicate: 1,
-                        authenticated_signed_writes: 0,
-                        extended_properties: 0,
-                    },
-                    handle: CHARACTERISTIC_VALUE_HANDLE.into(),
-                    uuid: CHARACTERISTIC_TYPE.into()
-                }
-            )
+            GattCharacteristicDeclarationValueBuilder {
+                properties: GattCharacteristicPropertiesBuilder {
+                    read: 1,
+                    broadcast: 0,
+                    write_without_response: 0,
+                    write: 1,
+                    notify: 0,
+                    indicate: 1,
+                    authenticated_signed_writes: 0,
+                    extended_properties: 0,
+                },
+                handle: CHARACTERISTIC_VALUE_HANDLE.into(),
+                uuid: CHARACTERISTIC_TYPE.into()
+            }
             .to_vec()
             .map_err(|_| AttErrorCode::UNLIKELY_ERROR)
         );
@@ -767,22 +762,20 @@ mod test {
             tokio_test::block_on(att_db.read_attribute(CHARACTERISTIC_DECLARATION_HANDLE));
         assert_eq!(
             characteristic_decl,
-            AttAttributeDataChild::GattCharacteristicDeclarationValue(
-                GattCharacteristicDeclarationValueBuilder {
-                    properties: GattCharacteristicPropertiesBuilder {
-                        read: 1,
-                        broadcast: 0,
-                        write_without_response: 1,
-                        write: 1,
-                        notify: 0,
-                        indicate: 1,
-                        authenticated_signed_writes: 0,
-                        extended_properties: 0,
-                    },
-                    handle: CHARACTERISTIC_VALUE_HANDLE.into(),
-                    uuid: CHARACTERISTIC_TYPE.into()
-                }
-            )
+            GattCharacteristicDeclarationValueBuilder {
+                properties: GattCharacteristicPropertiesBuilder {
+                    read: 1,
+                    broadcast: 0,
+                    write_without_response: 1,
+                    write: 1,
+                    notify: 0,
+                    indicate: 1,
+                    authenticated_signed_writes: 0,
+                    extended_properties: 0,
+                },
+                handle: CHARACTERISTIC_VALUE_HANDLE.into(),
+                uuid: CHARACTERISTIC_TYPE.into()
+            }
             .to_vec()
             .map_err(|_| AttErrorCode::UNLIKELY_ERROR)
         );

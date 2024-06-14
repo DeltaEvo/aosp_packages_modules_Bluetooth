@@ -12,7 +12,7 @@ use tokio::task::spawn_local;
 
 use crate::{
     do_in_rust_thread,
-    packets::{AttAttributeDataChild, AttBuilder, AttErrorCode, Serializable, SerializeError},
+    packets::{AttBuilder, AttErrorCode, Serializable, SerializeError},
 };
 
 use super::{
@@ -438,7 +438,7 @@ fn send_response(_server_id: u8, conn_id: u16, trans_id: u32, status: u8, value:
 fn send_indication(_server_id: u8, handle: u16, conn_id: u16, value: &[u8]) {
     let handle = AttHandle(handle);
     let conn_id = ConnectionId(conn_id);
-    let value = AttAttributeDataChild::RawData(value.into());
+    let value = value.into();
 
     trace!("send_indication {handle:?}, {conn_id:?}");
 

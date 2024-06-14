@@ -19,8 +19,8 @@ use crate::{
         opcode_types::{classify_opcode, OperationType},
     },
     packets::{
-        AttAttributeDataChild, AttBuilder, AttChild, AttErrorCode, AttErrorResponseBuilder,
-        AttView, Packet, SerializeError,
+        AttBuilder, AttChild, AttErrorCode, AttErrorResponseBuilder, AttView, Packet,
+        SerializeError,
     },
     utils::{owned_handle::OwnedHandle, packet::HACK_child_to_opcode},
 };
@@ -118,7 +118,7 @@ impl<T: AttDatabase + Clone + 'static> WeakBoxRef<'_, AttServerBearer<T>> {
     pub fn send_indication(
         &self,
         handle: AttHandle,
-        data: AttAttributeDataChild,
+        data: Vec<u8>,
     ) -> impl Future<Output = Result<(), IndicationError>> {
         trace!("sending indication for handle {handle:?}");
 
@@ -143,7 +143,7 @@ impl<T: AttDatabase + Clone + 'static> WeakBoxRef<'_, AttServerBearer<T>> {
                     IndicationError::SendError(SendError::ConnectionDropped)
                 })?;
             // finally, send, and wait for a response
-            indication_handler.send(handle, data, mtu, |packet| this.try_send_packet(packet)).await
+            indication_handler.send(handle, &data, mtu, |packet| this.try_send_packet(packet)).await
         }
     }
 
@@ -238,8 +238,8 @@ mod test {
             },
         },
         packets::{
-            AttAttributeDataBuilder, AttAttributeDataChild, AttHandleValueConfirmationBuilder,
-            AttOpcode, AttReadRequestBuilder, AttReadResponseBuilder,
+            AttHandleValueConfirmationBuilder, AttOpcode, AttReadRequestBuilder,
+            AttReadResponseBuilder,
         },
         utils::{
             packet::build_att_view_or_crash,
@@ -389,14 +389,7 @@ mod test {
                 resp,
                 AttBuilder {
                     opcode: AttOpcode::READ_RESPONSE,
-                    _child_: AttReadResponseBuilder {
-                        value: AttAttributeDataBuilder {
-                            _child_: AttAttributeDataChild::RawData(
-                                data.to_vec().into_boxed_slice()
-                            )
-                        },
-                    }
-                    .into()
+                    _child_: AttReadResponseBuilder { value: data.into() }.into()
                 }
             );
             // assert no other replies were made
@@ -414,10 +407,7 @@ mod test {
 
             // act: send an indication
             let pending_send =
-                spawn_local(conn.as_ref().send_indication(
-                    VALID_HANDLE,
-                    AttAttributeDataChild::RawData([1, 2, 3].into()),
-                ));
+                spawn_local(conn.as_ref().send_indication(VALID_HANDLE, vec![1, 2, 3]));
             assert_eq!(rx.recv().await.unwrap().opcode, AttOpcode::HANDLE_VALUE_INDICATION);
             assert_eq!(rx.try_recv(), Err(TryRecvError::Empty));
             // and the confirmation
@@ -438,10 +428,7 @@ mod test {
 
             // act: send the first indication
             let pending_send1 =
-                spawn_local(conn.as_ref().send_indication(
-                    VALID_HANDLE,
-                    AttAttributeDataChild::RawData([1, 2, 3].into()),
-                ));
+                spawn_local(conn.as_ref().send_indication(VALID_HANDLE, vec![1, 2, 3]));
             // wait for/capture the outgoing packet
             let sent1 = rx.recv().await.unwrap();
             // send the response
@@ -450,10 +437,7 @@ mod test {
             );
             // send the second indication
             let pending_send2 =
-                spawn_local(conn.as_ref().send_indication(
-                    VALID_HANDLE,
-                    AttAttributeDataChild::RawData([1, 2, 3].into()),
-                ));
+                spawn_local(conn.as_ref().send_indication(VALID_HANDLE, vec![1, 2, 3]));
             // wait for/capture the outgoing packet
             let sent2 = rx.recv().await.unwrap();
             // and the response
@@ -479,14 +463,9 @@ mod test {
 
             // act: send two indications simultaneously
             let pending_send1 =
-                spawn_local(conn.as_ref().send_indication(
-                    VALID_HANDLE,
-                    AttAttributeDataChild::RawData([1, 2, 3].into()),
-                ));
-            let pending_send2 = spawn_local(conn.as_ref().send_indication(
-                ANOTHER_VALID_HANDLE,
-                AttAttributeDataChild::RawData([1, 2, 3].into()),
-            ));
+                spawn_local(conn.as_ref().send_indication(VALID_HANDLE, vec![1, 2, 3]));
+            let pending_send2 =
+                spawn_local(conn.as_ref().send_indication(ANOTHER_VALID_HANDLE, vec![1, 2, 3]));
             // assert: only one was initially sent
             assert_eq!(rx.recv().await.unwrap().opcode, AttOpcode::HANDLE_VALUE_INDICATION);
             assert_eq!(rx.try_recv(), Err(TryRecvError::Empty));
@@ -504,14 +483,9 @@ mod test {
 
             // act: send two indications simultaneously
             let pending_send1 =
-                spawn_local(conn.as_ref().send_indication(
-                    VALID_HANDLE,
-                    AttAttributeDataChild::RawData([1, 2, 3].into()),
-                ));
-            let pending_send2 = spawn_local(conn.as_ref().send_indication(
-                ANOTHER_VALID_HANDLE,
-                AttAttributeDataChild::RawData([1, 2, 3].into()),
-            ));
+                spawn_local(conn.as_ref().send_indication(VALID_HANDLE, vec![1, 2, 3]));
+            let pending_send2 =
+                spawn_local(conn.as_ref().send_indication(ANOTHER_VALID_HANDLE, vec![1, 2, 3]));
             // wait for/capture the outgoing packet
             let sent1 = rx.recv().await.unwrap();
             // send response for the first one
@@ -540,14 +514,9 @@ mod test {
 
             // act: send two indications simultaneously
             let pending_send1 =
-                spawn_local(conn.as_ref().send_indication(
-                    VALID_HANDLE,
-                    AttAttributeDataChild::RawData([1, 2, 3].into()),
-                ));
-            let pending_send2 = spawn_local(conn.as_ref().send_indication(
-                ANOTHER_VALID_HANDLE,
-                AttAttributeDataChild::RawData([1, 2, 3].into()),
-            ));
+                spawn_local(conn.as_ref().send_indication(VALID_HANDLE, vec![1, 2, 3]));
+            let pending_send2 =
+                spawn_local(conn.as_ref().send_indication(ANOTHER_VALID_HANDLE, vec![1, 2, 3]));
             // wait for/capture the outgoing packet
             let sent1 = rx.recv().await.unwrap();
             // send response for the first one
@@ -577,10 +546,7 @@ mod test {
             // arrange: a pending indication
             let (conn, mut rx) = open_connection();
             let pending_send =
-                spawn_local(conn.as_ref().send_indication(
-                    VALID_HANDLE,
-                    AttAttributeDataChild::RawData([1, 2, 3].into()),
-                ));
+                spawn_local(conn.as_ref().send_indication(VALID_HANDLE, vec![1, 2, 3]));
 
             // act: drop the connection after the indication is sent
             rx.recv().await.unwrap();
@@ -602,12 +568,7 @@ mod test {
             conn.as_ref().handle_mtu_event(MtuEvent::OutgoingRequest).unwrap();
 
             // act: try to send an indication with a large payload size
-            let _ =
-                try_await(conn.as_ref().send_indication(
-                    VALID_HANDLE,
-                    AttAttributeDataChild::RawData((1..50).collect()),
-                ))
-                .await;
+            let _ = try_await(conn.as_ref().send_indication(VALID_HANDLE, (1..50).collect())).await;
             // then resolve the MTU negotiation with a large MTU
             conn.as_ref().handle_mtu_event(MtuEvent::IncomingResponse(100)).unwrap();
 
@@ -625,12 +586,9 @@ mod test {
 
             // act: try to send an indication with a large payload size
             let pending_mtu =
-                try_await(conn.as_ref().send_indication(
-                    VALID_HANDLE,
-                    AttAttributeDataChild::RawData((1..50).collect()),
-                ))
-                .await
-                .unwrap_err();
+                try_await(conn.as_ref().send_indication(VALID_HANDLE, (1..50).collect()))
+                    .await
+                    .unwrap_err();
             // then resolve the MTU negotiation with a small MTU
             conn.as_ref().handle_mtu_event(MtuEvent::IncomingResponse(32)).unwrap();
 
@@ -664,21 +622,11 @@ mod test {
         block_on_locally(async {
             // arrange: an outstanding indication
             let (conn, mut rx) = open_connection();
-            let _ =
-                try_await(conn.as_ref().send_indication(
-                    VALID_HANDLE,
-                    AttAttributeDataChild::RawData([1, 2, 3].into()),
-                ))
-                .await;
+            let _ = try_await(conn.as_ref().send_indication(VALID_HANDLE, vec![1, 2, 3])).await;
             rx.recv().await.unwrap(); // flush rx_queue
 
             // act: enqueue an indication with a large payload
-            let _ =
-                try_await(conn.as_ref().send_indication(
-                    VALID_HANDLE,
-                    AttAttributeDataChild::RawData((1..50).collect()),
-                ))
-                .await;
+            let _ = try_await(conn.as_ref().send_indication(VALID_HANDLE, (1..50).collect())).await;
             // then perform MTU negotiation to upgrade to a large MTU
             conn.as_ref().handle_mtu_event(MtuEvent::OutgoingRequest).unwrap();
             conn.as_ref().handle_mtu_event(MtuEvent::IncomingResponse(512)).unwrap();

@@ -24,7 +24,7 @@ impl<Db: AttDatabase> AttCommandHandler<Db> {
                 };
                 snapshotted_db.write_no_response_attribute(
                     packet.get_handle().into(),
-                    &packet.get_value().get_raw_payload().collect::<Vec<_>>(),
+                    &packet.get_value_iter().collect::<Vec<_>>(),
                 );
             }
             _ => {
@@ -47,10 +47,7 @@ mod test {
                 test::test_att_db::TestAttDatabase,
             },
         },
-        packets::{
-            AttAttributeDataBuilder, AttAttributeDataChild, AttErrorCode, AttErrorResponseBuilder,
-            AttOpcode, AttWriteCommandBuilder,
-        },
+        packets::{AttErrorCode, AttErrorResponseBuilder, AttOpcode, AttWriteCommandBuilder},
         utils::{packet::build_att_view_or_crash, task::block_on_locally},
     };
 
@@ -71,9 +68,7 @@ mod test {
         // act: send write command
         let att_view = build_att_view_or_crash(AttWriteCommandBuilder {
             handle: AttHandle(3).into(),
-            value: AttAttributeDataBuilder {
-                _child_: AttAttributeDataChild::RawData(data.to_vec().into_boxed_slice()),
-            },
+            value: data.into(),
         });
         handler.process_packet(att_view.view());
 
