@@ -1564,6 +1564,7 @@ cc_test {
     srcs: [
         ":BluetoothHalSources_hci_host",
         ":BluetoothHalSources_ranging_host",
+        ":BluetoothHciFake",
         ":BluetoothOsSources_host",
         ":OsiCompatSources",
         ":TestCommonMainHandler",
