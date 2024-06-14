@@ -97,6 +97,7 @@ typedef struct {
 #if ENABLE_UHID_SET_REPORT
   fixed_queue_t* set_rpt_id_queue;
 #endif  // ENABLE_UHID_SET_REPORT
+  fixed_queue_t* input_queue;  // to store the inputs before uhid is ready.
 } btif_hh_uhid_t;
 
 /* Control block to maintain properties of devices */
