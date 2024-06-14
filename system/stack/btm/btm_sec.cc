@@ -2328,7 +2328,6 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
     return;
   }
 
-  uint8_t old_sec_state = p_dev_rec->sec_rec.sec_state;
   if (status == HCI_SUCCESS) {
     log::debug(
         "Remote read request complete for known device pairing_state:{} "
@@ -2354,6 +2353,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
     p_dev_rec->sec_bd_name[0] = 0;
   }
 
+  uint8_t old_sec_state = p_dev_rec->sec_rec.sec_state;
   if (p_dev_rec->sec_rec.sec_state == BTM_SEC_STATE_GETTING_NAME)
     p_dev_rec->sec_rec.sec_state = BTM_SEC_STATE_IDLE;
 
