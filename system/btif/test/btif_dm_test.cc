@@ -155,12 +155,8 @@ class BtifDmWithStackTest : public BtifDmTest {
   bluetooth::ModuleList modules_;
 };
 
-#define MY_PACKAGE com::android::bluetooth::flags
-
 TEST_F_WITH_FLAGS(BtifDmWithStackTest,
-                  btif_dm_search_services_evt__BTA_DM_NAME_READ_EVT,
-                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(
-                      MY_PACKAGE, rnr_present_during_service_discovery))) {
+                  btif_dm_search_services_evt__BTA_DM_NAME_READ_EVT) {
   static struct {
     bt_status_t status;
     RawAddress bd_addr;

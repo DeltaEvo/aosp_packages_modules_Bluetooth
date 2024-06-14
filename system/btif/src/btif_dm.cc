@@ -2021,12 +2021,8 @@ static void btif_on_name_read(RawAddress bd_addr, tHCI_ERROR_CODE hci_status,
   // Differentiate between merged callbacks
   if (!during_device_search
       // New fix after refactor, this callback is needed for the fix to work
-      &&
-      !com::android::bluetooth::flags::separate_service_and_device_discovery()
-      // Original fix, this callback should not be called if RNR should not be
-      // called
-      &&
-      !com::android::bluetooth::flags::rnr_present_during_service_discovery()) {
+      && !com::android::bluetooth::flags::
+             separate_service_and_device_discovery()) {
     log::info("Skipping name read event - called on bad callback.");
     return;
   }
