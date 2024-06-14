@@ -2280,9 +2280,6 @@ static void call_registered_rmt_name_callbacks(const RawAddress* p_bd_addr,
 void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
                                        const uint8_t* p_bd_name,
                                        tHCI_STATUS status) {
-  tBTM_SEC_DEV_REC* p_dev_rec = nullptr;
-  uint8_t old_sec_state;
-
   log::info("btm_sec_rmt_name_request_complete for {}",
             p_bd_addr ? ADDRESS_TO_LOGGABLE_CSTR(*p_bd_addr) : "null");
 
@@ -2295,6 +2292,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
 
   /* If remote name request failed, p_bd_addr is null and we need to search */
   /* based on state assuming that we are doing 1 at a time */
+  tBTM_SEC_DEV_REC* p_dev_rec = nullptr;
   if (p_bd_addr)
     p_dev_rec = btm_find_dev(*p_bd_addr);
   else {
@@ -2327,7 +2325,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
     return;
   }
 
-  old_sec_state = p_dev_rec->sec_rec.sec_state;
+  uint8_t old_sec_state = p_dev_rec->sec_rec.sec_state;
   if (status == HCI_SUCCESS) {
     log::debug(
         "Remote read request complete for known device pairing_state:{} "
