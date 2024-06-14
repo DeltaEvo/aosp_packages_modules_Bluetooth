@@ -2316,8 +2316,10 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
 
   if (p_dev_rec == nullptr) {
     log::debug(
-        "Remote read request complete for unknown device pairing_state:{} "
+        "Remote read request complete for unknown device peer:{} "
+        "pairing_state:{} "
         "status:{} name:{}",
+        (p_bd_addr) ? ADDRESS_TO_LOGGABLE_CSTR(*p_bd_addr) : "null",
         tBTM_SEC_CB::btm_pair_state_descr(btm_sec_cb.pairing_state),
         hci_status_code_text(status), reinterpret_cast<char const*>(p_bd_name));
 
