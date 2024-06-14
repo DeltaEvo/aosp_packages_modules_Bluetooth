@@ -37,7 +37,6 @@
 
 #include "bt_dev_class.h"
 #include "btif/include/btif_storage.h"
-#include "common/init_flags.h"
 #include "common/metrics.h"
 #include "common/time_util.h"
 #include "device/include/device_iot_config.h"
@@ -232,7 +231,7 @@ static bool btm_dev_16_digit_authenticated(const tBTM_SEC_DEV_REC* p_dev_rec) {
 
 static bool is_sec_state_equal(void* data, void* context) {
   tBTM_SEC_DEV_REC* p_dev_rec = static_cast<tBTM_SEC_DEV_REC*>(data);
-  uint8_t* state = static_cast<uint8_t*>(context);
+  tSECURITY_STATE* state = static_cast<tSECURITY_STATE*>(context);
 
   if (p_dev_rec->sec_rec.sec_state == *state) return false;
 
@@ -249,7 +248,7 @@ static bool is_sec_state_equal(void* data, void* context) {
  * Returns          Pointer to the record or NULL
  *
  ******************************************************************************/
-static tBTM_SEC_DEV_REC* btm_sec_find_dev_by_sec_state(uint8_t state) {
+static tBTM_SEC_DEV_REC* btm_sec_find_dev_by_sec_state(tSECURITY_STATE state) {
   list_node_t* n =
       list_foreach(btm_sec_cb.sec_dev_rec, is_sec_state_equal, &state);
   if (n) return static_cast<tBTM_SEC_DEV_REC*>(list_node(n));
@@ -2358,7 +2357,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
                                      p_dev_rec->sec_bd_name, status);
 
   // Security procedure resumes
-  uint8_t old_sec_state = p_dev_rec->sec_rec.sec_state;
+  tSECURITY_STATE old_sec_state = p_dev_rec->sec_rec.sec_state;
   if (p_dev_rec->sec_rec.sec_state == BTM_SEC_STATE_GETTING_NAME)
     p_dev_rec->sec_rec.sec_state = BTM_SEC_STATE_IDLE;
 
@@ -3320,7 +3319,7 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
       "Security Manager encryption change request hci_status:{} request:{} "
       "state:{} sec_flags:0x{:x}",
       hci_status_code_text(status), (encr_enable) ? "encrypt" : "unencrypt",
-      (p_dev_rec->sec_rec.sec_state) ? "encrypted" : "unencrypted",
+      security_state_text(p_dev_rec->sec_rec.sec_state),
       p_dev_rec->sec_rec.sec_flags);
 
   if (status == HCI_SUCCESS) {
