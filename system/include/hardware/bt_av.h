@@ -98,7 +98,7 @@ typedef struct {
 typedef enum {
   // Disable the codec.
   // NOTE: This value can be used only during initialization when
-  // function btav_source_interface_t::init() is called.
+  // function btif_av_source_init() is called.
   BTAV_A2DP_CODEC_PRIORITY_DISABLED = -1,
 
   // Reset the codec priority to its default value.
@@ -365,42 +365,6 @@ typedef struct {
  *    android_audio_hw library and the Bluetooth stack.
  *
  */
-
-/** Represents the standard BT-AV A2DP Source interface.
- */
-typedef struct {
-  /** set to sizeof(btav_source_interface_t) */
-  size_t size;
-  /**
-   * Register the BtAv callbacks.
-   */
-  bt_status_t (*init)(
-      btav_source_callbacks_t* callbacks, int max_connected_audio_devices,
-      const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
-      const std::vector<btav_a2dp_codec_config_t>& offloading_preference,
-      std::vector<btav_a2dp_codec_info_t>* supported_codecs);
-
-  /** connect to headset */
-  bt_status_t (*connect)(const RawAddress& bd_addr);
-
-  /** dis-connect from headset */
-  bt_status_t (*disconnect)(const RawAddress& bd_addr);
-
-  /** sets the connected device silence state */
-  bt_status_t (*set_silence_device)(const RawAddress& bd_addr, bool silence);
-
-  /** sets the connected device as active */
-  bt_status_t (*set_active_device)(const RawAddress& bd_addr);
-
-  /** configure the codecs settings preferences */
-  bt_status_t (*config_codec)(
-      const RawAddress& bd_addr,
-      std::vector<btav_a2dp_codec_config_t> codec_preferences);
-
-  /** Closes the interface. */
-  void (*cleanup)(void);
-
-} btav_source_interface_t;
 
 /** Represents the standard BT-AV A2DP Sink interface.
  */
