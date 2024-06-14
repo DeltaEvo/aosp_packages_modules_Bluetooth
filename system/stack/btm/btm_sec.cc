@@ -2314,8 +2314,9 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
                                      p_dev_rec->sec_bd_name, status);
 
   // Security procedure resumes
-  tSECURITY_STATE old_sec_state = p_dev_rec->sec_rec.sec_state;
-  if (p_dev_rec->sec_rec.sec_state == tSECURITY_STATE::BTM_SEC_STATE_GETTING_NAME) {
+  const bool is_security_state_getting_name =
+          (p_dev_rec->sec_rec.sec_state == tSECURITY_STATE::BTM_SEC_STATE_GETTING_NAME);
+  if (is_security_state_getting_name) {
     p_dev_rec->sec_rec.sec_state = tSECURITY_STATE::BTM_SEC_STATE_IDLE;
   }
 
@@ -2439,7 +2440,8 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
     return;
   }
 
-  if (old_sec_state != tSECURITY_STATE::BTM_SEC_STATE_GETTING_NAME) {
+  if (!is_security_state_getting_name) {
+    log::warn("Security manager received RNR event when not in expected state");
     return;
   }
 
