@@ -20,8 +20,9 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <chrono>
+
+#include "packet/raw_builder.h"
 
 namespace bluetooth {
 namespace hci {
