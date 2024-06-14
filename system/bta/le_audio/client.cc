@@ -4677,8 +4677,9 @@ class LeAudioClientImpl : public LeAudioClient {
     return true;
   }
 
-  void OnLocalAudioSourceMetadataUpdate(source_metadata_v7 source_metadata,
-                                        DsaMode dsa_mode) {
+  void OnLocalAudioSourceMetadataUpdate(
+      const std::vector<struct playback_track_metadata_v7>& source_metadata,
+      DsaMode dsa_mode) {
     if (active_group_id_ == bluetooth::groups::kGroupUnknown) {
       log::warn(", cannot start streaming if no active group set");
       return;
@@ -4830,7 +4831,8 @@ class LeAudioClientImpl : public LeAudioClient {
                ToString(contexts_pair.sink), ToString(contexts_pair.source));
   }
 
-  void OnLocalAudioSinkMetadataUpdate(sink_metadata_v7 sink_metadata) {
+  void OnLocalAudioSinkMetadataUpdate(
+      const std::vector<record_track_metadata_v7>& sink_metadata) {
     if (active_group_id_ == bluetooth::groups::kGroupUnknown) {
       log::warn(", cannot start streaming if no active group set");
       return;
@@ -6196,11 +6198,11 @@ class SourceCallbacksImpl : public LeAudioSourceAudioHalClient::Callbacks {
     if (instance) instance->OnLocalAudioSourceResume();
   }
 
-  void OnAudioMetadataUpdate(source_metadata_v7 source_metadata,
-                             DsaMode dsa_mode) override {
+  void OnAudioMetadataUpdate(
+      std::vector<struct playback_track_metadata_v7> source_metadata,
+      DsaMode dsa_mode) override {
     if (instance)
-      instance->OnLocalAudioSourceMetadataUpdate(std::move(source_metadata),
-                                                 dsa_mode);
+      instance->OnLocalAudioSourceMetadataUpdate(source_metadata, dsa_mode);
   }
 };
 
@@ -6213,9 +6215,9 @@ class SinkCallbacksImpl : public LeAudioSinkAudioHalClient::Callbacks {
     if (instance) instance->OnLocalAudioSinkResume();
   }
 
-  void OnAudioMetadataUpdate(sink_metadata_v7 sink_metadata) override {
-    if (instance)
-      instance->OnLocalAudioSinkMetadataUpdate(std::move(sink_metadata));
+  void OnAudioMetadataUpdate(
+      std::vector<record_track_metadata_v7> sink_metadata) override {
+    if (instance) instance->OnLocalAudioSinkMetadataUpdate(sink_metadata);
   }
 };
 
