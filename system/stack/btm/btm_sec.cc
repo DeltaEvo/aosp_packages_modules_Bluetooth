@@ -2353,13 +2353,14 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
     p_dev_rec->sec_bd_name[0] = 0;
   }
 
-  uint8_t old_sec_state = p_dev_rec->sec_rec.sec_state;
-  if (p_dev_rec->sec_rec.sec_state == BTM_SEC_STATE_GETTING_NAME)
-    p_dev_rec->sec_rec.sec_state = BTM_SEC_STATE_IDLE;
-
   /* Notify all clients waiting for name to be resolved */
   call_registered_rmt_name_callbacks(p_bd_addr, p_dev_rec->dev_class,
                                      p_dev_rec->sec_bd_name, status);
+
+  // Security procedure resumes
+  uint8_t old_sec_state = p_dev_rec->sec_rec.sec_state;
+  if (p_dev_rec->sec_rec.sec_state == BTM_SEC_STATE_GETTING_NAME)
+    p_dev_rec->sec_rec.sec_state = BTM_SEC_STATE_IDLE;
 
   /* If we were delaying asking UI for a PIN because name was not resolved,
    * ask now */
