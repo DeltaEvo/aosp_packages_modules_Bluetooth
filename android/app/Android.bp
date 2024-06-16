@@ -131,7 +131,6 @@ cc_library_shared {
         "libbte",
         "libbtif",
         "libbtif-core",
-        "libc++fs",
         "libchrome",
         "libcutils",
         "libevent",
@@ -192,7 +191,6 @@ cc_library {
         "libosi",
 
         "libbluetooth-types",
-        "libc++fs",
     ],
     cflags: [
         /* we export all classes, so change default visibility, instead of having EXPORT_SYMBOL on each class*/
@@ -321,6 +319,15 @@ android_app {
         javacflags: [
             // "-Xep:AndroidFrameworkRequiresPermission:ERROR",
             "-Xep:AlmostJavadoc:ERROR",
+            "-Xep:BadImport:ERROR",
+            "-Xep:ClassCanBeStatic:ERROR",
+            "-Xep:EmptyBlockTag:ERROR",
+            "-Xep:InlineMeInliner:ERROR",
+            "-Xep:InvalidBlockTag:ERROR",
+            "-Xep:InvalidParam:ERROR",
+            "-Xep:MockNotUsedInProduction:ERROR",
+            "-Xep:NonCanonicalType:ERROR",
+            "-Xep:ReturnAtTheEndOfVoidFunction:ERROR",
             "-Xep:UnusedMethod:ERROR",
             "-Xep:UnusedVariable:ERROR",
             "-XepExcludedPaths:.*/srcjars/.*", // Exclude generated files

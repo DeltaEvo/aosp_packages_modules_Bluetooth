@@ -39,7 +39,6 @@ import com.android.bluetooth.a2dp.A2dpService;
 import com.android.bluetooth.a2dpsink.A2dpSinkService;
 import com.android.bluetooth.btservice.RemoteDevices.DeviceProperties;
 import com.android.bluetooth.csip.CsipSetCoordinatorService;
-import com.android.bluetooth.flags.Flags;
 import com.android.bluetooth.hap.HapClientService;
 import com.android.bluetooth.hfp.HeadsetService;
 import com.android.bluetooth.hfpclient.HeadsetClientService;
@@ -149,8 +148,7 @@ final class BondStateMachine extends StateMachine {
                     next pairing is started while previous still makes service discovery, it
                     would fail. Check the busy status of BTIF instead, and wait with starting
                     the bond. */
-                    if (Flags.delayBondingWhenBusy()
-                            && mAdapterService.getNative().pairingIsBusy()) {
+                    if (mAdapterService.getNative().pairingIsBusy()) {
                         short retry_no =
                                 (msg.getData() != null)
                                         ? msg.getData().getShort(DELAY_RETRY_COUNT)
@@ -488,13 +486,15 @@ final class BondStateMachine extends StateMachine {
     }
 
     private void sendDisplayPinIntent(byte[] address, Optional<Integer> maybePin, int variant) {
+        BluetoothDevice device = mRemoteDevices.getDevice(address);
         Intent intent = new Intent(BluetoothDevice.ACTION_PAIRING_REQUEST);
-        intent.putExtra(BluetoothDevice.EXTRA_DEVICE, mRemoteDevices.getDevice(address));
+        intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         maybePin.ifPresent(pin -> intent.putExtra(BluetoothDevice.EXTRA_PAIRING_KEY, pin));
         intent.putExtra(BluetoothDevice.EXTRA_PAIRING_VARIANT, variant);
         intent.setFlags(Intent.FLAG_RECEIVER_FOREGROUND);
         // Workaround for Android Auto until pre-accepting pairing requests is added.
         intent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
+        Log.i(TAG, "sendDisplayPinIntent: device=" + device + ", variant=" + variant);
         mAdapterService.sendOrderedBroadcast(
                 intent,
                 BLUETOOTH_CONNECT,

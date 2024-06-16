@@ -389,6 +389,14 @@ fn build_commands() -> HashMap<String, CommandOption> {
             function_pointer: _noop,
         },
     );
+    command_options.insert(
+        String::from("dumpsys"),
+        CommandOption {
+            rules: vec![String::from("dumpsys")],
+            description: String::from("Get diagnostic output."),
+            function_pointer: CommandHandler::cmd_dumpsys,
+        },
+    );
     command_options
 }
 
@@ -880,6 +888,7 @@ impl CommandHandler {
                     connection_state,
                     uuids,
                     wake_allowed,
+                    dual_mode_audio,
                 ) = {
                     let ctx = self.lock_context();
                     let adapter = ctx.adapter_dbus.as_ref().unwrap();
@@ -898,6 +907,7 @@ impl CommandHandler {
                     };
                     let uuids = adapter.get_remote_uuids(device.clone());
                     let wake_allowed = adapter.get_remote_wake_allowed(device.clone());
+                    let dual_mode_audio = adapter.is_dual_mode_audio_sink_device(device.clone());
 
                     (
                         name,
@@ -910,6 +920,7 @@ impl CommandHandler {
                         connection_state,
                         uuids,
                         wake_allowed,
+                        dual_mode_audio,
                     )
                 };
 
@@ -923,6 +934,7 @@ impl CommandHandler {
                 print_info!("Wake Allowed: {}", wake_allowed);
                 print_info!("Bond State: {:?}", bonded);
                 print_info!("Connection State: {}", connection_state);
+                print_info!("Dual Mode Audio Device: {}", dual_mode_audio);
                 print_info!(
                     "Uuids: {}",
                     DisplayList(
@@ -2334,6 +2346,17 @@ impl CommandHandler {
                 return Err(format!("Invalid argument '{}'", other).into());
             }
         }
+
+        Ok(())
+    }
+
+    fn cmd_dumpsys(&mut self, _args: &Vec<String>) -> CommandResult {
+        if !self.lock_context().adapter_ready {
+            return Err(self.adapter_not_ready());
+        }
+
+        let contents = self.lock_context().adapter_dbus.as_mut().unwrap().get_dumpsys();
+        println!("{}", contents);
 
         Ok(())
     }

@@ -299,7 +299,7 @@ static void sync_lockstate_on_connect(btif_hh_device_t* p_dev) {
         "Sending hid report to kernel indicating lock key state 0x{:x}",
         keylockstates);
     usleep(200000);
-    toggle_os_keylockstates(p_dev->fd, keylockstates);
+    toggle_os_keylockstates(p_dev->uhid.fd, keylockstates);
   } else {
     log::verbose(
         "NOT sending hid report to kernel indicating lock key state 0x{:x}",
@@ -708,7 +708,7 @@ void btif_hh_remove_device(const tAclLinkSpec& link_spec) {
     bta_hh_co_close(p_dev);
     p_dev->dev_status = BTHH_CONN_STATE_UNKNOWN;
     p_dev->dev_handle = BTA_HH_INVALID_HANDLE;
-    p_dev->ready_for_data = false;
+    p_dev->uhid.ready_for_data = false;
   }
 }
 
@@ -781,7 +781,7 @@ bt_status_t btif_hh_virtual_unplug(const tAclLinkSpec& link_spec) {
           },
           link_spec));
     }
-    return BT_STATUS_FAIL;
+    return BT_STATUS_DEVICE_NOT_FOUND;
   }
 }
 
@@ -882,38 +882,38 @@ void btif_hh_disconnect(const tAclLinkSpec& link_spec) {
  *
  * Function         btif_btif_hh_setreport
  *
- * Description      setreport initiated from the BTIF thread context
+ * Description      setreport initiated from the UHID thread context
  *
  * Returns          void
  *
  ******************************************************************************/
-void btif_hh_setreport(btif_hh_device_t* p_dev, bthh_report_type_t r_type,
+void btif_hh_setreport(btif_hh_uhid_t* p_uhid, bthh_report_type_t r_type,
                        uint16_t size, uint8_t* report) {
   BT_HDR* p_buf = create_pbuf(size, report);
   if (p_buf == NULL) {
     log::error("Error, failed to allocate RPT buffer, size = {}", size);
     return;
   }
-  BTA_HhSetReport(p_dev->dev_handle, r_type, p_buf);
+  BTA_HhSetReport(p_uhid->dev_handle, r_type, p_buf);
 }
 
 /*******************************************************************************
  *
  * Function         btif_btif_hh_senddata
  *
- * Description      senddata initiated from the BTIF thread context
+ * Description      senddata initiated from the UHID thread context
  *
  * Returns          void
  *
  ******************************************************************************/
-void btif_hh_senddata(btif_hh_device_t* p_dev, uint16_t size, uint8_t* report) {
+void btif_hh_senddata(btif_hh_uhid_t* p_uhid, uint16_t size, uint8_t* report) {
   BT_HDR* p_buf = create_pbuf(size, report);
   if (p_buf == NULL) {
     log::error("Error, failed to allocate RPT buffer, size = {}", size);
     return;
   }
   p_buf->layer_specific = BTA_HH_RPTT_OUTPUT;
-  BTA_HhSendData(p_dev->dev_handle, p_dev->link_spec, p_buf);
+  BTA_HhSendData(p_uhid->dev_handle, p_uhid->link_spec, p_buf);
 }
 
 /*******************************************************************************
@@ -950,14 +950,14 @@ void btif_hh_service_registration(bool enable) {
  *
  * Function         btif_hh_getreport
  *
- * Description      getreport initiated from the BTIF thread context
+ * Description      getreport initiated from the UHID thread context
  *
  * Returns          void
  *
  ******************************************************************************/
-void btif_hh_getreport(btif_hh_device_t* p_dev, bthh_report_type_t r_type,
+void btif_hh_getreport(btif_hh_uhid_t* p_uhid, bthh_report_type_t r_type,
                        uint8_t reportId, uint16_t bufferSize) {
-  BTA_HhGetReport(p_dev->dev_handle, r_type, reportId, bufferSize);
+  BTA_HhGetReport(p_uhid->dev_handle, r_type, reportId, bufferSize);
 }
 
 /*****************************************************************************
@@ -1038,7 +1038,8 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
       p_dev = btif_hh_find_connected_dev_by_handle(p_data->dev_status.handle);
       if (p_dev != NULL) {
         BTHH_STATE_UPDATE(p_dev->link_spec, BTHH_CONN_STATE_DISCONNECTING);
-        log::verbose("uhid fd={} local_vup={}", p_dev->fd, p_dev->local_vup);
+        log::verbose("uhid fd={} local_vup={}", p_dev->uhid.fd,
+                     p_dev->local_vup);
         btif_hh_stop_vup_timer(p_dev->link_spec);
         /* If this is a locally initiated VUP, remove the bond as ACL got
          *  disconnected while VUP being processed.
@@ -1185,7 +1186,7 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
         return;
       }
 
-      if (p_dev->fd < 0) {
+      if (p_dev->uhid.fd < 0) {
         log::error("BTA_HH_GET_DSCP_EVT: failed to find the uhid driver...");
         return;
       }
@@ -1723,7 +1724,7 @@ static bt_status_t virtual_unplug(RawAddress* bd_addr, tBLE_ADDR_TYPE addr_type,
   btif_hh_device_t* p_dev = btif_hh_find_dev_by_link_spec(link_spec);
   if (!p_dev) {
     BTHH_LOG_UNKNOWN_LINK(link_spec);
-    return BT_STATUS_FAIL;
+    return BT_STATUS_DEVICE_NOT_FOUND;
   }
   btif_transfer_context(btif_hh_handle_evt, BTIF_HH_VUP_REQ_EVT,
                         (char*)&link_spec, sizeof(tAclLinkSpec), NULL);
@@ -1754,7 +1755,7 @@ static bt_status_t get_idle_time(RawAddress* bd_addr, tBLE_ADDR_TYPE addr_type,
   btif_hh_device_t* p_dev = btif_hh_find_connected_dev_by_link_spec(link_spec);
   if (p_dev == NULL) {
     BTHH_LOG_UNKNOWN_LINK(link_spec);
-    return BT_STATUS_FAIL;
+    return BT_STATUS_DEVICE_NOT_FOUND;
   }
 
   BTA_HhGetIdle(p_dev->dev_handle);
@@ -1786,7 +1787,7 @@ static bt_status_t set_idle_time(RawAddress* bd_addr, tBLE_ADDR_TYPE addr_type,
   btif_hh_device_t* p_dev = btif_hh_find_connected_dev_by_link_spec(link_spec);
   if (p_dev == NULL) {
     BTHH_LOG_UNKNOWN_LINK(link_spec);
-    return BT_STATUS_FAIL;
+    return BT_STATUS_DEVICE_NOT_FOUND;
   }
 
   BTA_HhSetIdle(p_dev->dev_handle, idle_time);
@@ -1869,7 +1870,7 @@ static bt_status_t get_protocol(RawAddress* bd_addr, tBLE_ADDR_TYPE addr_type,
   btif_hh_device_t* p_dev = btif_hh_find_connected_dev_by_link_spec(link_spec);
   if (!p_dev) {
     BTHH_LOG_UNKNOWN_LINK(link_spec);
-    return BT_STATUS_FAIL;
+    return BT_STATUS_DEVICE_NOT_FOUND;
   }
 
   BTA_HhGetProtoMode(p_dev->dev_handle);
@@ -1904,7 +1905,7 @@ static bt_status_t set_protocol(RawAddress* bd_addr, tBLE_ADDR_TYPE addr_type,
   p_dev = btif_hh_find_connected_dev_by_link_spec(link_spec);
   if (p_dev == NULL) {
     BTHH_LOG_UNKNOWN_LINK(link_spec);
-    return BT_STATUS_FAIL;
+    return BT_STATUS_DEVICE_NOT_FOUND;
   } else if (protocolMode != BTA_HH_PROTO_RPT_MODE &&
              protocolMode != BTA_HH_PROTO_BOOT_MODE) {
     log::warn("device proto_mode = {}", proto_mode);
@@ -1945,7 +1946,7 @@ static bt_status_t get_report(RawAddress* bd_addr, tBLE_ADDR_TYPE addr_type,
   p_dev = btif_hh_find_connected_dev_by_link_spec(link_spec);
   if (p_dev == NULL) {
     BTHH_LOG_UNKNOWN_LINK(link_spec);
-    return BT_STATUS_FAIL;
+    return BT_STATUS_DEVICE_NOT_FOUND;
   } else if (((int)reportType) <= BTA_HH_RPTT_RESRV ||
              ((int)reportType) > BTA_HH_RPTT_FEATURE) {
     log::error("report type={} not supported", reportType);
@@ -1987,7 +1988,7 @@ static bt_status_t get_report_reply(RawAddress* bd_addr,
   btif_hh_device_t* p_dev = btif_hh_find_connected_dev_by_link_spec(link_spec);
   if (p_dev == NULL) {
     BTHH_LOG_UNKNOWN_LINK(link_spec);
-    return BT_STATUS_FAIL;
+    return BT_STATUS_DEVICE_NOT_FOUND;
   }
 
   bta_hh_co_get_rpt_rsp(p_dev->dev_handle, (tBTA_HH_STATUS)status,
@@ -2022,7 +2023,7 @@ static bt_status_t set_report(RawAddress* bd_addr, tBLE_ADDR_TYPE addr_type,
   p_dev = btif_hh_find_connected_dev_by_link_spec(link_spec);
   if (p_dev == NULL) {
     BTHH_LOG_UNKNOWN_LINK(link_spec);
-    return BT_STATUS_FAIL;
+    return BT_STATUS_DEVICE_NOT_FOUND;
   } else if (((int)reportType) <= BTA_HH_RPTT_RESRV ||
              ((int)reportType) > BTA_HH_RPTT_FEATURE) {
     log::error("report type={} not supported", reportType);
@@ -2079,7 +2080,7 @@ static bt_status_t send_data(RawAddress* bd_addr, tBLE_ADDR_TYPE addr_type,
   btif_hh_device_t* p_dev = btif_hh_find_connected_dev_by_link_spec(link_spec);
   if (p_dev == NULL) {
     BTHH_LOG_UNKNOWN_LINK(link_spec);
-    return BT_STATUS_FAIL;
+    return BT_STATUS_DEVICE_NOT_FOUND;
   } else {
     int hex_bytes_filled;
     size_t len = (strlen(data) + 1) / 2;
@@ -2134,8 +2135,8 @@ static void cleanup(void) {
   }
   for (i = 0; i < BTIF_HH_MAX_HID; i++) {
     p_dev = &btif_hh_cb.devices[i];
-    if (p_dev->dev_status != BTHH_CONN_STATE_UNKNOWN && p_dev->fd >= 0) {
-      log::verbose("Closing uhid fd = {}", p_dev->fd);
+    if (p_dev->dev_status != BTHH_CONN_STATE_UNKNOWN && p_dev->uhid.fd >= 0) {
+      log::verbose("Closing uhid fd = {}", p_dev->uhid.fd);
       bta_hh_co_close(p_dev);
     }
   }
@@ -2222,9 +2223,9 @@ void DumpsysHid(int fd) {
     if (p_dev->link_spec.addrt.bda != RawAddress::kEmpty) {
       LOG_DUMPSYS(
           fd, "  %u: addr:%s fd:%d state:%s ready:%s thread_id:%d handle:%d", i,
-          p_dev->link_spec.ToRedactedStringForLogging().c_str(), p_dev->fd,
+          p_dev->link_spec.ToRedactedStringForLogging().c_str(), p_dev->uhid.fd,
           bthh_connection_state_text(p_dev->dev_status).c_str(),
-          (p_dev->ready_for_data) ? ("T") : ("F"),
+          (p_dev->uhid.ready_for_data) ? ("T") : ("F"),
           static_cast<int>(p_dev->hh_poll_thread_id), p_dev->dev_handle);
     }
   }

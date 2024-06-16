@@ -141,8 +141,8 @@ class StackRfcommTest : public Test {
                   uuid, scn, true, mtu, RawAddress::kAny, server_handle,
                   management_callback, 0),
               PORT_SUCCESS);
-    ASSERT_EQ(PORT_SetEventMask(*server_handle, PORT_EV_RXCHAR), PORT_SUCCESS);
-    ASSERT_EQ(PORT_SetEventCallback(*server_handle, event_callback),
+    ASSERT_EQ(PORT_SetEventMaskAndCallback(*server_handle, PORT_EV_RXCHAR,
+                                           event_callback),
               PORT_SUCCESS);
   }
 
@@ -230,7 +230,7 @@ class StackRfcommTest : public Test {
     EXPECT_CALL(l2cap_interface_, DataWrite(lcid, BtHdrEqual(ua_channel_dlci)))
         .WillOnce(Return(L2CAP_DW_SUCCESS));
     ASSERT_TRUE(security_callback);
-    security_callback(&peer_addr, BT_TRANSPORT_BR_EDR, p_port, BTM_SUCCESS);
+    security_callback(peer_addr, BT_TRANSPORT_BR_EDR, p_port, BTM_SUCCESS);
     osi_free(ua_channel_dlci);
 
     log::verbose("Step 4");
@@ -287,8 +287,8 @@ class StackRfcommTest : public Test {
                                                   peer_bd_addr, client_handle,
                                                   management_callback, 0),
               PORT_SUCCESS);
-    ASSERT_EQ(PORT_SetEventMask(*client_handle, PORT_EV_RXCHAR), PORT_SUCCESS);
-    ASSERT_EQ(PORT_SetEventCallback(*client_handle, event_callback),
+    ASSERT_EQ(PORT_SetEventMaskAndCallback(*client_handle, PORT_EV_RXCHAR,
+                                           event_callback),
               PORT_SUCCESS);
     osi_free(uih_pn_channel_3);
   }
@@ -369,7 +369,7 @@ class StackRfcommTest : public Test {
     EXPECT_CALL(l2cap_interface_, DataWrite(lcid, BtHdrEqual(sabm_channel_3)))
         .WillOnce(Return(L2CAP_DW_SUCCESS));
     ASSERT_TRUE(security_callback);
-    security_callback(&peer_addr, BT_TRANSPORT_BR_EDR, p_port, BTM_SUCCESS);
+    security_callback(peer_addr, BT_TRANSPORT_BR_EDR, p_port, BTM_SUCCESS);
     osi_free(sabm_channel_3);
 
     log::verbose("Step 4");
@@ -731,9 +731,8 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
       test_uuid, test_server_scn, true, test_mtu, RawAddress::kAny,
       &server_handle, port_mgmt_cback_0, 0);
   ASSERT_EQ(status, PORT_SUCCESS);
-  status = PORT_SetEventMask(server_handle, PORT_EV_RXCHAR);
-  ASSERT_EQ(status, PORT_SUCCESS);
-  status = PORT_SetEventCallback(server_handle, port_event_cback_0);
+  status = PORT_SetEventMaskAndCallback(server_handle, PORT_EV_RXCHAR,
+                                        port_event_cback_0);
   ASSERT_EQ(status, PORT_SUCCESS);
 
   log::verbose("Step 2");
@@ -746,9 +745,8 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
       test_uuid, test_peer_scn, false, test_mtu, test_address, &client_handle_1,
       port_mgmt_cback_1, 0);
   ASSERT_EQ(status, PORT_SUCCESS);
-  status = PORT_SetEventMask(client_handle_1, PORT_EV_RXCHAR);
-  ASSERT_EQ(status, PORT_SUCCESS);
-  status = PORT_SetEventCallback(client_handle_1, port_event_cback_1);
+  status = PORT_SetEventMaskAndCallback(client_handle_1, PORT_EV_RXCHAR,
+                                        port_event_cback_1);
   ASSERT_EQ(status, PORT_SUCCESS);
 
   log::verbose("Step 3");
@@ -858,7 +856,7 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
   // in 20 seconds
   EXPECT_CALL(rfcomm_callback_,
               PortManagementCallback(PORT_SUCCESS, server_handle, 0));
-  security_callback(&test_address, BT_TRANSPORT_BR_EDR, p_port, BTM_SUCCESS);
+  security_callback(test_address, BT_TRANSPORT_BR_EDR, p_port, BTM_SUCCESS);
   osi_free(ua_server_scn);
 
   log::verbose("Step 11");

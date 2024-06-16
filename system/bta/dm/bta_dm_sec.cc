@@ -740,7 +740,7 @@ static uint8_t bta_dm_ble_smp_cback(tBTM_LE_EVT event, const RawAddress& bda,
           sec_event.auth_cmpl.bd_name,
           get_btm_client_interface().security.BTM_SecReadDevName(bda));
 
-      if (p_data->complt.reason != HCI_SUCCESS) {
+      if (p_data->complt.reason != SMP_SUCCESS) {
         // TODO This is not a proper use of this type
         sec_event.auth_cmpl.fail_reason =
             static_cast<tHCI_STATUS>(BTA_DM_AUTH_CONVERT_SMP_CODE(
@@ -794,17 +794,17 @@ static uint8_t bta_dm_ble_smp_cback(tBTM_LE_EVT event, const RawAddress& bda,
  * Returns         None
  *
  ******************************************************************************/
-void bta_dm_encrypt_cback(const RawAddress* bd_addr, tBT_TRANSPORT transport,
+void bta_dm_encrypt_cback(RawAddress bd_addr, tBT_TRANSPORT transport,
                           void* /* p_ref_data */, tBTM_STATUS result) {
   tBTA_DM_ENCRYPT_CBACK* p_callback = nullptr;
-  tBTA_DM_PEER_DEVICE* device = find_connected_device(*bd_addr, transport);
+  tBTA_DM_PEER_DEVICE* device = find_connected_device(bd_addr, transport);
   if (device != nullptr) {
     p_callback = device->p_encrypt_cback;
     device->p_encrypt_cback = nullptr;
   }
 
   log::debug("Encrypted:{:c}, peer:{} transport:{} status:{} callback:{:c}",
-             result == BTM_SUCCESS ? 'T' : 'F', *bd_addr,
+             result == BTM_SUCCESS ? 'T' : 'F', bd_addr,
              bt_transport_text(transport), btm_status_text(result),
              (p_callback) ? 'T' : 'F');
 
@@ -827,7 +827,7 @@ void bta_dm_encrypt_cback(const RawAddress* bd_addr, tBT_TRANSPORT transport,
   }
 
   if (p_callback) {
-    (*p_callback)(*bd_addr, transport, bta_status);
+    (*p_callback)(bd_addr, transport, bta_status);
   }
 }
 
