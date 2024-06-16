@@ -161,7 +161,7 @@ impl IBluetoothManager for BluetoothManager {
         config_util::write_floss_enabled(enabled);
 
         if prev != enabled && enabled {
-            if let Err(e) = Command::new("initctl").args(&["stop", BLUEZ_INIT_TARGET]).output() {
+            if let Err(e) = Command::new("initctl").args(["stop", BLUEZ_INIT_TARGET]).output() {
                 warn!("Failed to stop bluetoothd: {}", e);
             }
             migrate::migrate_bluez_devices();
@@ -177,7 +177,7 @@ impl IBluetoothManager for BluetoothManager {
                 }
             }
             migrate::migrate_floss_devices();
-            if let Err(e) = Command::new("initctl").args(&["start", BLUEZ_INIT_TARGET]).output() {
+            if let Err(e) = Command::new("initctl").args(["start", BLUEZ_INIT_TARGET]).output() {
                 warn!("Failed to start bluetoothd: {}", e);
             }
         }
@@ -230,7 +230,7 @@ fn config_with_le_device_entry(filename: &str) -> bool {
     };
     for (sec, props) in floss_map {
         // Skip all the non-device sections
-        if !sec.contains(":") {
+        if !sec.contains(':') {
             continue;
         }
         // Invalid entries have no DevType
@@ -247,7 +247,7 @@ fn config_with_le_device_entry(filename: &str) -> bool {
             }
         }
     }
-    return false;
+    false
 }
 
 /// Check if there are any LE Floss devices in storage.
@@ -265,7 +265,7 @@ fn floss_have_le_devices() -> bool {
             return true;
         }
     }
-    return false;
+    false
 }
 
 /// Implementation of IBluetoothExperimental
@@ -305,7 +305,7 @@ impl IBluetoothExperimental for BluetoothManager {
             self.restart_adapters();
         }
 
-        return true;
+        true
     }
 
     fn set_devcoredump(&mut self, enabled: bool) -> bool {

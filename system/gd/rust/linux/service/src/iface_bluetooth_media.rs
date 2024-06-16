@@ -241,7 +241,7 @@ impl DBusArg for PlayerMetadata {
                 _ => {}
             }
         }
-        return Ok(metadata);
+        Ok(metadata)
     }
 
     fn to_dbus(

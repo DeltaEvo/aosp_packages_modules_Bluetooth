@@ -236,12 +236,8 @@ impl UInputDev {
         code: libc::c_ushort,
         value: libc::c_int,
     ) -> i32 {
-        let mut event = UInputEvent {
-            time: libc::timeval { tv_sec: 0, tv_usec: 0 },
-            event_type: event_type,
-            code: code,
-            value: value,
-        };
+        let mut event =
+            UInputEvent { time: libc::timeval { tv_sec: 0, tv_usec: 0 }, event_type, code, value };
 
         unsafe {
             libc::write(
@@ -295,6 +291,12 @@ impl Drop for UInput {
     }
 }
 
+impl Default for UInput {
+    fn default() -> Self {
+        Self { devices: Vec::<UInputDev>::new(), active_device: String::from("00:00:00:00:00:00") }
+    }
+}
+
 impl UInput {
     fn get_device(&mut self, addr: String) -> Option<&mut UInputDev> {
         for device in self.devices.iter_mut() {
@@ -307,10 +309,7 @@ impl UInput {
 
     /// Create a new UInput struct that holds a vector of uinput objects.
     pub fn new() -> Self {
-        UInput {
-            devices: Vec::<UInputDev>::new(),
-            active_device: String::from("00:00:00:00:00:00"),
-        }
+        Default::default()
     }
 
     /// Initialize a uinput device with kernel.
@@ -350,7 +349,7 @@ impl UInput {
     /// Send key event to the active uinput.
     pub fn send_key(&mut self, key: u8, value: u8) -> Result<(), String> {
         match self.active_device.as_str() {
-            "00:00:00:00:00:00" => Err(format!("Active device is not specified")),
+            "00:00:00:00:00:00" => Err("Active device is not specified".to_string()),
             _ => match self.get_device(self.active_device.clone()) {
                 Some(device) => device.send_key(key, value),
                 None => Err(format!("uinput: {} is not initialized", self.active_device)),

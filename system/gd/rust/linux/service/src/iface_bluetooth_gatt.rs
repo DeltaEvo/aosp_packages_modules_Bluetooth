@@ -435,11 +435,11 @@ impl DBusArg for ScanFilterCondition {
         let patterns =
             <<Vec<ScanFilterPattern> as DBusArg>::DBusType as RefArgToRust>::ref_arg_to_rust(
                 variant.as_static_inner(0).unwrap(),
-                format!("ScanFilterCondition::Patterns"),
+                "ScanFilterCondition::Patterns".to_string(),
             )?;
 
         let patterns = Vec::<ScanFilterPattern>::from_dbus(patterns, None, None, None)?;
-        return Ok(ScanFilterCondition::Patterns(patterns));
+        Ok(ScanFilterCondition::Patterns(patterns))
     }
 
     fn to_dbus(
@@ -455,7 +455,7 @@ impl DBusArg for ScanFilterCondition {
             }
             _ => {}
         }
-        return Ok(map);
+        Ok(map)
     }
 
     fn log(condition: &ScanFilterCondition) -> String {

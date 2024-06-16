@@ -235,7 +235,7 @@ where
             key,
             stringify!(T),
         ))))?,
-        format!("{}", stringify!(T)),
+        stringify!(T).to_string(),
     )?;
     let output = T::from_dbus(output, None, None, None)?;
     Ok(output)
@@ -509,11 +509,11 @@ impl DBusArg for ScanFilterCondition {
         let patterns =
             <<Vec<ScanFilterPattern> as DBusArg>::DBusType as RefArgToRust>::ref_arg_to_rust(
                 variant.as_static_inner(0).unwrap(),
-                format!("ScanFilterCondition::Patterns"),
+                "ScanFilterCondition::Patterns".to_string(),
             )?;
 
         let patterns = Vec::<ScanFilterPattern>::from_dbus(patterns, None, None, None)?;
-        return Ok(ScanFilterCondition::Patterns(patterns));
+        Ok(ScanFilterCondition::Patterns(patterns))
     }
 
     fn to_dbus(
@@ -529,7 +529,7 @@ impl DBusArg for ScanFilterCondition {
             }
             _ => {}
         }
-        return Ok(map);
+        Ok(map)
     }
 
     // We don't log in btclient.
@@ -1141,7 +1141,7 @@ impl BluetoothManagerDBus {
 
     pub(crate) fn is_valid(&self) -> bool {
         let result: Result<(bool,), _> = self.client_proxy.method_withresult("GetFlossEnabled", ());
-        return result.is_ok();
+        result.is_ok()
     }
 }
 

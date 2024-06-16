@@ -154,7 +154,7 @@ lazy_static! {
 
 lazy_static! {
     static ref PROFILES_UUIDS: HashMap<Profile, Uuid> =
-        PROFILES.iter().map(|(k, v)| (v.clone(), k.clone())).collect();
+        PROFILES.iter().map(|(k, v)| (*v, *k)).collect();
 }
 
 impl UuidHelper {
@@ -187,7 +187,7 @@ impl UuidHelper {
     /// string that shows the service name. Else just format the uuid.
     pub fn known_uuid_to_string(uuid: &Uuid) -> String {
         if let Some(p) = Self::is_known_profile(uuid) {
-            format!("{}: {:?}", uuid.to_string(), p)
+            format!("{}: {:?}", uuid, p)
         } else {
             uuid.to_string()
         }

@@ -105,7 +105,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // InterfaceAdded and InterfaceRemoved signals.
     cr.lock().unwrap().set_object_manager_support(Some(conn.clone()));
     let om = cr.lock().unwrap().object_manager();
-    cr.lock().unwrap().insert("/", &[om], {});
+    cr.lock().unwrap().insert("/", &[om], ());
 
     let bluetooth_manager = Arc::new(Mutex::new(Box::new(BluetoothManager::new(proxy))));
 
