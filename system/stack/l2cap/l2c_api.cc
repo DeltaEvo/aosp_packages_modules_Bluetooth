@@ -1287,8 +1287,9 @@ bool L2CA_ConnectFixedChnl(uint16_t fixed_cid, const RawAddress& rem_bda) {
  *                  L2CAP_DW_FAILED,  if error
  *
  ******************************************************************************/
-uint16_t L2CA_SendFixedChnlData(uint16_t fixed_cid, const RawAddress& rem_bda,
-                                BT_HDR* p_buf) {
+tL2CAP_DW_RESULT L2CA_SendFixedChnlData(uint16_t fixed_cid,
+                                        const RawAddress& rem_bda,
+                                        BT_HDR* p_buf) {
   tL2C_LCB* p_lcb;
   tBT_TRANSPORT transport = BT_TRANSPORT_BR_EDR;
 
@@ -1501,12 +1502,12 @@ bool L2CA_MarkLeLinkAsActive(const RawAddress& rem_bda) {
  *                  L2CAP_DW_FAILED, if error
  *
  ******************************************************************************/
-uint8_t L2CA_DataWrite(uint16_t cid, BT_HDR* p_data) {
+tL2CAP_DW_RESULT L2CA_DataWrite(uint16_t cid, BT_HDR* p_data) {
   log::verbose("L2CA_DataWrite()  CID: 0x{:04x}  Len: {}", cid, p_data->len);
   return l2c_data_write(cid, p_data, L2CAP_FLUSHABLE_CH_BASED);
 }
 
-uint8_t L2CA_LECocDataWrite(uint16_t cid, BT_HDR* p_data) {
+tL2CAP_DW_RESULT L2CA_LECocDataWrite(uint16_t cid, BT_HDR* p_data) {
   return L2CA_DataWrite(cid, p_data);
 }
 

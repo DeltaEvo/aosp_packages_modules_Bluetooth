@@ -434,7 +434,7 @@ static bool gap_try_write_queued_data(tGAP_CCB* p_ccb) {
   /* Send the buffer through L2CAP */
   BT_HDR* p_buf;
   while ((p_buf = (BT_HDR*)fixed_queue_try_dequeue(p_ccb->tx_queue)) != NULL) {
-    uint8_t status;
+    tL2CAP_DW_RESULT status;
     if (p_ccb->transport == BT_TRANSPORT_LE) {
       status = L2CA_LECocDataWrite(p_ccb->connection_id, p_buf);
     } else {

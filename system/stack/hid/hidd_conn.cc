@@ -822,7 +822,7 @@ tHID_STATUS hidd_conn_send_data(uint8_t channel, uint8_t msg_type,
 
   log::verbose("report sent");
 
-  if (!L2CA_DataWrite(cid, p_buf)) {
+  if (L2CA_DataWrite(cid, p_buf) == L2CAP_DW_FAILED) {
     log_counter_metrics(android::bluetooth::CodePathCounterKeyEnum::
                             HIDD_ERR_CONGESTED_AT_DATA_WRITE,
                         1);

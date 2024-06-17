@@ -906,7 +906,7 @@ void l2c_lcb_timer_timeout(void* data) {
  *                  L2CAP_DW_FAILED, if error
  *
  ******************************************************************************/
-uint8_t l2c_data_write(uint16_t cid, BT_HDR* p_data, uint16_t flags) {
+tL2CAP_DW_RESULT l2c_data_write(uint16_t cid, BT_HDR* p_data, uint16_t flags) {
   /* Find the channel control block. We don't know the link it is on. */
   tL2C_CCB* p_ccb = l2cu_find_ccb_by_cid(NULL, cid);
   if (!p_ccb) {

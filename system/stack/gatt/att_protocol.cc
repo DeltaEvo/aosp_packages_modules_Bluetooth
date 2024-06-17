@@ -373,14 +373,14 @@ static BT_HDR* attp_build_value_cmd(uint16_t payload_size, uint8_t op_code,
  ******************************************************************************/
 tGATT_STATUS attp_send_msg_to_l2cap(tGATT_TCB& tcb, uint16_t lcid,
                                     BT_HDR* p_toL2CAP) {
-  uint16_t l2cap_ret;
+  tL2CAP_DW_RESULT l2cap_ret;
 
   if (lcid == L2CAP_ATT_CID) {
     log::debug("Sending ATT message on att fixed channel");
     l2cap_ret = L2CA_SendFixedChnlData(lcid, tcb.peer_bda, p_toL2CAP);
   } else {
     log::debug("Sending ATT message on lcid:{}", lcid);
-    l2cap_ret = (uint16_t)L2CA_DataWrite(lcid, p_toL2CAP);
+    l2cap_ret = L2CA_DataWrite(lcid, p_toL2CAP);
   }
 
   if (l2cap_ret == L2CAP_DW_FAILED) {
