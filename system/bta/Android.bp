@@ -1115,6 +1115,7 @@ cc_test {
         "libbase",
         "libcrypto",
         "liblog",
+        "server_configurable_flags",
     ],
     static_libs: [
         "libbluetooth-types",
@@ -1126,6 +1127,7 @@ cc_test {
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libchrome",
+        "libflagtest",
         "libflatbuffers-cpp",
         "libgmock",
         "libgtest",
