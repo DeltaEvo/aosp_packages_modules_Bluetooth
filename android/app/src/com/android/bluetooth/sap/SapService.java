@@ -907,12 +907,14 @@ public class SapService extends ProfileService implements AdapterService.Bluetoo
 
         @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
         private SapService getService(AttributionSource source) {
-            if (!Utils.checkServiceAvailable(mService, TAG)
-                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
-                    || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
+            SapService sapService = mService;
+
+            if (!Utils.checkServiceAvailable(sapService, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(sapService, TAG)
+                    || !Utils.checkConnectPermissionForDataDelivery(sapService, source, TAG)) {
                 return null;
             }
-            return mService;
+            return sapService;
         }
 
         SapBinder(SapService service) {
