@@ -385,3 +385,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "leaudio_broadcast_update_metadata_callback"
+    namespace: "bluetooth"
+    description: "Notify upper layer with callback when medadata is updated"
+    bug: "347710374"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
