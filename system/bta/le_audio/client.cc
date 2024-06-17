@@ -267,12 +267,10 @@ class LeAudioClientImpl : public LeAudioClient {
       reconnection_mode_ = BTM_BLE_BKG_CONNECT_ALLOW_LIST;
     }
 
-    if (com::android::bluetooth::flags::leaudio_enable_health_based_actions()) {
-      log::info("Loading health status module");
-      leAudioHealthStatus_ = LeAudioHealthStatus::Get();
-      leAudioHealthStatus_->RegisterCallback(
-          base::BindRepeating(le_audio_health_status_callback));
-    }
+    log::info("Loading health status module");
+    leAudioHealthStatus_ = LeAudioHealthStatus::Get();
+    leAudioHealthStatus_->RegisterCallback(
+        base::BindRepeating(le_audio_health_status_callback));
 
     BTA_GATTC_AppRegister(
         le_audio_gattc_callback,
