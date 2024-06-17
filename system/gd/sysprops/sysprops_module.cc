@@ -122,6 +122,7 @@ void SyspropsModule::parse_config(std::string file_path) {
       // LE Audio
       "bluetooth.le_audio.enable_le_audio_only",
       "bluetooth.leaudio.dual_bidirection_swb.supported",
+      "persist.bluetooth.leaudio.allow_list",
       // SCO
       "bluetooth.sco.disable_enhanced_connection",
       "bluetooth.sco.swb_supported",
