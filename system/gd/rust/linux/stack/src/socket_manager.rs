@@ -114,9 +114,9 @@ impl BluetoothServerSocket {
             sock_type: SocketType::Rfcomm,
             flags,
             psm: None,
-            channel: channel,
-            name: name,
-            uuid: uuid,
+            channel,
+            name,
+            uuid,
         }
     }
 
@@ -145,7 +145,7 @@ impl BluetoothServerSocket {
         sock.id = self.id;
         sock.sock_type = self.sock_type.clone();
         sock.flags = self.flags;
-        sock.uuid = self.uuid.clone();
+        sock.uuid = self.uuid;
 
         // Data from connection.
         sock.remote_device = BluetoothDevice::new(conn.addr, "".into());
@@ -170,7 +170,7 @@ impl fmt::Display for BluetoothServerSocket {
                 (Some(psm), Some(cn)) => format!("psm {} | cn {}", psm, cn),
                 (None, Some(cn)) => format!("cn {}", cn),
                 (Some(psm), None) => format!("psm {}", psm),
-                (None, None) => format!("none"),
+                (None, None) => "none".to_string(),
             },
             self.sock_type,
             self.name.as_ref().unwrap_or(&String::new()),
@@ -628,7 +628,7 @@ impl BluetoothSocketManager {
                 let id = self.next_socket_id();
                 socket_info.id = id;
                 let (runner_tx, runner_rx) = channel::<SocketRunnerActions>(10);
-                let uuid = socket_info.uuid.clone();
+                let uuid = socket_info.uuid;
 
                 // Push a listening task to local runtime to wait for device to
                 // start accepting or get closed.
@@ -644,7 +644,7 @@ impl BluetoothSocketManager {
                 };
 
                 // We only send socket ready after we've read the channel out.
-                let listen_status = status.clone();
+                let listen_status = status;
                 let joinhandle = self.runtime.spawn(async move {
                     BluetoothSocketManager::listening_task(
                         cbid,
@@ -768,7 +768,7 @@ impl BluetoothSocketManager {
         let connection_timeout = Duration::from_millis(CONNECT_COMPLETE_TIMEOUT_MS);
         // Wait for stream to be readable, then read channel. This is the first thing that must
         // happen in the listening channel. If this fails, close the channel.
-        let mut channel_bytes = [0 as u8; 4];
+        let mut channel_bytes = [0_u8; 4];
         let mut status =
             Self::wait_and_read_stream(connection_timeout, &stream, &mut channel_bytes).await;
         let channel = i32::from_ne_bytes(channel_bytes);
@@ -808,7 +808,7 @@ impl BluetoothSocketManager {
         };
         // Notify via callbacks that this socket is ready to be listened to since we have the
         // channel available now.
-        let (forwarded_socket, forwarded_status) = (socket_info.clone(), listen_status.clone());
+        let (forwarded_socket, forwarded_status) = (socket_info.clone(), listen_status);
         let _ = rpc_tx
             .send(Message::SocketManagerActions(SocketActions::OnIncomingSocketReady(
                 cbid,
@@ -945,7 +945,7 @@ impl BluetoothSocketManager {
 
                             // If we returned an error for the above socket, then the recv failed.
                             // Just continue this loop.
-                            if !sock.is_ok() {
+                            if sock.is_err() {
                                 continue;
                             }
 
@@ -1036,11 +1036,9 @@ impl BluetoothSocketManager {
                 if n != buf.len() {
                     return BtStatus::SocketError;
                 }
-                return BtStatus::Success;
+                BtStatus::Success
             }
-            _ => {
-                return BtStatus::SocketError;
-            }
+            _ => BtStatus::SocketError,
         }
     }
 
@@ -1074,7 +1072,7 @@ impl BluetoothSocketManager {
         };
 
         // Wait for stream to be readable, then read channel
-        let mut channel_bytes = [0 as u8; 4];
+        let mut channel_bytes = [0_u8; 4];
         let mut status =
             Self::wait_and_read_stream(connection_timeout, &stream, &mut channel_bytes).await;
         if i32::from_ne_bytes(channel_bytes) <= 0 {
@@ -1115,10 +1113,7 @@ impl BluetoothSocketManager {
                     let _ = tx
                         .send(Message::SocketManagerActions(
                             SocketActions::OnOutgoingConnectionResult(
-                                cbid,
-                                socket_id,
-                                status.clone(),
-                                None,
+                                cbid, socket_id, status, None,
                             ),
                         ))
                         .await;
@@ -1134,7 +1129,7 @@ impl BluetoothSocketManager {
                             SocketActions::OnOutgoingConnectionResult(
                                 cbid,
                                 socket_id,
-                                status.clone(),
+                                status,
                                 Some(sock),
                             ),
                         ))
@@ -1205,7 +1200,6 @@ impl BluetoothSocketManager {
         let forbidden_sockets = self
             .listening
             .values()
-            .into_iter()
             .flatten()
             .filter(|sock| {
                 sock.uuid
@@ -1469,10 +1463,7 @@ impl IBluetoothSocketManager for BluetoothSocketManager {
             Some(v) => {
                 if let Some(found) = v.iter().find(|item| item.socket_id == id) {
                     let tx = found.tx.clone();
-                    let timeout_duration = match timeout_ms {
-                        Some(t) => Some(Duration::from_millis(t.into())),
-                        None => None,
-                    };
+                    let timeout_duration = timeout_ms.map(|t| Duration::from_millis(t.into()));
                     self.runtime.spawn(async move {
                         let _ =
                             tx.send(SocketRunnerActions::AcceptTimeout(id, timeout_duration)).await;

@@ -94,10 +94,7 @@ impl ContextMap {
     }
 
     fn get_address_by_conn_id(&self, conn_id: i32) -> Option<RawAddress> {
-        match self.connections.iter().find(|conn| conn.conn_id == conn_id) {
-            None => None,
-            Some(conn) => Some(conn.address),
-        }
+        self.connections.iter().find(|conn| conn.conn_id == conn_id).map(|conn| conn.address)
     }
 
     fn get_client_by_conn_id(&self, conn_id: i32) -> Option<&Client> {
@@ -126,7 +123,7 @@ impl ContextMap {
         self.clients.push(Client {
             id: None,
             cbid,
-            uuid: uuid.clone(),
+            uuid: *uuid,
             is_congested: false,
             congestion_queue: vec![],
         });
@@ -165,14 +162,10 @@ impl ContextMap {
     }
 
     fn get_conn_id_from_address(&self, client_id: i32, address: &RawAddress) -> Option<i32> {
-        match self
-            .connections
+        self.connections
             .iter()
             .find(|conn| conn.client_id == client_id && conn.address == *address)
-        {
-            None => None,
-            Some(conn) => Some(conn.conn_id),
-        }
+            .map(|conn| conn.conn_id)
     }
 
     fn get_client_ids_from_address(&self, address: &RawAddress) -> Vec<i32> {
@@ -254,7 +247,7 @@ impl ServerContextMap {
     fn get_mut_by_conn_id(&mut self, conn_id: i32) -> Option<&mut Server> {
         self.connections
             .iter()
-            .find_map(|conn| (conn.conn_id == conn_id).then(|| conn.server_id.clone()))
+            .find_map(|conn| (conn.conn_id == conn_id).then_some(conn.server_id))
             .and_then(move |server_id| self.get_mut_by_server_id(server_id))
     }
 
@@ -268,7 +261,7 @@ impl ServerContextMap {
         self.servers.push(Server {
             id: None,
             cbid,
-            uuid: uuid.clone(),
+            uuid: *uuid,
             services: vec![],
             is_congested: false,
             congestion_queue: vec![],
@@ -331,7 +324,7 @@ impl ServerContextMap {
     }
 
     fn get_address_from_conn_id(&self, conn_id: i32) -> Option<RawAddress> {
-        self.connections.iter().find_map(|conn| (conn.conn_id == conn_id).then(|| conn.address))
+        self.connections.iter().find_map(|conn| (conn.conn_id == conn_id).then_some(conn.address))
     }
 
     fn add_service(&mut self, server_id: i32, service: BluetoothGattService) {
@@ -341,8 +334,9 @@ impl ServerContextMap {
     }
 
     fn delete_service(&mut self, server_id: i32, handle: i32) {
-        self.get_mut_by_server_id(server_id)
-            .map(|s: &mut Server| s.services.retain(|service| service.instance_id != handle));
+        if let Some(s) = self.get_mut_by_server_id(server_id) {
+            s.services.retain(|service| service.instance_id != handle)
+        }
     }
 
     fn add_request(&mut self, request_id: i32, handle: i32) {
@@ -354,7 +348,9 @@ impl ServerContextMap {
     }
 
     fn get_request_handle_from_id(&self, request_id: i32) -> Option<i32> {
-        self.requests.iter().find_map(|request| (request.id == request_id).then(|| request.handle))
+        self.requests
+            .iter()
+            .find_map(|request| (request.id == request_id).then_some(request.handle))
     }
 }
 
@@ -1154,40 +1150,30 @@ pub enum GattDbElementType {
     Descriptor = 4,
 }
 
-impl Into<i32> for GattDbElementType {
-    fn into(self) -> i32 {
-        self.to_u8().unwrap_or(0).into()
+impl From<GattDbElementType> for i32 {
+    fn from(val: GattDbElementType) -> Self {
+        val.to_u8().unwrap_or(0).into()
     }
 }
 
-#[derive(Debug, FromPrimitive, ToPrimitive, Copy, Clone)]
+#[derive(Debug, Default, FromPrimitive, ToPrimitive, Copy, Clone)]
 #[repr(u8)]
 /// GATT write type.
 pub enum GattWriteType {
     Invalid = 0,
     WriteNoRsp = 1,
+    #[default]
     Write = 2,
     WritePrepare = 3,
 }
 
-impl Default for GattWriteType {
-    fn default() -> Self {
-        GattWriteType::Write
-    }
-}
-
-#[derive(Debug, FromPrimitive, ToPrimitive, Clone, PartialEq)]
+#[derive(Debug, Default, FromPrimitive, ToPrimitive, Clone, PartialEq)]
 #[repr(u32)]
 /// Scan type configuration.
 pub enum ScanType {
+    #[default]
     Active = 0,
     Passive = 1,
-}
-
-impl Default for ScanType {
-    fn default() -> Self {
-        ScanType::Active
-    }
 }
 
 /// Represents scanning configurations to be passed to `IBluetoothGatt::start_scan`.
@@ -1221,7 +1207,7 @@ impl ScanSettings {
                 return None;
             }
         };
-        return Some((scan_type, interval, window));
+        Some((scan_type, interval, window))
     }
 }
 
@@ -1614,13 +1600,7 @@ impl BluetoothGatt {
             .unwrap()
             .iter()
             .filter(|(_uuid, scanner)| scanner.callback_id == callback_id)
-            .filter_map(|(_uuid, scanner)| {
-                if let Some(scanner_id) = scanner.scanner_id {
-                    Some(scanner_id)
-                } else {
-                    None
-                }
-            })
+            .filter_map(|(_uuid, scanner)| scanner.scanner_id)
             .collect();
 
         // All scanners associated with the callback must be also unregistered.
@@ -1677,7 +1657,7 @@ impl BluetoothGatt {
             }
         }
         self.set_scan_suspend_mode(SuspendMode::Suspended);
-        return BtStatus::Success;
+        BtStatus::Success
     }
 
     /// Exits suspend mode for LE Scan.
@@ -1721,7 +1701,7 @@ impl BluetoothGatt {
 
         self.set_scan_suspend_mode(SuspendMode::Normal);
 
-        return BtStatus::Success;
+        BtStatus::Success
     }
 
     fn find_scanner_by_id<'a>(
@@ -1803,8 +1783,10 @@ impl BluetoothGatt {
                 // The address monitor handles are needed in stop_scan().
                 let addr_info: MsftAdvMonitorAddress = (&scan_filter.condition).into();
 
-                if scanner.addr_handle_map.contains_key(&addr_info.bd_addr) {
-                    scanner.addr_handle_map.insert(addr_info.bd_addr, Some(monitor_handle));
+                if let std::collections::hash_map::Entry::Occupied(mut e) =
+                    scanner.addr_handle_map.entry(addr_info.bd_addr)
+                {
+                    e.insert(Some(monitor_handle));
                     log::debug!(
                         "Added addr monitor {} and updated bd_addr={} to addr filter map",
                         monitor_handle,
@@ -2056,19 +2038,19 @@ impl ScannerInfo {
     }
 }
 
-impl Into<MsftAdvMonitorPattern> for &ScanFilterPattern {
-    fn into(self) -> MsftAdvMonitorPattern {
+impl From<&ScanFilterPattern> for MsftAdvMonitorPattern {
+    fn from(val: &ScanFilterPattern) -> Self {
         MsftAdvMonitorPattern {
-            ad_type: self.ad_type,
-            start_byte: self.start_position,
-            pattern: self.content.clone(),
+            ad_type: val.ad_type,
+            start_byte: val.start_position,
+            pattern: val.content.clone(),
         }
     }
 }
 
-impl Into<Vec<MsftAdvMonitorPattern>> for &ScanFilterCondition {
-    fn into(self) -> Vec<MsftAdvMonitorPattern> {
-        match self {
+impl From<&ScanFilterCondition> for Vec<MsftAdvMonitorPattern> {
+    fn from(val: &ScanFilterCondition) -> Self {
+        match val {
             ScanFilterCondition::Patterns(patterns) => {
                 patterns.iter().map(|pattern| pattern.into()).collect()
             }
@@ -2077,24 +2059,24 @@ impl Into<Vec<MsftAdvMonitorPattern>> for &ScanFilterCondition {
     }
 }
 
-impl Into<MsftAdvMonitorAddress> for &ScanFilterAddress {
-    fn into(self) -> MsftAdvMonitorAddress {
-        MsftAdvMonitorAddress { addr_type: self.addr_type, bd_addr: self.bd_addr }
+impl From<&ScanFilterAddress> for MsftAdvMonitorAddress {
+    fn from(val: &ScanFilterAddress) -> Self {
+        MsftAdvMonitorAddress { addr_type: val.addr_type, bd_addr: val.bd_addr }
     }
 }
 
-impl Into<MsftAdvMonitorAddress> for &ScanFilterCondition {
-    fn into(self) -> MsftAdvMonitorAddress {
-        match &self {
+impl From<&ScanFilterCondition> for MsftAdvMonitorAddress {
+    fn from(val: &ScanFilterCondition) -> Self {
+        match &val {
             ScanFilterCondition::BluetoothAddress(addr_info) => addr_info.into(),
             _ => MsftAdvMonitorAddress { addr_type: 0, bd_addr: RawAddress::empty() },
         }
     }
 }
 
-impl Into<MsftAdvMonitor> for &ScanFilter {
-    fn into(self) -> MsftAdvMonitor {
-        let scan_filter_condition_type = match self.condition {
+impl From<&ScanFilter> for MsftAdvMonitor {
+    fn from(val: &ScanFilter) -> Self {
+        let scan_filter_condition_type = match val.condition {
             ScanFilterCondition::Patterns(_) => {
                 ScanFilterConditionType::MsftConditionTypePatterns as u8
             }
@@ -2104,13 +2086,13 @@ impl Into<MsftAdvMonitor> for &ScanFilter {
             _ => ScanFilterConditionType::MsftConditionTypeAll as u8,
         };
         MsftAdvMonitor {
-            rssi_high_threshold: self.rssi_high_threshold.try_into().unwrap(),
-            rssi_low_threshold: self.rssi_low_threshold.try_into().unwrap(),
-            rssi_low_timeout: self.rssi_low_timeout.try_into().unwrap(),
-            rssi_sampling_period: self.rssi_sampling_period.try_into().unwrap(),
+            rssi_high_threshold: val.rssi_high_threshold.try_into().unwrap(),
+            rssi_low_threshold: val.rssi_low_threshold.try_into().unwrap(),
+            rssi_low_timeout: val.rssi_low_timeout.try_into().unwrap(),
+            rssi_sampling_period: val.rssi_sampling_period.try_into().unwrap(),
             condition_type: scan_filter_condition_type,
-            patterns: (&self.condition).into(),
-            addr_info: (&self.condition).into(),
+            patterns: (&val.condition).into(),
+            addr_info: (&val.condition).into(),
         }
     }
 }
@@ -2226,7 +2208,7 @@ impl IBluetoothGatt for BluetoothGatt {
             }
         }
 
-        return self.add_monitor_and_update_scan(scanner_id, filter);
+        self.add_monitor_and_update_scan(scanner_id, filter)
     }
 
     fn stop_scan(&mut self, scanner_id: u8) -> BtStatus {
@@ -2574,7 +2556,7 @@ impl IBluetoothGatt for BluetoothGatt {
             &value,
         );
 
-        return GattWriteRequestStatus::Success;
+        GattWriteRequestStatus::Success
     }
 
     fn read_descriptor(&self, client_id: i32, addr: RawAddress, handle: i32, auth_req: i32) {
@@ -2836,7 +2818,7 @@ impl IBluetoothGatt for BluetoothGatt {
                         handle: handle as u16,
                         offset: offset as u16,
                         len,
-                        auth_req: 0 as u8,
+                        auth_req: 0_u8,
                     },
                 },
             );
@@ -2999,12 +2981,9 @@ impl BtifGattClientCallbacks for BluetoothGatt {
         match client {
             Some(c) => {
                 let cbid = c.cbid;
-                self.context_map.get_callback_from_callback_id(cbid).and_then(
-                    |cb: &mut GattClientCallback| {
-                        cb.on_client_registered(status, client_id);
-                        Some(())
-                    },
-                );
+                if let Some(cb) = self.context_map.get_callback_from_callback_id(cbid) {
+                    cb.on_client_registered(status, client_id);
+                }
             }
             None => {
                 warn!("Warning: Client not registered for UUID {}", DisplayUuid(&app_uuid));
@@ -3164,16 +3143,15 @@ impl BtifGattClientCallbacks for BluetoothGatt {
                 let cbid = client.cbid;
                 let mut congestion_queue: Vec<(RawAddress, GattStatus, i32)> = vec![];
                 client.congestion_queue.retain(|v| {
-                    congestion_queue.push(v.clone());
+                    congestion_queue.push(*v);
                     false
                 });
 
-                self.context_map.get_callback_from_callback_id(cbid).and_then(
+                self.context_map.get_callback_from_callback_id(cbid).map(
                     |cb: &mut GattClientCallback| {
                         for callback in congestion_queue.iter() {
-                            cb.on_characteristic_write(callback.0.clone(), callback.1, callback.2);
+                            cb.on_characteristic_write(callback.0, callback.1, callback.2);
                         }
-                        Some(())
                     },
                 );
             }
@@ -3447,10 +3425,7 @@ impl BtifGattServerCallbacks for BluetoothGatt {
             self.server_context_map.delete_service(server_id, handle);
         }
 
-        let cbid = self
-            .server_context_map
-            .get_by_server_id(server_id)
-            .and_then(|server| Some(server.cbid));
+        let cbid = self.server_context_map.get_by_server_id(server_id).map(|server| server.cbid);
 
         if let Some(cbid) = cbid {
             if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid).as_mut() {
@@ -3601,7 +3576,7 @@ impl BtifGattServerCallbacks for BluetoothGatt {
                     self.server_context_map.get_callback_from_callback_id(cbid).as_mut()
                 {
                     for callback in congestion_queue {
-                        cb.on_notification_sent(callback.0.clone(), callback.1);
+                        cb.on_notification_sent(callback.0, callback.1);
                     }
                 }
             }
@@ -4346,10 +4321,7 @@ mod tests {
             match found {
                 Some(c) => {
                     let cbid = c.cbid;
-                    map.callbacks
-                        .get_by_id(cbid)
-                        .and_then(|cb| Some(cb.get_object_id()))
-                        .unwrap_or(String::new())
+                    map.callbacks.get_by_id(cbid).map(|cb| cb.get_object_id()).unwrap_or_default()
                 }
                 None => String::new(),
             }
@@ -4366,10 +4338,7 @@ mod tests {
             match found {
                 Some(c) => {
                     let cbid = c.cbid;
-                    map.callbacks
-                        .get_by_id(cbid)
-                        .and_then(|cb| Some(cb.get_object_id()))
-                        .unwrap_or(String::new())
+                    map.callbacks.get_by_id(cbid).map(|cb| cb.get_object_id()).unwrap_or_default()
                 }
                 None => String::new(),
             }

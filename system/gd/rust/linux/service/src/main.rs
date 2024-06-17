@@ -98,7 +98,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // The remaining flags are passed down to Fluoride as is.
     let mut init_flags: Vec<String> = match matches.values_of("init-flags") {
-        Some(args) => args.map(|s| String::from(s)).collect(),
+        Some(args) => args.map(String::from).collect(),
         None => vec![],
     };
 

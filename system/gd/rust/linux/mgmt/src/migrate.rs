@@ -187,7 +187,7 @@ struct DeviceKey {
 impl DeviceKey {
     /// Returns a DeviceKey with the key and action given
     fn new(key: &'static str, action: KeyAction) -> Self {
-        Self { key: key, action: action, section: "" }
+        Self { key, action, section: "" }
     }
 
     /// Performs the KeyAction stored and returns the result of the key conversion
@@ -205,8 +205,8 @@ impl DeviceKey {
                 Converter::AddrTypeF2B => floss_to_bluez_addr_type(value),
                 Converter::ReverseEndianLowercase => reverse_endianness(value, false),
                 Converter::ReverseEndianUppercase => reverse_endianness(value, true),
-                Converter::ReplaceSemiColonWithSpace => Ok(value.replace(";", " ")),
-                Converter::ReplaceSpaceWithSemiColon => Ok(value.replace(" ", ";")),
+                Converter::ReplaceSemiColonWithSpace => Ok(value.replace(';', " ")),
+                Converter::ReplaceSpaceWithSemiColon => Ok(value.replace(' ', ";")),
             }
         }
 
@@ -371,7 +371,7 @@ fn convert_from_bluez_device(
                 floss_conf.set(
                     addr_lower.as_str(),
                     "LE_KEY_PID",
-                    Some(format!("{}{:02x}{}", irk, addr_type, addr_lower.replace(":", ""))),
+                    Some(format!("{}{:02x}{}", irk, addr_type, addr_lower.replace(':', ""))),
                 );
                 true
             }
@@ -574,13 +574,13 @@ pub fn migrate_bluez_devices() {
                 let devices = conf.sections();
                 for (sec, props) in ini {
                     // Drop devices that don't exist in BlueZ
-                    if sec.contains(":") && !devices.contains(&sec) {
+                    if sec.contains(':') && !devices.contains(&sec) {
                         info!("Dropping a device in Floss that doesn't exist in BlueZ");
                         continue;
                     }
                     // Keep keys that weren't transferrable
                     for (k, v) in props {
-                        if conf.get(sec.as_str(), k.as_str()) == None {
+                        if conf.get(sec.as_str(), k.as_str()).is_none() {
                             conf.set(sec.as_str(), k.as_str(), v);
                         }
                     }
@@ -622,7 +622,7 @@ fn merge_and_write_bluez_conf(filepath: String, conf: &mut Ini) {
             for (sec, props) in ini {
                 // Keep keys that weren't transferrable
                 for (k, v) in props {
-                    if conf.get(sec.as_str(), k.as_str()) == None {
+                    if conf.get(sec.as_str(), k.as_str()).is_none() {
                         conf.set(sec.as_str(), k.as_str(), v);
                     }
                 }
@@ -748,7 +748,7 @@ fn convert_floss_conf(filename: &str) {
     let mut devices: Vec<String> = Vec::new();
     for (sec, props) in floss_map {
         // Skip all the non-adapter sections
-        if !sec.contains(":") {
+        if !sec.contains(':') {
             continue;
         }
         // Keep track of Floss devices we've seen so we can remove BlueZ devices that don't exist on Floss
@@ -1137,24 +1137,18 @@ mod tests {
     fn test_convert_from_bluez_device() {
         let test_addr = "00:11:22:33:44:55";
         let mut conf = Ini::new_cs();
-        assert_eq!(
-            convert_from_bluez_device(
-                "test/migrate/fake_bluez_info.toml",
-                test_addr,
-                &mut conf,
-                false
-            ),
+        assert!(convert_from_bluez_device(
+            "test/migrate/fake_bluez_info.toml",
+            test_addr,
+            &mut conf,
+            false
+        ));
+        assert!(convert_from_bluez_device(
+            "test/migrate/fake_bluez_hid.toml",
+            test_addr,
+            &mut conf,
             true
-        );
-        assert_eq!(
-            convert_from_bluez_device(
-                "test/migrate/fake_bluez_hid.toml",
-                test_addr,
-                &mut conf,
-                true
-            ),
-            true
-        );
+        ));
 
         assert_eq!(conf.get(test_addr, "Name"), Some(String::from("Test Device")));
         assert_eq!(conf.get(test_addr, "DevClass"), Some(String::from("2360344")));

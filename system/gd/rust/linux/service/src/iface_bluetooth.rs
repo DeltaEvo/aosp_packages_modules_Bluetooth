@@ -50,11 +50,8 @@ impl DBusArg for Uuid {
         _remote: Option<dbus::strings::BusName<'static>>,
         _disconnect_watcher: Option<Arc<Mutex<dbus_projection::DisconnectWatcher>>>,
     ) -> Result<Uuid, Box<dyn std::error::Error>> {
-        Ok(Uuid::try_from(data.clone()).or_else(|_| {
-            Err(format!(
-                "Invalid Uuid: first 4 bytes={:?}",
-                data.iter().take(4).collect::<Vec<_>>()
-            ))
+        Ok(Uuid::try_from(data.clone()).map_err(|_| {
+            format!("Invalid Uuid: first 4 bytes={:?}", data.iter().take(4).collect::<Vec<_>>())
         })?)
     }
 
@@ -63,7 +60,7 @@ impl DBusArg for Uuid {
     }
 
     fn log(data: &Uuid) -> String {
-        format!("{}", DisplayUuid(&data))
+        format!("{}", DisplayUuid(data))
     }
 }
 
@@ -323,7 +320,7 @@ where
             key,
             stringify!(T),
         ))))?,
-        format!("{}", stringify!(T)),
+        stringify!(T).to_string(),
     )?;
     let output = T::from_dbus(output, None, None, None)?;
     Ok(output)
