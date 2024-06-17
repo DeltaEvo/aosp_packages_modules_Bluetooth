@@ -143,14 +143,14 @@ pub fn get_default_adapter() -> VirtualHciIndex {
 }
 
 pub fn set_default_adapter(hci: VirtualHciIndex) -> bool {
-    match read_config().ok().and_then(|config| {
-        let mut cfg = serde_json::from_str::<Value>(config.as_str()).ok()?;
-        cfg[DEFAULT_ADAPTER_KEY] = serde_json::to_value(hci.to_i32()).ok().unwrap();
-        serde_json::ser::to_string_pretty(&cfg).ok()
-    }) {
-        Some(s) => std::fs::write(BTMANAGERD_CONF, s).is_ok(),
-        None => false,
-    }
+    (|| {
+        let config: String = read_config()?;
+        let mut cfg = serde_json::from_str::<Value>(config.as_str())?;
+        cfg[DEFAULT_ADAPTER_KEY] = serde_json::to_value(hci.to_i32())?;
+        let new_config: String = serde_json::ser::to_string_pretty(&cfg)?;
+        std::fs::write(BTMANAGERD_CONF, new_config)
+    })()
+    .is_ok()
 }
 
 fn list_hci_devices_string() -> Vec<String> {
