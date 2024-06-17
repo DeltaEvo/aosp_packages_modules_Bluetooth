@@ -428,8 +428,31 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
                    btif_hf_cb[idx].connected_bda, p_data->open.status);
         RawAddress connected_bda = btif_hf_cb[idx].connected_bda;
         reset_control_block(&btif_hf_cb[idx]);
-        bt_hf_callbacks->ConnectionStateCallback(btif_hf_cb[idx].state,
-                                                 &connected_bda);
+
+        if (com::android::bluetooth::flags::
+                ignore_notify_when_already_connected()) {
+          bool notify_required = true;
+
+          for (int i = 0; i < BTA_AG_MAX_NUM_CLIENTS; i++) {
+            if ((i != idx) &&
+                (BTHF_CONNECTION_STATE_CONNECTED == btif_hf_cb[i].state) &&
+                (connected_bda == btif_hf_cb[i].connected_bda)) {
+              // There is already an active cnnection on this device
+              // skip upper layer notification
+              notify_required = false;
+              break;
+            }
+          }
+
+          if (notify_required) {
+            bt_hf_callbacks->ConnectionStateCallback(btif_hf_cb[idx].state,
+                                                     &connected_bda);
+          }
+        } else {
+          bt_hf_callbacks->ConnectionStateCallback(btif_hf_cb[idx].state,
+                                                   &connected_bda);
+        }
+
         log_counter_metrics_btif(android::bluetooth::CodePathCounterKeyEnum::
                                      HFP_SELF_INITIATED_AG_FAILED,
                                  1);
