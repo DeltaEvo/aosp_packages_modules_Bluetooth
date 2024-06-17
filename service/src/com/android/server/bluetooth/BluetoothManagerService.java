@@ -905,7 +905,7 @@ class BluetoothManagerService {
         }
         try {
             return Settings.Global.getInt(
-                            mContentResolver, Settings.Global.BLE_SCAN_ALWAYS_AVAILABLE)
+                            mContentResolver, BleScanSettingListener.BLE_SCAN_ALWAYS_AVAILABLE)
                     != 0;
         } catch (SettingNotFoundException e) {
             // The settings is considered as false by default.
@@ -956,7 +956,7 @@ class BluetoothManagerService {
                 };
 
         mContentResolver.registerContentObserver(
-                Settings.Global.getUriFor(Settings.Global.BLE_SCAN_ALWAYS_AVAILABLE),
+                Settings.Global.getUriFor(BleScanSettingListener.BLE_SCAN_ALWAYS_AVAILABLE),
                 false,
                 contentObserver);
     }
