@@ -718,12 +718,15 @@ class LeAudioAseConfigurationTest
       // configurations
       ON_CALL(*mock_codec_manager_, IsDualBiDirSwbSupported)
           .WillByDefault(Return(true));
-      ON_CALL(*mock_codec_manager_, GetCodecConfig)
-          .WillByDefault(Invoke(
-              [](const bluetooth::le_audio::CodecManager::
-                     UnicastConfigurationRequirements& requirements,
-                 bluetooth::le_audio::CodecManager::UnicastConfigurationVerifier
-                     verifier) {
+    }
+
+    ON_CALL(*mock_codec_manager_, GetCodecConfig)
+        .WillByDefault(Invoke(
+            [&](const bluetooth::le_audio::CodecManager::
+                    UnicastConfigurationRequirements& requirements,
+                bluetooth::le_audio::CodecManager::UnicastConfigurationVerifier
+                    verifier) {
+              if (codec_coding_format_ == kLeAudioCodingFormatLC3) {
                 auto filtered =
                     *bluetooth::le_audio::AudioSetConfigurationProvider::Get()
                          ->GetConfigurations(requirements.audio_context_type);
@@ -745,18 +748,10 @@ class LeAudioAseConfigurationTest
                   return std::unique_ptr<AudioSetConfiguration>(nullptr);
                 }
                 return std::make_unique<AudioSetConfiguration>(*cfg);
-              }));
-    } else {
-      // Provide a configuration for the vendor codec
-      ON_CALL(*mock_codec_manager_, GetCodecConfig)
-          .WillByDefault(Invoke(
-              [](const bluetooth::le_audio::CodecManager::
-                     UnicastConfigurationRequirements& requirements,
-                 bluetooth::le_audio::CodecManager::UnicastConfigurationVerifier
-                     verifier) {
+              } else {
                 return MockVendorCodecProvider(requirements);
-              }));
-    }
+              }
+            }));
 
     ON_CALL(*mock_codec_manager_, CheckCodecConfigIsBiDirSwb)
         .WillByDefault(Invoke([](const bluetooth::le_audio::set_configurations::
@@ -1125,7 +1120,8 @@ class LeAudioAseConfigurationTest
   }
 
   void TestAsesActive(LeAudioCodecId codec_id, uint8_t sampling_frequency,
-                      uint8_t frame_duration, uint16_t octets_per_frame) {
+                      uint8_t frame_duration, uint16_t octets_per_frame,
+                      uint8_t codec_frame_blocks_per_sdu = 1) {
     bool active_ase = false;
 
     for (const auto& device : devices_) {
@@ -1144,6 +1140,8 @@ class LeAudioAseConfigurationTest
           ASSERT_EQ(core_config.sampling_frequency, sampling_frequency);
           ASSERT_EQ(core_config.frame_duration, frame_duration);
           ASSERT_EQ(core_config.octets_per_codec_frame, octets_per_frame);
+          ASSERT_EQ(core_config.codec_frames_blocks_per_sdu.value_or(0),
+                    codec_frame_blocks_per_sdu);
         }
       }
     }
@@ -1177,7 +1175,8 @@ class LeAudioAseConfigurationTest
     }
   }
 
-  void TestLc3CodecConfig(LeAudioContextType context_type) {
+  void TestLc3CodecConfig(LeAudioContextType context_type,
+                          uint8_t max_codec_frames_per_sdu = 1) {
     for (int i = Lc3SettingIdBegin; i < Lc3SettingIdEnd; i++) {
       // test each configuration parameter against valid and invalid value
       std::array<Lc3SettingId, 2> test_variants = {static_cast<Lc3SettingId>(i),
@@ -1198,7 +1197,7 @@ class LeAudioAseConfigurationTest
                             frame_duration,
                             kLeAudioCodecChannelCountSingleChannel |
                                 kLeAudioCodecChannelCountTwoChannel,
-                            octets_per_frame);
+                            octets_per_frame, max_codec_frames_per_sdu);
             for (auto& device : devices_) {
               /* For simplicity configure both PACs with the same
               parameters*/
@@ -1224,7 +1223,8 @@ class LeAudioAseConfigurationTest
                       group_->Configure(context_type, group_audio_locations));
             if (success_expected) {
               TestAsesActive(LeAudioCodecIdLc3, sampling_frequency,
-                             frame_duration, octets_per_frame);
+                             frame_duration, octets_per_frame,
+                             max_codec_frames_per_sdu);
               group_->Deactivate();
             }
 
@@ -2070,6 +2070,74 @@ TEST_P(LeAudioAseConfigurationTest, test_lc3_config_media) {
   AddTestDevice(1, 1);
 
   TestLc3CodecConfig(LeAudioContextType::MEDIA);
+}
+
+TEST_P(LeAudioAseConfigurationTest,
+       test_lc3_config_media_codec_extensibility_fb2) {
+  if (codec_coding_format_ != kLeAudioCodingFormatLC3) GTEST_SKIP();
+
+  bool is_fb2_passed_as_requirement = false;
+  auto max_codec_frames_per_sdu = 2;
+
+  // Mock the configuration provider to give us config with 2 frame blocks per
+  // SDU if it receives the proper PAC entry in the requirements
+  // ON_CALL(*mock_codec_manager_, IsUsingCodecExtensibility)
+  //       .WillByDefault(Return(true));
+  ON_CALL(*mock_codec_manager_, GetCodecConfig)
+      .WillByDefault(Invoke([&](const bluetooth::le_audio::CodecManager::
+                                    UnicastConfigurationRequirements&
+                                        requirements,
+                                bluetooth::le_audio::CodecManager::
+                                    UnicastConfigurationVerifier verifier) {
+        auto filtered =
+            *bluetooth::le_audio::AudioSetConfigurationProvider::Get()
+                 ->GetConfigurations(requirements.audio_context_type);
+        // Filter out the dual bidir SWB configurations
+        if (!bluetooth::le_audio::CodecManager::GetInstance()
+                 ->IsDualBiDirSwbSupported()) {
+          filtered.erase(
+              std::remove_if(filtered.begin(), filtered.end(),
+                             [](auto const& el) {
+                               if (el->confs.source.empty()) return false;
+                               return AudioSetConfigurationProvider::Get()
+                                   ->CheckConfigurationIsDualBiDirSwb(*el);
+                             }),
+              filtered.end());
+        }
+        auto cfg = verifier(requirements, &filtered);
+        if (cfg == nullptr) {
+          return std::unique_ptr<AudioSetConfiguration>(nullptr);
+        }
+
+        auto config = *cfg;
+
+        if (requirements.sink_pacs.has_value()) {
+          for (auto const& rec : requirements.sink_pacs.value()) {
+            auto caps = rec.codec_spec_caps.GetAsCoreCodecCapabilities();
+            if (caps.HasSupportedMaxCodecFramesPerSdu()) {
+              if (caps.supported_max_codec_frames_per_sdu.value() ==
+                  max_codec_frames_per_sdu) {
+                // Inject the proper Codec Frames Per SDU as the json
+                // configs are conservative and will always give us 1
+                for (auto& entry : config.confs.sink) {
+                  entry.codec.params.Add(
+                      codec_spec_conf::kLeAudioLtvTypeCodecFrameBlocksPerSdu,
+                      (uint8_t)max_codec_frames_per_sdu);
+                }
+                is_fb2_passed_as_requirement = true;
+              }
+            }
+          }
+        }
+        return std::make_unique<AudioSetConfiguration>(config);
+      }));
+
+  AddTestDevice(1, 1);
+
+  TestLc3CodecConfig(LeAudioContextType::MEDIA, max_codec_frames_per_sdu);
+
+  // Make sure the CodecManager mock gets the proper PAC record
+  ASSERT_TRUE(is_fb2_passed_as_requirement);
 }
 
 TEST_P(LeAudioAseConfigurationTest, test_unsupported_codec) {
