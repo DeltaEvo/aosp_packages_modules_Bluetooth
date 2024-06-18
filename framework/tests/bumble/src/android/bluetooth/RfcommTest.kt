@@ -164,20 +164,7 @@ class RfcommTest {
         startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
 
-            // Insecure connection to RFCOMM Server
-            val insecureSocket =
-                mBumbleDevice.createInsecureRfcommSocketToServiceRecord(UUID.fromString(TEST_UUID))
-            insecureSocket.connect()
-
-            val connectionResponse =
-                mBumble
-                    .rfcommBlocking()
-                    .withDeadlineAfter(GRPC_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
-                    .acceptConnection(
-                        RfcommProto.AcceptConnectionRequest.newBuilder().setServer(serverId).build()
-                    )
-            Truth.assertThat(connectionResponse.connection.id).isEqualTo(mConnectionCounter)
-            Truth.assertThat(insecureSocket.isConnected).isTrue()
+            createAndConnectSocket(isSecure = false, serverId)
         }
     }
 
@@ -185,20 +172,8 @@ class RfcommTest {
     fun clientConnectToOpenServerSocketBondedSecure() {
         startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
-            // Secure connection to RFCOMM Server
-            val secureSocket =
-                mBumbleDevice.createRfcommSocketToServiceRecord(UUID.fromString(TEST_UUID))
-            secureSocket.connect()
 
-            val connectionResponse =
-                mBumble
-                    .rfcommBlocking()
-                    .withDeadlineAfter(GRPC_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
-                    .acceptConnection(
-                        RfcommProto.AcceptConnectionRequest.newBuilder().setServer(serverId).build()
-                    )
-            Truth.assertThat(connectionResponse.connection.id).isEqualTo(mConnectionCounter)
-            Truth.assertThat(secureSocket.isConnected).isTrue()
+            createAndConnectSocket(isSecure = true, serverId)
         }
     }
 
