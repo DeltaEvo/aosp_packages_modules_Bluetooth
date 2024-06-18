@@ -493,6 +493,17 @@ int PORT_CheckConnection(uint16_t handle, RawAddress* bd_addr,
  *                  bd_addr    - bd_addr of the peer
  *
  ******************************************************************************/
+static const tPORT* get_port_from_mcb(const tRFC_MCB* multiplexer_cb) {
+  tPORT* p_port = nullptr;
+
+  for (tPORT& port : rfc_cb.port.port) {
+    if (port.rfc.p_mcb == multiplexer_cb) {
+      return &port;
+    }
+  }
+  return nullptr;
+}
+
 bool PORT_IsOpening(RawAddress* bd_addr) {
   /* Check for any rfc_mcb which is in the middle of opening. */
   for (auto& multiplexer_cb : rfc_cb.port.rfc_mcb) {
@@ -505,15 +516,7 @@ bool PORT_IsOpening(RawAddress* bd_addr) {
     }
 
     if (multiplexer_cb.state == RFC_MX_STATE_CONNECTED) {
-      tPORT* p_port = nullptr;
-
-      for (tPORT& port : rfc_cb.port.port) {
-        if (port.rfc.p_mcb == &multiplexer_cb) {
-          p_port = &port;
-          break;
-        }
-      }
-
+      const tPORT* p_port = get_port_from_mcb(&multiplexer_cb);
       log::info("RFC_MX_STATE_CONNECTED, found_port={}, tRFC_PORT_STATE={}",
                 (p_port != nullptr) ? "T" : "F",
                 (p_port != nullptr) ? p_port->rfc.state : 0);
