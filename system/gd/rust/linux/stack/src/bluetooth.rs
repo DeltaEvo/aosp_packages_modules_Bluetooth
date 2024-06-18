@@ -31,7 +31,7 @@ use num_traits::cast::ToPrimitive;
 use num_traits::pow;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::hash::Hash;
 use std::io::Write;
 use std::os::fd::AsRawFd;
@@ -39,7 +39,6 @@ use std::process;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 use std::time::Instant;
-use tempfile::NamedTempFile;
 use tokio::sync::mpsc::Sender;
 use tokio::task::JoinHandle;
 use tokio::time;
@@ -69,6 +68,8 @@ const FOUND_DEVICE_FRESHNESS: Duration = Duration::from_secs(30);
 const BTM_SUCCESS: i32 = 0;
 
 const PID_DIR: &str = "/var/run/bluetooth";
+
+const DUMPSYS_LOG: &str = "/tmp/dumpsys.log";
 
 /// Represents various roles the adapter supports.
 #[derive(Debug, FromPrimitive, ToPrimitive)]
@@ -3021,11 +3022,15 @@ impl IBluetooth for Bluetooth {
     }
 
     fn get_dumpsys(&self) -> String {
-        NamedTempFile::new()
+        OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(DUMPSYS_LOG)
             .and_then(|file| {
                 let fd = file.as_raw_fd();
                 self.intf.lock().unwrap().dump(fd);
-                std::fs::read_to_string(file.path())
+                Ok(format!("dump to {}", DUMPSYS_LOG))
             })
             .unwrap_or_default()
     }
