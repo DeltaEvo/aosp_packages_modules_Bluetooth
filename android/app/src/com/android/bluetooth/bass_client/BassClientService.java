@@ -3097,9 +3097,9 @@ public class BassClientService extends ProfileService {
                             DeviceConfig.getBoolean(
                                             DeviceConfig.NAMESPACE_BLUETOOTH,
                                             "persist.vendor.service.bt.defNoPAS",
-                                            true)
-                                    ? BassConstants.PA_SYNC_PAST_AVAILABLE
-                                    : BassConstants.PA_SYNC_PAST_NOT_AVAILABLE;
+                                            false)
+                                    ? BassConstants.PA_SYNC_PAST_NOT_AVAILABLE
+                                    : BassConstants.PA_SYNC_PAST_AVAILABLE;
                     message.obj = metadata;
                     stateMachine.sendMessage(message);
                 } else {

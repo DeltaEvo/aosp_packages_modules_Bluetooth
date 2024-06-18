@@ -1997,6 +1997,9 @@ public class AdapterService extends Service {
         mLeAudioService = LeAudioService.getLeAudioService();
         mBassClientService = BassClientService.getBassClientService();
         mBatteryService = BatteryService.getBatteryService();
+        if (Flags.scanManagerRefactor()) {
+            mGattService = GattService.getGattService();
+        }
     }
 
     @BluetoothAdapter.RfcommListenerResult
@@ -4200,10 +4203,7 @@ public class AdapterService extends Service {
         @Override
         public IBinder getBluetoothGatt() {
             AdapterService service = getService();
-            if (service == null) {
-                return null;
-            }
-            return service.getBluetoothGatt();
+            return service == null ? null : service.getBluetoothGatt();
         }
 
         @Override
@@ -5767,6 +5767,15 @@ public class AdapterService extends Service {
                                 .isLePeriodicAdvertisingSyncTransferRecipientSupported());
     }
 
+    /**
+     * Check if the LE channel sounding feature is supported.
+     *
+     * @return true, if the LE channel sounding is supported
+     */
+    public boolean isLeChannelSoundingSupported() {
+        return mAdapterProperties.isLeChannelSoundingSupported();
+    }
+
     public long getSupportedProfilesBitMask() {
         return Config.getSupportedProfilesBitMask();
     }
@@ -5915,10 +5924,7 @@ public class AdapterService extends Service {
     }
 
     IBinder getBluetoothGatt() {
-        if (mGattService == null) {
-            return null;
-        }
-        return ((ProfileService) mGattService).getBinder();
+        return mGattService == null ? null : mGattService.getBinder();
     }
 
     IBinder getBluetoothScan() {

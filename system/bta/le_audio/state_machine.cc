@@ -330,11 +330,6 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
   void notifyLeAudioHealth(
       LeAudioDeviceGroup* group,
       bluetooth::le_audio::LeAudioHealthGroupStatType stat) {
-    if (!com::android::bluetooth::flags::
-            leaudio_enable_health_based_actions()) {
-      return;
-    }
-
     auto leAudioHealthStatus = bluetooth::le_audio::LeAudioHealthStatus::Get();
     if (leAudioHealthStatus) {
       leAudioHealthStatus->AddStatisticForGroup(group, stat);

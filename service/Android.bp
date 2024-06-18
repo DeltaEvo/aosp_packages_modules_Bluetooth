@@ -224,7 +224,7 @@ android_robolectric_test {
         "framework-statsd.stubs.module_lib",
     ],
 
-    sdk_version: "module_current",
+    sdk_version: "test_current",
     upstream: true,
     test_suites: ["general-tests"],
     strict_mode: false,

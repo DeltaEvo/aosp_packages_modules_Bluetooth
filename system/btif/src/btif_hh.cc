@@ -122,7 +122,7 @@ static tHID_KB_LIST hid_kb_numlock_on_list[] = {{LOGITECH_KB_MX5500_PRODUCT_ID,
   do {                                                                      \
     if (btif_hh_cb.status == BTIF_HH_DISABLED) {                            \
       log::error("HH status = {}", btif_hh_status_text(btif_hh_cb.status)); \
-      return BT_STATUS_FAIL;                                                \
+      return BT_STATUS_UNEXPECTED_STATE;                                    \
     }                                                                       \
   } while (0)
 
@@ -556,8 +556,8 @@ static void hh_open_handler(tBTA_HH_CONN& conn) {
   }
 
   /* Initialize device driver */
-  if (!bta_hh_co_open(conn.handle, conn.sub_class, conn.attr_mask,
-                      conn.app_id)) {
+  if (!bta_hh_co_open(conn.handle, conn.sub_class, conn.attr_mask, conn.app_id,
+                      conn.link_spec)) {
     log::warn("Failed to find the uhid driver");
     hh_connect_complete(conn.handle, conn.link_spec, BTIF_HH_DEV_DISCONNECTED);
     return;

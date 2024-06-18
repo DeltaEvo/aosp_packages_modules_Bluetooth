@@ -9,13 +9,6 @@ flag {
 }
 
 flag {
-    name: "divide_long_single_gap_data"
-    namespace: "bluetooth"
-    description: "Divide long single gap data if length is longer than HCI data length limit"
-    bug: "310217895"
-}
-
-flag {
     name: "fix_nonconnectable_scannable_advertisement"
     namespace: "bluetooth"
     description: "Fix adv_scan_ind being reported as connectable"

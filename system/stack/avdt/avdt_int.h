@@ -929,8 +929,8 @@ void avdt_ad_tc_cong_ind(AvdtpTransportChannel* p_tbl, bool is_congested);
 void avdt_ad_tc_data_ind(AvdtpTransportChannel* p_tbl, BT_HDR* p_buf);
 AvdtpTransportChannel* avdt_ad_tc_tbl_by_type(uint8_t type, AvdtpCcb* p_ccb,
                                               AvdtpScb* p_scb);
-uint8_t avdt_ad_write_req(uint8_t type, AvdtpCcb* p_ccb, AvdtpScb* p_scb,
-                          BT_HDR* p_buf);
+tL2CAP_DW_RESULT avdt_ad_write_req(uint8_t type, AvdtpCcb* p_ccb,
+                                   AvdtpScb* p_scb, BT_HDR* p_buf);
 void avdt_ad_open_req(uint8_t type, AvdtpCcb* p_ccb, AvdtpScb* p_scb,
                       uint8_t role);
 void avdt_ad_close_req(uint8_t type, AvdtpCcb* p_ccb, AvdtpScb* p_scb);

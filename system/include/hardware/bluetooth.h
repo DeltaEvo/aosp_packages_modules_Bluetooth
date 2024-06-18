@@ -108,7 +108,9 @@ typedef enum {
   BT_STATUS_JNI_THREAD_ATTACH_ERROR,
   BT_STATUS_WAKELOCK_ERROR,
   BT_STATUS_TIMEOUT,
-  BT_STATUS_DEVICE_NOT_FOUND
+  BT_STATUS_DEVICE_NOT_FOUND,
+  BT_STATUS_UNEXPECTED_STATE,
+  BT_STATUS_SOCKET_ERROR
 } bt_status_t;
 
 inline std::string bt_status_text(const bt_status_t& status) {
@@ -147,6 +149,10 @@ inline std::string bt_status_text(const bt_status_t& status) {
       return std::string("timeout_error");
     case BT_STATUS_DEVICE_NOT_FOUND:
       return std::string("device_not_found");
+    case BT_STATUS_UNEXPECTED_STATE:
+      return std::string("unexpected_state");
+    case BT_STATUS_SOCKET_ERROR:
+      return std::string("socket_error");
     default:
       return std::string("UNKNOWN");
   }
@@ -232,6 +238,7 @@ typedef struct {
   bool le_isochronous_broadcast_supported;
   bool le_periodic_advertising_sync_transfer_recipient_supported;
   uint16_t adv_filter_extended_features_mask;
+  bool le_channel_sounding_supported;
 } bt_local_le_features_t;
 
 /** Bluetooth Vendor and Product ID info */
@@ -401,6 +408,20 @@ typedef enum {
    * Data Type - uint8_t.
    */
   BT_PROPERTY_REMOTE_ADDR_TYPE,
+
+  /**
+   * Description - Whether remote device supports Secure Connections mode
+   * Access mode - GET and SET.
+   * Data Type - uint8_t.
+   */
+  BT_PROPERTY_REMOTE_SECURE_CONNECTIONS_SUPPORTED,
+
+  /**
+   * Description - Maximum observed session key for remote device
+   * Access mode - GET and SET.
+   * Data Type - uint8_t.
+   */
+  BT_PROPERTY_REMOTE_MAX_SESSION_KEY_SIZE,
 
   BT_PROPERTY_REMOTE_DEVICE_TIMESTAMP = 0xFF,
 } bt_property_type_t;
