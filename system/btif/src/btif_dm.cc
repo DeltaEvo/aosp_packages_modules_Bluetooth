@@ -2431,7 +2431,8 @@ void btif_dm_acl_evt(tBTA_DM_ACL_EVT event, tBTA_DM_ACL* p_data) {
     case BTA_DM_LINK_DOWN_EVT: {
       bd_addr = p_data->link_down.bd_addr;
       btm_set_bond_type_dev(p_data->link_down.bd_addr, BOND_TYPE_UNKNOWN);
-      GetInterfaceToProfiles()->onLinkDown(bd_addr);
+      GetInterfaceToProfiles()->onLinkDown(
+          bd_addr, p_data->link_down.transport_link_type);
 
       bt_conn_direction_t direction;
       switch (btm_get_acl_disc_reason_code()) {
