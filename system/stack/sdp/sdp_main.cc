@@ -241,7 +241,7 @@ static void sdp_data_ind(uint16_t l2cap_cid, BT_HDR* p_msg) {
         sdp_server_handle_client_req(p_ccb, p_msg);
     } else {
       log::warn("SDP - Ignored L2CAP data while in state: {}, CID: 0x{:x}",
-                p_ccb->con_state, l2cap_cid);
+                sdp_state_text(p_ccb->con_state), l2cap_cid);
     }
   } else {
     log::warn("SDP - Rcvd L2CAP data, unknown CID: 0x{:x}", l2cap_cid);
@@ -379,8 +379,8 @@ static void sdp_disconnect_cfm(uint16_t l2cap_cid, uint16_t /* result */) {
 void sdp_conn_timer_timeout(void* data) {
   tCONN_CB& ccb = *(tCONN_CB*)data;
 
-  log::verbose("SDP - CCB timeout in state: {}  CID: 0x{:x}", ccb.con_state,
-               ccb.connection_id);
+  log::verbose("SDP - CCB timeout in state: {}  CID: 0x{:x}",
+               sdp_state_text(ccb.con_state), ccb.connection_id);
 
   if (!L2CA_DisconnectReq(ccb.connection_id)) {
     log::warn("Unable to disconnect L2CAP peer:{} cid:{}", ccb.device_address,
