@@ -257,13 +257,14 @@ class RfcommTest {
 
     private fun createAndConnectSocket(
         isSecure: Boolean,
-        server: ServerId
+        server: ServerId,
+        uuid: String = TEST_UUID
     ): Pair<BluetoothSocket, RfcommProto.RfcommConnection> {
         val socket =
             if (isSecure) {
-                mBumbleDevice.createRfcommSocketToServiceRecord(UUID.fromString(TEST_UUID))
+                mBumbleDevice.createRfcommSocketToServiceRecord(UUID.fromString(uuid))
             } else {
-                mBumbleDevice.createInsecureRfcommSocketToServiceRecord(UUID.fromString(TEST_UUID))
+                mBumbleDevice.createInsecureRfcommSocketToServiceRecord(UUID.fromString(uuid))
             }
         socket.connect()
 
