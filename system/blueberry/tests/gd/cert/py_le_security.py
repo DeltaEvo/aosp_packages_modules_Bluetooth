@@ -16,7 +16,6 @@
 
 import logging
 
-from blueberry.tests.gd.cert.captures import SecurityCaptures
 from blueberry.tests.gd.cert.closable import Closable
 from blueberry.tests.gd.cert.closable import safeClose
 from blueberry.tests.gd.cert.event_stream import EventStream
@@ -55,15 +54,6 @@ class PyLeSecurity(Closable):
 
     def get_advertising_callback_event_stream(self):
         return self._advertising_callback_event_stream
-
-    def wait_for_ui_event_passkey(self, timeout=timedelta(seconds=3)):
-        display_passkey_capture = SecurityCaptures.DisplayPasskey()
-        assertThat(self._ui_event_stream).emits(display_passkey_capture, timeout=timeout)
-        return display_passkey_capture.get()
-
-    def wait_device_disconnect(self, address):
-        assertThat(self._helper_event_stream).emits(
-            SecurityMatchers.HelperMsg(HelperMsgType.DEVICE_DISCONNECTED, address))
 
     def SetLeAuthRequirements(self, *args, **kwargs):
         return self._device.security.SetLeAuthRequirements(LeAuthRequirementsMessage(*args, **kwargs))
