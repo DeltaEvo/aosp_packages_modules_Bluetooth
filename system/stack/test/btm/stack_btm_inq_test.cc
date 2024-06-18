@@ -17,7 +17,6 @@
 #include <bluetooth/log.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <stdlib.h>
 
 #include <future>
 
@@ -27,7 +26,7 @@
 #include "hci/hci_layer_fake.h"
 #include "hci/hci_packets.h"
 #include "stack/btm/btm_int_types.h"
-#include "stack/include/btm_api.h"
+#include "stack/include/btm_inq.h"
 #include "stack/include/hci_error_code.h"
 #include "stack/include/inq_hci_link_interface.h"
 #include "stack/include/main_thread.h"
