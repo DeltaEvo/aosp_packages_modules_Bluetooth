@@ -45,18 +45,25 @@ class MockBroadcastStateMachine
               const void* sent_data = nullptr;
               switch (event) {
                 case Message::START:
-                  if (result_) SetState(State::STREAMING);
-                  sent_data = &this->cfg.config.subgroups;
+                  if (GetState() != State::STREAMING && result_) {
+                    SetState(State::STREAMING);
+                    this->cb->OnStateMachineEvent(this->cfg.broadcast_id, GetState(),
+                                                  &this->cfg.config.subgroups);
+                  }
                   break;
                 case Message::STOP:
-                  if (result_) SetState(State::STOPPED);
+                  if (GetState() != State::STOPPED && result_) {
+                    SetState(State::STOPPED);
+                    this->cb->OnStateMachineEvent(this->cfg.broadcast_id, GetState(), nullptr);
+                  }
                   break;
                 case Message::SUSPEND:
-                  if (result_) SetState(State::CONFIGURED);
+                  if (GetState() != State::CONFIGURED && result_) {
+                    SetState(State::CONFIGURED);
+                    this->cb->OnStateMachineEvent(this->cfg.broadcast_id, GetState(), nullptr);
+                  }
                   break;
               };
-              this->cb->OnStateMachineEvent(this->cfg.broadcast_id, GetState(),
-                                            sent_data);
             });
 
     ON_CALL(*this, GetBigConfig).WillByDefault(testing::ReturnRef(big_config_));
