@@ -3143,8 +3143,8 @@ void bta_av_vendor_offload_start_v2(tBTA_AV_SCB* p_scb,
   log::verbose("");
 
   uint16_t connection_handle =
-      get_btm_client_interface().lifecycle.BTM_GetHCIConnHandle(
-          p_scb->PeerAddress(), BT_TRANSPORT_BR_EDR);
+      get_btm_client_interface().peer.BTM_GetHCIConnHandle(p_scb->PeerAddress(),
+                                                           BT_TRANSPORT_BR_EDR);
   btav_a2dp_scmst_info_t scmst_info =
       p_scb->p_cos->get_scmst_info(p_scb->PeerAddress());
   uint16_t mtu = p_scb->stream_mtu;
@@ -3204,7 +3204,7 @@ void bta_av_vendor_offload_stop() {
       return;
     }
     uint16_t connection_handle =
-        get_btm_client_interface().lifecycle.BTM_GetHCIConnHandle(
+        get_btm_client_interface().peer.BTM_GetHCIConnHandle(
             p_scb->PeerAddress(), BT_TRANSPORT_BR_EDR);
     uint16_t l2cap_channel_handle = 0;
 
@@ -3376,8 +3376,8 @@ static void bta_av_offload_codec_builder(tBTA_AV_SCB* p_scb,
   p_a2dp_offload->max_latency = 0;
   p_a2dp_offload->mtu = mtu;
   p_a2dp_offload->acl_hdl =
-      get_btm_client_interface().lifecycle.BTM_GetHCIConnHandle(
-          p_scb->PeerAddress(), BT_TRANSPORT_BR_EDR);
+      get_btm_client_interface().peer.BTM_GetHCIConnHandle(p_scb->PeerAddress(),
+                                                           BT_TRANSPORT_BR_EDR);
   btav_a2dp_scmst_info_t scmst_info =
       p_scb->p_cos->get_scmst_info(p_scb->PeerAddress());
   p_a2dp_offload->scms_t_enable[0] = scmst_info.enable_status;
