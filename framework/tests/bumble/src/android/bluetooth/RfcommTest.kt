@@ -161,8 +161,7 @@ class RfcommTest {
 
     @Test
     fun clientConnectToOpenServerSocketBondedInsecure() {
-        startServer {
-            val serverId = it
+        startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
 
             // Insecure connection to RFCOMM Server
@@ -184,8 +183,7 @@ class RfcommTest {
 
     @Test
     fun clientConnectToOpenServerSocketBondedSecure() {
-        startServer {
-            val serverId = it
+        startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
             // Secure connection to RFCOMM Server
             val secureSocket =
@@ -206,8 +204,7 @@ class RfcommTest {
 
     @Test
     fun clientSendDataOverInsecureSocket() {
-        startServer {
-            val serverId = it
+        startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
 
             val (insecureSocket, connection) = createAndConnectSocket(isSecure = false, serverId)
@@ -226,8 +223,7 @@ class RfcommTest {
 
     @Test
     fun clientSendDataOverSecureSocket() {
-        startServer {
-            val serverId = it
+        startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
 
             val (secureSocket, connection) = createAndConnectSocket(isSecure = true, serverId)
@@ -246,8 +242,7 @@ class RfcommTest {
 
     @Test
     fun clientReceiveDataOverInsecureSocket() {
-        startServer {
-            val serverId = it
+        startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
 
             val (insecureSocket, connection) = createAndConnectSocket(isSecure = false, serverId)
@@ -267,8 +262,7 @@ class RfcommTest {
 
     @Test
     fun clientReceiveDataOverSecureSocket() {
-        startServer {
-            val serverId = it
+        startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
 
             val (secureSocket, connection) = createAndConnectSocket(isSecure = true, serverId)
