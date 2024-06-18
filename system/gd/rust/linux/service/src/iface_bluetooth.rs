@@ -771,11 +771,6 @@ impl IBluetooth for IBluetoothDBus {
         dbus_generated!()
     }
 
-    #[dbus_method("IsLEAudioStable", DBusLog::Disable)]
-    fn is_le_audio_stable(&self, device: BluetoothDevice) -> bool {
-        dbus_generated!()
-    }
-
     #[dbus_method("GetDumpsys", DBusLog::Disable)]
     fn get_dumpsys(&self) -> String {
         dbus_generated!()

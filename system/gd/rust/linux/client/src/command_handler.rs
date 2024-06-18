@@ -889,7 +889,6 @@ impl CommandHandler {
                     uuids,
                     wake_allowed,
                     dual_mode_audio,
-                    le_audio_stable,
                 ) = {
                     let ctx = self.lock_context();
                     let adapter = ctx.adapter_dbus.as_ref().unwrap();
@@ -909,7 +908,6 @@ impl CommandHandler {
                     let uuids = adapter.get_remote_uuids(device.clone());
                     let wake_allowed = adapter.get_remote_wake_allowed(device.clone());
                     let dual_mode_audio = adapter.is_dual_mode_audio_sink_device(device.clone());
-                    let le_audio_stable = adapter.is_le_audio_stable(device.clone());
 
                     (
                         name,
@@ -923,7 +921,6 @@ impl CommandHandler {
                         uuids,
                         wake_allowed,
                         dual_mode_audio,
-                        le_audio_stable,
                     )
                 };
 
@@ -938,7 +935,6 @@ impl CommandHandler {
                 print_info!("Bond State: {:?}", bonded);
                 print_info!("Connection State: {}", connection_state);
                 print_info!("Dual Mode Audio Device: {}", dual_mode_audio);
-                print_info!("Is LE Audio Stable: {}", le_audio_stable);
                 print_info!(
                     "Uuids: {}",
                     DisplayList(

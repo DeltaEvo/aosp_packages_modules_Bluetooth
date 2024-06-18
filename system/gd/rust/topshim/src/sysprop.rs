@@ -3,9 +3,7 @@
 use std::ffi::CString;
 
 use crate::bindings::root as bindings;
-use crate::utils::{LTCheckedPtr, LTCheckedPtrMut};
-
-const PROPERTY_VALUE_MAX: usize = 92;
+use crate::utils::LTCheckedPtr;
 
 /// List of properties accessible to Rust. Add new ones here as they become
 /// necessary.
@@ -95,49 +93,4 @@ pub fn get_bool(prop: PropertyBool) -> bool {
 
     // SAFETY: Calling C++ function with compatible types (null terminated string and bool) is safe.
     unsafe { bindings::osi_property_get_bool(key_cptr.into(), default_value) }
-}
-
-/// List of string properties accessible to Rust. Add new ones here as they become
-/// necessary.
-pub enum PropertyString {
-    // bluetooth.le_audio
-    LeAudioAllowList,
-}
-
-impl Into<(CString, CString)> for PropertyString {
-    /// Convert the property into the property key name and a default value.
-    fn into(self) -> (CString, CString) {
-        let (key, default_value) = match self {
-            PropertyString::LeAudioAllowList => ("persist.bluetooth.leaudio.allow_list", ""),
-        };
-
-        (
-            CString::new(key).expect("CString::new failed on sysprop key"),
-            CString::new(default_value).expect("CString::new failed on sysprop default_value"),
-        )
-    }
-}
-
-/// Get the string value for a system property.
-pub fn get_string(prop: PropertyString) -> String {
-    let (key, default_value): (CString, CString) = prop.into();
-    let key_cptr = LTCheckedPtr::from(&key);
-    let default_val_cptr = LTCheckedPtr::from(&default_value);
-    let mut dest = vec![0u8; PROPERTY_VALUE_MAX];
-    let dest_cptr = LTCheckedPtrMut::from(&mut dest);
-
-    // SAFETY: Calling C++ function with compatible types (null terminated strings) is safe.
-    let len = unsafe {
-        bindings::osi_property_get(
-            key_cptr.into(),
-            dest_cptr.cast_into::<std::os::raw::c_char>(),
-            default_val_cptr.into(),
-        )
-    };
-    if len <= 0 {
-        return "".to_string();
-    }
-
-    dest.resize(len as usize, b'\0');
-    String::from_utf8(dest).expect("Found invalid UTF-8")
 }

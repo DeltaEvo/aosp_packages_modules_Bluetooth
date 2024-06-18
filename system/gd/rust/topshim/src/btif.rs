@@ -167,7 +167,7 @@ pub enum BtPropertyType {
     // Unimplemented:
     //  BT_PROPERTY_REMOTE_ASHA_CAPABILITY,
     //  BT_PROPERTY_REMOTE_ASHA_TRUNCATED_HISYNCID,
-    RemoteModelName = 0x17,
+    //  BT_PROPERTY_REMOTE_MODEL_NUM,
     RemoteAddrType = 0x18,
 
     Unknown = 0xFE,
@@ -583,7 +583,6 @@ pub enum BluetoothProperty {
     RemoteIsCoordinatedSetMember(bool),
     Appearance(u16),
     VendorProductInfo(BtVendorProductInfo),
-    RemoteModelName(String),
     RemoteAddrType(BtAddrType),
     RemoteDeviceTimestamp(),
 
@@ -628,7 +627,6 @@ impl BluetoothProperty {
             BluetoothProperty::Appearance(_) => BtPropertyType::Appearance,
             BluetoothProperty::VendorProductInfo(_) => BtPropertyType::VendorProductInfo,
             BluetoothProperty::RemoteDeviceTimestamp() => BtPropertyType::RemoteDeviceTimestamp,
-            BluetoothProperty::RemoteModelName(_) => BtPropertyType::RemoteModelName,
             BluetoothProperty::RemoteAddrType(_) => BtPropertyType::RemoteAddrType,
             BluetoothProperty::Unknown() => BtPropertyType::Unknown,
         }
@@ -660,7 +658,6 @@ impl BluetoothProperty {
             BluetoothProperty::RemoteIsCoordinatedSetMember(_) => mem::size_of::<bool>(),
             BluetoothProperty::Appearance(_) => mem::size_of::<u16>(),
             BluetoothProperty::VendorProductInfo(_) => mem::size_of::<BtVendorProductInfo>(),
-            BluetoothProperty::RemoteModelName(name) => name.len(),
             BluetoothProperty::RemoteAddrType(_) => mem::size_of::<BtAddrType>(),
 
             // TODO(abps) - Figure out sizes for these
@@ -770,9 +767,6 @@ impl BluetoothProperty {
                 };
                 data.copy_from_slice(&slice);
             }
-            BluetoothProperty::RemoteModelName(name) => {
-                data.copy_from_slice(name.as_bytes());
-            }
             BluetoothProperty::RemoteAddrType(addr_type) => {
                 data.copy_from_slice(
                     &BtAddrType::to_u32(addr_type).unwrap_or_default().to_ne_bytes(),
@@ -853,9 +847,6 @@ impl From<bindings::bt_property_t> for BluetoothProperty {
             BtPropertyType::VendorProductInfo => {
                 let v = unsafe { (prop.val as *const BtVendorProductInfo).read_unaligned() };
                 BluetoothProperty::VendorProductInfo(BtVendorProductInfo::from(v))
-            }
-            BtPropertyType::RemoteModelName => {
-                BluetoothProperty::RemoteModelName(ascii_to_string(slice, len))
             }
             BtPropertyType::RemoteAddrType => BluetoothProperty::RemoteAddrType(
                 BtAddrType::from_u32(u32_from_bytes(slice)).unwrap_or(BtAddrType::Unknown),
