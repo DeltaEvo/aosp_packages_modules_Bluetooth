@@ -46,6 +46,8 @@ use itertools::Itertools;
 use log::{debug, info, warn};
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
+use std::fs::File;
+use std::io::Write;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -151,8 +153,8 @@ pub trait IBluetoothMedia {
     // Set the HFP speaker volume. Valid volume specified by the HFP spec should
     // be in the range of 0-15.
     fn set_hfp_volume(&mut self, volume: u8, address: RawAddress);
-    fn start_audio_request(&mut self) -> bool;
-    fn stop_audio_request(&mut self);
+    fn start_audio_request(&mut self, connection_listener: File) -> bool;
+    fn stop_audio_request(&mut self, connection_listener: File);
 
     /// Returns true iff A2DP audio has started.
     fn get_a2dp_audio_started(&mut self, address: RawAddress) -> bool;
@@ -169,8 +171,9 @@ pub trait IBluetoothMedia {
         address: RawAddress,
         sco_offload: bool,
         disabled_codecs: HfpCodecBitId,
+        connection_listener: File,
     ) -> bool;
-    fn stop_sco_call(&mut self, address: RawAddress);
+    fn stop_sco_call(&mut self, address: RawAddress, connection_listener: File);
 
     /// Set the current playback status: e.g., playing, paused, stopped, etc. The method is a copy
     /// of the existing CRAS API, hence not following Floss API conventions.
@@ -492,6 +495,8 @@ pub struct BluetoothMedia {
     csis: Option<CsisClient>,
     csis_states: HashMap<RawAddress, BtCsisConnectionState>,
     is_le_audio_only_enabled: bool, // TODO: remove this once there is dual mode.
+    hfp_audio_connection_listener: Option<File>,
+    a2dp_audio_connection_listener: Option<File>,
 }
 
 impl BluetoothMedia {
@@ -557,6 +562,8 @@ impl BluetoothMedia {
             csis: None,
             csis_states: HashMap::new(),
             is_le_audio_only_enabled: false,
+            hfp_audio_connection_listener: None,
+            a2dp_audio_connection_listener: None,
         }
     }
 
@@ -634,6 +641,19 @@ impl BluetoothMedia {
                     DisplayAddress(&addr),
                     group_id
                 );
+            }
+        }
+    }
+
+    fn write_data_to_listener(&self, mut listener: File, data: Vec<u8>) {
+        match listener.write(&data) {
+            Ok(nwritten) => {
+                if nwritten != data.len() {
+                    warn!("Did not write full data into the event listener.");
+                }
+            }
+            Err(e) => {
+                warn!("Cannot write data into the event listener: {}", e);
             }
         }
     }
@@ -1227,11 +1247,13 @@ impl BluetoothMedia {
                 match state {
                     BtavConnectionState::Connected => {
                         info!("[{}]: a2dp connected.", DisplayAddress(&addr));
+
                         self.a2dp_states.insert(addr, state);
                         self.add_connected_profile(addr, Profile::A2dpSink);
                     }
                     BtavConnectionState::Disconnected => {
                         info!("[{}]: a2dp disconnected.", DisplayAddress(&addr));
+
                         self.a2dp_states.remove(&addr);
                         self.a2dp_caps.remove(&addr);
                         self.a2dp_audio_state.remove(&addr);
@@ -1244,6 +1266,18 @@ impl BluetoothMedia {
             }
             A2dpCallbacks::AudioState(addr, state) => {
                 info!("[{}]: a2dp audio state: {:?}", DisplayAddress(&addr), state);
+
+                let started: u8 = match state {
+                    BtavAudioState::Started => 1,
+                    _ => 0,
+                };
+
+                if self.a2dp_audio_connection_listener.is_some() {
+                    let listener = self.a2dp_audio_connection_listener.take().unwrap();
+                    let data: Vec<u8> = vec![started];
+                    self.write_data_to_listener(listener, data);
+                }
+
                 self.a2dp_audio_state.insert(addr, state);
             }
             A2dpCallbacks::AudioConfig(addr, _config, _local_caps, a2dp_caps) => {
@@ -1480,6 +1514,13 @@ impl BluetoothMedia {
 
                         self.hfp_audio_state.insert(addr, state);
 
+                        if self.hfp_audio_connection_listener.is_some() {
+                            let listener = self.hfp_audio_connection_listener.take().unwrap();
+                            let codec = self.get_hfp_audio_final_codecs(addr);
+                            let data: Vec<u8> = vec![codec];
+                            self.write_data_to_listener(listener, data);
+                        }
+
                         if self.should_insert_call_when_sco_start(addr) {
                             // This triggers a +CIEV command to set the call status for HFP devices.
                             // It is required for some devices to provide sound.
@@ -1489,6 +1530,12 @@ impl BluetoothMedia {
                     }
                     BthfAudioState::Disconnected => {
                         info!("[{}]: hfp audio disconnected.", DisplayAddress(&addr));
+
+                        if self.hfp_audio_connection_listener.is_some() {
+                            let listener = self.hfp_audio_connection_listener.take().unwrap();
+                            let data: Vec<u8> = vec![0];
+                            self.write_data_to_listener(listener, data);
+                        }
 
                         // Ignore disconnected -> disconnected
                         if let Some(BthfAudioState::Connected) =
@@ -3822,12 +3869,23 @@ impl IBluetoothMedia for BluetoothMedia {
         };
     }
 
-    fn start_audio_request(&mut self) -> bool {
+    fn start_audio_request(&mut self, connection_listener: File) -> bool {
+        if self.a2dp_audio_connection_listener.is_some() {
+            warn!("start_audio_request: replacing an unresolved listener");
+        }
+
+        self.a2dp_audio_connection_listener = Some(connection_listener);
         self.start_audio_request_impl()
     }
 
-    fn stop_audio_request(&mut self) {
+    fn stop_audio_request(&mut self, connection_listener: File) {
         debug!("Stop audio request");
+
+        if self.a2dp_audio_connection_listener.is_some() {
+            warn!("stop_audio_request: replacing an unresolved listener");
+        }
+
+        self.a2dp_audio_connection_listener = Some(connection_listener);
 
         match self.a2dp.as_mut() {
             Some(a2dp) => a2dp.stop_audio_request(),
@@ -3840,11 +3898,22 @@ impl IBluetoothMedia for BluetoothMedia {
         address: RawAddress,
         sco_offload: bool,
         disabled_codecs: HfpCodecBitId,
+        connection_listener: File,
     ) -> bool {
+        if self.hfp_audio_connection_listener.is_some() {
+            warn!("start_sco_call: replacing an unresolved listener");
+        }
+
+        self.hfp_audio_connection_listener = Some(connection_listener);
         self.start_sco_call_impl(address, sco_offload, disabled_codecs)
     }
 
-    fn stop_sco_call(&mut self, address: RawAddress) {
+    fn stop_sco_call(&mut self, address: RawAddress, listener: File) {
+        if self.hfp_audio_connection_listener.is_some() {
+            warn!("stop_sco_call: replacing an unresolved listener");
+        }
+
+        self.hfp_audio_connection_listener = Some(listener);
         self.stop_sco_call_impl(address)
     }
 
