@@ -163,8 +163,8 @@ void BleScannerInterfaceImpl::Init() {
 /** Registers a scanner with the stack */
 void BleScannerInterfaceImpl::RegisterScanner(const bluetooth::Uuid& uuid,
                                               RegisterCallback) {
-  log::info("in shim layer");
   auto app_uuid = bluetooth::hci::Uuid::From128BitBE(uuid.To128BitBE());
+  log::info("in shim layer, UUID={}", app_uuid.ToString());
   bluetooth::shim::GetScanning()->RegisterScanner(app_uuid);
 }
 
