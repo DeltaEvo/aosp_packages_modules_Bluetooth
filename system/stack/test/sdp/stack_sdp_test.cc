@@ -100,17 +100,17 @@ TEST_F(StackSdpInitTest, sdp_service_search_request) {
   int cid = L2CA_ConnectReqWithSecurity_cid;
   tCONN_CB* p_ccb = sdpu_find_ccb_by_cid(cid);
   ASSERT_NE(p_ccb, nullptr);
-  ASSERT_EQ(p_ccb->con_state, tSDP_STATE::SDP_STATE_CONN_SETUP);
+  ASSERT_EQ(p_ccb->con_state, tSDP_STATE::CONN_SETUP);
 
   tL2CAP_CFG_INFO cfg;
   sdp_cb.reg_info.pL2CA_ConfigCfm_Cb(p_ccb->connection_id, 0, &cfg);
 
-  ASSERT_EQ(p_ccb->con_state, tSDP_STATE::SDP_STATE_CONNECTED);
+  ASSERT_EQ(p_ccb->con_state, tSDP_STATE::CONNECTED);
 
   sdp_disconnect(p_ccb, SDP_SUCCESS);
   sdp_cb.reg_info.pL2CA_DisconnectCfm_Cb(p_ccb->connection_id, 0);
 
-  ASSERT_EQ(p_ccb->con_state, tSDP_STATE::SDP_STATE_IDLE);
+  ASSERT_EQ(p_ccb->con_state, tSDP_STATE::IDLE);
 }
 
 tCONN_CB* find_ccb(uint16_t cid, tSDP_STATE state) {
@@ -129,33 +129,33 @@ tCONN_CB* find_ccb(uint16_t cid, tSDP_STATE state) {
 TEST_F(StackSdpInitTest, sdp_service_search_request_queuing) {
   ASSERT_TRUE(SDP_ServiceSearchRequest(addr, sdp_db, nullptr));
   const int cid = L2CA_ConnectReqWithSecurity_cid;
-  tCONN_CB* p_ccb1 = find_ccb(cid, tSDP_STATE::SDP_STATE_CONN_SETUP);
+  tCONN_CB* p_ccb1 = find_ccb(cid, tSDP_STATE::CONN_SETUP);
   ASSERT_NE(p_ccb1, nullptr);
-  ASSERT_EQ(p_ccb1->con_state, tSDP_STATE::SDP_STATE_CONN_SETUP);
+  ASSERT_EQ(p_ccb1->con_state, tSDP_STATE::CONN_SETUP);
 
   ASSERT_TRUE(SDP_ServiceSearchRequest(addr, sdp_db, nullptr));
-  tCONN_CB* p_ccb2 = find_ccb(cid, tSDP_STATE::SDP_STATE_CONN_PEND);
+  tCONN_CB* p_ccb2 = find_ccb(cid, tSDP_STATE::CONN_PEND);
   ASSERT_NE(p_ccb2, nullptr);
   ASSERT_NE(p_ccb2, p_ccb1);
-  ASSERT_EQ(p_ccb2->con_state, tSDP_STATE::SDP_STATE_CONN_PEND);
+  ASSERT_EQ(p_ccb2->con_state, tSDP_STATE::CONN_PEND);
 
   tL2CAP_CFG_INFO cfg;
   sdp_cb.reg_info.pL2CA_ConfigCfm_Cb(p_ccb1->connection_id, 0, &cfg);
 
-  ASSERT_EQ(p_ccb1->con_state, tSDP_STATE::SDP_STATE_CONNECTED);
-  ASSERT_EQ(p_ccb2->con_state, tSDP_STATE::SDP_STATE_CONN_PEND);
+  ASSERT_EQ(p_ccb1->con_state, tSDP_STATE::CONNECTED);
+  ASSERT_EQ(p_ccb2->con_state, tSDP_STATE::CONN_PEND);
 
   p_ccb1->disconnect_reason = SDP_SUCCESS;
   sdp_disconnect(p_ccb1, SDP_SUCCESS);
 
-  ASSERT_EQ(p_ccb1->con_state, tSDP_STATE::SDP_STATE_IDLE);
-  ASSERT_EQ(p_ccb2->con_state, tSDP_STATE::SDP_STATE_CONNECTED);
+  ASSERT_EQ(p_ccb1->con_state, tSDP_STATE::IDLE);
+  ASSERT_EQ(p_ccb2->con_state, tSDP_STATE::CONNECTED);
 
   sdp_disconnect(p_ccb2, SDP_SUCCESS);
   sdp_cb.reg_info.pL2CA_DisconnectCfm_Cb(p_ccb2->connection_id, 0);
 
-  ASSERT_EQ(p_ccb1->con_state, tSDP_STATE::SDP_STATE_IDLE);
-  ASSERT_EQ(p_ccb2->con_state, tSDP_STATE::SDP_STATE_IDLE);
+  ASSERT_EQ(p_ccb1->con_state, tSDP_STATE::IDLE);
+  ASSERT_EQ(p_ccb2->con_state, tSDP_STATE::IDLE);
 }
 
 void sdp_callback(const RawAddress& /* bd_addr */, tSDP_RESULT result) {
@@ -168,24 +168,24 @@ TEST_F(StackSdpInitTest, sdp_service_search_request_queuing_race_condition) {
   // start first request
   ASSERT_TRUE(SDP_ServiceSearchRequest(addr, sdp_db, sdp_callback));
   const int cid1 = L2CA_ConnectReqWithSecurity_cid;
-  tCONN_CB* p_ccb1 = find_ccb(cid1, tSDP_STATE::SDP_STATE_CONN_SETUP);
+  tCONN_CB* p_ccb1 = find_ccb(cid1, tSDP_STATE::CONN_SETUP);
   ASSERT_NE(p_ccb1, nullptr);
-  ASSERT_EQ(p_ccb1->con_state, tSDP_STATE::SDP_STATE_CONN_SETUP);
+  ASSERT_EQ(p_ccb1->con_state, tSDP_STATE::CONN_SETUP);
 
   tL2CAP_CFG_INFO cfg;
   sdp_cb.reg_info.pL2CA_ConfigCfm_Cb(p_ccb1->connection_id, 0, &cfg);
 
-  ASSERT_EQ(p_ccb1->con_state, tSDP_STATE::SDP_STATE_CONNECTED);
+  ASSERT_EQ(p_ccb1->con_state, tSDP_STATE::CONNECTED);
 
   sdp_disconnect(p_ccb1, SDP_SUCCESS);
   sdp_cb.reg_info.pL2CA_DisconnectCfm_Cb(p_ccb1->connection_id, 0);
 
   const int cid2 = L2CA_ConnectReqWithSecurity_cid;
   ASSERT_NE(cid1, cid2);  // The callback a queued a new request
-  tCONN_CB* p_ccb2 = find_ccb(cid2, tSDP_STATE::SDP_STATE_CONN_SETUP);
+  tCONN_CB* p_ccb2 = find_ccb(cid2, tSDP_STATE::CONN_SETUP);
   ASSERT_NE(p_ccb2, nullptr);
   // If race condition, this will be stuck in PEND
-  ASSERT_EQ(p_ccb2->con_state, tSDP_STATE::SDP_STATE_CONN_SETUP);
+  ASSERT_EQ(p_ccb2->con_state, tSDP_STATE::CONN_SETUP);
 
   sdp_disconnect(p_ccb2, SDP_SUCCESS);
 }
@@ -211,16 +211,11 @@ TEST_F(StackSdpInitTest, sdp_disc_wait_text) {
 
 TEST_F(StackSdpInitTest, sdp_state_text) {
   std::vector<std::pair<tSDP_STATE, std::string>> states = {
-      std::make_pair(tSDP_STATE::SDP_STATE_IDLE,
-                     "tSDP_STATE::SDP_STATE_IDLE(0x0)"),
-      std::make_pair(tSDP_STATE::SDP_STATE_CONN_SETUP,
-                     "tSDP_STATE::SDP_STATE_CONN_SETUP(0x1)"),
-      std::make_pair(tSDP_STATE::SDP_STATE_CFG_SETUP,
-                     "tSDP_STATE::SDP_STATE_CFG_SETUP(0x2)"),
-      std::make_pair(tSDP_STATE::SDP_STATE_CONNECTED,
-                     "tSDP_STATE::SDP_STATE_CONNECTED(0x3)"),
-      std::make_pair(tSDP_STATE::SDP_STATE_CONN_PEND,
-                     "tSDP_STATE::SDP_STATE_CONN_PEND(0x4)"),
+      std::make_pair(tSDP_STATE::IDLE, "tSDP_STATE::IDLE(0x0)"),
+      std::make_pair(tSDP_STATE::CONN_SETUP, "tSDP_STATE::CONN_SETUP(0x1)"),
+      std::make_pair(tSDP_STATE::CFG_SETUP, "tSDP_STATE::CFG_SETUP(0x2)"),
+      std::make_pair(tSDP_STATE::CONNECTED, "tSDP_STATE::CONNECTED(0x3)"),
+      std::make_pair(tSDP_STATE::CONN_PEND, "tSDP_STATE::CONN_PEND(0x4)"),
   };
   for (const auto& state : states) {
     ASSERT_STREQ(state.second.c_str(), sdp_state_text(state.first).c_str());
