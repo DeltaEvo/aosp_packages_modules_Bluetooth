@@ -383,10 +383,10 @@ tGATT_STATUS attp_send_msg_to_l2cap(tGATT_TCB& tcb, uint16_t lcid,
     l2cap_ret = L2CA_DataWrite(lcid, p_toL2CAP);
   }
 
-  if (l2cap_ret == L2CAP_DW_FAILED) {
+  if (l2cap_ret == tL2CAP_DW_RESULT::L2CAP_DW_FAILED) {
     log::error("failed to write data to L2CAP");
     return GATT_INTERNAL_ERROR;
-  } else if (l2cap_ret == L2CAP_DW_CONGESTED) {
+  } else if (l2cap_ret == tL2CAP_DW_RESULT::L2CAP_DW_CONGESTED) {
     log::verbose("ATT congested, message accepted");
     return GATT_CONGESTED;
   }

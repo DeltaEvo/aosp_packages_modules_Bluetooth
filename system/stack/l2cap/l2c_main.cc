@@ -900,10 +900,11 @@ void l2c_lcb_timer_timeout(void* data) {
  *
  * Description      API functions call this function to write data.
  *
- * Returns          L2CAP_DW_SUCCESS, if data accepted, else false
- *                  L2CAP_DW_CONGESTED, if data accepted and the channel is
- *                                      congested
- *                  L2CAP_DW_FAILED, if error
+ * Returns          tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS, if data accepted,
+ *                  else false
+ *                  tL2CAP_DW_RESULT::L2CAP_DW_CONGESTED, if data accepted
+ *                  and the channel is congested
+ *                  tL2CAP_DW_RESULT::L2CAP_DW_FAILED, if error
  *
  ******************************************************************************/
 tL2CAP_DW_RESULT l2c_data_write(uint16_t cid, BT_HDR* p_data, uint16_t flags) {
@@ -912,7 +913,7 @@ tL2CAP_DW_RESULT l2c_data_write(uint16_t cid, BT_HDR* p_data, uint16_t flags) {
   if (!p_ccb) {
     log::warn("L2CAP - no CCB for L2CA_DataWrite, CID: {}", cid);
     osi_free(p_data);
-    return (L2CAP_DW_FAILED);
+    return (tL2CAP_DW_RESULT::L2CAP_DW_FAILED);
   }
 
   /* Sending message bigger than mtu size of peer is a violation of protocol */
@@ -929,7 +930,7 @@ tL2CAP_DW_RESULT l2c_data_write(uint16_t cid, BT_HDR* p_data, uint16_t flags) {
         "size: len={} mtu={}",
         cid, p_data->len, mtu);
     osi_free(p_data);
-    return (L2CAP_DW_FAILED);
+    return (tL2CAP_DW_RESULT::L2CAP_DW_FAILED);
   }
 
   /* channel based, packet based flushable or non-flushable */
@@ -944,12 +945,12 @@ tL2CAP_DW_RESULT l2c_data_write(uint16_t cid, BT_HDR* p_data, uint16_t flags) {
         p_ccb->buff_quota);
 
     osi_free(p_data);
-    return (L2CAP_DW_FAILED);
+    return (tL2CAP_DW_RESULT::L2CAP_DW_FAILED);
   }
 
   l2c_csm_execute(p_ccb, L2CEVT_L2CA_DATA_WRITE, p_data);
 
-  if (p_ccb->cong_sent) return (L2CAP_DW_CONGESTED);
+  if (p_ccb->cong_sent) return (tL2CAP_DW_RESULT::L2CAP_DW_CONGESTED);
 
-  return (L2CAP_DW_SUCCESS);
+  return (tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS);
 }
