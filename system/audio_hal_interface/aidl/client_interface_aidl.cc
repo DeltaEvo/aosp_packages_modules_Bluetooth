@@ -538,6 +538,10 @@ void BluetoothAudioClientInterface::FlushAudioData() {
     return;
   }
   size_t size = data_mq_->availableToRead();
+  if (size == 0) {
+    return;
+  }
+
   std::vector<MqDataType> buffer(size);
 
   if (data_mq_->read(buffer.data(), size) != size) {
