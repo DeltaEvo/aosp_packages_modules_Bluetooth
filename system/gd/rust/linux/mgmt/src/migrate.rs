@@ -11,6 +11,7 @@
 //!   all others
 
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::fs;
 use std::path::Path;
 
@@ -242,7 +243,10 @@ fn dec_str_to_hex_str(str: String) -> Result<String, String> {
 fn base64_str_to_hex_str(str: String) -> Result<String, String> {
     match base64::decode(str) {
         Ok(bytes) => {
-            let res: String = bytes.iter().map(|b| format!("{:02x}", b)).collect();
+            let res: String = bytes.iter().fold(String::new(), |mut res, b| {
+                let _ = write!(res, "{:02x}", b);
+                res
+            });
             Ok(res)
         }
         Err(err) => Err(format!("Error converting from base64 string to hex string: {}", err)),
@@ -616,19 +620,16 @@ pub fn migrate_bluez_devices() {
 fn merge_and_write_bluez_conf(filepath: String, conf: &mut Ini) {
     let mut existing_conf = Ini::new_cs();
     existing_conf.set_comment_symbols(&['!', '#']);
-    match existing_conf.load(filepath.clone()) {
+    if let Ok(ini) = existing_conf.load(filepath.clone()) {
         // Device already exists in BlueZ
-        Ok(ini) => {
-            for (sec, props) in ini {
-                // Keep keys that weren't transferrable
-                for (k, v) in props {
-                    if conf.get(sec.as_str(), k.as_str()).is_none() {
-                        conf.set(sec.as_str(), k.as_str(), v);
-                    }
+        for (sec, props) in ini {
+            // Keep keys that weren't transferrable
+            for (k, v) in props {
+                if conf.get(sec.as_str(), k.as_str()).is_none() {
+                    conf.set(sec.as_str(), k.as_str(), v);
                 }
             }
         }
-        Err(_) => {}
     }
     // Write BlueZ file
     match conf.write(filepath.clone()) {
@@ -880,26 +881,20 @@ fn convert_floss_conf(filename: &str) {
     }
 
     // Delete devices that exist in BlueZ but not in Floss
-    match glob(format!("{}/{}/*:*", BT_LIBDIR, adapter_addr).as_str()) {
-        Ok(globbed) => {
-            for entry in globbed {
-                let pathbuf = entry.unwrap_or_default();
-                let addrs = pathbuf.to_str().unwrap_or_default().split('/').collect::<Vec<&str>>();
-                let device_addr: String = addrs[addrs.len() - 1].into();
-                if !devices.contains(&device_addr.to_lowercase()) {
-                    match fs::remove_dir_all(pathbuf) {
-                        Ok(_) => (),
-                        Err(err) => {
-                            warn!(
-                                "Error removing {} during Floss to BlueZ device migration: {}",
-                                device_addr, err
-                            );
-                        }
-                    }
+    if let Ok(globbed) = glob(format!("{}/{}/*:*", BT_LIBDIR, adapter_addr).as_str()) {
+        for entry in globbed {
+            let pathbuf = entry.unwrap_or_default();
+            let addrs = pathbuf.to_str().unwrap_or_default().split('/').collect::<Vec<&str>>();
+            let device_addr: String = addrs[addrs.len() - 1].into();
+            if !devices.contains(&device_addr.to_lowercase()) {
+                if let Err(err) = fs::remove_dir_all(pathbuf) {
+                    warn!(
+                        "Error removing {} during Floss to BlueZ device migration: {}",
+                        device_addr, err
+                    );
                 }
             }
         }
-        _ => (),
     }
 }
 

@@ -176,15 +176,20 @@ impl IBluetoothCallback for BtCallback {
     }
 
     fn on_device_cleared(&mut self, remote_device: BluetoothDevice) {
-        match self.context.lock().unwrap().found_devices.remove(&remote_device.address.to_string())
+        if self
+            .context
+            .lock()
+            .unwrap()
+            .found_devices
+            .remove(&remote_device.address.to_string())
+            .is_some()
         {
-            Some(_) => print_info!(
+            print_info!(
                 "Removed device: [{}: {:?}]",
                 remote_device.address.to_string(),
                 remote_device.name
-            ),
-            None => (),
-        };
+            );
+        }
 
         self.context.lock().unwrap().bonded_devices.remove(&remote_device.address.to_string());
     }
@@ -217,19 +222,16 @@ impl IBluetoothCallback for BtCallback {
                     // Auto-confirm bonding attempts that were locally initiated.
                     // Ignore all other bonding attempts.
                     let bonding_device = context.lock().unwrap().bonding_attempt.as_ref().cloned();
-                    match bonding_device {
-                        Some(bd) => {
-                            if bd.address == rd.address {
-                                context
-                                    .lock()
-                                    .unwrap()
-                                    .adapter_dbus
-                                    .as_ref()
-                                    .unwrap()
-                                    .set_pairing_confirmation(rd.clone(), true);
-                            }
+                    if let Some(bd) = bonding_device {
+                        if bd.address == rd.address {
+                            context
+                                .lock()
+                                .unwrap()
+                                .adapter_dbus
+                                .as_ref()
+                                .unwrap()
+                                .set_pairing_confirmation(rd.clone(), true);
                         }
-                        None => (),
                     }
                 }));
             }
@@ -273,13 +275,10 @@ impl IBluetoothCallback for BtCallback {
             BtBondState::NotBonded | BtBondState::Bonded => {
                 let bonding_attempt =
                     self.context.lock().unwrap().bonding_attempt.as_ref().cloned();
-                match bonding_attempt {
-                    Some(bd) => {
-                        if address == bd.address {
-                            self.context.lock().unwrap().bonding_attempt = None;
-                        }
+                if let Some(bd) = bonding_attempt {
+                    if address == bd.address {
+                        self.context.lock().unwrap().bonding_attempt = None;
                     }
-                    None => (),
                 }
             }
             BtBondState::Bonding => (),

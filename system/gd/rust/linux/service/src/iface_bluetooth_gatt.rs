@@ -446,14 +446,11 @@ impl DBusArg for ScanFilterCondition {
         condition: ScanFilterCondition,
     ) -> Result<dbus::arg::PropMap, Box<dyn std::error::Error>> {
         let mut map: dbus::arg::PropMap = std::collections::HashMap::new();
-        match condition {
-            ScanFilterCondition::Patterns(patterns) => {
-                map.insert(
-                    String::from("patterns"),
-                    dbus::arg::Variant(Box::new(DBusArg::to_dbus(patterns)?)),
-                );
-            }
-            _ => {}
+        if let ScanFilterCondition::Patterns(patterns) = condition {
+            map.insert(
+                String::from("patterns"),
+                dbus::arg::Variant(Box::new(DBusArg::to_dbus(patterns)?)),
+            );
         }
         Ok(map)
     }
