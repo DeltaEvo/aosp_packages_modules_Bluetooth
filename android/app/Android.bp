@@ -329,8 +329,12 @@ android_app {
             "-Xep:InvalidBlockTag:ERROR",
             "-Xep:InvalidParam:ERROR",
             "-Xep:MockNotUsedInProduction:ERROR",
+            "-Xep:NonApiType:ERROR",
             "-Xep:NonCanonicalType:ERROR",
+            "-Xep:NotJavadoc:ERROR",
             "-Xep:ReturnAtTheEndOfVoidFunction:ERROR",
+            "-Xep:StringCaseLocaleUsage:ERROR",
+            "-Xep:StringCharset:ERROR",
             "-Xep:UnusedMethod:ERROR",
             "-Xep:UnusedVariable:ERROR",
             "-XepExcludedPaths:.*/srcjars/.*", // Exclude generated files

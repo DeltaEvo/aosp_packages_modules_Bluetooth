@@ -38,7 +38,7 @@ import com.android.bluetooth.R;
 import com.android.bluetooth.mapapi.BluetoothMapContract;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 public class BluetoothMapSettingsAdapter extends BaseExpandableListAdapter {
@@ -47,10 +47,10 @@ public class BluetoothMapSettingsAdapter extends BaseExpandableListAdapter {
     private boolean mCheckAll = true;
     public LayoutInflater mInflater;
     public Activity mActivity;
-    /*needed to prevent random checkbox toggles due to item reuse */ ArrayList<Boolean>
-            mPositionArray;
-    private LinkedHashMap<BluetoothMapAccountItem, ArrayList<BluetoothMapAccountItem>> mProupList;
-    private ArrayList<BluetoothMapAccountItem> mMainGroup;
+    /* needed to prevent random checkbox toggles due to item reuse */
+    List<Boolean> mPositionArray;
+    private Map<BluetoothMapAccountItem, List<BluetoothMapAccountItem>> mProupList;
+    private List<BluetoothMapAccountItem> mMainGroup;
     private int[] mGroupStatus;
     /* number of accounts possible to share */
     private int mSlotsLeft = 10;
@@ -58,7 +58,7 @@ public class BluetoothMapSettingsAdapter extends BaseExpandableListAdapter {
     public BluetoothMapSettingsAdapter(
             Activity act,
             ExpandableListView listView,
-            LinkedHashMap<BluetoothMapAccountItem, ArrayList<BluetoothMapAccountItem>> groupsList,
+            Map<BluetoothMapAccountItem, List<BluetoothMapAccountItem>> groupsList,
             int enabledAccountsCounts) {
         mActivity = act;
         this.mProupList = groupsList;
@@ -78,7 +78,7 @@ public class BluetoothMapSettingsAdapter extends BaseExpandableListAdapter {
                     }
                 });
         mMainGroup = new ArrayList<BluetoothMapAccountItem>();
-        for (Map.Entry<BluetoothMapAccountItem, ArrayList<BluetoothMapAccountItem>> mapEntry :
+        for (Map.Entry<BluetoothMapAccountItem, List<BluetoothMapAccountItem>> mapEntry :
                 mProupList.entrySet()) {
             mMainGroup.add(mapEntry.getKey());
         }
@@ -90,7 +90,7 @@ public class BluetoothMapSettingsAdapter extends BaseExpandableListAdapter {
         return mProupList.get(item).get(childPosition);
     }
 
-    private ArrayList<BluetoothMapAccountItem> getChild(BluetoothMapAccountItem group) {
+    private List<BluetoothMapAccountItem> getChild(BluetoothMapAccountItem group) {
         return mProupList.get(group);
     }
 
@@ -130,7 +130,7 @@ public class BluetoothMapSettingsAdapter extends BaseExpandableListAdapter {
                                 child.mIsChecked; // needed to prevent updates on UI redraw
                         child.mIsChecked = isChecked;
                         if (isChecked) {
-                            ArrayList<BluetoothMapAccountItem> childList = getChild(parentGroup);
+                            List<BluetoothMapAccountItem> childList = getChild(parentGroup);
                             int childIndex = childList.indexOf(child);
                             boolean isAllChildClicked = true;
                             if (mSlotsLeft - childList.size() >= 0) {
@@ -253,7 +253,7 @@ public class BluetoothMapSettingsAdapter extends BaseExpandableListAdapter {
                     @Override
                     public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                         if (mCheckAll) {
-                            ArrayList<BluetoothMapAccountItem> childItem = getChild(groupItem);
+                            List<BluetoothMapAccountItem> childItem = getChild(groupItem);
                             for (BluetoothMapAccountItem children : childItem) {
                                 boolean oldIsChecked = children.mIsChecked;
                                 if (mSlotsLeft > 0) {

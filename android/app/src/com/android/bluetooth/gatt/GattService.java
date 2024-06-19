@@ -1555,7 +1555,7 @@ public class GattService extends ProfileService {
         return new GattDbElement();
     }
 
-    void onGetGattDb(int connId, ArrayList<GattDbElement> db) throws RemoteException {
+    void onGetGattDb(int connId, List<GattDbElement> db) throws RemoteException {
         String address = mClientMap.addressByConnId(connId);
 
         Log.d(TAG, "onGetGattDb() - address=" + address);

@@ -22,8 +22,8 @@ import com.android.obex.HeaderSet;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 /* Get a listing of messages in directory. */
 class RequestGetMessagesListing extends Request {
@@ -135,7 +135,7 @@ class RequestGetMessagesListing extends Request {
         }
     }
 
-    public ArrayList<Message> getList() {
+    public List<Message> getList() {
         if (mResponse == null) {
             return null;
         }
