@@ -740,7 +740,7 @@ void sdpu_build_n_send_error(tCONN_CB* p_ccb, uint16_t trans_num,
 
   /* Send the buffer through L2CAP */
   if (L2CA_DataWrite(p_ccb->connection_id, p_buf) !=
-      tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS) {
+      tL2CAP_DW_RESULT::SUCCESS) {
     log::warn("Unable to write L2CAP data cid:{}", p_ccb->connection_id);
   }
 }

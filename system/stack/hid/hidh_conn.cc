@@ -848,7 +848,7 @@ tHID_STATUS hidh_conn_snd_data(uint8_t dhandle, uint8_t trans_type,
 
     /* Send the buffer through L2CAP */
     if ((p_hcon->conn_flags & HID_CONN_FLAGS_CONGESTED) ||
-        (L2CA_DataWrite(cid, p_buf) == tL2CAP_DW_RESULT::L2CAP_DW_FAILED)) {
+        (L2CA_DataWrite(cid, p_buf) == tL2CAP_DW_RESULT::FAILED)) {
       log_counter_metrics(android::bluetooth::CodePathCounterKeyEnum::
                               HIDH_ERR_CONGESTED_AT_SEND_DATA,
                           1);

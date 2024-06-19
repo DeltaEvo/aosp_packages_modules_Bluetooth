@@ -379,7 +379,7 @@ struct L2CA_SendFixedChnlData {
                                  BT_HDR* p_buf)>
       body{[](uint16_t /* fixed_cid */, const RawAddress& /* rem_bda */,
               BT_HDR* /* p_buf */) -> tL2CAP_DW_RESULT {
-        return tL2CAP_DW_RESULT::L2CAP_DW_FAILED;
+        return tL2CAP_DW_RESULT::FAILED;
       }};
   tL2CAP_DW_RESULT operator()(uint16_t fixed_cid, const RawAddress& rem_bda,
                               BT_HDR* p_buf) {
@@ -428,7 +428,7 @@ extern struct L2CA_MarkLeLinkAsActive L2CA_MarkLeLinkAsActive;
 struct L2CA_DataWrite {
   std::function<tL2CAP_DW_RESULT(uint16_t cid, BT_HDR* p_data)> body{
       [](uint16_t /* cid */, BT_HDR* /* p_data */) -> tL2CAP_DW_RESULT {
-        return tL2CAP_DW_RESULT::L2CAP_DW_FAILED;
+        return tL2CAP_DW_RESULT::FAILED;
       }};
   tL2CAP_DW_RESULT operator()(uint16_t cid, BT_HDR* p_data) {
     return body(cid, p_data);
@@ -441,7 +441,7 @@ extern struct L2CA_DataWrite L2CA_DataWrite;
 struct L2CA_LECocDataWrite {
   std::function<tL2CAP_DW_RESULT(uint16_t cid, BT_HDR* p_data)> body{
       [](uint16_t /* cid */, BT_HDR* /* p_data */) -> tL2CAP_DW_RESULT {
-        return tL2CAP_DW_RESULT::L2CAP_DW_FAILED;
+        return tL2CAP_DW_RESULT::FAILED;
       }};
   tL2CAP_DW_RESULT operator()(uint16_t cid, BT_HDR* p_data) {
     return body(cid, p_data);
