@@ -112,7 +112,7 @@ TEST_F(StackSdpInitTest, sdp_service_search_request) {
   ASSERT_EQ(p_ccb->con_state, SDP_STATE_IDLE);
 }
 
-tCONN_CB* find_ccb(uint16_t cid, uint8_t state) {
+tCONN_CB* find_ccb(uint16_t cid, tSDP_STATE state) {
   uint16_t xx;
   tCONN_CB* p_ccb;
 
