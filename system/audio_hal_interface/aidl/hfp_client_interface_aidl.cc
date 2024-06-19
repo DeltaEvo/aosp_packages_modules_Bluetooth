@@ -130,7 +130,27 @@ uint8_t HfpTransport::GetPendingCmd() const { return hfp_pending_cmd_; }
 void HfpTransport::LogBytesProcessed(size_t bytes_read) {}
 
 BluetoothAudioCtrlAck HfpTransport::SuspendRequest() {
-  return BluetoothAudioCtrlAck::FAILURE_UNSUPPORTED;
+  log::info("handling");
+  if (hfp_pending_cmd_ != HFP_CTRL_CMD_NONE) {
+    log::warn("busy in pending_cmd={}", hfp_pending_cmd_);
+    return BluetoothAudioCtrlAck::FAILURE_BUSY;
+  }
+
+  RawAddress addr = bta_ag_get_active_device();
+  if (addr.IsEmpty()) {
+    log::info("No active device found, mark SCO as suspended");
+    return BluetoothAudioCtrlAck::SUCCESS_FINISHED;
+  }
+
+  hfp_pending_cmd_ = HFP_CTRL_CMD_SUSPEND;
+  auto instance = bluetooth::headset::GetInterface();
+  if (instance == nullptr) {
+    log::error("headset instance is nullptr");
+    return BluetoothAudioCtrlAck::FAILURE;
+  }
+  auto status = instance->DisconnectAudio(&addr);
+  log::info("DisconnectAudio status = {} - {}", status, bt_status_text(status));
+  return BluetoothAudioCtrlAck::SUCCESS_FINISHED;
 }
 
 void HfpTransport::SetLatencyMode(LatencyMode latency_mode) {}

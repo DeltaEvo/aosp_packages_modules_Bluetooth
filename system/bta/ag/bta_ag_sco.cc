@@ -1502,6 +1502,8 @@ void bta_ag_sco_conn_close(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& /* data */) {
 
     bta_sys_sco_close(BTA_ID_AG, p_scb->app_id, p_scb->peer_addr);
 
+    bta_ag_stream_suspended();
+
     /* if av got suspended by this call, let it resume. */
     /* In case call stays alive regardless of sco, av should not be affected. */
     if (((p_scb->call_ind == BTA_AG_CALL_INACTIVE) &&
@@ -1602,6 +1604,12 @@ bool bta_ag_is_sco_managed_by_audio() {
     log::verbose("is_sco_managed_by_audio enabled={}", value);
   }
   return value;
+}
+
+void bta_ag_stream_suspended() {
+  if (bta_ag_is_sco_managed_by_audio() && hfp_offload_interface) {
+    hfp_offload_interface->CancelStreamingRequest();
+  }
 }
 
 const RawAddress& bta_ag_get_active_device() { return active_device_addr; }
