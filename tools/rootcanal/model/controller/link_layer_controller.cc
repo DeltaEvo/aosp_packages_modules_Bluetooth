@@ -6110,6 +6110,7 @@ void LinkLayerController::Reset() {
   legacy_advertiser_ = LegacyAdvertiser{};
   extended_advertisers_.clear();
   scanner_ = Scanner{};
+  apcf_scanner_ = ApcfScanner{};
   initiator_ = Initiator{};
   synchronizing_ = {};
   synchronized_ = {};
