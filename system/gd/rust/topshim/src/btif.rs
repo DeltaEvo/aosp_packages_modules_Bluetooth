@@ -1057,7 +1057,7 @@ pub enum BaseCallbacks {
     // link_quality_report_cb
     // switch_buffer_size_cb
     // switch_codec_cb
-    GenerateLocalOobData(u8, OobData),
+    GenerateLocalOobData(u8, Box<OobData>), // Box OobData as its size is much bigger than others
     LeRandCallback(u64),
     // key_missing_cb
 }
@@ -1117,7 +1117,7 @@ u32 -> BtStatus, *mut RawAddress, bindings::bt_acl_state_t -> BtAclState, i32 ->
     let _1 = unsafe { *(_1 as *const RawAddress) };
 });
 
-cb_variant!(BaseCb, generate_local_oob_data_cb -> BaseCallbacks::GenerateLocalOobData, u8, OobData);
+cb_variant!(BaseCb, generate_local_oob_data_cb -> BaseCallbacks::GenerateLocalOobData, u8, OobData -> Box::<OobData>);
 
 cb_variant!(BaseCb, le_rand_cb -> BaseCallbacks::LeRandCallback, u64);
 

@@ -22,9 +22,9 @@ import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.SignedLongLong;
 import com.android.bluetooth.content_profiles.ContentProfileErrorReportUtils;
 
-import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
@@ -941,23 +941,22 @@ public class BluetoothMapAppParams {
      * Get the approximate length needed to store the appParameters in a byte array.
      *
      * @return the length in bytes
-     * @throws UnsupportedEncodingException if the platform does not support UTF-8 encoding.
      */
-    private int getParamMaxLength() throws UnsupportedEncodingException {
+    private int getParamMaxLength() {
         int length = 0;
         length += 38 * 2; // tagId + tagLength
         length += 33 + 4 * 16; // fixed sizes TODO: Update when spec is ready
         length += getFilterPeriodBegin() == INVALID_VALUE_PARAMETER ? 0 : 20;
         length += getFilterPeriodEnd() == INVALID_VALUE_PARAMETER ? 0 : 20;
         if (getFilterRecipient() != null) {
-            length += getFilterRecipient().getBytes("UTF-8").length;
+            length += getFilterRecipient().getBytes(StandardCharsets.UTF_8).length;
         }
         if (getFilterOriginator() != null) {
-            length += getFilterOriginator().getBytes("UTF-8").length;
+            length += getFilterOriginator().getBytes(StandardCharsets.UTF_8).length;
         }
         length += getMseTime() == INVALID_VALUE_PARAMETER ? 0 : 20;
         if (getPresenceStatus() != null) {
-            length += getPresenceStatus().getBytes("UTF-8").length;
+            length += getPresenceStatus().getBytes(StandardCharsets.UTF_8).length;
         }
         length += (getLastActivity() == INVALID_VALUE_PARAMETER) ? 0 : 20;
         return length;
@@ -967,9 +966,8 @@ public class BluetoothMapAppParams {
      * Encode the application parameter object to a byte array.
      *
      * @return a byte Array representation of the application parameter object.
-     * @throws UnsupportedEncodingException if the platform does not support UTF-8 encoding.
      */
-    public byte[] encodeParams() throws UnsupportedEncodingException {
+    public byte[] encodeParams() {
         ByteBuffer appParamBuf = ByteBuffer.allocate(getParamMaxLength());
         appParamBuf.order(ByteOrder.BIG_ENDIAN);
         byte[] retBuf;
@@ -991,13 +989,15 @@ public class BluetoothMapAppParams {
         }
         if (getFilterPeriodBegin() != INVALID_VALUE_PARAMETER) {
             appParamBuf.put((byte) FILTER_PERIOD_BEGIN);
-            appParamBuf.put((byte) getFilterPeriodBeginString().getBytes("UTF-8").length);
-            appParamBuf.put(getFilterPeriodBeginString().getBytes("UTF-8"));
+            appParamBuf.put(
+                    (byte) getFilterPeriodBeginString().getBytes(StandardCharsets.UTF_8).length);
+            appParamBuf.put(getFilterPeriodBeginString().getBytes(StandardCharsets.UTF_8));
         }
         if (getFilterPeriodEnd() != INVALID_VALUE_PARAMETER) {
             appParamBuf.put((byte) FILTER_PERIOD_END);
-            appParamBuf.put((byte) getFilterPeriodEndString().getBytes("UTF-8").length);
-            appParamBuf.put(getFilterPeriodEndString().getBytes("UTF-8"));
+            appParamBuf.put(
+                    (byte) getFilterPeriodEndString().getBytes(StandardCharsets.UTF_8).length);
+            appParamBuf.put(getFilterPeriodEndString().getBytes(StandardCharsets.UTF_8));
         }
         if (getFilterReadStatus() != INVALID_VALUE_PARAMETER) {
             appParamBuf.put((byte) FILTER_READ_STATUS);
@@ -1006,13 +1006,13 @@ public class BluetoothMapAppParams {
         }
         if (getFilterRecipient() != null) {
             appParamBuf.put((byte) FILTER_RECIPIENT);
-            appParamBuf.put((byte) getFilterRecipient().getBytes("UTF-8").length);
-            appParamBuf.put(getFilterRecipient().getBytes("UTF-8"));
+            appParamBuf.put((byte) getFilterRecipient().getBytes(StandardCharsets.UTF_8).length);
+            appParamBuf.put(getFilterRecipient().getBytes(StandardCharsets.UTF_8));
         }
         if (getFilterOriginator() != null) {
             appParamBuf.put((byte) FILTER_ORIGINATOR);
-            appParamBuf.put((byte) getFilterOriginator().getBytes("UTF-8").length);
-            appParamBuf.put(getFilterOriginator().getBytes("UTF-8"));
+            appParamBuf.put((byte) getFilterOriginator().getBytes(StandardCharsets.UTF_8).length);
+            appParamBuf.put(getFilterOriginator().getBytes(StandardCharsets.UTF_8));
         }
         if (getFilterPriority() != INVALID_VALUE_PARAMETER) {
             appParamBuf.put((byte) FILTER_PRIORITY);
@@ -1101,8 +1101,8 @@ public class BluetoothMapAppParams {
         }
         if (getMseTime() != INVALID_VALUE_PARAMETER) {
             appParamBuf.put((byte) MSE_TIME);
-            appParamBuf.put((byte) getMseTimeString().getBytes("UTF-8").length);
-            appParamBuf.put(getMseTimeString().getBytes("UTF-8"));
+            appParamBuf.put((byte) getMseTimeString().getBytes(StandardCharsets.UTF_8).length);
+            appParamBuf.put(getMseTimeString().getBytes(StandardCharsets.UTF_8));
         }
         // Note: New for IM
         if (getDatabaseIdentifier() != null) {
@@ -1122,12 +1122,12 @@ public class BluetoothMapAppParams {
         }
         if (getPresenceStatus() != null) {
             appParamBuf.put((byte) PRESENCE_TEXT);
-            appParamBuf.put((byte) getPresenceStatus().getBytes("UTF-8").length);
+            appParamBuf.put((byte) getPresenceStatus().getBytes(StandardCharsets.UTF_8).length);
             appParamBuf.put(getPresenceStatus().getBytes());
         }
         if (getLastActivity() != INVALID_VALUE_PARAMETER) {
             appParamBuf.put((byte) LAST_ACTIVITY);
-            appParamBuf.put((byte) getLastActivityString().getBytes("UTF-8").length);
+            appParamBuf.put((byte) getLastActivityString().getBytes(StandardCharsets.UTF_8).length);
             appParamBuf.put(getLastActivityString().getBytes());
         }
         if (getChatState() != INVALID_VALUE_PARAMETER) {
@@ -1415,7 +1415,7 @@ public class BluetoothMapAppParams {
     public void setFilterMsgHandle(String handle) {
         try {
             mFilterMsgHandle = BluetoothMapUtils.getLongFromString(handle);
-        } catch (UnsupportedEncodingException | NumberFormatException e) {
+        } catch (NumberFormatException e) {
             ContentProfileErrorReportUtils.report(
                     BluetoothProfile.MAP,
                     BluetoothProtoEnums.BLUETOOTH_MAP_APP_PARAMS,
@@ -1473,7 +1473,7 @@ public class BluetoothMapAppParams {
     public void setFilterConvoId(String id) {
         try {
             mFilterConvoId = SignedLongLong.fromString(id);
-        } catch (UnsupportedEncodingException | NumberFormatException e) {
+        } catch (NumberFormatException e) {
             ContentProfileErrorReportUtils.report(
                     BluetoothProfile.MAP,
                     BluetoothProtoEnums.BLUETOOTH_MAP_APP_PARAMS,

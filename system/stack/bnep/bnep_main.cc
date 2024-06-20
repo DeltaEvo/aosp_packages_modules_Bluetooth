@@ -304,8 +304,7 @@ static void bnep_congestion_ind(uint16_t l2cap_cid, bool is_congested) {
 
       if (!p_buf) break;
 
-      if (L2CA_DataWrite(l2cap_cid, p_buf) !=
-          tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS) {
+      if (L2CA_DataWrite(l2cap_cid, p_buf) != tL2CAP_DW_RESULT::SUCCESS) {
         log::warn("Unable to write L2CAP data peer:{} cid:{} len:{}",
                   p_bcb->rem_bda, l2cap_cid, p_buf->len);
       }

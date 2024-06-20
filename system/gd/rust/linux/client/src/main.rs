@@ -804,7 +804,7 @@ async fn handle_client_command(
                             break 'foreground_actions;
                         }
 
-                        handler.process_cmd_line(cmd, &rest.to_vec());
+                        handler.process_cmd_line(cmd, rest);
                         break 'readline;
                     }
 

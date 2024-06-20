@@ -1096,13 +1096,6 @@ static void btu_hcif_hdl_command_status(uint16_t opcode, uint8_t status,
         btm_sec_encrypt_change(HCI_INVALID_HANDLE, hci_status, false);
       }
       break;
-    case HCI_RMT_NAME_REQUEST:
-      if (status != HCI_SUCCESS) {
-        // Tell inquiry processing that we are done
-        btm_process_remote_name(nullptr, nullptr, 0, hci_status);
-        btm_sec_rmt_name_request_complete(nullptr, nullptr, hci_status);
-      }
-      break;
     case HCI_READ_RMT_EXT_FEATURES:
       if (status != HCI_SUCCESS) {
         STREAM_TO_UINT16(handle, p_cmd);

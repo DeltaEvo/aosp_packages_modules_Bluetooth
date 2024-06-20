@@ -48,7 +48,7 @@ impl InterfaceManager {
     /// * `disconnect_watcher` - DisconnectWatcher to monitor client disconnects
     /// * `bluetooth` - Implementation of the Bluetooth API
     /// other implementations follow.
-    ///
+    #[allow(clippy::too_many_arguments)]
     pub async fn dispatch(
         mut rx: Receiver<APIMessage>,
         tx: Sender<Message>,

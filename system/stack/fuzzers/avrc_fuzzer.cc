@@ -62,7 +62,7 @@ class FakeBtStack {
       log::assert_that(cid == kDummyCid, "assert failed: cid == kDummyCid");
       ConsumeData((const uint8_t*)hdr, hdr->offset + hdr->len);
       osi_free(hdr);
-      return tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS;
+      return tL2CAP_DW_RESULT::SUCCESS;
     };
     test::mock::stack_l2cap_api::L2CA_DisconnectReq.body = [](uint16_t cid) {
       log::assert_that(cid == kDummyCid, "assert failed: cid == kDummyCid");

@@ -62,9 +62,9 @@ impl From<String> for CommandError {
 
 type CommandResult = Result<(), CommandError>;
 
-type CommandFunction = fn(&mut CommandHandler, &Vec<String>) -> CommandResult;
+type CommandFunction = fn(&mut CommandHandler, &[String]) -> CommandResult;
 
-fn _noop(_handler: &mut CommandHandler, _args: &Vec<String>) -> CommandResult {
+fn _noop(_handler: &mut CommandHandler, _args: &[String]) -> CommandResult {
     // Used so we can add options with no direct function
     // e.g. help and quit
     Ok(())
@@ -406,7 +406,7 @@ fn build_commands() -> HashMap<String, CommandOption> {
 // Use this to safely index an argument and conveniently return the error if the argument does not
 // exist.
 fn get_arg<I>(
-    args: &Vec<String>,
+    args: &[String],
     index: I,
 ) -> Result<&<I as SliceIndex<[String]>>::Output, CommandError>
 where
@@ -422,7 +422,7 @@ impl CommandHandler {
     }
 
     /// Entry point for command and arguments
-    pub fn process_cmd_line(&mut self, command: &str, args: &Vec<String>) -> bool {
+    pub fn process_cmd_line(&mut self, command: &str, args: &[String]) -> bool {
         // Ignore empty line
         match command {
             "" => false,
@@ -463,7 +463,7 @@ impl CommandHandler {
         .into()
     }
 
-    fn cmd_help(&mut self, args: &Vec<String>) -> CommandResult {
+    fn cmd_help(&mut self, args: &[String]) -> CommandResult {
         if let Some(command) = args.first() {
             match self.command_options.get(command) {
                 Some(cmd) => {
@@ -477,7 +477,7 @@ impl CommandHandler {
                 }
                 None => {
                     println!("'{}' is an invalid command!", command);
-                    self.cmd_help(&vec![]).ok();
+                    self.cmd_help(&[]).ok();
                 }
             }
         } else {
@@ -489,11 +489,11 @@ impl CommandHandler {
 
             // Header
             println!(
-                "\n{}\n{}\n{}\n{}",
+                "\n{}\n{}\n+{}+\n{}",
                 equal_bar,
                 wrap_help_text("Help Menu", MAX_MENU_CHAR_WIDTH, 2),
                 // Minus bar
-                format!("+{}+", BAR2_CHAR.repeat(MAX_MENU_CHAR_WIDTH)),
+                BAR2_CHAR.repeat(MAX_MENU_CHAR_WIDTH),
                 empty_bar
             );
 
@@ -514,7 +514,7 @@ impl CommandHandler {
         Ok(())
     }
 
-    fn cmd_adapter(&mut self, args: &Vec<String>) -> CommandResult {
+    fn cmd_adapter(&mut self, args: &[String]) -> CommandResult {
         if !self.lock_context().manager_dbus.get_floss_enabled() {
             return Err("Floss is not enabled. First run, `floss enable`".into());
         }
@@ -665,7 +665,7 @@ impl CommandHandler {
         Ok(())
     }
 
-    fn cmd_get_address(&mut self, _args: &Vec<String>) -> CommandResult {
+    fn cmd_get_address(&mut self, _args: &[String]) -> CommandResult {
         if !self.lock_context().adapter_ready {
             return Err(self.adapter_not_ready());
         }
@@ -675,7 +675,7 @@ impl CommandHandler {
         Ok(())
     }
 
-    fn cmd_discovery(&mut self, args: &Vec<String>) -> CommandResult {
+    fn cmd_discovery(&mut self, args: &[String]) -> CommandResult {
         if !self.lock_context().adapter_ready {
             return Err(self.adapter_not_ready());
         }
@@ -695,7 +695,7 @@ impl CommandHandler {
         Ok(())
     }
 
-    fn cmd_battery(&mut self, args: &Vec<String>) -> CommandResult {
+    fn cmd_battery(&mut self, args: &[String]) -> CommandResult {
         if !self.lock_context().adapter_ready {
             return Err(self.adapter_not_ready());
         }
@@ -766,7 +766,7 @@ impl CommandHandler {
         Ok(())
     }
 
-    fn cmd_bond(&mut self, args: &Vec<String>) -> CommandResult {
+    fn cmd_bond(&mut self, args: &[String]) -> CommandResult {
         if !self.lock_context().adapter_ready {
             return Err(self.adapter_not_ready());
         }
@@ -825,7 +825,7 @@ impl CommandHandler {
         Ok(())
     }
 
-    fn cmd_device(&mut self, args: &Vec<String>) -> CommandResult {
+    fn cmd_device(&mut self, args: &[String]) -> CommandResult {
         if !self.lock_context().adapter_ready {
             return Err(self.adapter_not_ready());
         }
@@ -1055,7 +1055,7 @@ impl CommandHandler {
         Ok(())
     }
 
-    fn cmd_floss(&mut self, args: &Vec<String>) -> CommandResult {
+    fn cmd_floss(&mut self, args: &[String]) -> CommandResult {
         let command = get_arg(args, 0)?;
 
         match &command[..] {
@@ -1079,7 +1079,7 @@ impl CommandHandler {
         Ok(())
     }
 
-    fn cmd_gatt(&mut self, args: &Vec<String>) -> CommandResult {
+    fn cmd_gatt(&mut self, args: &[String]) -> CommandResult {
         if !self.lock_context().adapter_ready {
             return Err(self.adapter_not_ready());
         }
@@ -1220,7 +1220,7 @@ impl CommandHandler {
             }
             "set-auth-req" => {
                 let flag = match &get_arg(args, 1)?[..] {
-                    "NONE" => AuthReq::NONE,
+                    "NONE" => AuthReq::NoEnc,
                     "EncNoMitm" => AuthReq::EncNoMitm,
                     "EncMitm" => AuthReq::EncMitm,
                     "SignedNoMitm" => AuthReq::SignedNoMitm,
@@ -1531,7 +1531,7 @@ impl CommandHandler {
         Ok(())
     }
 
-    fn cmd_le_scan(&mut self, args: &Vec<String>) -> CommandResult {
+    fn cmd_le_scan(&mut self, args: &[String]) -> CommandResult {
         if !self.lock_context().adapter_ready {
             return Err(self.adapter_not_ready());
         }
@@ -1598,7 +1598,7 @@ impl CommandHandler {
 
     // TODO(b/233128828): More options will be implemented to test BLE advertising.
     // Such as setting advertising parameters, starting multiple advertising sets, etc.
-    fn cmd_advertise(&mut self, args: &Vec<String>) -> CommandResult {
+    fn cmd_advertise(&mut self, args: &[String]) -> CommandResult {
         if !self.lock_context().adapter_ready {
             return Err(self.adapter_not_ready());
         }
@@ -1728,7 +1728,7 @@ impl CommandHandler {
         Ok(())
     }
 
-    fn cmd_sdp(&mut self, args: &Vec<String>) -> CommandResult {
+    fn cmd_sdp(&mut self, args: &[String]) -> CommandResult {
         if !self.lock_context().adapter_ready {
             return Err(self.adapter_not_ready());
         }
@@ -1753,7 +1753,7 @@ impl CommandHandler {
         Ok(())
     }
 
-    fn cmd_socket(&mut self, args: &Vec<String>) -> CommandResult {
+    fn cmd_socket(&mut self, args: &[String]) -> CommandResult {
         if !self.lock_context().adapter_ready {
             return Err(self.adapter_not_ready());
         }
@@ -1972,7 +1972,7 @@ impl CommandHandler {
         Ok(())
     }
 
-    fn cmd_hid(&mut self, args: &Vec<String>) -> CommandResult {
+    fn cmd_hid(&mut self, args: &[String]) -> CommandResult {
         if !self.context.lock().unwrap().adapter_ready {
             return Err(self.adapter_not_ready());
         }
@@ -2035,7 +2035,7 @@ impl CommandHandler {
         self.command_options.values().flat_map(|cmd| cmd.rules.clone()).collect()
     }
 
-    fn cmd_list_devices(&mut self, args: &Vec<String>) -> CommandResult {
+    fn cmd_list_devices(&mut self, args: &[String]) -> CommandResult {
         if !self.lock_context().adapter_ready {
             return Err(self.adapter_not_ready());
         }
@@ -2073,7 +2073,7 @@ impl CommandHandler {
         Ok(())
     }
 
-    fn cmd_telephony(&mut self, args: &Vec<String>) -> CommandResult {
+    fn cmd_telephony(&mut self, args: &[String]) -> CommandResult {
         if !self.context.lock().unwrap().adapter_ready {
             return Err(self.adapter_not_ready());
         }
@@ -2297,7 +2297,7 @@ impl CommandHandler {
         Ok(())
     }
 
-    fn cmd_qa(&mut self, args: &Vec<String>) -> CommandResult {
+    fn cmd_qa(&mut self, args: &[String]) -> CommandResult {
         if !self.context.lock().unwrap().adapter_ready {
             return Err(self.adapter_not_ready());
         }
@@ -2324,7 +2324,7 @@ impl CommandHandler {
         Ok(())
     }
 
-    fn cmd_media(&mut self, args: &Vec<String>) -> CommandResult {
+    fn cmd_media(&mut self, args: &[String]) -> CommandResult {
         if !self.context.lock().unwrap().adapter_ready {
             return Err(self.adapter_not_ready());
         }
@@ -2341,7 +2341,7 @@ impl CommandHandler {
         Ok(())
     }
 
-    fn cmd_dumpsys(&mut self, _args: &Vec<String>) -> CommandResult {
+    fn cmd_dumpsys(&mut self, _args: &[String]) -> CommandResult {
         if !self.lock_context().adapter_ready {
             return Err(self.adapter_not_ready());
         }

@@ -831,7 +831,8 @@ tBTM_STATUS btm_sec_bond_by_transport(const RawAddress& bd_addr,
        * -> RNR (to learn if peer is 2.1)
        * RNR when no ACL causes HCI_RMT_HOST_SUP_FEAT_NOTIFY_EVT */
       btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_GET_REM_NAME);
-      status = BTM_ReadRemoteDeviceName(bd_addr, NULL, BT_TRANSPORT_BR_EDR);
+      status = get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
+          bd_addr, NULL, BT_TRANSPORT_BR_EDR);
     } else {
       /* We are accepting connection request from peer */
       btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_WAIT_PIN_REQ);
@@ -2315,8 +2316,10 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
 
   if (p_dev_rec == nullptr) {
     log::debug(
-        "Remote read request complete for unknown device pairing_state:{} "
+        "Remote read request complete for unknown device peer:{} "
+        "pairing_state:{} "
         "status:{} name:{}",
+        (p_bd_addr) ? ADDRESS_TO_LOGGABLE_CSTR(*p_bd_addr) : "null",
         tBTM_SEC_CB::btm_pair_state_descr(btm_sec_cb.pairing_state),
         hci_status_code_text(status), reinterpret_cast<char const*>(p_bd_name));
 
@@ -2325,7 +2328,6 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
     return;
   }
 
-  uint8_t old_sec_state = p_dev_rec->sec_rec.sec_state;
   if (status == HCI_SUCCESS) {
     log::debug(
         "Remote read request complete for known device pairing_state:{} "
@@ -2351,6 +2353,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
     p_dev_rec->sec_bd_name[0] = 0;
   }
 
+  uint8_t old_sec_state = p_dev_rec->sec_rec.sec_state;
   if (p_dev_rec->sec_rec.sec_state == BTM_SEC_STATE_GETTING_NAME)
     p_dev_rec->sec_rec.sec_state = BTM_SEC_STATE_IDLE;
 
@@ -2449,8 +2452,9 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
       }
     } else {
       log::warn("wrong BDA, retry with pairing BDA");
-      if (BTM_ReadRemoteDeviceName(btm_sec_cb.pairing_bda, NULL,
-                                   BT_TRANSPORT_BR_EDR) != BTM_CMD_STARTED) {
+      if (get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
+              btm_sec_cb.pairing_bda, NULL, BT_TRANSPORT_BR_EDR) !=
+          BTM_CMD_STARTED) {
         log::error("failed to start remote name request");
         NotifyBondingChange(*p_dev_rec, HCI_ERR_MEMORY_FULL);
       };
@@ -3692,8 +3696,8 @@ void btm_sec_connected(const RawAddress& bda, uint16_t handle,
             /* remote device name is unknowm, start getting remote name first */
 
             btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_GET_REM_NAME);
-            if (BTM_ReadRemoteDeviceName(p_dev_rec->bd_addr, NULL,
-                                         BT_TRANSPORT_BR_EDR) !=
+            if (get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
+                    p_dev_rec->bd_addr, NULL, BT_TRANSPORT_BR_EDR) !=
                 BTM_CMD_STARTED) {
               log::error("cannot read remote name");
               btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_IDLE);
@@ -3727,8 +3731,8 @@ void btm_sec_connected(const RawAddress& bda, uint16_t handle,
       if (BTM_SEC_IS_SM4_UNKNOWN(p_dev_rec->sm4)) {
         /* Try again: RNR when no ACL causes HCI_RMT_HOST_SUP_FEAT_NOTIFY_EVT */
         btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_GET_REM_NAME);
-        if (BTM_ReadRemoteDeviceName(bda, NULL, BT_TRANSPORT_BR_EDR) !=
-            BTM_CMD_STARTED) {
+        if (get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
+                bda, NULL, BT_TRANSPORT_BR_EDR) != BTM_CMD_STARTED) {
           log::error("cannot read remote name");
           btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_IDLE);
         }

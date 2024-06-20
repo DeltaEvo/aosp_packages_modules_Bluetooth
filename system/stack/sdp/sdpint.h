@@ -178,7 +178,7 @@ typedef uint8_t tSDP_DISC_WAIT;
 
 /* Define the SDP Connection Control Block */
 struct tCONN_CB {
-  uint8_t con_state;
+  tSDP_STATE con_state;
   uint8_t con_flags;
 
   RawAddress device_address;

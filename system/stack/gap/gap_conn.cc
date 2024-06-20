@@ -441,10 +441,10 @@ static bool gap_try_write_queued_data(tGAP_CCB* p_ccb) {
       status = L2CA_DataWrite(p_ccb->connection_id, p_buf);
     }
 
-    if (status == tL2CAP_DW_RESULT::L2CAP_DW_CONGESTED) {
+    if (status == tL2CAP_DW_RESULT::CONGESTED) {
       p_ccb->is_congested = true;
       return true;
-    } else if (status != tL2CAP_DW_RESULT::L2CAP_DW_SUCCESS)
+    } else if (status != tL2CAP_DW_RESULT::SUCCESS)
       return false;
   }
   return true;

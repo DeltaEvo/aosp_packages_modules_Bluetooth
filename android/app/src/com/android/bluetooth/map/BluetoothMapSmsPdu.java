@@ -33,10 +33,12 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.List;
 import java.util.Random;
 
 // Next tag value for ContentProfileErrorReportUtils.report(): 10
@@ -378,13 +380,12 @@ public class BluetoothMapSmsPdu {
             Log.v(TAG, "userDataMsgOffset:" + mUserDataMsgOffset);
         }
 
-        private void gsmWriteDate(ByteArrayOutputStream header, long time)
-                throws UnsupportedEncodingException {
+        private void gsmWriteDate(ByteArrayOutputStream header, long time) {
             SimpleDateFormat format = new SimpleDateFormat("yyMMddHHmmss");
             Date date = new Date(time);
             String timeStr = format.format(date); // Format to YYMMDDTHHMMSS UTC time
             Log.v(TAG, "Generated time string: " + timeStr);
-            byte[] timeChars = timeStr.getBytes("US-ASCII");
+            byte[] timeChars = timeStr.getBytes(StandardCharsets.US_ASCII);
 
             for (int i = 0, n = timeStr.length(); i < n; i += 2) {
                 header.write(
@@ -522,8 +523,7 @@ public class BluetoothMapSmsPdu {
         return sConcatenatedRef;
     }
 
-    public static ArrayList<SmsPdu> getSubmitPdus(
-            Context context, String messageText, String address) {
+    public static List<SmsPdu> getSubmitPdus(Context context, String messageText, String address) {
         /* Use the generic GSM/CDMA SMS Message functionality within Android to generate the
          * SMS PDU's as once generated to send the SMS message.
          */
@@ -540,8 +540,8 @@ public class BluetoothMapSmsPdu {
         int languageShiftTable;
         int refNumber = getNextConcatenatedRef() & 0x00FF;
         SmsManager smsMng = SmsManager.getDefault();
-        ArrayList<String> smsFragments = smsMng.divideMessage(messageText);
-        ArrayList<SmsPdu> pdus = new ArrayList<SmsPdu>(msgCount);
+        List<String> smsFragments = smsMng.divideMessage(messageText);
+        List<SmsPdu> pdus = new ArrayList<>(msgCount);
         byte[] data;
 
         // Default to GSM, as this code should not be used, if we neither have CDMA not GSM.
@@ -592,9 +592,9 @@ public class BluetoothMapSmsPdu {
      * @param address The originator address.
      * @param date The delivery time stamp.
      */
-    public static ArrayList<SmsPdu> getDeliverPdus(
+    public static List<SmsPdu> getDeliverPdus(
             Context context, String messageText, String address, long date) {
-        ArrayList<SmsPdu> deliverPdus = getSubmitPdus(context, messageText, address);
+        List<SmsPdu> deliverPdus = getSubmitPdus(context, messageText, address);
 
         /*
          * For CDMA the only difference between deliver and submit pdus are the messageType,
@@ -826,7 +826,7 @@ public class BluetoothMapSmsPdu {
 
     private static int[] getTableFromByteArray(byte[] data) {
         ByteArrayInputStream inStream = new ByteArrayInputStream(data);
-        /** tableValue[0]: languageTable tableValue[1]: languageShiftTable */
+        /* tableValue[0]: languageTable tableValue[1]: languageShiftTable */
         int[] tableValue = new int[2];
         while (inStream.available() > 0) {
             int id = inStream.read();

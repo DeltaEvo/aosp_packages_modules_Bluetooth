@@ -86,7 +86,7 @@ public class BluetoothOppManager {
 
     @VisibleForTesting String mMimeTypeOfSendingFiles;
 
-    @VisibleForTesting ArrayList<Uri> mUrisOfSendingFiles;
+    @VisibleForTesting List<Uri> mUrisOfSendingFiles;
 
     private boolean mIsHandoverInitiated;
 
@@ -104,7 +104,7 @@ public class BluetoothOppManager {
 
     private static final String MULTIPLE_FLAG = "MULTIPLE_FLAG";
 
-    private static final String ARRAYLIST_ITEM_SEPERATOR = ";";
+    private static final String ARRAYLIST_ITEM_SEPARATOR = ";";
 
     @VisibleForTesting static final int ALLOWED_INSERT_SHARE_THREAD_NUMBER = 3;
 
@@ -221,7 +221,7 @@ public class BluetoothOppManager {
         String strUris = settings.getString(FILE_URIS, null);
         mUrisOfSendingFiles = new ArrayList<Uri>();
         if (strUris != null) {
-            String[] splitUri = strUris.split(ARRAYLIST_ITEM_SEPERATOR);
+            String[] splitUri = strUris.split(ARRAYLIST_ITEM_SEPARATOR);
             for (int i = 0; i < splitUri.length; i++) {
                 mUrisOfSendingFiles.add(Uri.parse(splitUri[i]));
                 Log.v(TAG, "Uri in batch:  " + Uri.parse(splitUri[i]));
@@ -243,7 +243,7 @@ public class BluetoothOppManager {
             for (int i = 0, count = mUrisOfSendingFiles.size(); i < count; i++) {
                 Uri uriContent = mUrisOfSendingFiles.get(i);
                 sb.append(uriContent);
-                sb.append(ARRAYLIST_ITEM_SEPERATOR);
+                sb.append(ARRAYLIST_ITEM_SEPARATOR);
             }
             String strUris = sb.toString();
             editor.putString(FILE_URIS, strUris);
@@ -280,7 +280,7 @@ public class BluetoothOppManager {
     }
 
     public void saveSendingFileInfo(
-            String mimeType, ArrayList<Uri> uris, boolean isHandover, boolean fromExternal)
+            String mimeType, List<Uri> uris, boolean isHandover, boolean fromExternal)
             throws IllegalArgumentException {
         synchronized (BluetoothOppManager.this) {
             mMultipleFlag = true;
@@ -406,7 +406,7 @@ public class BluetoothOppManager {
 
         private final String mTypeOfMultipleFiles;
 
-        private final ArrayList<Uri> mUris;
+        private final List<Uri> mUris;
 
         private final boolean mIsMultiple;
 
@@ -418,7 +418,7 @@ public class BluetoothOppManager {
                 String typeOfSingleFile,
                 String uri,
                 String typeOfMultipleFiles,
-                ArrayList<Uri> uris,
+                List<Uri> uris,
                 boolean handoverInitiated) {
             super("Insert ShareInfo Thread");
             this.mRemoteDevice = device;

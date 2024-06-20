@@ -43,6 +43,7 @@
 #include "stack/include/bt_types.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_ble_api.h"
+#include "stack/include/btm_client_interface.h"
 
 namespace bluetooth {
 namespace bqr {
@@ -849,8 +850,8 @@ static void btif_get_remote_version(const RawAddress& bd_addr,
   uint16_t tmp_lmp_subver = 0;
   tBTM_STATUS status;
 
-  status = BTM_ReadRemoteVersion(bd_addr, &tmp_lmp_ver, &tmp_manufacturer,
-                                 &tmp_lmp_subver);
+  status = get_btm_client_interface().peer.BTM_ReadRemoteVersion(
+      bd_addr, &tmp_lmp_ver, &tmp_manufacturer, &tmp_lmp_subver);
   if (status == BTM_SUCCESS &&
       (tmp_lmp_ver || tmp_manufacturer || tmp_lmp_subver)) {
     lmp_version = tmp_lmp_ver;

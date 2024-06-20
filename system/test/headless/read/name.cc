@@ -20,9 +20,9 @@
 
 #include <future>
 
-#include "os/log.h"        // android log only
-#include "stack/include/btm_api.h"
-#include "stack/include/btm_api_types.h"
+#include "stack/btm/neighbor_inquiry.h"
+#include "stack/include/bt_name.h"
+#include "stack/include/btm_client_interface.h"
 #include "test/headless/get_options.h"
 #include "test/headless/headless.h"
 #include "types/raw_address.h"
@@ -52,8 +52,9 @@ int bluetooth::test::headless::Name::Run() {
 
     auto future = promise_.get_future();
 
-    tBTM_STATUS status = BTM_ReadRemoteDeviceName(
-        raw_address, &RemoteNameCallback, BT_TRANSPORT_BR_EDR);
+    tBTM_STATUS status =
+        get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
+            raw_address, &RemoteNameCallback, BT_TRANSPORT_BR_EDR);
     if (status != BTM_CMD_STARTED) {
       fprintf(stdout, "Failure to start read remote device\n");
       return -1;

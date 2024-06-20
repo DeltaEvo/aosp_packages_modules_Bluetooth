@@ -51,7 +51,7 @@ impl BluetoothManager {
         } else {
             warn!("Presence removed: {}", hci);
         }
-        for (_, callback) in &mut self.callbacks {
+        for callback in self.callbacks.values_mut() {
             callback.on_hci_device_changed(hci.to_i32(), present);
         }
     }
@@ -63,13 +63,13 @@ impl BluetoothManager {
             warn!("Stopped {}", hci);
         }
 
-        for (_, callback) in &mut self.callbacks {
+        for callback in self.callbacks.values_mut() {
             callback.on_hci_enabled_changed(hci.to_i32(), enabled);
         }
     }
 
     pub(crate) fn callback_default_adapter_change(&mut self, hci: VirtualHciIndex) {
-        for (_, callback) in &mut self.callbacks {
+        for callback in self.callbacks.values_mut() {
             callback.on_default_adapter_changed(hci.to_i32());
         }
     }
@@ -272,14 +272,9 @@ fn floss_have_le_devices() -> bool {
 impl IBluetoothExperimental for BluetoothManager {
     fn set_ll_privacy(&mut self, enabled: bool) -> bool {
         warn!("Set Floss LL Privacy={}", enabled);
-        let current_status = match config_util::read_floss_ll_privacy_enabled() {
-            Ok(true) => true,
-            _ => false,
-        };
-        let current_address_status = match config_util::read_floss_address_privacy_enabled() {
-            Ok(true) => true,
-            _ => false,
-        };
+        let current_status = matches!(config_util::read_floss_ll_privacy_enabled(), Ok(true));
+        let current_address_status =
+            matches!(config_util::read_floss_address_privacy_enabled(), Ok(true));
 
         let mut need_restart = current_status != enabled;
 

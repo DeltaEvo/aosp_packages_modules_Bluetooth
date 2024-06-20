@@ -18,6 +18,8 @@ package com.android.bluetooth.avrcpcontroller;
 
 import android.util.Log;
 
+import com.google.common.base.Ascii;
+
 import java.util.HashSet;
 
 /**
@@ -51,7 +53,7 @@ public class BipTransformation {
     public BipTransformation(String transformations) {
         if (transformations == null) return;
 
-        transformations = transformations.trim().toLowerCase();
+        transformations = Ascii.toLowerCase(transformations.trim());
         String[] tokens = transformations.split(" ");
         for (String token : tokens) {
             switch (token) {
