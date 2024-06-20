@@ -130,6 +130,20 @@ void btm_ble_stop_inquiry(void);
 
 using namespace bluetooth;
 using bluetooth::Uuid;
+using bluetooth::hci::CommandCompleteView;
+using bluetooth::hci::CommandStatusView;
+using bluetooth::hci::ErrorCode;
+using bluetooth::hci::EventCode;
+using bluetooth::hci::EventView;
+using bluetooth::hci::ExtendedInquiryResultView;
+using bluetooth::hci::GapDataType;
+using bluetooth::hci::InquiryBuilder;
+using bluetooth::hci::InquiryCancelBuilder;
+using bluetooth::hci::InquiryCancelCompleteView;
+using bluetooth::hci::InquiryCompleteView;
+using bluetooth::hci::InquiryResultView;
+using bluetooth::hci::InquiryResultWithRssiView;
+using bluetooth::hci::Lap;
 
 /* 3 second timeout waiting for responses */
 #define BTM_INQ_REPLY_TIMEOUT_MS (3 * 1000)
@@ -241,7 +255,7 @@ static const uint8_t* btm_eir_get_uuid_list(const uint8_t* p_eir, size_t eir_len
                                             uint8_t* p_num_uuid, uint8_t* p_uuid_list_type);
 
 static void btm_process_cancel_complete(tHCI_STATUS status, uint8_t mode);
-static void on_incoming_hci_event(bluetooth::hci::EventView event);
+static void on_incoming_hci_event(EventView event);
 static bool is_inquery_by_rssi() { return osi_property_get_bool(PROPERTY_INQ_BY_RSSI, false); }
 /*******************************************************************************
  *
@@ -574,10 +588,9 @@ void BTM_CancelInquiry(void) {
 
     if ((btm_cb.btm_inq_vars.inqparms.mode & BTM_GENERAL_INQUIRY) != 0) {
       bluetooth::shim::GetHciLayer()->EnqueueCommand(
-              bluetooth::hci::InquiryCancelBuilder::Create(),
-              get_main_thread()->BindOnce([](bluetooth::hci::CommandCompleteView complete_view) {
-                bluetooth::hci::check_complete<bluetooth::hci::InquiryCancelCompleteView>(
-                        complete_view);
+              InquiryCancelBuilder::Create(),
+              get_main_thread()->BindOnce([](CommandCompleteView complete_view) {
+                check_complete<InquiryCancelCompleteView>(complete_view);
                 btm_process_cancel_complete(HCI_SUCCESS, BTM_GENERAL_INQUIRY);
               }));
     }
@@ -678,21 +691,17 @@ tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb, tBTM_CMPL_CB* p_
 
   if (btm_cb.btm_inq_vars.registered_for_hci_events == false) {
     bluetooth::shim::GetHciLayer()->RegisterEventHandler(
-            bluetooth::hci::EventCode::INQUIRY_COMPLETE,
-            get_main_thread()->Bind(
-                    [](bluetooth::hci::EventView event) { on_incoming_hci_event(event); }));
+            EventCode::INQUIRY_COMPLETE,
+            get_main_thread()->Bind([](EventView event) { on_incoming_hci_event(event); }));
     bluetooth::shim::GetHciLayer()->RegisterEventHandler(
-            bluetooth::hci::EventCode::INQUIRY_RESULT,
-            get_main_thread()->Bind(
-                    [](bluetooth::hci::EventView event) { on_incoming_hci_event(event); }));
+            EventCode::INQUIRY_RESULT,
+            get_main_thread()->Bind([](EventView event) { on_incoming_hci_event(event); }));
     bluetooth::shim::GetHciLayer()->RegisterEventHandler(
-            bluetooth::hci::EventCode::INQUIRY_RESULT_WITH_RSSI,
-            get_main_thread()->Bind(
-                    [](bluetooth::hci::EventView event) { on_incoming_hci_event(event); }));
+            EventCode::INQUIRY_RESULT_WITH_RSSI,
+            get_main_thread()->Bind([](EventView event) { on_incoming_hci_event(event); }));
     bluetooth::shim::GetHciLayer()->RegisterEventHandler(
-            bluetooth::hci::EventCode::EXTENDED_INQUIRY_RESULT,
-            get_main_thread()->Bind(
-                    [](bluetooth::hci::EventView event) { on_incoming_hci_event(event); }));
+            EventCode::EXTENDED_INQUIRY_RESULT,
+            get_main_thread()->Bind([](EventView event) { on_incoming_hci_event(event); }));
 
     btm_cb.btm_inq_vars.registered_for_hci_events = true;
   }
@@ -744,20 +753,19 @@ tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb, tBTM_CMPL_CB* p_
 
   btm_init_inq_result_flt();
 
-  bluetooth::hci::Lap lap;
+  Lap lap;
   lap.lap_ = general_inq_lap[2];
 
   // TODO: Register for the inquiry interface and use that
   bluetooth::shim::GetHciLayer()->EnqueueCommand(
-          bluetooth::hci::InquiryBuilder::Create(lap, btm_cb.btm_inq_vars.inqparms.duration, 0),
-          get_main_thread()->BindOnce([](bluetooth::hci::CommandStatusView status_view) {
+          InquiryBuilder::Create(lap, btm_cb.btm_inq_vars.inqparms.duration, 0),
+          get_main_thread()->BindOnce([](CommandStatusView status_view) {
             log::assert_that(status_view.IsValid(), "assert failed: status_view.IsValid()");
             auto status = status_view.GetStatus();
-            if (status == bluetooth::hci::ErrorCode::SUCCESS) {
+            if (status == ErrorCode::SUCCESS) {
               BTIF_dm_report_inquiry_status_change(tBTM_INQUIRY_STATE::BTM_INQUIRY_STARTED);
             } else {
-              log::info("Inquiry failed to start status: {}",
-                        bluetooth::hci::ErrorCodeText(status));
+              log::info("Inquiry failed to start status: {}", ErrorCodeText(status));
             }
           }));
 
@@ -1254,7 +1262,7 @@ tINQ_DB_ENT* btm_inq_db_new(const RawAddress& p_bda, bool is_ble) {
  * Returns          void
  *
  ******************************************************************************/
-static void btm_process_inq_results_standard(bluetooth::hci::EventView event) {
+static void btm_process_inq_results_standard(EventView event) {
   RawAddress bda;
   tINQ_DB_ENT* p_i;
   tBTM_INQ_RESULTS* p_cur = NULL;
@@ -1276,7 +1284,7 @@ static void btm_process_inq_results_standard(bluetooth::hci::EventView event) {
     return;
   }
 
-  auto standard_view = bluetooth::hci::InquiryResultView::Create(event);
+  auto standard_view = InquiryResultView::Create(event);
   log::assert_that(standard_view.IsValid(), "assert failed: standard_view.IsValid()");
   auto responses = standard_view.GetResponses();
 
@@ -1370,7 +1378,7 @@ static void btm_process_inq_results_standard(bluetooth::hci::EventView event) {
  * Returns          void
  *
  ******************************************************************************/
-static void btm_process_inq_results_rssi(bluetooth::hci::EventView event) {
+static void btm_process_inq_results_rssi(EventView event) {
   RawAddress bda;
   tINQ_DB_ENT* p_i;
   tBTM_INQ_RESULTS* p_cur = NULL;
@@ -1395,7 +1403,7 @@ static void btm_process_inq_results_rssi(bluetooth::hci::EventView event) {
     return;
   }
 
-  auto rssi_view = bluetooth::hci::InquiryResultWithRssiView::Create(event);
+  auto rssi_view = InquiryResultWithRssiView::Create(event);
   log::assert_that(rssi_view.IsValid(), "assert failed: rssi_view.IsValid()");
   auto responses = rssi_view.GetResponses();
 
@@ -1513,7 +1521,7 @@ static void btm_process_inq_results_rssi(bluetooth::hci::EventView event) {
  * Returns          void
  *
  ******************************************************************************/
-static void btm_process_inq_results_extended(bluetooth::hci::EventView event) {
+static void btm_process_inq_results_extended(EventView event) {
   RawAddress bda;
   tINQ_DB_ENT* p_i;
   tBTM_INQ_RESULTS* p_cur = NULL;
@@ -1537,7 +1545,7 @@ static void btm_process_inq_results_extended(bluetooth::hci::EventView event) {
     return;
   }
 
-  auto extended_view = bluetooth::hci::ExtendedInquiryResultView::Create(event);
+  auto extended_view = ExtendedInquiryResultView::Create(event);
   log::assert_that(extended_view.IsValid(), "assert failed: extended_view.IsValid()");
 
   btm_cb.neighbor.classic_inquiry.results++;
@@ -1644,7 +1652,7 @@ static void btm_process_inq_results_extended(bluetooth::hci::EventView event) {
       data.reserve(HCI_EXT_INQ_RESPONSE_LEN);
       bluetooth::packet::BitInserter bi(data);
       for (const auto& eir : extended_view.GetExtendedInquiryResponse()) {
-        if (eir.data_type_ != static_cast<bluetooth::hci::GapDataType>(0)) {
+        if (eir.data_type_ != static_cast<GapDataType>(0)) {
           eir.Serialize(bi);
         }
       }
@@ -2382,8 +2390,8 @@ void btm_set_eir_uuid(const uint8_t* p_eir, tBTM_INQ_RESULTS* p_results) {
   }
 }
 
-static void on_inquiry_complete(bluetooth::hci::EventView event) {
-  auto complete = bluetooth::hci::InquiryCompleteView::Create(event);
+static void on_inquiry_complete(EventView event) {
+  auto complete = InquiryCompleteView::Create(event);
   log::assert_that(complete.IsValid(), "assert failed: complete.IsValid()");
   auto status = to_hci_status_code(static_cast<uint8_t>(complete.GetStatus()));
 
@@ -2400,24 +2408,24 @@ static void on_inquiry_complete(bluetooth::hci::EventView event) {
  * Returns          None
  *
  ******************************************************************************/
-static void on_incoming_hci_event(bluetooth::hci::EventView event) {
+static void on_incoming_hci_event(EventView event) {
   log::assert_that(event.IsValid(), "assert failed: event.IsValid()");
   auto event_code = event.GetEventCode();
   switch (event_code) {
-    case bluetooth::hci::EventCode::INQUIRY_COMPLETE:
+    case EventCode::INQUIRY_COMPLETE:
       on_inquiry_complete(event);
       break;
-    case bluetooth::hci::EventCode::INQUIRY_RESULT:
+    case EventCode::INQUIRY_RESULT:
       btm_process_inq_results_standard(event);
       break;
-    case bluetooth::hci::EventCode::INQUIRY_RESULT_WITH_RSSI:
+    case EventCode::INQUIRY_RESULT_WITH_RSSI:
       btm_process_inq_results_rssi(event);
       break;
-    case bluetooth::hci::EventCode::EXTENDED_INQUIRY_RESULT:
+    case EventCode::EXTENDED_INQUIRY_RESULT:
       btm_process_inq_results_extended(event);
       break;
     default:
-      log::warn("Dropping unhandled event: {}", bluetooth::hci::EventCodeText(event_code));
+      log::warn("Dropping unhandled event: {}", EventCodeText(event_code));
   }
 }
 
