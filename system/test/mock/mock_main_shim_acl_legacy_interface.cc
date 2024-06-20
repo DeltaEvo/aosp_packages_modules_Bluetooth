@@ -60,6 +60,7 @@ acl_interface_t acl_interface_ = {
     .link.classic.on_role_discovery_complete = nullptr,
 
     .link.le.on_connection_update = nullptr,
+    .link.le.on_parameter_update_request = nullptr,
     .link.le.on_data_length_change = nullptr,
     .link.le.on_read_remote_version_information_complete = nullptr,
     .link.le.on_phy_update = nullptr,

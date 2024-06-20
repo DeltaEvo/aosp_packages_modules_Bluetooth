@@ -613,21 +613,15 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
       return;
     }
 
-    auto handle = request_view.GetConnectionHandle();
-    connections.execute(handle, [=, this](LeConnectionManagementCallbacks* /* callbacks */) {
-      // TODO: this is blindly accepting any parameters, just so we don't hang connection
-      // have proper parameter negotiation
-      le_acl_connection_interface_->EnqueueCommand(
-          LeRemoteConnectionParameterRequestReplyBuilder::Create(
-              handle,
+    connections.execute(
+        request_view.GetConnectionHandle(),
+        [request_view](LeConnectionManagementCallbacks* callbacks) {
+          callbacks->OnParameterUpdateRequest(
               request_view.GetIntervalMin(),
               request_view.GetIntervalMax(),
               request_view.GetLatency(),
-              request_view.GetTimeout(),
-              0,
-              0),
-          handler_->BindOnce([](CommandCompleteView /* status */) {}));
-    });
+              request_view.GetTimeout());
+        });
   }
 
   void on_le_subrate_change(LeMetaEventView view) {

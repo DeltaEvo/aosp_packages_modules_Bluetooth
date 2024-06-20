@@ -21,6 +21,7 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <future>
 
 #include "common/bidi_queue.h"
 #include "hci/acl_manager/le_connection_callbacks.h"
@@ -1114,6 +1115,13 @@ TEST_F(LeImplWithConnectionTest, on_le_event__DATA_LENGTH_CHANGE) {
 }
 
 TEST_F(LeImplWithConnectionTest, on_le_event__REMOTE_CONNECTION_PARAMETER_REQUEST) {
+  std::promise<void> request_promise;
+  auto request = request_promise.get_future();
+  EXPECT_CALL(
+      connection_management_callbacks_,
+      OnParameterUpdateRequest(kIntervalMin, kIntervalMax, kLatency, kTimeout))
+      .WillOnce([&request_promise]() { request_promise.set_value(); });
+
   // Send a remote connection parameter request
   auto command = hci::LeRemoteConnectionParameterRequestBuilder::Create(
       kHciHandle, kIntervalMin, kIntervalMax, kLatency, kTimeout);
@@ -1124,16 +1132,7 @@ TEST_F(LeImplWithConnectionTest, on_le_event__REMOTE_CONNECTION_PARAMETER_REQUES
     le_impl_->on_le_event(view);
   }
 
-  sync_handler();
-
-  auto view = CreateLeConnectionManagementCommandView<LeRemoteConnectionParameterRequestReplyView>(
-      hci_layer_->GetCommand());
-  ASSERT_TRUE(view.IsValid());
-
-  ASSERT_EQ(kIntervalMin, view.GetIntervalMin());
-  ASSERT_EQ(kIntervalMax, view.GetIntervalMax());
-  ASSERT_EQ(kLatency, view.GetLatency());
-  ASSERT_EQ(kTimeout, view.GetTimeout());
+  ASSERT_EQ(std::future_status::ready, request.wait_for(std::chrono::seconds(1)));
 }
 
 // b/260920739

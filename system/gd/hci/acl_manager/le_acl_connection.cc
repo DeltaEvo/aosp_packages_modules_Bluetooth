@@ -59,6 +59,14 @@ class LeAclConnectionTracker : public LeConnectionManagementCallbacks {
     SAVE_OR_CALL(OnConnectionUpdate, hci_status, conn_interval, conn_latency, supervision_timeout)
   }
 
+  void OnParameterUpdateRequest(
+      uint16_t interval_min,
+      uint16_t interval_max,
+      uint16_t latency,
+      uint16_t supervision_timeout) override {
+    SAVE_OR_CALL(OnParameterUpdateRequest, interval_min, interval_max, latency, supervision_timeout)
+  }
+
   void OnDataLengthChange(uint16_t tx_octets, uint16_t tx_time, uint16_t rx_octets, uint16_t rx_time) override {
     SAVE_OR_CALL(OnDataLengthChange, tx_octets, tx_time, rx_octets, rx_time)
   }

@@ -39,6 +39,14 @@ class MockLeConnectionManagementCallbacks : public LeConnectionManagementCallbac
       (override));
   MOCK_METHOD(
       void,
+      OnParameterUpdateRequest,
+      (uint16_t interval_min,
+       uint16_t interval_max,
+       uint16_t latency,
+       uint16_t supervision_timeout),
+      (override));
+  MOCK_METHOD(
+      void,
       OnDataLengthChange,
       (uint16_t tx_octets, uint16_t tx_time, uint16_t rx_octets, uint16_t rx_time),
       (override));
