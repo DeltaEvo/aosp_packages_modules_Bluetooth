@@ -310,7 +310,7 @@ void bta_gatts_delete_service(tBTA_GATTS_SRVC_CB* p_srvc_cb,
     cb_data.srvc_oper.status = GATT_ERROR;
   }
 
-  if (p_rcb->p_cback) (*p_rcb->p_cback)(BTA_GATTS_DELELTE_EVT, &cb_data);
+  if (p_rcb->p_cback) (*p_rcb->p_cback)(BTA_GATTS_DELETE_EVT, &cb_data);
 }
 
 /*******************************************************************************

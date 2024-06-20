@@ -51,6 +51,7 @@ import com.android.internal.annotations.VisibleForTesting;
 
 import com.google.android.mms.pdu.CharacterSets;
 import com.google.android.mms.pdu.PduHeaders;
+import com.google.common.base.Ascii;
 
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
@@ -59,9 +60,11 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 // Next tag value for ContentProfileErrorReportUtils.report(): 15
 public class BluetoothMapContent {
@@ -146,7 +149,7 @@ public class BluetoothMapContent {
                     Mms.MESSAGE_TYPE,
                     PduHeaders.MESSAGE_TYPE_NOTIFICATION_IND);
 
-    public static final String INSERT_ADDRES_TOKEN = "insert-address-token";
+    private static final String INSERT_ADDRESS_TOKEN = "insert-address-token";
 
     private final Context mContext;
     private final ContentResolver mResolver;
@@ -617,7 +620,7 @@ public class BluetoothMapContent {
                                         + " Changing size to 1");
                         size = 1;
                     }
-                    // TODO: Add handling of attachemnt mime types
+                    // TODO: Add handling of attachment mime types
                 }
             } else if (fi.mMsgType == FilterInfo.TYPE_EMAIL) {
                 int attachment = c.getInt(fi.mMessageColAttachment);
@@ -1478,7 +1481,7 @@ public class BluetoothMapContent {
             if (c != null) {
                 if (c.moveToFirst()) {
                     addr = c.getString(colIndex);
-                    if (INSERT_ADDRES_TOKEN.equals(addr)) {
+                    if (INSERT_ADDRESS_TOKEN.equals(addr)) {
                         addr = "";
                     }
                 }
@@ -2948,7 +2951,7 @@ public class BluetoothMapContent {
 
     /**
      * Refreshes the entire list of SMS/MMS conversation version counters. Use it to generate a new
-     * ConvoListVersinoCounter in mSmsMmsConvoListVersion
+     * ConvoListVersionCounter in mSmsMmsConvoListVersion
      *
      * @return true if a list change has been detected
      */
@@ -2965,7 +2968,7 @@ public class BluetoothMapContent {
                 cursor.moveToPosition(-1);
                 synchronized (getSmsMmsConvoList()) {
                     int size = Math.max(getSmsMmsConvoList().size(), cursor.getCount());
-                    HashMap<Long, BluetoothMapConvoListingElement> newList =
+                    Map<Long, BluetoothMapConvoListingElement> newList =
                             new HashMap<Long, BluetoothMapConvoListingElement>(size);
                     while (cursor.moveToNext()) {
                         // TODO: Extract to function, that can be called at listing, which returns
@@ -3069,7 +3072,7 @@ public class BluetoothMapContent {
                 synchronized (getImEmailConvoList()) {
                     int size = Math.max(getImEmailConvoList().size(), imEmailCursor.getCount());
                     boolean convoChanged = false;
-                    HashMap<Long, BluetoothMapConvoListingElement> newList =
+                    Map<Long, BluetoothMapConvoListingElement> newList =
                             new HashMap<Long, BluetoothMapConvoListingElement>(size);
                     while (isValid) {
                         long id = imEmailCursor.getLong(fi.mConvoColConvoId);
@@ -3279,7 +3282,7 @@ public class BluetoothMapContent {
             if (summary != null && cs != null && !cs.equals("UTF-8")) {
                 try {
                     // TODO: Not sure this is how to convert to UTF-8
-                    summary = new String(summary.getBytes(cs), "UTF-8");
+                    summary = new String(summary.getBytes(cs), StandardCharsets.UTF_8);
                 } catch (UnsupportedEncodingException e) {
                     ContentProfileErrorReportUtils.report(
                             BluetoothProfile.MAP,
@@ -3753,7 +3756,7 @@ public class BluetoothMapContent {
             if (c.moveToFirst()) {
                 do {
                     String address = c.getString(c.getColumnIndex(Mms.Addr.ADDRESS));
-                    if (address.equals(INSERT_ADDRES_TOKEN)) {
+                    if (address.equals(INSERT_ADDRESS_TOKEN)) {
                         continue;
                     }
                     Integer type = c.getInt(c.getColumnIndex(Mms.Addr.TYPE));
@@ -3895,36 +3898,26 @@ public class BluetoothMapContent {
                     // according to spec, "charset" should not be set. However, if the attachment
                     // is replaced with a text string, the bMessage now contains text and should
                     // have charset set to UTF-8 according to spec.
-                    if (!part.mContentType.toUpperCase().contains("TEXT")
+                    if (!Ascii.toUpperCase(part.mContentType).contains("TEXT")
                             && !message.getIncludeAttachments()) {
                         StringBuilder sb = new StringBuilder();
-                        try {
-                            part.encodePlainText(sb);
-                            // Each time {@code encodePlainText} is called, it adds {@code "\r\n"}
-                            // to the string. {@code encodePlainText} is called here to replace
-                            // an image with a string, but later on, when we encode the entire
-                            // bMessage in {@link BluetoothMapbMessageMime#encode()},
-                            // {@code encodePlainText} will be called again on this {@code
-                            // MimePart} (as text this time), adding a second {@code "\r\n"}. So
-                            // we remove the extra newline from the end.
-                            int newlineIndex = sb.lastIndexOf("\r\n");
-                            if (newlineIndex != -1) sb.delete(newlineIndex, newlineIndex + 4);
-                            text = sb.toString();
-                            part.mContentType = "text";
-                        } catch (UnsupportedEncodingException e) {
-                            ContentProfileErrorReportUtils.report(
-                                    BluetoothProfile.MAP,
-                                    BluetoothProtoEnums.BLUETOOTH_MAP_CONTENT,
-                                    BluetoothStatsLog
-                                            .BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
-                                    6);
-                            Log.d(TAG, "extractMmsParts", e);
-                        }
+                        part.encodePlainText(sb);
+                        // Each time {@code encodePlainText} is called, it adds {@code "\r\n"}
+                        // to the string. {@code encodePlainText} is called here to replace
+                        // an image with a string, but later on, when we encode the entire
+                        // bMessage in {@link BluetoothMapbMessageMime#encode()},
+                        // {@code encodePlainText} will be called again on this {@code
+                        // MimePart} (as text this time), adding a second {@code "\r\n"}. So
+                        // we remove the extra newline from the end.
+                        int newlineIndex = sb.lastIndexOf("\r\n");
+                        if (newlineIndex != -1) sb.delete(newlineIndex, newlineIndex + 4);
+                        text = sb.toString();
+                        part.mContentType = "text";
                     }
 
                     try {
                         if (text != null) {
-                            part.mData = text.getBytes("UTF-8");
+                            part.mData = text.getBytes(StandardCharsets.UTF_8);
                             part.mCharsetName = "utf-8";
                         } else {
                             part.mData =
@@ -4254,12 +4247,9 @@ public class BluetoothMapContent {
      * @param id the content provider id for the message to fetch.
      * @param appParams The application parameter object received from the client.
      * @return a byte[] containing the utf-8 encoded bMessage to send to the client.
-     * @throws UnsupportedEncodingException if UTF-8 is not supported, which is guaranteed to be
-     *     supported on an android device
      */
     public byte[] getIMMessage(
-            long id, BluetoothMapAppParams appParams, BluetoothMapFolderElement folderElement)
-            throws UnsupportedEncodingException {
+            long id, BluetoothMapAppParams appParams, BluetoothMapFolderElement folderElement) {
         long threadId, folderId;
 
         if (appParams.getCharset() == MAP_MESSAGE_CHARSET_NATIVE) {
@@ -4323,7 +4313,7 @@ public class BluetoothMapContent {
                 MimePart part = message.addMimePart();
                 part.mData =
                         c.getString((c.getColumnIndex(BluetoothMapContract.MessageColumns.BODY)))
-                                .getBytes("UTF-8");
+                                .getBytes(StandardCharsets.UTF_8);
                 part.mCharsetName = "utf-8";
                 part.mContentId = "0";
                 part.mContentType = "text/plain";
@@ -4402,19 +4392,19 @@ public class BluetoothMapContent {
         return this.mRemoteFeatureMask;
     }
 
-    HashMap<Long, BluetoothMapConvoListingElement> getSmsMmsConvoList() {
+    Map<Long, BluetoothMapConvoListingElement> getSmsMmsConvoList() {
         return mMasInstance.getSmsMmsConvoList();
     }
 
-    void setSmsMmsConvoList(HashMap<Long, BluetoothMapConvoListingElement> smsMmsConvoList) {
+    void setSmsMmsConvoList(Map<Long, BluetoothMapConvoListingElement> smsMmsConvoList) {
         mMasInstance.setSmsMmsConvoList(smsMmsConvoList);
     }
 
-    HashMap<Long, BluetoothMapConvoListingElement> getImEmailConvoList() {
+    Map<Long, BluetoothMapConvoListingElement> getImEmailConvoList() {
         return mMasInstance.getImEmailConvoList();
     }
 
-    void setImEmailConvoList(HashMap<Long, BluetoothMapConvoListingElement> imEmailConvoList) {
+    void setImEmailConvoList(Map<Long, BluetoothMapConvoListingElement> imEmailConvoList) {
         mMasInstance.setImEmailConvoList(imEmailConvoList);
     }
 }

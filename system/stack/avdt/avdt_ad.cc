@@ -483,8 +483,8 @@ void avdt_ad_tc_data_ind(AvdtpTransportChannel* p_tbl, BT_HDR* p_buf) {
  *                  AVDT_AD_FAILED, if error
  *
  ******************************************************************************/
-uint8_t avdt_ad_write_req(uint8_t type, AvdtpCcb* p_ccb, AvdtpScb* p_scb,
-                          BT_HDR* p_buf) {
+tL2CAP_DW_RESULT avdt_ad_write_req(uint8_t type, AvdtpCcb* p_ccb,
+                                   AvdtpScb* p_scb, BT_HDR* p_buf) {
   uint8_t tcid;
 
   /* get tcid from type, scb */

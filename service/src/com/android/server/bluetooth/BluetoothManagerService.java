@@ -106,6 +106,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
@@ -134,7 +135,7 @@ class BluetoothManagerService {
     private static final int TIMEOUT_BIND_MS = 4000 * HW_MULTIPLIER;
 
     // Timeout value for synchronous binder call
-    private static final Duration STATE_TIMEOUT = Duration.ofSeconds(4 * HW_MULTIPLIER);
+    private static final Duration STATE_TIMEOUT = Duration.ofSeconds(4L * HW_MULTIPLIER);
 
     // Maximum msec to wait for service restart
     private static final int SERVICE_RESTART_TIME_MS = 400 * HW_MULTIPLIER;
@@ -252,8 +253,10 @@ class BluetoothManagerService {
         }
     }
 
+    @SuppressWarnings("NonApiType")
     private final LinkedList<ActiveLog> mActiveLogs = new LinkedList<>();
-    private final LinkedList<Long> mCrashTimestamps = new LinkedList<>();
+
+    private final List<Long> mCrashTimestamps = new ArrayList<>();
     private int mCrashes = 0;
     private long mLastEnabledTime;
 
@@ -905,7 +908,7 @@ class BluetoothManagerService {
         }
         try {
             return Settings.Global.getInt(
-                            mContentResolver, Settings.Global.BLE_SCAN_ALWAYS_AVAILABLE)
+                            mContentResolver, BleScanSettingListener.BLE_SCAN_ALWAYS_AVAILABLE)
                     != 0;
         } catch (SettingNotFoundException e) {
             // The settings is considered as false by default.
@@ -956,7 +959,7 @@ class BluetoothManagerService {
                 };
 
         mContentResolver.registerContentObserver(
-                Settings.Global.getUriFor(Settings.Global.BLE_SCAN_ALWAYS_AVAILABLE),
+                Settings.Global.getUriFor(BleScanSettingListener.BLE_SCAN_ALWAYS_AVAILABLE),
                 false,
                 contentObserver);
     }
@@ -2215,7 +2218,7 @@ class BluetoothManagerService {
     private void addCrashLog() {
         synchronized (mCrashTimestamps) {
             if (mCrashTimestamps.size() == CRASH_LOG_MAX_SIZE) {
-                mCrashTimestamps.removeFirst();
+                mCrashTimestamps.remove(0);
             }
             mCrashTimestamps.add(System.currentTimeMillis());
             mCrashes++;

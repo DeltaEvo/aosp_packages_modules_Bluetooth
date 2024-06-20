@@ -68,7 +68,7 @@ public class PbapClientService extends ProfileService {
     private static final int MAXIMUM_DEVICES = 10;
 
     @VisibleForTesting
-    Map<BluetoothDevice, PbapClientStateMachine> mPbapClientStateMachineMap =
+    final Map<BluetoothDevice, PbapClientStateMachine> mPbapClientStateMachineMap =
             new ConcurrentHashMap<>();
 
     private static PbapClientService sPbapClientService;

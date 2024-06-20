@@ -165,6 +165,9 @@ cc_library_shared {
     ],
     min_sdk_version: "Tiramisu",
     ldflags: ["-Wl,--allow-multiple-definition"],
+
+    // TODO(b/346919576) Workaround LTO build breakage.
+    lto_O0: true,
 }
 
 cc_library {
@@ -326,8 +329,12 @@ android_app {
             "-Xep:InvalidBlockTag:ERROR",
             "-Xep:InvalidParam:ERROR",
             "-Xep:MockNotUsedInProduction:ERROR",
+            "-Xep:NonApiType:ERROR",
             "-Xep:NonCanonicalType:ERROR",
+            "-Xep:NotJavadoc:ERROR",
             "-Xep:ReturnAtTheEndOfVoidFunction:ERROR",
+            "-Xep:StringCaseLocaleUsage:ERROR",
+            "-Xep:StringCharset:ERROR",
             "-Xep:UnusedMethod:ERROR",
             "-Xep:UnusedVariable:ERROR",
             "-XepExcludedPaths:.*/srcjars/.*", // Exclude generated files

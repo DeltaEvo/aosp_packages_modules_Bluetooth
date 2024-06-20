@@ -56,7 +56,7 @@ class FakeBtStack {
       bluetooth::log::assert_that(cid == kDummyCid,
                                   "assert failed: cid == kDummyCid");
       osi_free(p_data);
-      return L2CAP_DW_SUCCESS;
+      return tL2CAP_DW_RESULT::SUCCESS;
     };
     test::mock::stack_l2cap_api::L2CA_DisconnectReq.body = [](uint16_t cid) {
       bluetooth::log::assert_that(cid == kDummyCid,

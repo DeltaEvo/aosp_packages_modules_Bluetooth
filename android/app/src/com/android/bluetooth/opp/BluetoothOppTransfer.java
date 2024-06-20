@@ -635,7 +635,7 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
              * mSession instance.
              */
             if (mSession == null) {
-                /** set current share as error */
+                /* set current share as error */
                 Log.e(TAG, "Unexpected error happened !");
                 ContentProfileErrorReportUtils.report(
                         BluetoothProfile.OPP,

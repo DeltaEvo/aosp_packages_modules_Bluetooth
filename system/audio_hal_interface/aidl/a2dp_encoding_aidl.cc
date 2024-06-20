@@ -18,6 +18,7 @@
 #include "a2dp_encoding_aidl.h"
 
 #include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 
 #include <vector>
 
@@ -26,6 +27,7 @@
 #include "audio_aidl_interfaces.h"
 #include "bta/av/bta_av_int.h"
 #include "btif/include/btif_common.h"
+#include "btm_iso_api.h"
 #include "codec_status_aidl.h"
 #include "transport_instance.h"
 
@@ -95,6 +97,14 @@ BluetoothAudioCtrlAck A2dpTransport::StartRequest(bool is_low_latency) {
   if (!bluetooth::headset::IsCallIdle()) {
     log::error("call state is busy");
     return a2dp_ack_to_bt_audio_ctrl_ack(A2DP_CTRL_ACK_INCALL_FAILURE);
+  }
+
+  if (com::android::bluetooth::flags::a2dp_check_lea_iso_channel()) {
+    // Don't send START request to stack while LEA sessions are in use
+    if (hci::IsoManager::GetInstance()->GetNumberOfActiveIso() > 0) {
+      log::error("LEA currently has active ISO channels");
+      return a2dp_ack_to_bt_audio_ctrl_ack(A2DP_CTRL_ACK_FAILURE);
+    }
   }
 
   if (btif_av_stream_started_ready(A2dpType::kSource)) {

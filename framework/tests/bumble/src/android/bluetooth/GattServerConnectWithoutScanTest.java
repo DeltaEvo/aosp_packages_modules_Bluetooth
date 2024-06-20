@@ -50,11 +50,13 @@ public class GattServerConnectWithoutScanTest {
     private static final String TAG = "GattServerConnectWithoutScanTest";
     private static final int TIMEOUT_GATT_CONNECTION_MS = 2_000;
 
-    @Rule public final AdoptShellPermissionsRule mPermissionRule = new AdoptShellPermissionsRule();
+    @Rule(order = 2)
+    public final AdoptShellPermissionsRule mPermissionRule = new AdoptShellPermissionsRule();
 
-    @Rule public final PandoraDevice mBumble = new PandoraDevice();
+    @Rule(order = 1)
+    public final PandoraDevice mBumble = new PandoraDevice();
 
-    @Rule
+    @Rule(order = 0)
     public final CheckFlagsRule mCheckFlagsRule = DeviceFlagsValueProvider.createCheckFlagsRule();
 
     private final Context mContext = ApplicationProvider.getApplicationContext();
@@ -64,6 +66,7 @@ public class GattServerConnectWithoutScanTest {
 
     @Test
     @RequiresFlagsEnabled(Flags.FLAG_BLE_GATT_SERVER_USE_ADDRESS_TYPE_IN_CONNECTION)
+    @Ignore("b/343749428: Remove hidden api's dependencies to enable the test.")
     public void serverConnectToRandomAddress_withTransportAuto() throws Exception {
         advertiseWithBumble(OwnAddressType.RANDOM);
 
@@ -90,6 +93,7 @@ public class GattServerConnectWithoutScanTest {
 
     @Test
     @RequiresFlagsEnabled(Flags.FLAG_BLE_GATT_SERVER_USE_ADDRESS_TYPE_IN_CONNECTION)
+    @Ignore("b/343749428: Remove hidden api's dependencies to enable the test.")
     public void serverConnectToRandomAddress_withTransportLE() throws Exception {
         advertiseWithBumble(OwnAddressType.RANDOM);
 

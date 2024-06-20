@@ -161,7 +161,7 @@ static void btapp_gatts_handle_cback(uint16_t event, char* p_param) {
                 p_data->srvc_oper.service_id);
       break;
 
-    case BTA_GATTS_DELELTE_EVT:
+    case BTA_GATTS_DELETE_EVT:
       HAL_CBACK(bt_gatt_callbacks, server->service_deleted_cb,
                 p_data->srvc_oper.status, p_data->srvc_oper.server_if,
                 p_data->srvc_oper.service_id);

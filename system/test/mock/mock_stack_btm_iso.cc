@@ -157,6 +157,10 @@ void IsoManager::Stop() {
   mock_pimpl_ = nullptr;
 }
 
+int IsoManager::GetNumberOfActiveIso() {
+  return pimpl_->GetNumberOfActiveIso();
+}
+
 void IsoManager::Dump(int /* fd */) {}
 
 IsoManager::~IsoManager() = default;

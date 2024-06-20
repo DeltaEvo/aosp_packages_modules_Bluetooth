@@ -29,7 +29,6 @@ import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlSerializer;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -219,17 +218,7 @@ public class BluetoothMapConvoListingElement
     /* Get a valid UTF-8 string of maximum 256 bytes */
     private String getSummary() {
         if (mSummary != null) {
-            try {
-                return BluetoothMapUtils.truncateUtf8StringToString(mSummary, 256);
-            } catch (UnsupportedEncodingException e) {
-                ContentProfileErrorReportUtils.report(
-                        BluetoothProfile.MAP,
-                        BluetoothProtoEnums.BLUETOOTH_MAP_CONVO_LISTING_ELEMENT,
-                        BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
-                        1);
-                // This cannot happen on an Android platform - UTF-8 is mandatory
-                Log.e(TAG, "Missing UTF-8 support on platform", e);
-            }
+            return BluetoothMapUtils.truncateUtf8StringToString(mSummary, 256);
         }
         return null;
     }

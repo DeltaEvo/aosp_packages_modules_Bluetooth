@@ -44,6 +44,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 
@@ -1058,8 +1059,7 @@ public class TbsGeneric {
         return null;
     }
 
-    private synchronized Map.Entry<Integer, TbsCall> getCallByStates(
-            LinkedHashSet<Integer> states) {
+    private synchronized Map.Entry<Integer, TbsCall> getCallByStates(Set<Integer> states) {
         for (Map.Entry<Integer, TbsCall> entry : mCurrentCallsList.entrySet()) {
             if (states.contains(entry.getValue().getState())) {
                 return entry;

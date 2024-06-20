@@ -126,7 +126,8 @@ struct MockCoreInterface : public CoreInterface {
               (tBTA_SERVICE_ID service_id, bool enable), ());
   MOCK_METHOD((void), removeDeviceFromProfiles, (const RawAddress& bd_addr),
               ());
-  MOCK_METHOD((void), onLinkDown, (const RawAddress& bd_addr), ());
+  MOCK_METHOD((void), onLinkDown,
+              (const RawAddress& bd_addr, tBT_TRANSPORT transport), ());
 };
 
 }  // namespace testing

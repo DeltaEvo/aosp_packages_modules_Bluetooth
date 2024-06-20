@@ -18,7 +18,6 @@
 #include "hci/controller_interface_mock.h"
 #include "hci/distance_measurement_manager_mock.h"
 #include "hci/hci_interface.h"
-#include "hci/hci_layer_mock.h"
 #include "hci/le_advertising_manager_mock.h"
 #include "hci/le_scanning_manager_mock.h"
 #include "main/shim/entry.h"
@@ -32,7 +31,7 @@ namespace testing {
 MockAclManager* mock_acl_manager_{nullptr};
 MockControllerInterface* mock_controller_{nullptr};
 shim::Dumpsys* shim_dumpsys_ = {};
-MockHciLayer* mock_hci_layer_{nullptr};
+HciInterface* mock_hci_layer_{nullptr};
 os::Handler* mock_gd_shim_handler_{nullptr};
 MockLeAdvertisingManager* mock_le_advertising_manager_{nullptr};
 MockLeScanningManager* mock_le_scanning_manager_{nullptr};
