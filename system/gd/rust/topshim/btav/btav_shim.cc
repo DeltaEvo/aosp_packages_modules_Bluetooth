@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "base/functional/callback.h"
+#include "btif/include/btif_av.h"
 #include "include/hardware/avrcp/avrcp.h"
 #include "include/hardware/bluetooth.h"
 #include "rust/cxx.h"
@@ -267,8 +268,7 @@ std::unique_ptr<A2dpIntf> GetA2dpProfile(const unsigned char* btif) {
 
   const bt_interface_t* btif_ = reinterpret_cast<const bt_interface_t*>(btif);
 
-  auto a2dpif = std::make_unique<A2dpIntf>(
-      reinterpret_cast<const btav_source_interface_t*>(btif_->get_profile_interface("a2dp")));
+  auto a2dpif = std::make_unique<A2dpIntf>();
   internal::g_a2dpif = a2dpif.get();
   return a2dpif;
 }
@@ -277,31 +277,31 @@ int A2dpIntf::init() const {
   std::vector<btav_a2dp_codec_config_t> a;
   std::vector<btav_a2dp_codec_config_t> b;
   std::vector<btav_a2dp_codec_info_t> c;
-  return intf_->init(&internal::g_callbacks, 1, a, b, &c);
+  return btif_av_source_init(&internal::g_callbacks, 1, a, b, &c);
 }
 
 uint32_t A2dpIntf::connect(RawAddress addr) const {
-  return intf_->connect(addr);
+  return btif_av_source_connect(addr);
 }
 uint32_t A2dpIntf::disconnect(RawAddress addr) const {
-  return intf_->disconnect(addr);
+  return btif_av_source_disconnect(addr);
 }
 int A2dpIntf::set_silence_device(RawAddress addr, bool silent) const {
-  return intf_->set_silence_device(addr, silent);
+  return btif_av_source_set_silence_device(addr, silent);
 }
 int A2dpIntf::set_active_device(RawAddress addr) const {
-  return intf_->set_active_device(addr);
+  return btif_av_source_set_active_device(addr);
 }
 int A2dpIntf::config_codec(RawAddress addr, ::rust::Vec<A2dpCodecConfig> codec_preferences) const {
   std::vector<btav_a2dp_codec_config_t> prefs;
   for (size_t i = 0; i < codec_preferences.size(); ++i) {
     prefs.push_back(internal::from_rust_codec_config(codec_preferences[i]));
   }
-  return intf_->config_codec(addr, prefs);
+  return btif_av_source_set_codec_config_preference(addr, prefs);
 }
 
 void A2dpIntf::cleanup() const {
-  intf_->cleanup();
+  btif_av_source_cleanup();
 }
 bool A2dpIntf::set_audio_config(A2dpCodecConfig rconfig) const {
   bluetooth::audio::a2dp::AudioConfig config = {
