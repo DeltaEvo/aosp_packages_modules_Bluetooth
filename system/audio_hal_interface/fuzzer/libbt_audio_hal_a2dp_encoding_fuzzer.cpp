@@ -22,6 +22,7 @@
 #include "include/btif_av_co.h"
 #include "osi/include/properties.h"
 
+using ::bluetooth::audio::a2dp::BluetoothAudioStatus;
 using ::bluetooth::audio::a2dp::update_codec_offloading_capabilities;
 
 extern "C" {
@@ -30,10 +31,13 @@ struct android_namespace_t* android_get_exported_namespace(const char*) {
 }
 }
 
-constexpr tA2DP_CTRL_ACK kCtrlAckStatus[] = {
-    A2DP_CTRL_ACK_SUCCESS,        A2DP_CTRL_ACK_FAILURE,
-    A2DP_CTRL_ACK_INCALL_FAILURE, A2DP_CTRL_ACK_UNSUPPORTED,
-    A2DP_CTRL_ACK_PENDING,        A2DP_CTRL_ACK_DISCONNECT_IN_PROGRESS};
+constexpr BluetoothAudioStatus kBluetoothAudioStatus[] = {
+        BluetoothAudioStatus::UNKNOWN,
+        BluetoothAudioStatus::SUCCESS,
+        BluetoothAudioStatus::UNSUPPORTED_CODEC_CONFIGURATION,
+        BluetoothAudioStatus::FAILURE,
+        BluetoothAudioStatus::PENDING,
+};
 
 constexpr int32_t kRandomStringLength = 256;
 
@@ -103,13 +107,13 @@ void A2dpEncodingFuzzer::process(const uint8_t* data, size_t size) {
 
   bluetooth::audio::a2dp::start_session();
 
-  tA2DP_CTRL_ACK status = fdp.PickValueInArray(kCtrlAckStatus);
+  BluetoothAudioStatus status = fdp.PickValueInArray(kBluetoothAudioStatus);
   bluetooth::audio::a2dp::ack_stream_started(status);
 
   for (auto offloadingPreference : CodecOffloadingPreferenceGenerator()) {
     update_codec_offloading_capabilities(offloadingPreference, false);
   }
-  status = fdp.PickValueInArray(kCtrlAckStatus);
+  status = fdp.PickValueInArray(kBluetoothAudioStatus);
   bluetooth::audio::a2dp::ack_stream_suspended(status);
   bluetooth::audio::a2dp::cleanup();
   messageLoopThread.ShutDown();
