@@ -56,7 +56,6 @@ import com.android.bluetooth.tbs.BluetoothLeCallControlProxy;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -153,13 +152,20 @@ public class BluetoothInCallService extends InCallService {
                 public void onServiceConnected(int profile, BluetoothProfile proxy) {
                     synchronized (LOCK) {
                         if (profile == BluetoothProfile.HEADSET) {
-                            setBluetoothHeadset(
-                                    new BluetoothHeadsetProxy((BluetoothHeadset) proxy));
+                            mBluetoothHeadset = new BluetoothHeadsetProxy((BluetoothHeadset) proxy);
                             updateHeadsetWithCallState(true /* force */);
                         } else {
-                            setBluetoothLeCallControl(
-                                    new BluetoothLeCallControlProxy(
-                                            (BluetoothLeCallControl) proxy));
+                            mBluetoothLeCallControl =
+                                    new BluetoothLeCallControlProxy((BluetoothLeCallControl) proxy);
+
+                            mBluetoothLeCallControl.registerBearer(
+                                    TAG,
+                                    List.of("tel"),
+                                    BluetoothLeCallControl.CAPABILITY_HOLD_CALL,
+                                    getNetworkOperator(),
+                                    getBearerTechnology(),
+                                    mExecutor,
+                                    mBluetoothLeCallControlCallback);
                             sendTbsCurrentCallsList();
                         }
                     }
@@ -169,9 +175,9 @@ public class BluetoothInCallService extends InCallService {
                 public void onServiceDisconnected(int profile) {
                     synchronized (LOCK) {
                         if (profile == BluetoothProfile.HEADSET) {
-                            setBluetoothHeadset(null);
+                            mBluetoothHeadset = null;
                         } else {
-                            setBluetoothLeCallControl(null);
+                            mBluetoothLeCallControl = null;
                         }
                     }
                 }
@@ -1378,11 +1384,6 @@ public class BluetoothInCallService extends InCallService {
     }
 
     @VisibleForTesting
-    public void setBluetoothHeadset(BluetoothHeadsetProxy bluetoothHeadset) {
-        mBluetoothHeadset = bluetoothHeadset;
-    }
-
-    @VisibleForTesting
     public BluetoothCall getBluetoothCallById(Integer id) {
         if (mBluetoothCallHashMap.containsKey(id)) {
             return mBluetoothCallHashMap.get(id);
@@ -1550,22 +1551,6 @@ public class BluetoothInCallService extends InCallService {
                 }
             }
             return null;
-        }
-    }
-
-    @VisibleForTesting
-    public void setBluetoothLeCallControl(BluetoothLeCallControlProxy bluetoothTbs) {
-        mBluetoothLeCallControl = bluetoothTbs;
-
-        if ((mBluetoothLeCallControl) != null) {
-            mBluetoothLeCallControl.registerBearer(
-                    TAG,
-                    new ArrayList<String>(Arrays.asList("tel")),
-                    BluetoothLeCallControl.CAPABILITY_HOLD_CALL,
-                    getNetworkOperator(),
-                    getBearerTechnology(),
-                    mExecutor,
-                    mBluetoothLeCallControlCallback);
         }
     }
 
