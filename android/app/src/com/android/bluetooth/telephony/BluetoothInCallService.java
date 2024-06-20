@@ -137,7 +137,7 @@ public class BluetoothInCallService extends InCallService {
 
     private static BluetoothInCallService sInstance = null;
 
-    public CallInfo mCallInfo = new CallInfo();
+    private final CallInfo mCallInfo;
 
     protected boolean mOnCreateCalled = false;
 
@@ -346,10 +346,29 @@ public class BluetoothInCallService extends InCallService {
         return super.onUnbind(intent);
     }
 
-    public BluetoothInCallService() {
+    private BluetoothInCallService(CallInfo callInfo) {
         Log.i(TAG, "BluetoothInCallService is created");
+        mCallInfo = Objects.requireNonNullElse(callInfo, new CallInfo());
         sInstance = this;
         mExecutor = Executors.newSingleThreadExecutor();
+    }
+
+    public BluetoothInCallService() {
+        this(null);
+    }
+
+    @VisibleForTesting
+    BluetoothInCallService(
+            Context context,
+            CallInfo callInfo,
+            BluetoothHeadsetProxy headset,
+            BluetoothLeCallControlProxy leCallControl) {
+        this(callInfo);
+        mBluetoothHeadset = headset;
+        mBluetoothLeCallControl = leCallControl;
+        attachBaseContext(context);
+        mTelephonyManager = getSystemService(TelephonyManager.class);
+        mTelecomManager = getSystemService(TelecomManager.class);
     }
 
     public static BluetoothInCallService getInstance() {
@@ -1551,7 +1570,6 @@ public class BluetoothInCallService extends InCallService {
             return null;
         }
     }
-    ;
 
     @VisibleForTesting
     public void setBluetoothLeCallControl(BluetoothLeCallControlProxy bluetoothTbs) {
