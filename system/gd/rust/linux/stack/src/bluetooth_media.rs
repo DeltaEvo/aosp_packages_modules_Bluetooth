@@ -1254,6 +1254,12 @@ impl BluetoothMedia {
                     BtavConnectionState::Disconnected => {
                         info!("[{}]: a2dp disconnected.", DisplayAddress(&addr));
 
+                        if self.a2dp_audio_connection_listener.is_some() {
+                            let listener = self.a2dp_audio_connection_listener.take().unwrap();
+                            let data: Vec<u8> = vec![0];
+                            self.write_data_to_listener(listener, data);
+                        }
+
                         self.a2dp_states.remove(&addr);
                         self.a2dp_caps.remove(&addr);
                         self.a2dp_audio_state.remove(&addr);
@@ -1484,6 +1490,13 @@ impl BluetoothMedia {
                     }
                     BthfConnectionState::Disconnected => {
                         info!("[{}]: hfp disconnected.", DisplayAddress(&addr));
+
+                        if self.hfp_audio_connection_listener.is_some() {
+                            let listener = self.hfp_audio_connection_listener.take().unwrap();
+                            let data: Vec<u8> = vec![0];
+                            self.write_data_to_listener(listener, data);
+                        }
+
                         self.uhid_destroy(&addr);
                         self.hfp_states.remove(&addr);
                         self.hfp_cap.remove(&addr);
