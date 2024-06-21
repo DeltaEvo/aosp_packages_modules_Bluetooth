@@ -64,7 +64,7 @@ public class ScanController {
         mTransitionalScanHelper.notifyProfileConnectionStateChange(profile, fromState, toState);
     }
 
-    TransitionalScanHelper getTransitionalScanHelper() {
+    public TransitionalScanHelper getTransitionalScanHelper() {
         return mTransitionalScanHelper;
     }
 
