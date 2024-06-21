@@ -101,15 +101,6 @@ static constexpr char kNotifyUpperLayerAboutGroupBeingInIdleDuringCall[] =
 const char* test_flags[] = {
     "INIT_default_log_level_str=LOG_VERBOSE",
     "INIT_leaudio_targeted_announcement_reconnection_mode=true",
-    "INIT_leaudio_enable_health_based_actions=false",
-    "INIT_leaudio_broadcast_audio_handover_policies=false",
-    nullptr,
-};
-
-const char* test_flags_with_health_status[] = {
-    "INIT_default_log_level_str=LOG_VERBOSE",
-    "INIT_leaudio_targeted_announcement_reconnection_mode=true",
-    "INIT_leaudio_enable_health_based_actions=true",
     "INIT_leaudio_broadcast_audio_handover_policies=false",
     nullptr,
 };
@@ -117,7 +108,6 @@ const char* test_flags_with_health_status[] = {
 const char* test_flags_with_handover_mode[] = {
     "INIT_default_log_level_str=LOG_VERBOSE",
     "INIT_leaudio_targeted_announcement_reconnection_mode=true",
-    "INIT_leaudio_enable_health_based_actions=false",
     "INIT_leaudio_broadcast_audio_handover_policies=true",
     nullptr,
 };
@@ -375,7 +365,6 @@ class MockLeAudioSourceHalClient : public LeAudioSourceAudioHalClient {
 
 class UnicastTestNoInit : public Test {
  public:
-  bool use_health_status = false;
   bool use_handover_mode = false;
 
  protected:
@@ -423,9 +412,7 @@ class UnicastTestNoInit : public Test {
   }
 
   void SetUpMockAudioHal() {
-    if (use_health_status) {
-      bluetooth::common::InitFlags::Load(test_flags_with_health_status);
-    } else if (use_handover_mode) {
+    if (use_handover_mode) {
       bluetooth::common::InitFlags::Load(test_flags_with_handover_mode);
     } else {
       bluetooth::common::InitFlags::Load(test_flags);
@@ -2931,7 +2918,6 @@ class UnicastTest : public UnicastTestNoInit {
 class UnicastTestHealthStatus : public UnicastTest {
  protected:
   void SetUp() override {
-    use_health_status = true;
     UnicastTest::SetUp();
     group_ = new LeAudioDeviceGroup(group_id_);
   }
