@@ -68,6 +68,7 @@ bt_status_t do_in_main_thread_delayed(base::Location const&,
   abort();
 }
 bluetooth::common::MessageLoopThread* get_main_thread() { return nullptr; }
+bluetooth::common::PostableContext* get_main() { return nullptr; }
 
 namespace bluetooth {
 namespace os {

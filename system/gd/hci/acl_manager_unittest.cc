@@ -27,6 +27,7 @@
 
 #include "common/bind.h"
 #include "common/init_flags.h"
+#include "hci/acl_manager/le_connection_management_callbacks_mock.h"
 #include "hci/address.h"
 #include "hci/address_with_type.h"
 #include "hci/class_of_device.h"
@@ -464,31 +465,7 @@ class AclManagerWithLeConnectionTest : public AclManagerWithCallbacksTest {
   std::shared_ptr<LeAclConnection> connection_;
   AddressWithType remote_with_type_;
 
-  class MockLeConnectionManagementCallbacks : public LeConnectionManagementCallbacks {
-   public:
-    MOCK_METHOD1(OnDisconnection, void(ErrorCode reason));
-    MOCK_METHOD4(
-        OnConnectionUpdate,
-        void(
-            hci::ErrorCode hci_status,
-            uint16_t connection_interval,
-            uint16_t connection_latency,
-            uint16_t supervision_timeout));
-    MOCK_METHOD4(OnDataLengthChange, void(uint16_t tx_octets, uint16_t tx_time, uint16_t rx_octets, uint16_t rx_time));
-    MOCK_METHOD4(
-        OnReadRemoteVersionInformationComplete,
-        void(hci::ErrorCode hci_status, uint8_t version, uint16_t manufacturer_name, uint16_t sub_version));
-    MOCK_METHOD2(OnLeReadRemoteFeaturesComplete, void(hci::ErrorCode hci_status, uint64_t features));
-    MOCK_METHOD3(OnPhyUpdate, void(hci::ErrorCode hci_status, uint8_t tx_phy, uint8_t rx_phy));
-    MOCK_METHOD5(
-        OnLeSubrateChange,
-        void(
-            hci::ErrorCode hci_status,
-            uint16_t subrate_factor,
-            uint16_t peripheral_latency,
-            uint16_t continuation_number,
-            uint16_t supervision_timeout));
-  } mock_le_connection_management_callbacks_;
+  MockLeConnectionManagementCallbacks mock_le_connection_management_callbacks_;
 };
 
 class AclManagerWithResolvableAddressTest : public AclManagerWithCallbacksTest {

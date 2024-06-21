@@ -28,13 +28,12 @@
 #include <queue>
 #include <vector>
 
-#include "hci/acl_manager/le_connection_management_callbacks.h"
+#include "hci/acl_manager/le_connection_management_callbacks_mock.h"
 #include "hci/address_with_type.h"
 #include "hci/hci_layer_fake.h"
 #include "hci/hci_packets.h"
 #include "hci/le_acl_connection_interface.h"
 #include "os/handler.h"
-#include "os/log.h"
 #include "os/thread.h"
 
 using namespace bluetooth;
@@ -62,44 +61,6 @@ constexpr uint16_t kContinuationNumber = 0x32;
 namespace bluetooth::hci::acl_manager {
 
 namespace {
-
-class TestLeConnectionManagementCallbacks : public hci::acl_manager::LeConnectionManagementCallbacks {
-  void OnConnectionUpdate(
-      hci::ErrorCode /* hci_status */,
-      uint16_t /* connection_interval */,
-      uint16_t /* connection_latency */,
-      uint16_t /* supervision_timeout */) override {}
-  virtual void OnDataLengthChange(
-      uint16_t /* tx_octets */,
-      uint16_t /* tx_time */,
-      uint16_t /* rx_octets */,
-      uint16_t /* rx_time */) override {}
-  virtual void OnDisconnection(hci::ErrorCode /* reason */) override {}
-  virtual void OnReadRemoteVersionInformationComplete(
-      hci::ErrorCode /* hci_status */,
-      uint8_t /* lmp_version */,
-      uint16_t /* manufacturer_name */,
-      uint16_t /* sub_version */) override {}
-  virtual void OnLeReadRemoteFeaturesComplete(
-      hci::ErrorCode /* hci_status */, uint64_t /* features */) override {}
-  virtual void OnPhyUpdate(
-      hci::ErrorCode /* hci_status */, uint8_t /* tx_phy */, uint8_t /* rx_phy */) override {}
-  MOCK_METHOD(
-      void,
-      OnLeSubrateChange,
-      (hci::ErrorCode hci_status,
-       uint16_t subrate_factor,
-       uint16_t peripheral_latency,
-       uint16_t continuation_number,
-       uint16_t supervision_timeout),
-      (override));
-
-  // give access to private method for test:
-  friend class LeAclConnectionTest;
-  FRIEND_TEST(LeAclConnectionTest, LeSubrateRequest_success);
-  FRIEND_TEST(LeAclConnectionTest, LeSubrateRequest_error);
-};
-
 class TestLeAclConnectionInterface : public hci::LeAclConnectionInterface {
  private:
   void EnqueueCommand(
@@ -210,7 +171,7 @@ class LeAclConnectionTest : public ::testing::Test {
   std::shared_ptr<LeAclConnection::Queue> queue_;
 
   TestLeAclConnectionInterface le_acl_connection_interface_;
-  TestLeConnectionManagementCallbacks callbacks_;
+  MockLeConnectionManagementCallbacks callbacks_;
   LeAclConnection* connection_;
 };
 
