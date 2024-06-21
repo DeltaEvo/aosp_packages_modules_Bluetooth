@@ -751,6 +751,11 @@ void BluetoothAudioClientInterface::FlushAudioData() {
     return;
   }
   size_t size = mDataMQ->availableToRead();
+
+  if (size == 0) {
+    return;
+  }
+
   uint8_t p_buf[size];
 
   if (mDataMQ->read(p_buf, size) != size)
