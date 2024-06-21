@@ -295,8 +295,8 @@ struct tBTA_AG_SCB {
   tBTA_AG_PEER_CODEC
       disabled_codecs; /* set by app to block certain codecs from being used */
   tBTA_AG_PEER_CODEC peer_codecs; /* codecs for eSCO supported by the peer */
-  tBTA_AG_PEER_CODEC sco_codec;   /* codec to be used for eSCO connection */
-  tBTA_AG_PEER_CODEC
+  tBTA_AG_PEER_CODEC sco_codec;   /* codecs to be used for eSCO connection */
+  tBTA_AG_UUID_CODEC
       inuse_codec;     /* codec being used for the current SCO connection */
   bool codec_updated;  /* set to true whenever the app updates codec type */
   bool codec_fallback; /* If sco nego fails for mSBC, fallback to CVSD */

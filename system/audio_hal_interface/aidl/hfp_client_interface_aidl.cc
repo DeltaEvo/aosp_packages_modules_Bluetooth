@@ -64,8 +64,8 @@ tBTA_AG_SCB* get_hfp_active_device_callback() {
   return cb;
 }
 
-std::unordered_map<int, ::hfp::sco_config> HfpTransport::GetHfpScoConfig(
-    SessionType sessionType) {
+std::unordered_map<tBTA_AG_UUID_CODEC, ::hfp::sco_config>
+HfpTransport::GetHfpScoConfig(SessionType sessionType) {
   auto providerInfo =
       ::bluetooth::audio::aidl::ProviderInfo::GetProviderInfo(sessionType);
   return providerInfo->GetHfpScoConfig();
