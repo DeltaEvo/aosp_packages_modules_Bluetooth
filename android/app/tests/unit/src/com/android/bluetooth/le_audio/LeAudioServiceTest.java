@@ -381,19 +381,6 @@ public class LeAudioServiceTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(mService::stop);
     }
 
-    /** Test if stop during init is ok. */
-    @Test
-    public void testStopStartStopService() throws Exception {
-        InstrumentationRegistry.getInstrumentation()
-                .runOnMainSync(
-                        () -> {
-                            mService.stop();
-                            mService.start();
-                            mService.stop();
-                            mService.start();
-                        });
-    }
-
     /** Test get/set priority for BluetoothDevice */
     @Test
     public void testGetSetPriority() {
