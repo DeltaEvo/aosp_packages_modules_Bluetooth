@@ -46,7 +46,7 @@
 #include "device/include/device_iot_config.h"
 #include "internal_include/bt_target.h"
 #include "stack/include/gatt_api.h"
-#include "stack/include/l2c_api.h"
+#include "stack/include/l2cap_module.h"
 #include "stack/include/port_api.h"
 #include "stack/sdp/sdpint.h"
 #if (BNEP_INCLUDED == TRUE)
