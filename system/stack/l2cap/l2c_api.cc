@@ -1586,7 +1586,7 @@ uint16_t L2CA_FlushChannel(uint16_t lcid, uint16_t num_to_flush) {
       /* If the controller supports enhanced flush, flush the data queued at the
        * controller */
       if (bluetooth::shim::GetController()->SupportsNonFlushablePb() &&
-          (BTM_GetNumScoLinks() == 0)) {
+          (get_btm_client_interface().sco.BTM_GetNumScoLinks() == 0)) {
         /* The only packet type defined - 0 - Automatically-Flushable Only */
         l2c_acl_flush(p_lcb->Handle());
       }
