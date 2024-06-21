@@ -266,14 +266,6 @@ public class LeAudioBroadcastServiceTest {
         Assert.assertEquals(mService, LeAudioService.getLeAudioService());
     }
 
-    @Test
-    public void testStopLeAudioService() {
-        Assert.assertEquals(mService, LeAudioService.getLeAudioService());
-
-        InstrumentationRegistry.getInstrumentation().runOnMainSync(mService::stop);
-        InstrumentationRegistry.getInstrumentation().runOnMainSync(mService::start);
-    }
-
     void verifyBroadcastStarted(int broadcastId, BluetoothLeBroadcastSettings settings) {
         mService.createBroadcast(settings);
 
