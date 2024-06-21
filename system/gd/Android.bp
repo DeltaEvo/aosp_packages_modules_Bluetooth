@@ -125,7 +125,13 @@ cc_defaults {
                 "libcutils",
                 "libhidlbase",
                 "libstatslog_bt",
+                "libstatssocket",
                 "libutils",
+            ],
+            static_libs: [
+                "libexpresslog",
+                "libstatslog_express",
+                "libtextclassifier_hash_static",
             ],
             whole_static_libs: [
                 "android.hardware.bluetooth-V1-ndk",

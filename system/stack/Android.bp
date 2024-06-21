@@ -837,6 +837,9 @@ cc_test {
             static_libs: [
                 "android.hardware.bluetooth@1.0",
                 "android.hardware.bluetooth@1.1",
+                "libexpresslog",
+                "libstatslog_express",
+                "libtextclassifier_hash_static",
             ],
         },
         host: {

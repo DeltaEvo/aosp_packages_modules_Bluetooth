@@ -20,12 +20,14 @@
 
 #include "os/metrics.h"
 
+#include <Counter.h>
 #include <bluetooth/log.h>
 #include <statslog_bt.h>
 
 #include "common/audit_log.h"
 #include "common/metric_id_manager.h"
 #include "common/strings.h"
+#include "hardware/bt_av.h"
 #include "hci/hci_packets.h"
 #include "metrics/metrics_state.h"
 #include "os/log.h"
@@ -206,8 +208,34 @@ void LogMetricA2dpSessionMetricsEvent(
     int /* buffer_overruns_total */,
     float /* buffer_underruns_average */,
     int /* buffer_underruns_count */,
-    int64_t /* codec_index */,
-    bool /* is_a2dp_offload */) {}
+    int64_t codec_index,
+    bool /* is_a2dp_offload */) {
+  char const* metric_id = nullptr;
+  switch (codec_index) {
+    case BTAV_A2DP_CODEC_INDEX_SOURCE_SBC:
+      metric_id = "bluetooth.value_sbc_codec_usage_over_a2dp";
+      break;
+    case BTAV_A2DP_CODEC_INDEX_SOURCE_AAC:
+      metric_id = "bluetooth.value_aac_codec_usage_over_a2dp";
+      break;
+    case BTAV_A2DP_CODEC_INDEX_SOURCE_APTX:
+      metric_id = "bluetooth.value_aptx_codec_usage_over_a2dp";
+      break;
+    case BTAV_A2DP_CODEC_INDEX_SOURCE_APTX_HD:
+      metric_id = "bluetooth.value_aptx_hd_codec_usage_over_a2dp";
+      break;
+    case BTAV_A2DP_CODEC_INDEX_SOURCE_LDAC:
+      metric_id = "bluetooth.value_ldac_codec_usage_over_a2dp";
+      break;
+    case BTAV_A2DP_CODEC_INDEX_SOURCE_OPUS:
+      metric_id = "bluetooth.value_opus_codec_usage_over_a2dp";
+      break;
+    default:
+      return;
+  }
+
+  android::expresslog::Counter::logIncrement(metric_id);
+}
 
 void LogMetricHfpPacketLossStats(
     const Address& /* address */,
