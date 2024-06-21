@@ -366,36 +366,6 @@ typedef struct {
  *
  */
 
-/** Represents the standard BT-AV A2DP Sink interface.
- */
-typedef struct {
-  /** set to sizeof(btav_sink_interface_t) */
-  size_t size;
-  /**
-   * Register the BtAv callbacks
-   */
-  bt_status_t (*init)(btav_sink_callbacks_t* callbacks,
-                      int max_connected_audio_devices);
-
-  /** connect to headset */
-  bt_status_t (*connect)(const RawAddress& bd_addr);
-
-  /** dis-connect from headset */
-  bt_status_t (*disconnect)(const RawAddress& bd_addr);
-
-  /** Closes the interface. */
-  void (*cleanup)(void);
-
-  /** Sends Audio Focus State. */
-  void (*set_audio_focus_state)(int focus_state);
-
-  /** Sets the audio track gain. */
-  void (*set_audio_track_gain)(float gain);
-
-  /** sets the connected device as active */
-  bt_status_t (*set_active_device)(const RawAddress& bd_addr);
-} btav_sink_interface_t;
-
 __END_DECLS
 
 namespace fmt {
