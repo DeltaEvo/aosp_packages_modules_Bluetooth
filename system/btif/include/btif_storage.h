@@ -16,11 +16,13 @@
  *
  ******************************************************************************/
 
-#ifndef BTIF_STORAGE_H
-#define BTIF_STORAGE_H
+#ifndef SYSTEM_BTIF_INCLUDE_BTIF_STORAGE_H_
+#define SYSTEM_BTIF_INCLUDE_BTIF_STORAGE_H_
 
 #include <bluetooth/uuid.h>
 #include <hardware/bluetooth.h>
+
+#include <string>
 
 #include "internal_include/bt_target.h"
 #include "stack/include/bt_device_type.h"
@@ -443,4 +445,4 @@ bt_status_t btif_storage_get_hid_connection_policy(
 size_t btif_split_uuids_string(const char* str, bluetooth::Uuid* p_uuid,
                                size_t max_uuids);
 
-#endif /* BTIF_STORAGE_H */
+#endif  // SYSTEM_BTIF_INCLUDE_BTIF_STORAGE_H_
