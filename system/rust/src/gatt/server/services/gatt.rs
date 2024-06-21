@@ -135,7 +135,8 @@ impl GattDatabaseCallbacks for GattService {
                                     start_handle: (*range.start()).into(),
                                     end_handle: (*range.end()).into(),
                                 }
-                                .into(),
+                                .to_vec()
+                                .unwrap(),
                             ),
                         );
                     }
@@ -190,7 +191,7 @@ mod test {
                 },
             },
         },
-        packets::{AttAttributeDataChild, AttBuilder, AttChild},
+        packets::{AttBuilder, AttChild},
         utils::task::{block_on_locally, try_await},
     };
 
@@ -369,11 +370,14 @@ mod test {
             let AttChild::AttHandleValueIndication(resp) = resp._child_ else {
                 unreachable!();
             };
-            let AttAttributeDataChild::GattServiceChanged(resp) = resp.value._child_ else {
-                unreachable!();
-            };
-            assert_eq!(resp.start_handle.handle, 15);
-            assert_eq!(resp.end_handle.handle, 17);
+            assert_eq!(
+                Ok(resp.value.into()),
+                GattServiceChangedBuilder {
+                    start_handle: AttHandle(15).into(),
+                    end_handle: AttHandle(17).into(),
+                }
+                .to_vec()
+            );
         });
     }
 
