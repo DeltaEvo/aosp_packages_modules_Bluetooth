@@ -48,6 +48,7 @@ import android.bluetooth.IBluetoothLeAudioCallback;
 import android.bluetooth.IBluetoothLeBroadcastCallback;
 import android.bluetooth.IBluetoothVolumeControl;
 import android.bluetooth.le.BluetoothLeScanner;
+import android.bluetooth.le.IScannerCallback;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanResult;
@@ -221,6 +222,8 @@ public class LeAudioService extends ProfileService {
     BluetoothLeScanner mAudioServersScanner;
     /* When mScanCallback is not null, it means scan is started. */
     ScanCallback mScanCallback;
+
+    private final AudioServerScanCallback2 mScanCallback2 = new AudioServerScanCallback2();
 
     public LeAudioService(Context ctx) {
         this(ctx, LeAudioNativeInterface.getInstance());
@@ -1790,8 +1793,68 @@ public class LeAudioService extends ProfileService {
         return true;
     }
 
+    private class AudioServerScanCallback2 extends IScannerCallback.Stub {
+        // See BluetoothLeScanner.BleScanCallbackWrapper.mScannerId
+        int mScannerId = 0;
+
+        synchronized void startBackgroundScan() {
+            if (mScannerId != 0) {
+                Log.d(TAG, "Scanner is already registered with id " + mScannerId);
+                return;
+            }
+            if (Flags.scanManagerRefactor()) {
+                mAdapterService
+                        .getBluetoothScanController()
+                        .getTransitionalScanHelper()
+                        .registerScannerInternal(this, null);
+            } else {
+                mAdapterService
+                        .getBluetoothGattService()
+                        .getTransitionalScanHelper()
+                        .registerScannerInternal(this, null);
+            }
+        }
+
+        synchronized void stopBackgroundScan() {
+            if (mScannerId == 0) {
+                Log.d(TAG, "Scanner is already unregistered");
+                return;
+            }
+            if (Flags.scanManagerRefactor()) {
+                mAdapterService
+                        .getBluetoothScanController()
+                        .getTransitionalScanHelper()
+                        .unregisterScannerInternal(mScannerId);
+            } else {
+                mAdapterService
+                        .getBluetoothGattService()
+                        .getTransitionalScanHelper()
+                        .unregisterScannerInternal(mScannerId);
+            }
+        }
+
+        @Override
+        public synchronized void onScannerRegistered(int status, int scannerId) {
+            mScannerId = scannerId;
+        }
+
+        // Eventually we should be able to start scan from native when b/276350722 is done
+        // All the result returned here are ignored
+        @Override
+        public void onScanResult(ScanResult scanResult) {}
+
+        @Override
+        public void onBatchScanResults(List<ScanResult> batchResults) {}
+
+        @Override
+        public void onFoundOrLost(boolean onFound, ScanResult scanResult) {}
+
+        @Override
+        public void onScanManagerErrorCallback(int errorCode) {}
+    }
+
     private class AudioServerScanCallback extends ScanCallback {
-        int mMaxScanRetires = 10;
+        int mMaxScanRetries = 10;
         int mScanRetries = 0;
 
         @Override
@@ -1814,7 +1877,7 @@ public class LeAudioService extends ProfileService {
             switch (errorCode) {
                 case SCAN_FAILED_INTERNAL_ERROR:
                 case SCAN_FAILED_APPLICATION_REGISTRATION_FAILED:
-                    if (mScanRetries < mMaxScanRetires) {
+                    if (mScanRetries < mMaxScanRetries) {
                         mScanRetries++;
                         Log.w(TAG, "Failed to start. Let's retry");
                         mHandler.post(() -> startAudioServersBackgroundScan(/* retry= */ true));
@@ -2793,6 +2856,11 @@ public class LeAudioService extends ProfileService {
     void stopAudioServersBackgroundScan() {
         Log.d(TAG, "stopAudioServersBackgroundScan");
 
+        if (Flags.leaudioCallStartScanDirectly()) {
+            mScanCallback2.stopBackgroundScan();
+            return;
+        }
+
         if (mAudioServersScanner == null || mScanCallback == null) {
             Log.d(TAG, "stopAudioServersBackgroundScan: already stopped");
             return;
@@ -2812,6 +2880,11 @@ public class LeAudioService extends ProfileService {
         Log.d(TAG, "startAudioServersBackgroundScan, retry: " + retry);
 
         if (!isScannerNeeded()) {
+            return;
+        }
+
+        if (Flags.leaudioCallStartScanDirectly()) {
+            mScanCallback2.startBackgroundScan();
             return;
         }
 

@@ -5963,8 +5963,16 @@ public class AdapterService extends Service {
         return mGattService == null ? null : mGattService.getBinder();
     }
 
+    public GattService getBluetoothGattService() {
+        return mGattService;
+    }
+
     IBinder getBluetoothScan() {
         return mScanController == null ? null : mScanController.getBinder();
+    }
+
+    public ScanController getBluetoothScanController() {
+        return mScanController;
     }
 
     void unregAllGattClient(AttributionSource source) {
