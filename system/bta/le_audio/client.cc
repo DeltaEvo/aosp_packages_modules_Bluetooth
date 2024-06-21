@@ -5626,8 +5626,12 @@ class LeAudioClientImpl : public LeAudioClient {
 
     switch (status) {
       case GroupStreamStatus::STREAMING: {
-        log::assert_that(group_id == active_group_id_,
-                         "invalid group id {}!={}", group_id, active_group_id_);
+        if (group_id != active_group_id_) {
+          log::error("Streaming group {} is no longer active. Stop the group.",
+                     group_id);
+          GroupStop(group_id);
+          return;
+        }
 
         take_stream_time();
 
