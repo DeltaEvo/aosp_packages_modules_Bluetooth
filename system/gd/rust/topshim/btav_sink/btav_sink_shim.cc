@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "include/hardware/bluetooth.h"
+#include "btif/include/btif_av.h"
 #include "rust/cxx.h"
 #include "src/profiles/a2dp.rs.h"
 #include "types/raw_address.h"
@@ -69,26 +70,25 @@ std::unique_ptr<A2dpSinkIntf> GetA2dpSinkProfile(const unsigned char* btif) {
 
   const bt_interface_t* btif_ = reinterpret_cast<const bt_interface_t*>(btif);
 
-  auto a2dp_sink = std::make_unique<A2dpSinkIntf>(
-      reinterpret_cast<const btav_sink_interface_t*>(btif_->get_profile_interface("a2dp_sink")));
+  auto a2dp_sink = std::make_unique<A2dpSinkIntf>();
   internal::g_a2dp_sink_if = a2dp_sink.get();
   return a2dp_sink;
 }
 
 int A2dpSinkIntf::init() const {
-  return intf_->init(&internal::g_a2dp_sink_callbacks, 1);
+  return btif_av_sink_init(&internal::g_a2dp_sink_callbacks, 1);
 }
 
 int A2dpSinkIntf::connect(RawAddress addr) const {
-  return intf_->connect(addr);
+  return btif_av_sink_connect(addr);
 }
 
 int A2dpSinkIntf::disconnect(RawAddress addr) const {
-  return intf_->disconnect(addr);
+  return btif_av_sink_disconnect(addr);
 }
 
 int A2dpSinkIntf::set_active_device(RawAddress addr) const {
-  return intf_->set_active_device(addr);
+  return btif_av_sink_set_active_device(addr);
 }
 
 void A2dpSinkIntf::cleanup() const {

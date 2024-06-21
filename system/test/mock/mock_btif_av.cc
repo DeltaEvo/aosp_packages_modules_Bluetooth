@@ -42,7 +42,6 @@ struct btif_av_clear_remote_suspend_flag btif_av_clear_remote_suspend_flag;
 struct btif_av_find_by_handle btif_av_find_by_handle;
 struct btif_av_get_audio_delay btif_av_get_audio_delay;
 struct btif_av_get_peer_sep btif_av_get_peer_sep;
-struct btif_av_get_sink_interface btif_av_get_sink_interface;
 struct btif_av_is_a2dp_offload_enabled btif_av_is_a2dp_offload_enabled;
 struct btif_av_is_a2dp_offload_running btif_av_is_a2dp_offload_running;
 struct btif_av_is_connected btif_av_is_connected;
@@ -91,7 +90,6 @@ namespace btif_av {
 const RawAddress& btif_av_find_by_handle::return_value = RawAddress::kEmpty;
 uint16_t btif_av_get_audio_delay::return_value = 0;
 uint8_t btif_av_get_peer_sep::return_value = 0;
-const btav_sink_interface_t* btif_av_get_sink_interface::return_value = nullptr;
 bool btif_av_is_a2dp_offload_enabled::return_value = false;
 bool btif_av_is_a2dp_offload_running::return_value = false;
 bool btif_av_is_connected::return_value = false;
@@ -140,10 +138,6 @@ uint16_t btif_av_get_audio_delay(const A2dpType local_a2dp_type) {
 uint8_t btif_av_get_peer_sep(const A2dpType local_a2dp_type) {
   inc_func_call_count(__func__);
   return test::mock::btif_av::btif_av_get_peer_sep(local_a2dp_type);
-}
-const btav_sink_interface_t* btif_av_get_sink_interface(void) {
-  inc_func_call_count(__func__);
-  return test::mock::btif_av::btif_av_get_sink_interface();
 }
 bool btif_av_is_a2dp_offload_enabled() {
   inc_func_call_count(__func__);

@@ -122,17 +122,6 @@ struct btif_av_get_peer_sep {
 };
 extern struct btif_av_get_peer_sep btif_av_get_peer_sep;
 
-// Name: btif_av_get_sink_interface
-// Params: void
-// Return: const btav_sink_interface_t*
-struct btif_av_get_sink_interface {
-  static const btav_sink_interface_t* return_value;
-  std::function<const btav_sink_interface_t*(void)> body{
-      [](void) { return return_value; }};
-  const btav_sink_interface_t* operator()(void) { return body(); };
-};
-extern struct btif_av_get_sink_interface btif_av_get_sink_interface;
-
 // Name: btif_av_is_a2dp_offload_enabled
 // Params:
 // Return: bool

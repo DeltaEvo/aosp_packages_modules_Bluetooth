@@ -46,6 +46,17 @@ bt_status_t btif_av_source_set_codec_config_preference(
     std::vector<btav_a2dp_codec_config_t> codec_preferences);
 void btif_av_source_cleanup();
 
+/* Interface methods for the A2DP sink stack. */
+
+bt_status_t btif_av_sink_init(btav_sink_callbacks_t* callbacks,
+                              int max_connected_audio_devices);
+bt_status_t btif_av_sink_connect(const RawAddress& peer_address);
+bt_status_t btif_av_sink_disconnect(const RawAddress& peer_address);
+void btif_av_sink_cleanup();
+void btif_av_sink_set_audio_focus_state(int focus_state);
+void btif_av_sink_set_audio_track_gain(float gain);
+bt_status_t btif_av_sink_set_active_device(const RawAddress& peer_address);
+
 /**
  * Enum to represent the type of local a2dp profile.
  */
