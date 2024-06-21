@@ -1170,10 +1170,10 @@ cc_test {
     srcs: [
         ":TestCommonMockFunctions",
         ":TestCommonStackConfig",
+        ":TestFakeOsi",
         ":TestMockMainShim",
         ":TestMockMainShimEntry",
         ":TestMockStackBtmIso",
-        ":TestStubOsi",
         "le_audio/broadcaster/broadcaster.cc",
         "le_audio/broadcaster/broadcaster_test.cc",
         "le_audio/broadcaster/broadcaster_types.cc",
