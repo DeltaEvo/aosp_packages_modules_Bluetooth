@@ -306,7 +306,7 @@ void btif_dut_mode_send(uint16_t opcode, uint8_t* buf, uint8_t len) {
  ****************************************************************************/
 
 static bt_status_t btif_in_get_adapter_properties(void) {
-  const static uint32_t NUM_ADAPTER_PROPERTIES = 6;
+  const static uint32_t NUM_ADAPTER_PROPERTIES = 5;
   bt_property_t properties[NUM_ADAPTER_PROPERTIES];
   uint32_t num_props = 0;
 
@@ -331,13 +331,6 @@ static bt_status_t btif_in_get_adapter_properties(void) {
   /* BD_NAME */
   BTIF_STORAGE_FILL_PROPERTY(&properties[num_props], BT_PROPERTY_BDNAME,
                              sizeof(name), &name);
-  btif_storage_get_adapter_property(&properties[num_props]);
-  num_props++;
-
-  /* SCAN_MODE */
-  BTIF_STORAGE_FILL_PROPERTY(&properties[num_props],
-                             BT_PROPERTY_ADAPTER_SCAN_MODE, sizeof(mode),
-                             &mode);
   btif_storage_get_adapter_property(&properties[num_props]);
   num_props++;
 
@@ -467,7 +460,7 @@ void btif_get_adapter_property(bt_property_type_t type) {
     tBTM_BLE_VSC_CB cmn_vsc_cb;
     bt_local_le_features_t local_le_features;
 
-    /* LE features are not stored in storage. Should be retrived from stack
+    /* LE features are not stored in storage. Should be retrieved from stack
      */
     BTM_BleGetVendorCapabilities(&cmn_vsc_cb);
     local_le_features.local_privacy_enabled = BTM_BleLocalPrivacyEnabled();
@@ -582,12 +575,24 @@ bt_property_t* property_deep_copy(const bt_property_t* prop) {
 
 /*******************************************************************************
  *
+ * Function         btif_set_scan_mode
+ *
+ * Description      Updates core stack scan mode
+ *
+ ******************************************************************************/
+
+void btif_set_scan_mode(bt_scan_mode_t mode) {
+  log::info("set scan mode : {:x}", mode);
+
+  BTA_DmSetVisibility(mode);
+}
+
+/*******************************************************************************
+ *
  * Function         btif_set_adapter_property
  *
  * Description      Updates core stack with property value and stores it in
  *                  local cache
- *
- * Returns          bt_status_t
  *
  ******************************************************************************/
 
@@ -610,14 +615,6 @@ void btif_set_adapter_property(bt_property_t* property) {
       btif_core_storage_adapter_write(property);
     } break;
 
-    case BT_PROPERTY_ADAPTER_SCAN_MODE: {
-      bt_scan_mode_t mode = *(bt_scan_mode_t*)property->val;
-      log::verbose("set property scan mode : {:x}", mode);
-
-      if (BTA_DmSetVisibility(mode)) {
-        btif_core_storage_adapter_write(property);
-      }
-    } break;
     case BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT: {
       /* Nothing to do beside store the value in NV.  Java
          will change the SCAN_MODE property after setting timeout,

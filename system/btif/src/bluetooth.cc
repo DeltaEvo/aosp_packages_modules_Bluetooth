@@ -531,12 +531,15 @@ static int get_adapter_property(bt_property_type_t type) {
   return BT_STATUS_SUCCESS;
 }
 
+static void set_scan_mode(bt_scan_mode_t mode) {
+  do_in_main_thread(FROM_HERE, base::BindOnce(btif_set_scan_mode, mode));
+}
+
 static int set_adapter_property(const bt_property_t* property) {
   if (!btif_is_enabled()) return BT_STATUS_NOT_READY;
 
   switch (property->type) {
     case BT_PROPERTY_BDNAME:
-    case BT_PROPERTY_ADAPTER_SCAN_MODE:
     case BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT:
     case BT_PROPERTY_CLASS_OF_DEVICE:
       break;
@@ -1162,6 +1165,7 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     .cleanup = cleanup,
     .get_adapter_properties = get_adapter_properties,
     .get_adapter_property = get_adapter_property,
+    .set_scan_mode = set_scan_mode,
     .set_adapter_property = set_adapter_property,
     .get_remote_device_properties = get_remote_device_properties,
     .get_remote_device_property = get_remote_device_property,

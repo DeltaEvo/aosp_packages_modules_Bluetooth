@@ -89,6 +89,10 @@ public class AdapterNativeInterface {
         return disableNative();
     }
 
+    boolean setScanMode(int mode) {
+        return setScanModeNative(mode);
+    }
+
     boolean setAdapterProperty(int type, byte[] val) {
         return setAdapterPropertyNative(type, val);
     }
@@ -282,6 +286,8 @@ public class AdapterNativeInterface {
     private native boolean enableNative();
 
     private native boolean disableNative();
+
+    private native boolean setScanModeNative(int mode);
 
     private native boolean setAdapterPropertyNative(int type, byte[] val);
 

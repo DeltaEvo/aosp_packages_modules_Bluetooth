@@ -3021,14 +3021,6 @@ bt_status_t btif_dm_get_adapter_property(bt_property_t* prop) {
       prop->len = strlen((char*)bd_name->name);
     } break;
 
-    case BT_PROPERTY_ADAPTER_SCAN_MODE: {
-      /* if the storage does not have it. Most likely app never set it. Default
-       * is NONE */
-      bt_scan_mode_t* mode = (bt_scan_mode_t*)prop->val;
-      *mode = BT_SCAN_MODE_NONE;
-      prop->len = sizeof(bt_scan_mode_t);
-    } break;
-
     case BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT: {
       uint32_t* tmt = (uint32_t*)prop->val;
       *tmt = 120; /* default to 120s, if not found in NV */

@@ -376,8 +376,6 @@ TEST_F(BtifUtilsTest, dump_property_type) {
                      "BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT"),
       std::make_pair(BT_PROPERTY_ADAPTER_BONDED_DEVICES,
                      "BT_PROPERTY_ADAPTER_BONDED_DEVICES"),
-      std::make_pair(BT_PROPERTY_ADAPTER_SCAN_MODE,
-                     "BT_PROPERTY_ADAPTER_SCAN_MODE"),
       std::make_pair(BT_PROPERTY_REMOTE_FRIENDLY_NAME,
                      "BT_PROPERTY_REMOTE_FRIENDLY_NAME"),
   };

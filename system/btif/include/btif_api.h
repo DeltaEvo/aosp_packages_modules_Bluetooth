@@ -153,6 +153,15 @@ void btif_get_adapter_property(bt_property_type_t type);
 
 /*******************************************************************************
  *
+ * Function         btif_set_scan_mode
+ *
+ * Description      Updates core stack scan mode
+ *
+ ******************************************************************************/
+void btif_set_scan_mode(bt_scan_mode_t mode);
+
+/*******************************************************************************
+ *
  * Function         btif_set_adapter_property
  *
  * Description      Updates core stack with property value and stores it in
