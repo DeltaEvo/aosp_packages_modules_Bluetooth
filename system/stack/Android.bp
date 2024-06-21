@@ -427,6 +427,64 @@ cc_fuzz {
 }
 
 cc_fuzz {
+    name: "rfcomm-fuzzer",
+    team: "trendy_team_attack_tools",
+    defaults: [
+        "btstack_fuzzer_default",
+        "fluoride_defaults",
+    ],
+    include_dirs: [
+        "external/flatbuffers/include",
+        "external/rust/crates/quiche/deps/boringssl/src/include",
+        "packages/modules/Bluetooth/system/stack/btm",
+        "packages/modules/Bluetooth/system/stack/test/common",
+        "packages/modules/Bluetooth/system/stack/test/rfcomm",
+    ],
+    generated_headers: [
+        "BluetoothGeneratedDumpsysDataSchema_h",
+    ],
+    srcs: [
+        ":BluetoothPacketSources",
+        ":TestCommonMockFunctions",
+        ":TestCommonStackConfig",
+        ":TestFakeOsi",
+        ":TestMockBtif",
+        ":TestMockDevice",
+        ":TestMockGdOsLoggingLogRedaction",
+        ":TestMockMainShim",
+        ":TestMockMainShimEntry",
+        ":TestMockRustFfi",
+        ":TestMockSrvcDis",
+        ":TestMockStackAcl",
+        ":TestMockStackArbiter",
+        ":TestMockStackBtm",
+        ":TestMockStackHcic",
+        ":TestMockStackL2cap",
+        ":TestMockStackMetrics",
+        ":TestMockStackSdp",
+        "fuzzers/rfcomm_fuzzer.cc",
+        "rfcomm/*.cc",
+        "test/common/stack_test_packet_utils.cc",
+        "test/rfcomm/stack_rfcomm_test_utils.cc",
+    ],
+    shared_libs: [
+        "server_configurable_flags",
+    ],
+    static_libs: [
+        "bluetooth_flags_c_lib",
+        "libbluetooth-types",
+        "libbluetooth_crypto_toolbox",
+        "libbluetooth_hci_pdl",
+        "libbluetooth_l2cap_pdl",
+        "libbluetooth_log",
+        "libbluetooth_smp_pdl",
+        "libbt-platform-protos-lite",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
+    ],
+}
+
+cc_fuzz {
     name: "gatt-fuzzer",
     defaults: [
         "btstack_fuzzer_default",
