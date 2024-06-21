@@ -24,7 +24,7 @@
 
 #include "common/bidi_queue.h"
 #include "hci/acl_manager/le_connection_callbacks.h"
-#include "hci/acl_manager/le_connection_management_callbacks.h"
+#include "hci/acl_manager/le_connection_management_callbacks_mock.h"
 #include "hci/address_with_type.h"
 #include "hci/controller.h"
 #include "hci/hci_layer_fake.h"
@@ -238,41 +238,6 @@ class MockLeAcceptlistCallbacks : public LeAcceptlistCallbacks {
   MOCK_METHOD(void, OnLeConnectFail, (AddressWithType address, ErrorCode reason), (override));
   MOCK_METHOD(void, OnLeDisconnection, (AddressWithType address), (override));
   MOCK_METHOD(void, OnResolvingListChange, (), (override));
-};
-
-class MockLeConnectionManagementCallbacks : public LeConnectionManagementCallbacks {
- public:
-  MOCK_METHOD(
-      void,
-      OnConnectionUpdate,
-      (hci::ErrorCode hci_status,
-       uint16_t connection_interval,
-       uint16_t connection_latency,
-       uint16_t supervision_timeout),
-      (override));
-  MOCK_METHOD(
-      void,
-      OnDataLengthChange,
-      (uint16_t tx_octets, uint16_t tx_time, uint16_t rx_octets, uint16_t rx_time),
-      (override));
-  MOCK_METHOD(void, OnDisconnection, (ErrorCode reason), (override));
-  MOCK_METHOD(
-      void,
-      OnReadRemoteVersionInformationComplete,
-      (hci::ErrorCode hci_status, uint8_t lmp_version, uint16_t manufacturer_name, uint16_t sub_version),
-      (override));
-  MOCK_METHOD(void, OnLeReadRemoteFeaturesComplete, (hci::ErrorCode hci_status, uint64_t features), (override));
-  MOCK_METHOD(
-      void, OnPhyUpdate, (hci::ErrorCode hci_status, uint8_t tx_phy, uint8_t rx_phy), (override));
-  MOCK_METHOD(
-      void,
-      OnLeSubrateChange,
-      (hci::ErrorCode hci_status,
-       uint16_t subrate_factor,
-       uint16_t peripheral_latency,
-       uint16_t continuation_number,
-       uint16_t supervision_timeout),
-      (override));
 };
 
 class LeImplTest : public ::testing::Test {
