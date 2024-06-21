@@ -229,7 +229,7 @@ public class BluetoothMediaBrowserService extends MediaBrowserServiceCompat {
                 AvrcpControllerService.getAvrcpControllerService();
         if (avrcpControllerService == null) {
             Log.w(TAG, "getContents(id=" + parentMediaId + "): AVRCP Controller Service not ready");
-            return new BrowseResult(new ArrayList(0), BrowseResult.ERROR_NO_AVRCP_SERVICE);
+            return new BrowseResult(null, BrowseResult.ERROR_NO_AVRCP_SERVICE);
         } else {
             return avrcpControllerService.getContents(parentMediaId);
         }
