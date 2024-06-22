@@ -52,17 +52,14 @@
 #include "device/include/device_iot_config.h"
 #include "hci/controller_interface.h"
 #include "internal_include/bt_target.h"
-#include "internal_include/bt_trace.h"
 #include "main/shim/entry.h"
 #include "main/shim/helpers.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/future.h"
 #include "osi/include/properties.h"
 #include "stack/include/a2dp_api.h"
-#include "stack/include/bt_types.h"
-#include "stack/include/btm_api.h"
 #include "stack/include/btm_ble_api.h"
+#include "stack/include/btm_client_interface.h"
 #include "storage/config_keys.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
@@ -296,7 +293,8 @@ void btif_dut_mode_configure(uint8_t enable) {
 void btif_dut_mode_send(uint16_t opcode, uint8_t* buf, uint8_t len) {
   log::verbose("");
   /* For now nothing to be done. */
-  BTM_VendorSpecificCommand(opcode, len, buf, [](tBTM_VSC_CMPL*) {});
+  get_btm_client_interface().vendor.BTM_VendorSpecificCommand(
+      opcode, len, buf, [](tBTM_VSC_CMPL*) {});
 }
 
 /*****************************************************************************
