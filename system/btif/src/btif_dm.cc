@@ -762,8 +762,7 @@ bool is_device_le_audio_capable(const RawAddress bd_addr) {
   /* First try reading device type from BTIF - it persists over multiple
    * inquiry sessions */
   int dev_type = 0;
-  if (com::android::bluetooth::flags::le_audio_dev_type_detection_fix() &&
-      (btif_get_device_type(bd_addr, &dev_type) &&
+  if ((btif_get_device_type(bd_addr, &dev_type) &&
        (dev_type & BT_DEVICE_TYPE_BLE) == BT_DEVICE_TYPE_BLE)) {
     /* LE Audio capable device is discoverable over both LE and Classic using
      * same address. Prefer to use LE transport, as we don't know if it can do

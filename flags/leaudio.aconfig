@@ -67,13 +67,6 @@ flag {
 }
 
 flag {
-    name: "le_audio_dev_type_detection_fix"
-    namespace: "bluetooth"
-    description: "Better LE Audio devices detection"
-    bug: "319511584"
-}
-
-flag {
     name: "metadata_api_inactive_audio_device_upon_connection"
     is_exported: true
     namespace: "bluetooth"
