@@ -1255,7 +1255,8 @@ void bta_av_str_opened(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
 
     L2CA_SetMediaStreamChannel(p_scb->l2c_cid, true);
 
-    p = BTM_ReadRemoteFeatures(p_scb->PeerAddress());
+    p = get_btm_client_interface().peer.BTM_ReadRemoteFeatures(
+        p_scb->PeerAddress());
     if (p != NULL) {
       if (HCI_EDR_ACL_2MPS_SUPPORTED(p)) open.edr |= BTA_AV_EDR_2MBPS;
       if (HCI_EDR_ACL_3MPS_SUPPORTED(p)) {
