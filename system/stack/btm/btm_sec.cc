@@ -2528,7 +2528,7 @@ void btm_sec_rmt_host_support_feat_evt(const RawAddress bd_addr,
 
   if (BTM_SEC_IS_SM4_UNKNOWN(p_dev_rec->sm4)) {
     p_dev_rec->sm4 = BTM_SM4_KNOWN;
-    if (HCI_SSP_HOST_SUPPORTED((std::array<uint8_t, 1>({features_0})))) {
+    if (HCI_SSP_HOST_SUPPORTED(&features_0)) {
       p_dev_rec->sm4 = BTM_SM4_TRUE;
     }
     log::verbose(
