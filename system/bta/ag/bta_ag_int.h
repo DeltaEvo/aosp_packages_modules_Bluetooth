@@ -483,6 +483,10 @@ void bta_ag_send_qcs(tBTA_AG_SCB* p_scb, tBTA_AG_DATA* p_data);
  * @return true if SCO managed by Audio is enabled, false otherwise
  */
 bool bta_ag_is_sco_managed_by_audio();
+/**
+ * Respond to Audio HAL's SuspendStream request when SCO is disconnected
+ */
+void bta_ag_stream_suspended();
 
 namespace fmt {
 template <>
