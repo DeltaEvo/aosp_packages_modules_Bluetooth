@@ -27,23 +27,20 @@
 namespace bluetooth {
 namespace l2cap {
 namespace internal {
-Receiver::Receiver(
-    LowerQueueUpEnd* link_queue_up_end, os::Handler* handler, DataPipelineManager* data_pipeline_manager_)
+Receiver::Receiver(LowerQueueUpEnd* link_queue_up_end, os::Handler* handler,
+                   DataPipelineManager* data_pipeline_manager_)
     : link_queue_up_end_(link_queue_up_end),
       handler_(handler),
       buffer_timer_(handler),
       data_pipeline_manager_(data_pipeline_manager_) {
-  log::assert_that(
-      link_queue_up_end_ != nullptr && handler_ != nullptr,
-      "assert failed: link_queue_up_end_ != nullptr && handler_ != nullptr");
-  link_queue_up_end_->RegisterDequeue(handler_,
-                                      common::Bind(&Receiver::link_queue_dequeue_callback, common::Unretained(this)));
+  log::assert_that(link_queue_up_end_ != nullptr && handler_ != nullptr,
+                   "assert failed: link_queue_up_end_ != nullptr && handler_ != nullptr");
+  link_queue_up_end_->RegisterDequeue(
+          handler_, common::Bind(&Receiver::link_queue_dequeue_callback, common::Unretained(this)));
 }
 
 // Invoked from external handler/thread (ModuleRegistry)
-Receiver::~Receiver() {
-  link_queue_up_end_->UnregisterDequeue();
-}
+Receiver::~Receiver() { link_queue_up_end_->UnregisterDequeue(); }
 
 // Invoked from external (Queue Reactable)
 void Receiver::link_queue_dequeue_callback() {
@@ -61,7 +58,8 @@ void Receiver::link_queue_dequeue_callback() {
     buffered_packets_.emplace(*packet);
     log::warn("Enqueued the unexpected packet. Current queue size: {}", buffered_packets_.size());
     buffer_timer_.Schedule(
-        common::BindOnce(&Receiver::check_buffered_packets, common::Unretained(this)), std::chrono::milliseconds(500));
+            common::BindOnce(&Receiver::check_buffered_packets, common::Unretained(this)),
+            std::chrono::milliseconds(500));
 
     return;
   }

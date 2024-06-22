@@ -27,9 +27,10 @@ namespace security {
 
 /* This structure holds the information about the failure in case of airing failure */
 struct PairingFailure {
-  /* A place in code that triggered this failure. It can be modified by functions that pass the error to a location that
-   * better reflect the current state of flow. i.e. instead of generic location responsible for waiting for packet,
-   * replace it with location of receiving specific packet in a specific flow */
+  /* A place in code that triggered this failure. It can be modified by functions that pass the
+   * error to a location that better reflect the current state of flow. i.e. instead of generic
+   * location responsible for waiting for packet, replace it with location of receiving specific
+   * packet in a specific flow */
   // base::Location location;
 
   /* This is the failure message, that will be passed, either into upper layers,
@@ -46,10 +47,12 @@ struct PairingFailure {
   PairingFailure(/*const base::Location& location, */ const std::string& message)
       : /*location(location), */ message(message) {}
 
-  PairingFailure(/*const base::Location& location, */ const std::string& message, Code received_code)
+  PairingFailure(/*const base::Location& location, */ const std::string& message,
+                 Code received_code)
       : /*location(location), */ message(message), received_code_(received_code) {}
 
-  PairingFailure(/*const base::Location& location, */ const std::string& message, PairingFailedReason reason)
+  PairingFailure(/*const base::Location& location, */ const std::string& message,
+                 PairingFailedReason reason)
       : /*location(location),*/ message(message), reason(reason) {}
 };
 

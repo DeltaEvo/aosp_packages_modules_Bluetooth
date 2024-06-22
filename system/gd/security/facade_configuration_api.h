@@ -31,7 +31,7 @@ namespace security {
  * encryption/decryption of communications.
  */
 class FacadeConfigurationApi {
- public:
+public:
   FacadeConfigurationApi(const FacadeConfigurationApi&) = delete;
   FacadeConfigurationApi& operator=(const FacadeConfigurationApi&) = delete;
 
@@ -41,26 +41,25 @@ class FacadeConfigurationApi {
   void SetDisconnectCallback(internal::SecurityManagerImpl::FacadeDisconnectCallback callback);
   void SetIoCapability(hci::IoCapability io_capability);
   void SetAuthenticationRequirements(hci::AuthenticationRequirements authentication_requirement);
-  void EnforceSecurityPolicy(
-      hci::AddressWithType remote,
-      l2cap::classic::SecurityPolicy policy,
-      l2cap::classic::SecurityEnforcementInterface::ResultCallback callback);
+  void EnforceSecurityPolicy(hci::AddressWithType remote, l2cap::classic::SecurityPolicy policy,
+                             l2cap::classic::SecurityEnforcementInterface::ResultCallback callback);
 
   void SetLeIoCapability(security::IoCapability io_capability);
   void SetLeAuthRequirements(uint8_t auth_req);
   void SetLeMaximumEncryptionKeySize(uint8_t maximum_encryption_key_size);
   void SetLeOobDataPresent(OobDataFlag oob_present);
-  void GetLeOutOfBandData(std::array<uint8_t, 16>* confirmation_value, std::array<uint8_t, 16>* random_value);
-  void SetOutOfBandData(
-      hci::AddressWithType remote_address,
-      std::array<uint8_t, 16> confirmation_value,
-      std::array<uint8_t, 16> random_value);
+  void GetLeOutOfBandData(std::array<uint8_t, 16>* confirmation_value,
+                          std::array<uint8_t, 16>* random_value);
+  void SetOutOfBandData(hci::AddressWithType remote_address,
+                        std::array<uint8_t, 16> confirmation_value,
+                        std::array<uint8_t, 16> random_value);
 
- protected:
-  FacadeConfigurationApi(os::Handler* security_handler, internal::SecurityManagerImpl* security_manager_impl)
+protected:
+  FacadeConfigurationApi(os::Handler* security_handler,
+                         internal::SecurityManagerImpl* security_manager_impl)
       : security_handler_(security_handler), security_manager_impl_(security_manager_impl) {}
 
- private:
+private:
   os::Handler* security_handler_ = nullptr;
   internal::SecurityManagerImpl* security_manager_impl_;
 };

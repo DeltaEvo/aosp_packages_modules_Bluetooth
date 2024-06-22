@@ -39,7 +39,7 @@ class FixedChannelImpl;
  *
  */
 class FixedChannel {
- public:
+public:
   // Should only be constructed by modules that have access to LinkManager
   FixedChannel(std::shared_ptr<internal::FixedChannelImpl> impl, os::Handler* l2cap_handler)
       : impl_(std::move(impl)), l2cap_handler_(l2cap_handler) {
@@ -50,9 +50,10 @@ class FixedChannel {
   hci::AddressWithType GetDevice() const;
 
   /**
-   * Register close callback. If close callback is registered, when a channel is closed, the channel's resource will
-   * only be freed after on_close callback is invoked. Otherwise, if no on_close callback is registered, the channel's
-   * resource will be freed immediately after closing.
+   * Register close callback. If close callback is registered, when a channel is closed, the
+   * channel's resource will only be freed after on_close callback is invoked. Otherwise, if no
+   * on_close callback is registered, the channel's resource will be freed immediately after
+   * closing.
    *
    * @param user_handler The handler used to invoke the callback on
    * @param on_close_callback The callback invoked upon channel closing.
@@ -61,14 +62,16 @@ class FixedChannel {
   void RegisterOnCloseCallback(os::Handler* user_handler, OnCloseCallback on_close_callback);
 
   /**
-   * Indicate that this Fixed Channel is being used. This will prevent ACL connection from being disconnected.
+   * Indicate that this Fixed Channel is being used. This will prevent ACL connection from being
+   * disconnected.
    */
   void Acquire();
 
   /**
-   * Indicate that this Fixed Channel is no longer being used. ACL connection will be disconnected after
-   * kLinkIdleDisconnectTimeout if no other DynamicChannel is connected or no other Fixed Channel is  using this
-   * ACL connection. However a module can still receive data on this channel as long as it remains open.
+   * Indicate that this Fixed Channel is no longer being used. ACL connection will be disconnected
+   * after kLinkIdleDisconnectTimeout if no other DynamicChannel is connected or no other Fixed
+   * Channel is  using this ACL connection. However a module can still receive data on this channel
+   * as long as it remains open.
    */
   void Release();
 
@@ -79,7 +82,8 @@ class FixedChannel {
    *
    * @return The upper end of a bi-directional queue.
    */
-  common::BidiQueueEnd<packet::BasePacketBuilder, packet::PacketView<packet::kLittleEndian>>* GetQueueUpEnd() const;
+  common::BidiQueueEnd<packet::BasePacketBuilder, packet::PacketView<packet::kLittleEndian>>*
+  GetQueueUpEnd() const;
 
   /**
    * Get the Proxy for L2CAP Link Options.
@@ -88,7 +92,7 @@ class FixedChannel {
    */
   LinkOptions* GetLinkOptions();
 
- private:
+private:
   std::shared_ptr<internal::FixedChannelImpl> impl_;
   os::Handler* l2cap_handler_;
 };

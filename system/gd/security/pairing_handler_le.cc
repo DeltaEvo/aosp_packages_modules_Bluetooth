@@ -42,7 +42,8 @@ void PairingHandlerLe::PairingMain(InitialInformations i) {
 
   if (i.remotely_initiated) {
     log::info("Was remotely initiated, presenting user with the accept prompt");
-    i.user_interface_handler->Post(common::BindOnce(&UI::DisplayPairingPrompt, common::Unretained(i.user_interface),
+    i.user_interface_handler->Post(common::BindOnce(&UI::DisplayPairingPrompt,
+                                                    common::Unretained(i.user_interface),
                                                     i.remote_connection_address, i.remote_name));
 
     // If pairing was initiated by remote device, wait for the user to accept
@@ -53,19 +54,22 @@ void PairingHandlerLe::PairingMain(InitialInformations i) {
       log::info("User either did not accept the remote pairing, or the prompt timed out");
       // TODO: Uncomment this one once we find a way to attempt to send packet when the link is down
       // SendL2capPacket(i, PairingFailedBuilder::Create(PairingFailedReason::UNSPECIFIED_REASON));
-      i.OnPairingFinished(PairingFailure("User either did not accept the remote pairing, or the prompt timed out"));
+      i.OnPairingFinished(PairingFailure(
+              "User either did not accept the remote pairing, or the prompt timed out"));
       return;
     }
 
     log::info("Pairing prompt accepted");
   }
 
-  /************************************************ PHASE 1 *********************************************************/
+  /************************************************ PHASE 1
+   * *********************************************************/
   Phase1ResultOrFailure phase_1_result = ExchangePairingFeature(i);
   if (std::holds_alternative<PairingFailure>(phase_1_result)) {
     log::warn("Pairing failed in phase 1");
-    // We already send pairing fialed in lower layer. Which one should do that ? how about disconneciton?
-    // SendL2capPacket(i, PairingFailedBuilder::Create(PairingFailedReason::UNSPECIFIED_REASON));
+    // We already send pairing fialed in lower layer. Which one should do that ? how about
+    // disconneciton? SendL2capPacket(i,
+    // PairingFailedBuilder::Create(PairingFailedReason::UNSPECIFIED_REASON));
     // TODO: disconnect?
     i.OnPairingFinished(std::get<PairingFailure>(phase_1_result));
     return;
@@ -73,20 +77,23 @@ void PairingHandlerLe::PairingMain(InitialInformations i) {
 
   auto [pairing_request, pairing_response] = std::get<Phase1Result>(phase_1_result);
 
-  uint8_t key_size =
-      std::min(pairing_request.GetMaximumEncryptionKeySize(), pairing_response.GetMaximumEncryptionKeySize());
+  uint8_t key_size = std::min(pairing_request.GetMaximumEncryptionKeySize(),
+                              pairing_response.GetMaximumEncryptionKeySize());
   if (key_size < 7 || key_size > 16) {
     log::warn("Resulting key size is bad {}", key_size);
     SendL2capPacket(i, PairingFailedBuilder::Create(PairingFailedReason::ENCRYPTION_KEY_SIZE));
-    i.OnPairingFinished(PairingFailure("Resulting key size is bad", PairingFailedReason::ENCRYPTION_KEY_SIZE));
+    i.OnPairingFinished(
+            PairingFailure("Resulting key size is bad", PairingFailedReason::ENCRYPTION_KEY_SIZE));
     return;
   }
   if (key_size != 16) {
     log::warn("Resulting key size is less than 16 octets!");
   }
 
-  /************************************************ PHASE 2 *********************************************************/
-  bool isSecureConnections = pairing_request.GetAuthReq() & pairing_response.GetAuthReq() & AuthReqMaskSc;
+  /************************************************ PHASE 2
+   * *********************************************************/
+  bool isSecureConnections =
+          pairing_request.GetAuthReq() & pairing_response.GetAuthReq() & AuthReqMaskSc;
   if (isSecureConnections) {
     // 2.3.5.6 LE Secure Connections pairing phase 2
     log::info("Pairing Phase 2 LE Secure connections Started");
@@ -101,7 +108,7 @@ void PairingHandlerLe::PairingMain(InitialInformations i) {
     */
 
     OobDataFlag remote_have_oob_data =
-        IAmCentral(i) ? pairing_response.GetOobDataFlag() : pairing_request.GetOobDataFlag();
+            IAmCentral(i) ? pairing_response.GetOobDataFlag() : pairing_request.GetOobDataFlag();
 
     auto key_exchange_result = ExchangePublicKeys(i, remote_have_oob_data);
     if (std::holds_alternative<PairingFailure>(key_exchange_result)) {
@@ -113,14 +120,16 @@ void PairingHandlerLe::PairingMain(InitialInformations i) {
 
     // Public key exchange finished, Diffie-Hellman key computed.
 
-    Stage1ResultOrFailure stage1result = DoSecureConnectionsStage1(i, PKa, PKb, pairing_request, pairing_response);
+    Stage1ResultOrFailure stage1result =
+            DoSecureConnectionsStage1(i, PKa, PKb, pairing_request, pairing_response);
     if (std::holds_alternative<PairingFailure>(stage1result)) {
       i.OnPairingFinished(std::get<PairingFailure>(stage1result));
       return;
     }
 
-    Stage2ResultOrFailure stage_2_result = DoSecureConnectionsStage2(i, PKa, PKb, pairing_request, pairing_response,
-                                                                     std::get<Stage1Result>(stage1result), dhkey);
+    Stage2ResultOrFailure stage_2_result =
+            DoSecureConnectionsStage2(i, PKa, PKb, pairing_request, pairing_response,
+                                      std::get<Stage1Result>(stage1result), dhkey);
     if (std::holds_alternative<PairingFailure>(stage_2_result)) {
       i.OnPairingFinished(std::get<PairingFailure>(stage_2_result));
       return;
@@ -168,14 +177,16 @@ void PairingHandlerLe::PairingMain(InitialInformations i) {
     }
   }
 
-  /************************************************ PHASE 3 *********************************************************/
+  /************************************************ PHASE 3
+   * *********************************************************/
   log::info("Waiting for encryption changed");
   auto encryption_change_result = WaitEncryptionChanged();
   if (std::holds_alternative<PairingFailure>(encryption_change_result)) {
     i.OnPairingFinished(std::get<PairingFailure>(encryption_change_result));
     return;
   } else if (std::holds_alternative<EncryptionChangeView>(encryption_change_result)) {
-    EncryptionChangeView encryption_changed = std::get<EncryptionChangeView>(encryption_change_result);
+    EncryptionChangeView encryption_changed =
+            std::get<EncryptionChangeView>(encryption_change_result);
     if (encryption_changed.GetStatus() != hci::ErrorCode::SUCCESS ||
         encryption_changed.GetEncryptionEnabled() != hci::EncryptionEnabled::ON) {
       i.OnPairingFinished(PairingFailure("Encryption change failed"));
@@ -183,7 +194,7 @@ void PairingHandlerLe::PairingMain(InitialInformations i) {
     }
   } else if (std::holds_alternative<EncryptionKeyRefreshCompleteView>(encryption_change_result)) {
     EncryptionKeyRefreshCompleteView encryption_changed =
-        std::get<EncryptionKeyRefreshCompleteView>(encryption_change_result);
+            std::get<EncryptionKeyRefreshCompleteView>(encryption_change_result);
     if (encryption_changed.GetStatus() != hci::ErrorCode::SUCCESS) {
       i.OnPairingFinished(PairingFailure("Encryption key refresh failed"));
       return;
@@ -194,7 +205,8 @@ void PairingHandlerLe::PairingMain(InitialInformations i) {
   }
   log::info("Encryption change finished successfully");
 
-  DistributedKeysOrFailure keyExchangeStatus = DistributeKeys(i, pairing_response, isSecureConnections);
+  DistributedKeysOrFailure keyExchangeStatus =
+          DistributeKeys(i, pairing_response, isSecureConnections);
   if (std::holds_alternative<PairingFailure>(keyExchangeStatus)) {
     i.OnPairingFinished(std::get<PairingFailure>(keyExchangeStatus));
     log::error("Key exchange failed");
@@ -209,12 +221,13 @@ void PairingHandlerLe::PairingMain(InitialInformations i) {
     distributed_keys.remote_link_key = link_key;
   }
 
-  // bool bonding = pairing_request.GetAuthReq() & pairing_response.GetAuthReq() & AuthReqMaskBondingFlag;
+  // bool bonding = pairing_request.GetAuthReq() & pairing_response.GetAuthReq() &
+  // AuthReqMaskBondingFlag;
 
   i.OnPairingFinished(PairingResult{
-      .connection_address = i.remote_connection_address,
-      .distributed_keys = distributed_keys,
-      .key_size = key_size,
+          .connection_address = i.remote_connection_address,
+          .distributed_keys = distributed_keys,
+          .key_size = key_size,
   });
 
   log::info("Pairing finished successfully.");
@@ -226,9 +239,9 @@ Phase1ResultOrFailure PairingHandlerLe::ExchangePairingFeature(const InitialInfo
   if (IAmCentral(i)) {
     // Send Pairing Request
     const auto& x = i.myPairingCapabilities;
-    auto pairing_request_builder =
-        PairingRequestBuilder::Create(x.io_capability, x.oob_data_flag, x.auth_req, x.maximum_encryption_key_size,
-                                      x.initiator_key_distribution, x.responder_key_distribution);
+    auto pairing_request_builder = PairingRequestBuilder::Create(
+            x.io_capability, x.oob_data_flag, x.auth_req, x.maximum_encryption_key_size,
+            x.initiator_key_distribution, x.responder_key_distribution);
     // basically pairing_request = myPairingCapabilities;
 
     // Convert builder to view
@@ -246,8 +259,8 @@ Phase1ResultOrFailure PairingHandlerLe::ExchangePairingFeature(const InitialInfo
     log::info("Waiting for Pairing Response");
     auto response = WaitPairingResponse();
 
-    /* There is a potential collision where the peripheral initiates the pairing at the same time we initiate it, by
-     * sending security request. */
+    /* There is a potential collision where the peripheral initiates the pairing at the same time we
+     * initiate it, by sending security request. */
     if (std::holds_alternative<PairingFailure>(response) &&
         std::get<PairingFailure>(response).received_code_ == Code::SECURITY_REQUEST) {
       log::info("Received security request, waiting for Pairing Response again...");
@@ -271,12 +284,15 @@ Phase1ResultOrFailure PairingHandlerLe::ExchangePairingFeature(const InitialInfo
 
     if (i.remotely_initiated) {
       if (!i.pairing_request.has_value()) {
-        return PairingFailure("You must pass PairingRequest as a initial information to peripheral!");
+        return PairingFailure(
+                "You must pass PairingRequest as a initial information to peripheral!");
       }
 
       pairing_request = i.pairing_request.value();
 
-      if (!pairing_request->IsValid()) return PairingFailure("Malformed PairingRequest");
+      if (!pairing_request->IsValid()) {
+        return PairingFailure("Malformed PairingRequest");
+      }
     } else {
       SendL2capPacket(i, SecurityRequestBuilder::Create(i.myPairingCapabilities.auth_req));
 
@@ -301,12 +317,12 @@ Phase1ResultOrFailure PairingHandlerLe::ExchangePairingFeature(const InitialInfo
     // Send Pairing Request
     const auto& x = i.myPairingCapabilities;
     // basically pairing_response_builder = my_first_packet;
-    // We are not allowed to enable bits that the remote did not allow us to set in initiator_key_dist and
-    // responder_key_distribution
-    auto pairing_response_builder =
-        PairingResponseBuilder::Create(x.io_capability, x.oob_data_flag, x.auth_req, x.maximum_encryption_key_size,
-                                       x.initiator_key_distribution & pairing_request->GetInitiatorKeyDistribution(),
-                                       x.responder_key_distribution & pairing_request->GetResponderKeyDistribution());
+    // We are not allowed to enable bits that the remote did not allow us to set in
+    // initiator_key_dist and responder_key_distribution
+    auto pairing_response_builder = PairingResponseBuilder::Create(
+            x.io_capability, x.oob_data_flag, x.auth_req, x.maximum_encryption_key_size,
+            x.initiator_key_distribution & pairing_request->GetInitiatorKeyDistribution(),
+            x.responder_key_distribution & pairing_request->GetResponderKeyDistribution());
 
     // Convert builder to view
     std::shared_ptr<std::vector<uint8_t>> packet_bytes = std::make_shared<std::vector<uint8_t>>();
@@ -325,13 +341,13 @@ Phase1ResultOrFailure PairingHandlerLe::ExchangePairingFeature(const InitialInfo
   }
 }
 
-DistributedKeysOrFailure PairingHandlerLe::DistributeKeys(const InitialInformations& i,
-                                                          const PairingResponseView& pairing_response,
-                                                          bool isSecureConnections) {
-  uint8_t keys_i_receive =
-      IAmCentral(i) ? pairing_response.GetResponderKeyDistribution() : pairing_response.GetInitiatorKeyDistribution();
-  uint8_t keys_i_send =
-      IAmCentral(i) ? pairing_response.GetInitiatorKeyDistribution() : pairing_response.GetResponderKeyDistribution();
+DistributedKeysOrFailure PairingHandlerLe::DistributeKeys(
+        const InitialInformations& i, const PairingResponseView& pairing_response,
+        bool isSecureConnections) {
+  uint8_t keys_i_receive = IAmCentral(i) ? pairing_response.GetResponderKeyDistribution()
+                                         : pairing_response.GetInitiatorKeyDistribution();
+  uint8_t keys_i_send = IAmCentral(i) ? pairing_response.GetInitiatorKeyDistribution()
+                                      : pairing_response.GetResponderKeyDistribution();
 
   // In Secure Connections on the LE Transport, the EncKey field shall be ignored
   if (isSecureConnections) {
@@ -339,10 +355,8 @@ DistributedKeysOrFailure PairingHandlerLe::DistributeKeys(const InitialInformati
     keys_i_receive = (~KeyMaskEnc) & keys_i_receive;
   }
 
-  log::info(
-      "Key distribution start, keys_i_send=0x{:02x}, keys_i_receive=0x{:02x}",
-      keys_i_send,
-      keys_i_receive);
+  log::info("Key distribution start, keys_i_send=0x{:02x}, keys_i_receive=0x{:02x}", keys_i_send,
+            keys_i_receive);
 
   // TODO: obtain actual values, and apply key_size to the LTK
   Octet16 my_ltk = bluetooth::os::GenerateRandom<16>();
@@ -352,7 +366,7 @@ DistributedKeysOrFailure PairingHandlerLe::DistributeKeys(const InitialInformati
   Octet16 my_irk = i.my_identity_resolving_key;
   Address my_identity_address = i.my_identity_address.GetAddress();
   AddrType my_identity_address_type =
-      static_cast<bluetooth::security::AddrType>(i.my_identity_address.GetAddressType());
+          static_cast<bluetooth::security::AddrType>(i.my_identity_address.GetAddressType());
   Octet16 my_signature_key{0};
 
   if (IAmCentral(i)) {
@@ -362,8 +376,8 @@ DistributedKeysOrFailure PairingHandlerLe::DistributeKeys(const InitialInformati
       return keys;
     }
 
-    SendKeys(i, keys_i_send, my_ltk, my_ediv, my_rand, my_irk, my_identity_address, my_identity_address_type,
-             my_signature_key);
+    SendKeys(i, keys_i_send, my_ltk, my_ediv, my_rand, my_irk, my_identity_address,
+             my_identity_address_type, my_signature_key);
 
     std::get<DistributedKeys>(keys).local_ltk = my_ltk;
     std::get<DistributedKeys>(keys).local_ediv = my_ediv;
@@ -371,8 +385,8 @@ DistributedKeysOrFailure PairingHandlerLe::DistributeKeys(const InitialInformati
     log::info("Key distribution finish");
     return keys;
   } else {
-    SendKeys(i, keys_i_send, my_ltk, my_ediv, my_rand, my_irk, my_identity_address, my_identity_address_type,
-             my_signature_key);
+    SendKeys(i, keys_i_send, my_ltk, my_ediv, my_rand, my_irk, my_identity_address,
+             my_identity_address_type, my_signature_key);
 
     DistributedKeysOrFailure keys = ReceiveKeys(keys_i_receive);
     if (std::holds_alternative<PairingFailure>(keys)) {
@@ -433,9 +447,10 @@ DistributedKeysOrFailure PairingHandlerLe::ReceiveKeys(const uint8_t& keys_i_rec
     }
     log::info("Received Identity Address Information");
     auto iapacketview = std::get<IdentityAddressInformationView>(iapacket);
-    identity_address = hci::AddressWithType(iapacketview.GetBdAddr(), iapacketview.GetAddrType() == AddrType::PUBLIC
-                                                                          ? hci::AddressType::PUBLIC_DEVICE_ADDRESS
-                                                                          : hci::AddressType::RANDOM_DEVICE_ADDRESS);
+    identity_address = hci::AddressWithType(iapacketview.GetBdAddr(),
+                                            iapacketview.GetAddrType() == AddrType::PUBLIC
+                                                    ? hci::AddressType::PUBLIC_DEVICE_ADDRESS
+                                                    : hci::AddressType::RANDOM_DEVICE_ADDRESS);
   }
 
   if (keys_i_receive & KeyMaskSign) {
@@ -457,8 +472,9 @@ DistributedKeysOrFailure PairingHandlerLe::ReceiveKeys(const uint8_t& keys_i_rec
                          .remote_signature_key = signature_key};
 }
 
-void PairingHandlerLe::SendKeys(const InitialInformations& i, const uint8_t& keys_i_send, Octet16 ltk, uint16_t ediv,
-                                std::array<uint8_t, 8> rand, Octet16 irk, Address identity_address,
+void PairingHandlerLe::SendKeys(const InitialInformations& i, const uint8_t& keys_i_send,
+                                Octet16 ltk, uint16_t ediv, std::array<uint8_t, 8> rand,
+                                Octet16 irk, Address identity_address,
                                 AddrType identity_addres_type, Octet16 signature_key) {
   if (keys_i_send & KeyMaskEnc) {
     log::info("Sending Encryption Information");
@@ -471,7 +487,8 @@ void PairingHandlerLe::SendKeys(const InitialInformations& i, const uint8_t& key
     log::info("Sending Identity Information");
     SendL2capPacket(i, IdentityInformationBuilder::Create(irk));
     log::info("Sending Identity Address Information");
-    SendL2capPacket(i, IdentityAddressInformationBuilder::Create(identity_addres_type, identity_address));
+    SendL2capPacket(
+            i, IdentityAddressInformationBuilder::Create(identity_addres_type, identity_address));
   }
 
   if (keys_i_send & KeyMaskSign) {

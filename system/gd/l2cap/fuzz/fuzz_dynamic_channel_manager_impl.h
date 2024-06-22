@@ -31,13 +31,12 @@ namespace bluetooth {
 namespace shim {
 namespace {
 class FuzzDynamicChannelManagerImpl {
- public:
+public:
   void ConnectChannel(
-      hci::Address device,
-      l2cap::classic::DynamicChannelConfigurationOption configuration_option,
-      l2cap::Psm,
-      l2cap::classic::DynamicChannelManager::OnConnectionOpenCallback on_open_callback,
-      l2cap::classic::DynamicChannelManager::OnConnectionFailureCallback on_fail_callback) {
+          hci::Address device,
+          l2cap::classic::DynamicChannelConfigurationOption configuration_option, l2cap::Psm,
+          l2cap::classic::DynamicChannelManager::OnConnectionOpenCallback on_open_callback,
+          l2cap::classic::DynamicChannelManager::OnConnectionFailureCallback on_fail_callback) {
     connections_++;
     on_open_callback_ = std::move(on_open_callback);
     on_fail_callback_ = std::move(on_fail_callback);
@@ -47,11 +46,11 @@ class FuzzDynamicChannelManagerImpl {
   int connections_{0};
 
   void RegisterService(
-      l2cap::Psm,
-      l2cap::classic::DynamicChannelConfigurationOption,
-      const l2cap::classic::SecurityPolicy&,
-      l2cap::classic::DynamicChannelManager::OnRegistrationCompleteCallback on_registration_complete,
-      l2cap::classic::DynamicChannelManager::OnConnectionOpenCallback on_open_callback) {
+          l2cap::Psm, l2cap::classic::DynamicChannelConfigurationOption,
+          const l2cap::classic::SecurityPolicy&,
+          l2cap::classic::DynamicChannelManager::OnRegistrationCompleteCallback
+                  on_registration_complete,
+          l2cap::classic::DynamicChannelManager::OnConnectionOpenCallback on_open_callback) {
     services_++;
     on_registration_complete_ = std::move(on_registration_complete);
     on_open_callback_ = std::move(on_open_callback);
@@ -60,30 +59,28 @@ class FuzzDynamicChannelManagerImpl {
   }
   int services_{0};
 
-  void SetConnectionFuture() {
-    connected_promise_ = std::promise<void>();
-  }
+  void SetConnectionFuture() { connected_promise_ = std::promise<void>(); }
 
   void WaitConnectionFuture() {
     connected_future_ = connected_promise_.get_future();
     connected_future_.wait();
   }
 
-  void SetRegistrationFuture() {
-    register_promise_ = std::promise<void>();
-  }
+  void SetRegistrationFuture() { register_promise_ = std::promise<void>(); }
 
   void WaitRegistrationFuture() {
     register_future_ = register_promise_.get_future();
     register_future_.wait();
   }
 
-  void SetConnectionOnFail(l2cap::classic::DynamicChannelManager::ConnectionResult result, std::promise<void> promise) {
+  void SetConnectionOnFail(l2cap::classic::DynamicChannelManager::ConnectionResult result,
+                           std::promise<void> promise) {
     std::move(on_fail_callback_)(result);
     promise.set_value();
   }
 
-  void SetConnectionOnOpen(std::unique_ptr<l2cap::DynamicChannel> channel, std::promise<void> promise) {
+  void SetConnectionOnOpen(std::unique_ptr<l2cap::DynamicChannel> channel,
+                           std::promise<void> promise) {
     std::move(on_open_callback_)(std::move(channel));
     promise.set_value();
   }
@@ -95,7 +92,7 @@ class FuzzDynamicChannelManagerImpl {
   FuzzDynamicChannelManagerImpl() = default;
   ~FuzzDynamicChannelManagerImpl() = default;
 
- private:
+private:
   std::promise<void> connected_promise_;
   std::future<void> connected_future_;
 

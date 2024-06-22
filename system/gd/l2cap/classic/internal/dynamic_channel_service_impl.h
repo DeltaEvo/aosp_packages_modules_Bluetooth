@@ -27,7 +27,7 @@ namespace l2cap {
 namespace classic {
 namespace internal {
 class DynamicChannelServiceImpl {
- public:
+public:
   virtual ~DynamicChannelServiceImpl() = default;
 
   struct PendingRegistration {
@@ -42,27 +42,23 @@ class DynamicChannelServiceImpl {
     on_connection_open_callback_(std::move(channel));
   }
 
-  virtual DynamicChannelConfigurationOption GetConfigOption() const {
-    return config_option_;
-  }
+  virtual DynamicChannelConfigurationOption GetConfigOption() const { return config_option_; }
 
-  virtual SecurityPolicy GetSecurityPolicy() const {
-    return security_policy_;
-  }
+  virtual SecurityPolicy GetSecurityPolicy() const { return security_policy_; }
 
   friend class DynamicChannelServiceManagerImpl;
 
- protected:
+protected:
   // protected access for mocking
   DynamicChannelServiceImpl(
-      classic::SecurityPolicy security_policy,
-      DynamicChannelManager::OnConnectionOpenCallback on_connection_open_callback,
-      DynamicChannelConfigurationOption config_option)
+          classic::SecurityPolicy security_policy,
+          DynamicChannelManager::OnConnectionOpenCallback on_connection_open_callback,
+          DynamicChannelConfigurationOption config_option)
       : security_policy_(security_policy),
         on_connection_open_callback_(std::move(on_connection_open_callback)),
         config_option_(config_option) {}
 
- private:
+private:
   classic::SecurityPolicy security_policy_;
   DynamicChannelManager::OnConnectionOpenCallback on_connection_open_callback_;
   DynamicChannelConfigurationOption config_option_;

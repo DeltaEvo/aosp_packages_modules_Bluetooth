@@ -28,26 +28,16 @@ using bluetooth::discovery::device::DataParser;
 
 namespace {
 constexpr uint8_t kOneFlag32Data[] = {
-    0x5, static_cast<uint8_t>(GapDataType::FLAGS), 0xde, 0xad, 0xbe, 0xef};
+        0x5, static_cast<uint8_t>(GapDataType::FLAGS), 0xde, 0xad, 0xbe, 0xef};
 constexpr uint8_t kTwoFlag32Data[] = {
-    0x5,
-    static_cast<uint8_t>(GapDataType::FLAGS),
-    0xde,
-    0xad,
-    0xbe,
-    0xef,
-    0x5,
-    static_cast<uint8_t>(GapDataType::FLAGS),
-    0x11,
-    0x22,
-    0x33,
-    0x44};
-constexpr uint8_t kNoUuid16Data[] = {
-    0x2, static_cast<uint8_t>(GapDataType::COMPLETE_LIST_16_BIT_UUIDS)};
+        0x5, static_cast<uint8_t>(GapDataType::FLAGS), 0xde, 0xad, 0xbe, 0xef,
+        0x5, static_cast<uint8_t>(GapDataType::FLAGS), 0x11, 0x22, 0x33, 0x44};
+constexpr uint8_t kNoUuid16Data[] = {0x2,
+                                     static_cast<uint8_t>(GapDataType::COMPLETE_LIST_16_BIT_UUIDS)};
 constexpr uint8_t kPartialUuid16Data[] = {
-    0x2, static_cast<uint8_t>(GapDataType::COMPLETE_LIST_16_BIT_UUIDS), 0x12};
+        0x2, static_cast<uint8_t>(GapDataType::COMPLETE_LIST_16_BIT_UUIDS), 0x12};
 constexpr uint8_t kOneUuid16Data[] = {
-    0x3, static_cast<uint8_t>(GapDataType::COMPLETE_LIST_16_BIT_UUIDS), 0x12, 0x34};
+        0x3, static_cast<uint8_t>(GapDataType::COMPLETE_LIST_16_BIT_UUIDS), 0x12, 0x34};
 
 uint32_t toLeInt(const std::vector<uint8_t>& v) {
   return v[3] | (v[2] << 8) | (v[1] << 16) | (v[0] << 24);
@@ -100,8 +90,8 @@ TEST(DataParserTest, all_ones_data) {
 }
 
 TEST(DataParserTest, simple_flag) {
-  auto data = std::make_shared<std::vector<uint8_t>>(
-      kOneFlag32Data, kOneFlag32Data + sizeof(kOneFlag32Data));
+  auto data = std::make_shared<std::vector<uint8_t>>(kOneFlag32Data,
+                                                     kOneFlag32Data + sizeof(kOneFlag32Data));
 
   auto it = Iterator<kLittleEndian>(data);
   GapData gap_data;
@@ -113,8 +103,8 @@ TEST(DataParserTest, simple_flag) {
 }
 
 TEST(DataParserTest, two_flags) {
-  auto data = std::make_shared<std::vector<uint8_t>>(
-      kTwoFlag32Data, kTwoFlag32Data + sizeof(kTwoFlag32Data));
+  auto data = std::make_shared<std::vector<uint8_t>>(kTwoFlag32Data,
+                                                     kTwoFlag32Data + sizeof(kTwoFlag32Data));
 
   auto it = Iterator<kLittleEndian>(data);
   GapData gap_data[2];
@@ -132,8 +122,8 @@ TEST(DataParserTest, two_flags) {
 }
 
 TEST(DataParserTest, no_uuid16) {
-  auto data =
-      std::make_shared<std::vector<uint8_t>>(kNoUuid16Data, kNoUuid16Data + sizeof(kNoUuid16Data));
+  auto data = std::make_shared<std::vector<uint8_t>>(kNoUuid16Data,
+                                                     kNoUuid16Data + sizeof(kNoUuid16Data));
 
   auto it = Iterator<kLittleEndian>(data);
   GapData gap_data;
@@ -146,7 +136,7 @@ TEST(DataParserTest, no_uuid16) {
 
 TEST(DataParserTest, partial_uuid16) {
   auto data = std::make_shared<std::vector<uint8_t>>(
-      kPartialUuid16Data, kPartialUuid16Data + sizeof(kPartialUuid16Data));
+          kPartialUuid16Data, kPartialUuid16Data + sizeof(kPartialUuid16Data));
 
   auto it = Iterator<kLittleEndian>(data);
   GapData gap_data;
@@ -158,8 +148,8 @@ TEST(DataParserTest, partial_uuid16) {
 }
 
 TEST(DataParserTest, one_uuid16) {
-  auto data = std::make_shared<std::vector<uint8_t>>(
-      kOneUuid16Data, kOneUuid16Data + sizeof(kOneUuid16Data));
+  auto data = std::make_shared<std::vector<uint8_t>>(kOneUuid16Data,
+                                                     kOneUuid16Data + sizeof(kOneUuid16Data));
   auto it = Iterator<kLittleEndian>(data);
   GapData gap_data;
   it = GapData::Parse(&gap_data, it);
@@ -183,8 +173,8 @@ TEST(DataParserTest, simple_data_parser) {
 
   ASSERT_EQ(2U, flags.size());
   uint32_t value[2] = {
-      toLeInt(flags[0].data_),
-      toLeInt(flags[1].data_),
+          toLeInt(flags[0].data_),
+          toLeInt(flags[1].data_),
   };
   ASSERT_EQ((unsigned)0xdeadbeef, value[0]);
   ASSERT_EQ((unsigned)0x11223344, value[1]);
@@ -206,8 +196,8 @@ TEST(DataParserTest, two_flags_backing_store_cleared) {
 
   ASSERT_EQ(2U, flags.size());
   uint32_t value[2] = {
-      toLeInt(flags[0].data_),
-      toLeInt(flags[1].data_),
+          toLeInt(flags[0].data_),
+          toLeInt(flags[1].data_),
   };
   ASSERT_EQ((unsigned)0xdeadbeef, value[0]);
   ASSERT_EQ((unsigned)0x11223344, value[1]);
@@ -231,8 +221,8 @@ TEST(DataParserTest, backing_store_freed) {
 
   ASSERT_EQ(2U, flags.size());
   uint32_t value[2] = {
-      toLeInt(flags[0].data_),
-      toLeInt(flags[1].data_),
+          toLeInt(flags[0].data_),
+          toLeInt(flags[1].data_),
   };
   ASSERT_EQ((unsigned)0xdeadbeef, value[0]);
   ASSERT_EQ((unsigned)0x11223344, value[1]);
@@ -241,10 +231,9 @@ TEST(DataParserTest, backing_store_freed) {
 std::string GapDataToString(const GapData& data) {
   std::stringstream ss;
   ss << std::hex << std::showbase << "LengthAndData { ";
-  ss << "data = "
-     << "VECTOR[";
+  ss << "data = " << "VECTOR[";
   for (size_t index = 0; index < data.data_.size(); index++) {
-    ss << ((index == 0) ? "" : ", ") << static_cast<uint64_t>((data.data_[index]));
+    ss << ((index == 0) ? "" : ", ") << static_cast<uint64_t>(data.data_[index]);
   }
   ss << "]";
   ss << " }";

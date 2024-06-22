@@ -56,10 +56,12 @@ tSDP_CB sdp_cb;
  * Returns          void
  *
  ******************************************************************************/
-static void sdp_connect_ind(const RawAddress& bd_addr, uint16_t l2cap_cid,
-                            uint16_t /* psm */, uint8_t /* l2cap_id */) {
+static void sdp_connect_ind(const RawAddress& bd_addr, uint16_t l2cap_cid, uint16_t /* psm */,
+                            uint8_t /* l2cap_id */) {
   tCONN_CB* p_ccb = sdpu_allocate_ccb();
-  if (p_ccb == NULL) return;
+  if (p_ccb == NULL) {
+    return;
+  }
 
   /* Transition to the next appropriate state, waiting for config setup. */
   p_ccb->con_state = tSDP_STATE::CFG_SETUP;
@@ -71,7 +73,9 @@ static void sdp_connect_ind(const RawAddress& bd_addr, uint16_t l2cap_cid,
 
 static void sdp_on_l2cap_error(uint16_t l2cap_cid, uint16_t /* result */) {
   tCONN_CB* p_ccb = sdpu_find_ccb_by_cid(l2cap_cid);
-  if (p_ccb == nullptr) return;
+  if (p_ccb == nullptr) {
+    return;
+  }
   sdp_disconnect(p_ccb, SDP_CFG_FAILED);
 }
 
@@ -98,8 +102,7 @@ static void sdp_connect_cfm(uint16_t l2cap_cid, uint16_t result) {
 
   /* If the connection response contains success status, then */
   /* Transition to the next state and startup the timer.      */
-  if ((result == L2CAP_CONN_OK) &&
-      (p_ccb->con_state == tSDP_STATE::CONN_SETUP)) {
+  if ((result == L2CAP_CONN_OK) && (p_ccb->con_state == tSDP_STATE::CONN_SETUP)) {
     p_ccb->con_state = tSDP_STATE::CFG_SETUP;
   } else {
     log::error("invoked with non OK status");
@@ -129,13 +132,13 @@ static void sdp_config_ind(uint16_t l2cap_cid, tL2CAP_CFG_INFO* p_cfg) {
   /* Remember the remote MTU size */
   if (!p_cfg->mtu_present) {
     /* use min(L2CAP_DEFAULT_MTU,SDP_MTU_SIZE) for GKI buffer size reasons */
-    p_ccb->rem_mtu_size =
-        (L2CAP_DEFAULT_MTU > SDP_MTU_SIZE) ? SDP_MTU_SIZE : L2CAP_DEFAULT_MTU;
+    p_ccb->rem_mtu_size = (L2CAP_DEFAULT_MTU > SDP_MTU_SIZE) ? SDP_MTU_SIZE : L2CAP_DEFAULT_MTU;
   } else {
-    if (p_cfg->mtu > SDP_MTU_SIZE)
+    if (p_cfg->mtu > SDP_MTU_SIZE) {
       p_ccb->rem_mtu_size = SDP_MTU_SIZE;
-    else
+    } else {
       p_ccb->rem_mtu_size = p_cfg->mtu;
+    }
   }
 
   log::verbose("SDP - Rcvd cfg ind, sent cfg cfm, CID: 0x{:x}", l2cap_cid);
@@ -151,8 +154,7 @@ static void sdp_config_ind(uint16_t l2cap_cid, tL2CAP_CFG_INFO* p_cfg) {
  * Returns          void
  *
  ******************************************************************************/
-static void sdp_config_cfm(uint16_t l2cap_cid, uint16_t /* initiator */,
-                           tL2CAP_CFG_INFO* p_cfg) {
+static void sdp_config_cfm(uint16_t l2cap_cid, uint16_t /* initiator */, tL2CAP_CFG_INFO* p_cfg) {
   sdp_config_ind(l2cap_cid, p_cfg);
 
   tCONN_CB* p_ccb;
@@ -173,8 +175,7 @@ static void sdp_config_cfm(uint16_t l2cap_cid, uint16_t /* initiator */,
     sdp_disc_connected(p_ccb);
   } else {
     /* Start inactivity timer */
-    alarm_set_on_mloop(p_ccb->sdp_conn_timer, SDP_INACT_TIMEOUT_MS,
-                       sdp_conn_timer_timeout, p_ccb);
+    alarm_set_on_mloop(p_ccb->sdp_conn_timer, SDP_INACT_TIMEOUT_MS, sdp_conn_timer_timeout, p_ccb);
   }
 }
 
@@ -200,7 +201,7 @@ static void sdp_disconnect_ind(uint16_t l2cap_cid, bool ack_needed) {
   tCONN_CB& ccb = *p_ccb;
 
   const tSDP_REASON reason =
-      (ccb.con_state == tSDP_STATE::CONNECTED) ? SDP_SUCCESS : SDP_CONN_FAILED;
+          (ccb.con_state == tSDP_STATE::CONNECTED) ? SDP_SUCCESS : SDP_CONN_FAILED;
   sdpu_callback(ccb, reason);
 
   if (ack_needed) {
@@ -236,10 +237,11 @@ static void sdp_data_ind(uint16_t l2cap_cid, BT_HDR* p_msg) {
   p_ccb = sdpu_find_ccb_by_cid(l2cap_cid);
   if (p_ccb != NULL) {
     if (p_ccb->con_state == tSDP_STATE::CONNECTED) {
-      if (p_ccb->con_flags & SDP_FLAGS_IS_ORIG)
+      if (p_ccb->con_flags & SDP_FLAGS_IS_ORIG) {
         sdp_disc_server_rsp(p_ccb, p_msg);
-      else
+      } else {
         sdp_server_handle_client_req(p_ccb, p_msg);
+      }
     } else {
       log::warn("SDP - Ignored L2CAP data while in state: {}, CID: 0x{:x}",
                 sdp_state_text(p_ccb->con_state), l2cap_cid);
@@ -269,7 +271,7 @@ tCONN_CB* sdp_conn_originate(const RawAddress& bd_addr) {
   p_ccb = sdpu_allocate_ccb();
   if (p_ccb == NULL) {
     log::warn("no spare CCB for peer {}", bd_addr);
-    return (NULL);
+    return NULL;
   }
 
   log::verbose("SDP - Originate started for peer {}", bd_addr);
@@ -284,8 +286,7 @@ tCONN_CB* sdp_conn_originate(const RawAddress& bd_addr) {
   p_ccb->device_address = bd_addr;
 
   /* Transition to the next appropriate state, waiting for connection confirm */
-  if (!bluetooth::common::init_flags::sdp_serialization_is_enabled() ||
-      cid == 0) {
+  if (!bluetooth::common::init_flags::sdp_serialization_is_enabled() || cid == 0) {
     p_ccb->con_state = tSDP_STATE::CONN_SETUP;
     cid = L2CA_ConnectReqWithSecurity(BT_PSM_SDP, bd_addr, BTM_SEC_NONE);
   } else {
@@ -297,10 +298,10 @@ tCONN_CB* sdp_conn_originate(const RawAddress& bd_addr) {
   if (cid == 0) {
     log::warn("SDP - Originate failed for peer {}", bd_addr);
     sdpu_release_ccb(*p_ccb);
-    return (NULL);
+    return NULL;
   }
   p_ccb->connection_id = cid;
-  return (p_ccb);
+  return p_ccb;
 }
 
 /*******************************************************************************
@@ -325,8 +326,8 @@ void sdp_disconnect(tCONN_CB* p_ccb, tSDP_REASON reason) {
       return;
     } else {
       if (!L2CA_DisconnectReq(ccb.connection_id)) {
-        log::warn("Unable to disconnect L2CAP peer:{} cid:{}",
-                  ccb.device_address, ccb.connection_id);
+        log::warn("Unable to disconnect L2CAP peer:{} cid:{}", ccb.device_address,
+                  ccb.connection_id);
       }
     }
   }
@@ -380,12 +381,11 @@ static void sdp_disconnect_cfm(uint16_t l2cap_cid, uint16_t /* result */) {
 void sdp_conn_timer_timeout(void* data) {
   tCONN_CB& ccb = *(tCONN_CB*)data;
 
-  log::verbose("SDP - CCB timeout in state: {}  CID: 0x{:x}",
-               sdp_state_text(ccb.con_state), ccb.connection_id);
+  log::verbose("SDP - CCB timeout in state: {}  CID: 0x{:x}", sdp_state_text(ccb.con_state),
+               ccb.connection_id);
 
   if (!L2CA_DisconnectReq(ccb.connection_id)) {
-    log::warn("Unable to disconnect L2CAP peer:{} cid:{}", ccb.device_address,
-              ccb.connection_id);
+    log::warn("Unable to disconnect L2CAP peer:{} cid:{}", ccb.device_address, ccb.connection_id);
   }
 
   sdpu_callback(ccb, SDP_CONN_FAILED);
@@ -427,9 +427,8 @@ void sdp_init(void) {
   sdp_cb.reg_info.pL2CA_Error_Cb = sdp_on_l2cap_error;
 
   /* Now, register with L2CAP */
-  if (!L2CA_RegisterWithSecurity(BT_PSM_SDP, sdp_cb.reg_info,
-                                 true /* enable_snoop */, nullptr, SDP_MTU_SIZE,
-                                 0, BTM_SEC_NONE)) {
+  if (!L2CA_RegisterWithSecurity(BT_PSM_SDP, sdp_cb.reg_info, true /* enable_snoop */, nullptr,
+                                 SDP_MTU_SIZE, 0, BTM_SEC_NONE)) {
     log::error("SDP Registration failed");
   }
 }

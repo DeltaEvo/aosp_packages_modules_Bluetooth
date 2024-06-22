@@ -34,9 +34,7 @@
 
 bluetooth::common::MessageLoopThread* main_thread_ptr = nullptr;
 
-bluetooth::common::MessageLoopThread* get_main_thread() {
-  return main_thread_ptr;
-}
+bluetooth::common::MessageLoopThread* get_main_thread() { return main_thread_ptr; }
 namespace {
 
 #define SDP_DB_SIZE 0x10000
@@ -46,69 +44,65 @@ constexpr uint8_t kDummyRemoteAddr[] = {0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC};
 
 // Set up default callback structure
 tL2CAP_FIXED_CHNL_REG fixed_chnl_reg = {
-    .pL2CA_FixedConn_Cb = [](uint16_t, const RawAddress&, bool, uint16_t,
-                             tBT_TRANSPORT) {},
-    .pL2CA_FixedData_Cb = [](uint16_t, const RawAddress&, BT_HDR*) {},
+        .pL2CA_FixedConn_Cb = [](uint16_t, const RawAddress&, bool, uint16_t, tBT_TRANSPORT) {},
+        .pL2CA_FixedData_Cb = [](uint16_t, const RawAddress&, BT_HDR*) {},
 };
 
 tL2CAP_FIXED_CHNL_REG fixed_chnl_br_reg = {
-    .pL2CA_FixedConn_Cb = [](uint16_t, const RawAddress&, bool, uint16_t,
-                             tBT_TRANSPORT) {},
-    .pL2CA_FixedData_Cb = [](uint16_t, const RawAddress&, BT_HDR*) {},
+        .pL2CA_FixedConn_Cb = [](uint16_t, const RawAddress&, bool, uint16_t, tBT_TRANSPORT) {},
+        .pL2CA_FixedData_Cb = [](uint16_t, const RawAddress&, BT_HDR*) {},
 };
 
 tBTM_SEC_DEV_REC dev_rec;
 bool is_peripheral;
 
 class FakeBtStack {
- public:
+public:
   FakeBtStack() {
     test::mock::stack_acl::BTM_ReadConnectionAddr.body =
-        [](const RawAddress& remote_bda, RawAddress& local_conn_addr,
-           tBLE_ADDR_TYPE* p_addr_type, bool ota_address) {
-          local_conn_addr = kDummyAddr;
-          *p_addr_type = BLE_ADDR_PUBLIC;
-        };
+            [](const RawAddress& remote_bda, RawAddress& local_conn_addr,
+               tBLE_ADDR_TYPE* p_addr_type, bool ota_address) {
+              local_conn_addr = kDummyAddr;
+              *p_addr_type = BLE_ADDR_PUBLIC;
+            };
     test::mock::stack_acl::BTM_ReadRemoteConnectionAddr.body =
-        [](const RawAddress& pseudo_addr, RawAddress& conn_addr,
-           tBLE_ADDR_TYPE* p_addr_type, bool ota_address) {
-          conn_addr = kDummyRemoteAddr;
-          *p_addr_type = BLE_ADDR_PUBLIC;
-          return true;
-        };
-    test::mock::stack_btm_dev::btm_find_dev.body = [](const RawAddress&) {
-      return &dev_rec;
+            [](const RawAddress& pseudo_addr, RawAddress& conn_addr, tBLE_ADDR_TYPE* p_addr_type,
+               bool ota_address) {
+              conn_addr = kDummyRemoteAddr;
+              *p_addr_type = BLE_ADDR_PUBLIC;
+              return true;
+            };
+    test::mock::stack_btm_dev::btm_find_dev.body = [](const RawAddress&) { return &dev_rec; };
+
+    test::mock::stack_l2cap_ble::L2CA_GetBleConnRole.body = [](const RawAddress&) {
+      return is_peripheral ? HCI_ROLE_PERIPHERAL : HCI_ROLE_CENTRAL;
     };
 
-    test::mock::stack_l2cap_ble::L2CA_GetBleConnRole.body =
-        [](const RawAddress&) {
-          return is_peripheral ? HCI_ROLE_PERIPHERAL : HCI_ROLE_CENTRAL;
-        };
-
-    test::mock::stack_l2cap_api::L2CA_SetIdleTimeoutByBdAddr.body =
-        [](const RawAddress&, uint16_t, uint8_t) { return true; };
-    test::mock::stack_l2cap_api::L2CA_RemoveFixedChnl.body =
-        [](uint16_t, const RawAddress&) { return true; };
-    test::mock::stack_l2cap_api::L2CA_ConnectFixedChnl.body =
-        [](uint16_t, const RawAddress&) { return true; };
+    test::mock::stack_l2cap_api::L2CA_SetIdleTimeoutByBdAddr.body = [](const RawAddress&, uint16_t,
+                                                                       uint8_t) { return true; };
+    test::mock::stack_l2cap_api::L2CA_RemoveFixedChnl.body = [](uint16_t, const RawAddress&) {
+      return true;
+    };
+    test::mock::stack_l2cap_api::L2CA_ConnectFixedChnl.body = [](uint16_t, const RawAddress&) {
+      return true;
+    };
     test::mock::stack_l2cap_api::L2CA_SendFixedChnlData.body =
-        [](uint16_t cid, const RawAddress& addr, BT_HDR* hdr) {
-          osi_free(hdr);
-          return tL2CAP_DW_RESULT::SUCCESS;
-        };
+            [](uint16_t cid, const RawAddress& addr, BT_HDR* hdr) {
+              osi_free(hdr);
+              return tL2CAP_DW_RESULT::SUCCESS;
+            };
     test::mock::stack_l2cap_api::L2CA_RegisterFixedChannel.body =
-        [](uint16_t fixed_cid, tL2CAP_FIXED_CHNL_REG* p_freg) {
-          if (fixed_cid == L2CAP_SMP_CID) {
-            fixed_chnl_reg = *p_freg;
-          } else if (fixed_cid == L2CAP_SMP_BR_CID) {
-            fixed_chnl_br_reg = *p_freg;
-          } else {
-            abort();
-          }
-          return true;
-        };
-    main_thread_ptr =
-        new bluetooth::common::MessageLoopThread("smp_fuzz_main_thread");
+            [](uint16_t fixed_cid, tL2CAP_FIXED_CHNL_REG* p_freg) {
+              if (fixed_cid == L2CAP_SMP_CID) {
+                fixed_chnl_reg = *p_freg;
+              } else if (fixed_cid == L2CAP_SMP_BR_CID) {
+                fixed_chnl_br_reg = *p_freg;
+              } else {
+                abort();
+              }
+              return true;
+            };
+    main_thread_ptr = new bluetooth::common::MessageLoopThread("smp_fuzz_main_thread");
     main_thread_ptr->StartUp();
   }
 
@@ -132,7 +126,7 @@ class FakeBtStack {
 };
 
 class Fakes {
- public:
+public:
   test::fake::FakeOsi fake_osi;
   FakeBtStack fake_stack;
 };
@@ -143,8 +137,7 @@ uint8_t oob_data[] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
                       0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00};
 tSMP_IO_REQ io_req = {};
 
-tBTM_STATUS smp_callback(tSMP_EVT event, const RawAddress& bd_addr,
-                         const tSMP_EVT_DATA* p_data) {
+tBTM_STATUS smp_callback(tSMP_EVT event, const RawAddress& bd_addr, const tSMP_EVT_DATA* p_data) {
   switch (event) {
     case SMP_IO_CAP_REQ_EVT:
     case SMP_BR_KEYS_REQ_EVT: {
@@ -196,12 +189,16 @@ void Fuzz(const uint8_t* data, size_t size) {
     cid = L2CAP_SMP_BR_CID;
     chnl_reg = &fixed_chnl_br_reg;
     transport = BT_TRANSPORT_BR_EDR;
-    if (is_initiator) SMP_BR_PairWith(kDummyAddr);
+    if (is_initiator) {
+      SMP_BR_PairWith(kDummyAddr);
+    }
   } else {
     cid = L2CAP_SMP_CID;
     chnl_reg = &fixed_chnl_reg;
     transport = BT_TRANSPORT_LE;
-    if (is_initiator) SMP_Pair(kDummyAddr);
+    if (is_initiator) {
+      SMP_Pair(kDummyAddr);
+    }
   }
 
   // Simulating connection establaishing event

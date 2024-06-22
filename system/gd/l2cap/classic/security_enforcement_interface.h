@@ -28,16 +28,18 @@ namespace classic {
  * The interface for Security Module to implement.
  */
 class SecurityEnforcementInterface {
- public:
+public:
   virtual ~SecurityEnforcementInterface() = default;
 
   using ResultCallback = common::ContextualOnceCallback<void(bool)>;
 
   /**
-   * Invoked when L2CAP needs to open a channel with given security requirement. When the Security Module satisfies the
-   * required security level, or cannot satisfy at all, invoke the result_callback.
+   * Invoked when L2CAP needs to open a channel with given security requirement. When the Security
+   * Module satisfies the required security level, or cannot satisfy at all, invoke the
+   * result_callback.
    */
-  virtual void Enforce(hci::AddressWithType remote, SecurityPolicy policy, ResultCallback result_callback) = 0;
+  virtual void Enforce(hci::AddressWithType remote, SecurityPolicy policy,
+                       ResultCallback result_callback) = 0;
 };
 
 /**
@@ -45,11 +47,9 @@ class SecurityEnforcementInterface {
  * _SDP_ONLY_NO_SECURITY_WHATSOEVER_PLAINTEXT_TRANSPORT_OK.
  */
 class SecurityEnforcementRejectAllImpl : public SecurityEnforcementInterface {
- public:
-  void Enforce(
-      hci::AddressWithType /* remote */,
-      SecurityPolicy policy,
-      ResultCallback result_callback) override {
+public:
+  void Enforce(hci::AddressWithType /* remote */, SecurityPolicy policy,
+               ResultCallback result_callback) override {
     if (policy == SecurityPolicy::_SDP_ONLY_NO_SECURITY_WHATSOEVER_PLAINTEXT_TRANSPORT_OK) {
       result_callback(true);
     } else {

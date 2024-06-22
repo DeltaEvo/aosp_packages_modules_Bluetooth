@@ -28,23 +28,22 @@ namespace hfp {
  * Only available if HFP is managed by AIDL sessions
  */
 class HfpClientInterface {
- private:
+private:
   class IClientInterfaceEndpoint {
-   public:
+  public:
     virtual ~IClientInterfaceEndpoint() = default;
     virtual void Cleanup() = 0;
     virtual void StartSession() = 0;
     virtual void StopSession() = 0;
-    virtual void UpdateAudioConfigToHal(
-        const ::hfp::offload_config& config) = 0;
+    virtual void UpdateAudioConfigToHal(const ::hfp::offload_config& config) = 0;
     virtual void ConfirmStreamingRequest() = 0;
     virtual void CancelStreamingRequest() = 0;
   };
 
- public:
+public:
   class Decode : public IClientInterfaceEndpoint {
-   public:
-    Decode(){};
+  public:
+    Decode() {}
     virtual ~Decode() = default;
 
     void Cleanup() override;
@@ -57,7 +56,7 @@ class HfpClientInterface {
   };
 
   class Encode : public IClientInterfaceEndpoint {
-   public:
+  public:
     virtual ~Encode() = default;
 
     void Cleanup() override;
@@ -70,7 +69,7 @@ class HfpClientInterface {
   };
 
   class Offload : public IClientInterfaceEndpoint {
-   public:
+  public:
     virtual ~Offload() = default;
 
     void Cleanup() override;
@@ -102,7 +101,7 @@ class HfpClientInterface {
   // Get interface, if previously not initialized - it'll initialize singleton.
   static HfpClientInterface* Get();
 
- private:
+private:
   static HfpClientInterface* interface;
   Decode* decode_ = nullptr;
   Encode* encode_ = nullptr;

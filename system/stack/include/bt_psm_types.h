@@ -37,8 +37,8 @@ enum tBT_PSM : uint16_t {
   BT_PSM_AVCTP = 0x0017,
   BT_PSM_AVDTP = 0x0019,
   BT_PSM_AVCTP_13 = 0x001B, /* Advanced Control - Browsing */
-  BT_PSM_UDI_CP = 0x001D, /* Unrestricted Digital Information Profile C-Plane */
-  BT_PSM_ATT = 0x001F,    /* Attribute Protocol  */
+  BT_PSM_UDI_CP = 0x001D,   /* Unrestricted Digital Information Profile C-Plane */
+  BT_PSM_ATT = 0x001F,      /* Attribute Protocol  */
   BT_PSM_EATT = 0x0027,
   /* We will not allocate a PSM in the reserved range to 3rd party apps
    */

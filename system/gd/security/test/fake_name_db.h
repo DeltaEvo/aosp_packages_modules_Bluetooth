@@ -22,24 +22,20 @@ namespace bluetooth {
 namespace security {
 
 class FakeNameDbModule : public neighbor::NameDbModule {
- public:
+public:
   FakeNameDbModule() {}
 
   void ListDependencies(ModuleList* /* list */) const override {}
   void Start() override {}
   void Stop() override {}
-  std::string ToString() const override {
-    return std::string("FakeNameDbModule");
-  }
+  std::string ToString() const override { return std::string("FakeNameDbModule"); }
 
-  void ReadRemoteNameRequest(
-      hci::Address address, neighbor::ReadRemoteNameDbCallback callback, os::Handler* handler) override {
+  void ReadRemoteNameRequest(hci::Address address, neighbor::ReadRemoteNameDbCallback callback,
+                             os::Handler* handler) override {
     handler->Call(std::move(callback), address, true);
   }
 
-  bool IsNameCached(hci::Address /* address */) const {
-    return true;
-  }
+  bool IsNameCached(hci::Address /* address */) const { return true; }
 
   neighbor::RemoteName ReadCachedRemoteName(hci::Address /* address */) const {
     neighbor::RemoteName name = {'t', 'e', 's', 't'};

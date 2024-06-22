@@ -47,7 +47,7 @@ static bool on_link_connected_called = false;
 static bool on_link_disconnected_called = false;
 
 class FakeSecurityManagerChannel : public SecurityManagerChannel {
- public:
+public:
   FakeSecurityManagerChannel(os::Handler* handler, hci::HciLayer* hci_layer)
       : SecurityManagerChannel(handler, hci_layer) {}
   ~FakeSecurityManagerChannel() {}
@@ -56,9 +56,7 @@ class FakeSecurityManagerChannel : public SecurityManagerChannel {
     on_link_connected_called = true;
   }
 
-  void OnLinkDisconnected(hci::Address address) {
-    on_link_disconnected_called = true;
-  }
+  void OnLinkDisconnected(hci::Address address) { on_link_disconnected_called = true; }
 
   void OnAuthenticationComplete(hci::ErrorCode hci_status, hci::Address remote) override {}
 
@@ -66,7 +64,7 @@ class FakeSecurityManagerChannel : public SecurityManagerChannel {
 };
 
 class SecurityManagerChannelCallback : public ISecurityManagerChannelListener {
- public:
+public:
   // HCI
   bool receivedChangeConnectionLinkKeyComplete = false;
   bool receivedCentralLinkKeyComplete = false;
@@ -209,13 +207,11 @@ class SecurityManagerChannelCallback : public ISecurityManagerChannelListener {
     }
   }
 
-  void OnConnectionClosed(hci::Address address) override {
-    log::info("Called");
-  }
+  void OnConnectionClosed(hci::Address address) override { log::info("Called"); }
 };
 
 class SecurityManagerChannelTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
     hci::Address address;
     hci::Address::FromString("01:23:45:67:89:AB:CD", address);
@@ -271,8 +267,8 @@ TEST_F(SecurityManagerChannelTest, send_io_cap_request_reply) {
   hci::IoCapability io_capability = (hci::IoCapability)0x00;
   OobDataPresent oob_present = (OobDataPresent)0x00;
   AuthenticationRequirements authentication_requirements = (AuthenticationRequirements)0x00;
-  auto packet = hci::IoCapabilityRequestReplyBuilder::Create(device_.GetAddress(), io_capability, oob_present,
-                                                             authentication_requirements);
+  auto packet = hci::IoCapabilityRequestReplyBuilder::Create(
+          device_.GetAddress(), io_capability, oob_present, authentication_requirements);
 
   // Act
   channel_->SendCommand(std::move(packet));
@@ -287,8 +283,8 @@ TEST_F(SecurityManagerChannelTest, send_io_cap_request_reply) {
 
 TEST_F(SecurityManagerChannelTest, send_io_cap_request_neg_reply) {
   // Arrange
-  auto packet =
-      hci::IoCapabilityRequestNegativeReplyBuilder::Create(device_.GetAddress(), hci::ErrorCode::COMMAND_DISALLOWED);
+  auto packet = hci::IoCapabilityRequestNegativeReplyBuilder::Create(
+          device_.GetAddress(), hci::ErrorCode::COMMAND_DISALLOWED);
 
   // Act
   channel_->SendCommand(std::move(packet));
@@ -305,8 +301,8 @@ TEST_F(SecurityManagerChannelTest, recv_io_cap_response) {
   hci::IoCapability io_capability = (hci::IoCapability)0x00;
   OobDataPresent oob_present = (OobDataPresent)0x00;
   AuthenticationRequirements authentication_requirements = (AuthenticationRequirements)0x00;
-  hci_layer_->IncomingEvent(hci::IoCapabilityResponseBuilder::Create(device_.GetAddress(), io_capability, oob_present,
-                                                                     authentication_requirements));
+  hci_layer_->IncomingEvent(hci::IoCapabilityResponseBuilder::Create(
+          device_.GetAddress(), io_capability, oob_present, authentication_requirements));
   synchronize();
   ASSERT_TRUE(callback_->receivedIoCapabilityResponse);
 }
@@ -321,7 +317,8 @@ TEST_F(SecurityManagerChannelTest, send_pin_code_request_reply) {
   // Arrange
   uint8_t pin_code_length = 6;
   std::array<uint8_t, 16> pin_code = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5};
-  auto packet = hci::PinCodeRequestReplyBuilder::Create(device_.GetAddress(), pin_code_length, pin_code);
+  auto packet =
+          hci::PinCodeRequestReplyBuilder::Create(device_.GetAddress(), pin_code_length, pin_code);
 
   // Act
   channel_->SendCommand(std::move(packet));
@@ -351,14 +348,16 @@ TEST_F(SecurityManagerChannelTest, send_pin_code_request_neg_reply) {
 
 TEST_F(SecurityManagerChannelTest, recv_user_passkey_notification) {
   uint32_t passkey = 0x00;
-  hci_layer_->IncomingEvent(hci::UserPasskeyNotificationBuilder::Create(device_.GetAddress(), passkey));
+  hci_layer_->IncomingEvent(
+          hci::UserPasskeyNotificationBuilder::Create(device_.GetAddress(), passkey));
   synchronize();
   ASSERT_TRUE(callback_->receivedUserPasskeyNotification);
 }
 
 TEST_F(SecurityManagerChannelTest, recv_user_confirmation_request) {
   uint32_t numeric_value = 0x0;
-  hci_layer_->IncomingEvent(hci::UserConfirmationRequestBuilder::Create(device_.GetAddress(), numeric_value));
+  hci_layer_->IncomingEvent(
+          hci::UserConfirmationRequestBuilder::Create(device_.GetAddress(), numeric_value));
   synchronize();
   ASSERT_TRUE(callback_->receivedUserConfirmationRequest);
 }
@@ -469,24 +468,24 @@ TEST_F(SecurityManagerChannelTest, recv_link_key_request) {
 
 TEST_F(SecurityManagerChannelTest, recv_link_key_notification) {
   std::array<uint8_t, 16> link_key = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5};
-  hci_layer_->IncomingEvent(
-      hci::LinkKeyNotificationBuilder::Create(device_.GetAddress(), link_key, hci::KeyType::DEBUG_COMBINATION));
+  hci_layer_->IncomingEvent(hci::LinkKeyNotificationBuilder::Create(
+          device_.GetAddress(), link_key, hci::KeyType::DEBUG_COMBINATION));
   synchronize();
   ASSERT_TRUE(callback_->receivedLinkKeyNotification);
 }
 
 TEST_F(SecurityManagerChannelTest, recv_central_link_key_complete) {
   uint16_t connection_handle = 0x0;
-  hci_layer_->IncomingEvent(
-      hci::CentralLinkKeyCompleteBuilder::Create(hci::ErrorCode::SUCCESS, connection_handle, hci::KeyFlag::TEMPORARY));
+  hci_layer_->IncomingEvent(hci::CentralLinkKeyCompleteBuilder::Create(
+          hci::ErrorCode::SUCCESS, connection_handle, hci::KeyFlag::TEMPORARY));
   synchronize();
   ASSERT_TRUE(callback_->receivedCentralLinkKeyComplete);
 }
 
 TEST_F(SecurityManagerChannelTest, recv_change_connection_link_key_complete) {
   uint16_t connection_handle = 0x0;
-  hci_layer_->IncomingEvent(
-      hci::ChangeConnectionLinkKeyCompleteBuilder::Create(hci::ErrorCode::SUCCESS, connection_handle));
+  hci_layer_->IncomingEvent(hci::ChangeConnectionLinkKeyCompleteBuilder::Create(
+          hci::ErrorCode::SUCCESS, connection_handle));
   synchronize();
   ASSERT_TRUE(callback_->receivedChangeConnectionLinkKeyComplete);
 }
@@ -531,7 +530,8 @@ TEST_F(SecurityManagerChannelTest, send_link_key_request_neg_reply) {
 
 TEST_F(SecurityManagerChannelTest, send_read_stored_link_key) {
   // Arrange
-  auto packet = hci::ReadStoredLinkKeyBuilder::Create(device_.GetAddress(), hci::ReadStoredLinkKeyReadAllFlag::ALL);
+  auto packet = hci::ReadStoredLinkKeyBuilder::Create(device_.GetAddress(),
+                                                      hci::ReadStoredLinkKeyReadAllFlag::ALL);
 
   // Act
   channel_->SendCommand(std::move(packet));
@@ -562,8 +562,8 @@ TEST_F(SecurityManagerChannelTest, send_write_stored_link_key) {
 
 TEST_F(SecurityManagerChannelTest, send_delete_stored_link_key) {
   // Arrange
-  auto packet =
-      hci::DeleteStoredLinkKeyBuilder::Create(device_.GetAddress(), hci::DeleteStoredLinkKeyDeleteAllFlag::ALL);
+  auto packet = hci::DeleteStoredLinkKeyBuilder::Create(device_.GetAddress(),
+                                                        hci::DeleteStoredLinkKeyDeleteAllFlag::ALL);
 
   // Act
   channel_->SendCommand(std::move(packet));
@@ -578,16 +578,16 @@ TEST_F(SecurityManagerChannelTest, send_delete_stored_link_key) {
 
 TEST_F(SecurityManagerChannelTest, recv_encryption_change) {
   uint16_t connection_handle = 0x0;
-  hci_layer_->IncomingEvent(
-      hci::EncryptionChangeBuilder::Create(hci::ErrorCode::SUCCESS, connection_handle, hci::EncryptionEnabled::ON));
+  hci_layer_->IncomingEvent(hci::EncryptionChangeBuilder::Create(
+          hci::ErrorCode::SUCCESS, connection_handle, hci::EncryptionEnabled::ON));
   synchronize();
   ASSERT_TRUE(callback_->receivedEncryptionChange);
 }
 
 TEST_F(SecurityManagerChannelTest, recv_encryption_key_refresh) {
   uint16_t connection_handle = 0x0;
-  hci_layer_->IncomingEvent(
-      hci::EncryptionKeyRefreshCompleteBuilder::Create(hci::ErrorCode::SUCCESS, connection_handle));
+  hci_layer_->IncomingEvent(hci::EncryptionKeyRefreshCompleteBuilder::Create(
+          hci::ErrorCode::SUCCESS, connection_handle));
   synchronize();
   ASSERT_TRUE(callback_->receivedEncryptionKeyRefreshComplete);
 }
@@ -625,7 +625,8 @@ TEST_F(SecurityManagerChannelTest, send_read_encryption_key_size) {
 }
 
 TEST_F(SecurityManagerChannelTest, recv_simple_pairing_complete) {
-  hci_layer_->IncomingEvent(hci::SimplePairingCompleteBuilder::Create(hci::ErrorCode::SUCCESS, device_.GetAddress()));
+  hci_layer_->IncomingEvent(
+          hci::SimplePairingCompleteBuilder::Create(hci::ErrorCode::SUCCESS, device_.GetAddress()));
   synchronize();
   ASSERT_TRUE(callback_->receivedSimplePairingComplete);
 }
@@ -661,16 +662,16 @@ TEST_F(SecurityManagerChannelTest, send_write_simple_pairing_mode) {
 }
 
 TEST_F(SecurityManagerChannelTest, recv_keypress_notification) {
-  hci_layer_->IncomingEvent(
-      hci::KeypressNotificationBuilder::Create(device_.GetAddress(), hci::KeypressNotificationType::ENTRY_COMPLETED));
+  hci_layer_->IncomingEvent(hci::KeypressNotificationBuilder::Create(
+          device_.GetAddress(), hci::KeypressNotificationType::ENTRY_COMPLETED));
   synchronize();
   ASSERT_TRUE(callback_->receivedKeypressNotification);
 }
 
 TEST_F(SecurityManagerChannelTest, send_keypress_notification) {
   // Arrange
-  auto packet =
-      hci::SendKeypressNotificationBuilder::Create(device_.GetAddress(), hci::KeypressNotificationType::ENTRY_STARTED);
+  auto packet = hci::SendKeypressNotificationBuilder::Create(
+          device_.GetAddress(), hci::KeypressNotificationType::ENTRY_STARTED);
 
   // Act
   channel_->SendCommand(std::move(packet));

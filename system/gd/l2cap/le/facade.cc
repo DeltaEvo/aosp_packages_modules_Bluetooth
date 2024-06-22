@@ -54,7 +54,7 @@ SecurityPolicy SecurityLevelToPolicy(SecurityLevel level) {
 static constexpr auto kChannelOpenTimeout = std::chrono::seconds(4);
 
 class L2capLeModuleFacadeService : public L2capLeModuleFacade::Service {
- public:
+public:
   L2capLeModuleFacadeService(L2capLeModule* l2cap_layer, os::Handler* facade_handler)
       : l2cap_layer_(l2cap_layer), facade_handler_(facade_handler) {
     log::assert_that(l2cap_layer_ != nullptr, "assert failed: l2cap_layer_ != nullptr");
@@ -62,37 +62,34 @@ class L2capLeModuleFacadeService : public L2capLeModuleFacade::Service {
   }
 
   ::grpc::Status FetchL2capData(
-      ::grpc::ServerContext* context,
-      const ::google::protobuf::Empty* /* request */,
-      ::grpc::ServerWriter<::bluetooth::l2cap::le::L2capPacket>* writer) override {
+          ::grpc::ServerContext* context, const ::google::protobuf::Empty* /* request */,
+          ::grpc::ServerWriter<::bluetooth::l2cap::le::L2capPacket>* writer) override {
     return pending_l2cap_data_.RunLoop(context, writer);
   }
 
-  ::grpc::Status OpenDynamicChannel(
-      ::grpc::ServerContext* /* context */,
-      const OpenDynamicChannelRequest* request,
-      OpenDynamicChannelResponse* response) override {
+  ::grpc::Status OpenDynamicChannel(::grpc::ServerContext* /* context */,
+                                    const OpenDynamicChannelRequest* request,
+                                    OpenDynamicChannelResponse* response) override {
     auto service_helper = dynamic_channel_helper_map_.find(request->psm());
     if (service_helper == dynamic_channel_helper_map_.end()) {
       return ::grpc::Status(::grpc::StatusCode::FAILED_PRECONDITION, "Psm not registered");
     }
     hci::Address peer_address;
     log::assert_that(
-        hci::Address::FromString(request->remote().address().address(), peer_address),
-        "assert failed: hci::Address::FromString(request->remote().address().address(), "
-        "peer_address)");
+            hci::Address::FromString(request->remote().address().address(), peer_address),
+            "assert failed: hci::Address::FromString(request->remote().address().address(), "
+            "peer_address)");
     // TODO: Support different address type
     hci::AddressWithType peer(peer_address, hci::AddressType::RANDOM_DEVICE_ADDRESS);
     service_helper->second->Connect(peer);
-    response->set_status(
-        static_cast<int>(service_helper->second->channel_open_fail_reason_.l2cap_connection_response_result));
+    response->set_status(static_cast<int>(
+            service_helper->second->channel_open_fail_reason_.l2cap_connection_response_result));
     return ::grpc::Status::OK;
   }
 
-  ::grpc::Status CloseDynamicChannel(
-      ::grpc::ServerContext* /* context */,
-      const CloseDynamicChannelRequest* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status CloseDynamicChannel(::grpc::ServerContext* /* context */,
+                                     const CloseDynamicChannelRequest* request,
+                                     ::google::protobuf::Empty* /* response */) override {
     auto service_helper = dynamic_channel_helper_map_.find(request->psm());
     if (service_helper == dynamic_channel_helper_map_.end()) {
       return ::grpc::Status(::grpc::StatusCode::FAILED_PRECONDITION, "Psm not registered");
@@ -103,24 +100,26 @@ class L2capLeModuleFacadeService : public L2capLeModuleFacade::Service {
     auto address = service_helper->second->channel_->GetDevice().GetAddress();
     hci::Address peer_address;
     log::assert_that(
-        hci::Address::FromString(request->remote().address().address(), peer_address),
-        "assert failed: hci::Address::FromString(request->remote().address().address(), "
-        "peer_address)");
+            hci::Address::FromString(request->remote().address().address(), peer_address),
+            "assert failed: hci::Address::FromString(request->remote().address().address(), "
+            "peer_address)");
     if (address != peer_address) {
-      return ::grpc::Status(::grpc::StatusCode::FAILED_PRECONDITION, "Remote address doesn't match");
+      return ::grpc::Status(::grpc::StatusCode::FAILED_PRECONDITION,
+                            "Remote address doesn't match");
     }
     service_helper->second->channel_->Close();
     return ::grpc::Status::OK;
   }
 
   ::grpc::Status SetDynamicChannel(
-      ::grpc::ServerContext* /* context */,
-      const ::bluetooth::l2cap::le::SetEnableDynamicChannelRequest* request,
-      ::google::protobuf::Empty* /* response */) override {
+          ::grpc::ServerContext* /* context */,
+          const ::bluetooth::l2cap::le::SetEnableDynamicChannelRequest* request,
+          ::google::protobuf::Empty* /* response */) override {
     if (request->enable()) {
-      dynamic_channel_helper_map_.emplace(request->psm(), std::make_unique<L2capDynamicChannelHelper>(
-                                                              this, l2cap_layer_, facade_handler_, request->psm(),
-                                                              SecurityLevelToPolicy(request->security_level())));
+      dynamic_channel_helper_map_.emplace(
+              request->psm(), std::make_unique<L2capDynamicChannelHelper>(
+                                      this, l2cap_layer_, facade_handler_, request->psm(),
+                                      SecurityLevelToPolicy(request->security_level())));
       return ::grpc::Status::OK;
     } else {
       auto service_helper = dynamic_channel_helper_map_.find(request->psm());
@@ -133,9 +132,9 @@ class L2capLeModuleFacadeService : public L2capLeModuleFacade::Service {
   }
 
   ::grpc::Status SendDynamicChannelPacket(
-      ::grpc::ServerContext* /* context */,
-      const ::bluetooth::l2cap::le::DynamicChannelPacket* request,
-      ::google::protobuf::Empty* /* response */) override {
+          ::grpc::ServerContext* /* context */,
+          const ::bluetooth::l2cap::le::DynamicChannelPacket* request,
+          ::google::protobuf::Empty* /* response */) override {
     std::unique_lock<std::mutex> lock(channel_map_mutex_);
     if (dynamic_channel_helper_map_.find(request->psm()) == dynamic_channel_helper_map_.end()) {
       return ::grpc::Status(::grpc::StatusCode::FAILED_PRECONDITION, "Psm not registered");
@@ -148,16 +147,18 @@ class L2capLeModuleFacadeService : public L2capLeModuleFacade::Service {
   }
 
   class L2capDynamicChannelHelper {
-   public:
-    L2capDynamicChannelHelper(L2capLeModuleFacadeService* service, L2capLeModule* l2cap_layer, os::Handler* handler,
-                              Psm psm, SecurityPolicy security_policy)
+  public:
+    L2capDynamicChannelHelper(L2capLeModuleFacadeService* service, L2capLeModule* l2cap_layer,
+                              os::Handler* handler, Psm psm, SecurityPolicy security_policy)
         : facade_service_(service), l2cap_layer_(l2cap_layer), handler_(handler), psm_(psm) {
       dynamic_channel_manager_ = l2cap_layer_->GetDynamicChannelManager();
       dynamic_channel_manager_->RegisterService(
-          psm, {}, security_policy,
-          common::BindOnce(&L2capDynamicChannelHelper::on_l2cap_service_registration_complete,
+              psm, {}, security_policy,
+              common::BindOnce(&L2capDynamicChannelHelper::on_l2cap_service_registration_complete,
+                               common::Unretained(this)),
+              common::Bind(&L2capDynamicChannelHelper::on_connection_open,
                            common::Unretained(this)),
-          common::Bind(&L2capDynamicChannelHelper::on_connection_open, common::Unretained(this)), handler_);
+              handler_);
     }
 
     ~L2capDynamicChannelHelper() {
@@ -169,16 +170,21 @@ class L2capLeModuleFacadeService : public L2capLeModuleFacade::Service {
 
     void Connect(hci::AddressWithType address) {
       dynamic_channel_manager_->ConnectChannel(
-          address, {}, psm_, common::Bind(&L2capDynamicChannelHelper::on_connection_open, common::Unretained(this)),
-          common::Bind(&L2capDynamicChannelHelper::on_connect_fail, common::Unretained(this)), handler_);
+              address, {}, psm_,
+              common::Bind(&L2capDynamicChannelHelper::on_connection_open,
+                           common::Unretained(this)),
+              common::Bind(&L2capDynamicChannelHelper::on_connect_fail, common::Unretained(this)),
+              handler_);
       std::unique_lock<std::mutex> lock(channel_open_cv_mutex_);
-      if (!channel_open_cv_.wait_for(lock, kChannelOpenTimeout, [this] { return channel_ != nullptr; })) {
+      if (!channel_open_cv_.wait_for(lock, kChannelOpenTimeout,
+                                     [this] { return channel_ != nullptr; })) {
         log::warn("Channel is not open for psm {}", psm_);
       }
     }
 
-    void on_l2cap_service_registration_complete(DynamicChannelManager::RegistrationResult registration_result,
-                                                std::unique_ptr<DynamicChannelService> service) {
+    void on_l2cap_service_registration_complete(
+            DynamicChannelManager::RegistrationResult registration_result,
+            std::unique_ptr<DynamicChannelService> service) {
       if (registration_result != DynamicChannelManager::RegistrationResult::SUCCESS) {
         log::error("Service registration failed");
       } else {
@@ -193,11 +199,12 @@ class L2capLeModuleFacadeService : public L2capLeModuleFacade::Service {
         channel_ = std::move(channel);
       }
       channel_open_cv_.notify_all();
-      channel_->RegisterOnCloseCallback(
-          facade_service_->facade_handler_->BindOnceOn(this, &L2capDynamicChannelHelper::on_close_callback));
+      channel_->RegisterOnCloseCallback(facade_service_->facade_handler_->BindOnceOn(
+              this, &L2capDynamicChannelHelper::on_close_callback));
       channel_->GetQueueUpEnd()->RegisterDequeue(
-          facade_service_->facade_handler_,
-          common::Bind(&L2capDynamicChannelHelper::on_incoming_packet, common::Unretained(this)));
+              facade_service_->facade_handler_,
+              common::Bind(&L2capDynamicChannelHelper::on_incoming_packet,
+                           common::Unretained(this)));
     }
 
     void on_close_callback(hci::ErrorCode /* error_code */) {
@@ -229,7 +236,8 @@ class L2capLeModuleFacadeService : public L2capLeModuleFacade::Service {
     bool SendPacket(std::vector<uint8_t> packet) {
       if (channel_ == nullptr) {
         std::unique_lock<std::mutex> lock(channel_open_cv_mutex_);
-        if (!channel_open_cv_.wait_for(lock, kChannelOpenTimeout, [this] { return channel_ != nullptr; })) {
+        if (!channel_open_cv_.wait_for(lock, kChannelOpenTimeout,
+                                       [this] { return channel_ != nullptr; })) {
           log::warn("Channel is not open for psm {}", psm_);
           return false;
         }
@@ -237,8 +245,9 @@ class L2capLeModuleFacadeService : public L2capLeModuleFacade::Service {
       std::promise<void> promise;
       auto future = promise.get_future();
       channel_->GetQueueUpEnd()->RegisterEnqueue(
-          handler_, common::Bind(&L2capDynamicChannelHelper::enqueue_callback, common::Unretained(this), packet,
-                                 common::Passed(std::move(promise))));
+              handler_,
+              common::Bind(&L2capDynamicChannelHelper::enqueue_callback, common::Unretained(this),
+                           packet, common::Passed(std::move(promise))));
       auto status = future.wait_for(std::chrono::milliseconds(500));
       if (status != std::future_status::ready) {
         log::error("Can't send packet because the previous packet wasn't sent yet");
@@ -268,13 +277,13 @@ class L2capLeModuleFacadeService : public L2capLeModuleFacade::Service {
     std::mutex channel_open_cv_mutex_;
   };
 
-  ::grpc::Status SetFixedChannel(
-      ::grpc::ServerContext* /* context */,
-      const SetEnableFixedChannelRequest* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status SetFixedChannel(::grpc::ServerContext* /* context */,
+                                 const SetEnableFixedChannelRequest* request,
+                                 ::google::protobuf::Empty* /* response */) override {
     if (request->enable()) {
-      fixed_channel_helper_map_.emplace(request->cid(), std::make_unique<L2capFixedChannelHelper>(
-                                                            this, l2cap_layer_, facade_handler_, request->cid()));
+      fixed_channel_helper_map_.emplace(
+              request->cid(), std::make_unique<L2capFixedChannelHelper>(
+                                      this, l2cap_layer_, facade_handler_, request->cid()));
       return ::grpc::Status::OK;
     } else {
       auto service_helper = fixed_channel_helper_map_.find(request->cid());
@@ -287,10 +296,9 @@ class L2capLeModuleFacadeService : public L2capLeModuleFacade::Service {
     }
   }
 
-  ::grpc::Status SendFixedChannelPacket(
-      ::grpc::ServerContext* /* context */,
-      const FixedChannelPacket* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status SendFixedChannelPacket(::grpc::ServerContext* /* context */,
+                                        const FixedChannelPacket* request,
+                                        ::google::protobuf::Empty* /* response */) override {
     std::unique_lock<std::mutex> lock(channel_map_mutex_);
     if (fixed_channel_helper_map_.find(request->cid()) == fixed_channel_helper_map_.end()) {
       return ::grpc::Status(::grpc::StatusCode::FAILED_PRECONDITION, "Cid not registered");
@@ -303,15 +311,17 @@ class L2capLeModuleFacadeService : public L2capLeModuleFacade::Service {
   }
 
   class L2capFixedChannelHelper {
-   public:
-    L2capFixedChannelHelper(L2capLeModuleFacadeService* service, L2capLeModule* l2cap_layer, os::Handler* handler,
-                            Cid cid)
+  public:
+    L2capFixedChannelHelper(L2capLeModuleFacadeService* service, L2capLeModule* l2cap_layer,
+                            os::Handler* handler, Cid cid)
         : facade_service_(service), l2cap_layer_(l2cap_layer), handler_(handler), cid_(cid) {
       fixed_channel_manager_ = l2cap_layer_->GetFixedChannelManager();
       fixed_channel_manager_->RegisterService(
-          cid_,
-          common::BindOnce(&L2capFixedChannelHelper::on_l2cap_service_registration_complete, common::Unretained(this)),
-          common::Bind(&L2capFixedChannelHelper::on_connection_open, common::Unretained(this)), handler_);
+              cid_,
+              common::BindOnce(&L2capFixedChannelHelper::on_l2cap_service_registration_complete,
+                               common::Unretained(this)),
+              common::Bind(&L2capFixedChannelHelper::on_connection_open, common::Unretained(this)),
+              handler_);
     }
 
     ~L2capFixedChannelHelper() {
@@ -324,15 +334,19 @@ class L2capLeModuleFacadeService : public L2capLeModuleFacade::Service {
 
     void Connect(hci::AddressWithType address) {
       fixed_channel_manager_->ConnectServices(
-          address, common::BindOnce(&L2capFixedChannelHelper::on_connect_fail, common::Unretained(this)), handler_);
+              address,
+              common::BindOnce(&L2capFixedChannelHelper::on_connect_fail, common::Unretained(this)),
+              handler_);
       std::unique_lock<std::mutex> lock(channel_open_cv_mutex_);
-      if (!channel_open_cv_.wait_for(lock, kChannelOpenTimeout, [this] { return channel_ != nullptr; })) {
+      if (!channel_open_cv_.wait_for(lock, kChannelOpenTimeout,
+                                     [this] { return channel_ != nullptr; })) {
         log::warn("Channel is not open for cid {}", cid_);
       }
     }
 
-    void on_l2cap_service_registration_complete(FixedChannelManager::RegistrationResult registration_result,
-                                                std::unique_ptr<FixedChannelService> service) {
+    void on_l2cap_service_registration_complete(
+            FixedChannelManager::RegistrationResult registration_result,
+            std::unique_ptr<FixedChannelService> service) {
       if (registration_result != FixedChannelManager::RegistrationResult::SUCCESS) {
         log::error("Service registration failed");
       } else {
@@ -346,13 +360,14 @@ class L2capLeModuleFacadeService : public L2capLeModuleFacade::Service {
         std::unique_lock<std::mutex> lock(channel_open_cv_mutex_);
         channel_ = std::move(channel);
         channel_->RegisterOnCloseCallback(
-            handler_, common::BindOnce(&L2capFixedChannelHelper::on_close_callback, common::Unretained(this)));
+                handler_, common::BindOnce(&L2capFixedChannelHelper::on_close_callback,
+                                           common::Unretained(this)));
         channel_->Acquire();
       }
       channel_open_cv_.notify_all();
       channel_->GetQueueUpEnd()->RegisterDequeue(
-          facade_service_->facade_handler_,
-          common::Bind(&L2capFixedChannelHelper::on_incoming_packet, common::Unretained(this)));
+              facade_service_->facade_handler_,
+              common::Bind(&L2capFixedChannelHelper::on_incoming_packet, common::Unretained(this)));
     }
 
     void on_close_callback(hci::ErrorCode /* error_code */) {
@@ -383,7 +398,8 @@ class L2capLeModuleFacadeService : public L2capLeModuleFacade::Service {
     bool SendPacket(std::vector<uint8_t> packet) {
       if (channel_ == nullptr) {
         std::unique_lock<std::mutex> lock(channel_open_cv_mutex_);
-        if (!channel_open_cv_.wait_for(lock, kChannelOpenTimeout, [this] { return channel_ != nullptr; })) {
+        if (!channel_open_cv_.wait_for(lock, kChannelOpenTimeout,
+                                       [this] { return channel_ != nullptr; })) {
           log::warn("Channel is not open for cid {}", cid_);
           return false;
         }
@@ -391,8 +407,9 @@ class L2capLeModuleFacadeService : public L2capLeModuleFacade::Service {
       std::promise<void> promise;
       auto future = promise.get_future();
       channel_->GetQueueUpEnd()->RegisterEnqueue(
-          handler_, common::Bind(&L2capFixedChannelHelper::enqueue_callback, common::Unretained(this), packet,
-                                 common::Passed(std::move(promise))));
+              handler_,
+              common::Bind(&L2capFixedChannelHelper::enqueue_callback, common::Unretained(this),
+                           packet, common::Passed(std::move(promise))));
       auto status = future.wait_for(std::chrono::milliseconds(500));
       if (status != std::future_status::ready) {
         log::error("Can't send packet because the previous packet wasn't sent yet");
@@ -421,17 +438,17 @@ class L2capLeModuleFacadeService : public L2capLeModuleFacade::Service {
     std::mutex channel_open_cv_mutex_;
   };
 
-  ::grpc::Status SendConnectionParameterUpdate(
-      ::grpc::ServerContext* /* context */,
-      const ConnectionParameter* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status SendConnectionParameterUpdate(::grpc::ServerContext* /* context */,
+                                               const ConnectionParameter* request,
+                                               ::google::protobuf::Empty* /* response */) override {
     if (dynamic_channel_helper_map_.empty()) {
-      return ::grpc::Status(::grpc::StatusCode::FAILED_PRECONDITION, "Need to open at least one dynamic channel first");
+      return ::grpc::Status(::grpc::StatusCode::FAILED_PRECONDITION,
+                            "Need to open at least one dynamic channel first");
     }
     auto& dynamic_channel_helper = dynamic_channel_helper_map_.begin()->second;
     dynamic_channel_helper->channel_->GetLinkOptions()->UpdateConnectionParameter(
-        request->conn_interval_min(), request->conn_interval_max(), request->conn_latency(),
-        request->supervision_timeout(), request->min_ce_length(), request->max_ce_length());
+            request->conn_interval_min(), request->conn_interval_max(), request->conn_latency(),
+            request->supervision_timeout(), request->min_ce_length(), request->max_ce_length());
 
     return ::grpc::Status::OK;
   }
@@ -451,7 +468,8 @@ void L2capLeModuleFacadeModule::ListDependencies(ModuleList* list) const {
 
 void L2capLeModuleFacadeModule::Start() {
   ::bluetooth::grpc::GrpcFacadeModule::Start();
-  service_ = new L2capLeModuleFacadeService(GetDependency<l2cap::le::L2capLeModule>(), GetHandler());
+  service_ =
+          new L2capLeModuleFacadeService(GetDependency<l2cap::le::L2capLeModule>(), GetHandler());
 }
 
 void L2capLeModuleFacadeModule::Stop() {
@@ -459,12 +477,10 @@ void L2capLeModuleFacadeModule::Stop() {
   ::bluetooth::grpc::GrpcFacadeModule::Stop();
 }
 
-::grpc::Service* L2capLeModuleFacadeModule::GetService() const {
-  return service_;
-}
+::grpc::Service* L2capLeModuleFacadeModule::GetService() const { return service_; }
 
 const ModuleFactory L2capLeModuleFacadeModule::Factory =
-    ::bluetooth::ModuleFactory([]() { return new L2capLeModuleFacadeModule(); });
+        ::bluetooth::ModuleFactory([]() { return new L2capLeModuleFacadeModule(); });
 
 }  // namespace le
 }  // namespace l2cap

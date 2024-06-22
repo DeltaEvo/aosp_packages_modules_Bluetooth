@@ -16,16 +16,16 @@
 
 #include "l2cap/classic/internal/link.h"
 
+#include <gmock/gmock-nice-strict.h>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
 #include "hci/acl_manager_mock.h"
 #include "hci/address.h"
 #include "l2cap/classic/internal/dynamic_channel_service_impl_mock.h"
 #include "l2cap/classic/internal/dynamic_channel_service_manager_impl_mock.h"
 #include "l2cap/classic/internal/fixed_channel_service_manager_impl_mock.h"
 #include "l2cap/internal/parameter_provider_mock.h"
-
-#include <gmock/gmock-nice-strict.h>
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 using ::testing::NiceMock;
 
@@ -45,17 +45,14 @@ using l2cap::internal::testing::MockParameterProvider;
 using testing::MockFixedChannelServiceManagerImpl;
 
 class L2capClassicLinkTest : public ::testing::Test {
- public:
-  void OnOpen(std::unique_ptr<DynamicChannel> channel) {
-    on_open_promise_.set_value();
-  }
+public:
+  void OnOpen(std::unique_ptr<DynamicChannel> channel) { on_open_promise_.set_value(); }
 
-  void OnFail(DynamicChannelManager::ConnectionResult result) {
-    on_fail_promise_.set_value();
-  }
+  void OnFail(DynamicChannelManager::ConnectionResult result) { on_fail_promise_.set_value(); }
 
   void OnDequeueCallbackForTest() {
-    std::unique_ptr<BasePacketBuilder> data = raw_acl_connection_->acl_queue_.GetDownEnd()->TryDequeue();
+    std::unique_ptr<BasePacketBuilder> data =
+            raw_acl_connection_->acl_queue_.GetDownEnd()->TryDequeue();
     if (data != nullptr) {
       dequeue_promise_.set_value();
     }
@@ -63,21 +60,21 @@ class L2capClassicLinkTest : public ::testing::Test {
 
   void EnqueueCallbackForTest() {
     raw_acl_connection_->acl_queue_.GetDownEnd()->RegisterDequeue(
-        handler_, common::Bind(&L2capClassicLinkTest::OnDequeueCallbackForTest, common::Unretained(this)));
+            handler_, common::Bind(&L2capClassicLinkTest::OnDequeueCallbackForTest,
+                                   common::Unretained(this)));
   }
 
-  void DequeueCallback() {
-    raw_acl_connection_->acl_queue_.GetDownEnd()->UnregisterDequeue();
-  }
+  void DequeueCallback() { raw_acl_connection_->acl_queue_.GetDownEnd()->UnregisterDequeue(); }
 
- protected:
+protected:
   void SetUp() override {
     thread_ = new os::Thread("test_thread", os::Thread::Priority::NORMAL);
     handler_ = new os::Handler(thread_);
     signalling_handler_ = new os::Handler(thread_);
 
     raw_acl_connection_ = new NiceMock<MockClassicAclConnection>();
-    link_ = new Link(signalling_handler_, std::unique_ptr<MockClassicAclConnection>(raw_acl_connection_),
+    link_ = new Link(signalling_handler_,
+                     std::unique_ptr<MockClassicAclConnection>(raw_acl_connection_),
                      &mock_parameter_provider_, &mock_classic_dynamic_channel_service_manager_,
                      &mock_classic_fixed_channel_service_manager_, nullptr);
   }
@@ -117,20 +114,21 @@ TEST_F(L2capClassicLinkTest, pending_channels_get_notified_on_acl_disconnect) {
   EnqueueCallbackForTest();
 
   Link::PendingDynamicChannelConnection pending_dynamic_channel_connection{
-      .on_open_callback_ = handler_->BindOn(this, &L2capClassicLinkTest::OnOpen),
-      .on_fail_callback_ = handler_->BindOnceOn(this, &L2capClassicLinkTest::OnFail),
-      .configuration_ = DynamicChannelConfigurationOption(),
+          .on_open_callback_ = handler_->BindOn(this, &L2capClassicLinkTest::OnOpen),
+          .on_fail_callback_ = handler_->BindOnceOn(this, &L2capClassicLinkTest::OnFail),
+          .configuration_ = DynamicChannelConfigurationOption(),
   };
   auto future = on_fail_promise_.get_future();
 
   MockDynamicChannelServiceImpl service;
   ON_CALL(service, GetSecurityPolicy())
-      .WillByDefault(::testing::Return(SecurityPolicy::_SDP_ONLY_NO_SECURITY_WHATSOEVER_PLAINTEXT_TRANSPORT_OK));
+          .WillByDefault(::testing::Return(
+                  SecurityPolicy::_SDP_ONLY_NO_SECURITY_WHATSOEVER_PLAINTEXT_TRANSPORT_OK));
 
   EXPECT_CALL(mock_classic_dynamic_channel_service_manager_, GetSecurityEnforcementInterface())
-      .WillOnce(::testing::Return(&security_module_impl_));
+          .WillOnce(::testing::Return(&security_module_impl_));
   EXPECT_CALL(mock_classic_dynamic_channel_service_manager_, GetService(::testing::_))
-      .WillRepeatedly(::testing::Return(&service));
+          .WillRepeatedly(::testing::Return(&service));
 
   link_->SendConnectionRequest(kPsm, kCid, std::move(pending_dynamic_channel_connection));
   link_->OnAclDisconnected(hci::ErrorCode::UNKNOWN_HCI_COMMAND);

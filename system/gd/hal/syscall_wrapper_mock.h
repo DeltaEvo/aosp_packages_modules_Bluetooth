@@ -28,7 +28,7 @@ namespace bluetooth {
 namespace hal {
 
 class SyscallWrapperMock : public SyscallWrapperInterface {
- public:
+public:
   MOCK_METHOD(int, Socket, (int, int, int));
 
   MOCK_METHOD(int, Bind, (int, const struct sockaddr*, socklen_t));

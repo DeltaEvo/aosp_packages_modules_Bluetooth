@@ -33,9 +33,11 @@ constexpr size_t kNumberTestedProperties = 20;
 constexpr size_t kBdPropNameLength = kBdNameLength + sizeof(kBdNameDelim);
 
 constexpr uint8_t kReallyLongName[kBdPropNameLength] =
-    "aaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaa"
-    "aaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaa"
-    "aAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaa";
+        "aaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaA"
+        "aaaa"
+        "aaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaa"
+        "aaaa"
+        "aAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaaaaaa";
 
 // BT_PROPERTY_BDNAME
 constexpr BD_NAME kBdName{'k', 'B', 'd', 'N', 'a', 'm', 'e', '\0'};
@@ -45,9 +47,9 @@ const RawAddress kRawAddress{{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}};
 
 // BT_PROPERTY_UUIDS
 const bluetooth::Uuid uuids[] = {
-    {bluetooth::Uuid::FromString("00000001-1001-1000-8000-00805f9b34fb")},
-    {bluetooth::Uuid::FromString("00000001-1002-1000-8000-00805f9b34fb")},
-    {bluetooth::Uuid::FromString("00000001-1003-1000-8000-00805f9b34fb")},
+        {bluetooth::Uuid::FromString("00000001-1001-1000-8000-00805f9b34fb")},
+        {bluetooth::Uuid::FromString("00000001-1002-1000-8000-00805f9b34fb")},
+        {bluetooth::Uuid::FromString("00000001-1003-1000-8000-00805f9b34fb")},
 };
 const std::vector<bluetooth::Uuid> kUuids(uuids, uuids + sizeof(uuids) / sizeof(uuids[0]));
 
@@ -59,22 +61,20 @@ constexpr bt_device_type_t kTypeOfDevice{BT_DEVICE_DEVTYPE_BREDR};
 
 // BT_PROPERTY_SERVICE_RECORD
 const bt_service_record_t kServiceRecord{
-    .uuid = uuids[0],
-    .channel = 0x1234,
-    .name = {'k', 'S', 'e', 'r', 'v', 'i', 'c', 'e', 'R', 'e',
-             'c', 'o', 'r', 'd', '.', 'n', 'a', 'm', 'e', '\0'},
+        .uuid = uuids[0],
+        .channel = 0x1234,
+        .name = {'k', 'S', 'e', 'r', 'v', 'i', 'c', 'e', 'R', 'e',
+                 'c', 'o', 'r', 'd', '.', 'n', 'a', 'm', 'e', '\0'},
 };
 
 // BT_PROPERTY_ADAPTER_BONDED_DEVICES
 const RawAddress kAdapterBondedDevices[] = {
-    {{0x11, 0x22, 0x33, 0x44, 0x55}},
-    {{0x12, 0x22, 0x33, 0x44, 0x55}},
-    {{0x13, 0x22, 0x33, 0x44, 0x55}},
-    {{0x14, 0x22, 0x33, 0x44, 0x55}},
-    {{0x15, 0x22, 0x33, 0x44, 0x55}},
+        {{0x11, 0x22, 0x33, 0x44, 0x55}}, {{0x12, 0x22, 0x33, 0x44, 0x55}},
+        {{0x13, 0x22, 0x33, 0x44, 0x55}}, {{0x14, 0x22, 0x33, 0x44, 0x55}},
+        {{0x15, 0x22, 0x33, 0x44, 0x55}},
 };
 constexpr size_t kNumBondedDevices =
-    sizeof(kAdapterBondedDevices) / sizeof(kAdapterBondedDevices[0]);
+        sizeof(kAdapterBondedDevices) / sizeof(kAdapterBondedDevices[0]);
 
 // BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT
 constexpr uint32_t kAdapterDiscoverableTimeout{0x4488cc00};
@@ -88,36 +88,36 @@ constexpr int8_t kRemoteRssi{0x10};
 
 // BT_PROPERTY_REMOTE_VERSION_INFO
 bt_remote_version_t kRemoteVersionInfo{
-    .version = 1,
-    .sub_ver = 2,
-    .manufacturer = 3,
+        .version = 1,
+        .sub_ver = 2,
+        .manufacturer = 3,
 };
 
 // BT_PROPERTY_LOCAL_LE_FEATURES
 constexpr bt_local_le_features_t kLocalLeFeatures{
-    .version_supported = 0x1234,
-    .local_privacy_enabled = 0x11,
-    .max_adv_instance = 0x22,
-    .rpa_offload_supported = 0x33,
-    .max_irk_list_size = 0x44,
-    .max_adv_filter_supported = 0x55,
-    .activity_energy_info_supported = 0x66,
-    .scan_result_storage_size = 0x5678,
-    .total_trackable_advertisers = 0x9abc,
-    .extended_scan_support = true,
-    .debug_logging_supported = true,
-    .le_2m_phy_supported = true,
-    .le_coded_phy_supported = true,
-    .le_extended_advertising_supported = true,
-    .le_periodic_advertising_supported = true,
-    .le_maximum_advertising_data_length = 0x1357,
-    .dynamic_audio_buffer_supported = 0x22446688,
-    .le_periodic_advertising_sync_transfer_sender_supported = true,
-    .le_connected_isochronous_stream_central_supported = true,
-    .le_isochronous_broadcast_supported = true,
-    .le_periodic_advertising_sync_transfer_recipient_supported = true,
-    .adv_filter_extended_features_mask = 0x3366,
-    .le_channel_sounding_supported = true,
+        .version_supported = 0x1234,
+        .local_privacy_enabled = 0x11,
+        .max_adv_instance = 0x22,
+        .rpa_offload_supported = 0x33,
+        .max_irk_list_size = 0x44,
+        .max_adv_filter_supported = 0x55,
+        .activity_energy_info_supported = 0x66,
+        .scan_result_storage_size = 0x5678,
+        .total_trackable_advertisers = 0x9abc,
+        .extended_scan_support = true,
+        .debug_logging_supported = true,
+        .le_2m_phy_supported = true,
+        .le_coded_phy_supported = true,
+        .le_extended_advertising_supported = true,
+        .le_periodic_advertising_supported = true,
+        .le_maximum_advertising_data_length = 0x1357,
+        .dynamic_audio_buffer_supported = 0x22446688,
+        .le_periodic_advertising_sync_transfer_sender_supported = true,
+        .le_connected_isochronous_stream_central_supported = true,
+        .le_isochronous_broadcast_supported = true,
+        .le_periodic_advertising_sync_transfer_recipient_supported = true,
+        .adv_filter_extended_features_mask = 0x3366,
+        .le_channel_sounding_supported = true,
 };
 
 // BT_PROPERTY_RESERVED_0F
@@ -131,10 +131,10 @@ constexpr uint16_t kAppearance{0x44};
 
 // BT_PROPERTY_VENDOR_PRODUCT_INFO
 constexpr bt_vendor_product_info_t kVendorProductInfo{
-    .vendor_id_src = 0x02,
-    .vendor_id = 0x1235,
-    .product_id = 0x5679,
-    .version = 0x9abd,
+        .vendor_id_src = 0x02,
+        .vendor_id = 0x1235,
+        .product_id = 0x5679,
+        .version = 0x9abd,
 };
 
 // BT_PROPERTY_REMOTE_ASHA_CAPABILITY
@@ -145,7 +145,7 @@ constexpr uint32_t kRemoteAshaTruncatedHisyncId{0x22446688};
 
 // BT_PROPERTY_REMOTE_MODEL_NUM
 constexpr bt_bdname_t kRemoteModelNum{
-    .name = {'k', 'R', 'e', 'm', 'o', 't', 'e', 'M', 'o', 'd', 'e', 'l', 'N', 'u', 'm', '\0'},
+        .name = {'k', 'R', 'e', 'm', 'o', 't', 'e', 'M', 'o', 'd', 'e', 'l', 'N', 'u', 'm', '\0'},
 };
 
 // BT_PROPERTY_REMOTE_ADDR_TYPE
@@ -155,8 +155,8 @@ constexpr uint8_t kRemoteAddrType{0x55};
 constexpr int kRemoteDeviceTimestamp{0x12345678};
 
 // Fill the given property type with the well known property data set
-void fill_property(
-    const bt_property_type_t& type, std::vector<std::shared_ptr<BtProperty>>& properties) {
+void fill_property(const bt_property_type_t& type,
+                   std::vector<std::shared_ptr<BtProperty>>& properties) {
   switch (type) {
     case BT_PROPERTY_BDNAME: {
       properties.push_back(BdName::Create(kBdName));
@@ -200,7 +200,7 @@ void fill_property(
 
     case BT_PROPERTY_REMOTE_FRIENDLY_NAME: {
       properties.push_back(
-          RemoteFriendlyName::Create(kRemoteFriendlyName, sizeof(kRemoteFriendlyName)));
+              RemoteFriendlyName::Create(kRemoteFriendlyName, sizeof(kRemoteFriendlyName)));
       ASSERT_EQ(sizeof(kRemoteFriendlyName) + sizeof(kBdNameDelim), properties.back()->Size());
     } break;
 
@@ -336,87 +336,63 @@ void verify_property(const bt_property_type_t& type, const bt_property_t& proper
       ASSERT_EQ((int)sizeof(bt_remote_version_t), property.len);
       ASSERT_EQ(kRemoteVersionInfo.version, ((bt_remote_version_t*)property.val)->version);
       ASSERT_EQ(kRemoteVersionInfo.sub_ver, ((bt_remote_version_t*)property.val)->sub_ver);
-      ASSERT_EQ(
-          kRemoteVersionInfo.manufacturer, ((bt_remote_version_t*)property.val)->manufacturer);
+      ASSERT_EQ(kRemoteVersionInfo.manufacturer,
+                ((bt_remote_version_t*)property.val)->manufacturer);
       break;
 
     case BT_PROPERTY_LOCAL_LE_FEATURES:
       ASSERT_EQ((int)sizeof(bt_local_le_features_t), property.len);
-      ASSERT_EQ(
-          kLocalLeFeatures.version_supported,
-          ((bt_local_le_features_t*)property.val)->version_supported);
-      ASSERT_EQ(
-          kLocalLeFeatures.local_privacy_enabled,
-          ((bt_local_le_features_t*)property.val)->local_privacy_enabled);
-      ASSERT_EQ(
-          kLocalLeFeatures.local_privacy_enabled,
-          ((bt_local_le_features_t*)property.val)->local_privacy_enabled);
-      ASSERT_EQ(
-          kLocalLeFeatures.max_adv_instance,
-          ((bt_local_le_features_t*)property.val)->max_adv_instance);
-      ASSERT_EQ(
-          kLocalLeFeatures.rpa_offload_supported,
-          ((bt_local_le_features_t*)property.val)->rpa_offload_supported);
-      ASSERT_EQ(
-          kLocalLeFeatures.max_irk_list_size,
-          ((bt_local_le_features_t*)property.val)->max_irk_list_size);
-      ASSERT_EQ(
-          kLocalLeFeatures.max_adv_filter_supported,
-          ((bt_local_le_features_t*)property.val)->max_adv_filter_supported);
-      ASSERT_EQ(
-          kLocalLeFeatures.activity_energy_info_supported,
-          ((bt_local_le_features_t*)property.val)->activity_energy_info_supported);
-      ASSERT_EQ(
-          kLocalLeFeatures.scan_result_storage_size,
-          ((bt_local_le_features_t*)property.val)->scan_result_storage_size);
-      ASSERT_EQ(
-          kLocalLeFeatures.total_trackable_advertisers,
-          ((bt_local_le_features_t*)property.val)->total_trackable_advertisers);
-      ASSERT_EQ(
-          kLocalLeFeatures.extended_scan_support,
-          ((bt_local_le_features_t*)property.val)->extended_scan_support);
-      ASSERT_EQ(
-          kLocalLeFeatures.debug_logging_supported,
-          ((bt_local_le_features_t*)property.val)->debug_logging_supported);
-      ASSERT_EQ(
-          kLocalLeFeatures.le_2m_phy_supported,
-          ((bt_local_le_features_t*)property.val)->le_2m_phy_supported);
-      ASSERT_EQ(
-          kLocalLeFeatures.le_coded_phy_supported,
-          ((bt_local_le_features_t*)property.val)->le_coded_phy_supported);
-      ASSERT_EQ(
-          kLocalLeFeatures.le_extended_advertising_supported,
-          ((bt_local_le_features_t*)property.val)->le_extended_advertising_supported);
-      ASSERT_EQ(
-          kLocalLeFeatures.le_periodic_advertising_supported,
-          ((bt_local_le_features_t*)property.val)->le_periodic_advertising_supported);
-      ASSERT_EQ(
-          kLocalLeFeatures.le_maximum_advertising_data_length,
-          ((bt_local_le_features_t*)property.val)->le_maximum_advertising_data_length);
-      ASSERT_EQ(
-          kLocalLeFeatures.dynamic_audio_buffer_supported,
-          ((bt_local_le_features_t*)property.val)->dynamic_audio_buffer_supported);
-      ASSERT_EQ(
-          kLocalLeFeatures.le_periodic_advertising_sync_transfer_sender_supported,
-          ((bt_local_le_features_t*)property.val)
-              ->le_periodic_advertising_sync_transfer_sender_supported);
-      ASSERT_EQ(
-          kLocalLeFeatures.le_connected_isochronous_stream_central_supported,
-          ((bt_local_le_features_t*)property.val)
-              ->le_connected_isochronous_stream_central_supported);
-      ASSERT_EQ(
-          kLocalLeFeatures.le_isochronous_broadcast_supported,
-          ((bt_local_le_features_t*)property.val)->le_isochronous_broadcast_supported);
-      ASSERT_EQ(
-          kLocalLeFeatures.le_periodic_advertising_sync_transfer_recipient_supported,
-          ((bt_local_le_features_t*)property.val)
-              ->le_periodic_advertising_sync_transfer_recipient_supported);
-      ASSERT_EQ(
-          kLocalLeFeatures.adv_filter_extended_features_mask,
-          ((bt_local_le_features_t*)property.val)->adv_filter_extended_features_mask);
-      ASSERT_EQ(
-          kLocalLeFeatures.le_channel_sounding_supported,
-          ((bt_local_le_features_t*)property.val)->le_channel_sounding_supported);
+      ASSERT_EQ(kLocalLeFeatures.version_supported,
+                ((bt_local_le_features_t*)property.val)->version_supported);
+      ASSERT_EQ(kLocalLeFeatures.local_privacy_enabled,
+                ((bt_local_le_features_t*)property.val)->local_privacy_enabled);
+      ASSERT_EQ(kLocalLeFeatures.local_privacy_enabled,
+                ((bt_local_le_features_t*)property.val)->local_privacy_enabled);
+      ASSERT_EQ(kLocalLeFeatures.max_adv_instance,
+                ((bt_local_le_features_t*)property.val)->max_adv_instance);
+      ASSERT_EQ(kLocalLeFeatures.rpa_offload_supported,
+                ((bt_local_le_features_t*)property.val)->rpa_offload_supported);
+      ASSERT_EQ(kLocalLeFeatures.max_irk_list_size,
+                ((bt_local_le_features_t*)property.val)->max_irk_list_size);
+      ASSERT_EQ(kLocalLeFeatures.max_adv_filter_supported,
+                ((bt_local_le_features_t*)property.val)->max_adv_filter_supported);
+      ASSERT_EQ(kLocalLeFeatures.activity_energy_info_supported,
+                ((bt_local_le_features_t*)property.val)->activity_energy_info_supported);
+      ASSERT_EQ(kLocalLeFeatures.scan_result_storage_size,
+                ((bt_local_le_features_t*)property.val)->scan_result_storage_size);
+      ASSERT_EQ(kLocalLeFeatures.total_trackable_advertisers,
+                ((bt_local_le_features_t*)property.val)->total_trackable_advertisers);
+      ASSERT_EQ(kLocalLeFeatures.extended_scan_support,
+                ((bt_local_le_features_t*)property.val)->extended_scan_support);
+      ASSERT_EQ(kLocalLeFeatures.debug_logging_supported,
+                ((bt_local_le_features_t*)property.val)->debug_logging_supported);
+      ASSERT_EQ(kLocalLeFeatures.le_2m_phy_supported,
+                ((bt_local_le_features_t*)property.val)->le_2m_phy_supported);
+      ASSERT_EQ(kLocalLeFeatures.le_coded_phy_supported,
+                ((bt_local_le_features_t*)property.val)->le_coded_phy_supported);
+      ASSERT_EQ(kLocalLeFeatures.le_extended_advertising_supported,
+                ((bt_local_le_features_t*)property.val)->le_extended_advertising_supported);
+      ASSERT_EQ(kLocalLeFeatures.le_periodic_advertising_supported,
+                ((bt_local_le_features_t*)property.val)->le_periodic_advertising_supported);
+      ASSERT_EQ(kLocalLeFeatures.le_maximum_advertising_data_length,
+                ((bt_local_le_features_t*)property.val)->le_maximum_advertising_data_length);
+      ASSERT_EQ(kLocalLeFeatures.dynamic_audio_buffer_supported,
+                ((bt_local_le_features_t*)property.val)->dynamic_audio_buffer_supported);
+      ASSERT_EQ(kLocalLeFeatures.le_periodic_advertising_sync_transfer_sender_supported,
+                ((bt_local_le_features_t*)property.val)
+                        ->le_periodic_advertising_sync_transfer_sender_supported);
+      ASSERT_EQ(kLocalLeFeatures.le_connected_isochronous_stream_central_supported,
+                ((bt_local_le_features_t*)property.val)
+                        ->le_connected_isochronous_stream_central_supported);
+      ASSERT_EQ(kLocalLeFeatures.le_isochronous_broadcast_supported,
+                ((bt_local_le_features_t*)property.val)->le_isochronous_broadcast_supported);
+      ASSERT_EQ(kLocalLeFeatures.le_periodic_advertising_sync_transfer_recipient_supported,
+                ((bt_local_le_features_t*)property.val)
+                        ->le_periodic_advertising_sync_transfer_recipient_supported);
+      ASSERT_EQ(kLocalLeFeatures.adv_filter_extended_features_mask,
+                ((bt_local_le_features_t*)property.val)->adv_filter_extended_features_mask);
+      ASSERT_EQ(kLocalLeFeatures.le_channel_sounding_supported,
+                ((bt_local_le_features_t*)property.val)->le_channel_sounding_supported);
       break;
 
     case BT_PROPERTY_RESERVED_0E:
@@ -436,12 +412,11 @@ void verify_property(const bt_property_type_t& type, const bt_property_t& proper
 
     case BT_PROPERTY_VENDOR_PRODUCT_INFO:
       ASSERT_EQ((int)sizeof(bt_vendor_product_info_t), property.len);
-      ASSERT_EQ(
-          kVendorProductInfo.vendor_id_src,
-          ((bt_vendor_product_info_t*)property.val)->vendor_id_src);
+      ASSERT_EQ(kVendorProductInfo.vendor_id_src,
+                ((bt_vendor_product_info_t*)property.val)->vendor_id_src);
       ASSERT_EQ(kVendorProductInfo.vendor_id, ((bt_vendor_product_info_t*)property.val)->vendor_id);
-      ASSERT_EQ(
-          kVendorProductInfo.product_id, ((bt_vendor_product_info_t*)property.val)->product_id);
+      ASSERT_EQ(kVendorProductInfo.product_id,
+                ((bt_vendor_product_info_t*)property.val)->product_id);
       ASSERT_EQ(kVendorProductInfo.version, ((bt_vendor_product_info_t*)property.val)->version);
       break;
 
@@ -504,7 +479,7 @@ void fill_properties(std::vector<std::shared_ptr<BtProperty>>& properties) {
 }  // namespace
    //
 class BtPropertyTest : public testing::Test {
- protected:
+protected:
   void SetUp() override {}
   void TearDown() override {}
 };
@@ -512,224 +487,221 @@ class BtPropertyTest : public testing::Test {
 TEST_F(BtPropertyTest, bt_property_text_test) {
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_BDNAME,
-        .len = (int)sizeof(kBdName),
-        .val = (void*)kBdName,
+            .type = BT_PROPERTY_BDNAME,
+            .len = (int)sizeof(kBdName),
+            .val = (void*)kBdName,
     };
     ASSERT_STREQ("type:BT_PROPERTY_BDNAME name:kBdName", bt_property_text(prop).c_str());
   }
 
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_BDADDR,
-        .len = (int)sizeof(kRawAddress),
-        .val = (void*)&kRawAddress,
+            .type = BT_PROPERTY_BDADDR,
+            .len = (int)sizeof(kRawAddress),
+            .val = (void*)&kRawAddress,
     };
     ASSERT_STREQ("type:BT_PROPERTY_BDADDR addr:11:22:33:44:55:66", bt_property_text(prop).c_str());
   }
 
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_UUIDS,
-        .len = (int)(sizeof(bluetooth::Uuid) * kUuids.size()),
-        .val = (void*)&kUuids[0],
+            .type = BT_PROPERTY_UUIDS,
+            .len = (int)(sizeof(bluetooth::Uuid) * kUuids.size()),
+            .val = (void*)&kUuids[0],
     };
     ASSERT_STREQ(
-        "type:BT_PROPERTY_UUIDS uuids:00000001-1001-1000-8000-00805f9b34fb "
-        "00000001-1002-1000-8000-00805f9b34fb 00000001-1003-1000-8000-00805f9b34fb",
-        bt_property_text(prop).c_str());
+            "type:BT_PROPERTY_UUIDS uuids:00000001-1001-1000-8000-00805f9b34fb "
+            "00000001-1002-1000-8000-00805f9b34fb 00000001-1003-1000-8000-00805f9b34fb",
+            bt_property_text(prop).c_str());
   }
 
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_CLASS_OF_DEVICE,
-        .len = (int)sizeof(kClassOfDevice),
-        .val = (void*)&kClassOfDevice,
+            .type = BT_PROPERTY_CLASS_OF_DEVICE,
+            .len = (int)sizeof(kClassOfDevice),
+            .val = (void*)&kClassOfDevice,
     };
     ASSERT_STREQ("type:BT_PROPERTY_CLASS_OF_DEVICE cod:0x99663300", bt_property_text(prop).c_str());
   }
 
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_TYPE_OF_DEVICE,
-        .len = (int)sizeof(kTypeOfDevice),
-        .val = (void*)&kTypeOfDevice,
+            .type = BT_PROPERTY_TYPE_OF_DEVICE,
+            .len = (int)sizeof(kTypeOfDevice),
+            .val = (void*)&kTypeOfDevice,
     };
-    ASSERT_STREQ(
-        "type:BT_PROPERTY_TYPE_OF_DEVICE type_of_device:1", bt_property_text(prop).c_str());
+    ASSERT_STREQ("type:BT_PROPERTY_TYPE_OF_DEVICE type_of_device:1",
+                 bt_property_text(prop).c_str());
   }
 
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_SERVICE_RECORD,
-        .len = (int)sizeof(kServiceRecord),
-        .val = (void*)&kServiceRecord,
+            .type = BT_PROPERTY_SERVICE_RECORD,
+            .len = (int)sizeof(kServiceRecord),
+            .val = (void*)&kServiceRecord,
     };
     ASSERT_STREQ(
-        "type:BT_PROPERTY_SERVICE_RECORD uuid:00000001-1001-1000-8000-00805f9b34fb channel:4660 "
-        "name:\"kServiceRecord.name\"",
-        bt_property_text(prop).c_str());
+            "type:BT_PROPERTY_SERVICE_RECORD uuid:00000001-1001-1000-8000-00805f9b34fb "
+            "channel:4660 "
+            "name:\"kServiceRecord.name\"",
+            bt_property_text(prop).c_str());
   }
 
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_ADAPTER_BONDED_DEVICES,
-        .len = (int)(sizeof(kAdapterBondedDevices)),
-        .val = (void*)kAdapterBondedDevices,
+            .type = BT_PROPERTY_ADAPTER_BONDED_DEVICES,
+            .len = (int)(sizeof(kAdapterBondedDevices)),
+            .val = (void*)kAdapterBondedDevices,
     };
     ASSERT_STREQ(
-        "type:BT_PROPERTY_ADAPTER_BONDED_DEVICES addrs:11:22:33:44:55:00 12:22:33:44:55:00 "
-        "13:22:33:44:55:00 14:22:33:44:55:00 15:22:33:44:55:00",
-        bt_property_text(prop).c_str());
+            "type:BT_PROPERTY_ADAPTER_BONDED_DEVICES addrs:11:22:33:44:55:00 12:22:33:44:55:00 "
+            "13:22:33:44:55:00 14:22:33:44:55:00 15:22:33:44:55:00",
+            bt_property_text(prop).c_str());
   }
 
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT,
-        .len = (int)sizeof(kAdapterDiscoverableTimeout),
-        .val = (void*)&kAdapterDiscoverableTimeout,
+            .type = BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT,
+            .len = (int)sizeof(kAdapterDiscoverableTimeout),
+            .val = (void*)&kAdapterDiscoverableTimeout,
     };
-    ASSERT_STREQ(
-        "type:BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT discoverable_timeout:1149815808",
-        bt_property_text(prop).c_str());
+    ASSERT_STREQ("type:BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT discoverable_timeout:1149815808",
+                 bt_property_text(prop).c_str());
   }
 
   {
     bt_bdname_t bd_name;
     bd_name_from_char_pointer(bd_name.name, (const char*)kRemoteFriendlyName);
     bt_property_t prop = {
-        .type = BT_PROPERTY_REMOTE_FRIENDLY_NAME,
-        .len = (int)sizeof(bd_name.name),
-        .val = (void*)&bd_name.name,
+            .type = BT_PROPERTY_REMOTE_FRIENDLY_NAME,
+            .len = (int)sizeof(bd_name.name),
+            .val = (void*)&bd_name.name,
     };
-    ASSERT_STREQ(
-        "type:BT_PROPERTY_REMOTE_FRIENDLY_NAME remote_friendly_name:kRemoteFriendlyName",
-        bt_property_text(prop).c_str());
+    ASSERT_STREQ("type:BT_PROPERTY_REMOTE_FRIENDLY_NAME remote_friendly_name:kRemoteFriendlyName",
+                 bt_property_text(prop).c_str());
   }
 
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_REMOTE_RSSI,
-        .len = (int)sizeof(kRemoteRssi),
-        .val = (void*)&kRemoteRssi,
+            .type = BT_PROPERTY_REMOTE_RSSI,
+            .len = (int)sizeof(kRemoteRssi),
+            .val = (void*)&kRemoteRssi,
     };
     ASSERT_STREQ("type:BT_PROPERTY_REMOTE_RSSI rssi:16", bt_property_text(prop).c_str());
   }
 
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_REMOTE_VERSION_INFO,
-        .len = (int)sizeof(kRemoteVersionInfo),
-        .val = (void*)&kRemoteVersionInfo,
+            .type = BT_PROPERTY_REMOTE_VERSION_INFO,
+            .len = (int)sizeof(kRemoteVersionInfo),
+            .val = (void*)&kRemoteVersionInfo,
     };
-    ASSERT_STREQ(
-        "type:BT_PROPERTY_REMOTE_VERSION_INFO version:1 sub:2 mfr:3",
-        bt_property_text(prop).c_str());
+    ASSERT_STREQ("type:BT_PROPERTY_REMOTE_VERSION_INFO version:1 sub:2 mfr:3",
+                 bt_property_text(prop).c_str());
   }
 
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_LOCAL_LE_FEATURES,
-        .len = (int)sizeof(kLocalLeFeatures),
-        .val = (void*)&kLocalLeFeatures,
+            .type = BT_PROPERTY_LOCAL_LE_FEATURES,
+            .len = (int)sizeof(kLocalLeFeatures),
+            .val = (void*)&kLocalLeFeatures,
     };
     ASSERT_STREQ(
-        "type:BT_PROPERTY_LOCAL_LE_FEATURES version_supported:4660 local_privacy_enabled:17 "
-        "max_adv_instance:34 rpa_offload_supported:51 max_irk_list_size:68 "
-        "max_adv_filter_supported:85 activity_energy_info_supported:102 "
-        "scan_result_storage_size:22136 total_trackable_advertisers:39612 extended_scan_support:1 "
-        "debug_logging_supported:1 le_2m_phy_supported:1 le_coded_phy_supported:1 "
-        "le_extended_advertising_supported:1 le_periodic_advertising_supported:1 "
-        "le_maximum_advertising_data_length:4951 dynamic_audio_buffer_supported:574908040 "
-        "le_periodic_advertising_sync_transfer_sender_supported:1 "
-        "le_connected_isochronous_stream_central_supported:1 le_isochronous_broadcast_supported:1 "
-        "le_periodic_advertising_sync_transfer_recipient_supported:1 "
-        "adv_filter_extended_features_mask:13158"
-        "le_channel_sounding_supported:1 ",
-        bt_property_text(prop).c_str());
+            "type:BT_PROPERTY_LOCAL_LE_FEATURES version_supported:4660 local_privacy_enabled:17 "
+            "max_adv_instance:34 rpa_offload_supported:51 max_irk_list_size:68 "
+            "max_adv_filter_supported:85 activity_energy_info_supported:102 "
+            "scan_result_storage_size:22136 total_trackable_advertisers:39612 "
+            "extended_scan_support:1 "
+            "debug_logging_supported:1 le_2m_phy_supported:1 le_coded_phy_supported:1 "
+            "le_extended_advertising_supported:1 le_periodic_advertising_supported:1 "
+            "le_maximum_advertising_data_length:4951 dynamic_audio_buffer_supported:574908040 "
+            "le_periodic_advertising_sync_transfer_sender_supported:1 "
+            "le_connected_isochronous_stream_central_supported:1 "
+            "le_isochronous_broadcast_supported:1 "
+            "le_periodic_advertising_sync_transfer_recipient_supported:1 "
+            "adv_filter_extended_features_mask:13158"
+            "le_channel_sounding_supported:1 ",
+            bt_property_text(prop).c_str());
   }
 
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_REMOTE_IS_COORDINATED_SET_MEMBER,
-        .len = (int)sizeof(kRemoteIsCoordinatedSetMember),
-        .val = (void*)&kRemoteIsCoordinatedSetMember,
+            .type = BT_PROPERTY_REMOTE_IS_COORDINATED_SET_MEMBER,
+            .len = (int)sizeof(kRemoteIsCoordinatedSetMember),
+            .val = (void*)&kRemoteIsCoordinatedSetMember,
     };
-    ASSERT_STREQ(
-        "type:BT_PROPERTY_REMOTE_IS_COORDINATED_SET_MEMBER is_coordinated_set_member:true",
-        bt_property_text(prop).c_str());
+    ASSERT_STREQ("type:BT_PROPERTY_REMOTE_IS_COORDINATED_SET_MEMBER is_coordinated_set_member:true",
+                 bt_property_text(prop).c_str());
   }
 
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_APPEARANCE,
-        .len = (int)sizeof(kAppearance),
-        .val = (void*)&kAppearance,
+            .type = BT_PROPERTY_APPEARANCE,
+            .len = (int)sizeof(kAppearance),
+            .val = (void*)&kAppearance,
     };
     ASSERT_STREQ("type:BT_PROPERTY_APPEARANCE appearance:0x44", bt_property_text(prop).c_str());
   }
 
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_VENDOR_PRODUCT_INFO,
-        .len = (int)sizeof(kVendorProductInfo),
-        .val = (void*)&kVendorProductInfo,
+            .type = BT_PROPERTY_VENDOR_PRODUCT_INFO,
+            .len = (int)sizeof(kVendorProductInfo),
+            .val = (void*)&kVendorProductInfo,
     };
     ASSERT_STREQ(
-        "type:BT_PROPERTY_VENDOR_PRODUCT_INFO vendor_id_src:2 vendor_id:4661 product_id:22137 "
-        "version:39613",
-        bt_property_text(prop).c_str());
+            "type:BT_PROPERTY_VENDOR_PRODUCT_INFO vendor_id_src:2 vendor_id:4661 product_id:22137 "
+            "version:39613",
+            bt_property_text(prop).c_str());
   }
 
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_REMOTE_ASHA_CAPABILITY,
-        .len = (int)sizeof(kRemoteAshaCapability),
-        .val = (void*)&kRemoteAshaCapability,
+            .type = BT_PROPERTY_REMOTE_ASHA_CAPABILITY,
+            .len = (int)sizeof(kRemoteAshaCapability),
+            .val = (void*)&kRemoteAshaCapability,
     };
-    ASSERT_STREQ(
-        "type:BT_PROPERTY_REMOTE_ASHA_CAPABILITY remote_asha_capability:137",
-        bt_property_text(prop).c_str());
+    ASSERT_STREQ("type:BT_PROPERTY_REMOTE_ASHA_CAPABILITY remote_asha_capability:137",
+                 bt_property_text(prop).c_str());
   }
 
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_REMOTE_ASHA_TRUNCATED_HISYNCID,
-        .len = (int)sizeof(kRemoteAshaTruncatedHisyncId),
-        .val = (void*)&kRemoteAshaTruncatedHisyncId,
+            .type = BT_PROPERTY_REMOTE_ASHA_TRUNCATED_HISYNCID,
+            .len = (int)sizeof(kRemoteAshaTruncatedHisyncId),
+            .val = (void*)&kRemoteAshaTruncatedHisyncId,
     };
     ASSERT_STREQ(
-        "type:BT_PROPERTY_REMOTE_ASHA_TRUNCATED_HISYNCID remote_asha_truncated_hisyncid:574908040",
-        bt_property_text(prop).c_str());
+            "type:BT_PROPERTY_REMOTE_ASHA_TRUNCATED_HISYNCID "
+            "remote_asha_truncated_hisyncid:574908040",
+            bt_property_text(prop).c_str());
   }
 
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_REMOTE_MODEL_NUM,
-        .len = (int)sizeof(kRemoteModelNum.name),
-        .val = (void*)kRemoteModelNum.name,
+            .type = BT_PROPERTY_REMOTE_MODEL_NUM,
+            .len = (int)sizeof(kRemoteModelNum.name),
+            .val = (void*)kRemoteModelNum.name,
     };
-    ASSERT_STREQ(
-        "type:BT_PROPERTY_REMOTE_MODEL_NUM remote_model_num:kRemoteModelNum",
-        bt_property_text(prop).c_str());
+    ASSERT_STREQ("type:BT_PROPERTY_REMOTE_MODEL_NUM remote_model_num:kRemoteModelNum",
+                 bt_property_text(prop).c_str());
   }
 
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_REMOTE_ADDR_TYPE,
-        .len = (int)sizeof(kRemoteAddrType),
-        .val = (void*)&kRemoteAddrType,
+            .type = BT_PROPERTY_REMOTE_ADDR_TYPE,
+            .len = (int)sizeof(kRemoteAddrType),
+            .val = (void*)&kRemoteAddrType,
     };
-    ASSERT_STREQ(
-        "type:BT_PROPERTY_REMOTE_ADDR_TYPE remote_asha_truncated_hisyncid:0x55",
-        bt_property_text(prop).c_str());
+    ASSERT_STREQ("type:BT_PROPERTY_REMOTE_ADDR_TYPE remote_asha_truncated_hisyncid:0x55",
+                 bt_property_text(prop).c_str());
   }
 
   {
     bt_property_t prop = {
-        .type = BT_PROPERTY_REMOTE_DEVICE_TIMESTAMP,
-        .len = (int)sizeof(kRemoteDeviceTimestamp),
-        .val = (void*)&kRemoteDeviceTimestamp,
+            .type = BT_PROPERTY_REMOTE_DEVICE_TIMESTAMP,
+            .len = (int)sizeof(kRemoteDeviceTimestamp),
+            .val = (void*)&kRemoteDeviceTimestamp,
     };
     ASSERT_STREQ("type:BT_PROPERTY_REMOTE_DEVICE_TIMESTAMP", bt_property_text(prop).c_str());
   }
@@ -778,10 +750,8 @@ TEST_F(BtPropertyTest, name_too_long) {
 }
 
 class BtPropertyArrayTest : public testing::Test {
- protected:
-  void SetUp() override {
-    fill_properties(properties);
-  }
+protected:
+  void SetUp() override { fill_properties(properties); }
   void TearDown() override {}
   std::vector<std::shared_ptr<BtProperty>> properties;
   bt_property_t props[kNumberTestedProperties];
@@ -812,14 +782,12 @@ TEST_F(BtPropertyArrayTest, async_data) {
 }
 
 class BtPropertyDynamicArrayTest : public testing::Test {
- protected:
+protected:
   void SetUp() override {
     fill_properties(properties);
     props = (bt_property_t*)malloc(sizeof(bt_property_t) * properties.size());
   }
-  void TearDown() override {
-    free(props);
-  }
+  void TearDown() override { free(props); }
 
   bt_property_t* props{nullptr};
   std::vector<std::shared_ptr<BtProperty>> properties;
@@ -839,7 +807,7 @@ TEST_F(BtPropertyDynamicArrayTest, serialize_and_verify) {
 }
 
 class BtPropertyMultiAllocationTest : public testing::Test {
- protected:
+protected:
   static constexpr size_t kNumProperties = 1;
   static constexpr size_t kNumThreads = 20;
 
@@ -865,8 +833,8 @@ TEST_F(BtPropertyMultiAllocationTest, async_data_multi) {
   for (size_t i = 0; i < kNumThreads; i++) {
     std::vector<std::shared_ptr<BtProperty>> props = future_vector[i].get();
     BtPropertyLegacy legacy(props);
-    memcpy(
-        bt_properties[i], (const void*)legacy.Ptr(), (size_t)legacy.Len() * sizeof(bt_property_t));
+    memcpy(bt_properties[i], (const void*)legacy.Ptr(),
+           (size_t)legacy.Len() * sizeof(bt_property_t));
 
     ASSERT_EQ(BT_PROPERTY_REMOTE_DEVICE_TIMESTAMP, (int)bt_properties[i]->type);
     ASSERT_EQ((int)sizeof(uint32_t), bt_properties[i]->len);

@@ -47,7 +47,7 @@ class ILink;
  * Contains a Sender and its corresponding DataController per attached channel.
  */
 class DataPipelineManager {
- public:
+public:
   using UpperEnqueue = packet::PacketView<packet::kLittleEndian>;
   using UpperDequeue = packet::BasePacketBuilder;
   using UpperQueueDownEnd = common::BidiQueueEnd<UpperEnqueue, UpperDequeue>;
@@ -56,7 +56,9 @@ class DataPipelineManager {
   using LowerQueueUpEnd = common::BidiQueueEnd<LowerEnqueue, LowerDequeue>;
 
   DataPipelineManager(os::Handler* handler, ILink* link, LowerQueueUpEnd* link_queue_up_end)
-      : handler_(handler), link_(link), scheduler_(std::make_unique<Fifo>(this, link_queue_up_end, handler)),
+      : handler_(handler),
+        link_(link),
+        scheduler_(std::make_unique<Fifo>(this, link_queue_up_end, handler)),
         receiver_(link_queue_up_end, handler, this) {}
 
   using ChannelMode = Sender::ChannelMode;
@@ -65,11 +67,12 @@ class DataPipelineManager {
   virtual void DetachChannel(Cid cid);
   virtual DataController* GetDataController(Cid cid);
   virtual void OnPacketSent(Cid cid);
-  virtual void UpdateClassicConfiguration(Cid cid, classic::internal::ChannelConfigurationState config);
+  virtual void UpdateClassicConfiguration(Cid cid,
+                                          classic::internal::ChannelConfigurationState config);
   virtual void SetChannelTxPriority(Cid cid, bool high_priority);
   virtual ~DataPipelineManager() = default;
 
- private:
+private:
   os::Handler* handler_;
   ILink* link_;
   std::unordered_map<Cid, Sender> sender_map_;

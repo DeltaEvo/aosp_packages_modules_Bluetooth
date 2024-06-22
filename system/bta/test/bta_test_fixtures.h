@@ -41,7 +41,7 @@ extern tBTA_DM_CB bta_dm_cb;
 
 // Set up base mocks and fakes
 class BtaWithFakesTest : public testing::Test {
- protected:
+protected:
   void SetUp() override {
     bta_dm_cb = {};
     fake_osi_ = std::make_unique<test::fake::FakeOsi>();
@@ -53,7 +53,7 @@ class BtaWithFakesTest : public testing::Test {
 
 // Setup any default or optional mocks
 class BtaWithMocksTest : public BtaWithFakesTest {
- protected:
+protected:
   void SetUp() override {
     BtaWithFakesTest::SetUp();
     reset_mock_function_count_map();
@@ -63,21 +63,19 @@ class BtaWithMocksTest : public BtaWithFakesTest {
 
     bluetooth::hci::testing::mock_controller_ = &mock_controller_;
     test::mock::stack_gatt_api::GATT_Register.body =
-        [](const bluetooth::Uuid& p_app_uuid128, const std::string name,
-           tGATT_CBACK* p_cb_info,
-           bool eatt_support) -> tGATT_IF { return kGattRegisteredIf; };
+            [](const bluetooth::Uuid& p_app_uuid128, const std::string name, tGATT_CBACK* p_cb_info,
+               bool eatt_support) -> tGATT_IF { return kGattRegisteredIf; };
     mock_btm_client_interface.eir.BTM_GetEirSupportedServices =
-        [](uint32_t* p_eir_uuid, uint8_t** p, uint8_t max_num_uuid16,
-           uint8_t* p_num_uuid16) -> uint8_t { return 0; };
-    mock_btm_client_interface.eir.BTM_WriteEIR =
-        [](BT_HDR* p_buf) -> tBTM_STATUS {
+            [](uint32_t* p_eir_uuid, uint8_t** p, uint8_t max_num_uuid16,
+               uint8_t* p_num_uuid16) -> uint8_t { return 0; };
+    mock_btm_client_interface.eir.BTM_WriteEIR = [](BT_HDR* p_buf) -> tBTM_STATUS {
       osi_free(p_buf);
       return BTM_SUCCESS;
     };
     mock_btm_client_interface.local.BTM_ReadLocalDeviceNameFromController =
-        [](tBTM_CMPL_CB* cb) -> tBTM_STATUS { return BTM_CMD_STARTED; };
+            [](tBTM_CMPL_CB* cb) -> tBTM_STATUS { return BTM_CMD_STARTED; };
     mock_btm_client_interface.security.BTM_SecRegister =
-        [](const tBTM_APPL_INFO* p_cb_info) -> bool { return true; };
+            [](const tBTM_APPL_INFO* p_cb_info) -> bool { return true; };
   }
 
   void TearDown() override {
@@ -96,22 +94,21 @@ class BtaWithMocksTest : public BtaWithFakesTest {
 };
 
 class BtaWithContextTest : public BtaWithMocksTest {
- protected:
+protected:
   void SetUp() override {
     BtaWithMocksTest::SetUp();
     main_thread_start_up();
     post_on_bt_main([]() { bluetooth::log::info("Main thread started up"); });
   }
   void TearDown() override {
-    post_on_bt_main(
-        []() { bluetooth::log::info("Main thread shutting down"); });
+    post_on_bt_main([]() { bluetooth::log::info("Main thread shutting down"); });
     main_thread_shut_down();
     BtaWithMocksTest::TearDown();
   }
 };
 
 class BtaWithHwOnTest : public BtaWithContextTest {
- protected:
+protected:
   void SetUp() override {
     BtaWithContextTest::SetUp();
     BTA_dm_on_hw_on();

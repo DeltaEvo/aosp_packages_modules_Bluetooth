@@ -34,17 +34,16 @@ namespace l2cap {
 namespace classic {
 namespace internal {
 
-using RetransmissionAndFlowControlMode = DynamicChannelConfigurationOption::RetransmissionAndFlowControlMode;
+using RetransmissionAndFlowControlMode =
+        DynamicChannelConfigurationOption::RetransmissionAndFlowControlMode;
 using ConnectionResult = DynamicChannelManager::ConnectionResult;
 using ConnectionResultCode = DynamicChannelManager::ConnectionResultCode;
 
-Link::Link(
-    os::Handler* l2cap_handler,
-    std::unique_ptr<hci::acl_manager::ClassicAclConnection> acl_connection,
-    l2cap::internal::ParameterProvider* parameter_provider,
-    DynamicChannelServiceManagerImpl* dynamic_service_manager,
-    FixedChannelServiceManagerImpl* fixed_service_manager,
-    LinkManager* link_manager)
+Link::Link(os::Handler* l2cap_handler,
+           std::unique_ptr<hci::acl_manager::ClassicAclConnection> acl_connection,
+           l2cap::internal::ParameterProvider* parameter_provider,
+           DynamicChannelServiceManagerImpl* dynamic_service_manager,
+           FixedChannelServiceManagerImpl* fixed_service_manager, LinkManager* link_manager)
     : l2cap_handler_(l2cap_handler),
       acl_connection_(std::move(acl_connection)),
       data_pipeline_manager_(l2cap_handler, this, acl_connection_->GetAclQueueEnd()),
@@ -52,19 +51,15 @@ Link::Link(
       dynamic_service_manager_(dynamic_service_manager),
       fixed_service_manager_(fixed_service_manager),
       link_manager_(link_manager),
-      signalling_manager_(
-          l2cap_handler_,
-          this,
-          &data_pipeline_manager_,
-          dynamic_service_manager_,
-          &dynamic_channel_allocator_,
-          fixed_service_manager_),
+      signalling_manager_(l2cap_handler_, this, &data_pipeline_manager_, dynamic_service_manager_,
+                          &dynamic_channel_allocator_, fixed_service_manager_),
       acl_handle_(acl_connection_->GetHandle()) {
   log::assert_that(l2cap_handler_ != nullptr, "assert failed: l2cap_handler_ != nullptr");
   log::assert_that(acl_connection_ != nullptr, "assert failed: acl_connection_ != nullptr");
   log::assert_that(parameter_provider_ != nullptr, "assert failed: parameter_provider_ != nullptr");
-  link_idle_disconnect_alarm_.Schedule(common::BindOnce(&Link::Disconnect, common::Unretained(this)),
-                                       parameter_provider_->GetClassicLinkIdleDisconnectTimeout());
+  link_idle_disconnect_alarm_.Schedule(
+          common::BindOnce(&Link::Disconnect, common::Unretained(this)),
+          parameter_provider_->GetClassicLinkIdleDisconnectTimeout());
   acl_connection_->RegisterCallbacks(this, l2cap_handler_);
 }
 
@@ -73,9 +68,9 @@ void Link::OnAclDisconnected(hci::ErrorCode status) {
   fixed_channel_allocator_.OnAclDisconnected(status);
   dynamic_channel_allocator_.OnAclDisconnected(status);
   ConnectionResult result{
-      .connection_result_code = ConnectionResultCode::FAIL_HCI_ERROR,
-      .hci_error = status,
-      .l2cap_connection_response_result = ConnectionResponseResult::SUCCESS,
+          .connection_result_code = ConnectionResultCode::FAIL_HCI_ERROR,
+          .hci_error = status,
+          .l2cap_connection_response_result = ConnectionResponseResult::SUCCESS,
   };
   while (!local_cid_to_pending_dynamic_channel_connection_map_.empty()) {
     auto entry = local_cid_to_pending_dynamic_channel_connection_map_.begin();
@@ -100,25 +95,17 @@ void Link::Authenticate() {
   }
 }
 
-bool Link::IsAuthenticated() const {
-  return encryption_enabled_ != hci::EncryptionEnabled::OFF;
-}
+bool Link::IsAuthenticated() const { return encryption_enabled_ != hci::EncryptionEnabled::OFF; }
 
-void Link::ReadRemoteVersionInformation() {
-  acl_connection_->ReadRemoteVersionInformation();
-}
+void Link::ReadRemoteVersionInformation() { acl_connection_->ReadRemoteVersionInformation(); }
 
-void Link::ReadRemoteSupportedFeatures() {
-  acl_connection_->ReadRemoteSupportedFeatures();
-}
+void Link::ReadRemoteSupportedFeatures() { acl_connection_->ReadRemoteSupportedFeatures(); }
 
 void Link::ReadRemoteExtendedFeatures(uint8_t page_number) {
   acl_connection_->ReadRemoteExtendedFeatures(page_number);
 }
 
-void Link::ReadClockOffset() {
-  acl_connection_->ReadClockOffset();
-}
+void Link::ReadClockOffset() { acl_connection_->ReadClockOffset(); }
 
 void Link::AcquireSecurityHold() {
   used_by_security_module_ = true;
@@ -131,7 +118,8 @@ void Link::ReleaseSecurityHold() {
 
 std::shared_ptr<FixedChannelImpl> Link::AllocateFixedChannel(Cid cid) {
   auto channel = fixed_channel_allocator_.AllocateChannel(cid);
-  data_pipeline_manager_.AttachChannel(cid, channel, l2cap::internal::DataPipelineManager::ChannelMode::BASIC);
+  data_pipeline_manager_.AttachChannel(cid, channel,
+                                       l2cap::internal::DataPipelineManager::ChannelMode::BASIC);
   return channel;
 }
 
@@ -139,18 +127,17 @@ bool Link::IsFixedChannelAllocated(Cid cid) {
   return fixed_channel_allocator_.IsChannelAllocated(cid);
 }
 
-Cid Link::ReserveDynamicChannel() {
-  return dynamic_channel_allocator_.ReserveChannel();
-}
+Cid Link::ReserveDynamicChannel() { return dynamic_channel_allocator_.ReserveChannel(); }
 
 void Link::SendConnectionRequest(Psm psm, Cid local_cid) {
   signalling_manager_.SendConnectionRequest(psm, local_cid);
 }
 
-void Link::SendConnectionRequest(Psm psm, Cid local_cid,
-                                 PendingDynamicChannelConnection pending_dynamic_channel_connection) {
+void Link::SendConnectionRequest(
+        Psm psm, Cid local_cid,
+        PendingDynamicChannelConnection pending_dynamic_channel_connection) {
   if (pending_dynamic_channel_connection.configuration_.channel_mode ==
-          RetransmissionAndFlowControlMode::ENHANCED_RETRANSMISSION &&
+              RetransmissionAndFlowControlMode::ENHANCED_RETRANSMISSION &&
       !remote_extended_feature_received_) {
     pending_dynamic_psm_list_.push_back(psm);
     pending_dynamic_channel_callback_list_.push_back(std::move(pending_dynamic_channel_connection));
@@ -158,17 +145,18 @@ void Link::SendConnectionRequest(Psm psm, Cid local_cid,
     dynamic_channel_allocator_.FreeChannel(local_cid);
     return;
   } else if (pending_dynamic_channel_connection.configuration_.channel_mode ==
-                 RetransmissionAndFlowControlMode::ENHANCED_RETRANSMISSION &&
+                     RetransmissionAndFlowControlMode::ENHANCED_RETRANSMISSION &&
              !GetRemoteSupportsErtm()) {
     log::warn("Remote doesn't support ERTM. Dropping connection request");
     ConnectionResult result{
-        .connection_result_code = ConnectionResultCode::FAIL_REMOTE_NOT_SUPPORT,
+            .connection_result_code = ConnectionResultCode::FAIL_REMOTE_NOT_SUPPORT,
     };
     pending_dynamic_channel_connection.on_fail_callback_(result);
     dynamic_channel_allocator_.FreeChannel(local_cid);
     return;
   } else {
-    local_cid_to_pending_dynamic_channel_connection_map_[local_cid] = std::move(pending_dynamic_channel_connection);
+    local_cid_to_pending_dynamic_channel_connection_map_[local_cid] =
+            std::move(pending_dynamic_channel_connection);
     signalling_manager_.SendConnectionRequest(psm, local_cid);
   }
 }
@@ -177,11 +165,10 @@ void Link::SetChannelTxPriority(Cid local_cid, bool high_priority) {
   data_pipeline_manager_.SetChannelTxPriority(local_cid, high_priority);
 }
 
-void Link::SetPendingDynamicChannels(std::list<Psm> psm_list,
-                                     std::list<Link::PendingDynamicChannelConnection> callback_list) {
-  log::assert_that(
-      psm_list.size() == callback_list.size(),
-      "assert failed: psm_list.size() == callback_list.size()");
+void Link::SetPendingDynamicChannels(
+        std::list<Psm> psm_list, std::list<Link::PendingDynamicChannelConnection> callback_list) {
+  log::assert_that(psm_list.size() == callback_list.size(),
+                   "assert failed: psm_list.size() == callback_list.size()");
   pending_dynamic_psm_list_ = std::move(psm_list);
   pending_dynamic_channel_callback_list_ = std::move(callback_list);
 }
@@ -227,7 +214,8 @@ void Link::SendInformationRequest(InformationRequestInfoType type) {
   signalling_manager_.SendInformationRequest(type);
 }
 
-std::shared_ptr<l2cap::internal::DynamicChannelImpl> Link::AllocateDynamicChannel(Psm psm, Cid remote_cid) {
+std::shared_ptr<l2cap::internal::DynamicChannelImpl> Link::AllocateDynamicChannel(Psm psm,
+                                                                                  Cid remote_cid) {
   auto channel = dynamic_channel_allocator_.AllocateChannel(psm, remote_cid);
   if (channel != nullptr) {
     RefreshRefCount();
@@ -236,8 +224,8 @@ std::shared_ptr<l2cap::internal::DynamicChannelImpl> Link::AllocateDynamicChanne
   return channel;
 }
 
-std::shared_ptr<l2cap::internal::DynamicChannelImpl> Link::AllocateReservedDynamicChannel(Cid reserved_cid, Psm psm,
-                                                                                          Cid remote_cid) {
+std::shared_ptr<l2cap::internal::DynamicChannelImpl> Link::AllocateReservedDynamicChannel(
+        Cid reserved_cid, Psm psm, Cid remote_cid) {
   auto channel = dynamic_channel_allocator_.AllocateReservedChannel(reserved_cid, psm, remote_cid);
   if (channel != nullptr) {
     RefreshRefCount();
@@ -248,10 +236,10 @@ std::shared_ptr<l2cap::internal::DynamicChannelImpl> Link::AllocateReservedDynam
 
 classic::DynamicChannelConfigurationOption Link::GetConfigurationForInitialConfiguration(Cid cid) {
   log::assert_that(
-      local_cid_to_pending_dynamic_channel_connection_map_.find(cid) !=
-          local_cid_to_pending_dynamic_channel_connection_map_.end(),
-      "assert failed: local_cid_to_pending_dynamic_channel_connection_map_.find(cid) != "
-      "local_cid_to_pending_dynamic_channel_connection_map_.end()");
+          local_cid_to_pending_dynamic_channel_connection_map_.find(cid) !=
+                  local_cid_to_pending_dynamic_channel_connection_map_.end(),
+          "assert failed: local_cid_to_pending_dynamic_channel_connection_map_.find(cid) != "
+          "local_cid_to_pending_dynamic_channel_connection_map_.end()");
   return local_cid_to_pending_dynamic_channel_connection_map_[cid].configuration_;
 }
 
@@ -274,48 +262,43 @@ void Link::RefreshRefCount() {
   if (ref_count > 0) {
     link_idle_disconnect_alarm_.Cancel();
   } else {
-    link_idle_disconnect_alarm_.Schedule(common::BindOnce(&Link::Disconnect, common::Unretained(this)),
-                                         parameter_provider_->GetClassicLinkIdleDisconnectTimeout());
+    link_idle_disconnect_alarm_.Schedule(
+            common::BindOnce(&Link::Disconnect, common::Unretained(this)),
+            parameter_provider_->GetClassicLinkIdleDisconnectTimeout());
   }
 }
 
 void Link::NotifyChannelCreation(Cid cid, std::unique_ptr<DynamicChannel> user_channel) {
   log::assert_that(
-      local_cid_to_pending_dynamic_channel_connection_map_.find(cid) !=
-          local_cid_to_pending_dynamic_channel_connection_map_.end(),
-      "assert failed: local_cid_to_pending_dynamic_channel_connection_map_.find(cid) != "
-      "local_cid_to_pending_dynamic_channel_connection_map_.end()");
-  auto& pending_dynamic_channel_connection = local_cid_to_pending_dynamic_channel_connection_map_[cid];
+          local_cid_to_pending_dynamic_channel_connection_map_.find(cid) !=
+                  local_cid_to_pending_dynamic_channel_connection_map_.end(),
+          "assert failed: local_cid_to_pending_dynamic_channel_connection_map_.find(cid) != "
+          "local_cid_to_pending_dynamic_channel_connection_map_.end()");
+  auto& pending_dynamic_channel_connection =
+          local_cid_to_pending_dynamic_channel_connection_map_[cid];
   pending_dynamic_channel_connection.on_open_callback_(std::move(user_channel));
   local_cid_to_pending_dynamic_channel_connection_map_.erase(cid);
 }
 
 void Link::NotifyChannelFail(Cid cid, ConnectionResult result) {
   log::assert_that(
-      local_cid_to_pending_dynamic_channel_connection_map_.find(cid) !=
-          local_cid_to_pending_dynamic_channel_connection_map_.end(),
-      "assert failed: local_cid_to_pending_dynamic_channel_connection_map_.find(cid) != "
-      "local_cid_to_pending_dynamic_channel_connection_map_.end()");
-  auto& pending_dynamic_channel_connection = local_cid_to_pending_dynamic_channel_connection_map_[cid];
+          local_cid_to_pending_dynamic_channel_connection_map_.find(cid) !=
+                  local_cid_to_pending_dynamic_channel_connection_map_.end(),
+          "assert failed: local_cid_to_pending_dynamic_channel_connection_map_.find(cid) != "
+          "local_cid_to_pending_dynamic_channel_connection_map_.end()");
+  auto& pending_dynamic_channel_connection =
+          local_cid_to_pending_dynamic_channel_connection_map_[cid];
   pending_dynamic_channel_connection.on_fail_callback_(result);
   local_cid_to_pending_dynamic_channel_connection_map_.erase(cid);
 }
 
-void Link::SetRemoteConnectionlessMtu(Mtu mtu) {
-  remote_connectionless_mtu_ = mtu;
-}
+void Link::SetRemoteConnectionlessMtu(Mtu mtu) { remote_connectionless_mtu_ = mtu; }
 
-Mtu Link::GetRemoteConnectionlessMtu() const {
-  return remote_connectionless_mtu_;
-}
+Mtu Link::GetRemoteConnectionlessMtu() const { return remote_connectionless_mtu_; }
 
-bool Link::GetRemoteSupportsErtm() const {
-  return remote_supports_ertm_;
-}
+bool Link::GetRemoteSupportsErtm() const { return remote_supports_ertm_; }
 
-bool Link::GetRemoteSupportsFcs() const {
-  return remote_supports_fcs_;
-}
+bool Link::GetRemoteSupportsFcs() const { return remote_supports_fcs_; }
 
 void Link::OnRemoteExtendedFeatureReceived(bool ertm_supported, bool fcs_supported) {
   remote_supports_ertm_ = ertm_supported;
@@ -338,16 +321,12 @@ void Link::OnEncryptionChange(hci::EncryptionEnabled enabled) {
   link_manager_->OnEncryptionChange(GetDevice().GetAddress(), enabled);
   for (auto& listener : encryption_change_listener_) {
     signalling_manager_.on_security_result_for_outgoing(
-        ClassicSignallingManager::SecurityEnforcementType::ENCRYPTION,
-        listener.psm,
-        listener.cid,
-        enabled != hci::EncryptionEnabled::OFF);
+            ClassicSignallingManager::SecurityEnforcementType::ENCRYPTION, listener.psm,
+            listener.cid, enabled != hci::EncryptionEnabled::OFF);
   }
 }
 
-void Link::OnChangeConnectionLinkKeyComplete() {
-  log::info("UNIMPLEMENTED");
-}
+void Link::OnChangeConnectionLinkKeyComplete() { log::info("UNIMPLEMENTED"); }
 
 void Link::OnReadClockOffsetComplete(uint16_t clock_offset) {
   link_manager_->OnReadClockOffset(GetDevice().GetAddress(), clock_offset);
@@ -357,51 +336,33 @@ void Link::OnModeChange(hci::ErrorCode status, hci::Mode current_mode, uint16_t 
   link_manager_->OnModeChange(status, GetDevice().GetAddress(), current_mode, interval);
 }
 
-void Link::OnSniffSubrating(
-    hci::ErrorCode hci_status,
-    uint16_t maximum_transmit_latency,
-    uint16_t maximum_receive_latency,
-    uint16_t minimum_remote_timeout,
-    uint16_t minimum_local_timeout) {
-  link_manager_->OnSniffSubrating(
-      hci_status,
-      GetDevice().GetAddress(),
-      maximum_transmit_latency,
-      maximum_receive_latency,
-      minimum_remote_timeout,
-      minimum_local_timeout);
+void Link::OnSniffSubrating(hci::ErrorCode hci_status, uint16_t maximum_transmit_latency,
+                            uint16_t maximum_receive_latency, uint16_t minimum_remote_timeout,
+                            uint16_t minimum_local_timeout) {
+  link_manager_->OnSniffSubrating(hci_status, GetDevice().GetAddress(), maximum_transmit_latency,
+                                  maximum_receive_latency, minimum_remote_timeout,
+                                  minimum_local_timeout);
 }
 
-void Link::OnQosSetupComplete(hci::ServiceType service_type, uint32_t token_rate, uint32_t peak_bandwidth,
-                              uint32_t latency, uint32_t delay_variation) {
+void Link::OnQosSetupComplete(hci::ServiceType service_type, uint32_t token_rate,
+                              uint32_t peak_bandwidth, uint32_t latency, uint32_t delay_variation) {
   log::info(
-      "UNIMPLEMENTED service_type:{} token_rate:{} peak_bandwidth:{} latency:{} "
-      "delay_varitation:{}",
-      hci::ServiceTypeText(service_type),
-      token_rate,
-      peak_bandwidth,
-      latency,
-      delay_variation);
+          "UNIMPLEMENTED service_type:{} token_rate:{} peak_bandwidth:{} latency:{} "
+          "delay_varitation:{}",
+          hci::ServiceTypeText(service_type), token_rate, peak_bandwidth, latency, delay_variation);
 }
-void Link::OnFlowSpecificationComplete(hci::FlowDirection flow_direction, hci::ServiceType service_type,
-                                       uint32_t token_rate, uint32_t token_bucket_size, uint32_t peak_bandwidth,
+void Link::OnFlowSpecificationComplete(hci::FlowDirection flow_direction,
+                                       hci::ServiceType service_type, uint32_t token_rate,
+                                       uint32_t token_bucket_size, uint32_t peak_bandwidth,
                                        uint32_t access_latency) {
   log::info(
-      "UNIMPLEMENTED flow_direction:{} service_type:{} token_rate:{} token_bucket_size:{} "
-      "peak_bandwidth:{} access_latency:{}",
-      hci::FlowDirectionText(flow_direction),
-      hci::ServiceTypeText(service_type),
-      token_rate,
-      token_bucket_size,
-      peak_bandwidth,
-      access_latency);
+          "UNIMPLEMENTED flow_direction:{} service_type:{} token_rate:{} token_bucket_size:{} "
+          "peak_bandwidth:{} access_latency:{}",
+          hci::FlowDirectionText(flow_direction), hci::ServiceTypeText(service_type), token_rate,
+          token_bucket_size, peak_bandwidth, access_latency);
 }
-void Link::OnFlushOccurred() {
-  log::info("UNIMPLEMENTED");
-}
-void Link::OnRoleDiscoveryComplete(hci::Role current_role) {
-  role_ = current_role;
-}
+void Link::OnFlushOccurred() { log::info("UNIMPLEMENTED"); }
+void Link::OnRoleDiscoveryComplete(hci::Role current_role) { role_ = current_role; }
 void Link::OnReadLinkPolicySettingsComplete(uint16_t link_policy_settings) {
   log::info("UNIMPLEMENTED link_policy_settings:0x{:x}", link_policy_settings);
 }
@@ -420,13 +381,11 @@ void Link::OnReadFailedContactCounterComplete(uint16_t failed_contact_counter) {
 void Link::OnReadLinkQualityComplete(uint8_t link_quality) {
   log::info("UNIMPLEMENTED link_quality:{}", link_quality);
 }
-void Link::OnReadAfhChannelMapComplete(
-    hci::AfhMode afh_mode, std::array<uint8_t, 10> /* afh_channel_map */) {
+void Link::OnReadAfhChannelMapComplete(hci::AfhMode afh_mode,
+                                       std::array<uint8_t, 10> /* afh_channel_map */) {
   log::info("UNIMPLEMENTED afh_mode:{}", hci::AfhModeText(afh_mode));
 }
-void Link::OnReadRssiComplete(uint8_t rssi) {
-  log::info("UNIMPLEMENTED rssi:{}", rssi);
-}
+void Link::OnReadRssiComplete(uint8_t rssi) { log::info("UNIMPLEMENTED rssi:{}", rssi); }
 void Link::OnReadClockComplete(uint32_t clock, uint16_t accuracy) {
   log::info("UNIMPLEMENTED clock:{} accuracy:{}", clock, accuracy);
 }
@@ -441,32 +400,26 @@ void Link::OnDisconnection(hci::ErrorCode reason) {
   OnAclDisconnected(reason);
   link_manager_->OnDisconnect(GetDevice().GetAddress(), reason);
 }
-void Link::OnReadRemoteVersionInformationComplete(
-    hci::ErrorCode hci_status, uint8_t lmp_version, uint16_t manufacturer_name, uint16_t sub_version) {
-  log::info(
-      "UNIMPLEMENTED hci_status:{} lmp_version:{} manufacturer_name:{} sub_version:{}",
-      ErrorCodeText(hci_status),
-      lmp_version,
-      manufacturer_name,
-      sub_version);
-  link_manager_->OnReadRemoteVersionInformation(
-      hci_status, GetDevice().GetAddress(), lmp_version, manufacturer_name, sub_version);
+void Link::OnReadRemoteVersionInformationComplete(hci::ErrorCode hci_status, uint8_t lmp_version,
+                                                  uint16_t manufacturer_name,
+                                                  uint16_t sub_version) {
+  log::info("UNIMPLEMENTED hci_status:{} lmp_version:{} manufacturer_name:{} sub_version:{}",
+            ErrorCodeText(hci_status), lmp_version, manufacturer_name, sub_version);
+  link_manager_->OnReadRemoteVersionInformation(hci_status, GetDevice().GetAddress(), lmp_version,
+                                                manufacturer_name, sub_version);
 }
 void Link::OnReadRemoteSupportedFeaturesComplete(uint64_t features) {
-  log::info(
-      "page_number:{} features:0x{:x}",
-      static_cast<uint8_t>(0),
-      static_cast<unsigned long>(features));
+  log::info("page_number:{} features:0x{:x}", static_cast<uint8_t>(0),
+            static_cast<unsigned long>(features));
   link_manager_->OnReadRemoteSupportedFeatures(GetDevice().GetAddress(), features);
 }
 
-void Link::OnReadRemoteExtendedFeaturesComplete(uint8_t page_number, uint8_t max_page_number, uint64_t features) {
-  log::info(
-      "page_number:{} max_page_number:{} features:0x{:x}",
-      page_number,
-      max_page_number,
-      static_cast<unsigned long>(features));
-  link_manager_->OnReadRemoteExtendedFeatures(GetDevice().GetAddress(), page_number, max_page_number, features);
+void Link::OnReadRemoteExtendedFeaturesComplete(uint8_t page_number, uint8_t max_page_number,
+                                                uint64_t features) {
+  log::info("page_number:{} max_page_number:{} features:0x{:x}", page_number, max_page_number,
+            static_cast<unsigned long>(features));
+  link_manager_->OnReadRemoteExtendedFeatures(GetDevice().GetAddress(), page_number,
+                                              max_page_number, features);
 }
 
 void Link::AddEncryptionChangeListener(EncryptionChangeListener listener) {

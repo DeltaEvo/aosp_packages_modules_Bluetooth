@@ -71,9 +71,9 @@ constexpr uint16_t CONNECTION_INTERVAL_10MS_PARAM = 0x0008;
 constexpr uint16_t CONNECTION_INTERVAL_20MS_PARAM = 0x0010;
 
 void btif_storage_add_hearing_aid(const HearingDevice& dev_info);
-bool btif_storage_get_hearing_aid_prop(
-    const RawAddress& address, uint8_t* capabilities, uint64_t* hi_sync_id,
-    uint16_t* render_delay, uint16_t* preparation_delay, uint16_t* codecs);
+bool btif_storage_get_hearing_aid_prop(const RawAddress& address, uint8_t* capabilities,
+                                       uint64_t* hi_sync_id, uint16_t* render_delay,
+                                       uint16_t* preparation_delay, uint16_t* codecs);
 
 constexpr uint8_t CODEC_G722_16KHZ = 0x01;
 constexpr uint8_t CODEC_G722_24KHZ = 0x02;
@@ -138,9 +138,11 @@ std::mutex instance_mutex;
 HearingAidAudioReceiver* audioReceiver;
 
 class HearingDevices {
- public:
+public:
   void Add(HearingDevice device) {
-    if (FindByAddress(device.address) != nullptr) return;
+    if (FindByAddress(device.address) != nullptr) {
+      return;
+    }
 
     devices.push_back(device);
   }
@@ -158,38 +160,33 @@ class HearingDevices {
   }
 
   HearingDevice* FindByAddress(const RawAddress& address) {
-    auto iter = std::find_if(devices.begin(), devices.end(),
-                             [&address](const HearingDevice& device) {
-                               return device.address == address;
-                             });
+    auto iter = std::find_if(
+            devices.begin(), devices.end(),
+            [&address](const HearingDevice& device) { return device.address == address; });
 
     return (iter == devices.end()) ? nullptr : &(*iter);
   }
 
   HearingDevice* FindOtherConnectedDeviceFromSet(const HearingDevice& device) {
-    auto iter = std::find_if(
-        devices.begin(), devices.end(), [&device](const HearingDevice& other) {
-          return &device != &other && device.hi_sync_id == other.hi_sync_id &&
-                 other.conn_id != 0;
-        });
+    auto iter = std::find_if(devices.begin(), devices.end(), [&device](const HearingDevice& other) {
+      return &device != &other && device.hi_sync_id == other.hi_sync_id && other.conn_id != 0;
+    });
 
     return (iter == devices.end()) ? nullptr : &(*iter);
   }
 
   HearingDevice* FindByConnId(uint16_t conn_id) {
-    auto iter = std::find_if(devices.begin(), devices.end(),
-                             [&conn_id](const HearingDevice& device) {
-                               return device.conn_id == conn_id;
-                             });
+    auto iter = std::find_if(
+            devices.begin(), devices.end(),
+            [&conn_id](const HearingDevice& device) { return device.conn_id == conn_id; });
 
     return (iter == devices.end()) ? nullptr : &(*iter);
   }
 
   HearingDevice* FindByGapHandle(uint16_t gap_handle) {
-    auto iter = std::find_if(devices.begin(), devices.end(),
-                             [&gap_handle](const HearingDevice& device) {
-                               return device.gap_handle == gap_handle;
-                             });
+    auto iter = std::find_if(
+            devices.begin(), devices.end(),
+            [&gap_handle](const HearingDevice& device) { return device.gap_handle == gap_handle; });
 
     return (iter == devices.end()) ? nullptr : &(*iter);
   }
@@ -218,17 +215,16 @@ class HearingDevices {
     }
   }
 
-  size_t size() { return (devices.size()); }
+  size_t size() { return devices.size(); }
 
   std::vector<HearingDevice> devices;
 };
 
-static void write_rpt_ctl_cfg_cb(uint16_t conn_id, tGATT_STATUS status,
-                                 uint16_t handle, uint16_t len,
-                                 const uint8_t* value, void* data) {
+static void write_rpt_ctl_cfg_cb(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
+                                 uint16_t len, const uint8_t* value, void* data) {
   if (status != GATT_SUCCESS) {
-    log::error("handle= {}, conn_id={}, status= 0x{:x}, length={}", handle,
-               conn_id, static_cast<uint8_t>(status), len);
+    log::error("handle= {}, conn_id={}, status= 0x{:x}, length={}", handle, conn_id,
+               static_cast<uint8_t>(status), len);
   }
 }
 
@@ -254,7 +250,7 @@ inline void encoder_state_release() {
 }
 
 class HearingAidImpl : public HearingAid {
- private:
+private:
   // Keep track of whether the Audio Service has resumed audio playback
   bool audio_running;
   bool is_iso_running = false;
@@ -262,14 +258,12 @@ class HearingAidImpl : public HearingAid {
   // parameter updates
   int16_t overwrite_min_ce_len = -1;
   int16_t overwrite_max_ce_len = -1;
-  const std::string PERSIST_MIN_CE_LEN_NAME =
-      "persist.bluetooth.hearing_aid_min_ce_len";
-  const std::string PERSIST_MAX_CE_LEN_NAME =
-      "persist.bluetooth.hearing_aid_max_ce_len";
+  const std::string PERSIST_MIN_CE_LEN_NAME = "persist.bluetooth.hearing_aid_min_ce_len";
+  const std::string PERSIST_MAX_CE_LEN_NAME = "persist.bluetooth.hearing_aid_max_ce_len";
   // Record whether the connection parameter needs to update to a better one
   bool needs_parameter_update = false;
   std::chrono::time_point<std::chrono::steady_clock> last_drop_time_point =
-      std::chrono::steady_clock::now();
+          std::chrono::steady_clock::now();
   // at most 1 packet DROP per kDropFrequencyThreshold seconds
   static constexpr int64_t kDropFrequencyThreshold = 60;
 
@@ -279,11 +273,10 @@ class HearingAidImpl : public HearingAid {
   // connected.
   std::unique_ptr<bluetooth::audio::asrc::SourceAudioHalAsrc> asrc;
 
- public:
+public:
   ~HearingAidImpl() override = default;
 
-  HearingAidImpl(bluetooth::hearing_aid::HearingAidCallbacks* callbacks,
-                 Closure initCb)
+  HearingAidImpl(bluetooth::hearing_aid::HearingAidCallbacks* callbacks, Closure initCb)
       : audio_running(false),
         overwrite_min_ce_len(-1),
         overwrite_max_ce_len(-1),
@@ -293,48 +286,41 @@ class HearingAidImpl : public HearingAid {
         callbacks(callbacks),
         codec_in_use(0) {
     default_data_interval_ms = (uint16_t)osi_property_get_int32(
-        "persist.bluetooth.hearingaid.interval", (int32_t)HA_INTERVAL_20_MS);
+            "persist.bluetooth.hearingaid.interval", (int32_t)HA_INTERVAL_20_MS);
 
     if ((default_data_interval_ms != HA_INTERVAL_10_MS) &&
         (default_data_interval_ms != HA_INTERVAL_20_MS)) {
-      log::error("invalid interval={}ms. Overwrriting back to default",
-                 default_data_interval_ms);
+      log::error("invalid interval={}ms. Overwrriting back to default", default_data_interval_ms);
       default_data_interval_ms = HA_INTERVAL_20_MS;
     }
 
-    overwrite_min_ce_len =
-        (int16_t)osi_property_get_int32(PERSIST_MIN_CE_LEN_NAME.c_str(), -1);
-    overwrite_max_ce_len =
-        (int16_t)osi_property_get_int32(PERSIST_MAX_CE_LEN_NAME.c_str(), -1);
+    overwrite_min_ce_len = (int16_t)osi_property_get_int32(PERSIST_MIN_CE_LEN_NAME.c_str(), -1);
+    overwrite_max_ce_len = (int16_t)osi_property_get_int32(PERSIST_MAX_CE_LEN_NAME.c_str(), -1);
 
-    log::info(
-        "default_data_interval_ms={} overwrite_min_ce_len={}"
-        " overwrite_max_ce_len={}",
-        default_data_interval_ms, overwrite_min_ce_len, overwrite_max_ce_len);
+    log::info("default_data_interval_ms={} overwrite_min_ce_len={} overwrite_max_ce_len={}",
+              default_data_interval_ms, overwrite_min_ce_len, overwrite_max_ce_len);
 
     BTA_GATTC_AppRegister(
-        hearingaid_gattc_callback,
-        base::Bind(
-            [](Closure initCb, uint8_t client_id, uint8_t status) {
-              if (status != GATT_SUCCESS) {
-                log::error(
-                    "Can't start Hearing Aid profile - no gatt clients left!");
-                return;
-              }
-              instance->gatt_if = client_id;
-              initCb.Run();
-            },
-            initCb),
-        false);
+            hearingaid_gattc_callback,
+            base::Bind(
+                    [](Closure initCb, uint8_t client_id, uint8_t status) {
+                      if (status != GATT_SUCCESS) {
+                        log::error("Can't start Hearing Aid profile - no gatt clients left!");
+                        return;
+                      }
+                      instance->gatt_if = client_id;
+                      initCb.Run();
+                    },
+                    initCb),
+            false);
 
     IsoManager::GetInstance()->Start();
-    IsoManager::GetInstance()->RegisterOnIsoTrafficActiveCallback(
-        [](bool is_active) {
-          if (!instance) {
-            return;
-          }
-          instance->IsoTrafficEventCb(is_active);
-        });
+    IsoManager::GetInstance()->RegisterOnIsoTrafficActiveCallback([](bool is_active) {
+      if (!instance) {
+        return;
+      }
+      instance->IsoTrafficEventCb(is_active);
+    });
   }
 
   void IsoTrafficEventCb(bool is_active) {
@@ -352,8 +338,7 @@ class HearingAidImpl : public HearingAid {
       for (auto& device : hearingDevices.devices) {
         if (device.conn_id != 0) {
           device.connection_update_status = STARTED;
-          device.requested_connection_interval =
-              UpdateBleConnParams(device.address);
+          device.requested_connection_interval = UpdateBleConnParams(device.address);
         }
       }
     }
@@ -371,13 +356,13 @@ class HearingAidImpl : public HearingAid {
     if (asrc == nullptr) {
       log::info("Configuring Asha resampler");
       asrc = std::make_unique<bluetooth::audio::asrc::SourceAudioHalAsrc>(
-          /*thread*/ get_main_thread(),
-          /*channels*/ 2,
-          /*sample_rate*/ codec_in_use == CODEC_G722_24KHZ ? 24000 : 16000,
-          /*bit_depth*/ 16,
-          /*interval_us*/ default_data_interval_ms * 1000,
-          /*num_burst_buffers*/ 0,
-          /*burst_delay*/ 0);
+              /*thread*/ get_main_thread(),
+              /*channels*/ 2,
+              /*sample_rate*/ codec_in_use == CODEC_G722_24KHZ ? 24000 : 16000,
+              /*bit_depth*/ 16,
+              /*interval_us*/ default_data_interval_ms * 1000,
+              /*num_burst_buffers*/ 0,
+              /*burst_delay*/ 0);
     }
   }
 
@@ -417,37 +402,32 @@ class HearingAidImpl : public HearingAid {
         break;
 
       default:
-        log::error("invalid default_data_interval_ms={}",
-                   default_data_interval_ms);
+        log::error("invalid default_data_interval_ms={}", default_data_interval_ms);
         min_ce_len = MIN_CE_LEN_10MS_CI;
         connection_interval = CONNECTION_INTERVAL_10MS_PARAM;
     }
 
     if (overwrite_min_ce_len != -1) {
-      log::warn("min_ce_len={} for device {} is overwritten to {}", min_ce_len,
-                address, overwrite_min_ce_len);
+      log::warn("min_ce_len={} for device {} is overwritten to {}", min_ce_len, address,
+                overwrite_min_ce_len);
       min_ce_len = overwrite_min_ce_len;
     }
     if (overwrite_max_ce_len != -1) {
-      log::warn("max_ce_len={} for device {} is overwritten to {}", max_ce_len,
-                address, overwrite_max_ce_len);
+      log::warn("max_ce_len={} for device {} is overwritten to {}", max_ce_len, address,
+                overwrite_max_ce_len);
       max_ce_len = overwrite_max_ce_len;
     }
 
-    log::info(
-        "L2CA_UpdateBleConnParams for device {} min_ce_len:{} max_ce_len:{}",
-        address, min_ce_len, max_ce_len);
-    if (!L2CA_UpdateBleConnParams(address, connection_interval,
-                                  connection_interval, 0x000A, 0x0064 /*1s*/,
-                                  min_ce_len, max_ce_len)) {
-      log::warn("Unable to update L2CAP ble connection parameters peer:{}",
-                address);
+    log::info("L2CA_UpdateBleConnParams for device {} min_ce_len:{} max_ce_len:{}", address,
+              min_ce_len, max_ce_len);
+    if (!L2CA_UpdateBleConnParams(address, connection_interval, connection_interval, 0x000A,
+                                  0x0064 /*1s*/, min_ce_len, max_ce_len)) {
+      log::warn("Unable to update L2CAP ble connection parameters peer:{}", address);
     }
     return connection_interval;
   }
 
-  bool IsBelowDropFrequency(
-      std::chrono::time_point<std::chrono::steady_clock> tp) {
+  bool IsBelowDropFrequency(std::chrono::time_point<std::chrono::steady_clock> tp) {
     auto duration = tp - last_drop_time_point;
     bool droppable = std::chrono::duration_cast<std::chrono::seconds>(duration).count() >=
                      kDropFrequencyThreshold;
@@ -468,8 +448,8 @@ class HearingAidImpl : public HearingAid {
   }
 
   void AddFromStorage(const HearingDevice& dev_info, bool is_acceptlisted) {
-    log::info("bd_addr={} hi_sync_id=0x{:x} is_acceptlisted={}",
-              dev_info.address, dev_info.hi_sync_id, is_acceptlisted);
+    log::info("bd_addr={} hi_sync_id=0x{:x} is_acceptlisted={}", dev_info.address,
+              dev_info.hi_sync_id, is_acceptlisted);
     if (is_acceptlisted) {
       hearingDevices.Add(dev_info);
 
@@ -478,25 +458,21 @@ class HearingAidImpl : public HearingAid {
       // BTM_BleSetConnScanParams(2048, 1024);
 
       /* add device into BG connection to accept remote initiated connection */
-      BTA_GATTC_Open(gatt_if, dev_info.address, BTM_BLE_BKG_CONNECT_ALLOW_LIST,
-                     false);
+      BTA_GATTC_Open(gatt_if, dev_info.address, BTM_BLE_BKG_CONNECT_ALLOW_LIST, false);
     }
 
-    callbacks->OnDeviceAvailable(dev_info.capabilities, dev_info.hi_sync_id,
-                                 dev_info.address);
+    callbacks->OnDeviceAvailable(dev_info.capabilities, dev_info.hi_sync_id, dev_info.address);
   }
 
-  int GetDeviceCount() { return (hearingDevices.size()); }
+  int GetDeviceCount() { return hearingDevices.size(); }
 
-  void OnGattConnected(tGATT_STATUS status, uint16_t conn_id,
-                       tGATT_IF client_if, RawAddress address,
-                       tBT_TRANSPORT transport, uint16_t mtu) {
+  void OnGattConnected(tGATT_STATUS status, uint16_t conn_id, tGATT_IF client_if,
+                       RawAddress address, tBT_TRANSPORT transport, uint16_t mtu) {
     HearingDevice* hearingDevice = hearingDevices.FindByAddress(address);
     if (!hearingDevice) {
       /* When Hearing Aid is quickly disabled and enabled in settings, this case
        * might happen */
-      log::warn("Closing connection to non hearing-aid device: bd_addr={}",
-                address);
+      log::warn("Closing connection to non hearing-aid device: bd_addr={}", address);
       BTA_GATTC_Close(conn_id);
       return;
     }
@@ -527,19 +503,15 @@ class HearingAidImpl : public HearingAid {
     uint64_t hi_sync_id = hearingDevice->hi_sync_id;
 
     // If there a background connection to the other device of a pair, promote
-    // it to a direct connection to scan more agressively for it
+    // it to a direct connection to scan more aggressively for it
     if (hi_sync_id != 0) {
       for (auto& device : hearingDevices.devices) {
-        if (device.hi_sync_id == hi_sync_id && device.conn_id == 0 &&
-            !device.connecting_actively) {
-          log::info(
-              "Promoting device from the set from background to direct "
-              "connection, bda={}",
-              device.address);
+        if (device.hi_sync_id == hi_sync_id && device.conn_id == 0 && !device.connecting_actively) {
+          log::info("Promoting device from the set from background to direct connection, bda={}",
+                    device.address);
           device.connecting_actively = true;
           device.switch_to_background_connection_after_failure = true;
-          BTA_GATTC_Open(gatt_if, device.address, BTM_BLE_DIRECT_CONNECTION,
-                         false);
+          BTA_GATTC_Open(gatt_if, device.address, BTM_BLE_DIRECT_CONNECTION, false);
         }
       }
     }
@@ -590,34 +562,31 @@ class HearingAidImpl : public HearingAid {
     if (p_data) {
       if (p_data->conn_update.status == 0) {
         bool same_conn_interval =
-            (hearingDevice->requested_connection_interval ==
-             p_data->conn_update.interval);
+                (hearingDevice->requested_connection_interval == p_data->conn_update.interval);
 
         switch (hearingDevice->connection_update_status) {
           case COMPLETED:
             if (!same_conn_interval) {
               log::warn(
-                  "Unexpected change. Redo. connection interval={}, "
-                  "expected={}, conn_id={}, connection_update_status={}",
-                  p_data->conn_update.interval,
-                  hearingDevice->requested_connection_interval, conn_id,
-                  hearingDevice->connection_update_status);
+                      "Unexpected change. Redo. connection interval={}, "
+                      "expected={}, conn_id={}, connection_update_status={}",
+                      p_data->conn_update.interval, hearingDevice->requested_connection_interval,
+                      conn_id, hearingDevice->connection_update_status);
               // Redo this connection interval change.
               hearingDevice->connection_update_status = AWAITING;
             }
             break;
           case STARTED:
             if (same_conn_interval) {
-              log::info("Connection update completed: conn_id={} bd_addr={}",
-                        conn_id, hearingDevice->address);
+              log::info("Connection update completed: conn_id={} bd_addr={}", conn_id,
+                        hearingDevice->address);
               hearingDevice->connection_update_status = COMPLETED;
             } else {
               log::warn(
-                  "Ignored. Different connection interval={}, expected={}, "
-                  "conn_id={}, connection_update_status={}",
-                  p_data->conn_update.interval,
-                  hearingDevice->requested_connection_interval, conn_id,
-                  hearingDevice->connection_update_status);
+                      "Ignored. Different connection interval={}, expected={}, "
+                      "conn_id={}, connection_update_status={}",
+                      p_data->conn_update.interval, hearingDevice->requested_connection_interval,
+                      conn_id, hearingDevice->connection_update_status);
               // Wait for the right Connection Update Completion.
               return;
             }
@@ -629,17 +598,14 @@ class HearingAidImpl : public HearingAid {
 
         // Inform this side and other side device (if any) of Connection
         // Updates.
-        std::vector<uint8_t> conn_update(
-            {CONTROL_POINT_OP_STATE_CHANGE, STATE_CHANGE_CONN_UPDATE,
-             (uint8_t)p_data->conn_update.interval});
+        std::vector<uint8_t> conn_update({CONTROL_POINT_OP_STATE_CHANGE, STATE_CHANGE_CONN_UPDATE,
+                                          (uint8_t)p_data->conn_update.interval});
         send_state_change_to_other_side(hearingDevice, conn_update);
         send_state_change(hearingDevice, conn_update);
       } else {
-        log::info(
-            "error status=0x{:x}, conn_id={} bd_addr={}, "
-            "connection_update_status={}",
-            static_cast<uint8_t>(p_data->conn_update.status), conn_id,
-            hearingDevice->address, hearingDevice->connection_update_status);
+        log::info("error status=0x{:x}, conn_id={} bd_addr={}, connection_update_status={}",
+                  static_cast<uint8_t>(p_data->conn_update.status), conn_id, hearingDevice->address,
+                  hearingDevice->connection_update_status);
         if (hearingDevice->connection_update_status == STARTED) {
           // Redo this connection interval change.
           log::error("Redo Connection Interval change");
@@ -650,8 +616,7 @@ class HearingAidImpl : public HearingAid {
       hearingDevice->connection_update_status = NONE;
     }
 
-    if (!hearingDevice->accepting_audio &&
-        hearingDevice->connection_update_status == COMPLETED &&
+    if (!hearingDevice->accepting_audio && hearingDevice->connection_update_status == COMPLETED &&
         hearingDevice->gap_opened) {
       OnDeviceReady(hearingDevice->address);
     }
@@ -659,8 +624,7 @@ class HearingAidImpl : public HearingAid {
     for (auto& device : hearingDevices.devices) {
       if (device.conn_id && (device.connection_update_status == AWAITING)) {
         device.connection_update_status = STARTED;
-        device.requested_connection_interval =
-            UpdateBleConnParams(device.address);
+        device.requested_connection_interval = UpdateBleConnParams(device.address);
         return;
       }
     }
@@ -677,8 +641,7 @@ class HearingAidImpl : public HearingAid {
     log::debug("bd_addr={} rssi={}", address, (int)rssi_value);
 
     if (hearingDevice->read_rssi_count <= 0) {
-      log::error("bd_addr={}, invalid read_rssi_count={}", address,
-                 hearingDevice->read_rssi_count);
+      log::error("bd_addr={}, invalid read_rssi_count={}", address, hearingDevice->read_rssi_count);
       return;
     }
 
@@ -712,23 +675,20 @@ class HearingAidImpl : public HearingAid {
 
     log::info("encryption successful: bd_addr={}", address);
 
-    if (hearingDevice->audio_control_point_handle &&
-        hearingDevice->audio_status_handle &&
-        hearingDevice->audio_status_ccc_handle &&
-        hearingDevice->volume_handle && hearingDevice->read_psm_handle) {
+    if (hearingDevice->audio_control_point_handle && hearingDevice->audio_status_handle &&
+        hearingDevice->audio_status_ccc_handle && hearingDevice->volume_handle &&
+        hearingDevice->read_psm_handle) {
       // Use cached data, jump to read PSM
       ReadPSM(hearingDevice);
     } else {
-      log::info("starting service search request for ASHA: bd_addr={}",
-                address);
+      log::info("starting service search request for ASHA: bd_addr={}", address);
       hearingDevice->first_connection = true;
       BTA_GATTC_ServiceSearchRequest(hearingDevice->conn_id, HEARING_AID_UUID);
     }
   }
 
-  // Just take care phy update successful case to avoid loop excuting.
-  void OnPhyUpdateEvent(uint16_t conn_id, uint8_t tx_phys, uint8_t rx_phys,
-                        tGATT_STATUS status) {
+  // Just take care phy update successful case to avoid loop executing.
+  void OnPhyUpdateEvent(uint16_t conn_id, uint8_t tx_phys, uint8_t rx_phys, tGATT_STATUS status) {
     HearingDevice* hearingDevice = hearingDevices.FindByConnId(conn_id);
     if (!hearingDevice) {
       log::error("unknown device: conn_id=0x{:x}", conn_id);
@@ -736,30 +696,28 @@ class HearingAidImpl : public HearingAid {
     }
 
     if (status != GATT_SUCCESS) {
-      log::warn("phy update failed: bd_addr={} status={}",
-                hearingDevice->address, status);
+      log::warn("phy update failed: bd_addr={} status={}", hearingDevice->address, status);
       return;
     }
 
     if (tx_phys == PHY_LE_2M && rx_phys == PHY_LE_2M) {
-      log::info("phy update to 2M successful: bd_addr={}",
-                hearingDevice->address);
+      log::info("phy update to 2M successful: bd_addr={}", hearingDevice->address);
       hearingDevice->phy_update_retry_remain = kPhyUpdateRetryLimit;
       return;
     }
 
     if (hearingDevice->phy_update_retry_remain > 0) {
       log::info(
-          "phy update successful with unexpected phys, retrying:"
-          " bd_addr={} tx_phy=0x{:x} rx_phy=0x{:x}",
-          hearingDevice->address, tx_phys, rx_phys);
+              "phy update successful with unexpected phys, retrying:"
+              " bd_addr={} tx_phy=0x{:x} rx_phy=0x{:x}",
+              hearingDevice->address, tx_phys, rx_phys);
       BTM_BleSetPhy(hearingDevice->address, PHY_LE_2M, PHY_LE_2M, 0);
       hearingDevice->phy_update_retry_remain--;
     } else {
       log::warn(
-          "phy update successful with unexpected phys, exceeded retry count:"
-          " bd_addr={} tx_phy=0x{:x} rx_phy=0x{:x}",
-          hearingDevice->address, tx_phys, rx_phys);
+              "phy update successful with unexpected phys, exceeded retry count:"
+              " bd_addr={} tx_phy=0x{:x} rx_phy=0x{:x}",
+              hearingDevice->address, tx_phys, rx_phys);
     }
   }
 
@@ -792,12 +750,10 @@ class HearingAidImpl : public HearingAid {
     log::info("bd_addr={}", address);
 
     if (hearingDevice->service_changed_rcvd ||
-        !(hearingDevice->audio_control_point_handle &&
-          hearingDevice->audio_status_handle &&
-          hearingDevice->audio_status_ccc_handle &&
-          hearingDevice->volume_handle && hearingDevice->read_psm_handle)) {
-      log::info("starting service search request for ASHA: bd_addr={}",
-                address);
+        !(hearingDevice->audio_control_point_handle && hearingDevice->audio_status_handle &&
+          hearingDevice->audio_status_ccc_handle && hearingDevice->volume_handle &&
+          hearingDevice->read_psm_handle)) {
+      log::info("starting service search request for ASHA: bd_addr={}", address);
       BTA_GATTC_ServiceSearchRequest(hearingDevice->conn_id, HEARING_AID_UUID);
     }
   }
@@ -811,33 +767,28 @@ class HearingAidImpl : public HearingAid {
 
     // Known device, nothing to do.
     if (!hearingDevice->first_connection) {
-      log::info("service discovery result ignored: bd_addr={}",
-                hearingDevice->address);
+      log::info("service discovery result ignored: bd_addr={}", hearingDevice->address);
       return;
     }
 
     if (status != GATT_SUCCESS) {
       /* close connection and report service discovery complete with error */
-      log::error("service discovery failed: bd_addr={} status={}",
-                 hearingDevice->address, status);
+      log::error("service discovery failed: bd_addr={} status={}", hearingDevice->address, status);
 
       if (hearingDevice->first_connection) {
-        callbacks->OnConnectionState(ConnectionState::DISCONNECTED,
-                                     hearingDevice->address);
+        callbacks->OnConnectionState(ConnectionState::DISCONNECTED, hearingDevice->address);
       }
       return;
     }
 
-    log::info("service discovery successful: bd_addr={}",
-              hearingDevice->address);
+    log::info("service discovery successful: bd_addr={}", hearingDevice->address);
 
     const std::list<gatt::Service>* services = BTA_GATTC_GetServices(conn_id);
 
     const gatt::Service* service = nullptr;
     for (const gatt::Service& tmp : *services) {
       if (tmp.uuid == Uuid::From16Bit(UUID_SERVCLASS_GATT_SERVER)) {
-        log::info("Found UUID_SERVCLASS_GATT_SERVER, handle=0x{:x}",
-                  tmp.handle);
+        log::info("Found UUID_SERVCLASS_GATT_SERVER, handle=0x{:x}", tmp.handle);
         const gatt::Service* service_changed_service = &tmp;
         find_server_changed_ccc_handle(conn_id, service_changed_service);
       } else if (tmp.uuid == HEARING_AID_UUID) {
@@ -848,22 +799,19 @@ class HearingAidImpl : public HearingAid {
 
     if (!service) {
       log::error("No Hearing Aid service found");
-      callbacks->OnConnectionState(ConnectionState::DISCONNECTED,
-                                   hearingDevice->address);
+      callbacks->OnConnectionState(ConnectionState::DISCONNECTED, hearingDevice->address);
       return;
     }
 
     for (const gatt::Characteristic& charac : service->characteristics) {
       if (charac.uuid == READ_ONLY_PROPERTIES_UUID) {
         if (!btif_storage_get_hearing_aid_prop(
-                hearingDevice->address, &hearingDevice->capabilities,
-                &hearingDevice->hi_sync_id, &hearingDevice->render_delay,
-                &hearingDevice->preparation_delay, &hearingDevice->codecs)) {
-          log::debug("Reading read only properties 0x{:x}",
-                     charac.value_handle);
-          BtaGattQueue::ReadCharacteristic(
-              conn_id, charac.value_handle,
-              HearingAidImpl::OnReadOnlyPropertiesReadStatic, nullptr);
+                    hearingDevice->address, &hearingDevice->capabilities,
+                    &hearingDevice->hi_sync_id, &hearingDevice->render_delay,
+                    &hearingDevice->preparation_delay, &hearingDevice->codecs)) {
+          log::debug("Reading read only properties 0x{:x}", charac.value_handle);
+          BtaGattQueue::ReadCharacteristic(conn_id, charac.value_handle,
+                                           HearingAidImpl::OnReadOnlyPropertiesReadStatic, nullptr);
         }
       } else if (charac.uuid == AUDIO_CONTROL_POINT_UUID) {
         hearingDevice->audio_control_point_handle = charac.value_handle;
@@ -871,8 +819,7 @@ class HearingAidImpl : public HearingAid {
       } else if (charac.uuid == AUDIO_STATUS_UUID) {
         hearingDevice->audio_status_handle = charac.value_handle;
 
-        hearingDevice->audio_status_ccc_handle =
-            find_ccc_handle(conn_id, charac.value_handle);
+        hearingDevice->audio_status_ccc_handle = find_ccc_handle(conn_id, charac.value_handle);
         if (!hearingDevice->audio_status_ccc_handle) {
           log::error("cannot find Audio Status CCC descriptor");
           continue;
@@ -898,16 +845,13 @@ class HearingAidImpl : public HearingAid {
 
   void ReadPSM(HearingDevice* hearingDevice) {
     if (hearingDevice->read_psm_handle) {
-      log::info("bd_addr={} handle=0x{:x}", hearingDevice->address,
-                hearingDevice->read_psm_handle);
-      BtaGattQueue::ReadCharacteristic(
-          hearingDevice->conn_id, hearingDevice->read_psm_handle,
-          HearingAidImpl::OnPsmReadStatic, nullptr);
+      log::info("bd_addr={} handle=0x{:x}", hearingDevice->address, hearingDevice->read_psm_handle);
+      BtaGattQueue::ReadCharacteristic(hearingDevice->conn_id, hearingDevice->read_psm_handle,
+                                       HearingAidImpl::OnPsmReadStatic, nullptr);
     }
   }
 
-  void OnNotificationEvent(uint16_t conn_id, uint16_t handle, uint16_t len,
-                           uint8_t* value) {
+  void OnNotificationEvent(uint16_t conn_id, uint16_t handle, uint16_t len, uint8_t* value) {
     HearingDevice* device = hearingDevices.FindByConnId(conn_id);
     if (!device) {
       log::error("unknown device: conn_id=0x{:x}", conn_id);
@@ -915,33 +859,28 @@ class HearingAidImpl : public HearingAid {
     }
 
     if (device->audio_status_handle != handle) {
-      log::warn(
-          "unexpected handle: bd_addr={} audio_status_handle=0x{:x}"
-          " handle=0x{:x}",
-          device->address, device->audio_status_handle, handle);
+      log::warn("unexpected handle: bd_addr={} audio_status_handle=0x{:x} handle=0x{:x}",
+                device->address, device->audio_status_handle, handle);
       return;
     }
 
     if (len < 1) {
-      log::warn("invalid data length (expected 1+ bytes): bd_addr={} len={}",
-                device->address, len);
+      log::warn("invalid data length (expected 1+ bytes): bd_addr={} len={}", device->address, len);
       return;
     }
 
     if (value[0] != 0) {
-      log::warn("received error status: bd_addr={} status=0x{:x}",
-                device->address, value[0]);
+      log::warn("received error status: bd_addr={} status=0x{:x}", device->address, value[0]);
       return;
     }
 
-    log::info("received success notification: bd_addr={} command_acked={}",
-              device->address, device->command_acked);
+    log::info("received success notification: bd_addr={} command_acked={}", device->address,
+              device->command_acked);
     device->command_acked = true;
   }
 
-  void OnReadOnlyPropertiesRead(uint16_t conn_id, tGATT_STATUS status,
-                                uint16_t handle, uint16_t len, uint8_t* value,
-                                void* data) {
+  void OnReadOnlyPropertiesRead(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
+                                uint16_t len, uint8_t* value, void* data) {
     HearingDevice* hearingDevice = hearingDevices.FindByConnId(conn_id);
     if (!hearingDevice) {
       log::error("unknown device: conn_id=0x{:x}", conn_id);
@@ -954,8 +893,7 @@ class HearingAidImpl : public HearingAid {
     STREAM_TO_UINT8(version, p);
 
     if (version != 0x01) {
-      log::warn("unsupported version: bd_addr={} version=0x{:x}",
-                hearingDevice->address, version);
+      log::warn("unsupported version: bd_addr={} version=0x{:x}", hearingDevice->address, version);
       return;
     }
 
@@ -984,31 +922,27 @@ class HearingAidImpl : public HearingAid {
     bool csis_capable = capabilities & CAPABILITY_CSIS;
 
     if (capabilities & CAPABILITY_RESERVED) {
-      log::warn(
-          "reserved capabilities bits are set: bd_addr={} capabilities=0x{:x}",
-          hearingDevice->address, capabilities);
+      log::warn("reserved capabilities bits are set: bd_addr={} capabilities=0x{:x}",
+                hearingDevice->address, capabilities);
     }
 
     bool g722_16khz_supported = codecs & (1 << CODEC_G722_16KHZ);
     bool g722_24khz_supported = codecs & (1 << CODEC_G722_24KHZ);
 
     if (!g722_16khz_supported) {
-      log::warn("mandatory codec G722@16kHz not supported: bd_addr={}",
-                hearingDevice->address);
+      log::warn("mandatory codec G722@16kHz not supported: bd_addr={}", hearingDevice->address);
     }
 
     log::info(
-        "device capabilities: bd_addr={} side={} binaural={}"
-        " CSIS_supported={} hi_sync_id=0x{:x} render_delay={}"
-        " preparation_delay={} G722@16kHz_supported={} G722@24kHz_supported={}",
-        hearingDevice->address, side ? "right" : "left", binaural, csis_capable,
-        hearingDevice->hi_sync_id, hearingDevice->render_delay,
-        hearingDevice->preparation_delay, g722_16khz_supported,
-        g722_24khz_supported);
+            "device capabilities: bd_addr={} side={} binaural={}"
+            " CSIS_supported={} hi_sync_id=0x{:x} render_delay={}"
+            " preparation_delay={} G722@16kHz_supported={} G722@24kHz_supported={}",
+            hearingDevice->address, side ? "right" : "left", binaural, csis_capable,
+            hearingDevice->hi_sync_id, hearingDevice->render_delay,
+            hearingDevice->preparation_delay, g722_16khz_supported, g722_24khz_supported);
   }
 
-  uint16_t CalcCompressedAudioPacketSize(uint16_t codec_type,
-                                         int connection_interval) {
+  uint16_t CalcCompressedAudioPacketSize(uint16_t codec_type, int connection_interval) {
     int sample_rate;
 
     const int sample_bit_rate = 16;  /* 16 bits per sample */
@@ -1022,20 +956,22 @@ class HearingAidImpl : public HearingAid {
     // compressed_data_packet_size is the size in bytes of the compressed audio
     // data buffer that is generated for each connection interval.
     uint32_t compressed_data_packet_size =
-        (sample_rate * connection_interval * (sample_bit_rate / 8) /
-         compression_ratio) /
-        1000;
-    return ((uint16_t)compressed_data_packet_size);
+            (sample_rate * connection_interval * (sample_bit_rate / 8) / compression_ratio) / 1000;
+    return (uint16_t)compressed_data_packet_size;
   }
 
   void ChooseCodec(const HearingDevice& hearingDevice) {
-    if (codec_in_use) return;
+    if (codec_in_use) {
+      return;
+    }
 
     // use the best codec available for this pair of devices.
     uint16_t codecs = hearingDevice.codecs;
     if (hearingDevice.hi_sync_id != 0) {
       for (const auto& device : hearingDevices.devices) {
-        if (device.hi_sync_id != hearingDevice.hi_sync_id) continue;
+        if (device.hi_sync_id != hearingDevice.hi_sync_id) {
+          continue;
+        }
 
         codecs &= device.codecs;
       }
@@ -1050,13 +986,13 @@ class HearingAidImpl : public HearingAid {
     }
   }
 
-  void OnAudioStatus(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
-                     uint16_t len, uint8_t* value, void* data) {
+  void OnAudioStatus(uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
+                     uint8_t* value, void* data) {
     log::info("{}", base::HexEncode(value, len));
   }
 
-  void OnPsmRead(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
-                 uint16_t len, uint8_t* value, void* data) {
+  void OnPsmRead(uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
+                 uint8_t* value, void* data) {
     HearingDevice* hearingDevice = hearingDevices.FindByConnId(conn_id);
     if (!hearingDevice) {
       log::error("unknown device: conn_id=0x{:x}", conn_id);
@@ -1064,14 +1000,12 @@ class HearingAidImpl : public HearingAid {
     }
 
     if (status != GATT_SUCCESS) {
-      log::error("error reading PSM: bd_addr={} status={}",
-                 hearingDevice->address, status);
+      log::error("error reading PSM: bd_addr={} status={}", hearingDevice->address, status);
       return;
     }
 
     if (len < 2) {
-      log::error("invalid PSM length: bd_addr={} len={}",
-                 hearingDevice->address, len);
+      log::error("invalid PSM length: bd_addr={} len={}", hearingDevice->address, len);
       return;
     }
 
@@ -1093,54 +1027,50 @@ class HearingAidImpl : public HearingAid {
 
     SendEnableServiceChangedInd(hearingDevice);
 
-    uint8_t service_id = hearingDevice->isLeft()
-                             ? BTM_SEC_SERVICE_HEARING_AID_LEFT
-                             : BTM_SEC_SERVICE_HEARING_AID_RIGHT;
+    uint8_t service_id = hearingDevice->isLeft() ? BTM_SEC_SERVICE_HEARING_AID_LEFT
+                                                 : BTM_SEC_SERVICE_HEARING_AID_RIGHT;
     uint16_t gap_handle = GAP_ConnOpen(
-        "", service_id, false, &hearingDevice->address, psm, 514 /* MPS */,
-        &cfg_info, nullptr,
-        /// b/309483354:
-        /// Encryption needs to be explicitly requested at channel
-        /// establishment even though validation is performed in this module
-        /// because of re-connection logic present in the L2CAP module.
-        /// The L2CAP will automatically reconnect the LE-ACL link on
-        /// disconnection when there is a pending channel request,
-        /// which invalidates all encryption checks performed here.
-        com::android::bluetooth::flags::asha_encrypted_l2c_coc()
-            ? BTM_SEC_IN_ENCRYPT | BTM_SEC_OUT_ENCRYPT
-            : BTM_SEC_NONE,
-        HearingAidImpl::GapCallbackStatic, BT_TRANSPORT_LE);
+            "", service_id, false, &hearingDevice->address, psm, 514 /* MPS */, &cfg_info, nullptr,
+            /// b/309483354:
+            /// Encryption needs to be explicitly requested at channel
+            /// establishment even though validation is performed in this module
+            /// because of re-connection logic present in the L2CAP module.
+            /// The L2CAP will automatically reconnect the LE-ACL link on
+            /// disconnection when there is a pending channel request,
+            /// which invalidates all encryption checks performed here.
+            com::android::bluetooth::flags::asha_encrypted_l2c_coc()
+                    ? BTM_SEC_IN_ENCRYPT | BTM_SEC_OUT_ENCRYPT
+                    : BTM_SEC_NONE,
+            HearingAidImpl::GapCallbackStatic, BT_TRANSPORT_LE);
 
     if (gap_handle == GAP_INVALID_HANDLE) {
       log::error("failed to open socket: bd_addr={}", hearingDevice->address);
     } else {
       hearingDevice->gap_handle = gap_handle;
-      log::info("sent GAP connect request: bd_addr={}, gap_handle={}",
-                hearingDevice->address, gap_handle);
+      log::info("sent GAP connect request: bd_addr={}, gap_handle={}", hearingDevice->address,
+                gap_handle);
     }
   }
 
-  static void OnReadOnlyPropertiesReadStatic(uint16_t conn_id,
-                                             tGATT_STATUS status,
-                                             uint16_t handle, uint16_t len,
-                                             uint8_t* value, void* data) {
-    if (instance)
-      instance->OnReadOnlyPropertiesRead(conn_id, status, handle, len, value,
-                                         data);
+  static void OnReadOnlyPropertiesReadStatic(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
+                                             uint16_t len, uint8_t* value, void* data) {
+    if (instance) {
+      instance->OnReadOnlyPropertiesRead(conn_id, status, handle, len, value, data);
+    }
   }
 
-  static void OnAudioStatusStatic(uint16_t conn_id, tGATT_STATUS status,
-                                  uint16_t handle, uint16_t len, uint8_t* value,
-                                  void* data) {
-    if (instance)
+  static void OnAudioStatusStatic(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
+                                  uint16_t len, uint8_t* value, void* data) {
+    if (instance) {
       instance->OnAudioStatus(conn_id, status, handle, len, value, data);
+    }
   }
 
-  static void OnPsmReadStatic(uint16_t conn_id, tGATT_STATUS status,
-                              uint16_t handle, uint16_t len, uint8_t* value,
-                              void* data) {
-    if (instance)
+  static void OnPsmReadStatic(uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
+                              uint8_t* value, void* data) {
+    if (instance) {
       instance->OnPsmRead(conn_id, status, handle, len, value, data);
+    }
   }
 
   /* CoC Socket, BLE connection parameter are ready */
@@ -1161,13 +1091,11 @@ class HearingAidImpl : public HearingAid {
 
     /* Register and enable the Audio Status Notification */
     tGATT_STATUS register_status = BTA_GATTC_RegisterForNotifications(
-        gatt_if, address, hearingDevice->audio_status_handle);
+            gatt_if, address, hearingDevice->audio_status_handle);
 
     if (register_status != GATT_SUCCESS) {
-      log::error(
-          "failed to register for notifications:"
-          " bd_addr={} status={} handle=0x{:x}",
-          address, register_status, hearingDevice->audio_status_handle);
+      log::error("failed to register for notifications: bd_addr={} status={} handle=0x{:x}",
+                 address, register_status, hearingDevice->audio_status_handle);
       return;
     }
 
@@ -1175,9 +1103,8 @@ class HearingAidImpl : public HearingAid {
     uint8_t* ptr = value.data();
     UINT16_TO_STREAM(ptr, GATT_CHAR_CLIENT_CONFIG_NOTIFICATION);
 
-    BtaGattQueue::WriteDescriptor(
-        hearingDevice->conn_id, hearingDevice->audio_status_ccc_handle,
-        std::move(value), GATT_WRITE, write_rpt_ctl_cfg_cb, nullptr);
+    BtaGattQueue::WriteDescriptor(hearingDevice->conn_id, hearingDevice->audio_status_ccc_handle,
+                                  std::move(value), GATT_WRITE, write_rpt_ctl_cfg_cb, nullptr);
 
     ChooseCodec(*hearingDevice);
     SendStart(hearingDevice);
@@ -1185,7 +1112,7 @@ class HearingAidImpl : public HearingAid {
     if (audio_running) {
       // Inform the other side (if any) of this connection
       std::vector<uint8_t> inform_conn_state(
-          {CONTROL_POINT_OP_STATE_CHANGE, STATE_CHANGE_OTHER_SIDE_CONNECTED});
+              {CONTROL_POINT_OP_STATE_CHANGE, STATE_CHANGE_OTHER_SIDE_CONNECTED});
       send_state_change_to_other_side(hearingDevice, inform_conn_state);
     }
 
@@ -1193,8 +1120,7 @@ class HearingAidImpl : public HearingAid {
     hearingDevice->accepting_audio = true;
 
     StartSendingAudio(*hearingDevice);
-    callbacks->OnDeviceAvailable(hearingDevice->capabilities,
-                                 hearingDevice->hi_sync_id, address);
+    callbacks->OnDeviceAvailable(hearingDevice->capabilities, hearingDevice->hi_sync_id, address);
     callbacks->OnConnectionState(ConnectionState::CONNECTED, address);
   }
 
@@ -1216,9 +1142,8 @@ class HearingAidImpl : public HearingAid {
 
       uint16_t delay_report_ms = 0;
       if (hearingDevice.render_delay != 0) {
-        delay_report_ms =
-            hearingDevice.render_delay +
-            (ADD_RENDER_DELAY_INTERVALS * default_data_interval_ms);
+        delay_report_ms = hearingDevice.render_delay +
+                          (ADD_RENDER_DELAY_INTERVALS * default_data_interval_ms);
       }
 
       HearingAidAudioSource::Start(codec, audioReceiver, delay_report_ms);
@@ -1242,18 +1167,18 @@ class HearingAidImpl : public HearingAid {
 
     std::vector<uint8_t> stop({CONTROL_POINT_OP_STOP});
     for (auto& device : hearingDevices.devices) {
-      if (!device.accepting_audio) continue;
+      if (!device.accepting_audio) {
+        continue;
+      }
 
       if (!device.playback_started) {
-        log::warn("Playback not started, skip send Stop cmd, bd_addr={}",
-                  device.address);
+        log::warn("Playback not started, skip send Stop cmd, bd_addr={}", device.address);
       } else {
         log::info("send Stop cmd, bd_addr={}", device.address);
         device.playback_started = false;
         device.command_acked = false;
-        BtaGattQueue::WriteCharacteristic(device.conn_id,
-                                          device.audio_control_point_handle,
-                                          stop, GATT_WRITE, nullptr, nullptr);
+        BtaGattQueue::WriteCharacteristic(device.conn_id, device.audio_control_point_handle, stop,
+                                          GATT_WRITE, nullptr, nullptr);
       }
     }
   }
@@ -1268,7 +1193,9 @@ class HearingAidImpl : public HearingAid {
     }
 
     for (auto& device : hearingDevices.devices) {
-      if (!device.accepting_audio) continue;
+      if (!device.accepting_audio) {
+        continue;
+      }
       audio_running = true;
       SendStart(&device);
     }
@@ -1296,12 +1223,12 @@ class HearingAidImpl : public HearingAid {
         continue;
       }
       if (audio_running && (device.conn_id != 0)) {
-        return (OTHER_SIDE_IS_STREAMING);
+        return OTHER_SIDE_IS_STREAMING;
       } else {
-        return (OTHER_SIDE_NOT_STREAMING);
+        return OTHER_SIDE_NOT_STREAMING;
       }
     }
-    return (OTHER_SIDE_NOT_STREAMING);
+    return OTHER_SIDE_NOT_STREAMING;
   }
 
   void SendEnableServiceChangedInd(HearingDevice* device) {
@@ -1311,49 +1238,44 @@ class HearingAidImpl : public HearingAid {
     uint8_t* ptr = value.data();
     UINT16_TO_STREAM(ptr, GATT_CHAR_CLIENT_CONFIG_INDICTION);
 
-    BtaGattQueue::WriteDescriptor(
-        device->conn_id, device->service_changed_ccc_handle, std::move(value),
-        GATT_WRITE, nullptr, nullptr);
+    BtaGattQueue::WriteDescriptor(device->conn_id, device->service_changed_ccc_handle,
+                                  std::move(value), GATT_WRITE, nullptr, nullptr);
   }
 
   void SendStart(HearingDevice* device) {
-    std::vector<uint8_t> start({CONTROL_POINT_OP_START, codec_in_use,
-                                AUDIOTYPE_UNKNOWN, (uint8_t)current_volume,
-                                OTHER_SIDE_NOT_STREAMING});
+    std::vector<uint8_t> start({CONTROL_POINT_OP_START, codec_in_use, AUDIOTYPE_UNKNOWN,
+                                (uint8_t)current_volume, OTHER_SIDE_NOT_STREAMING});
 
     if (!audio_running) {
       if (!device->playback_started) {
-        log::info("Skip Send Start since audio is not running, bd_addr={}",
-                  device->address);
+        log::info("Skip Send Start since audio is not running, bd_addr={}", device->address);
       } else {
-        log::error("Audio not running but Playback has started, bd_addr={}",
-                   device->address);
+        log::error("Audio not running but Playback has started, bd_addr={}", device->address);
       }
       return;
     }
 
-    if (current_volume == VOLUME_UNKNOWN) start[3] = (uint8_t)VOLUME_MIN;
+    if (current_volume == VOLUME_UNKNOWN) {
+      start[3] = (uint8_t)VOLUME_MIN;
+    }
 
     if (device->playback_started) {
-      log::error("Playback already started, skip send Start cmd, bd_addr={}",
-                 device->address);
+      log::error("Playback already started, skip send Start cmd, bd_addr={}", device->address);
     } else {
       start[4] = GetOtherSideStreamStatus(device);
       log::info(
-          "send Start cmd, volume=0x{:x}, audio type=0x{:x}, bd_addr={}, other "
-          "side streaming=0x{:x}",
-          start[3], start[2], device->address, start[4]);
+              "send Start cmd, volume=0x{:x}, audio type=0x{:x}, bd_addr={}, other "
+              "side streaming=0x{:x}",
+              start[3], start[2], device->address, start[4]);
       device->command_acked = false;
-      BtaGattQueue::WriteCharacteristic(
-          device->conn_id, device->audio_control_point_handle, start,
-          GATT_WRITE, HearingAidImpl::StartAudioCtrlCallbackStatic, nullptr);
+      BtaGattQueue::WriteCharacteristic(device->conn_id, device->audio_control_point_handle, start,
+                                        GATT_WRITE, HearingAidImpl::StartAudioCtrlCallbackStatic,
+                                        nullptr);
     }
   }
 
-  static void StartAudioCtrlCallbackStatic(uint16_t conn_id,
-                                           tGATT_STATUS status, uint16_t handle,
-                                           uint16_t len, const uint8_t* value,
-                                           void* data) {
+  static void StartAudioCtrlCallbackStatic(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
+                                           uint16_t len, const uint8_t* value, void* data) {
     if (status != GATT_SUCCESS) {
       log::error("handle={}, conn_id={}, status=0x{:x}", handle, conn_id,
                  static_cast<uint8_t>(status));
@@ -1394,14 +1316,14 @@ class HearingAidImpl : public HearingAid {
     uint16_t diff_credit = 0;
 
     uint16_t target_current_credit = L2CA_GetPeerLECocCredit(
-        target_side->address, GAP_ConnGetL2CAPCid(target_side->gap_handle));
+            target_side->address, GAP_ConnGetL2CAPCid(target_side->gap_handle));
     if (target_current_credit == L2CAP_LE_CREDIT_MAX) {
       log::error("Get target side credit value fail.");
       return true;
     }
 
     uint16_t other_current_credit = L2CA_GetPeerLECocCredit(
-        other_side->address, GAP_ConnGetL2CAPCid(other_side->gap_handle));
+            other_side->address, GAP_ConnGetL2CAPCid(other_side->gap_handle));
     if (other_current_credit == L2CAP_LE_CREDIT_MAX) {
       log::error("Get other side credit value fail.");
       return true;
@@ -1412,9 +1334,8 @@ class HearingAidImpl : public HearingAid {
     } else {
       diff_credit = other_current_credit - target_current_credit;
     }
-    log::debug("Target({}) Credit: {}, Other({}) Credit: {}, Init Credit: {}",
-               target_side->address, target_current_credit, other_side->address,
-               other_current_credit, init_credit);
+    log::debug("Target({}) Credit: {}, Other({}) Credit: {}, Init Credit: {}", target_side->address,
+               target_current_credit, other_side->address, other_current_credit, init_credit);
     return diff_credit < (init_credit / 2 - 1);
   }
 
@@ -1431,24 +1352,27 @@ class HearingAidImpl : public HearingAid {
   void OnAudioDataReady(const std::vector<uint8_t>& data) {
     /* For now we assume data comes in as 16bit per sample 16kHz PCM stereo */
     bool need_drop = false;
-    int num_samples =
-        data.size() / (2 /*bytes_per_sample*/ * 2 /*number of channels*/);
+    int num_samples = data.size() / (2 /*bytes_per_sample*/ * 2 /*number of channels*/);
 
     // The G.722 codec accept only even number of samples for encoding
-    if (num_samples % 2 != 0)
+    if (num_samples % 2 != 0) {
       log::fatal("num_samples is not even: {}", num_samples);
+    }
 
-    // TODO: we should cache left/right and current state, instad of recomputing
+    // TODO: we should cache left/right and current state, instead of recomputing
     // it for each packet, 100 times a second.
     HearingDevice* left = nullptr;
     HearingDevice* right = nullptr;
     for (auto& device : hearingDevices.devices) {
-      if (!device.accepting_audio) continue;
+      if (!device.accepting_audio) {
+        continue;
+      }
 
-      if (device.isLeft())
+      if (device.isLeft()) {
         left = &device;
-      else
+      } else {
         right = &device;
+      }
     }
 
     if (left == nullptr && right == nullptr) {
@@ -1515,9 +1439,8 @@ class HearingAidImpl : public HearingAid {
       // TODO: instead of a magic number, we need to figure out the correct
       // buffer size
       encoded_data_left.resize(4000);
-      int encoded_size =
-          g722_encode(encoder_state_left, encoded_data_left.data(),
-                      (const int16_t*)chan_left.data(), chan_left.size());
+      int encoded_size = g722_encode(encoder_state_left, encoded_data_left.data(),
+                                     (const int16_t*)chan_left.data(), chan_left.size());
       encoded_data_left.resize(encoded_size);
 
       uint16_t cid = GAP_ConnGetL2CAPCid(left->gap_handle);
@@ -1526,21 +1449,17 @@ class HearingAidImpl : public HearingAid {
         // Compare the two sides LE CoC credit value to confirm need to drop or
         // skip audio packet.
         if (NeedToDropPacket(left, right) && IsBelowDropFrequency(time_point)) {
-          log::info("{} triggers dropping, {} packets in channel",
-                    left->address, packets_in_chans);
+          log::info("{} triggers dropping, {} packets in channel", left->address, packets_in_chans);
           need_drop = true;
           left->audio_stats.trigger_drop_count++;
         } else {
           log::info("{} skipping {} packets", left->address, packets_in_chans);
           left->audio_stats.packet_flush_count += packets_in_chans;
           left->audio_stats.frame_flush_count++;
-          const uint16_t buffers_left =
-              L2CA_FlushChannel(cid, L2CAP_FLUSH_CHANS_ALL);
+          const uint16_t buffers_left = L2CA_FlushChannel(cid, L2CAP_FLUSH_CHANS_ALL);
           if (buffers_left) {
-            log::warn(
-                "Unable to flush L2CAP ALL (left HA) channel peer:{} cid:{} "
-                "buffers_left:{}",
-                left->address, cid, buffers_left);
+            log::warn("Unable to flush L2CAP ALL (left HA) channel peer:{} cid:{} buffers_left:{}",
+                      left->address, cid, buffers_left);
           }
         }
         hearingDevices.StartRssiLog();
@@ -1553,9 +1472,8 @@ class HearingAidImpl : public HearingAid {
       // TODO: instead of a magic number, we need to figure out the correct
       // buffer size
       encoded_data_right.resize(4000);
-      int encoded_size =
-          g722_encode(encoder_state_right, encoded_data_right.data(),
-                      (const int16_t*)chan_right.data(), chan_right.size());
+      int encoded_size = g722_encode(encoder_state_right, encoded_data_right.data(),
+                                     (const int16_t*)chan_right.data(), chan_right.size());
       encoded_data_right.resize(encoded_size);
 
       uint16_t cid = GAP_ConnGetL2CAPCid(right->gap_handle);
@@ -1564,21 +1482,18 @@ class HearingAidImpl : public HearingAid {
         // Compare the two sides LE CoC credit value to confirm need to drop or
         // skip audio packet.
         if (NeedToDropPacket(right, left) && IsBelowDropFrequency(time_point)) {
-          log::info("{} triggers dropping, {} packets in channel",
-                    right->address, packets_in_chans);
+          log::info("{} triggers dropping, {} packets in channel", right->address,
+                    packets_in_chans);
           need_drop = true;
           right->audio_stats.trigger_drop_count++;
         } else {
           log::info("{} skipping {} packets", right->address, packets_in_chans);
           right->audio_stats.packet_flush_count += packets_in_chans;
           right->audio_stats.frame_flush_count++;
-          const uint16_t buffers_left =
-              L2CA_FlushChannel(cid, L2CAP_FLUSH_CHANS_ALL);
+          const uint16_t buffers_left = L2CA_FlushChannel(cid, L2CAP_FLUSH_CHANS_ALL);
           if (buffers_left) {
-            log::warn(
-                "Unable to flush L2CAP ALL (right HA) channel peer:{} cid:{} "
-                "buffers_left:{}",
-                right->address, cid, buffers_left);
+            log::warn("Unable to flush L2CAP ALL (right HA) channel peer:{} cid:{} buffers_left:{}",
+                      right->address, cid, buffers_left);
           }
         }
         hearingDevices.StartRssiLog();
@@ -1586,11 +1501,9 @@ class HearingAidImpl : public HearingAid {
       check_and_do_rssi_read(right);
     }
 
-    size_t encoded_data_size =
-        std::max(encoded_data_left.size(), encoded_data_right.size());
+    size_t encoded_data_size = std::max(encoded_data_left.size(), encoded_data_right.size());
 
-    uint16_t packet_size =
-        CalcCompressedAudioPacketSize(codec_in_use, default_data_interval_ms);
+    uint16_t packet_size = CalcCompressedAudioPacketSize(codec_in_use, default_data_interval_ms);
 
     if (need_drop) {
       last_drop_time_point = time_point;
@@ -1614,16 +1527,18 @@ class HearingAidImpl : public HearingAid {
       }
       seq_counter++;
     }
-    if (left) left->audio_stats.frame_send_count++;
-    if (right) right->audio_stats.frame_send_count++;
+    if (left) {
+      left->audio_stats.frame_send_count++;
+    }
+    if (right) {
+      right->audio_stats.frame_send_count++;
+    }
   }
 
-  void SendAudio(uint8_t* encoded_data, uint16_t packet_size,
-                 HearingDevice* hearingAid) {
+  void SendAudio(uint8_t* encoded_data, uint16_t packet_size, HearingDevice* hearingAid) {
     if (!hearingAid->playback_started || !hearingAid->command_acked) {
-      log::warn("Playback stalled: bd_addr={} cmd send={} cmd acked={}",
-                hearingAid->address, hearingAid->playback_started,
-                hearingAid->command_acked);
+      log::warn("Playback stalled: bd_addr={} cmd send={} cmd acked={}", hearingAid->address,
+                hearingAid->playback_started, hearingAid->command_acked);
       return;
     }
 
@@ -1645,8 +1560,7 @@ class HearingAidImpl : public HearingAid {
   void GapCallback(uint16_t gap_handle, uint16_t event, tGAP_CB_DATA* data) {
     HearingDevice* hearingDevice = hearingDevices.FindByGapHandle(gap_handle);
     if (!hearingDevice) {
-      log::error("unknown device: gap_handle={} event=0x{:x}", gap_handle,
-                 event);
+      log::error("unknown device: gap_handle={} event=0x{:x}", gap_handle, event);
       return;
     }
 
@@ -1655,11 +1569,10 @@ class HearingAidImpl : public HearingAid {
         RawAddress address = *GAP_ConnGetRemoteAddr(gap_handle);
         uint16_t tx_mtu = GAP_ConnGetRemMtuSize(gap_handle);
 
-        init_credit =
-            L2CA_GetPeerLECocCredit(address, GAP_ConnGetL2CAPCid(gap_handle));
+        init_credit = L2CA_GetPeerLECocCredit(address, GAP_ConnGetL2CAPCid(gap_handle));
 
-        log::info("GAP_EVT_CONN_OPENED: bd_addr={} tx_mtu={} init_credit={}",
-                  address, tx_mtu, init_credit);
+        log::info("GAP_EVT_CONN_OPENED: bd_addr={} tx_mtu={} init_credit={}", address, tx_mtu,
+                  init_credit);
 
         HearingDevice* hearingDevice = hearingDevices.FindByAddress(address);
         if (!hearingDevice) {
@@ -1674,8 +1587,8 @@ class HearingAidImpl : public HearingAid {
       }
 
       case GAP_EVT_CONN_CLOSED:
-        log::info("GAP_EVT_CONN_CLOSED: bd_addr={} accepting_audio={}",
-                  hearingDevice->address, hearingDevice->accepting_audio);
+        log::info("GAP_EVT_CONN_CLOSED: bd_addr={} accepting_audio={}", hearingDevice->address,
+                  hearingDevice->accepting_audio);
 
         if (!hearingDevice->accepting_audio) {
           /* Disconnect connection when data channel is not available */
@@ -1692,8 +1605,7 @@ class HearingAidImpl : public HearingAid {
         break;
 
       case GAP_EVT_CONN_DATA_AVAIL: {
-        log::verbose("GAP_EVT_CONN_DATA_AVAIL: bd_addr={}",
-                     hearingDevice->address);
+        log::verbose("GAP_EVT_CONN_DATA_AVAIL: bd_addr={}", hearingDevice->address);
 
         // only data we receive back from hearing aids are some stats, not
         // really important, but useful now for debugging.
@@ -1702,7 +1614,7 @@ class HearingAidImpl : public HearingAid {
         std::vector<uint8_t> buffer(bytes_to_read);
 
         uint16_t bytes_read = 0;
-        // TODO:GAP_ConnReadData should accpet uint32_t for length!
+        // TODO:GAP_ConnReadData should accept uint32_t for length!
         GAP_ConnReadData(gap_handle, buffer.data(), buffer.size(), &bytes_read);
 
         if (bytes_read < 4) {
@@ -1717,8 +1629,7 @@ class HearingAidImpl : public HearingAid {
           uint16_t event_counter, frame_index;
           STREAM_TO_UINT16(event_counter, p);
           STREAM_TO_UINT16(frame_index, p);
-          log::verbose("event_counter={} frame_index: {}", event_counter,
-                       frame_index);
+          log::verbose("event_counter={} frame_index: {}", event_counter, frame_index);
         }
         break;
       }
@@ -1739,27 +1650,25 @@ class HearingAidImpl : public HearingAid {
         break;
 
       case GAP_EVT_CONN_UNCONGESTED:
-        log::info("GAP_EVT_CONN_UNCONGESTED: bd_addr={}",
-                  hearingDevice->address);
+        log::info("GAP_EVT_CONN_UNCONGESTED: bd_addr={}", hearingDevice->address);
         break;
     }
   }
 
-  static void GapCallbackStatic(uint16_t gap_handle, uint16_t event,
-                                tGAP_CB_DATA* data) {
-    if (instance) instance->GapCallback(gap_handle, event, data);
+  static void GapCallbackStatic(uint16_t gap_handle, uint16_t event, tGAP_CB_DATA* data) {
+    if (instance) {
+      instance->GapCallback(gap_handle, event, data);
+    }
   }
 
   void DumpRssi(int fd, const HearingDevice& device) {
     const struct AudioStats* stats = &device.audio_stats;
 
     if (stats->rssi_history.size() <= 0) {
-      dprintf(fd, "  No RSSI history for %s:\n",
-              ADDRESS_TO_LOGGABLE_CSTR(device.address));
+      dprintf(fd, "  No RSSI history for %s:\n", ADDRESS_TO_LOGGABLE_CSTR(device.address));
       return;
     }
-    dprintf(fd, "  RSSI history for %s:\n",
-            ADDRESS_TO_LOGGABLE_CSTR(device.address));
+    dprintf(fd, "  RSSI history for %s:\n", ADDRESS_TO_LOGGABLE_CSTR(device.address));
 
     dprintf(fd, "    Time of RSSI    0.0  0.1  0.2  0.3  0.4  0.5  0.6  0.7  0.8  0.9\n");
     for (auto& rssi_logs : stats->rssi_history) {
@@ -1771,11 +1680,12 @@ class HearingAidImpl : public HearingAid {
       char temptime[20];
       struct tm* tstamp = localtime(&rssi_logs.timestamp.tv_sec);
       if (!strftime(temptime, sizeof(temptime), "%H:%M:%S", tstamp)) {
-        log::error("strftime fails. tm_sec={}, tm_min={}, tm_hour={}",
-                   tstamp->tm_sec, tstamp->tm_min, tstamp->tm_hour);
+        log::error("strftime fails. tm_sec={}, tm_min={}, tm_hour={}", tstamp->tm_sec,
+                   tstamp->tm_min, tstamp->tm_hour);
         strlcpy(temptime, "UNKNOWN TIME", sizeof(temptime));
       }
-      snprintf(eventtime, sizeof(eventtime), "%s.%03ld", temptime, rssi_logs.timestamp.tv_nsec / 1000000);
+      snprintf(eventtime, sizeof(eventtime), "%s.%03ld", temptime,
+               rssi_logs.timestamp.tv_nsec / 1000000);
 
       dprintf(fd, "    %s: ", eventtime);
 
@@ -1791,22 +1701,19 @@ class HearingAidImpl : public HearingAid {
     for (const auto& device : hearingDevices.devices) {
       bool side = device.capabilities & CAPABILITY_SIDE;
       bool standalone = device.capabilities & CAPABILITY_BINAURAL;
-      stream << "  " << device.address.ToString() << " "
-             << (device.accepting_audio ? "" : "not ") << "connected"
-             << "\n    " << (standalone ? "binaural" : "monaural") << " "
-             << (side ? "right" : "left") << " " << loghex(device.hi_sync_id)
+      stream << "  " << device.address.ToString() << " " << (device.accepting_audio ? "" : "not ")
+             << "connected" << "\n    " << (standalone ? "binaural" : "monaural") << " "
+             << (side ? "right" : "left") << " " << loghex(device.hi_sync_id) << std::endl;
+      stream << "    Trigger dropped counts                                 : "
+             << device.audio_stats.trigger_drop_count
+             << "\n    Packet dropped counts                                  : "
+             << device.audio_stats.packet_drop_count
+             << "\n    Packet counts (send/flush)                             : "
+             << device.audio_stats.packet_send_count << " / "
+             << device.audio_stats.packet_flush_count
+             << "\n    Frame counts (sent/flush)                              : "
+             << device.audio_stats.frame_send_count << " / " << device.audio_stats.frame_flush_count
              << std::endl;
-      stream
-          << "    Trigger dropped counts                                 : "
-          << device.audio_stats.trigger_drop_count
-          << "\n    Packet dropped counts                                  : "
-          << device.audio_stats.packet_drop_count
-          << "\n    Packet counts (send/flush)                             : "
-          << device.audio_stats.packet_send_count << " / "
-          << device.audio_stats.packet_flush_count
-          << "\n    Frame counts (sent/flush)                              : "
-          << device.audio_stats.frame_send_count << " / "
-          << device.audio_stats.frame_flush_count << std::endl;
 
       DumpRssi(fd, device);
     }
@@ -1823,9 +1730,8 @@ class HearingAidImpl : public HearingAid {
     bool connected = hearingDevice->accepting_audio;
     bool connecting_by_user = hearingDevice->connecting_actively;
 
-    log::info("bd_addr={} playback_started={} accepting_audio={}",
-              hearingDevice->address, hearingDevice->playback_started,
-              hearingDevice->accepting_audio);
+    log::info("bd_addr={} playback_started={} accepting_audio={}", hearingDevice->address,
+              hearingDevice->playback_started, hearingDevice->accepting_audio);
 
     if (hearingDevice->connecting_actively) {
       // cancel pending direct connect
@@ -1837,7 +1743,7 @@ class HearingAidImpl : public HearingAid {
 
     // Inform the other side (if any) of this disconnection
     std::vector<uint8_t> inform_disconn_state(
-        {CONTROL_POINT_OP_STATE_CHANGE, STATE_CHANGE_OTHER_SIDE_DISCONNECTED});
+            {CONTROL_POINT_OP_STATE_CHANGE, STATE_CHANGE_OTHER_SIDE_DISCONNECTED});
     send_state_change_to_other_side(hearingDevice, inform_disconn_state);
 
     DoDisconnectCleanUp(hearingDevice);
@@ -1856,19 +1762,19 @@ class HearingAidImpl : public HearingAid {
     /* Do remove device when the address is useless. */
     hearingDevices.Remove(address);
     for (const auto& device : hearingDevices.devices) {
-      if (device.accepting_audio) return;
+      if (device.accepting_audio) {
+        return;
+      }
     }
 
     log::info("No more (0/{}) devices ready", GetDeviceCount());
     DoDisconnectAudioStop();
   }
 
-  void OnGattDisconnected(uint16_t conn_id, tGATT_IF client_if,
-                          RawAddress remote_bda) {
+  void OnGattDisconnected(uint16_t conn_id, tGATT_IF client_if, RawAddress remote_bda) {
     HearingDevice* hearingDevice = hearingDevices.FindByConnId(conn_id);
     if (!hearingDevice) {
-      log::error("unknown device: conn_id=0x{:x} bd_addr={}", conn_id,
-                 remote_bda);
+      log::error("unknown device: conn_id=0x{:x} bd_addr={}", conn_id, remote_bda);
       return;
     }
 
@@ -1876,32 +1782,30 @@ class HearingAidImpl : public HearingAid {
 
     // Inform the other side (if any) of this disconnection
     std::vector<uint8_t> inform_disconn_state(
-        {CONTROL_POINT_OP_STATE_CHANGE, STATE_CHANGE_OTHER_SIDE_DISCONNECTED});
+            {CONTROL_POINT_OP_STATE_CHANGE, STATE_CHANGE_OTHER_SIDE_DISCONNECTED});
     send_state_change_to_other_side(hearingDevice, inform_disconn_state);
 
     DoDisconnectCleanUp(hearingDevice);
 
     HearingDevice* other_connected_device_from_set =
-        hearingDevices.FindOtherConnectedDeviceFromSet(*hearingDevice);
+            hearingDevices.FindOtherConnectedDeviceFromSet(*hearingDevice);
 
     if (other_connected_device_from_set != nullptr) {
       log::info(
-          "Another device from the set is still connected, issuing a direct "
-          "connection, other_device_bda={}",
-          other_connected_device_from_set->address);
+              "Another device from the set is still connected, issuing a direct "
+              "connection, other_device_bda={}",
+              other_connected_device_from_set->address);
     }
 
     // If another device from the pair is still connected, do a direct
     // connection to scan more aggressively and connect as fast as possible
-    hearingDevice->connecting_actively =
-        other_connected_device_from_set != nullptr;
+    hearingDevice->connecting_actively = other_connected_device_from_set != nullptr;
 
-    auto connection_type = hearingDevice->connecting_actively
-                               ? BTM_BLE_DIRECT_CONNECTION
-                               : BTM_BLE_BKG_CONNECT_ALLOW_LIST;
+    auto connection_type = hearingDevice->connecting_actively ? BTM_BLE_DIRECT_CONNECTION
+                                                              : BTM_BLE_BKG_CONNECT_ALLOW_LIST;
 
     hearingDevice->switch_to_background_connection_after_failure =
-        connection_type == BTM_BLE_DIRECT_CONNECTION;
+            connection_type == BTM_BLE_DIRECT_CONNECTION;
 
     // This is needed just for the first connection. After stack is restarted,
     // code that loads device will add them to acceptlist.
@@ -1910,7 +1814,9 @@ class HearingAidImpl : public HearingAid {
     callbacks->OnConnectionState(ConnectionState::DISCONNECTED, remote_bda);
 
     for (const auto& device : hearingDevices.devices) {
-      if (device.accepting_audio) return;
+      if (device.accepting_audio) {
+        return;
+      }
     }
 
     log::info("No more (0/{}) devices ready", GetDeviceCount());
@@ -1920,8 +1826,7 @@ class HearingAidImpl : public HearingAid {
   void DoDisconnectCleanUp(HearingDevice* hearingDevice) {
     if (hearingDevice->connection_update_status != COMPLETED) {
       log::info("connection update not completed: status={}, bd_addr={}",
-                hearingDevice->connection_update_status,
-                hearingDevice->address);
+                hearingDevice->connection_update_status, hearingDevice->address);
 
       if (hearingDevice->connection_update_status == STARTED) {
         OnConnectionUpdateComplete(hearingDevice->conn_id, NULL);
@@ -1960,12 +1865,13 @@ class HearingAidImpl : public HearingAid {
     log::debug("{}", volume);
     current_volume = volume;
     for (HearingDevice& device : hearingDevices.devices) {
-      if (!device.accepting_audio) continue;
+      if (!device.accepting_audio) {
+        continue;
+      }
 
       std::vector<uint8_t> volume_value({static_cast<unsigned char>(volume)});
-      BtaGattQueue::WriteCharacteristic(device.conn_id, device.volume_handle,
-                                        volume_value, GATT_WRITE_NO_RSP,
-                                        nullptr, nullptr);
+      BtaGattQueue::WriteCharacteristic(device.conn_id, device.volume_handle, volume_value,
+                                        GATT_WRITE_NO_RSP, nullptr, nullptr);
     }
   }
 
@@ -1980,7 +1886,7 @@ class HearingAidImpl : public HearingAid {
     encoder_state_release();
   }
 
- private:
+private:
   uint8_t gatt_if;
   uint8_t seq_counter;
   /* current volume gain for the hearing aids*/
@@ -1996,8 +1902,7 @@ class HearingAidImpl : public HearingAid {
 
   HearingDevices hearingDevices;
 
-  void find_server_changed_ccc_handle(uint16_t conn_id,
-                                      const gatt::Service* service) {
+  void find_server_changed_ccc_handle(uint16_t conn_id, const gatt::Service* service) {
     HearingDevice* hearingDevice = hearingDevices.FindByConnId(conn_id);
     if (!hearingDevice) {
       log::error("unknown device: conn_id=0x{:x}", conn_id);
@@ -2006,16 +1911,13 @@ class HearingAidImpl : public HearingAid {
 
     for (const gatt::Characteristic& charac : service->characteristics) {
       if (charac.uuid == Uuid::From16Bit(GATT_UUID_GATT_SRV_CHGD)) {
-        hearingDevice->service_changed_ccc_handle =
-            find_ccc_handle(conn_id, charac.value_handle);
+        hearingDevice->service_changed_ccc_handle = find_ccc_handle(conn_id, charac.value_handle);
         if (!hearingDevice->service_changed_ccc_handle) {
-          log::error(
-              "failed to find service changed CCC descriptor: bd_addr={}",
-              hearingDevice->address);
+          log::error("failed to find service changed CCC descriptor: bd_addr={}",
+                     hearingDevice->address);
           continue;
         }
-        log::info("bd_addr={} service_changed_ccc=0x{:x}",
-                  hearingDevice->address,
+        log::info("bd_addr={} service_changed_ccc=0x{:x}", hearingDevice->address,
                   hearingDevice->service_changed_ccc_handle);
         break;
       }
@@ -2025,8 +1927,7 @@ class HearingAidImpl : public HearingAid {
   // Find the handle for the client characteristics configuration of a given
   // characteristics
   uint16_t find_ccc_handle(uint16_t conn_id, uint16_t char_handle) {
-    const gatt::Characteristic* p_char =
-        BTA_GATTC_GetCharacteristic(conn_id, char_handle);
+    const gatt::Characteristic* p_char = BTA_GATTC_GetCharacteristic(conn_id, char_handle);
 
     if (!p_char) {
       log::warn("No such characteristic: {}", char_handle);
@@ -2034,8 +1935,9 @@ class HearingAidImpl : public HearingAid {
     }
 
     for (const gatt::Descriptor& desc : p_char->descriptors) {
-      if (desc.uuid == Uuid::From16Bit(GATT_UUID_CHAR_CLIENT_CONFIG))
+      if (desc.uuid == Uuid::From16Bit(GATT_UUID_CHAR_CLIENT_CONFIG)) {
         return desc.handle;
+      }
     }
 
     return 0;
@@ -2044,16 +1946,13 @@ class HearingAidImpl : public HearingAid {
   void send_state_change(HearingDevice* device, std::vector<uint8_t> payload) {
     if (device->conn_id != 0) {
       if (device->service_changed_rcvd) {
-        log::info(
-            "service discover is in progress, skip send State Change cmd.");
+        log::info("service discover is in progress, skip send State Change cmd.");
         return;
       }
       // Send the data packet
-      log::info("Send State Change: bd_addr={} status=0x{:x}", device->address,
-                payload[1]);
-      BtaGattQueue::WriteCharacteristic(
-          device->conn_id, device->audio_control_point_handle, payload,
-          GATT_WRITE_NO_RSP, nullptr, nullptr);
+      log::info("Send State Change: bd_addr={} status=0x{:x}", device->address, payload[1]);
+      BtaGattQueue::WriteCharacteristic(device->conn_id, device->audio_control_point_handle,
+                                        payload, GATT_WRITE_NO_RSP, nullptr, nullptr);
     }
   }
 
@@ -2083,16 +1982,19 @@ class HearingAidImpl : public HearingAid {
 static void read_rssi_callback(void* p_void) {
   tBTM_RSSI_RESULT* p_result = (tBTM_RSSI_RESULT*)p_void;
 
-  if (!p_result) return;
+  if (!p_result) {
+    return;
+  }
 
   if ((instance) && (p_result->status == BTM_SUCCESS)) {
     instance->OnReadRssiComplete(p_result->rem_bda, p_result->rssi);
   }
 }
 
-static void hearingaid_gattc_callback(tBTA_GATTC_EVT event,
-                                      tBTA_GATTC* p_data) {
-  if (p_data == nullptr) return;
+static void hearingaid_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
+  if (p_data == nullptr) {
+    return;
+  }
 
   switch (event) {
     case BTA_GATTC_DEREG_EVT:
@@ -2100,60 +2002,74 @@ static void hearingaid_gattc_callback(tBTA_GATTC_EVT event,
       break;
 
     case BTA_GATTC_OPEN_EVT: {
-      if (!instance) return;
+      if (!instance) {
+        return;
+      }
       tBTA_GATTC_OPEN& o = p_data->open;
-      instance->OnGattConnected(o.status, o.conn_id, o.client_if, o.remote_bda,
-                                o.transport, o.mtu);
+      instance->OnGattConnected(o.status, o.conn_id, o.client_if, o.remote_bda, o.transport, o.mtu);
       break;
     }
 
     case BTA_GATTC_CLOSE_EVT: {
-      if (!instance) return;
+      if (!instance) {
+        return;
+      }
       tBTA_GATTC_CLOSE& c = p_data->close;
       instance->OnGattDisconnected(c.conn_id, c.client_if, c.remote_bda);
     } break;
 
     case BTA_GATTC_SEARCH_CMPL_EVT:
-      if (!instance) return;
-      instance->OnServiceSearchComplete(p_data->search_cmpl.conn_id,
-                                        p_data->search_cmpl.status);
+      if (!instance) {
+        return;
+      }
+      instance->OnServiceSearchComplete(p_data->search_cmpl.conn_id, p_data->search_cmpl.status);
       break;
 
     case BTA_GATTC_NOTIF_EVT:
-      if (!instance) return;
+      if (!instance) {
+        return;
+      }
       if (!p_data->notify.is_notify || p_data->notify.len > GATT_MAX_ATTR_LEN) {
-        log::error("rejected BTA_GATTC_NOTIF_EVT. is_notify={}, len={}",
-                   p_data->notify.is_notify, p_data->notify.len);
+        log::error("rejected BTA_GATTC_NOTIF_EVT. is_notify={}, len={}", p_data->notify.is_notify,
+                   p_data->notify.len);
         break;
       }
-      instance->OnNotificationEvent(p_data->notify.conn_id,
-                                    p_data->notify.handle, p_data->notify.len,
-                                    p_data->notify.value);
+      instance->OnNotificationEvent(p_data->notify.conn_id, p_data->notify.handle,
+                                    p_data->notify.len, p_data->notify.value);
       break;
 
     case BTA_GATTC_ENC_CMPL_CB_EVT:
-      if (!instance) return;
-      instance->OnEncryptionComplete(
-          p_data->enc_cmpl.remote_bda,
-          BTM_IsEncrypted(p_data->enc_cmpl.remote_bda, BT_TRANSPORT_LE));
+      if (!instance) {
+        return;
+      }
+      instance->OnEncryptionComplete(p_data->enc_cmpl.remote_bda,
+                                     BTM_IsEncrypted(p_data->enc_cmpl.remote_bda, BT_TRANSPORT_LE));
       break;
 
     case BTA_GATTC_CONN_UPDATE_EVT:
-      if (!instance) return;
+      if (!instance) {
+        return;
+      }
       instance->OnConnectionUpdateComplete(p_data->conn_update.conn_id, p_data);
       break;
 
     case BTA_GATTC_SRVC_CHG_EVT:
-      if (!instance) return;
+      if (!instance) {
+        return;
+      }
       instance->OnServiceChangeEvent(p_data->remote_bda);
       break;
 
     case BTA_GATTC_SRVC_DISC_DONE_EVT:
-      if (!instance) return;
+      if (!instance) {
+        return;
+      }
       instance->OnServiceDiscDoneEvent(p_data->service_changed.remote_bda);
       break;
     case BTA_GATTC_PHY_UPDATE_EVT: {
-      if (!instance) return;
+      if (!instance) {
+        return;
+      }
       tBTA_GATTC_PHY_UPDATE& p = p_data->phy_update;
       instance->OnPhyUpdateEvent(p.conn_id, p.tx_phy, p.rx_phy, p.status);
       break;
@@ -2164,24 +2080,28 @@ static void hearingaid_gattc_callback(tBTA_GATTC_EVT event,
   }
 }
 
-static void encryption_callback(RawAddress address, tBT_TRANSPORT, void*,
-                                tBTM_STATUS status) {
+static void encryption_callback(RawAddress address, tBT_TRANSPORT, void*, tBTM_STATUS status) {
   if (instance) {
-    instance->OnEncryptionComplete(address,
-                                   status == BTM_SUCCESS ? true : false);
+    instance->OnEncryptionComplete(address, status == BTM_SUCCESS ? true : false);
   }
 }
 
 class HearingAidAudioReceiverImpl : public HearingAidAudioReceiver {
- public:
+public:
   void OnAudioDataReady(const std::vector<uint8_t>& data) override {
-    if (instance) instance->OnAudioDataReadyResample(data);
+    if (instance) {
+      instance->OnAudioDataReadyResample(data);
+    }
   }
   void OnAudioSuspend(const std::function<void()>& stop_audio_ticks) override {
-    if (instance) instance->OnAudioSuspend(stop_audio_ticks);
+    if (instance) {
+      instance->OnAudioSuspend(stop_audio_ticks);
+    }
   }
   void OnAudioResume(const std::function<void()>& start_audio_ticks) override {
-    if (instance) instance->OnAudioResume(start_audio_ticks);
+    if (instance) {
+      instance->OnAudioResume(start_audio_ticks);
+    }
   }
 };
 
@@ -2189,8 +2109,8 @@ HearingAidAudioReceiverImpl audioReceiverImpl;
 
 }  // namespace
 
-void HearingAid::Initialize(
-    bluetooth::hearing_aid::HearingAidCallbacks* callbacks, Closure initCb) {
+void HearingAid::Initialize(bluetooth::hearing_aid::HearingAidCallbacks* callbacks,
+                            Closure initCb) {
   std::scoped_lock<std::mutex> lock(instance_mutex);
   if (instance) {
     log::error("Already initialized!");
@@ -2236,14 +2156,13 @@ void HearingAid::SetVolume(int8_t volume) {
   instance->SetVolume(volume);
 }
 
-void HearingAid::AddFromStorage(const HearingDevice& dev_info,
-                                bool is_acceptlisted) {
+void HearingAid::AddFromStorage(const HearingDevice& dev_info, bool is_acceptlisted) {
   if (!instance) {
     log::error("Not initialized yet");
   }
 
   instance->AddFromStorage(dev_info, is_acceptlisted);
-};
+}
 
 int HearingAid::GetDeviceCount() {
   if (!instance) {
@@ -2251,7 +2170,7 @@ int HearingAid::GetDeviceCount() {
     return 0;
   }
 
-  return (instance->GetDeviceCount());
+  return instance->GetDeviceCount();
 }
 
 void HearingAid::CleanUp() {
@@ -2267,12 +2186,14 @@ void HearingAid::CleanUp() {
   ptr->CleanUp();
 
   delete ptr;
-};
+}
 
 void HearingAid::DebugDump(int fd) {
   std::scoped_lock<std::mutex> lock(instance_mutex);
   dprintf(fd, "Hearing Aid Manager:\n");
-  if (instance) instance->Dump(fd);
+  if (instance) {
+    instance->Dump(fd);
+  }
   HearingAidAudioSource::DebugDump(fd);
   dprintf(fd, "\n");
 }

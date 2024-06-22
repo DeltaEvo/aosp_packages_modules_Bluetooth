@@ -67,22 +67,24 @@ typedef enum : uint8_t {
                                  enter sniff mode */
   BTA_DM_DI_ACP_SNIFF = 0x04, /* set this bit if peer init sniff */
   BTA_DM_DI_UNUSED = 0x08,
-  BTA_DM_DI_USE_SSR = 0x10, /* set this bit if ssr is supported for this link */
+  BTA_DM_DI_USE_SSR = 0x10,   /* set this bit if ssr is supported for this link */
   BTA_DM_DI_AV_ACTIVE = 0x20, /* set this bit if AV is active for this link */
 } tBTA_DM_DEV_INFO_BITMASK;
 typedef uint8_t tBTA_DM_DEV_INFO;
 
 inline std::string device_info_text(tBTA_DM_DEV_INFO info) {
   const char* const device_info_text[] = {
-      ":set_sniff", ":int_sniff", ":acp_sniff",
-      ":unused",    ":use_ssr",   ":av_active",
+          ":set_sniff", ":int_sniff", ":acp_sniff", ":unused", ":use_ssr", ":av_active",
   };
 
   std::string s = base::StringPrintf("0x%02x", info);
-  if (info == BTA_DM_DI_NONE) return s + std::string(":none");
-  for (size_t i = 0; i < sizeof(device_info_text) / sizeof(device_info_text[0]);
-       i++) {
-    if (info & (1u << i)) s += std::string(device_info_text[i]);
+  if (info == BTA_DM_DI_NONE) {
+    return s + std::string(":none");
+  }
+  for (size_t i = 0; i < sizeof(device_info_text) / sizeof(device_info_text[0]); i++) {
+    if (info & (1u << i)) {
+      s += std::string(device_info_text[i]);
+    }
   }
   return s;
 }
@@ -99,11 +101,11 @@ struct tBTA_DM_PEER_DEVICE {
   tBTA_PREF_ROLES pref_role;
   bool in_use;
 
- private:
+private:
   // Dynamic pieces of operational device information
   tBTA_DM_DEV_INFO info{BTA_DM_DI_NONE};
 
- public:
+public:
   std::string info_text() const { return device_info_text(info); }
 
   void reset_device_info() { info = BTA_DM_DI_NONE; }
@@ -156,11 +158,10 @@ typedef struct {
   bool new_request;
 
   std::string ToString() const {
-    return base::StringPrintf(
-        "peer:%s sys_name:%s app_id:%hhu state:%s new_request:%s",
-        ADDRESS_TO_LOGGABLE_CSTR(peer_bdaddr), BtaIdSysText(id).c_str(), app_id,
-        bta_sys_conn_status_text(state).c_str(),
-        new_request ? "true" : "false");
+    return base::StringPrintf("peer:%s sys_name:%s app_id:%hhu state:%s new_request:%s",
+                              ADDRESS_TO_LOGGABLE_CSTR(peer_bdaddr), BtaIdSysText(id).c_str(),
+                              app_id, bta_sys_conn_status_text(state).c_str(),
+                              new_request ? "true" : "false");
   }
 
 } tBTA_DM_SRVCS;
@@ -210,7 +211,7 @@ typedef struct {
   alarm_t* disable_timer;
   uint8_t pm_id;
   tBTA_PM_TIMER pm_timer[BTA_DM_NUM_PM_TIMER];
-  uint8_t cur_av_count;   /* current AV connecions */
+  uint8_t cur_av_count; /* current AV connections */
 
   /* store UUID list for EIR */
   uint32_t eir_uuid[BTM_EIR_SERVICE_ARRAY_SIZE];
@@ -229,8 +230,8 @@ typedef struct {
 
 typedef struct {
   uint16_t page_timeout; /* timeout for page in slots */
-  bool avoid_scatter; /* true to avoid scatternet when av is streaming (be the
-                         central) */
+  bool avoid_scatter;    /* true to avoid scatternet when av is streaming (be the
+                            central) */
 
 } tBTA_DM_CFG;
 
@@ -261,7 +262,7 @@ typedef struct {
 
 typedef struct {
   uint8_t allow_mask; /* mask of sniff/hold/park modes to allow */
-  uint8_t ssr; /* set SSR on conn open/unpark */
+  uint8_t ssr;        /* set SSR on conn open/unpark */
   tBTA_DM_PM_ACTN actn_tbl[BTA_DM_PM_NUM_EVTS][2];
 
 } tBTA_DM_PM_SPEC;
@@ -311,10 +312,9 @@ void bta_dm_enable(tBTA_DM_SEC_CBACK*, tBTA_DM_ACL_CBACK*);
 void bta_dm_disable();
 void bta_dm_set_dev_name(const std::vector<uint8_t>&);
 
-void bta_dm_ble_set_conn_params(const RawAddress&, uint16_t, uint16_t, uint16_t,
-                                uint16_t);
-void bta_dm_ble_update_conn_params(const RawAddress&, uint16_t, uint16_t,
-                                   uint16_t, uint16_t, uint16_t, uint16_t);
+void bta_dm_ble_set_conn_params(const RawAddress&, uint16_t, uint16_t, uint16_t, uint16_t);
+void bta_dm_ble_update_conn_params(const RawAddress&, uint16_t, uint16_t, uint16_t, uint16_t,
+                                   uint16_t, uint16_t);
 
 void bta_dm_ble_set_data_length(const RawAddress& bd_addr);
 
@@ -332,22 +332,20 @@ void bta_dm_clear_filter_accept_list(void);
 void bta_dm_disconnect_all_acls(void);
 void bta_dm_le_rand(bluetooth::hci::LeRandCallback cb);
 void bta_dm_set_event_filter_connection_setup_all_devices();
-void bta_dm_allow_wake_by_hid(
-    std::vector<RawAddress> classic_hid_devices,
-    std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices);
-void bta_dm_restore_filter_accept_list(
-    std::vector<std::pair<RawAddress, uint8_t>> le_devices);
+void bta_dm_allow_wake_by_hid(std::vector<RawAddress> classic_hid_devices,
+                              std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices);
+void bta_dm_restore_filter_accept_list(std::vector<std::pair<RawAddress, uint8_t>> le_devices);
 void bta_dm_set_default_event_mask_except(uint64_t mask, uint64_t le_mask);
 void bta_dm_set_event_filter_inquiry_result_all_devices();
 
 void bta_dm_ble_reset_id(void);
 
 void bta_dm_eir_update_uuid(uint16_t uuid16, bool adding);
-void bta_dm_eir_update_cust_uuid(const tBTA_CUSTOM_UUID &curr, bool adding);
+void bta_dm_eir_update_cust_uuid(const tBTA_CUSTOM_UUID& curr, bool adding);
 
 void bta_dm_ble_subrate_request(const RawAddress& bd_addr, uint16_t subrate_min,
-                                uint16_t subrate_max, uint16_t max_latency,
-                                uint16_t cont_num, uint16_t timeout);
+                                uint16_t subrate_max, uint16_t max_latency, uint16_t cont_num,
+                                uint16_t timeout);
 
 namespace fmt {
 template <>

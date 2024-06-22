@@ -45,16 +45,18 @@ PacketView<kLittleEndian> GetPacketView(std::unique_ptr<packet::BasePacketBuilde
 }
 
 class CommandQueueEntry {
- public:
-  CommandQueueEntry(
-      std::unique_ptr<hci::CommandBuilder> command_packet,
-      ContextualOnceCallback<void(CommandCompleteView)> on_complete_function)
-      : command(std::move(command_packet)), waiting_for_status_(false), on_complete(std::move(on_complete_function)) {}
+public:
+  CommandQueueEntry(std::unique_ptr<hci::CommandBuilder> command_packet,
+                    ContextualOnceCallback<void(CommandCompleteView)> on_complete_function)
+      : command(std::move(command_packet)),
+        waiting_for_status_(false),
+        on_complete(std::move(on_complete_function)) {}
 
-  CommandQueueEntry(
-      std::unique_ptr<hci::CommandBuilder> command_packet,
-      ContextualOnceCallback<void(CommandStatusView)> on_status_function)
-      : command(std::move(command_packet)), waiting_for_status_(true), on_status(std::move(on_status_function)) {}
+  CommandQueueEntry(std::unique_ptr<hci::CommandBuilder> command_packet,
+                    ContextualOnceCallback<void(CommandStatusView)> on_status_function)
+      : command(std::move(command_packet)),
+        waiting_for_status_(true),
+        on_status(std::move(on_status_function)) {}
 
   std::unique_ptr<hci::CommandBuilder> command;
   bool waiting_for_status_;
@@ -65,18 +67,18 @@ class CommandQueueEntry {
 }  // namespace
 
 class FakeHciLayer : public HciLayer {
- public:
-  void EnqueueCommand(
-      std::unique_ptr<hci::CommandBuilder> command,
-      ContextualOnceCallback<void(CommandStatusView)> on_status) override {
-    auto command_queue_entry = std::make_unique<CommandQueueEntry>(std::move(command), std::move(on_status));
+public:
+  void EnqueueCommand(std::unique_ptr<hci::CommandBuilder> command,
+                      ContextualOnceCallback<void(CommandStatusView)> on_status) override {
+    auto command_queue_entry =
+            std::make_unique<CommandQueueEntry>(std::move(command), std::move(on_status));
     command_queue_.push(std::move(command_queue_entry));
   }
 
-  void EnqueueCommand(
-      std::unique_ptr<hci::CommandBuilder> command,
-      ContextualOnceCallback<void(CommandCompleteView)> on_complete) override {
-    auto command_queue_entry = std::make_unique<CommandQueueEntry>(std::move(command), std::move(on_complete));
+  void EnqueueCommand(std::unique_ptr<hci::CommandBuilder> command,
+                      ContextualOnceCallback<void(CommandCompleteView)> on_complete) override {
+    auto command_queue_entry =
+            std::make_unique<CommandQueueEntry>(std::move(command), std::move(on_complete));
     command_queue_.push(std::move(command_queue_entry));
   }
 
@@ -87,7 +89,8 @@ class FakeHciLayer : public HciLayer {
     return last;
   }
 
-  void RegisterEventHandler(EventCode event_code, common::ContextualCallback<void(EventView)> event_handler) override {
+  void RegisterEventHandler(EventCode event_code,
+                            common::ContextualCallback<void(EventView)> event_handler) override {
     registered_events_[event_code] = event_handler;
   }
 
@@ -108,7 +111,7 @@ class FakeHciLayer : public HciLayer {
   void Start() override {}
   void Stop() override {}
 
- private:
+private:
   std::map<EventCode, common::ContextualCallback<void(EventView)>> registered_events_;
   std::queue<std::unique_ptr<CommandQueueEntry>> command_queue_;
 };

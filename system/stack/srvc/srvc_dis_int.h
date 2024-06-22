@@ -54,8 +54,7 @@ typedef struct {
 extern tDIS_CB dis_cb;
 
 bool dis_valid_handle_range(uint16_t handle);
-uint8_t dis_read_attr_value(uint8_t clcb_idx, uint16_t handle,
-                            tGATT_VALUE* p_value, bool is_long,
+uint8_t dis_read_attr_value(uint8_t clcb_idx, uint16_t handle, tGATT_VALUE* p_value, bool is_long,
                             tGATT_STATUS* p_status);
 uint8_t dis_write_attr_value(tGATT_WRITE_REQ* p_data, tGATT_STATUS* p_status);
 

@@ -28,8 +28,8 @@ namespace topshim {
 namespace rust {
 
 class A2dpSinkIntf {
- public:
-  A2dpSinkIntf(){};
+public:
+  A2dpSinkIntf() {}
   ~A2dpSinkIntf();
 
   // interface for Settings

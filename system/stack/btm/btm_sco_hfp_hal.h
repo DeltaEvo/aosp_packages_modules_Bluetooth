@@ -98,8 +98,7 @@ void set_codec_datapath(tBTA_AG_UUID_CODEC codec_uuid);
 size_t get_packet_size(int codec);
 
 // Notify the lower layer about SCO connection change.
-void notify_sco_connection_change(RawAddress device, bool is_connected,
-                                  int codec);
+void notify_sco_connection_change(RawAddress device, bool is_connected, int codec);
 
 // Update eSCO parameters
 void update_esco_parameters(enh_esco_params_t* p_parms);

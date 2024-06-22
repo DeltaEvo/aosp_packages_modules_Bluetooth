@@ -31,8 +31,7 @@ using namespace bluetooth;
 
 constexpr uint8_t GATT_NOTIFY = 1;
 
-std::unordered_map<uint16_t, std::list<gatts_operation>>
-    BtaGattServerQueue::gatts_op_queue;
+std::unordered_map<uint16_t, std::list<gatts_operation>> BtaGattServerQueue::gatts_op_queue;
 std::unordered_set<uint16_t> BtaGattServerQueue::gatts_op_queue_executing;
 std::unordered_map<uint16_t, bool> BtaGattServerQueue::congestion_queue;
 
@@ -52,8 +51,7 @@ void BtaGattServerQueue::gatts_execute_next_op(uint16_t conn_id) {
 
   if (ptr != congestion_queue.end()) {
     bool is_congested = ptr->second;
-    log::verbose("congestion queue exist, conn_id: {}, is_congested: {}",
-                 conn_id, is_congested);
+    log::verbose("congestion queue exist, conn_id: {}, is_congested: {}", conn_id, is_congested);
     if (is_congested) {
       log::verbose("lower layer is congested");
       return;
@@ -81,8 +79,7 @@ void BtaGattServerQueue::gatts_execute_next_op(uint16_t conn_id) {
   log::verbose("op.type={}, attr_id={}", op.type, op.attr_id);
 
   if (op.type == GATT_NOTIFY) {
-    BTA_GATTS_HandleValueIndication(conn_id, op.attr_id, op.value,
-                                    op.need_confirm);
+    BTA_GATTS_HandleValueIndication(conn_id, op.attr_id, op.value, op.need_confirm);
     gatts_op_queue_executing.insert(conn_id);
   }
 }
@@ -95,13 +92,9 @@ void BtaGattServerQueue::Clean(uint16_t conn_id) {
 }
 
 void BtaGattServerQueue::SendNotification(uint16_t conn_id, uint16_t handle,
-                                          std::vector<uint8_t> value,
-                                          bool need_confirm) {
-  gatts_op_queue[conn_id].emplace_back(
-      gatts_operation{.type = GATT_NOTIFY,
-                      .attr_id = handle,
-                      .value = value,
-                      .need_confirm = need_confirm});
+                                          std::vector<uint8_t> value, bool need_confirm) {
+  gatts_op_queue[conn_id].emplace_back(gatts_operation{
+          .type = GATT_NOTIFY, .attr_id = handle, .value = value, .need_confirm = need_confirm});
   gatts_execute_next_op(conn_id);
 }
 

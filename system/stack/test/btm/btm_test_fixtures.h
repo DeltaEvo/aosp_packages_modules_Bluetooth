@@ -22,7 +22,7 @@
 #include "test/fake/fake_osi.h"
 
 class BtmWithFakesTest : public testing::Test {
- protected:
+protected:
   void SetUp() override { fake_osi_ = std::make_unique<test::fake::FakeOsi>(); }
 
   void TearDown() override { fake_osi_.reset(); }
@@ -31,7 +31,7 @@ class BtmWithFakesTest : public testing::Test {
 
 // Setup any default or optional mocks
 class BtmWithMocksTest : public BtmWithFakesTest {
- protected:
+protected:
   void SetUp() override {
     BtmWithFakesTest::SetUp();
     reset_mock_function_count_map();

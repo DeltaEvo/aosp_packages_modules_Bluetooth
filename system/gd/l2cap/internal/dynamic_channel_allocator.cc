@@ -30,45 +30,43 @@ namespace bluetooth {
 namespace l2cap {
 namespace internal {
 
-std::shared_ptr<DynamicChannelImpl> DynamicChannelAllocator::AllocateChannel(Psm psm, Cid remote_cid) {
+std::shared_ptr<DynamicChannelImpl> DynamicChannelAllocator::AllocateChannel(Psm psm,
+                                                                             Cid remote_cid) {
   if (used_remote_cid_.find(remote_cid) != used_remote_cid_.end()) {
     log::info("Remote cid 0x{:x} is used", remote_cid);
     return nullptr;
   }
   Cid cid = kFirstDynamicChannel;
   for (; cid <= kLastDynamicChannel; cid++) {
-    if (used_cid_.find(cid) == used_cid_.end()) break;
+    if (used_cid_.find(cid) == used_cid_.end()) {
+      break;
+    }
   }
   if (cid > kLastDynamicChannel) {
     log::warn("All cid are used");
     return nullptr;
   }
-  auto elem =
-      channels_.try_emplace(cid, std::make_shared<DynamicChannelImpl>(psm, cid, remote_cid, link_, l2cap_handler_));
-  log::assert_that(
-      elem.second,
-      "Failed to create channel for psm 0x{:x} device {}",
-      psm,
-      ADDRESS_TO_LOGGABLE_CSTR(link_->GetDevice()));
+  auto elem = channels_.try_emplace(
+          cid, std::make_shared<DynamicChannelImpl>(psm, cid, remote_cid, link_, l2cap_handler_));
+  log::assert_that(elem.second, "Failed to create channel for psm 0x{:x} device {}", psm,
+                   ADDRESS_TO_LOGGABLE_CSTR(link_->GetDevice()));
   log::assert_that(elem.first->second != nullptr, "assert failed: elem.first->second != nullptr");
   used_remote_cid_.insert(remote_cid);
   used_cid_.insert(cid);
   return elem.first->second;
 }
 
-std::shared_ptr<DynamicChannelImpl> DynamicChannelAllocator::AllocateReservedChannel(Cid reserved_cid, Psm psm,
-                                                                                     Cid remote_cid) {
+std::shared_ptr<DynamicChannelImpl> DynamicChannelAllocator::AllocateReservedChannel(
+        Cid reserved_cid, Psm psm, Cid remote_cid) {
   if (used_remote_cid_.find(remote_cid) != used_remote_cid_.end()) {
     log::info("Remote cid 0x{:x} is used", remote_cid);
     return nullptr;
   }
   auto elem = channels_.try_emplace(
-      reserved_cid, std::make_shared<DynamicChannelImpl>(psm, reserved_cid, remote_cid, link_, l2cap_handler_));
-  log::assert_that(
-      elem.second,
-      "Failed to create channel for psm 0x{:x} device {}",
-      psm,
-      ADDRESS_TO_LOGGABLE_CSTR(link_->GetDevice()));
+          reserved_cid, std::make_shared<DynamicChannelImpl>(psm, reserved_cid, remote_cid, link_,
+                                                             l2cap_handler_));
+  log::assert_that(elem.second, "Failed to create channel for psm 0x{:x} device {}", psm,
+                   ADDRESS_TO_LOGGABLE_CSTR(link_->GetDevice()));
   log::assert_that(elem.first->second != nullptr, "assert failed: elem.first->second != nullptr");
   used_remote_cid_.insert(remote_cid);
   return elem.first->second;
@@ -77,7 +75,9 @@ std::shared_ptr<DynamicChannelImpl> DynamicChannelAllocator::AllocateReservedCha
 Cid DynamicChannelAllocator::ReserveChannel() {
   Cid cid = kFirstDynamicChannel;
   for (; cid <= kLastDynamicChannel; cid++) {
-    if (used_cid_.find(cid) == used_cid_.end()) break;
+    if (used_cid_.find(cid) == used_cid_.end()) {
+      break;
+    }
   }
   if (cid > kLastDynamicChannel) {
     log::warn("All cid are used");
@@ -115,7 +115,8 @@ std::shared_ptr<DynamicChannelImpl> DynamicChannelAllocator::FindChannelByCid(Ci
   return channels_.find(cid)->second;
 }
 
-std::shared_ptr<DynamicChannelImpl> DynamicChannelAllocator::FindChannelByRemoteCid(Cid remote_cid) {
+std::shared_ptr<DynamicChannelImpl> DynamicChannelAllocator::FindChannelByRemoteCid(
+        Cid remote_cid) {
   for (auto& channel : channels_) {
     if (channel.second->GetRemoteCid() == remote_cid) {
       return channel.second;
@@ -124,9 +125,7 @@ std::shared_ptr<DynamicChannelImpl> DynamicChannelAllocator::FindChannelByRemote
   return nullptr;
 }
 
-size_t DynamicChannelAllocator::NumberOfChannels() const {
-  return channels_.size();
-}
+size_t DynamicChannelAllocator::NumberOfChannels() const { return channels_.size(); }
 
 void DynamicChannelAllocator::OnAclDisconnected(hci::ErrorCode reason) {
   for (auto& elem : channels_) {

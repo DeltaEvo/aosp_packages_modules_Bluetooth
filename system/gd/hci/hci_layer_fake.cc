@@ -58,8 +58,8 @@ static std::unique_ptr<AclBuilder> NextAclPacket(uint16_t handle) {
 }
 
 void HciLayerFake::EnqueueCommand(
-    std::unique_ptr<CommandBuilder> command,
-    common::ContextualOnceCallback<void(CommandStatusView)> on_status) {
+        std::unique_ptr<CommandBuilder> command,
+        common::ContextualOnceCallback<void(CommandStatusView)> on_status) {
   std::lock_guard<std::mutex> lock(mutex_);
 
   command_queue_.push(std::move(command));
@@ -72,8 +72,8 @@ void HciLayerFake::EnqueueCommand(
 }
 
 void HciLayerFake::EnqueueCommand(
-    std::unique_ptr<CommandBuilder> command,
-    common::ContextualOnceCallback<void(CommandCompleteView)> on_complete) {
+        std::unique_ptr<CommandBuilder> command,
+        common::ContextualOnceCallback<void(CommandCompleteView)> on_complete) {
   std::lock_guard<std::mutex> lock(mutex_);
 
   command_queue_.push(std::move(command));
@@ -116,12 +116,10 @@ CommandView HciLayerFake::GetCommand(OpCode op_code) {
   return next_command;
 }
 
-void HciLayerFake::AssertNoQueuedCommand() {
-  EXPECT_TRUE(command_queue_.empty());
-}
+void HciLayerFake::AssertNoQueuedCommand() { EXPECT_TRUE(command_queue_.empty()); }
 
-void HciLayerFake::RegisterEventHandler(
-    EventCode event_code, common::ContextualCallback<void(EventView)> event_handler) {
+void HciLayerFake::RegisterEventHandler(EventCode event_code,
+                                        common::ContextualCallback<void(EventView)> event_handler) {
   registered_events_[event_code] = event_handler;
 }
 
@@ -130,7 +128,8 @@ void HciLayerFake::UnregisterEventHandler(EventCode event_code) {
 }
 
 void HciLayerFake::RegisterLeEventHandler(
-    SubeventCode subevent_code, common::ContextualCallback<void(LeMetaEventView)> event_handler) {
+        SubeventCode subevent_code,
+        common::ContextualCallback<void(LeMetaEventView)> event_handler) {
   registered_le_events_[subevent_code] = event_handler;
 }
 
@@ -139,8 +138,8 @@ void HciLayerFake::UnregisterLeEventHandler(SubeventCode subevent_code) {
 }
 
 void HciLayerFake::RegisterVendorSpecificEventHandler(
-    VseSubeventCode subevent_code,
-    common::ContextualCallback<void(VendorSpecificEventView)> event_handler) {
+        VseSubeventCode subevent_code,
+        common::ContextualCallback<void(VendorSpecificEventView)> event_handler) {
   registered_vs_events_[subevent_code] = event_handler;
 }
 
@@ -158,7 +157,8 @@ void HciLayerFake::IncomingEvent(std::unique_ptr<EventBuilder> event_builder) {
   } else if (event_code == EventCode::COMMAND_STATUS) {
     CommandStatusCallback(event);
   } else {
-    ASSERT_NE(registered_events_.find(event_code), registered_events_.end()) << EventCodeText(event_code);
+    ASSERT_NE(registered_events_.find(event_code), registered_events_.end())
+            << EventCodeText(event_code);
     registered_events_[event_code](event);
   }
 }
@@ -202,20 +202,14 @@ void HciLayerFake::IncomingAclData(uint16_t handle, std::unique_ptr<AclBuilder> 
   auto packet = GetPacketView(std::move(acl_builder));
   auto acl_view = AclView::Create(packet);
   queue_end->RegisterEnqueue(
-      hci_handler,
-      common::Bind(
-          [](decltype(queue_end) queue_end,
-             uint16_t /* handle */,
-             AclView acl2,
-             std::promise<void> promise) {
-            queue_end->UnregisterEnqueue();
-            promise.set_value();
-            return std::make_unique<AclView>(acl2);
-          },
-          queue_end,
-          handle,
-          acl_view,
-          common::Passed(std::move(promise))));
+          hci_handler, common::Bind(
+                               [](decltype(queue_end) queue_end, uint16_t /* handle */,
+                                  AclView acl2, std::promise<void> promise) {
+                                 queue_end->UnregisterEnqueue();
+                                 promise.set_value();
+                                 return std::make_unique<AclView>(acl2);
+                               },
+                               queue_end, handle, acl_view, common::Passed(std::move(promise))));
   auto status = future.wait_for(std::chrono::milliseconds(1000));
   ASSERT_EQ(status, std::future_status::ready);
 }
@@ -239,13 +233,11 @@ PacketView<kLittleEndian> HciLayerFake::OutgoingAclData() {
   return GetPacketView(std::move(received));
 }
 
-BidiQueueEnd<AclBuilder, AclView>* HciLayerFake::GetAclQueueEnd() {
-  return acl_queue_.GetUpEnd();
-}
+BidiQueueEnd<AclBuilder, AclView>* HciLayerFake::GetAclQueueEnd() { return acl_queue_.GetUpEnd(); }
 
 void HciLayerFake::Disconnect(uint16_t handle, ErrorCode reason) {
   GetHandler()->Post(
-      common::BindOnce(&HciLayerFake::do_disconnect, common::Unretained(this), handle, reason));
+          common::BindOnce(&HciLayerFake::do_disconnect, common::Unretained(this), handle, reason));
 }
 
 void HciLayerFake::do_disconnect(uint16_t handle, ErrorCode reason) {

@@ -191,8 +191,7 @@ static void bta_hh_better_state_machine(tBTA_HH_DEV_CB* p_cb, uint16_t event,
  * Returns          void
  *
  ******************************************************************************/
-void bta_hh_sm_execute(tBTA_HH_DEV_CB* p_cb, uint16_t event,
-                       const tBTA_HH_DATA* p_data) {
+void bta_hh_sm_execute(tBTA_HH_DEV_CB* p_cb, uint16_t event, const tBTA_HH_DATA* p_data) {
   tBTA_HH cback_data;
   tBTA_HH_EVT cback_event = 0;
   tBTA_HH_STATE in_state;
@@ -225,59 +224,57 @@ void bta_hh_sm_execute(tBTA_HH_DEV_CB* p_cb, uint16_t event,
             cback_data.dev_info.handle = BTA_HH_INVALID_HANDLE;
           } else {
             cback_data.dev_info.status = BTA_HH_ERR_HDL;
-            cback_data.dev_info.handle =
-                (uint8_t)p_data->api_maintdev.hdr.layer_specific;
+            cback_data.dev_info.handle = (uint8_t)p_data->api_maintdev.hdr.layer_specific;
           }
           break;
         case BTA_HH_API_WRITE_DEV_EVT:
-          cback_event = (p_data->api_sndcmd.t_type - HID_TRANS_GET_REPORT) +
-                        BTA_HH_GET_RPT_EVT;
+          cback_event = (p_data->api_sndcmd.t_type - HID_TRANS_GET_REPORT) + BTA_HH_GET_RPT_EVT;
           osi_free_and_reset((void**)&p_data->api_sndcmd.p_data);
           if (p_data->api_sndcmd.t_type == HID_TRANS_SET_PROTOCOL ||
               p_data->api_sndcmd.t_type == HID_TRANS_SET_REPORT ||
               p_data->api_sndcmd.t_type == HID_TRANS_SET_IDLE) {
             cback_data.dev_status.status = BTA_HH_ERR_HDL;
-            cback_data.dev_status.handle =
-                (uint8_t)p_data->api_sndcmd.hdr.layer_specific;
+            cback_data.dev_status.handle = (uint8_t)p_data->api_sndcmd.hdr.layer_specific;
           } else if (p_data->api_sndcmd.t_type != HID_TRANS_DATA &&
                      p_data->api_sndcmd.t_type != HID_TRANS_CONTROL) {
-            cback_data.hs_data.handle =
-                (uint8_t)p_data->api_sndcmd.hdr.layer_specific;
+            cback_data.hs_data.handle = (uint8_t)p_data->api_sndcmd.hdr.layer_specific;
             cback_data.hs_data.status = BTA_HH_ERR_HDL;
             /* hs_data.rsp_data will be all zero, which is not valid value */
           } else if (p_data->api_sndcmd.t_type == HID_TRANS_CONTROL &&
-                     p_data->api_sndcmd.param ==
-                         BTA_HH_CTRL_VIRTUAL_CABLE_UNPLUG) {
+                     p_data->api_sndcmd.param == BTA_HH_CTRL_VIRTUAL_CABLE_UNPLUG) {
             cback_data.status = BTA_HH_ERR_HDL;
             cback_event = BTA_HH_VC_UNPLUG_EVT;
-          } else
+          } else {
             cback_event = 0;
+          }
           break;
 
         case BTA_HH_API_CLOSE_EVT:
           cback_event = BTA_HH_CLOSE_EVT;
 
           cback_data.dev_status.status = BTA_HH_ERR_HDL;
-          cback_data.dev_status.handle =
-              (uint8_t)p_data->api_sndcmd.hdr.layer_specific;
+          cback_data.dev_status.handle = (uint8_t)p_data->api_sndcmd.hdr.layer_specific;
           break;
 
         default:
           /* invalid handle, call bad API event */
           log::error("wrong device handle:{}", p_data->hdr.layer_specific);
           /* Free the callback buffer now */
-          if (p_data != NULL)
+          if (p_data != NULL) {
             osi_free_and_reset((void**)&p_data->hid_cback.p_data);
+          }
           break;
       }
-      if (cback_event) (*bta_hh_cb.p_cback)(cback_event, &cback_data);
+      if (cback_event) {
+        (*bta_hh_cb.p_cback)(cback_event, &cback_data);
+      }
     }
   }
   /* corresponding CB is found, go to state machine */
   else {
     in_state = p_cb->state;
-    log::verbose("State 0x{:02x} [{}], Event [{}]", in_state,
-                 bta_hh_state_code(in_state), bta_hh_evt_code(debug_event));
+    log::verbose("State 0x{:02x} [{}], Event [{}]", in_state, bta_hh_state_code(in_state),
+                 bta_hh_evt_code(debug_event));
 
     if ((p_cb->state == BTA_HH_NULL_ST) || (p_cb->state >= BTA_HH_INVALID_ST)) {
       log::error("Invalid state State=0x{:x}, Event={}", p_cb->state, event);
@@ -287,9 +284,8 @@ void bta_hh_sm_execute(tBTA_HH_DEV_CB* p_cb, uint16_t event,
     bta_hh_better_state_machine(p_cb, event, p_data);
 
     if (in_state != p_cb->state) {
-      log::debug("HHID State Change: [{}] -> [{}] after Event [{}]",
-                 bta_hh_state_code(in_state), bta_hh_state_code(p_cb->state),
-                 bta_hh_evt_code(debug_event));
+      log::debug("HHID State Change: [{}] -> [{}] after Event [{}]", bta_hh_state_code(in_state),
+                 bta_hh_state_code(p_cb->state), bta_hh_evt_code(debug_event));
     }
   }
 }
@@ -338,12 +334,14 @@ bool bta_hh_hdl_event(const BT_HDR_RIGID* p_msg) {
     index = bta_hh_dev_handle_to_cb_idx((uint8_t)p_msg->layer_specific);
   }
 
-  if (index != BTA_HH_IDX_INVALID) p_cb = &bta_hh_cb.kdev[index];
+  if (index != BTA_HH_IDX_INVALID) {
+    p_cb = &bta_hh_cb.kdev[index];
+  }
 
   log::verbose("handle={} dev_cb[{}]", p_msg->layer_specific, index);
   bta_hh_sm_execute(p_cb, p_msg->event, (tBTA_HH_DATA*)p_msg);
 
-  return (true);
+  return true;
 }
 
 /*****************************************************************************

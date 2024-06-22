@@ -23,17 +23,11 @@ void TestHciHal::sendHciCommand(hal::HciPacket command) {
   outgoing_commands_.push(std::move(command));
 }
 
-void TestHciHal::sendAclData(hal::HciPacket data) {
-  outgoing_acl_.push(std::move(data));
-}
+void TestHciHal::sendAclData(hal::HciPacket data) { outgoing_acl_.push(std::move(data)); }
 
-void TestHciHal::sendScoData(hal::HciPacket data) {
-  outgoing_sco_.push(std::move(data));
-}
+void TestHciHal::sendScoData(hal::HciPacket data) { outgoing_sco_.push(std::move(data)); }
 
-void TestHciHal::sendIsoData(hal::HciPacket data) {
-  outgoing_iso_.push(std::move(data));
-}
+void TestHciHal::sendIsoData(hal::HciPacket data) { outgoing_iso_.push(std::move(data)); }
 
 packet::PacketView<packet::kLittleEndian> TestHciHal::GetPacketView(hal::HciPacket data) {
   auto shared = std::make_shared<std::vector<uint8_t>>(data);
@@ -75,8 +69,8 @@ std::optional<hci::IsoView> TestHciHal::GetSentIso(std::chrono::milliseconds tim
     // Timed out
     return {};
   }
-  log::assert_that(
-      outgoing_iso_.wait_to_take(timeout), "assert failed: outgoing_iso_.wait_to_take(timeout)");
+  log::assert_that(outgoing_iso_.wait_to_take(timeout),
+                   "assert failed: outgoing_iso_.wait_to_take(timeout)");
   auto iso = hci::IsoView::Create(GetPacketView(std::move(outgoing_iso_.take())));
   log::assert_that(iso.IsValid(), "assert failed: iso.IsValid()");
   return iso;

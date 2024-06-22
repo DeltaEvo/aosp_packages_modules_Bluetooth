@@ -29,10 +29,10 @@ namespace bluetooth {
 namespace os {
 
 // A single-shot alarm for reactor-based thread, implemented by Linux timerfd.
-// When it's constructed, it will register a reactable on the specified thread; when it's destroyed, it will unregister
-// itself from the thread.
+// When it's constructed, it will register a reactable on the specified thread; when it's destroyed,
+// it will unregister itself from the thread.
 class Alarm {
- public:
+public:
   // Create and register a single-shot alarm on a given handler
   explicit Alarm(Handler* handler);
 
@@ -48,7 +48,7 @@ class Alarm {
   // Cancel the alarm. No-op if it's not armed.
   void Cancel();
 
- private:
+private:
   common::OnceClosure task_;
   Handler* handler_;
   int fd_ = 0;

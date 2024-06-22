@@ -22,10 +22,10 @@
 #include "bta_gatt_api.h"
 
 class BtaGattServerQueue {
- public:
+public:
   static void Clean(uint16_t conn_id);
-  static void SendNotification(uint16_t conn_id, uint16_t handle,
-                               std::vector<uint8_t> value, bool need_confirm);
+  static void SendNotification(uint16_t conn_id, uint16_t handle, std::vector<uint8_t> value,
+                               bool need_confirm);
   static void NotificationCallback(uint16_t conn_id);
   static void CongestionCallback(uint16_t conn_id, bool congested);
 
@@ -37,14 +37,13 @@ class BtaGattServerQueue {
     bool need_confirm;
   };
 
- private:
+private:
   static bool is_congested;
   static void mark_as_not_executing(uint16_t conn_id);
   static void gatts_execute_next_op(uint16_t conn_id);
 
   // maps connection id to operations waiting for execution
-  static std::unordered_map<uint16_t, std::list<gatts_operation>>
-      gatts_op_queue;
+  static std::unordered_map<uint16_t, std::list<gatts_operation>> gatts_op_queue;
 
   // maps connection id to congestion status of each device
   static std::unordered_map<uint16_t, bool> congestion_queue;
