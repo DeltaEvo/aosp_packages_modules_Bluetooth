@@ -1615,7 +1615,8 @@ void bta_ag_stream_suspended() {
 const RawAddress& bta_ag_get_active_device() { return active_device_addr; }
 
 void bta_clear_active_device() {
-  log::debug("Set bta active device to null");
+  log::debug("Set bta active device to null, current active device:{}",
+             active_device_addr);
   if (bta_ag_is_sco_managed_by_audio()) {
     if (hfp_offload_interface && !active_device_addr.IsEmpty()) {
       hfp_offload_interface->StopSession();
@@ -1625,6 +1626,8 @@ void bta_clear_active_device() {
 }
 
 void bta_ag_api_set_active_device(const RawAddress& new_active_device) {
+  log::info("active_device_addr{}, new_active_device:{}", active_device_addr,
+            new_active_device);
   if (new_active_device.IsEmpty()) {
     log::error("empty device");
     return;
@@ -1635,22 +1638,22 @@ void bta_ag_api_set_active_device(const RawAddress& new_active_device) {
       hfp_client_interface = std::unique_ptr<HfpInterface>(HfpInterface::Get());
       if (!hfp_client_interface) {
         log::error("could not acquire audio source interface");
-        return;
       }
     }
 
-    if (!hfp_offload_interface) {
+    if (hfp_client_interface && !hfp_offload_interface) {
       hfp_offload_interface = std::unique_ptr<HfpInterface::Offload>(
           hfp_client_interface->GetOffload(get_main_thread()));
-      sco_config_map = hfp_offload_interface->GetHfpScoConfig();
       if (!hfp_offload_interface) {
         log::warn("could not get offload interface");
-      } else {
-        // start audio session if there was no previous active device
-        // if there was an active device, java layer would call disconnectAudio
-        if (active_device_addr.IsEmpty()) {
-          hfp_offload_interface->StartSession();
-        }
+      }
+    }
+
+    if (hfp_offload_interface) {
+      sco_config_map = hfp_offload_interface->GetHfpScoConfig();
+      // start audio session if there was no previous active device
+      if (active_device_addr.IsEmpty()) {
+        hfp_offload_interface->StartSession();
       }
     }
   }
