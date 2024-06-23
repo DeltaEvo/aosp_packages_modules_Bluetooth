@@ -67,7 +67,7 @@ bool L2CA_ConfigRsp(uint16_t cid, tL2CAP_CFG_INFO* p_cfg) {
   return l2cap_interface->ConfigResponse(cid, p_cfg);
 }
 
-uint8_t L2CA_DataWrite(uint16_t cid, BT_HDR* p_data) {
+tL2CAP_DW_RESULT L2CA_DataWrite(uint16_t cid, BT_HDR* p_data) {
   return l2cap_interface->DataWrite(cid, p_data);
 }
 

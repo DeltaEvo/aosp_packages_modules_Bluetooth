@@ -701,7 +701,7 @@ void l2c_receive_hold_timer_timeout(void* data);
 void l2c_ccb_timer_timeout(void* data);
 void l2c_lcb_timer_timeout(void* data);
 void l2c_fcrb_ack_timer_timeout(void* data);
-uint8_t l2c_data_write(uint16_t cid, BT_HDR* p_data, uint16_t flag);
+tL2CAP_DW_RESULT l2c_data_write(uint16_t cid, BT_HDR* p_data, uint16_t flag);
 void l2c_acl_flush(uint16_t handle);
 
 tL2C_LCB* l2cu_allocate_lcb(const RawAddress& p_bd_addr, bool is_bonding,

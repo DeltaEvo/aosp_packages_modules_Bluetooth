@@ -375,12 +375,14 @@ extern struct L2CA_ConnectFixedChnl L2CA_ConnectFixedChnl;
 // Params: uint16_t fixed_cid, const RawAddress& rem_bda, BT_HDR* p_buf
 // Returns: uint16_t
 struct L2CA_SendFixedChnlData {
-  std::function<uint16_t(uint16_t fixed_cid, const RawAddress& rem_bda,
-                         BT_HDR* p_buf)>
+  std::function<tL2CAP_DW_RESULT(uint16_t fixed_cid, const RawAddress& rem_bda,
+                                 BT_HDR* p_buf)>
       body{[](uint16_t /* fixed_cid */, const RawAddress& /* rem_bda */,
-              BT_HDR* /* p_buf */) { return 0; }};
-  uint16_t operator()(uint16_t fixed_cid, const RawAddress& rem_bda,
-                      BT_HDR* p_buf) {
+              BT_HDR* /* p_buf */) -> tL2CAP_DW_RESULT {
+        return tL2CAP_DW_RESULT::FAILED;
+      }};
+  tL2CAP_DW_RESULT operator()(uint16_t fixed_cid, const RawAddress& rem_bda,
+                              BT_HDR* p_buf) {
     return body(fixed_cid, rem_bda, p_buf);
   };
 };
@@ -424,9 +426,11 @@ extern struct L2CA_MarkLeLinkAsActive L2CA_MarkLeLinkAsActive;
 // Params: uint16_t cid, BT_HDR* p_data
 // Returns: uint8_t
 struct L2CA_DataWrite {
-  std::function<uint8_t(uint16_t cid, BT_HDR* p_data)> body{
-      [](uint16_t /* cid */, BT_HDR* /* p_data */) { return 0; }};
-  uint8_t operator()(uint16_t cid, BT_HDR* p_data) {
+  std::function<tL2CAP_DW_RESULT(uint16_t cid, BT_HDR* p_data)> body{
+      [](uint16_t /* cid */, BT_HDR* /* p_data */) -> tL2CAP_DW_RESULT {
+        return tL2CAP_DW_RESULT::FAILED;
+      }};
+  tL2CAP_DW_RESULT operator()(uint16_t cid, BT_HDR* p_data) {
     return body(cid, p_data);
   };
 };
@@ -435,9 +439,11 @@ extern struct L2CA_DataWrite L2CA_DataWrite;
 // Params: uint16_t cid, BT_HDR* p_data
 // Returns: uint8_t
 struct L2CA_LECocDataWrite {
-  std::function<uint8_t(uint16_t cid, BT_HDR* p_data)> body{
-      [](uint16_t /* cid */, BT_HDR* /* p_data */) { return 0; }};
-  uint8_t operator()(uint16_t cid, BT_HDR* p_data) {
+  std::function<tL2CAP_DW_RESULT(uint16_t cid, BT_HDR* p_data)> body{
+      [](uint16_t /* cid */, BT_HDR* /* p_data */) -> tL2CAP_DW_RESULT {
+        return tL2CAP_DW_RESULT::FAILED;
+      }};
+  tL2CAP_DW_RESULT operator()(uint16_t cid, BT_HDR* p_data) {
     return body(cid, p_data);
   };
 };

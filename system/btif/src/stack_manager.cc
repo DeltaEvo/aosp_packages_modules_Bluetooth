@@ -313,7 +313,7 @@ static void event_start_up_stack(bluetooth::core::CoreInterface* interface,
   bta_dm_enable(btif_dm_sec_evt, btif_dm_acl_evt);
 
   btm_acl_device_down();
-  BTM_reset_complete();
+  get_btm_client_interface().lifecycle.BTM_reset_complete();
 
   BTA_dm_on_hw_on();
 

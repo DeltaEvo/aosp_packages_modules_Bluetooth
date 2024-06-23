@@ -15,13 +15,13 @@
  */
 
 #include <future>
+#include <list>
 #include <map>
+#include <memory>
+#include <queue>
 #include <vector>
 
-#include "common/bind.h"
-#include "hci/address.h"
 #include "hci/hci_layer.h"
-#include "packet/raw_builder.h"
 
 namespace bluetooth {
 namespace hci {

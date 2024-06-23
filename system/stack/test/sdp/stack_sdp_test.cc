@@ -49,10 +49,10 @@ class StackSdpWithMocksTest : public ::testing::Test {
            uint16_t /* sec_level */) {
           return ++L2CA_ConnectReqWithSecurity_cid;
         };
-    test::mock::stack_l2cap_api::L2CA_DataWrite.body = [](uint16_t /* cid */,
-                                                          BT_HDR* p_data) {
+    test::mock::stack_l2cap_api::L2CA_DataWrite.body =
+        [](uint16_t /* cid */, BT_HDR* p_data) -> tL2CAP_DW_RESULT {
       osi_free_and_reset((void**)&p_data);
-      return 0;
+      return tL2CAP_DW_RESULT::FAILED;
     };
     test::mock::stack_l2cap_api::L2CA_DisconnectReq.body =
         [](uint16_t /* cid */) { return true; };
@@ -112,7 +112,7 @@ TEST_F(StackSdpInitTest, sdp_service_search_request) {
   ASSERT_EQ(p_ccb->con_state, SDP_STATE_IDLE);
 }
 
-tCONN_CB* find_ccb(uint16_t cid, uint8_t state) {
+tCONN_CB* find_ccb(uint16_t cid, tSDP_STATE state) {
   uint16_t xx;
   tCONN_CB* p_ccb;
 

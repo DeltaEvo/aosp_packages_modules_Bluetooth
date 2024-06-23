@@ -50,6 +50,7 @@ struct MockIsoManager {
       (void), EstablishCis,
       (struct bluetooth::hci::iso_manager::cis_establish_params conn_params));
   MOCK_METHOD((void), DisconnectCis, (uint16_t cis_handle, uint8_t reason));
+  MOCK_METHOD((int), GetNumberOfActiveIso, ());
   MOCK_METHOD(
       (void), SetupIsoDataPath,
       (uint16_t iso_handle,

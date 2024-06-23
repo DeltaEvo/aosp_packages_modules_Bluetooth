@@ -132,7 +132,7 @@ public class BluetoothMapService extends ProfileService {
     // The remote connected device - protect access
     private static BluetoothDevice sRemoteDevice = null;
 
-    private ArrayList<BluetoothMapAccountItem> mEnabledAccounts = null;
+    private List<BluetoothMapAccountItem> mEnabledAccounts = null;
     private static String sRemoteDeviceName = null;
 
     private int mState = BluetoothMap.STATE_DISCONNECTED;
@@ -789,8 +789,8 @@ public class BluetoothMapService extends ProfileService {
             return;
         }
 
-        ArrayList<BluetoothMapAccountItem> newAccountList = mAppObserver.getEnabledAccountItems();
-        ArrayList<BluetoothMapAccountItem> newAccounts = new ArrayList<>();
+        List<BluetoothMapAccountItem> newAccountList = mAppObserver.getEnabledAccountItems();
+        List<BluetoothMapAccountItem> newAccounts = new ArrayList<>();
 
         for (BluetoothMapAccountItem account : newAccountList) {
             if (!mEnabledAccounts.remove(account)) {

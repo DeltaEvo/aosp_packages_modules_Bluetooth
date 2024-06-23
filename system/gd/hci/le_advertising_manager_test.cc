@@ -788,10 +788,7 @@ TEST_F(LeExtendedAdvertisingManagerTest, create_periodic_advertiser_test) {
   ASSERT_EQ(OpCode::LE_REMOVE_ADVERTISING_SET, test_hci_layer_->GetCommand().GetOpCode());
 }
 
-TEST_F_WITH_FLAGS(
-    LeExtendedAdvertisingManagerTest,
-    create_advertiser_valid_max_251_ad_data_length_test,
-    REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(TEST_BT, divide_long_single_gap_data))) {
+TEST_F(LeExtendedAdvertisingManagerTest, create_advertiser_valid_max_251_ad_data_length_test) {
   AdvertisingConfig advertising_config{};
   advertising_config.advertising_type = AdvertisingType::ADV_IND;
   advertising_config.requested_advertiser_address_type = AdvertiserAddressType::PUBLIC;
@@ -849,10 +846,9 @@ TEST_F_WITH_FLAGS(
   ASSERT_EQ(OpCode::LE_REMOVE_ADVERTISING_SET, test_hci_layer_->GetCommand().GetOpCode());
 }
 
-TEST_F_WITH_FLAGS(
+TEST_F(
     LeExtendedAdvertisingManagerTest,
-    create_advertiser_valid_max_252_ad_data_length_fragments_test,
-    REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(TEST_BT, divide_long_single_gap_data))) {
+    create_advertiser_valid_max_252_ad_data_length_fragments_test) {
   AdvertisingConfig advertising_config{};
   advertising_config.advertising_type = AdvertisingType::ADV_IND;
   advertising_config.requested_advertiser_address_type = AdvertiserAddressType::PUBLIC;
@@ -918,10 +914,7 @@ TEST_F_WITH_FLAGS(
   ASSERT_EQ(OpCode::LE_REMOVE_ADVERTISING_SET, test_hci_layer_->GetCommand().GetOpCode());
 }
 
-TEST_F_WITH_FLAGS(
-    LeExtendedAdvertisingManagerTest,
-    create_advertiser_test_invalid_256_ad_data_length_test,
-    REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(TEST_BT, divide_long_single_gap_data))) {
+TEST_F(LeExtendedAdvertisingManagerTest, create_advertiser_test_invalid_256_ad_data_length_test) {
   AdvertisingConfig advertising_config{};
   advertising_config.advertising_type = AdvertisingType::ADV_IND;
   advertising_config.requested_advertiser_address_type = AdvertiserAddressType::PUBLIC;
@@ -1279,10 +1272,7 @@ TEST_F(LeExtendedAdvertisingAPITest, set_data_with_invalid_length) {
   sync_client_handler();
 }
 
-TEST_F_WITH_FLAGS(
-    LeExtendedAdvertisingAPITest,
-    set_data_valid_max_251_ad_data_length_test,
-    REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(TEST_BT, divide_long_single_gap_data))) {
+TEST_F(LeExtendedAdvertisingAPITest, set_data_valid_max_251_ad_data_length_test) {
   // Set advertising data
   std::vector<GapData> advertising_data{};
   // set data 251 bytes
@@ -1317,10 +1307,7 @@ TEST_F_WITH_FLAGS(
       LeSetExtendedScanResponseDataCompleteBuilder::Create(uint8_t{1}, ErrorCode::SUCCESS));
 }
 
-TEST_F_WITH_FLAGS(
-    LeExtendedAdvertisingAPITest,
-    set_data_valid_252_ad_data_length_fragments_test,
-    REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(TEST_BT, divide_long_single_gap_data))) {
+TEST_F(LeExtendedAdvertisingAPITest, set_data_valid_252_ad_data_length_fragments_test) {
   // Set advertising data
   std::vector<GapData> advertising_data{};
   // set data 252 bytes
@@ -1391,10 +1378,7 @@ TEST_F_WITH_FLAGS(
       LeSetExtendedScanResponseDataCompleteBuilder::Create(uint8_t{1}, ErrorCode::SUCCESS));
 }
 
-TEST_F_WITH_FLAGS(
-    LeExtendedAdvertisingAPITest,
-    set_data_with_invalid_256_ad_data_length_test,
-    REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(TEST_BT, divide_long_single_gap_data))) {
+TEST_F(LeExtendedAdvertisingAPITest, set_data_with_invalid_256_ad_data_length_test) {
   // Set advertising data with data that greater than le_maximum_advertising_data_length_
   std::vector<GapData> advertising_data{};
 
@@ -1586,10 +1570,7 @@ TEST_F(LeExtendedAdvertisingAPITest, set_periodic_data_fragments_test) {
   test_hci_layer_->IncomingEvent(LeSetPeriodicAdvertisingDataCompleteBuilder::Create(uint8_t{1}, ErrorCode::SUCCESS));
 }
 
-TEST_F_WITH_FLAGS(
-    LeExtendedAdvertisingAPITest,
-    set_periodic_data_valid_max_252_ad_data_length_test,
-    REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(TEST_BT, divide_long_single_gap_data))) {
+TEST_F(LeExtendedAdvertisingAPITest, set_periodic_data_valid_max_252_ad_data_length_test) {
   // Set advertising data
   std::vector<GapData> advertising_data{};
 
@@ -1612,10 +1593,7 @@ TEST_F_WITH_FLAGS(
   sync_client_handler();
 }
 
-TEST_F_WITH_FLAGS(
-    LeExtendedAdvertisingAPITest,
-    set_periodic_data_valid_253_ad_data_length_fragments_test,
-    REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(TEST_BT, divide_long_single_gap_data))) {
+TEST_F(LeExtendedAdvertisingAPITest, set_periodic_data_valid_253_ad_data_length_fragments_test) {
   // Set advertising data
   std::vector<GapData> advertising_data{};
 
@@ -1653,10 +1631,7 @@ TEST_F_WITH_FLAGS(
       LeSetPeriodicAdvertisingDataCompleteBuilder::Create(uint8_t{1}, ErrorCode::SUCCESS));
 }
 
-TEST_F_WITH_FLAGS(
-    LeExtendedAdvertisingAPITest,
-    set_periodic_data_invalid_256_ad_data_length_test,
-    REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(TEST_BT, divide_long_single_gap_data))) {
+TEST_F(LeExtendedAdvertisingAPITest, set_periodic_data_invalid_256_ad_data_length_test) {
   // Set advertising data
   std::vector<GapData> advertising_data{};
 

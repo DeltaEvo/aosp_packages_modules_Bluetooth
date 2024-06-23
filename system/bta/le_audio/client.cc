@@ -267,12 +267,10 @@ class LeAudioClientImpl : public LeAudioClient {
       reconnection_mode_ = BTM_BLE_BKG_CONNECT_ALLOW_LIST;
     }
 
-    if (com::android::bluetooth::flags::leaudio_enable_health_based_actions()) {
-      log::info("Loading health status module");
-      leAudioHealthStatus_ = LeAudioHealthStatus::Get();
-      leAudioHealthStatus_->RegisterCallback(
-          base::BindRepeating(le_audio_health_status_callback));
-    }
+    log::info("Loading health status module");
+    leAudioHealthStatus_ = LeAudioHealthStatus::Get();
+    leAudioHealthStatus_->RegisterCallback(
+        base::BindRepeating(le_audio_health_status_callback));
 
     BTA_GATTC_AppRegister(
         le_audio_gattc_callback,
@@ -1159,6 +1157,8 @@ class LeAudioClientImpl : public LeAudioClient {
     } else {
       log::assert_that(true, "Both configs are invalid");
     }
+
+    L2CA_SetEcosystemBaseInterval(frame_duration_us / 1250);
 
     audio_framework_source_config.data_interval_us = frame_duration_us;
     le_audio_source_hal_client_->Start(audio_framework_source_config,
@@ -3838,7 +3838,10 @@ class LeAudioClientImpl : public LeAudioClient {
     CleanCachedMicrophoneData();
   }
 
-  void StopAudio(void) { SuspendAudio(); }
+  void StopAudio(void) {
+    SuspendAudio();
+    L2CA_SetEcosystemBaseInterval(0 /* clear recommendation */);
+  }
 
   void printCurrentStreamConfiguration(int fd) {
     std::stringstream stream;
@@ -4672,8 +4675,9 @@ class LeAudioClientImpl : public LeAudioClient {
     return true;
   }
 
-  void OnLocalAudioSourceMetadataUpdate(source_metadata_v7 source_metadata,
-                                        DsaMode dsa_mode) {
+  void OnLocalAudioSourceMetadataUpdate(
+      const std::vector<struct playback_track_metadata_v7>& source_metadata,
+      DsaMode dsa_mode) {
     if (active_group_id_ == bluetooth::groups::kGroupUnknown) {
       log::warn(", cannot start streaming if no active group set");
       return;
@@ -4825,7 +4829,8 @@ class LeAudioClientImpl : public LeAudioClient {
                ToString(contexts_pair.sink), ToString(contexts_pair.source));
   }
 
-  void OnLocalAudioSinkMetadataUpdate(sink_metadata_v7 sink_metadata) {
+  void OnLocalAudioSinkMetadataUpdate(
+      const std::vector<record_track_metadata_v7>& sink_metadata) {
     if (active_group_id_ == bluetooth::groups::kGroupUnknown) {
       log::warn(", cannot start streaming if no active group set");
       return;
@@ -6191,11 +6196,11 @@ class SourceCallbacksImpl : public LeAudioSourceAudioHalClient::Callbacks {
     if (instance) instance->OnLocalAudioSourceResume();
   }
 
-  void OnAudioMetadataUpdate(source_metadata_v7 source_metadata,
-                             DsaMode dsa_mode) override {
+  void OnAudioMetadataUpdate(
+      std::vector<struct playback_track_metadata_v7> source_metadata,
+      DsaMode dsa_mode) override {
     if (instance)
-      instance->OnLocalAudioSourceMetadataUpdate(std::move(source_metadata),
-                                                 dsa_mode);
+      instance->OnLocalAudioSourceMetadataUpdate(source_metadata, dsa_mode);
   }
 };
 
@@ -6208,9 +6213,9 @@ class SinkCallbacksImpl : public LeAudioSinkAudioHalClient::Callbacks {
     if (instance) instance->OnLocalAudioSinkResume();
   }
 
-  void OnAudioMetadataUpdate(sink_metadata_v7 sink_metadata) override {
-    if (instance)
-      instance->OnLocalAudioSinkMetadataUpdate(std::move(sink_metadata));
+  void OnAudioMetadataUpdate(
+      std::vector<record_track_metadata_v7> sink_metadata) override {
+    if (instance) instance->OnLocalAudioSinkMetadataUpdate(sink_metadata);
   }
 };
 

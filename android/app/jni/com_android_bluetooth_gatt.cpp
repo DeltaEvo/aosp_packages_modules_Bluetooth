@@ -2468,10 +2468,11 @@ static void periodicScanCleanupNative(JNIEnv* env, jobject /* object */) {
 }
 
 static void scanInitializeNative(JNIEnv* env, jobject object) {
+  std::unique_lock<std::shared_mutex> lock(callbacks_mutex);
+
   sScanner = bluetooth::shim::get_ble_scanner_instance();
   sScanner->RegisterCallbacks(JniScanningCallbacks::GetInstance());
 
-  std::unique_lock<std::shared_mutex> lock(callbacks_mutex);
   if (mScanCallbacksObj != NULL) {
     log::warn("Cleaning up scan callback object");
     env->DeleteGlobalRef(mScanCallbacksObj);
@@ -2881,7 +2882,7 @@ static int register_com_android_bluetooth_gatt_(JNIEnv* env) {
       {"onClientCongestion", "(IZ)V", &method_onClientCongestion},
       {"getSampleGattDbElement", "()Lcom/android/bluetooth/gatt/GattDbElement;",
        &method_getSampleGattDbElement},
-      {"onGetGattDb", "(ILjava/util/ArrayList;)V", &method_onGetGattDb},
+      {"onGetGattDb", "(ILjava/util/List;)V", &method_onGetGattDb},
       {"onClientPhyRead", "(ILjava/lang/String;III)V", &method_onClientPhyRead},
       {"onClientPhyUpdate", "(IIII)V", &method_onClientPhyUpdate},
       {"onClientConnUpdate", "(IIIII)V", &method_onClientConnUpdate},

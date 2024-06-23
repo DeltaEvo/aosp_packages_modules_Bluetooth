@@ -27,8 +27,6 @@ struct btm_client_interface_t btm_client_interface = {
     .lifecycle =
         {
             .BTM_PmRegister = ::BTM_PmRegister,
-            .BTM_GetHCIConnHandle = ::BTM_GetHCIConnHandle,
-            .BTM_VendorSpecificCommand = ::BTM_VendorSpecificCommand,
             .ACL_RegisterClient = ::ACL_RegisterClient,
             .ACL_UnregisterClient = ::ACL_UnregisterClient,
             .btm_init = ::btm_init,
@@ -55,6 +53,7 @@ struct btm_client_interface_t btm_client_interface = {
             .BTM_RequestPeerSCA = ::BTM_RequestPeerSCA,
             .BTM_GetPeerSCA = ::BTM_GetPeerSCA,
             .BTM_IsPhy2mSupported = ::BTM_IsPhy2mSupported,
+            .BTM_GetHCIConnHandle = ::BTM_GetHCIConnHandle,
         },
 
     .link_policy =
@@ -131,6 +130,10 @@ struct btm_client_interface_t btm_client_interface = {
             .BTM_InqDbFirst = ::BTM_InqDbFirst,
             .BTM_InqDbNext = ::BTM_InqDbNext,
             .BTM_ClearInqDb = ::BTM_ClearInqDb,
+        },
+    .vendor =
+        {
+            .BTM_VendorSpecificCommand = ::BTM_VendorSpecificCommand,
         },
 };
 

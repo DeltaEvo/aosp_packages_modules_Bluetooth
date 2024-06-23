@@ -105,13 +105,14 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // InterfaceAdded and InterfaceRemoved signals.
     cr.lock().unwrap().set_object_manager_support(Some(conn.clone()));
     let om = cr.lock().unwrap().object_manager();
-    cr.lock().unwrap().insert("/", &[om], {});
+    cr.lock().unwrap().insert("/", &[om], ());
 
     let bluetooth_manager = Arc::new(Mutex::new(Box::new(BluetoothManager::new(proxy))));
 
     // Set up the disconnect watcher to monitor client disconnects.
-    let disconnect_watcher = Arc::new(Mutex::new(DisconnectWatcher::new()));
-    disconnect_watcher.lock().unwrap().setup_watch(conn.clone()).await;
+    let mut disconnect_watcher = DisconnectWatcher::new();
+    disconnect_watcher.setup_watch(conn.clone()).await;
+    let disconnect_watcher = Arc::new(Mutex::new(disconnect_watcher));
 
     // We add the Crossroads instance to the connection so that incoming method calls will be
     // handled.

@@ -331,7 +331,9 @@ struct CoreInterfaceImpl : bluetooth::core::CoreInterface {
     }
   }
 
-  void onLinkDown(const RawAddress& bd_addr) override {
+  void onLinkDown(const RawAddress& bd_addr, tBT_TRANSPORT transport) override {
+    if (transport != BT_TRANSPORT_BR_EDR) return;
+
     if (com::android::bluetooth::flags::a2dp_concurrent_source_sink()) {
       btif_av_acl_disconnected(bd_addr, A2dpType::kSource);
       btif_av_acl_disconnected(bd_addr, A2dpType::kSink);
@@ -946,7 +948,7 @@ int dut_mode_configure(uint8_t enable) {
 
 int dut_mode_send(uint16_t opcode, uint8_t* buf, uint8_t len) {
   if (!interface_ready()) return BT_STATUS_NOT_READY;
-  if (!btif_is_dut_mode()) return BT_STATUS_FAIL;
+  if (!btif_is_dut_mode()) return BT_STATUS_UNEXPECTED_STATE;
 
   uint8_t* copy = (uint8_t*)osi_calloc(len);
   memcpy(copy, buf, len);

@@ -87,11 +87,11 @@ class FakeL2cap {
         [](uint16_t psm, const RawAddress& p_bd_addr, uint16_t sec_level) {
           return L2CA_ConnectReq(psm, p_bd_addr);
         };
-    test::mock::stack_l2cap_api::L2CA_DataWrite.body = [](uint16_t cid,
-                                                          BT_HDR* p_data) {
+    test::mock::stack_l2cap_api::L2CA_DataWrite.body =
+        [](uint16_t cid, BT_HDR* p_data) -> tL2CAP_DW_RESULT {
       auto len = p_data->len;
       osi_free(p_data);
-      return (uint8_t)len;
+      return tL2CAP_DW_RESULT::SUCCESS;
     };
     test::mock::stack_l2cap_api::L2CA_DisconnectReq.body = [](uint16_t lcid) {
       return true;

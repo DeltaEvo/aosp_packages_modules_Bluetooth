@@ -726,8 +726,8 @@ void l2c_link_init(const uint16_t acl_buffer_count_classic) {
  * Returns          void
  *
  ******************************************************************************/
-void l2c_link_role_changed(const RawAddress* bd_addr, uint8_t new_role,
-                           uint8_t hci_status) {
+void l2c_link_role_changed(const RawAddress* bd_addr, tHCI_ROLE new_role,
+                           tHCI_STATUS hci_status) {
   /* Make sure not called from HCI Command Status (bd_addr and new_role are
    * invalid) */
   if (bd_addr != nullptr) {

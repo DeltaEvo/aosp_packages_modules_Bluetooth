@@ -41,7 +41,7 @@ class L2capInterface {
   virtual bool DisconnectResponse(uint16_t cid) = 0;
   virtual bool ConfigRequest(uint16_t cid, tL2CAP_CFG_INFO* p_cfg) = 0;
   virtual bool ConfigResponse(uint16_t cid, tL2CAP_CFG_INFO* p_cfg) = 0;
-  virtual uint8_t DataWrite(uint16_t cid, BT_HDR* p_data) = 0;
+  virtual tL2CAP_DW_RESULT DataWrite(uint16_t cid, BT_HDR* p_data) = 0;
   virtual uint16_t RegisterLECoc(uint16_t psm, const tL2CAP_APPL_INFO &cb_info, uint16_t sec_level) = 0;
   virtual void DeregisterLECoc(uint16_t psm) = 0;
   virtual bool ConnectCreditBasedRsp(const RawAddress& bd_addr, uint8_t id,
@@ -72,7 +72,7 @@ class MockL2capInterface : public L2capInterface {
   MOCK_METHOD1(DisconnectResponse, bool(uint16_t cid));
   MOCK_METHOD2(ConfigRequest, bool(uint16_t cid, tL2CAP_CFG_INFO* p_cfg));
   MOCK_METHOD2(ConfigResponse, bool(uint16_t cid, tL2CAP_CFG_INFO* p_cfg));
-  MOCK_METHOD2(DataWrite, uint8_t(uint16_t cid, BT_HDR* p_data));
+  MOCK_METHOD2(DataWrite, tL2CAP_DW_RESULT(uint16_t cid, BT_HDR* p_data));
   MOCK_METHOD3(RegisterLECoc,
                uint16_t(uint16_t psm, const tL2CAP_APPL_INFO &cb_info, uint16_t sec_level));
   MOCK_METHOD1(DeregisterLECoc, void(uint16_t psm));

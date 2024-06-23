@@ -94,7 +94,7 @@ class FakeBtStack {
     test::mock::stack_l2cap_api::L2CA_SendFixedChnlData.body =
         [](uint16_t cid, const RawAddress& addr, BT_HDR* hdr) {
           osi_free(hdr);
-          return L2CAP_DW_SUCCESS;
+          return tL2CAP_DW_RESULT::SUCCESS;
         };
     test::mock::stack_l2cap_api::L2CA_RegisterFixedChannel.body =
         [](uint16_t fixed_cid, tL2CAP_FIXED_CHNL_REG* p_freg) {

@@ -27,11 +27,11 @@ import org.xmlpull.v1.XmlSerializer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Contains the metadata that describes either (1) the desired size of a image to be downloaded or
- * (2) the extact size of an image to be uploaded.
+ * (2) the exact size of an image to be uploaded.
  *
  * <p>When using this to assert the size of an image to download/pull, it's best to derive this
  * specific descriptor from any of the available BipImageFormat options returned from a
@@ -245,11 +245,7 @@ public class BipImageDescriptor {
      */
     public byte[] serialize() {
         String s = toString();
-        try {
-            return s != null ? s.getBytes("UTF-8") : null;
-        } catch (UnsupportedEncodingException e) {
-            return null;
-        }
+        return s != null ? s.getBytes(StandardCharsets.UTF_8) : null;
     }
 
     @Override

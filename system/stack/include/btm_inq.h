@@ -38,7 +38,7 @@
  *                  BTM_WRONG_MODE if the device is not up.
  *
  ******************************************************************************/
-tBTM_STATUS BTM_SetDiscoverability(uint16_t inq_mode);
+[[nodiscard]] tBTM_STATUS BTM_SetDiscoverability(uint16_t inq_mode);
 
 /*******************************************************************************
  *
@@ -74,8 +74,8 @@ tBTM_STATUS BTM_SetDiscoverability(uint16_t inq_mode);
  *                  BTM_WRONG_MODE if the device is not up.
  *
  ******************************************************************************/
-tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb,
-                             tBTM_CMPL_CB* p_cmpl_cb);
+[[nodiscard]] tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb,
+                                           tBTM_CMPL_CB* p_cmpl_cb);
 
 /*******************************************************************************
  *
@@ -83,11 +83,10 @@ tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb,
  *
  * Description      Return a bit mask of the current inquiry state
  *
- * Returns          BTM_INQUIRY_INACTIVE if inactive (0)
- *                  BTM_GENERAL_INQUIRY_ACTIVE if a general inquiry is active
+ * Returns          Bitmask of current inquiry state
  *
  ******************************************************************************/
-uint16_t BTM_IsInquiryActive(void);
+[[nodiscard]] uint16_t BTM_IsInquiryActive(void);
 
 /*******************************************************************************
  *
@@ -112,7 +111,7 @@ void BTM_CancelInquiry(void);
  *                  BTM_WRONG_MODE if the device is not up.
  *
  ******************************************************************************/
-tBTM_STATUS BTM_SetConnectability(uint16_t page_mode);
+[[nodiscard]] tBTM_STATUS BTM_SetConnectability(uint16_t page_mode);
 
 /*******************************************************************************
  *
@@ -130,8 +129,32 @@ tBTM_STATUS BTM_SetConnectability(uint16_t page_mode);
  *                  BTM_WRONG_MODE if the device is not up.
  *
  ******************************************************************************/
-tBTM_STATUS BTM_SetInquiryMode(uint8_t mode);
+[[nodiscard]] tBTM_STATUS BTM_SetInquiryMode(uint8_t mode);
 
+/*******************************************************************************
+ *
+ * Function         BTM_EnableInterlacedInquiryScan
+ *
+ * Description      Reads system property PROPERTY_INQ_SCAN_TYPE and
+ *                  enables interlaced inquiry scan with controller support.
+ *
+ * Input Params:    None
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
 void BTM_EnableInterlacedInquiryScan();
 
+/*******************************************************************************
+ *
+ * Function         BTM_EnableInterlacedPageScan
+ *
+ * Description      Reads system property PROPERTY_PAGE_SCAN_TYPE and
+ *                  enables interlaced page scan with controller support.
+ *
+ * Input Params:    None
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
 void BTM_EnableInterlacedPageScan();

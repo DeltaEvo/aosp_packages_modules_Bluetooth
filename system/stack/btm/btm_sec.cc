@@ -74,6 +74,7 @@
 #include "stack/include/main_thread.h"
 #include "stack/include/smp_api.h"
 #include "stack/include/stack_metrics_logging.h"
+#include "types/bt_transport.h"
 #include "types/raw_address.h"
 
 namespace {
@@ -103,7 +104,6 @@ bool btm_ble_init_pseudo_addr(tBTM_SEC_DEV_REC* p_dev_rec,
 void bta_dm_remove_device(const RawAddress& bd_addr);
 void bta_dm_remote_key_missing(const RawAddress bd_addr);
 void bta_dm_process_remove_device(const RawAddress& bd_addr);
-void btm_inq_clear_ssp(void);
 
 static tBTM_STATUS btm_sec_execute_procedure(tBTM_SEC_DEV_REC* p_dev_rec);
 static bool btm_sec_start_get_name(tBTM_SEC_DEV_REC* p_dev_rec);
@@ -259,6 +259,110 @@ static tBTM_SEC_DEV_REC* btm_sec_find_dev_by_sec_state(uint8_t state) {
 
 /*******************************************************************************
  *
+ * Function         btm_sec_is_device_sc_downgrade
+ *
+ * Description      Check for a stored device record matching the candidate
+ *                  device, and return true if the stored device has reported
+ *                  that it supports Secure Connections mode and the candidate
+ *                  device reports that it does not.  Otherwise, return false.
+ *
+ * Returns          bool
+ *
+ ******************************************************************************/
+static bool btm_sec_is_device_sc_downgrade(uint16_t hci_handle,
+                                           bool secure_connections_supported) {
+  if (secure_connections_supported) return false;
+
+  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev_by_handle(hci_handle);
+  if (p_dev_rec == nullptr) return false;
+
+  uint8_t property_val = 0;
+  bt_property_t property = {
+      .type = BT_PROPERTY_REMOTE_SECURE_CONNECTIONS_SUPPORTED,
+      .len = sizeof(uint8_t),
+      .val = &property_val};
+
+  bt_status_t cached =
+      btif_storage_get_remote_device_property(&p_dev_rec->bd_addr, &property);
+
+  if (cached == BT_STATUS_FAIL) return false;
+
+  return (bool)property_val;
+}
+
+/*******************************************************************************
+ *
+ * Function         btm_sec_store_device_sc_support
+ *
+ * Description      Save Secure Connections support for this device to file
+ *
+ ******************************************************************************/
+
+static void btm_sec_store_device_sc_support(uint16_t hci_handle,
+                                            bool secure_connections_supported) {
+  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev_by_handle(hci_handle);
+  if (p_dev_rec == nullptr) return;
+
+  uint8_t property_val = (uint8_t)secure_connections_supported;
+  bt_property_t property = {
+      .type = BT_PROPERTY_REMOTE_SECURE_CONNECTIONS_SUPPORTED,
+      .len = sizeof(uint8_t),
+      .val = &property_val};
+
+  btif_storage_set_remote_device_property(&p_dev_rec->bd_addr, &property);
+}
+
+/*******************************************************************************
+ *
+ * Function         btm_sec_is_session_key_size_downgrade
+ *
+ * Description      Check if there is a stored device record matching this
+ *                  handle, and return true if the stored record has a lower
+ *                  session key size than the candidate device.
+ *
+ * Returns          bool
+ *
+ ******************************************************************************/
+static bool btm_sec_is_session_key_size_downgrade(uint16_t hci_handle,
+                                                  uint8_t key_size) {
+  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev_by_handle(hci_handle);
+  if (p_dev_rec == nullptr) return false;
+
+  uint8_t property_val = 0;
+  bt_property_t property = {.type = BT_PROPERTY_REMOTE_MAX_SESSION_KEY_SIZE,
+                            .len = sizeof(uint8_t),
+                            .val = &property_val};
+
+  bt_status_t cached =
+      btif_storage_get_remote_device_property(&p_dev_rec->bd_addr, &property);
+
+  if (cached == BT_STATUS_FAIL) return false;
+
+  return property_val > key_size;
+}
+
+/*******************************************************************************
+ *
+ * Function         btm_sec_update_session_key_size
+ *
+ * Description      Store the max session key size to disk, if possible.
+ *
+ ******************************************************************************/
+static void btm_sec_update_session_key_size(uint16_t hci_handle,
+                                            uint8_t key_size) {
+  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev_by_handle(hci_handle);
+  if (p_dev_rec == nullptr) return;
+
+  uint8_t property_val = key_size;
+  bt_property_t property = {.type = BT_PROPERTY_REMOTE_MAX_SESSION_KEY_SIZE,
+                            .len = sizeof(uint8_t),
+                            .val = &property_val};
+
+  btif_storage_set_remote_device_property(&p_dev_rec->bd_addr, &property);
+}
+
+/*******************************************************************************
+ *
  * Function         access_secure_service_from_temp_bond
  *
  * Description      a utility function to test whether an access to
@@ -272,7 +376,6 @@ static bool access_secure_service_from_temp_bond(const tBTM_SEC_DEV_REC* p_dev_r
                                                  bool locally_initiated,
                                                  uint16_t security_req) {
   return !locally_initiated && (security_req & BTM_SEC_IN_AUTHENTICATE) &&
-         p_dev_rec->sec_rec.is_device_authenticated() &&
          p_dev_rec->sec_rec.is_bond_type_temporary();
 }
 
@@ -696,6 +799,8 @@ tBTM_STATUS btm_sec_bond_by_transport(const RawAddress& bd_addr,
 
   /* If connection already exists... */
   if (BTM_IsAclConnectionUpAndHandleValid(bd_addr, transport)) {
+    log::debug("An ACL connection currently exists peer:{} transport:{}",
+               bd_addr, bt_transport_text(transport));
     btm_sec_wait_and_start_authentication(p_dev_rec);
 
     btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_WAIT_PIN_REQ);
@@ -704,12 +809,18 @@ tBTM_STATUS btm_sec_bond_by_transport(const RawAddress& bd_addr,
     l2cu_update_lcb_4_bonding(bd_addr, true);
     return (BTM_CMD_STARTED);
   }
+  log::debug("An ACL connection does not currently exist peer:{} transport:{}",
+             bd_addr, bt_transport_text(transport));
 
   log::verbose("sec mode: {} sm4:x{:x}", btm_sec_cb.security_mode,
                p_dev_rec->sm4);
   if (!bluetooth::shim::GetController()->SupportsSimplePairing() ||
       (p_dev_rec->sm4 == BTM_SM4_KNOWN)) {
-    if (btm_sec_check_prefetch_pin(p_dev_rec)) return (BTM_CMD_STARTED);
+    if (btm_sec_check_prefetch_pin(p_dev_rec)) {
+      log::debug("Class of device used to check for pin peer:{} transport:{}",
+                 bd_addr, bt_transport_text(transport));
+      return (BTM_CMD_STARTED);
+    }
   }
   if ((btm_sec_cb.security_mode == BTM_SEC_MODE_SP ||
        btm_sec_cb.security_mode == BTM_SEC_MODE_SC) &&
@@ -720,7 +831,8 @@ tBTM_STATUS btm_sec_bond_by_transport(const RawAddress& bd_addr,
        * -> RNR (to learn if peer is 2.1)
        * RNR when no ACL causes HCI_RMT_HOST_SUP_FEAT_NOTIFY_EVT */
       btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_GET_REM_NAME);
-      status = BTM_ReadRemoteDeviceName(bd_addr, NULL, BT_TRANSPORT_BR_EDR);
+      status = get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
+          bd_addr, NULL, BT_TRANSPORT_BR_EDR);
     } else {
       /* We are accepting connection request from peer */
       btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_WAIT_PIN_REQ);
@@ -2169,9 +2281,6 @@ static void call_registered_rmt_name_callbacks(const RawAddress* p_bd_addr,
 void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
                                        const uint8_t* p_bd_name,
                                        tHCI_STATUS status) {
-  tBTM_SEC_DEV_REC* p_dev_rec = nullptr;
-  uint8_t old_sec_state;
-
   log::info("btm_sec_rmt_name_request_complete for {}",
             p_bd_addr ? ADDRESS_TO_LOGGABLE_CSTR(*p_bd_addr) : "null");
 
@@ -2184,6 +2293,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
 
   /* If remote name request failed, p_bd_addr is null and we need to search */
   /* based on state assuming that we are doing 1 at a time */
+  tBTM_SEC_DEV_REC* p_dev_rec = nullptr;
   if (p_bd_addr)
     p_dev_rec = btm_find_dev(*p_bd_addr);
   else {
@@ -2206,8 +2316,10 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
 
   if (p_dev_rec == nullptr) {
     log::debug(
-        "Remote read request complete for unknown device pairing_state:{} "
+        "Remote read request complete for unknown device peer:{} "
+        "pairing_state:{} "
         "status:{} name:{}",
+        (p_bd_addr) ? ADDRESS_TO_LOGGABLE_CSTR(*p_bd_addr) : "null",
         tBTM_SEC_CB::btm_pair_state_descr(btm_sec_cb.pairing_state),
         hci_status_code_text(status), reinterpret_cast<char const*>(p_bd_name));
 
@@ -2216,7 +2328,6 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
     return;
   }
 
-  old_sec_state = p_dev_rec->sec_rec.sec_state;
   if (status == HCI_SUCCESS) {
     log::debug(
         "Remote read request complete for known device pairing_state:{} "
@@ -2242,6 +2353,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
     p_dev_rec->sec_bd_name[0] = 0;
   }
 
+  uint8_t old_sec_state = p_dev_rec->sec_rec.sec_state;
   if (p_dev_rec->sec_rec.sec_state == BTM_SEC_STATE_GETTING_NAME)
     p_dev_rec->sec_rec.sec_state = BTM_SEC_STATE_IDLE;
 
@@ -2340,8 +2452,9 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
       }
     } else {
       log::warn("wrong BDA, retry with pairing BDA");
-      if (BTM_ReadRemoteDeviceName(btm_sec_cb.pairing_bda, NULL,
-                                   BT_TRANSPORT_BR_EDR) != BTM_CMD_STARTED) {
+      if (get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
+              btm_sec_cb.pairing_bda, NULL, BT_TRANSPORT_BR_EDR) !=
+          BTM_CMD_STARTED) {
         log::error("failed to start remote name request");
         NotifyBondingChange(*p_dev_rec, HCI_ERR_MEMORY_FULL);
       };
@@ -3392,6 +3505,22 @@ static void read_encryption_key_size_complete_after_encryption_change(
     return;
   }
 
+  if (com::android::bluetooth::flags::bluffs_mitigation()) {
+    if (btm_sec_is_session_key_size_downgrade(handle, key_size)) {
+      log::error(
+          "encryption key size lower than cached value, disconnecting. "
+          "handle: 0x{:x} attempted key size: {}",
+          handle, key_size);
+      acl_disconnect_from_handle(
+          handle, HCI_ERR_HOST_REJECT_SECURITY,
+          "stack::btu::btu_hcif::read_encryption_key_size_complete_after_"
+          "encryption_change Key Size Downgrade");
+      return;
+    }
+
+    btm_sec_update_session_key_size(handle, key_size);
+  }
+
   // good key size - succeed
   btm_acl_encrypt_change(handle, static_cast<tHCI_STATUS>(status),
                          1 /* enable */);
@@ -3413,27 +3542,52 @@ void smp_cancel_start_encryption_attempt();
  ******************************************************************************/
 void btm_sec_encryption_change_evt(uint16_t handle, tHCI_STATUS status,
                                    uint8_t encr_enable) {
-  if (status != HCI_SUCCESS || encr_enable == 0 ||
-      BTM_IsBleConnection(handle) ||
-      !bluetooth::shim::GetController()->IsSupported(
-          bluetooth::hci::OpCode::READ_ENCRYPTION_KEY_SIZE) ||
-      // Skip encryption key size check when using set_min_encryption_key_size
-      (bluetooth::common::init_flags::set_min_encryption_is_enabled() &&
-       bluetooth::shim::GetController()->IsSupported(
-           bluetooth::hci::OpCode::SET_MIN_ENCRYPTION_KEY_SIZE))) {
-    if (status == HCI_ERR_CONNECTION_TOUT) {
-      smp_cancel_start_encryption_attempt();
-      return;
-    }
+  if (com::android::bluetooth::flags::bluffs_mitigation()) {
+    if (status != HCI_SUCCESS || encr_enable == 0 ||
+        BTM_IsBleConnection(handle) ||
+        !bluetooth::shim::GetController()->IsSupported(
+            bluetooth::hci::OpCode::READ_ENCRYPTION_KEY_SIZE)) {
+      if (status == HCI_ERR_CONNECTION_TOUT) {
+        smp_cancel_start_encryption_attempt();
+        return;
+      }
 
-    btm_acl_encrypt_change(handle, static_cast<tHCI_STATUS>(status),
-                           encr_enable);
-    btm_sec_encrypt_change(handle, static_cast<tHCI_STATUS>(status),
-                           encr_enable);
+      btm_acl_encrypt_change(handle, static_cast<tHCI_STATUS>(status),
+                             encr_enable);
+      btm_sec_encrypt_change(handle, static_cast<tHCI_STATUS>(status),
+                             encr_enable);
+    } else {
+      btsnd_hcic_read_encryption_key_size(
+          handle,
+          base::Bind(
+              &read_encryption_key_size_complete_after_encryption_change));
+    }
   } else {
-    btsnd_hcic_read_encryption_key_size(
-        handle,
-        base::Bind(&read_encryption_key_size_complete_after_encryption_change));
+    // This block added to ensure matching code flow with the bluffs_mitigation
+    // flag off.  The entire block should be removed when the flag is.
+    if (status != HCI_SUCCESS || encr_enable == 0 ||
+        BTM_IsBleConnection(handle) ||
+        !bluetooth::shim::GetController()->IsSupported(
+            bluetooth::hci::OpCode::READ_ENCRYPTION_KEY_SIZE) ||
+        // Skip encryption key size check when using set_min_encryption_key_size
+        (bluetooth::common::init_flags::set_min_encryption_is_enabled() &&
+         bluetooth::shim::GetController()->IsSupported(
+             bluetooth::hci::OpCode::SET_MIN_ENCRYPTION_KEY_SIZE))) {
+      if (status == HCI_ERR_CONNECTION_TOUT) {
+        smp_cancel_start_encryption_attempt();
+        return;
+      }
+
+      btm_acl_encrypt_change(handle, static_cast<tHCI_STATUS>(status),
+                             encr_enable);
+      btm_sec_encrypt_change(handle, static_cast<tHCI_STATUS>(status),
+                             encr_enable);
+    } else {
+      btsnd_hcic_read_encryption_key_size(
+          handle,
+          base::Bind(
+              &read_encryption_key_size_complete_after_encryption_change));
+    }
   }
 }
 /*******************************************************************************
@@ -3542,8 +3696,8 @@ void btm_sec_connected(const RawAddress& bda, uint16_t handle,
             /* remote device name is unknowm, start getting remote name first */
 
             btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_GET_REM_NAME);
-            if (BTM_ReadRemoteDeviceName(p_dev_rec->bd_addr, NULL,
-                                         BT_TRANSPORT_BR_EDR) !=
+            if (get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
+                    p_dev_rec->bd_addr, NULL, BT_TRANSPORT_BR_EDR) !=
                 BTM_CMD_STARTED) {
               log::error("cannot read remote name");
               btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_IDLE);
@@ -3577,8 +3731,8 @@ void btm_sec_connected(const RawAddress& bda, uint16_t handle,
       if (BTM_SEC_IS_SM4_UNKNOWN(p_dev_rec->sm4)) {
         /* Try again: RNR when no ACL causes HCI_RMT_HOST_SUP_FEAT_NOTIFY_EVT */
         btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_GET_REM_NAME);
-        if (BTM_ReadRemoteDeviceName(bda, NULL, BT_TRANSPORT_BR_EDR) !=
-            BTM_CMD_STARTED) {
+        if (get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
+                bda, NULL, BT_TRANSPORT_BR_EDR) != BTM_CMD_STARTED) {
           log::error("cannot read remote name");
           btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_IDLE);
         }
@@ -4059,6 +4213,14 @@ void btm_sec_link_key_notification(const RawAddress& p_bda,
       log::verbose("set new_encr_key_256 to {}",
                    p_dev_rec->sec_rec.new_encryption_key_is_p256);
     }
+  }
+
+  if (com::android::bluetooth::flags::bluffs_mitigation() &&
+      p_dev_rec->sec_rec.is_bond_type_persistent() &&
+      (p_dev_rec->is_device_type_br_edr() ||
+       p_dev_rec->is_device_type_dual_mode())) {
+    btm_sec_store_device_sc_support(p_dev_rec->get_br_edr_hci_handle(),
+                                    p_dev_rec->SupportsSecureConnections());
   }
 
   /* If name is not known at this point delay calling callback until the name is
@@ -4753,7 +4915,6 @@ void tBTM_SEC_CB::change_pairing_state(tBTM_PAIRING_STATE new_state) {
 
     btm_restore_mode();
     btm_sec_check_pending_reqs();
-    btm_inq_clear_ssp();
 
     pairing_bda = RawAddress::kAny;
   } else {
@@ -5079,6 +5240,18 @@ void btm_sec_set_peer_sec_caps(uint16_t hci_handle, bool ssp_supported,
                                bool br_edr_supported, bool le_supported) {
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev_by_handle(hci_handle);
   if (p_dev_rec == nullptr) return;
+
+  if (com::android::bluetooth::flags::bluffs_mitigation()) {
+    // Drop the connection here if the remote attempts to downgrade from Secure
+    // Connections mode.
+    if (btm_sec_is_device_sc_downgrade(hci_handle, sc_supported)) {
+      acl_set_disconnect_reason(HCI_ERR_HOST_REJECT_SECURITY);
+      btm_sec_send_hci_disconnect(
+          p_dev_rec, HCI_ERR_AUTH_FAILURE, hci_handle,
+          "attempted to downgrade from Secure Connections mode");
+      return;
+    }
+  }
 
   p_dev_rec->remote_feature_received = true;
   p_dev_rec->remote_supports_hci_role_switch = hci_role_switch_supported;

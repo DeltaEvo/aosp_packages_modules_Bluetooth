@@ -150,7 +150,7 @@ class RequestGetMessagesListingForOwnNumber extends Request {
             return;
         }
 
-        ArrayList<Message> messageListing = response.getList();
+        List<Message> messageListing = response.getList();
         if (messageListing == null || messageListing.isEmpty()) {
             // No more messages in this folder; move on to the next folder;
             logD("readResponse: no messages, moving to next folder");
@@ -170,8 +170,7 @@ class RequestGetMessagesListingForOwnNumber extends Request {
                         mMessageListingWindow.getStartOffset(),
                         mMessageListingWindow.getMaxCount()));
         String number = null;
-        for (int i = 0; i < messageListing.size(); i++) {
-            Message msg = messageListing.get(i);
+        for (Message msg : messageListing) {
             if (MceStateMachine.FOLDER_INBOX.equals(folderName)) {
                 number = PhoneNumberUtils.extractNetworkPortion(msg.getRecipientAddressing());
             } else if (MceStateMachine.FOLDER_SENT.equals(folderName)) {

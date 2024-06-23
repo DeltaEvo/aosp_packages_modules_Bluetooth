@@ -216,10 +216,11 @@ bool L2CA_DisconnectLECocReq(uint16_t cid);
  *
  * Description      Higher layers call this function to write data.
  *
- * Returns          L2CAP_DW_SUCCESS, if data accepted, else false
- *                  L2CAP_DW_CONGESTED, if data accepted and the channel is
- *                                      congested
- *                  L2CAP_DW_FAILED, if error
+ * Returns          tL2CAP_DW_RESULT::SUCCESS, if data accepted, else
+ *                  false
+ *                  tL2CAP_DW_RESULT::CONGESTED, if data accepted
+ *                  and the channel is congested
+ *                  tL2CAP_DW_RESULT::FAILED, if error
  *
  ******************************************************************************/
 uint8_t L2CA_DataWrite(uint16_t cid, BT_HDR* p_data);
@@ -354,8 +355,8 @@ bool L2CA_ConnectFixedChnl(uint16_t fixed_cid, const RawAddress& bd_addr);
  *                  BD Address of remote
  *                  Pointer to buffer of type BT_HDR
  *
- * Return value     L2CAP_DW_SUCCESS, if data accepted
- *                  L2CAP_DW_FAILED,  if error
+ * Return value     tL2CAP_DW_RESULT::SUCCESS, if data accepted
+ *                  tL2CAP_DW_RESULT::FAILED,  if error
  *
  ******************************************************************************/
 uint16_t L2CA_SendFixedChnlData(uint16_t fixed_cid, const RawAddress& rem_bda,

@@ -37,13 +37,6 @@ struct btm_client_interface_t default_btm_client_interface = {
                              tBTM_PM_STATUS_CBACK* /* p_cb */) -> tBTM_STATUS {
           return BTM_SUCCESS;
         },
-        .BTM_GetHCIConnHandle = [](const RawAddress& /* remote_bda */,
-                                   tBT_TRANSPORT /* transport */) -> uint16_t {
-          return 0;
-        },
-        .BTM_VendorSpecificCommand =
-            [](uint16_t /* opcode */, uint8_t /* param_len */,
-               uint8_t* /* p_param_buf */, tBTM_VSC_CMPL_CB* /* p_cb */) {},
         .ACL_RegisterClient =
             [](struct acl_client_callback_s* /* callbacks */) {},
         .ACL_UnregisterClient =
@@ -81,6 +74,10 @@ struct btm_client_interface_t default_btm_client_interface = {
             [](const RawAddress& /* addr */, uint8_t* /* lmp_version */,
                uint16_t* /* manufacturer */,
                uint16_t* /* lmp_sub_version */) -> bool { return false; },
+        .BTM_GetHCIConnHandle = [](const RawAddress& /* remote_bda */,
+                                   tBT_TRANSPORT /* transport */) -> uint16_t {
+          return 0;
+        },
     },
     .link_policy = {
         .BTM_GetRole = [](const RawAddress& /* remote_bd_addr */,
@@ -237,7 +234,8 @@ struct btm_client_interface_t default_btm_client_interface = {
           return BTM_SUCCESS;
         },
         .BTM_WriteVoiceSettings = [](uint16_t /* settings */) {},
-        .BTM_EScoConnRsp = [](uint16_t /* sco_inx */, uint8_t /* hci_status */,
+        .BTM_EScoConnRsp = [](uint16_t /* sco_inx */,
+                              tHCI_STATUS /* hci_status */,
                               enh_esco_params_t* /* p_parms */) {},
         .BTM_GetNumScoLinks = []() -> uint8_t { return 0; },
         .BTM_SetEScoMode = [](enh_esco_params_t* /* p_parms */) -> tBTM_STATUS {
@@ -290,6 +288,12 @@ struct btm_client_interface_t default_btm_client_interface = {
           return BTM_SUCCESS;
         },
     },
+    .vendor =
+        {
+            .BTM_VendorSpecificCommand =
+                [](uint16_t /* opcode */, uint8_t /* param_len */,
+                   uint8_t* /* p_param_buf */, tBTM_VSC_CMPL_CB* /* p_cb */) {},
+        },
 };
 
 }  // namespace

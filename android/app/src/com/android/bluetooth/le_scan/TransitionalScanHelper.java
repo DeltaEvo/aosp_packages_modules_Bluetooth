@@ -493,6 +493,7 @@ public class TransitionalScanHelper {
         }
     }
 
+    @SuppressWarnings("NonApiType")
     private void sendResultsByPendingIntent(
             PendingIntentInfo pii, ArrayList<ScanResult> results, int callbackType)
             throws PendingIntent.CanceledException {
@@ -750,6 +751,7 @@ public class TransitionalScanHelper {
         mScanManager.callbackDone(scannerId, status);
     }
 
+    @SuppressWarnings("NonApiType")
     private void sendBatchScanResults(
             ContextMap<IScannerCallback, PendingIntentInfo>.App app,
             ScanClient client,
