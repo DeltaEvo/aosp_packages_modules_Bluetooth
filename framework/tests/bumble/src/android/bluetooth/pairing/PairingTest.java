@@ -39,7 +39,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.ParcelUuid;
-import android.platform.test.annotations.RequiresFlagsEnabled;
 import android.platform.test.flag.junit.CheckFlagsRule;
 import android.platform.test.flag.junit.DeviceFlagsValueProvider;
 import android.util.Log;
@@ -47,7 +46,6 @@ import android.util.Log;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
-import com.android.bluetooth.flags.Flags;
 import com.android.compatibility.common.util.AdoptShellPermissionsRule;
 
 import io.grpc.stub.StreamObserver;
@@ -306,7 +304,6 @@ public class PairingTest {
      * Expectation: Pairing gets cancelled instead of getting timed out
      */
     @Test
-    @RequiresFlagsEnabled(Flags.FLAG_RESET_PAIRING_ONLY_FOR_RELATED_SERVICE_DISCOVERY)
     public void testCancelBondLe_WithGattServiceDiscovery() {
         registerIntentActions(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
 
@@ -357,7 +354,6 @@ public class PairingTest {
      * Expectation: Pairing succeeds
      */
     @Test
-    @RequiresFlagsEnabled(Flags.FLAG_RESET_PAIRING_ONLY_FOR_RELATED_SERVICE_DISCOVERY)
     public void testBondLe_WithGattServiceDiscovery() {
         registerIntentActions(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
 

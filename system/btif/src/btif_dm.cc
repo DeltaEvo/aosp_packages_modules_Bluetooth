@@ -1658,27 +1658,8 @@ static bool btif_should_ignore_uuid(const Uuid& uuid) {
 }
 
 static bool btif_is_gatt_service_discovery_post_pairing(const RawAddress bd_addr) {
-  if (!com::android::bluetooth::flags::
-          reset_pairing_only_for_related_service_discovery()) {
-    if (bd_addr == pairing_cb.bd_addr || bd_addr == pairing_cb.static_bdaddr) {
-      if (pairing_cb.gatt_over_le !=
-          btif_dm_pairing_cb_t::ServiceDiscoveryState::SCHEDULED) {
-        log::error(
-            "gatt_over_le should be SCHEDULED, did someone clear the control "
-            "block for {} ?",
-            bd_addr);
-      }
-
-      return true;
-    }
-
-    return false;
-  }
-
- return ((bd_addr == pairing_cb.bd_addr ||
-          bd_addr == pairing_cb.static_bdaddr) &&
-         (pairing_cb.gatt_over_le ==
-          btif_dm_pairing_cb_t::ServiceDiscoveryState::SCHEDULED));
+  return (bd_addr == pairing_cb.bd_addr || bd_addr == pairing_cb.static_bdaddr) &&
+         (pairing_cb.gatt_over_le == btif_dm_pairing_cb_t::ServiceDiscoveryState::SCHEDULED);
 }
 
 static void btif_merge_existing_uuids(RawAddress& addr, std::set<Uuid>* uuids) {
