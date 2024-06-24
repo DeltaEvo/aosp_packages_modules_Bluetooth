@@ -2,13 +2,6 @@ package: "com.android.bluetooth.flags"
 container: "com.android.btservices"
 
 flag {
-    name: "ignore_bond_type_for_le"
-    namespace: "bluetooth"
-    description: "Bond type is not applicable for LE SMP pairing"
-    bug: "319695663"
-}
-
-flag {
     name: "force_bredr_for_sdp_retry"
     namespace: "bluetooth"
     description: "Force BR/EDR transport for retrying SDP service discovery"

@@ -3474,10 +3474,6 @@ static void btif_dm_ble_key_notif_evt(tBTA_DM_SP_KEY_NOTIF* p_ssp_key_notif) {
 
 static bool btif_dm_ble_is_temp_pairing(RawAddress& bd_addr, bool ctkd) {
   if (btm_get_bond_type_dev(bd_addr) == BOND_TYPE_TEMPORARY) {
-    if (!com::android::bluetooth::flags::ignore_bond_type_for_le()) {
-      return true;
-    }
-
     return ctkd;
   }
 
