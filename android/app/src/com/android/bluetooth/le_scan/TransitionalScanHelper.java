@@ -1182,12 +1182,36 @@ public class TransitionalScanHelper {
                 Utils.checkCallerHasScanWithoutLocationPermission(mContext);
         scanClient.associatedDevices = getAssociatedDevices(callingPackage);
 
+        startScan(scannerId, settings, filters, scanClient);
+    }
+
+    /** Intended for internal use within the Bluetooth app. Bypass permission check */
+    public void startScanInternal(int scannerId, ScanSettings settings, List<ScanFilter> filters) {
+        final ScanClient scanClient = new ScanClient(scannerId, settings, filters);
+        scanClient.userHandle = Binder.getCallingUserHandle();
+        scanClient.eligibleForSanitizedExposureNotification = false;
+        scanClient.hasDisavowedLocation = false;
+        scanClient.isQApp = true;
+        scanClient.hasNetworkSettingsPermission =
+                Utils.checkCallerHasNetworkSettingsPermission(mContext);
+        scanClient.hasNetworkSetupWizardPermission =
+                Utils.checkCallerHasNetworkSetupWizardPermission(mContext);
+        scanClient.hasScanWithoutLocationPermission =
+                Utils.checkCallerHasScanWithoutLocationPermission(mContext);
+        scanClient.associatedDevices = Collections.emptyList();
+
+        startScan(scannerId, settings, filters, scanClient);
+    }
+
+    private void startScan(
+            int scannerId, ScanSettings settings, List<ScanFilter> filters, ScanClient scanClient) {
         AppScanStats app = mScannerMap.getAppScanStatsById(scannerId);
-        ContextMap.App cbApp = mScannerMap.getById(scannerId);
         if (app != null) {
             scanClient.stats = app;
             boolean isFilteredScan = (filters != null) && !filters.isEmpty();
             boolean isCallbackScan = false;
+
+            ContextMap.App cbApp = mScannerMap.getById(scannerId);
             if (cbApp != null) {
                 isCallbackScan = cbApp.callback != null;
             }
@@ -1319,6 +1343,11 @@ public class TransitionalScanHelper {
                 mContext, attributionSource, "ScanHelper stopScan")) {
             return;
         }
+        stopScanInternal(scannerId);
+    }
+
+    /** Intended for internal use within the Bluetooth app. Bypass permission check */
+    public void stopScanInternal(int scannerId) {
         int scanQueueSize =
                 mScanManager.getBatchScanQueue().size() + mScanManager.getRegularScanQueue().size();
         Log.d(TAG, "stopScan() - queue size =" + scanQueueSize);
