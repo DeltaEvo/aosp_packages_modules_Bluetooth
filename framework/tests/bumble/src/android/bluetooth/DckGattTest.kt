@@ -250,7 +250,7 @@ public class DckGattTest() {
         // Verify correct scan result as prerequisite
         val scanResult = scanResultCaptor.firstValue
         assertThat(scanResult).isNotNull()
-        assertThat(scanResult.device.identityAddress).isEqualTo(TEST_ADDRESS_RANDOM_STATIC)
+        assertThat(scanResult.device.address).isEqualTo(TEST_ADDRESS_RANDOM_STATIC)
 
         // Verify successful GATT connection
         val device = scanResult.device
