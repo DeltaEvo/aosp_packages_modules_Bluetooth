@@ -21,6 +21,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.media.AudioManager;
 import android.os.Bundle;
 import android.support.v4.media.MediaBrowserCompat.MediaItem;
 import android.support.v4.media.MediaMetadataCompat;
@@ -33,6 +34,7 @@ import androidx.media.MediaBrowserServiceCompat;
 
 import com.android.bluetooth.BluetoothPrefs;
 import com.android.bluetooth.R;
+import com.android.bluetooth.flags.Flags;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 
@@ -397,6 +399,65 @@ public class BluetoothMediaBrowserService extends MediaBrowserServiceCompat {
                 "Playback State Changed, state="
                         + AvrcpControllerUtils.playbackStateCompatToString(state));
         service.mSession.setPlaybackState(state);
+    }
+
+    /**
+     * Notify this MediaBrowserService of changes to audio focus state
+     *
+     * <p>Temporarily set state to "Connecting" to better interoperate with media center
+     * applications.
+     *
+     * <p>The "Connecting" state is considered an "active" playback state, which will cause clients
+     * that don't listen to the media framework's callback for media key events (whoever most
+     * recently requested focus + had playback) to think we're the application who most recently
+     * updated to an "active" playback state, which in turn will have them show us as the active app
+     * in the UI while we wait on the remote device to accept our playback command.
+     */
+    static synchronized void onAudioFocusStateChanged(int state) {
+        if (!Flags.signalConnectingOnFocusGain()) {
+            Log.w(TAG, "Feature 'signal_connecting_on_focus_gain' not enabled. Skip");
+            return;
+        }
+
+        if (state != AudioManager.AUDIOFOCUS_GAIN) {
+            return;
+        }
+
+        BluetoothMediaBrowserService service = BluetoothMediaBrowserService.getInstance();
+        if (service == null) {
+            Log.w(TAG, "onAudioFocusStateChanged(state=" + state + "): Service not available");
+            return;
+        }
+
+        Log.i(
+                TAG,
+                "onAudioFocusStateChanged(state="
+                        + state
+                        + "): Focus gained, briefly signal connecting");
+
+        MediaSessionCompat session = service.getSession();
+        MediaControllerCompat controller = session.getController();
+        PlaybackStateCompat currentState =
+                controller == null ? null : controller.getPlaybackState();
+
+        PlaybackStateCompat connectingState = null;
+        if (currentState != null) {
+            connectingState =
+                    new PlaybackStateCompat.Builder(currentState)
+                            .setState(
+                                    PlaybackStateCompat.STATE_CONNECTING,
+                                    currentState.getPosition(),
+                                    currentState.getPlaybackSpeed())
+                            .build();
+            service.mSession.setPlaybackState(connectingState);
+            service.mSession.setPlaybackState(currentState);
+        } else {
+            Log.w(
+                    TAG,
+                    "onAudioFocusStateChanged(state="
+                            + state
+                            + "): current playback state is null");
+        }
     }
 
     /** Get playback state */
