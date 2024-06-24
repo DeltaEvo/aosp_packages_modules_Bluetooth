@@ -39,6 +39,10 @@ void l2cble_process_conn_update_evt(uint16_t handle, uint8_t status,
                                     uint16_t interval, uint16_t latency,
                                     uint16_t timeout);
 
+void l2cble_process_rc_param_request_evt(uint16_t handle, uint16_t interval_min,
+                                         uint16_t interval_max,
+                                         uint16_t latency, uint16_t timeout);
+
 void l2cble_process_data_length_change_event(uint16_t handle,
                                              uint16_t tx_data_len,
                                              uint16_t rx_data_len);

@@ -88,6 +88,12 @@ class Link : public l2cap::internal::ILink,
       uint16_t connection_latency,
       uint16_t supervision_timeout) override;
 
+  void OnParameterUpdateRequest(
+      uint16_t interval_min,
+      uint16_t interval_max,
+      uint16_t latency,
+      uint16_t supervision_timeout) override;
+
   void OnDataLengthChange(uint16_t tx_octets, uint16_t tx_time, uint16_t rx_octets, uint16_t rx_time) override;
 
   void OnReadRemoteVersionInformationComplete(

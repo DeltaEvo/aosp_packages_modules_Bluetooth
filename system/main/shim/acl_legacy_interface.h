@@ -108,6 +108,9 @@ typedef struct {
                                uint16_t connection_interval,
                                uint16_t connection_latency,
                                uint16_t supervision_timeout);
+  void (*on_parameter_update_request)(uint16_t handle, uint16_t interval_min,
+                                      uint16_t interval_max, uint16_t latency,
+                                      uint16_t supervision_timeout);
   void (*on_data_length_change)(uint16_t handle, uint16_t max_tx_octets,
                                 uint16_t max_tx_time, uint16_t max_rx_octets,
                                 uint16_t max_rx_time);

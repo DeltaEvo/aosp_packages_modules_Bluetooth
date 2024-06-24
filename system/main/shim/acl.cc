@@ -826,6 +826,13 @@ class LeShimAclConnection
         interface_.on_connection_update, ToLegacyHciErrorCode(hci_status),
         handle_, connection_interval, connection_latency, supervision_timeout);
   }
+  void OnParameterUpdateRequest(uint16_t interval_min, uint16_t interval_max,
+                                uint16_t latency,
+                                uint16_t supervision_timeout) {
+    TRY_POSTING_ON_MAIN(interface_.on_parameter_update_request, handle_,
+                        interval_min, interval_max, latency,
+                        supervision_timeout);
+  }
   void OnDataLengthChange(uint16_t max_tx_octets, uint16_t max_tx_time,
                           uint16_t max_rx_octets, uint16_t max_rx_time) {
     TRY_POSTING_ON_MAIN(interface_.on_data_length_change, handle_,
