@@ -141,10 +141,8 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
 
     if (le_audio_source_hal_client_) {
       le_audio_source_hal_client_->Stop();
-      auto result =
-          CodecManager::GetInstance()->UpdateActiveBroadcastAudioHalClient(
-              le_audio_source_hal_client_.get(), false);
-      log::assert_that(result, "Could not update session in codec manager");
+      CodecManager::GetInstance()->UpdateActiveBroadcastAudioHalClient(
+          le_audio_source_hal_client_.get(), false);
       le_audio_source_hal_client_.reset();
     }
   }

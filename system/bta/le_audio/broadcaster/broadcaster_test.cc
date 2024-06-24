@@ -439,6 +439,14 @@ TEST_F(BroadcasterTest, Initialize) {
   ASSERT_TRUE(LeAudioBroadcaster::IsLeAudioBroadcasterRunning());
 }
 
+TEST_F(BroadcasterTest, CleanupWithBroadcastInstance) {
+  auto broadcast_id = InstantiateBroadcast();
+  ASSERT_NE(broadcast_id, LeAudioBroadcaster::kInstanceIdUndefined);
+  EXPECT_CALL(*mock_codec_manager_,
+              UpdateActiveBroadcastAudioHalClient(mock_audio_source_, false))
+      .WillOnce(Return(false));
+}
+
 TEST_F(BroadcasterTest, GetStreamingPhy) {
   LeAudioBroadcaster::Get()->SetStreamingPhy(1);
   ASSERT_EQ(LeAudioBroadcaster::Get()->GetStreamingPhy(), 1);
