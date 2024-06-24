@@ -30,13 +30,6 @@ flag {
 }
 
 flag {
-    name: "close_rfcomm_instead_of_reset"
-    namespace: "bluetooth"
-    description: "Closing Rfcomm Connection instead of reset"
-    bug: "316993992"
-}
-
-flag {
     name: "pretend_network_service"
     namespace: "bluetooth"
     description: "during ongoing call, pretend network service in +CIND when network is unavailable"
