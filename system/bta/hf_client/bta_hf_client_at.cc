@@ -1920,7 +1920,7 @@ void bta_hf_client_send_at_biev(tBTA_HF_CLIENT_CB* client_cb, int indicator_id,
   char buf[32];
   tBTA_HF_CLIENT_AT_CMD cmd = BTA_HF_CLIENT_AT_BIEV;
 
-  if ((client_cb->peer_features & BTA_HF_CLIENT_FEAT_HF_IND) == 0) {
+  if ((client_cb->peer_features & BTA_HF_CLIENT_PEER_HF_IND) == 0) {
     log::error("peer does not support HF Indicators");
     return;
   }
