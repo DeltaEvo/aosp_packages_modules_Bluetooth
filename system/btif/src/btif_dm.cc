@@ -1697,11 +1697,7 @@ static void btif_on_service_discovery_results(
     if (pairing_cb.sdp_attempts) {
       log::warn("SDP failed after bonding re-attempting for {}", bd_addr);
       pairing_cb.sdp_attempts++;
-      if (com::android::bluetooth::flags::force_bredr_for_sdp_retry()) {
-        btif_dm_get_remote_services(bd_addr, BT_TRANSPORT_BR_EDR);
-      } else {
-        btif_dm_get_remote_services(bd_addr, BT_TRANSPORT_AUTO);
-      }
+      btif_dm_get_remote_services(bd_addr, BT_TRANSPORT_BR_EDR);
     } else {
       log::warn("SDP triggered by someone failed when bonding");
     }
