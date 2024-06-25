@@ -3060,14 +3060,8 @@ impl BluetoothMedia {
             return;
         }
 
-        self.call_list.push(CallInfo {
-            index: 1,
-            dir_incoming: false,
-            state: CallState::Active,
-            number: "".into(),
-        });
-        self.phone_state.num_active = 1;
-        self.phone_state_change("".into());
+        self.dialing_call_impl("".into(), None);
+        self.answer_call_impl();
     }
 
     pub fn get_group_devices(&self, group_id: i32) -> HashSet<RawAddress> {
