@@ -69,3 +69,5 @@ UnflaggedApi: android.bluetooth.BluetoothHapClient#switchToPreviousPreset(androi
     New API must be flagged with @FlaggedApi: method android.bluetooth.BluetoothHapClient.switchToPreviousPreset(android.bluetooth.BluetoothDevice)
 UnflaggedApi: android.bluetooth.BluetoothHapClient#switchToPreviousPresetForGroup(int):
     New API must be flagged with @FlaggedApi: method android.bluetooth.BluetoothHapClient.switchToPreviousPresetForGroup(int)
+UnflaggedApi: android.bluetooth.BluetoothUuid#MFI_HAS:
+    New API must be flagged with @FlaggedApi: field android.bluetooth.BluetoothUuid.MFI_HAS
