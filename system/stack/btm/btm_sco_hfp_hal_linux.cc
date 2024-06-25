@@ -136,7 +136,7 @@ constexpr uint16_t HCI_DEV_NONE = 0xffff;
 int btsocket_open_mgmt(uint16_t hci) {
   int fd = socket(PF_BLUETOOTH, SOCK_RAW | SOCK_NONBLOCK, BTPROTO_HCI);
   if (fd < 0) {
-    log::debug("Failed to open BT socket.");
+    log::debug("Failed to open BT socket, hci: %u", hci);
     return -errno;
   }
 
@@ -364,7 +364,7 @@ bool enable_offload(bool enable) {
 
 static bool get_single_codec(int codec, bt_codec** out) {
   for (cached_codec_info& c : cached_codecs) {
-    if (c.inner.codec == codec) {
+    if (c.inner.codec == static_cast<uint64_t>(codec)) {
       *out = &c.inner;
       return true;
     }
@@ -443,7 +443,7 @@ void set_codec_datapath(tBTA_AG_UUID_CODEC codec_uuid) {
 
 size_t get_packet_size(int codec) {
   for (const cached_codec_info& c : cached_codecs) {
-    if (c.inner.codec == codec) {
+    if (c.inner.codec == static_cast<uint64_t>(codec)) {
       return c.pkt_size;
     }
   }
