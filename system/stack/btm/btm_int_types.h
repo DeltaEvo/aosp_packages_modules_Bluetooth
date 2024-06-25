@@ -143,9 +143,6 @@ typedef struct tBTM_CB {
   *****************************************************/
   tSCO_CB sco_cb;
 
-#define BTM_SEC_MAX_RMT_NAME_CALLBACKS 2
-  tBTM_RMT_NAME_CALLBACK* p_rmt_name_callback[BTM_SEC_MAX_RMT_NAME_CALLBACKS];
-
   uint16_t disc_handle{0};          /* for legacy devices */
   uint8_t disc_reason{0};           /* for legacy devices */
 
@@ -180,7 +177,6 @@ typedef struct tBTM_CB {
     memset(&cmn_ble_vsc_cb, 0, sizeof(cmn_ble_vsc_cb));
     memset(&btm_inq_vars, 0, sizeof(btm_inq_vars));
     memset(&sco_cb, 0, sizeof(sco_cb));
-    memset(p_rmt_name_callback, 0, sizeof(p_rmt_name_callback));
 
     acl_cb_ = {};
     neighbor = {};

@@ -20,6 +20,7 @@
 #include "stack/include/bt_name.h"
 #include "stack/include/btm_status.h"
 #include "stack/include/hci_error_code.h"
+#include "stack/include/security_client_callbacks.h"
 #include "types/raw_address.h"
 
 /* Structure returned with remote name  request */
@@ -44,6 +45,8 @@ class RemoteNameRequest {
       false}; /* State of a remote name request by external API */
   tBT_DEVICE_TYPE remname_dev_type{
       BT_DEVICE_TYPE_UNKNOWN}; /* Whether it's LE or BREDR name request */
+#define BTM_SEC_MAX_RMT_NAME_CALLBACKS 2
+  tBTM_RMT_NAME_CALLBACK* p_rmt_name_callback[BTM_SEC_MAX_RMT_NAME_CALLBACKS]{nullptr, nullptr};
 };
 
 }  // namespace rnr
