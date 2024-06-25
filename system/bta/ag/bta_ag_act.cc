@@ -584,10 +584,7 @@ void bta_ag_rfc_acp_open(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
       log::info(
           "close outgoing connection before accepting {} with conn_handle={}",
           ag_scb.peer_addr, ag_scb.conn_handle);
-      if (!com::android::bluetooth::flags::close_rfcomm_instead_of_reset()) {
-        // Fail the outgoing connection to clean up any upper layer states
-        bta_ag_rfc_fail(&ag_scb, tBTA_AG_DATA::kEmpty);
-      }
+
       // If client port is opened, close it, state machine will handle rfcomm
       // closed in opening state as failure and pass to upper layer
       if (ag_scb.conn_handle > 0) {
