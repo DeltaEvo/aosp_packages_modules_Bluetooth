@@ -2177,7 +2177,7 @@ public class BassClientServiceTest {
                         0);
 
         mBassClientService.addSelectSourceRequest(scanResult, false);
-        verify(mMethodProxy, never())
+        verify(mMethodProxy)
                 .periodicAdvertisingManagerRegisterSync(
                         any(), any(), anyInt(), anyInt(), any(), any());
     }
@@ -2224,8 +2224,10 @@ public class BassClientServiceTest {
                     0x56,
                     0x18,
                     0x07,
-                    0x03,
-                    0x06, // WRONG PUBLIC_BROADCAST data
+                    0x04, // WRONG PUBLIC_BROADCAST data (metada size)
+                    0x06,
+                    0x07,
+                    0x08,
                     // service data - public broadcast,
                     // feature - 0x7, metadata len - 0x3, metadata - 0x6, 0x7, 0x8
                     0x05,
@@ -2253,7 +2255,7 @@ public class BassClientServiceTest {
                         0);
 
         mBassClientService.addSelectSourceRequest(scanResult, false);
-        verify(mMethodProxy, never())
+        verify(mMethodProxy)
                 .periodicAdvertisingManagerRegisterSync(
                         any(), any(), anyInt(), anyInt(), any(), any());
     }
