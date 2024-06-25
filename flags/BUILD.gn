@@ -4,6 +4,7 @@ aconfig("bluetooth_flags_c_lib") {
   # LINT.IfChange
   sources = [
     "a2dp.aconfig",
+    "active_device_manager.aconfig",
     "asha.aconfig",
     "audio_routing.aconfig",
     "avrcp.aconfig",
