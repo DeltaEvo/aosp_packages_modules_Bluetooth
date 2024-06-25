@@ -1836,13 +1836,10 @@ static void bta_dm_gatt_disc_complete(uint16_t conn_id, tGATT_STATUS status) {
   } else {
     bta_dm_search_cb.conn_id = GATT_INVALID_CONN_ID;
 
-    if (com::android::bluetooth::flags::bta_dm_disc_stuck_in_cancelling_fix()) {
-      log::info(
-          "Discovery complete for invalid conn ID. Will pick up next job");
-      bta_dm_search_set_state(BTA_DM_SEARCH_IDLE);
-      bta_dm_free_sdp_db();
-      bta_dm_execute_queued_request();
-    }
+    log::info("Discovery complete for invalid conn ID. Will pick up next job");
+    bta_dm_search_set_state(BTA_DM_SEARCH_IDLE);
+    bta_dm_free_sdp_db();
+    bta_dm_execute_queued_request();
   }
 }
 
