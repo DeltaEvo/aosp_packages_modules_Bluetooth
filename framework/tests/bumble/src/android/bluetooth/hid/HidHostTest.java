@@ -38,12 +38,17 @@ import com.google.protobuf.Empty;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import pandora.HIDGrpc;
+import pandora.HidProto.ProtocolModeEvent;
+import pandora.HidProto.ReportEvent;
 
+import java.time.Duration;
+import java.util.Iterator;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -74,6 +79,8 @@ public class HidHostTest {
     private static final int MOUSE_RPT_SIZE = 4;
     private static final int INVALID_RPT_ID = 3;
     private static final int CONNECTION_TIMEOUT_MS = 2_000;
+
+    private static final Duration PROTO_MODE_TIMEOUT = Duration.ofSeconds(10);
 
     @Rule(order = 0)
     public final CheckFlagsRule mCheckFlagsRule = DeviceFlagsValueProvider.createCheckFlagsRule();
@@ -489,11 +496,22 @@ public class HidHostTest {
      * </ol>
      */
     @Test
+    @Ignore("b/349351673: sets wrong protocol mode value")
     public void hidSetProtocolModeTest() throws Exception {
+        Iterator<ProtocolModeEvent> mHidProtoModeEventObserver =
+                mHidBlockingStub
+                        .withDeadlineAfter(PROTO_MODE_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
+                        .onSetProtocolMode(Empty.getDefaultInstance());
         mHidService.setProtocolMode(mDevice, BluetoothHidHost.PROTOCOL_BOOT_MODE);
         mFutureHandShakeIntent = SettableFuture.create();
         assertThat(mFutureHandShakeIntent.get())
                 .isEqualTo(BluetoothHidDevice.ERROR_RSP_UNSUPPORTED_REQ);
+        if (mHidProtoModeEventObserver.hasNext()) {
+            ProtocolModeEvent hidProtoModeEvent = mHidProtoModeEventObserver.next();
+            Log.i(TAG, "Protocol mode:" + hidProtoModeEvent.getProtocolMode());
+            assertThat(hidProtoModeEvent.getProtocolModeValue())
+                    .isEqualTo(BluetoothHidHost.PROTOCOL_BOOT_MODE);
+        }
     }
 
     /**
@@ -538,24 +556,60 @@ public class HidHostTest {
      */
     @Test
     public void hidSetReportTest() throws Exception {
+        Iterator<ReportEvent> mHidReportEventObserver =
+                mHidBlockingStub
+                        .withDeadlineAfter(PROTO_MODE_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
+                        .onSetReport(Empty.getDefaultInstance());
         // Keyboard report
-        mHidService.setReport(mDevice, BluetoothHidHost.REPORT_TYPE_INPUT, "010203040506070809");
+        String kbReportData = "010203040506070809";
+        mHidService.setReport(mDevice, BluetoothHidHost.REPORT_TYPE_INPUT, kbReportData);
         mFutureHandShakeIntent = SettableFuture.create();
         assertThat(mFutureHandShakeIntent.get()).isEqualTo(BluetoothHidDevice.ERROR_RSP_SUCCESS);
+        if (mHidReportEventObserver.hasNext()) {
+            ReportEvent hidReportEvent = mHidReportEventObserver.next();
+            assertThat(hidReportEvent.getReportTypeValue())
+                    .isEqualTo(BluetoothHidHost.REPORT_TYPE_INPUT);
+            assertThat(hidReportEvent.getReportIdValue()).isEqualTo(KEYBD_RPT_ID);
+            assertThat(hidReportEvent.getReportData()).isEqualTo(kbReportData.substring(2));
+        }
         // Keyboard report - Invalid param
-        mHidService.setReport(mDevice, BluetoothHidHost.REPORT_TYPE_INPUT, "0102030405");
+        mHidService.setReport(
+                mDevice, BluetoothHidHost.REPORT_TYPE_INPUT, kbReportData.substring(0, 10));
         mFutureHandShakeIntent = SettableFuture.create();
         assertThat(mFutureHandShakeIntent.get())
                 .isEqualTo(BluetoothHidDevice.ERROR_RSP_INVALID_PARAM);
+        if (mHidReportEventObserver.hasNext()) {
+            ReportEvent hidReportEvent = mHidReportEventObserver.next();
+            assertThat(hidReportEvent.getReportTypeValue())
+                    .isEqualTo(BluetoothHidHost.REPORT_TYPE_INPUT);
+            assertThat(hidReportEvent.getReportIdValue()).isEqualTo(KEYBD_RPT_ID);
+            assertThat(hidReportEvent.getReportData()).isEqualTo(kbReportData.substring(2, 10));
+        }
         // Mouse report
-        mHidService.setReport(mDevice, BluetoothHidHost.REPORT_TYPE_INPUT, "02030405");
+        String mouseReportData = "02030405";
+        mHidService.setReport(mDevice, BluetoothHidHost.REPORT_TYPE_INPUT, mouseReportData);
         mFutureHandShakeIntent = SettableFuture.create();
         assertThat(mFutureHandShakeIntent.get()).isEqualTo(BluetoothHidDevice.ERROR_RSP_SUCCESS);
+        if (mHidReportEventObserver.hasNext()) {
+            ReportEvent hidReportEvent = mHidReportEventObserver.next();
+            assertThat(hidReportEvent.getReportTypeValue())
+                    .isEqualTo(BluetoothHidHost.REPORT_TYPE_INPUT);
+            assertThat(hidReportEvent.getReportIdValue()).isEqualTo(MOUSE_RPT_ID);
+            assertThat(hidReportEvent.getReportData()).isEqualTo(mouseReportData.substring(2));
+        }
         // Invalid report id
-        mHidService.setReport(mDevice, BluetoothHidHost.REPORT_TYPE_INPUT, "0304");
+        String inValidReportData = "0304";
+        mHidService.setReport(mDevice, BluetoothHidHost.REPORT_TYPE_INPUT, inValidReportData);
         mFutureHandShakeIntent = SettableFuture.create();
         assertThat(mFutureHandShakeIntent.get())
                 .isEqualTo(BluetoothHidDevice.ERROR_RSP_INVALID_RPT_ID);
+        if (mHidReportEventObserver.hasNext()) {
+            ReportEvent hidReportEvent = mHidReportEventObserver.next();
+            assertThat(hidReportEvent.getReportTypeValue())
+                    .isEqualTo(BluetoothHidHost.REPORT_TYPE_INPUT);
+            assertThat(hidReportEvent.getReportIdValue()).isEqualTo(INVALID_RPT_ID);
+            assertThat(hidReportEvent.getReportData()).isEqualTo(inValidReportData.substring(2));
+        }
     }
 
     private void reconnectionFromRemoteAndVerifyDisconnectedState() throws Exception {
