@@ -140,7 +140,7 @@ constexpr uint8_t kCapTypeSupportedSamplingFrequencies = 0x01;
 constexpr uint8_t kCapTypeSupportedFrameDurations = 0x02;
 constexpr uint8_t kCapTypeAudioChannelCount = 0x03;
 constexpr uint8_t kCapTypeSupportedOctetsPerCodecFrame = 0x04;
-// constexpr uint8_t kCapTypeSupportedLc3CodecFramesPerSdu = 0x05;
+constexpr uint8_t kCapTypeSupportedLc3CodecFramesPerSdu = 0x05;
 
 // constexpr uint8_t kCapSamplingFrequency8000Hz = 0x0001;
 // constexpr uint8_t kCapSamplingFrequency11025Hz = 0x0002;
@@ -247,6 +247,7 @@ class StateMachineTestBase : public Test {
   uint8_t additional_snk_ases = 0;
   uint8_t additional_src_ases = 0;
   uint8_t channel_count_ = kLeAudioCodecChannelCountSingleChannel;
+  uint8_t codec_frame_blocks_per_sdu_ = 1;
   uint16_t sample_freq_ = codec_specific::kCapSamplingFrequency16000Hz |
                           codec_specific::kCapSamplingFrequency32000Hz;
   uint8_t channel_allocations_sink_ =
@@ -407,6 +408,7 @@ class StateMachineTestBase : public Test {
             [this](uint8_t cig_id,
                    bluetooth::hci::iso_manager::cig_create_params p) {
               log::debug("CreateCig");
+              last_cig_params_ = p;
 
               auto& group = le_audio_device_groups_[cig_id];
               if (group) {
@@ -900,6 +902,7 @@ class StateMachineTestBase : public Test {
       uint8_t audio_channel_count_bitfield,
       uint16_t supported_octets_per_codec_frame_min,
       uint16_t supported_octets_per_codec_frame_max,
+      uint8_t codec_frame_blocks_per_sdu_ = 1,
       uint8_t coding_format = codec_specific::kLc3CodingFormat,
       uint16_t vendor_company_id = 0x0000, uint16_t vendor_codec_id = 0x0000,
       std::vector<uint8_t> metadata = {}) {
@@ -921,6 +924,8 @@ class StateMachineTestBase : public Test {
              (uint8_t)(supported_octets_per_codec_frame_max >> 8),
          }},
     });
+    ltv_map.Add(codec_specific::kCapTypeSupportedLc3CodecFramesPerSdu,
+                (uint8_t)codec_frame_blocks_per_sdu_);
     recs.push_back({
         .codec_id =
             {
@@ -1066,7 +1071,7 @@ class StateMachineTestBase : public Test {
                           codec_specific::kCapFrameDuration10ms |
                               codec_specific::kCapFrameDuration7p5ms |
                               codec_specific::kCapFrameDuration10msPreferred,
-                          channel_count_, 30, 120);
+                          channel_count_, 30, 120, codec_frame_blocks_per_sdu_);
 
           types::hdl_pair handle_pair;
           handle_pair.val_hdl = attr_handle++;
@@ -1091,7 +1096,7 @@ class StateMachineTestBase : public Test {
                           codec_specific::kCapFrameDuration10ms |
                               codec_specific::kCapFrameDuration7p5ms |
                               codec_specific::kCapFrameDuration10msPreferred,
-                          0b00000001, 30, 120);
+                          0b00000001, 30, 120, codec_frame_blocks_per_sdu_);
 
           types::hdl_pair handle_pair;
           handle_pair.val_hdl = attr_handle++;
@@ -1188,7 +1193,7 @@ class StateMachineTestBase : public Test {
             codec_configured_state_params.framing =
                 ascs::kAseParamFramingUnframedSupported;
             codec_configured_state_params.preferred_retrans_nb = 0x04;
-            codec_configured_state_params.max_transport_latency = 0x0010;
+            codec_configured_state_params.max_transport_latency = 0x0020;
             codec_configured_state_params.pres_delay_min = 0xABABAB;
             codec_configured_state_params.pres_delay_max = 0xCDCDCD;
             codec_configured_state_params.preferred_pres_delay_min =
@@ -1605,6 +1610,7 @@ class StateMachineTestBase : public Test {
   gatt::MockBtaGattQueue gatt_queue;
 
   bluetooth::hci::IsoManager* iso_manager_;
+  bluetooth::hci::iso_manager::cig_create_params last_cig_params_;
   MockIsoManager* mock_iso_manager_;
   bluetooth::le_audio::CodecManager* codec_manager_;
   MockCodecManager* mock_codec_manager_;
@@ -1710,6 +1716,153 @@ TEST_F(StateMachineTest, testConfigureCodecSingle) {
 
   /* Cancel is called when group goes to streaming. */
   ASSERT_EQ(0, get_func_call_count("alarm_cancel"));
+}
+
+TEST_F(StateMachineTest, testConfigureCodecSingleFb2) {
+  codec_frame_blocks_per_sdu_ = 2;
+  bool is_fb2_passed_as_sink_requirement = false;
+  bool is_fb2_passed_as_source_requirement = false;
+
+  ON_CALL(*mock_codec_manager_, GetCodecConfig)
+      .WillByDefault(Invoke([&](const bluetooth::le_audio::CodecManager::
+                                    UnicastConfigurationRequirements&
+                                        requirements,
+                                bluetooth::le_audio::CodecManager::
+                                    UnicastConfigurationVerifier verifier) {
+        auto configs =
+            *bluetooth::le_audio::AudioSetConfigurationProvider::Get()
+                 ->GetConfigurations(requirements.audio_context_type);
+        // Note: This dual bidir SWB exclusion logic has to match the
+        // CodecManager::GetCodecConfig() implementation.
+        if (!CodecManager::GetInstance()->IsDualBiDirSwbSupported()) {
+          configs.erase(
+              std::remove_if(configs.begin(), configs.end(),
+                             [](auto const& el) {
+                               if (el->confs.source.empty()) return false;
+                               return AudioSetConfigurationProvider::Get()
+                                   ->CheckConfigurationIsDualBiDirSwb(*el);
+                             }),
+              configs.end());
+        }
+
+        auto cfg = verifier(requirements, &configs);
+        if (cfg == nullptr) {
+          return std::unique_ptr<
+              bluetooth::le_audio::set_configurations::AudioSetConfiguration>(
+              nullptr);
+        }
+        auto config = *cfg;
+
+        if (requirements.sink_pacs.has_value()) {
+          for (auto const& rec : requirements.sink_pacs.value()) {
+            auto caps = rec.codec_spec_caps.GetAsCoreCodecCapabilities();
+            if (caps.HasSupportedMaxCodecFramesPerSdu()) {
+              if (caps.supported_max_codec_frames_per_sdu.value() ==
+                  codec_frame_blocks_per_sdu_) {
+                // Scale by Codec Frames Per SDU = 2
+                for (auto& entry : config.confs.sink) {
+                  entry.codec.params.Add(
+                      codec_spec_conf::kLeAudioLtvTypeCodecFrameBlocksPerSdu,
+                      (uint8_t)codec_frame_blocks_per_sdu_);
+                  entry.qos.maxSdu *= codec_frame_blocks_per_sdu_;
+                  entry.qos.sduIntervalUs *= codec_frame_blocks_per_sdu_;
+                  entry.qos.max_transport_latency *=
+                      codec_frame_blocks_per_sdu_;
+                }
+                is_fb2_passed_as_sink_requirement = true;
+              }
+            }
+          }
+        }
+        if (requirements.source_pacs.has_value()) {
+          for (auto const& rec : requirements.source_pacs.value()) {
+            auto caps = rec.codec_spec_caps.GetAsCoreCodecCapabilities();
+            if (caps.HasSupportedMaxCodecFramesPerSdu()) {
+              if (caps.supported_max_codec_frames_per_sdu.value() ==
+                  codec_frame_blocks_per_sdu_) {
+                // Scale by Codec Frames Per SDU = 2
+                for (auto& entry : config.confs.source) {
+                  entry.codec.params.Add(
+                      codec_spec_conf::kLeAudioLtvTypeCodecFrameBlocksPerSdu,
+                      (uint8_t)codec_frame_blocks_per_sdu_);
+                  entry.qos.maxSdu *= codec_frame_blocks_per_sdu_;
+                  entry.qos.sduIntervalUs *= codec_frame_blocks_per_sdu_;
+                  entry.qos.max_transport_latency *=
+                      codec_frame_blocks_per_sdu_;
+                }
+                is_fb2_passed_as_source_requirement = true;
+              }
+            }
+          }
+        }
+
+        return std::make_unique<
+            bluetooth::le_audio::set_configurations::AudioSetConfiguration>(
+            config);
+      }));
+
+  /* Device is banded headphones with 1x snk + 0x src ase
+   * (1xunidirectional CIS) with channel count 2 (for stereo
+   */
+  const auto context_type = kContextTypeRingtone;
+  const int leaudio_group_id = 2;
+  channel_count_ = kLeAudioCodecChannelCountSingleChannel |
+                   kLeAudioCodecChannelCountTwoChannel;
+
+  /* Prepare the fake connected device group */
+  auto* group = PrepareSingleTestDeviceGroup(leaudio_group_id, context_type);
+
+  /* Since we prepared device with Ringtone context in mind, only one ASE
+   * should have been configured.
+   */
+  auto* leAudioDevice = group->GetFirstDevice();
+  PrepareConfigureCodecHandler(group, 1);
+
+  /* Start the configuration and stream Media content.
+   * Expect 2 times: for Codec Configure & QoS Configure */
+  EXPECT_CALL(gatt_queue,
+              WriteCharacteristic(1, leAudioDevice->ctp_hdls_.val_hdl, _,
+                                  GATT_WRITE_NO_RSP, _, _))
+      .Times(2);
+
+  InjectInitialIdleNotification(group);
+
+  EXPECT_CALL(*mock_iso_manager_, CreateCig).Times(1);
+  ASSERT_TRUE(LeAudioGroupStateMachine::Get()->StartStream(
+      group, context_type,
+      {.sink = types::AudioContexts(context_type),
+       .source = types::AudioContexts(context_type)}));
+
+  /* Check if group has transitioned to a proper state */
+  ASSERT_EQ(group->GetState(),
+            types::AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED);
+
+  /* Cancel is called when group goes to streaming. */
+  ASSERT_EQ(0, get_func_call_count("alarm_cancel"));
+
+  ASSERT_TRUE(is_fb2_passed_as_sink_requirement);
+
+  /* Make sure that data interval is based on the codec frame blocks count */
+  auto data_interval = group->GetActiveConfiguration()
+                           ->confs.sink.at(0)
+                           .codec.GetDataIntervalUs();
+  ASSERT_EQ(data_interval, group->GetActiveConfiguration()
+                                   ->confs.sink.at(0)
+                                   .codec.params.GetAsCoreCodecConfig()
+                                   .GetFrameDurationUs() *
+                               codec_frame_blocks_per_sdu_);
+
+  /* Verify CIG parameters */
+  auto channel_count = group->GetActiveConfiguration()
+                           ->confs.sink.at(0)
+                           .codec.GetChannelCountPerIsoStream();
+  auto frame_octets = group->GetActiveConfiguration()
+                          ->confs.sink.at(0)
+                          .codec.GetOctectsPerFrame();
+  ASSERT_NE(last_cig_params_.cis_cfgs.size(), 0lu);
+  ASSERT_EQ(last_cig_params_.sdu_itv_mtos, data_interval);
+  ASSERT_EQ(last_cig_params_.cis_cfgs.at(0).max_sdu_size_mtos,
+            codec_frame_blocks_per_sdu_ * channel_count * frame_octets);
 }
 
 TEST_F(StateMachineTest, testConfigureCodecMulti) {

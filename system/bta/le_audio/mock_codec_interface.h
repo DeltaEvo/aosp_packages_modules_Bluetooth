@@ -24,6 +24,10 @@
 
 class MockCodecInterface {
  public:
+  static void RegisterMockInstanceHook(
+      std::function<void(MockCodecInterface*, bool)>);
+  static void ClearMockInstanceHookList();
+
   MockCodecInterface() = default;
   MockCodecInterface(const MockCodecInterface&) = delete;
   MockCodecInterface& operator=(const MockCodecInterface&) = delete;

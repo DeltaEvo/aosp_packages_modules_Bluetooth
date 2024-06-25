@@ -30,6 +30,7 @@
 #include "bta_groups.h"
 #include "bta_le_audio_api.h"
 #include "bta_le_audio_broadcaster_api.h"
+#include "btif/include/mock_core_callbacks.h"
 #include "btif_storage_mock.h"
 #include "btm_api_mock.h"
 #include "btm_iso_api.h"
@@ -41,6 +42,7 @@
 #include "hci/controller_interface_mock.h"
 #include "internal_include/stack_config.h"
 #include "le_audio/codec_manager.h"
+#include "le_audio/mock_codec_interface.h"
 #include "le_audio_health_status.h"
 #include "le_audio_set_configuration_provider.h"
 #include "le_audio_types.h"
@@ -1156,6 +1158,8 @@ class UnicastTestNoInit : public Test {
                     stream_conf->stream_params.source
                         .codec_frames_blocks_per_sdu =
                         *core_config.codec_frames_blocks_per_sdu;
+                    stream_conf->stream_params.source.frame_duration_us =
+                        core_config.GetFrameDurationUs();
                   } else {
                     log::assert_that(
                         stream_conf->stream_params.source
@@ -1228,6 +1232,8 @@ class UnicastTestNoInit : public Test {
                     stream_conf->stream_params.sink
                         .codec_frames_blocks_per_sdu =
                         *core_config.codec_frames_blocks_per_sdu;
+                    stream_conf->stream_params.sink.frame_duration_us =
+                        core_config.GetFrameDurationUs();
                   } else {
                     log::assert_that(
                         stream_conf->stream_params.sink
@@ -2347,6 +2353,25 @@ class UnicastTestNoInit : public Test {
                         std::move(ascs), std::move(pacs));
   }
 
+  struct SampleDatabaseParameters {
+    uint16_t conn_id;
+    RawAddress addr;
+
+    uint32_t sink_audio_allocation = codec_spec_conf::kLeAudioLocationStereo;
+    uint32_t source_audio_allocation = codec_spec_conf::kLeAudioLocationStereo;
+    uint8_t sink_channel_cnt = 0x03;
+    uint8_t source_channel_cnt = 0x03;
+    uint16_t sample_freq_mask = 0x0004;
+    bool add_csis = true;
+    bool add_cas = true;
+    bool add_pacs = true;
+    int add_ascs_cnt = 1;
+    uint8_t set_size = 2;
+    uint8_t rank = 1;
+    GattStatus gatt_status = GATT_SUCCESS;
+    uint8_t max_supported_codec_frames_per_sdu = 1;
+  };
+
   void SetSampleDatabaseEarbudsValid(
       uint16_t conn_id, RawAddress addr, uint32_t sink_audio_allocation,
       uint32_t source_audio_allocation, uint8_t sink_channel_cnt = 0x03,
@@ -2354,6 +2379,43 @@ class UnicastTestNoInit : public Test {
       bool add_csis = true, bool add_cas = true, bool add_pacs = true,
       int add_ascs_cnt = 1, uint8_t set_size = 2, uint8_t rank = 1,
       GattStatus gatt_status = GATT_SUCCESS) {
+    SetSampleDatabaseEarbudsValid(SampleDatabaseParameters{
+        .conn_id = conn_id,
+        .addr = addr,
+        .sink_audio_allocation = sink_audio_allocation,
+        .source_audio_allocation = source_audio_allocation,
+        .sink_channel_cnt = sink_channel_cnt,
+        .source_channel_cnt = source_channel_cnt,
+        .sample_freq_mask = sample_freq_mask,
+        .add_csis = add_csis,
+        .add_cas = add_cas,
+        .add_pacs = add_pacs,
+        .add_ascs_cnt = add_ascs_cnt,
+        .set_size = set_size,
+        .rank = rank,
+        .gatt_status = gatt_status,
+        .max_supported_codec_frames_per_sdu = 1,
+    });
+  }
+
+  void SetSampleDatabaseEarbudsValid(const SampleDatabaseParameters& params) {
+    auto conn_id = params.conn_id;
+    auto addr = params.addr;
+    auto sink_audio_allocation = params.sink_audio_allocation;
+    auto source_audio_allocation = params.source_audio_allocation;
+    auto sink_channel_cnt = params.sink_channel_cnt;
+    auto source_channel_cnt = params.source_channel_cnt;
+    auto sample_freq_mask = params.sample_freq_mask;
+    auto add_csis = params.add_csis;
+    auto add_cas = params.add_cas;
+    auto add_pacs = params.add_pacs;
+    auto add_ascs_cnt = params.add_ascs_cnt;
+    auto set_size = params.set_size;
+    auto rank = params.rank;
+    auto gatt_status = params.gatt_status;
+    auto max_supported_codec_frames_per_sdu =
+        params.max_supported_codec_frames_per_sdu;
+
     auto csis = std::make_unique<NiceMock<MockDeviceWrapper::csis_mock>>();
     if (add_csis) {
       // attribute handles
@@ -2451,10 +2513,8 @@ class UnicastTestNoInit : public Test {
 
       // Set pacs default read values
       ON_CALL(*peer_devices.at(conn_id)->pacs, OnReadCharacteristic(_, _, _))
-          .WillByDefault([this, conn_id, snk_allocation, src_allocation,
-                          sample_freq, sink_channel_cnt, source_channel_cnt,
-                          gatt_status](uint16_t handle, GATT_READ_OP_CB cb,
-                                       void* cb_data) {
+          .WillByDefault([=, this](uint16_t handle, GATT_READ_OP_CB cb,
+                                   void* cb_data) {
             auto& pacs = peer_devices.at(conn_id)->pacs;
             std::vector<uint8_t> value;
             if (gatt_status == GATT_SUCCESS) {
@@ -2498,7 +2558,7 @@ class UnicastTestNoInit : public Test {
                       0x00,
                       0x00,
                       // Codec Spec. Caps. Len
-                      0x10,
+                      0x13,
                       0x03, /* sample freq */
                       0x01,
                       0x80, /* 48kHz */
@@ -2515,6 +2575,9 @@ class UnicastTestNoInit : public Test {
                       0x00,
                       0x78,
                       0x00,
+                      0x02, /* Max supported codec frames per SDU */
+                      0x05,
+                      max_supported_codec_frames_per_sdu,
                       // Metadata Length
                       0x00,
                   };
@@ -2900,6 +2963,8 @@ class UnicastTest : public UnicastTestNoInit {
   }
 
   void TearDown() override {
+    MockCodecInterface::ClearMockInstanceHookList();
+
     // Clear the default actions before the parent class teardown is called
     Mock::VerifyAndClear(&mock_btm_interface_);
     Mock::VerifyAndClear(&mock_gatt_interface_);
@@ -10882,4 +10947,186 @@ TEST_F_WITH_FLAGS(UnicastTest, NoContextvalidateStreamingRequest,
   Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
   Mock::VerifyAndClearExpectations(mock_le_audio_source_hal_client_);
 }
+
+TEST_F(UnicastTest, CodecFrameBlocks2) {
+  auto const max_codec_frames_per_sdu = 2;
+  uint32_t data_len = 1920;
+
+  // Register a on-the-fly hook for codec interface mock mutation to prepare the
+  // codec mock for encoding
+  std::list<MockCodecInterface*> codec_mocks;
+  MockCodecInterface::RegisterMockInstanceHook([&](MockCodecInterface* mock,
+                                                   bool is_destroyed) {
+    if (is_destroyed) {
+      log::debug("Codec Interface Destroyed: {}", (long)mock);
+      codec_mocks.remove(mock);
+    } else {
+      log::debug("Codec Interface Created: {}", (long)mock);
+      ON_CALL(*mock, GetNumOfSamplesPerChannel()).WillByDefault(Return(960));
+      ON_CALL(*mock, GetNumOfBytesPerSample())
+          .WillByDefault(Return(2));  // 16bits samples
+      ON_CALL(*mock, Encode(_, _, _, _, _))
+          .WillByDefault(Return(CodecInterface::Status::STATUS_OK));
+      codec_mocks.push_back(mock);
+    }
+  });
+
+  // Add a frame block PAC passing verifier
+  bool is_fb2_passed_as_requirement = false;
+  ON_CALL(*mock_codec_manager_, GetCodecConfig)
+      .WillByDefault(Invoke([&](const bluetooth::le_audio::CodecManager::
+                                    UnicastConfigurationRequirements&
+                                        requirements,
+                                bluetooth::le_audio::CodecManager::
+                                    UnicastConfigurationVerifier verifier) {
+        auto filtered =
+            *bluetooth::le_audio::AudioSetConfigurationProvider::Get()
+                 ->GetConfigurations(requirements.audio_context_type);
+        // Filter out the dual bidir SWB configurations
+        if (!bluetooth::le_audio::CodecManager::GetInstance()
+                 ->IsDualBiDirSwbSupported()) {
+          filtered.erase(
+              std::remove_if(filtered.begin(), filtered.end(),
+                             [](auto const& el) {
+                               if (el->confs.source.empty()) return false;
+                               return AudioSetConfigurationProvider::Get()
+                                   ->CheckConfigurationIsDualBiDirSwb(*el);
+                             }),
+              filtered.end());
+        }
+        auto cfg = verifier(requirements, &filtered);
+        if (cfg == nullptr) {
+          return std::unique_ptr<set_configurations::AudioSetConfiguration>(
+              nullptr);
+        }
+
+        auto config = *cfg;
+
+        if (requirements.sink_pacs.has_value()) {
+          for (auto const& rec : requirements.sink_pacs.value()) {
+            auto caps = rec.codec_spec_caps.GetAsCoreCodecCapabilities();
+            if (caps.HasSupportedMaxCodecFramesPerSdu()) {
+              if (caps.supported_max_codec_frames_per_sdu.value() ==
+                  max_codec_frames_per_sdu) {
+                // Inject the proper Codec Frames Per SDU as the json
+                // configs are conservative and will always give us 1
+                for (auto& entry : config.confs.sink) {
+                  entry.codec.params.Add(
+                      codec_spec_conf::kLeAudioLtvTypeCodecFrameBlocksPerSdu,
+                      (uint8_t)max_codec_frames_per_sdu);
+                }
+                is_fb2_passed_as_requirement = true;
+              }
+            }
+          }
+        }
+        return std::make_unique<set_configurations::AudioSetConfiguration>(
+            config);
+      }));
+
+  types::BidirectionalPair<stream_parameters> codec_manager_stream_params;
+  ON_CALL(*mock_codec_manager_, UpdateActiveAudioConfig)
+      .WillByDefault(Invoke(
+          [&](const types::BidirectionalPair<stream_parameters>& stream_params,
+              types::BidirectionalPair<uint16_t> delays_ms,
+              std::function<void(const offload_config& config,
+                                 uint8_t direction)>
+                  updater) { codec_manager_stream_params = stream_params; }));
+
+  const RawAddress test_address0 = GetTestAddress(0);
+  int group_id = bluetooth::groups::kGroupUnknown;
+
+  SampleDatabaseParameters remote_params{
+      .conn_id = 1,
+      .addr = test_address0,
+      .add_csis = false,
+      .set_size = 0,
+      .rank = 0,
+      .max_supported_codec_frames_per_sdu = 2,
+  };
+  SetSampleDatabaseEarbudsValid(remote_params);
+
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnConnectionState(ConnectionState::CONNECTED, test_address0))
+      .Times(1);
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnGroupNodeStatus(test_address0, _, GroupNodeStatus::ADDED))
+      .WillOnce(DoAll(SaveArg<1>(&group_id)));
+
+  ConnectLeAudio(test_address0);
+  ASSERT_NE(group_id, bluetooth::groups::kGroupUnknown);
+
+  constexpr int gmcs_ccid = 1;
+  constexpr int gtbs_ccid = 2;
+
+  // Audio sessions are started only when device gets active
+  EXPECT_CALL(*mock_le_audio_source_hal_client_, Start(_, _, _)).Times(1);
+  EXPECT_CALL(*mock_le_audio_sink_hal_client_, Start(_, _, _)).Times(1);
+  LeAudioClient::Get()->SetCcidInformation(gmcs_ccid, 4 /* Media */);
+  LeAudioClient::Get()->SetCcidInformation(gtbs_ccid, 2 /* Phone */);
+  LeAudioClient::Get()->GroupSetActive(group_id);
+  SyncOnMainLoop();
+
+  types::BidirectionalPair<std::vector<uint8_t>> ccids = {.sink = {gmcs_ccid},
+                                                          .source = {}};
+  EXPECT_CALL(mock_state_machine_, StartStream(_, _, _, ccids)).Times(1);
+
+  block_streaming_state_callback = true;
+
+  UpdateLocalSourceMetadata(AUDIO_USAGE_MEDIA, AUDIO_CONTENT_TYPE_MUSIC);
+  LocalAudioSourceResume(false);
+
+  SyncOnMainLoop();
+  Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
+  Mock::VerifyAndClearExpectations(mock_le_audio_source_hal_client_);
+  ASSERT_TRUE(is_fb2_passed_as_requirement);
+
+  // Verify codec fram blocks per SDU has been applied to the device
+  ASSERT_NE(0lu, streaming_groups.count(group_id));
+  uint8_t device_configured_codec_frame_blocks_per_sdu = 0;
+  auto group = streaming_groups.at(group_id);
+  for (LeAudioDevice* device = group->GetFirstDevice(); device != nullptr;
+       device = group->GetNextDevice(device)) {
+    for (auto& ase : device->ases_) {
+      if (ase.active) {
+        auto cfg = ase.codec_config.GetAsCoreCodecConfig();
+        ASSERT_TRUE(cfg.codec_frames_blocks_per_sdu.has_value());
+        device_configured_codec_frame_blocks_per_sdu =
+            cfg.codec_frames_blocks_per_sdu.value();
+      }
+    }
+  }
+
+  // Verify the configured codec frame blocks per SDU
+  ASSERT_EQ(device_configured_codec_frame_blocks_per_sdu,
+            remote_params.max_supported_codec_frames_per_sdu);
+
+  EXPECT_CALL(mock_state_machine_, StopStream(_)).Times(0);
+  do_in_main_thread(
+      FROM_HERE,
+      base::BindOnce(
+          [](int group_id,
+             bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks*
+                 state_machine_callbacks) {
+            state_machine_callbacks->StatusReportCb(
+                group_id, GroupStreamStatus::STREAMING);
+          },
+          group_id, base::Unretained(state_machine_callbacks_)));
+  SyncOnMainLoop();
+  Mock::VerifyAndClearExpectations(&mock_state_machine_);
+
+  // Verify Data transfer on one audio source cis
+  constexpr uint8_t cis_count_out = 1;
+  constexpr uint8_t cis_count_in = 0;
+  TestAudioDataTransfer(
+      group_id, cis_count_out, cis_count_in,
+      data_len * device_configured_codec_frame_blocks_per_sdu);
+
+  ASSERT_NE(codec_mocks.size(), 0ul);
+
+  // Verify that the initially started session was updated with the new params
+  ASSERT_EQ(codec_manager_stream_params.sink.codec_frames_blocks_per_sdu,
+            max_codec_frames_per_sdu);
+}
+
 }  // namespace bluetooth::le_audio
