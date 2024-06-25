@@ -85,13 +85,12 @@ enum class ResponseCodeValue : uint8_t {
   RESERVED_FOR_FUTURE_USE = 0x00,
   SUCCESS = 0x01,
   OP_CODE_NOT_SUPPORTED = 0x02,
-  INVALID_OPERATOR = 0x03,
-  OPERATOR_NOT_SUPPORTED = 0x04,
-  INVALID_OPERAND = 0x05,
-  ABORT_UNSUCCESSFUL = 0x06,
-  PROCEDURE_NOT_COMPLETED = 0x07,
-  OPERAND_NOT_SUPPORTED = 0x08,
-  NO_RECORDS_FOUND = 0x09,
+  INVALID_PARAMETER = 0x03,
+  PERSISTED = 0x04,
+  ABORT_UNSUCCESSFUL = 0x05,
+  PROCEDURE_NOT_COMPLETED = 0x06,
+  OPERAND_NOT_SUPPORTED = 0x07,
+  NO_RECORDS_FOUND = 0x08,
 };
 
 std::string GetResponseOpcodeValueText(ResponseCodeValue response_code_value);
@@ -99,6 +98,7 @@ std::string GetResponseOpcodeValueText(ResponseCodeValue response_code_value);
 struct ControlPointCommand {
   Opcode opcode_;
   uint8_t parameter_[4];
+  bool isValid_;
 };
 
 struct ControlPointResponse {

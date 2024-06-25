@@ -535,12 +535,7 @@ void smp_proc_pair_fail(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
               p_cb->rcvd_cmd_len);
     p_cb->status = SMP_INVALID_PARAMETERS;
   } else {
-    if (com::android::bluetooth::flags::
-            fix_pairing_failure_reason_from_remote()) {
-      p_cb->status = static_cast<tSMP_STATUS>(p_data->p_data[0]);
-    } else {
-      p_cb->status = p_data->status;
-    }
+    p_cb->status = static_cast<tSMP_STATUS>(p_data->p_data[0]);
   }
 
   /* Cancel pending auth complete timer if set */

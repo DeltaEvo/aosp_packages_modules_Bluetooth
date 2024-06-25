@@ -16,12 +16,15 @@
 
 package com.android.bluetooth.telephony;
 
+import static java.util.Objects.requireNonNull;
+
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothHeadset;
 import android.bluetooth.BluetoothLeCall;
 import android.bluetooth.BluetoothLeCallControl;
+import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -53,7 +56,6 @@ import com.android.bluetooth.tbs.BluetoothLeCallControlProxy;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -120,9 +122,8 @@ public class BluetoothInCallService extends InCallService {
     @VisibleForTesting BluetoothLeCallControlProxy mBluetoothLeCallControl;
     private ExecutorService mExecutor;
 
-    @VisibleForTesting public TelephonyManager mTelephonyManager;
-
-    @VisibleForTesting public TelecomManager mTelecomManager;
+    private TelephonyManager mTelephonyManager;
+    private TelecomManager mTelecomManager;
 
     @VisibleForTesting
     public final HashMap<Integer, CallStateCallback> mCallbacks = new HashMap<>();
@@ -138,30 +139,34 @@ public class BluetoothInCallService extends InCallService {
 
     private static BluetoothInCallService sInstance = null;
 
-    public CallInfo mCallInfo = new CallInfo();
+    private final CallInfo mCallInfo;
 
     protected boolean mOnCreateCalled = false;
 
     private int mMaxNumberOfCalls = 0;
 
-    /**
-     * Listens to connections and disconnections of bluetooth headsets. We need to save the current
-     * bluetooth headset so that we know where to send BluetoothCall updates.
-     */
-    @VisibleForTesting
-    public BluetoothProfile.ServiceListener mProfileListener =
+    private BluetoothAdapter mAdapter = null;
+
+    private final BluetoothProfile.ServiceListener mProfileListener =
             new BluetoothProfile.ServiceListener() {
                 @Override
                 public void onServiceConnected(int profile, BluetoothProfile proxy) {
                     synchronized (LOCK) {
                         if (profile == BluetoothProfile.HEADSET) {
-                            setBluetoothHeadset(
-                                    new BluetoothHeadsetProxy((BluetoothHeadset) proxy));
+                            mBluetoothHeadset = new BluetoothHeadsetProxy((BluetoothHeadset) proxy);
                             updateHeadsetWithCallState(true /* force */);
                         } else {
-                            setBluetoothLeCallControl(
-                                    new BluetoothLeCallControlProxy(
-                                            (BluetoothLeCallControl) proxy));
+                            mBluetoothLeCallControl =
+                                    new BluetoothLeCallControlProxy((BluetoothLeCallControl) proxy);
+
+                            mBluetoothLeCallControl.registerBearer(
+                                    TAG,
+                                    List.of("tel"),
+                                    BluetoothLeCallControl.CAPABILITY_HOLD_CALL,
+                                    getNetworkOperator(),
+                                    getBearerTechnology(),
+                                    mExecutor,
+                                    mBluetoothLeCallControlCallback);
                             sendTbsCurrentCallsList();
                         }
                     }
@@ -171,9 +176,9 @@ public class BluetoothInCallService extends InCallService {
                 public void onServiceDisconnected(int profile) {
                     synchronized (LOCK) {
                         if (profile == BluetoothProfile.HEADSET) {
-                            setBluetoothHeadset(null);
+                            mBluetoothHeadset = null;
                         } else {
-                            setBluetoothLeCallControl(null);
+                            mBluetoothLeCallControl = null;
                         }
                     }
                 }
@@ -335,10 +340,7 @@ public class BluetoothInCallService extends InCallService {
     @Override
     public IBinder onBind(Intent intent) {
         Log.i(TAG, "onBind. Intent: " + intent);
-        IBinder binder = super.onBind(intent);
-        mTelephonyManager = getSystemService(TelephonyManager.class);
-        mTelecomManager = getSystemService(TelecomManager.class);
-        return binder;
+        return super.onBind(intent);
     }
 
     @Override
@@ -347,10 +349,27 @@ public class BluetoothInCallService extends InCallService {
         return super.onUnbind(intent);
     }
 
-    public BluetoothInCallService() {
+    private BluetoothInCallService(CallInfo callInfo) {
         Log.i(TAG, "BluetoothInCallService is created");
+        mCallInfo = Objects.requireNonNullElse(callInfo, new CallInfo());
         sInstance = this;
         mExecutor = Executors.newSingleThreadExecutor();
+    }
+
+    public BluetoothInCallService() {
+        this(null);
+    }
+
+    @VisibleForTesting
+    BluetoothInCallService(
+            Context context,
+            CallInfo callInfo,
+            BluetoothHeadsetProxy headset,
+            BluetoothLeCallControlProxy leCallControl) {
+        this(callInfo);
+        mBluetoothHeadset = headset;
+        mBluetoothLeCallControl = leCallControl;
+        attachBaseContext(context);
     }
 
     public static BluetoothInCallService getInstance() {
@@ -502,11 +521,7 @@ public class BluetoothInCallService extends InCallService {
                 }
             }
             if (TextUtils.isEmpty(address)) {
-                if (mTelephonyManager == null) {
-                    address = null;
-                } else {
-                    address = mTelephonyManager.getLine1Number();
-                }
+                address = mTelephonyManager.getLine1Number();
                 if (address == null) address = "";
             }
             return address;
@@ -717,10 +732,11 @@ public class BluetoothInCallService extends InCallService {
     public void onCreate() {
         Log.d(TAG, "onCreate");
         super.onCreate();
-        BluetoothAdapter.getDefaultAdapter()
-                .getProfileProxy(this, mProfileListener, BluetoothProfile.HEADSET);
-        BluetoothAdapter.getDefaultAdapter()
-                .getProfileProxy(this, mProfileListener, BluetoothProfile.LE_CALL_CONTROL);
+        mAdapter = requireNonNull(getSystemService(BluetoothManager.class)).getAdapter();
+        mTelephonyManager = requireNonNull(getSystemService(TelephonyManager.class));
+        mTelecomManager = requireNonNull(getSystemService(TelecomManager.class));
+        mAdapter.getProfileProxy(this, mProfileListener, BluetoothProfile.HEADSET);
+        mAdapter.getProfileProxy(this, mProfileListener, BluetoothProfile.LE_CALL_CONTROL);
         mBluetoothAdapterReceiver = new BluetoothAdapterReceiver();
         IntentFilter intentFilter = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
         intentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
@@ -750,14 +766,13 @@ public class BluetoothInCallService extends InCallService {
             mBluetoothAdapterReceiver = null;
         }
         if (mBluetoothHeadset != null) {
-            mBluetoothHeadset.closeBluetoothHeadsetProxy(this);
+            mBluetoothHeadset.closeBluetoothHeadsetProxy(mAdapter);
             mBluetoothHeadset = null;
         }
         if (mBluetoothLeCallControl != null) {
             mBluetoothLeCallControl.unregisterBearer();
-            mBluetoothLeCallControl.closeBluetoothLeCallControlProxy(this);
+            mBluetoothLeCallControl.closeBluetoothLeCallControlProxy(mAdapter);
         }
-        mProfileListener = null;
         sInstance = null;
         mCallbacks.clear();
         mBluetoothCallHashMap.clear();
@@ -814,10 +829,6 @@ public class BluetoothInCallService extends InCallService {
                 for (BluetoothCall bluetoothCall : mBluetoothCallHashMap.values()) {
                     if (bluetoothCall.getHandle() == null) {
                         Log.w(TAG, "call id: " + bluetoothCall.getId() + " handle is null");
-                        continue;
-                    }
-                    if (mTelephonyManager == null) {
-                        Log.w(TAG, "mTelephonyManager is null");
                         continue;
                     }
                     boolean isSame =
@@ -1374,11 +1385,6 @@ public class BluetoothInCallService extends InCallService {
     }
 
     @VisibleForTesting
-    public void setBluetoothHeadset(BluetoothHeadsetProxy bluetoothHeadset) {
-        mBluetoothHeadset = bluetoothHeadset;
-    }
-
-    @VisibleForTesting
     public BluetoothCall getBluetoothCallById(Integer id) {
         if (mBluetoothCallHashMap.containsKey(id)) {
             return mBluetoothCallHashMap.get(id);
@@ -1521,10 +1527,6 @@ public class BluetoothInCallService extends InCallService {
 
             if (account == null) {
                 // Second, Try to get the label for the default Phone Account.
-                if (mTelecomManager == null) {
-                    Log.w(TAG, "mTelecomManager is null");
-                    return null;
-                }
                 List<PhoneAccountHandle> handles =
                         mTelecomManager.getPhoneAccountsSupportingScheme(PhoneAccount.SCHEME_TEL);
                 while (handles.iterator().hasNext()) {
@@ -1550,23 +1552,6 @@ public class BluetoothInCallService extends InCallService {
                 }
             }
             return null;
-        }
-    }
-    ;
-
-    @VisibleForTesting
-    public void setBluetoothLeCallControl(BluetoothLeCallControlProxy bluetoothTbs) {
-        mBluetoothLeCallControl = bluetoothTbs;
-
-        if ((mBluetoothLeCallControl) != null && (mTelecomManager != null)) {
-            mBluetoothLeCallControl.registerBearer(
-                    TAG,
-                    new ArrayList<String>(Arrays.asList("tel")),
-                    BluetoothLeCallControl.CAPABILITY_HOLD_CALL,
-                    getNetworkOperator(),
-                    getBearerTechnology(),
-                    mExecutor,
-                    mBluetoothLeCallControlCallback);
         }
     }
 

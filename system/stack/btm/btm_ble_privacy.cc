@@ -33,12 +33,11 @@
 #include "hci/controller_interface.h"
 #include "main/shim/acl_api.h"
 #include "main/shim/entry.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/include/bt_octets.h"
 #include "stack/include/bt_types.h"
-#include "stack/include/btm_api.h"
+#include "stack/include/btm_client_interface.h"
 #include "types/raw_address.h"
 
 using namespace bluetooth;
@@ -456,9 +455,9 @@ static tBTM_STATUS btm_ble_remove_resolving_list_entry(
     UINT8_TO_STREAM(p, p_dev_rec->ble.identity_address_with_type.type);
     BDADDR_TO_STREAM(p, p_dev_rec->ble.identity_address_with_type.bda);
 
-    BTM_VendorSpecificCommand(HCI_VENDOR_BLE_RPA_VSC,
-                              BTM_BLE_META_REMOVE_IRK_LEN, param,
-                              btm_ble_resolving_list_vsc_op_cmpl);
+    get_btm_client_interface().vendor.BTM_VendorSpecificCommand(
+        HCI_VENDOR_BLE_RPA_VSC, BTM_BLE_META_REMOVE_IRK_LEN, param,
+        btm_ble_resolving_list_vsc_op_cmpl);
     btm_ble_enq_resolving_list_pending(p_dev_rec->bd_addr,
                                        BTM_BLE_META_REMOVE_IRK_ENTRY);
   }
@@ -482,9 +481,9 @@ static void btm_ble_clear_resolving_list(void) {
     uint8_t* p = param;
 
     UINT8_TO_STREAM(p, BTM_BLE_META_CLEAR_IRK_LIST);
-    BTM_VendorSpecificCommand(HCI_VENDOR_BLE_RPA_VSC,
-                              BTM_BLE_META_CLEAR_IRK_LEN, param,
-                              btm_ble_resolving_list_vsc_op_cmpl);
+    get_btm_client_interface().vendor.BTM_VendorSpecificCommand(
+        HCI_VENDOR_BLE_RPA_VSC, BTM_BLE_META_CLEAR_IRK_LEN, param,
+        btm_ble_resolving_list_vsc_op_cmpl);
   }
 }
 
@@ -520,8 +519,9 @@ bool btm_ble_read_resolving_list_entry(tBTM_SEC_DEV_REC* p_dev_rec) {
     UINT8_TO_STREAM(p, BTM_BLE_META_READ_IRK_ENTRY);
     UINT8_TO_STREAM(p, p_dev_rec->ble.resolving_list_index);
 
-    BTM_VendorSpecificCommand(HCI_VENDOR_BLE_RPA_VSC, BTM_BLE_META_READ_IRK_LEN,
-                              param, btm_ble_resolving_list_vsc_op_cmpl);
+    get_btm_client_interface().vendor.BTM_VendorSpecificCommand(
+        HCI_VENDOR_BLE_RPA_VSC, BTM_BLE_META_READ_IRK_LEN, param,
+        btm_ble_resolving_list_vsc_op_cmpl);
 
     btm_ble_enq_resolving_list_pending(p_dev_rec->bd_addr,
                                        BTM_BLE_META_READ_IRK_ENTRY);
@@ -540,8 +540,9 @@ static void btm_ble_ble_unsupported_resolving_list_load_dev(
   UINT8_TO_STREAM(p, p_dev_rec->ble.identity_address_with_type.type);
   BDADDR_TO_STREAM(p, p_dev_rec->ble.identity_address_with_type.bda);
 
-  BTM_VendorSpecificCommand(HCI_VENDOR_BLE_RPA_VSC, BTM_BLE_META_ADD_IRK_LEN,
-                            param, btm_ble_resolving_list_vsc_op_cmpl);
+  get_btm_client_interface().vendor.BTM_VendorSpecificCommand(
+      HCI_VENDOR_BLE_RPA_VSC, BTM_BLE_META_ADD_IRK_LEN, param,
+      btm_ble_resolving_list_vsc_op_cmpl);
 
   btm_ble_enq_resolving_list_pending(p_dev_rec->bd_addr,
                                      BTM_BLE_META_ADD_IRK_ENTRY);

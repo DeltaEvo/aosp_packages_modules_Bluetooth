@@ -252,7 +252,7 @@ public class ContextMap<C, T> {
                 if (!mAppAdvertiseStats.containsKey(id)) {
                     AppAdvertiseStats appAdvertiseStats =
                             BluetoothMethodProxy.getInstance()
-                                    .createAppAdvertiseStats(id, appName, this, service);
+                                    .createAppAdvertiseStats(appUid, id, appName, this, service);
                     mAppAdvertiseStats.put(id, appAdvertiseStats);
                 }
             }
@@ -450,6 +450,9 @@ public class ContextMap<C, T> {
             if (stats == null) {
                 return;
             }
+            int advertiseInstanceCount = mAppAdvertiseStats.size();
+            Log.d(TAG, "advertiseInstanceCount is " + advertiseInstanceCount);
+            AppAdvertiseStats.recordAdvertiseInstanceCount(advertiseInstanceCount);
             stats.recordAdvertiseStart(
                     parameters,
                     advertiseData,
@@ -457,10 +460,8 @@ public class ContextMap<C, T> {
                     periodicParameters,
                     periodicData,
                     duration,
-                    maxExtAdvEvents);
-            int advertiseInstanceCount = mAppAdvertiseStats.size();
-            Log.d(TAG, "advertiseInstanceCount is " + advertiseInstanceCount);
-            AppAdvertiseStats.recordAdvertiseInstanceCount(advertiseInstanceCount);
+                    maxExtAdvEvents,
+                    advertiseInstanceCount);
         }
     }
 
@@ -470,7 +471,7 @@ public class ContextMap<C, T> {
             if (stats == null) {
                 return;
             }
-            stats.recordAdvertiseStop();
+            stats.recordAdvertiseStop(mAppAdvertiseStats.size());
             mAppAdvertiseStats.remove(id);
             mLastAdvertises.add(stats);
         }
@@ -482,7 +483,8 @@ public class ContextMap<C, T> {
             if (stats == null) {
                 return;
             }
-            stats.enableAdvertisingSet(enable, duration, maxExtAdvEvents);
+            stats.enableAdvertisingSet(
+                    enable, duration, maxExtAdvEvents, mAppAdvertiseStats.size());
         }
     }
 

@@ -386,6 +386,11 @@ bool a2dp_get_selected_hal_pcm_config(PcmConfiguration* pcm_config) {
   pcm_config->sampleRateHz = A2dpCodecToHalSampleRate(current_codec);
   pcm_config->bitsPerSample = A2dpCodecToHalBitsPerSample(current_codec);
   pcm_config->channelMode = A2dpCodecToHalChannelMode(current_codec);
+
+  if (com::android::bluetooth::flags::a2dp_aidl_encoding_interval()) {
+    pcm_config->dataIntervalUs = bta_av_co_get_encoder_preferred_interval_us();
+  }
+
   return (pcm_config->sampleRateHz > 0 && pcm_config->bitsPerSample > 0 &&
           pcm_config->channelMode != ChannelMode::UNKNOWN);
 }

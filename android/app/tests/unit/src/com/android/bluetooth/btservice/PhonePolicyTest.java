@@ -1071,7 +1071,6 @@ public class PhonePolicyTest {
      */
     @Test
     public void testAutoConnectHfpOnly() {
-        mSetFlagsRule.enableFlags(Flags.FLAG_AUTO_CONNECT_ON_HFP_WHEN_NO_A2DP_DEVICE);
         mSetFlagsRule.disableFlags(Flags.FLAG_AUTO_CONNECT_ON_MULTIPLE_HFP_WHEN_NO_A2DP_DEVICE);
 
         // Return desired values from the mocked object(s)
@@ -1109,7 +1108,6 @@ public class PhonePolicyTest {
 
     @Test
     public void autoConnect_whenMultiHfp_startConnection() {
-        mSetFlagsRule.enableFlags(Flags.FLAG_AUTO_CONNECT_ON_HFP_WHEN_NO_A2DP_DEVICE);
         mSetFlagsRule.enableFlags(Flags.FLAG_AUTO_CONNECT_ON_MULTIPLE_HFP_WHEN_NO_A2DP_DEVICE);
 
         // Return desired values from the mocked object(s)
@@ -1154,7 +1152,6 @@ public class PhonePolicyTest {
     @Test
     public void autoConnect_whenMultiHfpAndDeconnection_startConnection() {
         mSetFlagsRule.enableFlags(Flags.FLAG_AUTO_CONNECT_ON_MULTIPLE_HFP_WHEN_NO_A2DP_DEVICE);
-        mSetFlagsRule.enableFlags(Flags.FLAG_AUTO_CONNECT_ON_HFP_WHEN_NO_A2DP_DEVICE);
 
         // Return desired values from the mocked object(s)
         doReturn(BluetoothAdapter.STATE_ON).when(mAdapterService).getState();

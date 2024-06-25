@@ -297,7 +297,7 @@ typedef uint16_t tBTA_AG_PEER_CODEC;
 namespace hfp {
 
 struct offload_config {
-  tBTA_AG_PEER_CODEC sco_codec;
+  tBTA_AG_UUID_CODEC sco_codec;
   int32_t connection_handle;
   bool is_controller_codec;
   bool is_nrec;

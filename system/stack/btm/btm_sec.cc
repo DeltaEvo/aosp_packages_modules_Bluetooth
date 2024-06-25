@@ -37,7 +37,6 @@
 
 #include "bt_dev_class.h"
 #include "btif/include/btif_storage.h"
-#include "common/init_flags.h"
 #include "common/metrics.h"
 #include "common/time_util.h"
 #include "device/include/device_iot_config.h"
@@ -232,7 +231,7 @@ static bool btm_dev_16_digit_authenticated(const tBTM_SEC_DEV_REC* p_dev_rec) {
 
 static bool is_sec_state_equal(void* data, void* context) {
   tBTM_SEC_DEV_REC* p_dev_rec = static_cast<tBTM_SEC_DEV_REC*>(data);
-  uint8_t* state = static_cast<uint8_t*>(context);
+  tSECURITY_STATE* state = static_cast<tSECURITY_STATE*>(context);
 
   if (p_dev_rec->sec_rec.sec_state == *state) return false;
 
@@ -249,7 +248,7 @@ static bool is_sec_state_equal(void* data, void* context) {
  * Returns          Pointer to the record or NULL
  *
  ******************************************************************************/
-static tBTM_SEC_DEV_REC* btm_sec_find_dev_by_sec_state(uint8_t state) {
+static tBTM_SEC_DEV_REC* btm_sec_find_dev_by_sec_state(tSECURITY_STATE state) {
   list_node_t* n =
       list_foreach(btm_sec_cb.sec_dev_rec, is_sec_state_equal, &state);
   if (n) return static_cast<tBTM_SEC_DEV_REC*>(list_node(n));
@@ -427,8 +426,8 @@ bool BTM_SecAddRmtNameNotifyCallback(tBTM_RMT_NAME_CALLBACK* p_callback) {
   int i;
 
   for (i = 0; i < BTM_SEC_MAX_RMT_NAME_CALLBACKS; i++) {
-    if (btm_cb.p_rmt_name_callback[i] == NULL) {
-      btm_cb.p_rmt_name_callback[i] = p_callback;
+    if (btm_cb.rnr.p_rmt_name_callback[i] == NULL) {
+      btm_cb.rnr.p_rmt_name_callback[i] = p_callback;
       return (true);
     }
   }
@@ -450,8 +449,8 @@ bool BTM_SecDeleteRmtNameNotifyCallback(tBTM_RMT_NAME_CALLBACK* p_callback) {
   int i;
 
   for (i = 0; i < BTM_SEC_MAX_RMT_NAME_CALLBACKS; i++) {
-    if (btm_cb.p_rmt_name_callback[i] == p_callback) {
-      btm_cb.p_rmt_name_callback[i] = NULL;
+    if (btm_cb.rnr.p_rmt_name_callback[i] == p_callback) {
+      btm_cb.rnr.p_rmt_name_callback[i] = NULL;
       return (true);
     }
   }
@@ -2262,8 +2261,8 @@ static void call_registered_rmt_name_callbacks(const RawAddress* p_bd_addr,
   /* Notify all clients waiting for name to be resolved even if not found so
    * clients can continue */
   for (i = 0; i < BTM_SEC_MAX_RMT_NAME_CALLBACKS; i++) {
-    if (btm_cb.p_rmt_name_callback[i]) {
-      (*btm_cb.p_rmt_name_callback[i])(*p_bd_addr, dev_class, p_bd_name);
+    if (btm_cb.rnr.p_rmt_name_callback[i]) {
+      (*btm_cb.rnr.p_rmt_name_callback[i])(*p_bd_addr, dev_class, p_bd_name);
     }
   }
 }
@@ -2353,13 +2352,14 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
     p_dev_rec->sec_bd_name[0] = 0;
   }
 
-  uint8_t old_sec_state = p_dev_rec->sec_rec.sec_state;
-  if (p_dev_rec->sec_rec.sec_state == BTM_SEC_STATE_GETTING_NAME)
-    p_dev_rec->sec_rec.sec_state = BTM_SEC_STATE_IDLE;
-
   /* Notify all clients waiting for name to be resolved */
   call_registered_rmt_name_callbacks(p_bd_addr, p_dev_rec->dev_class,
                                      p_dev_rec->sec_bd_name, status);
+
+  // Security procedure resumes
+  tSECURITY_STATE old_sec_state = p_dev_rec->sec_rec.sec_state;
+  if (p_dev_rec->sec_rec.sec_state == BTM_SEC_STATE_GETTING_NAME)
+    p_dev_rec->sec_rec.sec_state = BTM_SEC_STATE_IDLE;
 
   /* If we were delaying asking UI for a PIN because name was not resolved,
    * ask now */
@@ -2374,7 +2374,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
       log::verbose("calling pin_callback");
       btm_sec_cb.pairing_flags |= BTM_PAIR_FLAGS_PIN_REQD;
       (*btm_sec_cb.api.p_pin_callback)(
-          p_dev_rec->bd_addr, p_dev_rec->dev_class, p_bd_name,
+          p_dev_rec->bd_addr, p_dev_rec->dev_class, p_dev_rec->sec_bd_name,
           (p_dev_rec->sec_rec.required_security_flags_for_pairing &
            BTM_SEC_IN_MIN_16_DIGIT_PIN));
     }
@@ -3319,7 +3319,7 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
       "Security Manager encryption change request hci_status:{} request:{} "
       "state:{} sec_flags:0x{:x}",
       hci_status_code_text(status), (encr_enable) ? "encrypt" : "unencrypt",
-      (p_dev_rec->sec_rec.sec_state) ? "encrypted" : "unencrypted",
+      security_state_text(p_dev_rec->sec_rec.sec_state),
       p_dev_rec->sec_rec.sec_flags);
 
   if (status == HCI_SUCCESS) {
@@ -3629,9 +3629,6 @@ static void btm_sec_connect_after_reject_timeout(void* /* data */) {
 void btm_sec_connected(const RawAddress& bda, uint16_t handle,
                        tHCI_STATUS status, uint8_t enc_mode,
                        tHCI_ROLE assigned_role) {
-  tBTM_STATUS res;
-  bool is_pairing_device = false;
-  bool addr_matched;
   uint8_t bit_shift = 0;
 
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bda);
@@ -3715,8 +3712,8 @@ void btm_sec_connected(const RawAddress& bda, uint16_t handle,
   }
 
   p_dev_rec->device_type |= BT_DEVICE_TYPE_BREDR;
-
-  addr_matched = (btm_sec_cb.pairing_bda == bda);
+  bool is_pairing_device = false;
+  const bool addr_matched = (btm_sec_cb.pairing_bda == bda);
 
   if ((btm_sec_cb.pairing_state != BTM_PAIR_STATE_IDLE) && addr_matched) {
     /* if we rejected incoming connection from bonding device */
@@ -3747,16 +3744,13 @@ void btm_sec_connected(const RawAddress& bda, uint16_t handle,
         alarm_set_on_mloop(btm_sec_cb.sec_collision_timer, 0,
                            btm_sec_connect_after_reject_timeout, NULL);
       }
-
       return;
-    }
-    /* wait for incoming connection without resetting pairing state */
-    else if (status == HCI_ERR_CONNECTION_EXISTS) {
+    } else if (status == HCI_ERR_CONNECTION_EXISTS) {
+      /* wait for incoming connection without resetting pairing state */
       log::warn(
           "Security Manager: btm_sec_connected: Wait for incoming connection");
       return;
     }
-
     is_pairing_device = true;
   }
 
@@ -3897,7 +3891,7 @@ void btm_sec_connected(const RawAddress& bda, uint16_t handle,
   log::debug("Is connection locally initiated:{}", p_dev_rec->is_originator);
   if (!(p_dev_rec->sec_rec.sec_flags & BTM_SEC_NAME_KNOWN) ||
       p_dev_rec->is_originator) {
-    res = btm_sec_execute_procedure(p_dev_rec);
+    tBTM_STATUS res = btm_sec_execute_procedure(p_dev_rec);
     if (res != BTM_CMD_STARTED)
       btm_sec_dev_rec_cback_event(p_dev_rec, res, false);
   }
@@ -4750,7 +4744,9 @@ tBTM_STATUS btm_sec_execute_procedure(tBTM_SEC_DEV_REC* p_dev_rec) {
  *
  ******************************************************************************/
 static bool btm_sec_start_get_name(tBTM_SEC_DEV_REC* p_dev_rec) {
-  if (!BTM_IsDeviceUp()) return false;
+  if (!get_btm_client_interface().local.BTM_IsDeviceUp()) {
+    return false;
+  }
 
   p_dev_rec->sec_rec.sec_state = BTM_SEC_STATE_GETTING_NAME;
 

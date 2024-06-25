@@ -180,6 +180,7 @@ class BroadcastStateMachine : public StateMachine<5> {
   virtual void OnCreateAnnouncement(uint8_t advertising_sid, int8_t tx_power,
                                     uint8_t status) = 0;
   virtual void OnEnableAnnouncement(bool enable, uint8_t status) = 0;
+  virtual void OnUpdateAnnouncement(uint8_t status) = 0;
   void SetMuted(bool muted) { is_muted_ = muted; };
   bool IsMuted() const { return is_muted_; };
 
@@ -218,6 +219,7 @@ class IBroadcastStateMachineCallbacks {
   virtual void OnOwnAddressResponse(uint32_t broadcast_id, uint8_t addr_type,
                                     RawAddress address) = 0;
   virtual void OnBigCreated(const std::vector<uint16_t>& conn_handle) = 0;
+  virtual void OnAnnouncementUpdated(uint32_t broadcast_id) = 0;
 };
 
 std::ostream& operator<<(

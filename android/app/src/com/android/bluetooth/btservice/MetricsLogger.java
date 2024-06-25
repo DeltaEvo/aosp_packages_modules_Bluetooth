@@ -389,6 +389,88 @@ public class MetricsLogger {
         return matchedString;
     }
 
+    /** Logs the app scan stats with app attribution when the app scan state changed. */
+    public void logAppScanStateChanged(
+            int[] uids,
+            String[] tags,
+            boolean enabled,
+            boolean isFilterScan,
+            boolean isCallbackScan,
+            int scanCallBackType,
+            int scanType,
+            int scanMode,
+            long reportDelayMillis,
+            long scanDurationMillis,
+            int numOngoingScan,
+            boolean isScreenOn,
+            boolean isAppDead) {
+        BluetoothStatsLog.write(
+                BluetoothStatsLog.LE_APP_SCAN_STATE_CHANGED,
+                uids,
+                tags,
+                enabled,
+                isFilterScan,
+                isCallbackScan,
+                scanCallBackType,
+                scanType,
+                scanMode,
+                reportDelayMillis,
+                scanDurationMillis,
+                numOngoingScan,
+                isScreenOn,
+                isAppDead);
+    }
+
+    /** Logs the radio scan stats with app attribution when the radio scan stopped. */
+    public void logRadioScanStopped(
+            int[] uids,
+            String[] tags,
+            int scanType,
+            int scanMode,
+            long scanIntervalMillis,
+            long scanWindowMillis,
+            boolean isScreenOn,
+            long scanDurationMillis) {
+        BluetoothStatsLog.write(
+                BluetoothStatsLog.LE_RADIO_SCAN_STOPPED,
+                uids,
+                tags,
+                scanType,
+                scanMode,
+                scanIntervalMillis,
+                scanWindowMillis,
+                isScreenOn,
+                scanDurationMillis);
+    }
+
+    /** Logs the advertise stats with app attribution when the advertise state changed. */
+    public void logAdvStateChanged(
+            int[] uids,
+            String[] tags,
+            boolean enabled,
+            int interval,
+            int txPowerLevel,
+            boolean isConnectable,
+            boolean isPeriodicAdvertisingEnabled,
+            boolean hasScanResponse,
+            boolean isExtendedAdv,
+            int instanceCount,
+            long advDurationMs) {
+        BluetoothStatsLog.write(
+                BluetoothStatsLog.LE_ADV_STATE_CHANGED,
+                uids,
+                tags,
+                enabled,
+                interval,
+                txPowerLevel,
+                isConnectable,
+                isPeriodicAdvertisingEnabled,
+                hasScanResponse,
+                isExtendedAdv,
+                instanceCount,
+                advDurationMs);
+    }
+
     protected String getAllowlistedDeviceNameHash(String deviceName) {
         List<String> wordBreakdownList = getWordBreakdownList(deviceName);
         String matchedString = getMatchedString(wordBreakdownList);

@@ -337,8 +337,8 @@ tCONN_CB* sdpu_find_ccb_by_cid(uint16_t cid) {
 
   /* Look through each connection control block */
   for (xx = 0, p_ccb = sdp_cb.ccb; xx < SDP_MAX_CONNECTIONS; xx++, p_ccb++) {
-    if ((p_ccb->con_state != SDP_STATE_IDLE) &&
-        (p_ccb->con_state != SDP_STATE_CONN_PEND) &&
+    if ((p_ccb->con_state != tSDP_STATE::IDLE) &&
+        (p_ccb->con_state != tSDP_STATE::CONN_PEND) &&
         (p_ccb->connection_id == cid)) {
       return (p_ccb);
     }
@@ -365,7 +365,7 @@ tCONN_CB* sdpu_find_ccb_by_db(const tSDP_DISCOVERY_DB* p_db) {
   if (p_db) {
     /* Look through each connection control block */
     for (xx = 0, p_ccb = sdp_cb.ccb; xx < SDP_MAX_CONNECTIONS; xx++, p_ccb++) {
-      if ((p_ccb->con_state != SDP_STATE_IDLE) && (p_ccb->p_db == p_db))
+      if ((p_ccb->con_state != tSDP_STATE::IDLE) && (p_ccb->p_db == p_db))
         return (p_ccb);
     }
   }
@@ -388,7 +388,7 @@ tCONN_CB* sdpu_allocate_ccb(void) {
 
   /* Look through each connection control block for a free one */
   for (xx = 0, p_ccb = sdp_cb.ccb; xx < SDP_MAX_CONNECTIONS; xx++, p_ccb++) {
-    if (p_ccb->con_state == SDP_STATE_IDLE) {
+    if (p_ccb->con_state == tSDP_STATE::IDLE) {
       alarm_t* alarm = p_ccb->sdp_conn_timer;
       *p_ccb = {};
       p_ccb->sdp_conn_timer = alarm;
@@ -431,7 +431,7 @@ void sdpu_release_ccb(tCONN_CB& ccb) {
   alarm_cancel(ccb.sdp_conn_timer);
 
   /* Drop any response pointer we may be holding */
-  ccb.con_state = SDP_STATE_IDLE;
+  ccb.con_state = tSDP_STATE::IDLE;
   ccb.is_attr_search = false;
 
   /* Free the response buffer */
@@ -457,9 +457,9 @@ uint16_t sdpu_get_active_ccb_cid(const RawAddress& bd_addr) {
 
   // Look through each connection control block for active sdp on given remote
   for (xx = 0, p_ccb = sdp_cb.ccb; xx < SDP_MAX_CONNECTIONS; xx++, p_ccb++) {
-    if ((p_ccb->con_state == SDP_STATE_CONN_SETUP) ||
-        (p_ccb->con_state == SDP_STATE_CFG_SETUP) ||
-        (p_ccb->con_state == SDP_STATE_CONNECTED)) {
+    if ((p_ccb->con_state == tSDP_STATE::CONN_SETUP) ||
+        (p_ccb->con_state == tSDP_STATE::CFG_SETUP) ||
+        (p_ccb->con_state == tSDP_STATE::CONNECTED)) {
       if (p_ccb->con_flags & SDP_FLAGS_IS_ORIG &&
           p_ccb->device_address == bd_addr) {
         return p_ccb->connection_id;
@@ -489,10 +489,10 @@ bool sdpu_process_pend_ccb_same_cid(tCONN_CB& ccb) {
 
   // Look through each connection control block for active sdp on given remote
   for (xx = 0, p_ccb = sdp_cb.ccb; xx < SDP_MAX_CONNECTIONS; xx++, p_ccb++) {
-    if ((p_ccb->con_state == SDP_STATE_CONN_PEND) &&
+    if ((p_ccb->con_state == tSDP_STATE::CONN_PEND) &&
         (p_ccb->connection_id == ccb.connection_id) &&
         (p_ccb->con_flags & SDP_FLAGS_IS_ORIG)) {
-      p_ccb->con_state = SDP_STATE_CONNECTED;
+      p_ccb->con_state = tSDP_STATE::CONNECTED;
       sdp_disc_connected(p_ccb);
       return true;
     }
@@ -521,12 +521,12 @@ bool sdpu_process_pend_ccb_new_cid(tCONN_CB& ccb) {
 
   // Look through each ccb to replace the obsolete cid with a new one.
   for (xx = 0, p_ccb = sdp_cb.ccb; xx < SDP_MAX_CONNECTIONS; xx++, p_ccb++) {
-    if ((p_ccb->con_state == SDP_STATE_CONN_PEND) &&
+    if ((p_ccb->con_state == tSDP_STATE::CONN_PEND) &&
         (p_ccb->connection_id == ccb.connection_id) &&
         (p_ccb->con_flags & SDP_FLAGS_IS_ORIG)) {
       if (!new_conn) {
         // Only change state of the first ccb
-        p_ccb->con_state = SDP_STATE_CONN_SETUP;
+        p_ccb->con_state = tSDP_STATE::CONN_SETUP;
         new_cid = L2CA_ConnectReqWithSecurity(BT_PSM_SDP, p_ccb->device_address,
                                               BTM_SEC_NONE);
         new_conn = true;
@@ -561,7 +561,7 @@ void sdpu_clear_pend_ccb(tCONN_CB& ccb) {
 
   // Look through each connection control block for active sdp on given remote
   for (xx = 0, p_ccb = sdp_cb.ccb; xx < SDP_MAX_CONNECTIONS; xx++, p_ccb++) {
-    if ((p_ccb->con_state == SDP_STATE_CONN_PEND) &&
+    if ((p_ccb->con_state == tSDP_STATE::CONN_PEND) &&
         (p_ccb->connection_id == ccb.connection_id) &&
         (p_ccb->con_flags & SDP_FLAGS_IS_ORIG)) {
       sdpu_callback(*p_ccb, SDP_CONN_FAILED);

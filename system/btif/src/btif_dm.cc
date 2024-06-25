@@ -762,8 +762,7 @@ bool is_device_le_audio_capable(const RawAddress bd_addr) {
   /* First try reading device type from BTIF - it persists over multiple
    * inquiry sessions */
   int dev_type = 0;
-  if (com::android::bluetooth::flags::le_audio_dev_type_detection_fix() &&
-      (btif_get_device_type(bd_addr, &dev_type) &&
+  if ((btif_get_device_type(bd_addr, &dev_type) &&
        (dev_type & BT_DEVICE_TYPE_BLE) == BT_DEVICE_TYPE_BLE)) {
     /* LE Audio capable device is discoverable over both LE and Classic using
      * same address. Prefer to use LE transport, as we don't know if it can do
@@ -855,20 +854,7 @@ static void btif_dm_cb_create_bond(const RawAddress bd_addr,
                        static_cast<tBT_DEVICE_TYPE>(device_type));
   }
 
-  if (!com::android::bluetooth::flags::connect_hid_after_service_discovery() &&
-      is_hid && (device_type & BT_DEVICE_TYPE_BLE) == 0) {
-    tAclLinkSpec link_spec;
-    link_spec.addrt.bda = bd_addr;
-    link_spec.addrt.type = addr_type;
-    link_spec.transport = transport;
-    const bt_status_t status =
-        GetInterfaceToProfiles()->profileSpecific_HACK->btif_hh_connect(
-            link_spec);
-    if (status != BT_STATUS_SUCCESS)
-      bond_state_changed(status, bd_addr, BT_BOND_STATE_NONE);
-  } else {
-    BTA_DmBond(bd_addr, addr_type, transport, device_type);
-  }
+  BTA_DmBond(bd_addr, addr_type, transport, device_type);
   /*  Track  originator of bond creation  */
   pairing_cb.is_local_initiated = true;
 }
@@ -981,8 +967,8 @@ static void btif_dm_pin_req_evt(tBTA_DM_PIN_REQ* p_pin_req) {
   int dev_type;
 
   /* Remote properties update */
-  if (BTM_GetPeerDeviceTypeFromFeatures(p_pin_req->bd_addr) ==
-      BT_DEVICE_TYPE_DUMO) {
+  if (get_btm_client_interface().peer.BTM_GetPeerDeviceTypeFromFeatures(
+          p_pin_req->bd_addr) == BT_DEVICE_TYPE_DUMO) {
     dev_type = BT_DEVICE_TYPE_DUMO;
   } else if (!btif_get_device_type(p_pin_req->bd_addr, &dev_type)) {
     // Failed to get device type, defaulting to BR/EDR.
@@ -1075,8 +1061,8 @@ static void btif_dm_ssp_cfm_req_evt(tBTA_DM_SP_CFM_REQ* p_ssp_cfm_req) {
                p_ssp_cfm_req->bd_addr, p_ssp_cfm_req->just_works,
                p_ssp_cfm_req->loc_auth_req, p_ssp_cfm_req->rmt_auth_req);
   /* Remote properties update */
-  if (BTM_GetPeerDeviceTypeFromFeatures(p_ssp_cfm_req->bd_addr) ==
-      BT_DEVICE_TYPE_DUMO) {
+  if (get_btm_client_interface().peer.BTM_GetPeerDeviceTypeFromFeatures(
+          p_ssp_cfm_req->bd_addr) == BT_DEVICE_TYPE_DUMO) {
     dev_type = BT_DEVICE_TYPE_DUMO;
   } else if (!btif_get_device_type(p_ssp_cfm_req->bd_addr, &dev_type)) {
     // Failed to get device type, defaulting to BR/EDR.
@@ -1143,8 +1129,8 @@ static void btif_dm_ssp_key_notif_evt(tBTA_DM_SP_KEY_NOTIF* p_ssp_key_notif) {
   log::verbose("addr:{}", p_ssp_key_notif->bd_addr);
 
   /* Remote properties update */
-  if (BTM_GetPeerDeviceTypeFromFeatures(p_ssp_key_notif->bd_addr) ==
-      BT_DEVICE_TYPE_DUMO) {
+  if (get_btm_client_interface().peer.BTM_GetPeerDeviceTypeFromFeatures(
+          p_ssp_key_notif->bd_addr) == BT_DEVICE_TYPE_DUMO) {
     dev_type = BT_DEVICE_TYPE_DUMO;
   } else if (!btif_get_device_type(p_ssp_key_notif->bd_addr, &dev_type)) {
     // Failed to get device type, defaulting to BR/EDR.
@@ -1237,7 +1223,8 @@ static void btif_dm_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
     btif_storage_set_remote_addr_type(&bd_addr, p_auth_cmpl->addr_type);
 
     int dev_type;
-    if (BTM_GetPeerDeviceTypeFromFeatures(bd_addr) == BT_DEVICE_TYPE_DUMO) {
+    if (get_btm_client_interface().peer.BTM_GetPeerDeviceTypeFromFeatures(
+            bd_addr) == BT_DEVICE_TYPE_DUMO) {
       dev_type = BT_DEVICE_TYPE_DUMO;
     } else {
       dev_type = p_auth_cmpl->dev_type;
@@ -1658,27 +1645,8 @@ static bool btif_should_ignore_uuid(const Uuid& uuid) {
 }
 
 static bool btif_is_gatt_service_discovery_post_pairing(const RawAddress bd_addr) {
-  if (!com::android::bluetooth::flags::
-          reset_pairing_only_for_related_service_discovery()) {
-    if (bd_addr == pairing_cb.bd_addr || bd_addr == pairing_cb.static_bdaddr) {
-      if (pairing_cb.gatt_over_le !=
-          btif_dm_pairing_cb_t::ServiceDiscoveryState::SCHEDULED) {
-        log::error(
-            "gatt_over_le should be SCHEDULED, did someone clear the control "
-            "block for {} ?",
-            bd_addr);
-      }
-
-      return true;
-    }
-
-    return false;
-  }
-
- return ((bd_addr == pairing_cb.bd_addr ||
-          bd_addr == pairing_cb.static_bdaddr) &&
-         (pairing_cb.gatt_over_le ==
-          btif_dm_pairing_cb_t::ServiceDiscoveryState::SCHEDULED));
+  return (bd_addr == pairing_cb.bd_addr || bd_addr == pairing_cb.static_bdaddr) &&
+         (pairing_cb.gatt_over_le == btif_dm_pairing_cb_t::ServiceDiscoveryState::SCHEDULED);
 }
 
 static void btif_merge_existing_uuids(RawAddress& addr, std::set<Uuid>* uuids) {
@@ -1716,11 +1684,7 @@ static void btif_on_service_discovery_results(
     if (pairing_cb.sdp_attempts) {
       log::warn("SDP failed after bonding re-attempting for {}", bd_addr);
       pairing_cb.sdp_attempts++;
-      if (com::android::bluetooth::flags::force_bredr_for_sdp_retry()) {
-        btif_dm_get_remote_services(bd_addr, BT_TRANSPORT_BR_EDR);
-      } else {
-        btif_dm_get_remote_services(bd_addr, BT_TRANSPORT_AUTO);
-      }
+      btif_dm_get_remote_services(bd_addr, BT_TRANSPORT_BR_EDR);
     } else {
       log::warn("SDP triggered by someone failed when bonding");
     }
@@ -3021,14 +2985,6 @@ bt_status_t btif_dm_get_adapter_property(bt_property_t* prop) {
       prop->len = strlen((char*)bd_name->name);
     } break;
 
-    case BT_PROPERTY_ADAPTER_SCAN_MODE: {
-      /* if the storage does not have it. Most likely app never set it. Default
-       * is NONE */
-      bt_scan_mode_t* mode = (bt_scan_mode_t*)prop->val;
-      *mode = BT_SCAN_MODE_NONE;
-      prop->len = sizeof(bt_scan_mode_t);
-    } break;
-
     case BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT: {
       uint32_t* tmt = (uint32_t*)prop->val;
       *tmt = 120; /* default to 120s, if not found in NV */
@@ -3501,10 +3457,6 @@ static void btif_dm_ble_key_notif_evt(tBTA_DM_SP_KEY_NOTIF* p_ssp_key_notif) {
 
 static bool btif_dm_ble_is_temp_pairing(RawAddress& bd_addr, bool ctkd) {
   if (btm_get_bond_type_dev(bd_addr) == BOND_TYPE_TEMPORARY) {
-    if (!com::android::bluetooth::flags::ignore_bond_type_for_le()) {
-      return true;
-    }
-
     return ctkd;
   }
 

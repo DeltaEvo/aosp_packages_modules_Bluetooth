@@ -58,20 +58,23 @@ ProviderInfo::ProviderInfo(SessionType sessionType,
     : codecInfos(std::move(codecs)) {
   for (auto codecInfo : codecInfos) {
     if (codecInfo.id == CodecId::Core::CVSD) {
-      hfpScoConfigMap[UUID_CODEC_CVSD] = recordHfpCodecInfo(codecInfo);
+      hfpScoConfigMap[tBTA_AG_UUID_CODEC::UUID_CODEC_CVSD] =
+          recordHfpCodecInfo(codecInfo);
     } else if (codecInfo.id == CodecId::Core::MSBC) {
-      hfpScoConfigMap[UUID_CODEC_MSBC] = recordHfpCodecInfo(codecInfo);
+      hfpScoConfigMap[tBTA_AG_UUID_CODEC::UUID_CODEC_MSBC] =
+          recordHfpCodecInfo(codecInfo);
     } else if (codecInfo.id == CodecId::Core::LC3) {
       if (sessionType == SessionType::HFP_HARDWARE_OFFLOAD_DATAPATH ||
           sessionType == SessionType::HFP_SOFTWARE_ENCODING_DATAPATH ||
           sessionType == SessionType::HFP_SOFTWARE_DECODING_DATAPATH) {
-        hfpScoConfigMap[UUID_CODEC_LC3] = recordHfpCodecInfo(codecInfo);
+        hfpScoConfigMap[tBTA_AG_UUID_CODEC::UUID_CODEC_LC3] =
+            recordHfpCodecInfo(codecInfo);
       }
     }
   }
 }
 
-const std::unordered_map<int, ::hfp::sco_config>&
+const std::unordered_map<tBTA_AG_UUID_CODEC, ::hfp::sco_config>&
 ProviderInfo::GetHfpScoConfig() {
   return hfpScoConfigMap;
 }

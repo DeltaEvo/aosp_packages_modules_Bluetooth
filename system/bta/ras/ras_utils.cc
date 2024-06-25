@@ -57,24 +57,28 @@ std::string uuid::getUuidName(const bluetooth::Uuid& uuid) {
 
 bool ParseControlPointCommand(ControlPointCommand* command,
                               const uint8_t* value, uint16_t len) {
+  command->opcode_ = static_cast<Opcode>(value[0]);
   // Check for minimum expected length
   switch (value[0]) {
     case (uint8_t)Opcode::ABORT_OPERATION:
+      if (len != 1) {
+        return false;
+      }
       break;
     case (uint8_t)Opcode::PCT_FORMAT: {
-      if (len < 2) {
+      if (len != 2) {
         return false;
       }
     } break;
     case (uint8_t)Opcode::GET_RANGING_DATA:
     case (uint8_t)Opcode::ACK_RANGING_DATA:
     case (uint8_t)Opcode::FILTER: {
-      if (len < 3) {
+      if (len != 3) {
         return false;
       }
     } break;
     case (uint8_t)Opcode::RETRIEVE_LOST_RANGING_DATA_SEGMENTS: {
-      if (len < 5) {
+      if (len != 5) {
         return false;
       }
     } break;
@@ -82,8 +86,8 @@ bool ParseControlPointCommand(ControlPointCommand* command,
       log::warn("unknown opcode 0x{:02x}", value[0]);
       return false;
   }
-  command->opcode_ = static_cast<Opcode>(value[0]);
   std::memcpy(command->parameter_, value + 1, len - 1);
+  command->isValid_ = true;
   return true;
 }
 
@@ -114,12 +118,10 @@ std::string GetResponseOpcodeValueText(ResponseCodeValue response_code_value) {
       return "SUCCESS";
     case ResponseCodeValue::OP_CODE_NOT_SUPPORTED:
       return "OP_CODE_NOT_SUPPORTED";
-    case ResponseCodeValue::INVALID_OPERATOR:
-      return "INVALID_OPERATOR";
-    case ResponseCodeValue::OPERATOR_NOT_SUPPORTED:
-      return "OPERATOR_NOT_SUPPORTED";
-    case ResponseCodeValue::INVALID_OPERAND:
-      return "INVALID_OPERAND";
+    case ResponseCodeValue::INVALID_PARAMETER:
+      return "INVALID_PARAMETER";
+    case ResponseCodeValue::PERSISTED:
+      return "PERSISTED";
     case ResponseCodeValue::ABORT_UNSUCCESSFUL:
       return "ABORT_UNSUCCESSFUL";
     case ResponseCodeValue::PROCEDURE_NOT_COMPLETED:

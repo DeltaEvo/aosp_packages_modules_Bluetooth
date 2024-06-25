@@ -98,6 +98,11 @@ A2dpCodecConfig* bta_av_get_a2dp_peer_current_codec(
 // Returns the effective frame size if the encoder is configured, otherwise 0.
 int bta_av_co_get_encoder_effective_frame_size();
 
+// Gets the preferred encoding interval from the current encoder.
+// Returns the preferred encoding interval if the encoder is configured,
+// otherwise 0.
+int bta_av_co_get_encoder_preferred_interval_us();
+
 // Dump A2DP codec debug-related information for the A2DP module.
 // |fd| is the file descriptor to use for writing the ASCII formatted
 // information.

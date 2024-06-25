@@ -62,6 +62,14 @@ void acl_ble_update_event_received(tHCI_STATUS /* status */,
   inc_func_call_count(__func__);
 }
 
+void acl_ble_update_request_event_received(uint16_t /* handle */,
+                                           uint16_t /* interval_min */,
+                                           uint16_t /* interval_max */,
+                                           uint16_t /* latency */,
+                                           uint16_t /* timeout */) {
+  inc_func_call_count(__func__);
+}
+
 void acl_ble_data_length_change_event(uint16_t /* handle */,
                                       uint16_t /* max_tx_octets */,
                                       uint16_t /* max_tx_time */,
