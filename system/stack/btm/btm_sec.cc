@@ -2284,6 +2284,9 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
     return;
   }
 
+  // We are guaranteed to have an address at this point
+  const RawAddress bd_addr(*p_bd_addr);
+
   if (status == HCI_SUCCESS) {
     log::debug(
         "Remote read request complete for known device pairing_state:{} "
@@ -2310,8 +2313,8 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
   }
 
   /* Notify all clients waiting for name to be resolved */
-  call_registered_rmt_name_callbacks(p_bd_addr, p_dev_rec->dev_class,
-                                     p_dev_rec->sec_bd_name, status);
+  call_registered_rmt_name_callbacks(&bd_addr, p_dev_rec->dev_class, p_dev_rec->sec_bd_name,
+                                     status);
 
   // Security procedure resumes
   const bool is_security_state_getting_name =
@@ -2323,7 +2326,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
   /* If we were delaying asking UI for a PIN because name was not resolved,
    * ask now */
   if ((btm_sec_cb.pairing_state == BTM_PAIR_STATE_WAIT_LOCAL_PIN) &&
-      p_bd_addr && (btm_sec_cb.pairing_bda == *p_bd_addr)) {
+      (btm_sec_cb.pairing_bda == bd_addr)) {
     log::verbose(
         "delayed pin now being requested flags:0x{:x}, (p_pin_callback=0x{})",
         btm_sec_cb.pairing_flags, fmt::ptr(btm_sec_cb.api.p_pin_callback));
@@ -2345,7 +2348,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
 
   /* Check if we were delaying bonding because name was not resolved */
   if (btm_sec_cb.pairing_state == BTM_PAIR_STATE_GET_REM_NAME) {
-    if (p_bd_addr && btm_sec_cb.pairing_bda == *p_bd_addr) {
+    if (btm_sec_cb.pairing_bda == bd_addr) {
       log::verbose("continue bonding sm4: 0x{:04x}, status:0x{:x}",
                    p_dev_rec->sm4, status);
       if (btm_sec_cb.pairing_flags & BTM_PAIR_FLAGS_WE_CANCEL_DD) {
