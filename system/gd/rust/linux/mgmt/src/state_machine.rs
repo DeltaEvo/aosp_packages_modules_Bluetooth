@@ -323,7 +323,8 @@ fn configure_pid(pid_tx: mpsc::Sender<Message>) {
 
         loop {
             let r = pid_async_fd.readable_mut();
-            let mut fd_ready = r.await.unwrap();
+            let mut fd_ready =
+                r.await.expect(format!("pid file in {} never became readable", PID_DIR).as_str());
             let mut buffer: [u8; 1024] = [0; 1024];
             debug!("Found new pid inotify entries. Reading them");
             match fd_ready.try_io(|inner| inner.get_mut().read_events(&mut buffer)) {
