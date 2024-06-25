@@ -32,6 +32,7 @@
 
 #include "hcidefs.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/l2cdefs.h"
 #include "types/bt_transport.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
@@ -178,6 +179,7 @@ constexpr uint16_t L2CAP_LE_MIN_MTU = 23;  // Minimum SDU size
 constexpr uint16_t L2CAP_LE_MIN_MPS = 23;
 constexpr uint16_t L2CAP_LE_MAX_MPS = 65533;
 constexpr uint16_t L2CAP_LE_CREDIT_MAX = 65535;
+constexpr uint16_t L2CAP_LE_CREDIT_THRESHOLD = 64;
 
 // This is initial amout of credits we send, and amount to which we increase
 // credits once they fall below threshold
@@ -188,17 +190,20 @@ uint16_t L2CA_LeCreditDefault();
 uint16_t L2CA_LeCreditThreshold();
 
 // Max number of CIDs in the L2CAP CREDIT BASED CONNECTION REQUEST
-constexpr uint16_t L2CAP_CREDIT_BASED_MAX_CIDS = 5;
+constexpr uint8_t L2CAP_CREDIT_BASED_MAX_CIDS = 5;
 
 /* Define a structure to hold the configuration parameter for LE L2CAP
  * connection oriented channels.
  */
+constexpr uint16_t kDefaultL2capMtu = 100;
+constexpr uint16_t kDefaultL2capMps = 100;
+
 struct tL2CAP_LE_CFG_INFO {
-  uint16_t result; /* Only used in confirm messages */
-  uint16_t mtu = 100;
-  uint16_t mps = 100;
-  uint16_t credits = L2CA_LeCreditDefault();
-  uint8_t number_of_channels = L2CAP_CREDIT_BASED_MAX_CIDS;
+  uint16_t result{L2CAP_LE_RESULT_CONN_OK}; /* Only used in confirm messages */
+  uint16_t mtu{kDefaultL2capMtu};
+  uint16_t mps{kDefaultL2capMps};
+  uint16_t credits{L2CA_LeCreditDefault()};
+  uint8_t number_of_channels{L2CAP_CREDIT_BASED_MAX_CIDS};
 };
 
 /*********************************
