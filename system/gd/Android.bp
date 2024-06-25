@@ -175,6 +175,9 @@ cc_defaults {
         "libbluetooth_ras_pdl",
         "libbluetooth_smp_pdl",
     ],
+    static_rlibs: [
+        "libbt_shim_ffi",
+    ],
     static_libs: [
         "libaconfig_storage_read_api_cc",
         "libbase",
@@ -187,7 +190,6 @@ cc_defaults {
         "libbt-common",
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
-        "libbt_shim_ffi",
         "libcom.android.sysprop.bluetooth.wrapped",
         "libosi",
         "server_configurable_flags",
@@ -526,6 +528,7 @@ cc_test {
     name: "bluetooth_test_gdx_unit",
     test_suites: ["device-tests"],
     defaults: [
+        "aconfig_lib_cc_shared_link.defaults",
         "gd_defaults",
         "mts_defaults",
     ],
@@ -554,7 +557,6 @@ cc_test {
         "BluetoothGeneratedDumpsysTestData_h",
     ],
     static_libs: [
-        "libaconfig_storage_read_api_cc",
         "libbase",
         "libbluetooth-dumpsys",
         "libbluetooth-dumpsys-test",
