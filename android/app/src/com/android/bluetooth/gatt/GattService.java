@@ -419,11 +419,15 @@ public class GattService extends ProfileService {
         }
 
         private GattService getService() {
-            if (mService != null && mService.isAvailable()) {
-                return mService;
+            // Cache mService because it can change while getService is called
+            GattService service = mService;
+
+            if (service == null || !service.isAvailable()) {
+                Log.e(TAG, "getService() - Service requested, but not available!");
+                return null;
             }
-            Log.e(TAG, "getService() - Service requested, but not available!");
-            return null;
+
+            return service;
         }
 
         @Override
