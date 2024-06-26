@@ -2570,7 +2570,11 @@ bool BtifAvStateMachine::StateOpened::ProcessEvent(uint32_t event,
           log::error("Peer {} : cannot proceed to do AvStart",
                      peer_.PeerAddress());
           peer_.ClearFlags(BtifAvPeer::kFlagPendingStart);
-          btif_a2dp_command_ack(A2DP_CTRL_ACK_FAILURE);
+          if (bluetooth::audio::a2dp::is_hal_enabled()) {
+            bluetooth::audio::a2dp::ack_stream_started(A2DP_CTRL_ACK_FAILURE);
+          } else {
+            btif_a2dp_command_ack(A2DP_CTRL_ACK_FAILURE);
+          }
         }
         if (peer_.IsSink()) {
           btif_av_source_disconnect(peer_.PeerAddress());
