@@ -240,7 +240,10 @@ public class HeadsetService extends ProfileService {
         unregisterReceiver(mHeadsetReceiver);
         synchronized (mStateMachines) {
             // Reset active device to null
-            mActiveDevice = null;
+            if (mActiveDevice != null) {
+                mActiveDevice = null;
+                broadcastActiveDevice(null);
+            }
             mInbandRingingRuntimeDisable = false;
             mForceScoAudio = false;
             mAudioRouteAllowed = true;
