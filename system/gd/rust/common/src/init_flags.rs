@@ -210,7 +210,6 @@ init_flags!(
         classic_discovery_only,
         dynamic_avrcp_version_enhancement = true,
         hci_adapter: i32,
-        sdp_serialization = true,
         sdp_skip_rnr_if_known = true,
         set_min_encryption = true,
         subrating = true,
