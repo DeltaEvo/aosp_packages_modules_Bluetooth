@@ -211,7 +211,6 @@ init_flags!(
         dynamic_avrcp_version_enhancement = true,
         hci_adapter: i32,
         use_unified_connection_manager,
-        sdp_return_classic_services_when_le_discovery_fails = true,
         use_rsi_from_cached_inqiry_results = false,
         att_mtu_default: i32 = 517,
     }
