@@ -440,6 +440,8 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
               // There is already an active cnnection on this device
               // skip upper layer notification
               notify_required = false;
+              log::info("AG open failure for {} is ignored because there's an "
+                        "active connection on the same device", connected_bda);
               break;
             }
           }
