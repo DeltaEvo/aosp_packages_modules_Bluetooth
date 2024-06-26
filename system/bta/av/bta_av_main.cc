@@ -1089,7 +1089,8 @@ bool bta_av_link_role_ok(tBTA_AV_SCB* p_scb, uint8_t bits) {
             "conn_audio:0x{:x} bits:{} features:0x{:x}",
             p_scb->PeerAddress(), p_scb->hndl, RoleText(role), bta_av_cb.conn_audio, bits,
             bta_av_cb.features);
-    const tBTM_STATUS status = BTM_SwitchRoleToCentral(p_scb->PeerAddress());
+    const tBTM_STATUS status =
+            get_btm_client_interface().link_policy.BTM_SwitchRoleToCentral(p_scb->PeerAddress());
     switch (status) {
       case BTM_CMD_STARTED:
         break;

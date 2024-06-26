@@ -309,15 +309,6 @@ struct BTM_SetLinkSuperTout {
   }
 };
 extern struct BTM_SetLinkSuperTout BTM_SetLinkSuperTout;
-// Name: BTM_SwitchRoleToCentral
-// Params: const RawAddress& remote_bd_addr
-// Returns: tBTM_STATUS
-struct BTM_SwitchRoleToCentral {
-  std::function<tBTM_STATUS(const RawAddress& remote_bd_addr)> body{
-          [](const RawAddress& /* remote_bd_addr */) { return BTM_SUCCESS; }};
-  tBTM_STATUS operator()(const RawAddress& remote_bd_addr) { return body(remote_bd_addr); }
-};
-extern struct BTM_SwitchRoleToCentral BTM_SwitchRoleToCentral;
 // Name: btm_remove_acl
 // Params: const RawAddress& bd_addr, tBT_TRANSPORT transport
 // Returns: tBTM_STATUS

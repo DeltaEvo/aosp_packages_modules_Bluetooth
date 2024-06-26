@@ -68,7 +68,6 @@ struct acl_get_connection_from_handle acl_get_connection_from_handle;
 struct BTM_ReadFailedContactCounter BTM_ReadFailedContactCounter;
 struct BTM_ReadTxPower BTM_ReadTxPower;
 struct BTM_SetLinkSuperTout BTM_SetLinkSuperTout;
-struct BTM_SwitchRoleToCentral BTM_SwitchRoleToCentral;
 struct btm_remove_acl btm_remove_acl;
 struct btm_get_acl_disc_reason_code btm_get_acl_disc_reason_code;
 struct btm_is_acl_locally_initiated btm_is_acl_locally_initiated;
@@ -245,10 +244,6 @@ tBTM_STATUS BTM_ReadTxPower(const RawAddress& remote_bda, tBT_TRANSPORT transpor
 tBTM_STATUS BTM_SetLinkSuperTout(const RawAddress& remote_bda, uint16_t timeout) {
   inc_func_call_count(__func__);
   return test::mock::stack_acl::BTM_SetLinkSuperTout(remote_bda, timeout);
-}
-tBTM_STATUS BTM_SwitchRoleToCentral(const RawAddress& remote_bd_addr) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_acl::BTM_SwitchRoleToCentral(remote_bd_addr);
 }
 tBTM_STATUS btm_remove_acl(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
   inc_func_call_count(__func__);

@@ -3115,7 +3115,10 @@ void btm_sec_auth_complete(uint16_t handle, tHCI_STATUS status) {
         log::info(
                 "auth completed in role=peripheral, try to switch role and "
                 "encrypt");
-        BTM_SwitchRoleToCentral(p_dev_rec->RemoteAddress());
+        if (get_btm_client_interface().link_policy.BTM_SwitchRoleToCentral(
+                    p_dev_rec->RemoteAddress()) != BTM_CMD_STARTED) {
+          log::warn("Unable to switch role to central peer:{}", p_dev_rec->RemoteAddress());
+        }
       }
 
       l2cu_start_post_bond_timer(p_dev_rec->hci_handle);
