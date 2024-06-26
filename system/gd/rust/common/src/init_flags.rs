@@ -207,7 +207,6 @@ pub fn set_all_for_testing() {
 init_flags!(
     name: InitFlags
     flags: {
-        always_use_private_gatt_for_debugging,
         bluetooth_power_telemetry = false,
         btm_dm_flush_discovery_queue_on_search_cancel,
         classic_discovery_only,

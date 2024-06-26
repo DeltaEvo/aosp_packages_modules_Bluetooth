@@ -12,7 +12,6 @@ mod ffi {
 
         fn dump() -> Vec<InitFlagWithValue>;
 
-        fn always_use_private_gatt_for_debugging_is_enabled() -> bool;
         fn bluetooth_power_telemetry_is_enabled() -> bool;
         fn btm_dm_flush_discovery_queue_on_search_cancel_is_enabled() -> bool;
         fn classic_discovery_only_is_enabled() -> bool;
