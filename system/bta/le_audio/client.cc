@@ -5693,9 +5693,11 @@ private:
          tmpDevice = group->GetNextDevice(tmpDevice)) {
       log::info("tmpDevice->acl_asymmetric_: {}, asymmetric: {}, address: {}, acl_connected: {}",
                 tmpDevice->acl_asymmetric_ == asymmetric, asymmetric, tmpDevice->address_,
-                BTM_IsAclConnectionUp(tmpDevice->address_, BT_TRANSPORT_LE));
+                get_btm_client_interface().peer.BTM_IsAclConnectionUp(tmpDevice->address_,
+                                                                      BT_TRANSPORT_LE));
       if (tmpDevice->acl_asymmetric_ == asymmetric ||
-          !BTM_IsAclConnectionUp(tmpDevice->address_, BT_TRANSPORT_LE)) {
+          !get_btm_client_interface().peer.BTM_IsAclConnectionUp(tmpDevice->address_,
+                                                                 BT_TRANSPORT_LE)) {
         continue;
       }
 

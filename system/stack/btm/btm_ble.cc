@@ -121,9 +121,9 @@ void btm_ble_test_command_complete(uint8_t* p) {
  *
  ******************************************************************************/
 bool BTM_UseLeLink(const RawAddress& bd_addr) {
-  if (BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_BR_EDR)) {
+  if (get_btm_client_interface().peer.BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_BR_EDR)) {
     return false;
-  } else if (BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
+  } else if (get_btm_client_interface().peer.BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
     return true;
   }
 
@@ -164,7 +164,7 @@ void read_phy_cb(base::Callback<void(uint8_t tx_phy, uint8_t rx_phy, uint8_t sta
  ******************************************************************************/
 void BTM_BleReadPhy(const RawAddress& bd_addr,
                     base::Callback<void(uint8_t tx_phy, uint8_t rx_phy, uint8_t status)> cb) {
-  if (!BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
+  if (!get_btm_client_interface().peer.BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
     log::error("Wrong mode: no LE link exist or LE not supported");
     cb.Run(0, 0, HCI_ERR_NO_CONNECTION);
     return;
@@ -192,7 +192,7 @@ void doNothing(uint8_t* /* data */, uint16_t /* len */) {}
 
 void BTM_BleSetPhy(const RawAddress& bd_addr, uint8_t tx_phys, uint8_t rx_phys,
                    uint16_t phy_options) {
-  if (!BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
+  if (!get_btm_client_interface().peer.BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
     log::info(
             "Unable to set phy preferences because no le acl is connected to "
             "device");
