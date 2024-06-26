@@ -16,13 +16,6 @@ flag {
 }
 
 flag {
-    name: "correct_bond_type_of_loaded_devices"
-    namespace: "bluetooth"
-    description: "Mark the bond type of loaded device as persistent"
-    bug: "319530790"
-}
-
-flag {
     name: "bluffs_mitigation"
     namespace: "bluetooth"
     description: "Cache security values to mitigate BLUFFS"
