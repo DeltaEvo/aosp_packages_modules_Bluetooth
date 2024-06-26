@@ -22,12 +22,6 @@
 
 using bluetooth::common::InitFlags;
 
-TEST(InitFlagsTest, test_leaudio_targeted_announcement_reconnection_mode) {
-  const char* input[] = {"INIT_leaudio_targeted_announcement_reconnection_mode=true", nullptr};
-  InitFlags::Load(input);
-  ASSERT_TRUE(InitFlags::IsTargetedAnnouncementReconnectionMode());
-}
-
 TEST(InitFlagsTest, test_enable_use_rsi_from_cached_inqiry_results) {
   const char* input[] = {"INIT_use_rsi_from_cached_inqiry_results=true", nullptr};
   InitFlags::Load(input);

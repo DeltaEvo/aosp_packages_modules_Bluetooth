@@ -18,8 +18,6 @@
 
 #include <gtest/gtest.h>
 
-#include "common/init_flags.h"
-
 using bluetooth::le_audio::LeAudioDevice;
 
 namespace bluetooth::le_audio {
