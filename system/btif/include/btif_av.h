@@ -245,11 +245,6 @@ void btif_av_set_audio_delay(const RawAddress& peer_address, uint16_t delay,
 uint16_t btif_av_get_audio_delay(const A2dpType local_a2dp_type);
 
 /**
- * Reset the audio delay and count of audio bytes sent to zero.
- */
-void btif_av_reset_audio_delay(void);
-
-/**
  *  check A2DP offload support enabled
  *  @param  none
  */
