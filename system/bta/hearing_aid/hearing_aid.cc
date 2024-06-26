@@ -525,7 +525,9 @@ public:
 
     // Set data length
     // TODO(jpawlowski: for 16khz only 87 is required, optimize
-    BTM_SetBleDataLength(address, 167);
+    if (get_btm_client_interface().ble.BTM_SetBleDataLength(address, 167) != BTM_SUCCESS) {
+      log::warn("Unable to set BLE data length peer:{} size:{}", address, 167);
+    }
 
     if (BTM_SecIsSecurityPending(address)) {
       /* if security collision happened, wait for encryption done

@@ -44,6 +44,7 @@
 #include "stack/include/ais_api.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_uuid16.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/l2cap_acl_interface.h"
 #include "stack/include/l2cdefs.h"
 #include "stack/include/sdp_api.h"
@@ -843,7 +844,9 @@ void GATTC_UpdateUserAttMtuIfNeeded(const RawAddress& remote_bda, tBT_TRANSPORT 
   }
 
   p_tcb->max_user_mtu = user_mtu;
-  BTM_SetBleDataLength(remote_bda, user_mtu);
+  if (get_btm_client_interface().ble.BTM_SetBleDataLength(remote_bda, user_mtu) != BTM_SUCCESS) {
+    log::warn("Unable to set ble data length peer:{} mtu:{}", remote_bda, user_mtu);
+  }
 }
 
 std::list<uint16_t> GATTC_GetAndRemoveListOfConnIdsWaitingForMtuRequest(
