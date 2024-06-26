@@ -31,6 +31,7 @@
 #include "osi/include/mutex.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/btm_client_interface.h"
 #include "types/raw_address.h"
 
 using namespace bluetooth;
@@ -102,8 +103,6 @@ static tGAP_CCB* gap_find_ccb_by_handle(uint16_t handle);
 static tGAP_CCB* gap_allocate_ccb(void);
 static void gap_release_ccb(tGAP_CCB* p_ccb);
 static void gap_checks_con_flags(tGAP_CCB* p_ccb);
-
-bool BTM_UseLeLink(const RawAddress& bd_addr);
 
 /*******************************************************************************
  *
@@ -622,7 +621,7 @@ static void gap_connect_ind(const RawAddress& bd_addr, uint16_t l2cap_cid, uint1
     log::warn("*******");
 
     /* Disconnect because it is an unexpected connection */
-    if (BTM_UseLeLink(bd_addr)) {
+    if (get_btm_client_interface().ble.BTM_UseLeLink(bd_addr)) {
       if (!L2CA_DisconnectLECocReq(l2cap_cid)) {
         log::warn("Unable to request L2CAP disconnect le_coc peer:{} cid:{}", bd_addr, l2cap_cid);
       }

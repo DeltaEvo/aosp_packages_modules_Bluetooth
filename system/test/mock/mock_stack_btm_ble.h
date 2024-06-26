@@ -277,17 +277,6 @@ struct BTM_SecurityGrant {
 };
 extern struct BTM_SecurityGrant BTM_SecurityGrant;
 
-// Name: BTM_UseLeLink
-// Params: const RawAddress& bd_addr
-// Return: bool
-struct BTM_UseLeLink {
-  static bool return_value;
-  std::function<bool(const RawAddress& bd_addr)> body{
-          [](const RawAddress& /* bd_addr */) { return return_value; }};
-  bool operator()(const RawAddress& bd_addr) { return body(bd_addr); }
-};
-extern struct BTM_UseLeLink BTM_UseLeLink;
-
 // Name: btm_ble_connected
 // Params: const RawAddress& bda, uint16_t handle, uint8_t enc_mode, uint8_t
 // role, tBLE_ADDR_TYPE addr_type, bool addr_matched Return: void
