@@ -12,7 +12,6 @@ mod ffi {
 
         fn dump() -> Vec<InitFlagWithValue>;
 
-        fn btm_dm_flush_discovery_queue_on_search_cancel_is_enabled() -> bool;
         fn classic_discovery_only_is_enabled() -> bool;
         fn dynamic_avrcp_version_enhancement_is_enabled() -> bool;
         fn gatt_robust_caching_server_is_enabled() -> bool;

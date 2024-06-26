@@ -1035,13 +1035,7 @@ bool bta_dm_is_search_request_queued() {
  * Returns          void
  *
  ******************************************************************************/
-static void bta_dm_search_clear_queue() {
-  bta_dm_search_cb.p_pending_search.reset();
-  if (bluetooth::common::InitFlags::
-          IsBtmDmFlushDiscoveryQueueOnSearchCancel()) {
-    bta_dm_search_cb.pending_discovery_queue = {};
-  }
-}
+static void bta_dm_search_clear_queue() { bta_dm_search_cb.p_pending_search.reset(); }
 
 /*******************************************************************************
  *

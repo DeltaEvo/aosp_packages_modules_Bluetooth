@@ -207,7 +207,6 @@ pub fn set_all_for_testing() {
 init_flags!(
     name: InitFlags
     flags: {
-        btm_dm_flush_discovery_queue_on_search_cancel,
         classic_discovery_only,
         dynamic_avrcp_version_enhancement = true,
         gatt_robust_caching_server,
