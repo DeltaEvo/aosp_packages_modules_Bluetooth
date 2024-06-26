@@ -425,9 +425,6 @@ void LeAudioDevice::ClearPACs(void) {
 
 LeAudioDevice::~LeAudioDevice(void) {
   alarm_free(link_quality_timer);
-  for (auto& ase : ases_) {
-    alarm_free(ase.autonomous_operation_timer_);
-  }
   this->ClearPACs();
 }
 
@@ -718,6 +715,19 @@ BidirectionalPair<struct ase*> LeAudioDevice::GetAsesByCisId(uint8_t cis_id) {
 bool LeAudioDevice::HaveActiveAse(void) {
   auto iter = std::find_if(ases_.begin(), ases_.end(),
                            [](const auto& ase) { return ase.active; });
+
+  return iter != ases_.end();
+}
+
+bool LeAudioDevice::HaveAnyStreamingAses(void) {
+  /* In configuring state when active in Idle or Configured and reconfigure */
+  auto iter = std::find_if(ases_.begin(), ases_.end(), [](const auto& ase) {
+    if (!ase.active) return false;
+
+    if (ase.state == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) return true;
+
+    return false;
+  });
 
   return iter != ases_.end();
 }
@@ -1131,11 +1141,9 @@ void LeAudioDevice::DeactivateAllAses(void) {
           bluetooth::common::ToString(ase.cis_state),
           bluetooth::common::ToString(ase.data_path_state));
     }
-    if (alarm_is_scheduled(ase.autonomous_operation_timer_)) {
-      alarm_free(ase.autonomous_operation_timer_);
-      ase.autonomous_operation_timer_ = NULL;
-      ase.autonomous_target_state_ = AseState::BTA_LE_AUDIO_ASE_STATE_IDLE;
-    }
+
+    log::verbose("{}, ase_id {}", address_, ase.id);
+
     ase.state = AseState::BTA_LE_AUDIO_ASE_STATE_IDLE;
     ase.cis_state = CisState::IDLE;
     ase.data_path_state = DataPathState::IDLE;
