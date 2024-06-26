@@ -211,7 +211,7 @@ init_flags!(
         dynamic_avrcp_version_enhancement = true,
         hci_adapter: i32,
         use_unified_connection_manager,
-        att_mtu_default: i32 = 517,
+        encryption_in_busy_state = true,
     }
     extra_parsed_flags: {
         "--hci" => parse_hci_adapter(_, _),
