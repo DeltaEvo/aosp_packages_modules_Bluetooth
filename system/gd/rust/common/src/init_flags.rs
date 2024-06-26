@@ -210,7 +210,6 @@ init_flags!(
         classic_discovery_only,
         dynamic_avrcp_version_enhancement = true,
         hci_adapter: i32,
-        irk_rotation,
         leaudio_targeted_announcement_reconnection_mode = true,
         pbap_pse_dynamic_version_upgrade = false,
         redact_log = true,
