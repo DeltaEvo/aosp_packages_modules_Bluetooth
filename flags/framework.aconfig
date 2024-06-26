@@ -2,6 +2,16 @@ package: "com.android.bluetooth.flags"
 container: "com.android.btservices"
 
 flag {
+    name: "override_context_to_specify_device_id"
+    namespace: "bluetooth"
+    description: "In Bluetooth Manager, override the context with createDeviceContext to pin a specific DeviceId"
+    bug: "349657939"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
     name: "support_metadata_device_types_apis"
     is_exported: true
     namespace: "bluetooth"
