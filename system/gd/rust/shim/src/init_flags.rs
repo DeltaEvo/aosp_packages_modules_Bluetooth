@@ -20,7 +20,6 @@ mod ffi {
         fn dynamic_avrcp_version_enhancement_is_enabled() -> bool;
         fn gatt_robust_caching_server_is_enabled() -> bool;
         fn get_hci_adapter() -> i32;
-        fn get_asha_phy_update_retry_limit() -> i32;
         fn hfp_dynamic_version_is_enabled() -> bool;
         fn irk_rotation_is_enabled() -> bool;
         fn leaudio_targeted_announcement_reconnection_mode_is_enabled() -> bool;

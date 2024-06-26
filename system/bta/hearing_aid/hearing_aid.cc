@@ -744,7 +744,7 @@ class HearingAidImpl : public HearingAid {
     if (tx_phys == PHY_LE_2M && rx_phys == PHY_LE_2M) {
       log::info("phy update to 2M successful: bd_addr={}",
                 hearingDevice->address);
-      hearingDevice->phy_update_retry_remain = PHY_UPDATE_RETRY_LIMIT;
+      hearingDevice->phy_update_retry_remain = kPhyUpdateRetryLimit;
       return;
     }
 
