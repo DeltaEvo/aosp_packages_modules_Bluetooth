@@ -270,9 +270,8 @@ class HearingAidImpl : public HearingAid {
   bool needs_parameter_update = false;
   std::chrono::time_point<std::chrono::steady_clock> last_drop_time_point =
       std::chrono::steady_clock::now();
-  // at most 1 packet DROP per DROP_FREQUENCY_THRESHOLD seconds
-  const int DROP_FREQUENCY_THRESHOLD =
-      bluetooth::common::init_flags::get_asha_packet_drop_frequency_threshold();
+  // at most 1 packet DROP per kDropFrequencyThreshold seconds
+  static constexpr int64_t kDropFrequencyThreshold = 60;
 
   // Resampler context for audio stream.
   // Clock recovery uses L2CAP Flow Control Credit Ind acknowledgments
@@ -450,9 +449,8 @@ class HearingAidImpl : public HearingAid {
   bool IsBelowDropFrequency(
       std::chrono::time_point<std::chrono::steady_clock> tp) {
     auto duration = tp - last_drop_time_point;
-    bool droppable =
-        std::chrono::duration_cast<std::chrono::seconds>(duration).count() >=
-        DROP_FREQUENCY_THRESHOLD;
+    bool droppable = std::chrono::duration_cast<std::chrono::seconds>(duration).count() >=
+                     kDropFrequencyThreshold;
     log::info("IsBelowDropFrequency {}", droppable);
     return droppable;
   }
