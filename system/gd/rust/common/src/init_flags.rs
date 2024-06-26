@@ -210,7 +210,6 @@ init_flags!(
         classic_discovery_only,
         dynamic_avrcp_version_enhancement = true,
         hci_adapter: i32,
-        redact_log = true,
         sco_codec_timeout_clear,
         sdp_serialization = true,
         sdp_skip_rnr_if_known = true,
@@ -268,17 +267,6 @@ mod tests {
         let _guard = ASYNC_LOCK.lock().unwrap();
         test_load(vec!["--hci=2"]);
         assert_eq!(get_hci_adapter(), 2);
-    }
-    #[test]
-    fn test_redact_logging() {
-        let _guard = ASYNC_LOCK.lock().unwrap();
-        assert!(redact_log_is_enabled()); // default is true
-        test_load(vec!["INIT_redact_log=false"]);
-        assert!(!redact_log_is_enabled()); // turned off
-        test_load(vec!["INIT_redact_log=foo"]);
-        assert!(redact_log_is_enabled()); // invalid value, interpreted as default, true
-        test_load(vec!["INIT_redact_log=true"]);
-        assert!(redact_log_is_enabled()); // turned on
     }
 
     init_flags_struct!(
