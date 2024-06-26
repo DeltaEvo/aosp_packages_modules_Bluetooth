@@ -33,6 +33,7 @@
 #include "os/alarm.h"
 #include "os/metrics.h"
 #include "os/queue.h"
+#include "os/system_properties.h"
 #include "osi/include/stack_power_telemetry.h"
 #include "packet/raw_builder.h"
 #include "storage/storage_module.h"
@@ -57,6 +58,19 @@ using os::Alarm;
 using os::Handler;
 using std::unique_ptr;
 
+static std::chrono::milliseconds getHciTimeoutMs() {
+  static auto sHciTimeoutMs = std::chrono::milliseconds(bluetooth::os::GetSystemPropertyUint32Base(
+      "bluetooth.hci.timeout_milliseconds", HciLayer::kHciTimeoutMs.count()));
+  return sHciTimeoutMs;
+}
+
+static std::chrono::milliseconds getHciTimeoutRestartMs() {
+  static auto sRestartHciTimeoutMs =
+      std::chrono::milliseconds(bluetooth::os::GetSystemPropertyUint32Base(
+          "bluetooth.hci.restart_timeout_milliseconds", HciLayer::kHciTimeoutRestartMs.count()));
+  return sRestartHciTimeoutMs;
+}
+
 static void fail_if_reset_complete_not_success(CommandCompleteView complete) {
   auto reset_complete = ResetCompleteView::Create(complete);
   log::assert_that(reset_complete.IsValid(), "assert failed: reset_complete.IsValid()");
@@ -67,7 +81,10 @@ static void fail_if_reset_complete_not_success(CommandCompleteView complete) {
 }
 
 static void abort_after_time_out(OpCode op_code) {
-  log::fatal("Done waiting for debug information after HCI timeout ({})", OpCodeText(op_code));
+  log::fatal(
+      "Done waiting for debug information after HCI timeout ({}) for {}ms",
+      OpCodeText(op_code),
+      getHciTimeoutRestartMs().count());
 }
 
 class CommandQueueEntry {
@@ -267,7 +284,7 @@ struct HciLayer::impl {
 
   void on_hci_timeout(OpCode op_code) {
     common::StopWatch::DumpStopWatchLog();
-    log::error("Timed out waiting for {}", OpCodeText(op_code));
+    log::error("Timed out waiting for {} for {}ms", OpCodeText(op_code), getHciTimeoutMs().count());
 
     bluetooth::os::LogMetricHciTimeoutEvent(static_cast<uint32_t>(op_code));
 
@@ -286,7 +303,8 @@ struct HciLayer::impl {
     }
     if (hci_abort_alarm_ == nullptr) {
       hci_abort_alarm_ = new Alarm(module_.GetHandler());
-      hci_abort_alarm_->Schedule(BindOnce(&abort_after_time_out, op_code), kHciTimeoutRestartMs);
+      hci_abort_alarm_->Schedule(
+          BindOnce(&abort_after_time_out, op_code), getHciTimeoutRestartMs());
     } else {
       log::warn("Unable to schedul abort timer");
     }
@@ -317,7 +335,8 @@ struct HciLayer::impl {
     waiting_command_ = op_code;
     command_credits_ = 0;  // Only allow one outstanding command
     if (hci_timeout_alarm_ != nullptr) {
-      hci_timeout_alarm_->Schedule(BindOnce(&impl::on_hci_timeout, common::Unretained(this), op_code), kHciTimeoutMs);
+      hci_timeout_alarm_->Schedule(
+          BindOnce(&impl::on_hci_timeout, common::Unretained(this), op_code), getHciTimeoutMs());
     } else {
       log::warn("{} sent without an hci-timeout timer", OpCodeText(op_code));
     }
@@ -386,7 +405,8 @@ struct HciLayer::impl {
     }
     if (hci_abort_alarm_ == nullptr) {
       hci_abort_alarm_ = new Alarm(module_.GetHandler());
-      hci_abort_alarm_->Schedule(BindOnce(&abort_after_root_inflammation, vse_error_reason), kHciTimeoutRestartMs);
+      hci_abort_alarm_->Schedule(
+          BindOnce(&abort_after_root_inflammation, vse_error_reason), getHciTimeoutRestartMs());
     } else {
       log::warn("Abort timer already scheduled");
     }
