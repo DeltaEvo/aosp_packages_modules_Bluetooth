@@ -32,12 +32,9 @@
 #include "bta/ag/bta_ag_int.h"
 #include "bta_ag_swb_aptx.h"
 #include "btm_status.h"
-#include "common/init_flags.h"
 #include "hci/controller_interface.h"
 #include "internal_include/bt_target.h"
-#include "internal_include/bt_trace.h"
 #include "main/shim/entry.h"
-#include "os/logging/log_adapter.h"
 #include "osi/include/properties.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/btm/btm_sco.h"
@@ -819,16 +816,6 @@ static void bta_ag_sco_event(tBTA_AG_SCB* p_scb, uint8_t event) {
           break;
 
         case BTA_AG_SCO_CLOSE_E:
-          if (bluetooth::common::init_flags::sco_codec_timeout_clear_is_enabled()) {
-            /* remove listening connection */
-            bta_ag_remove_sco(p_scb, false);
-
-            if (p_scb == p_sco->p_curr_scb) {
-              p_sco->p_curr_scb = nullptr;
-            }
-
-            bta_ag_create_sco(p_scb, false);
-          }
           /* sco open is not started yet. just go back to listening */
           p_sco->state = BTA_AG_SCO_LISTEN_ST;
           break;
