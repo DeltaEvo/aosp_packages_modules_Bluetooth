@@ -16,8 +16,6 @@
 
 #pragma once
 
-#include <string>
-
 #include "src/init_flags.rs.h"
 
 namespace bluetooth {
@@ -32,10 +30,6 @@ public:
       flags++;
     }
     init_flags::load(std::move(rusted_flags));
-  }
-
-  inline static bool UseRsiFromCachedInquiryResults() {
-    return init_flags::use_rsi_from_cached_inqiry_results_is_enabled();
   }
 
   inline static int GetAdapterIndex() { return init_flags::get_hci_adapter(); }

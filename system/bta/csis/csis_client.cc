@@ -36,7 +36,6 @@
 #include "bta_le_audio_uuids.h"
 #include "bta_sec_api.h"
 #include "btif/include/btif_storage.h"
-#include "common/init_flags.h"
 #include "crypto_toolbox/crypto_toolbox.h"
 #include "csis_types.h"
 #include "gap_api.h"
@@ -1430,10 +1429,6 @@ private:
   }
 
   void CsisActiveDiscovery(std::shared_ptr<CsisGroup> csis_group) {
-    if (bluetooth::common::InitFlags::UseRsiFromCachedInquiryResults()) {
-      CheckForGroupInInqDb(csis_group);
-    }
-
     if (csis_group->GetDiscoveryState() != CsisDiscoveryState::CSIS_DISCOVERY_IDLE) {
       log::error("Incorrect ase group: {}, state 0x{:02x}", csis_group->GetGroupId(),
                  static_cast<int>(csis_group->GetDiscoveryState()));

@@ -211,7 +211,6 @@ init_flags!(
         dynamic_avrcp_version_enhancement = true,
         hci_adapter: i32,
         use_unified_connection_manager,
-        use_rsi_from_cached_inqiry_results = false,
         att_mtu_default: i32 = 517,
     }
     extra_parsed_flags: {
