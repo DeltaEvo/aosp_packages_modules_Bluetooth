@@ -210,7 +210,6 @@ init_flags!(
         classic_discovery_only,
         dynamic_avrcp_version_enhancement = true,
         hci_adapter: i32,
-        subrating = true,
         use_unified_connection_manager,
         sdp_return_classic_services_when_le_discovery_fails = true,
         use_rsi_from_cached_inqiry_results = false,
