@@ -210,7 +210,6 @@ init_flags!(
         classic_discovery_only,
         dynamic_avrcp_version_enhancement = true,
         hci_adapter: i32,
-        set_min_encryption = true,
         subrating = true,
         use_unified_connection_manager,
         sdp_return_classic_services_when_le_discovery_fails = true,
