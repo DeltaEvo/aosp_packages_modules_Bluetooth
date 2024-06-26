@@ -87,6 +87,11 @@ struct VolumeOperation {
     started_ = false;
   }
 
+  // Disallow copying due to owning operation_timeout_t which is freed in the
+  // destructor - prevents double free.
+  VolumeOperation(const VolumeOperation&) = delete;
+  VolumeOperation& operator=(const VolumeOperation&) = delete;
+
   ~VolumeOperation() {
     if (operation_timeout_ == nullptr) {
       log::warn("operation_timeout_ should not be null, id {}, device cnt {}", operation_id_,

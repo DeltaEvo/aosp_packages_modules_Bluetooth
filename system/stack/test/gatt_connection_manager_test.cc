@@ -80,7 +80,21 @@ uint16_t BTM_GetHCIConnHandle(RawAddress const&, unsigned char) { return 0xFFFF;
 
 namespace connection_manager {
 class BleConnectionManager : public testing::Test {
-  void SetUp() override { localAcceptlistMock = std::make_unique<AcceptlistMock>(); }
+  void SetUp() override {
+    localAcceptlistMock = std::make_unique<AcceptlistMock>();
+    auto alarm_mock = AlarmMock::Get();
+    ON_CALL(*alarm_mock, AlarmNew(_)).WillByDefault(testing::Invoke([](const char* name) {
+      // We must return something from alarm_new in tests, if we just return
+      // null, unique_ptr will misbehave.
+      return (alarm_t*)new uint8_t[30];
+    }));
+    ON_CALL(*alarm_mock, AlarmFree(_)).WillByDefault(testing::Invoke([](alarm_t* alarm) {
+      if (alarm) {
+        uint8_t* ptr = (uint8_t*)alarm;
+        delete[] ptr;
+      }
+    }));
+  }
 
   void TearDown() override {
     connection_manager::reset(true);
