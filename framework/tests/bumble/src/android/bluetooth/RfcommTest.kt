@@ -164,7 +164,7 @@ class RfcommTest {
         startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
 
-            createAndConnectSocket(isSecure = false, serverId)
+            createConnectAcceptSocket(isSecure = false, serverId)
         }
     }
 
@@ -173,7 +173,7 @@ class RfcommTest {
         startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
 
-            createAndConnectSocket(isSecure = true, serverId)
+            createConnectAcceptSocket(isSecure = true, serverId)
         }
     }
 
@@ -182,7 +182,7 @@ class RfcommTest {
         startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
 
-            val (insecureSocket, connection) = createAndConnectSocket(isSecure = false, serverId)
+            val (insecureSocket, connection) = createConnectAcceptSocket(isSecure = false, serverId)
             val data: ByteArray = "Test data for clientSendDataOverInsecureSocket".toByteArray()
             val socketOs = insecureSocket.outputStream
 
@@ -201,7 +201,7 @@ class RfcommTest {
         startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
 
-            val (secureSocket, connection) = createAndConnectSocket(isSecure = true, serverId)
+            val (secureSocket, connection) = createConnectAcceptSocket(isSecure = true, serverId)
             val data: ByteArray = "Test data for clientSendDataOverSecureSocket".toByteArray()
             val socketOs = secureSocket.outputStream
 
@@ -220,7 +220,7 @@ class RfcommTest {
         startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
 
-            val (insecureSocket, connection) = createAndConnectSocket(isSecure = false, serverId)
+            val (insecureSocket, connection) = createConnectAcceptSocket(isSecure = false, serverId)
             val buffer = ByteArray(64)
             val socketIs = insecureSocket.inputStream
             val data: ByteString =
@@ -240,7 +240,7 @@ class RfcommTest {
         startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
 
-            val (secureSocket, connection) = createAndConnectSocket(isSecure = true, serverId)
+            val (secureSocket, connection) = createConnectAcceptSocket(isSecure = true, serverId)
             val buffer = ByteArray(64)
             val socketIs = secureSocket.inputStream
             val data: ByteString =
@@ -255,19 +255,35 @@ class RfcommTest {
         }
     }
 
-    private fun createAndConnectSocket(
+    private fun createConnectAcceptSocket(
         isSecure: Boolean,
         server: ServerId,
         uuid: String = TEST_UUID
     ): Pair<BluetoothSocket, RfcommProto.RfcommConnection> {
+        val socket = createSocket(mBumbleDevice, isSecure, uuid)
+
+        val connection = acceptSocket(server)
+        Truth.assertThat(socket.isConnected).isTrue()
+
+        return Pair(socket, connection)
+    }
+
+    private fun createSocket(
+        device: BluetoothDevice,
+        isSecure: Boolean,
+        uuid: String
+    ): BluetoothSocket {
         val socket =
             if (isSecure) {
-                mBumbleDevice.createRfcommSocketToServiceRecord(UUID.fromString(uuid))
+                device.createRfcommSocketToServiceRecord(UUID.fromString(uuid))
             } else {
-                mBumbleDevice.createInsecureRfcommSocketToServiceRecord(UUID.fromString(uuid))
+                device.createInsecureRfcommSocketToServiceRecord(UUID.fromString(uuid))
             }
         socket.connect()
+        return socket
+    }
 
+    private fun acceptSocket(server: ServerId): RfcommProto.RfcommConnection {
         val connectionResponse =
             mBumble
                 .rfcommBlocking()
@@ -276,11 +292,9 @@ class RfcommTest {
                     RfcommProto.AcceptConnectionRequest.newBuilder().setServer(server).build()
                 )
         Truth.assertThat(connectionResponse.connection.id).isEqualTo(mConnectionCounter)
-        Truth.assertThat(socket.isConnected).isTrue()
 
         mConnectionCounter += 1
-        val connection = connectionResponse.connection
-        return Pair(socket, connection)
+        return connectionResponse.connection
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -310,9 +324,12 @@ class RfcommTest {
         flow.first()
     }
 
-    private fun startServer(block: (ServerId) -> Unit) {
-        val request =
-            StartServerRequest.newBuilder().setName(TEST_SERVER_NAME).setUuid(TEST_UUID).build()
+    private fun startServer(
+        name: String = TEST_SERVER_NAME,
+        uuid: String = TEST_UUID,
+        block: (ServerId) -> Unit
+    ) {
+        val request = StartServerRequest.newBuilder().setName(name).setUuid(uuid).build()
         val response = mBumble.rfcommBlocking().startServer(request)
 
         try {
@@ -332,7 +349,8 @@ class RfcommTest {
         private val TAG = RfcommTest::class.java.getSimpleName()
         private val GRPC_TIMEOUT = Duration.ofSeconds(10)
         private val BOND_TIMEOUT = Duration.ofSeconds(20)
-        private const val TEST_UUID = "00001101-0000-1000-8000-00805F9B34FB"
+        private const val TEST_UUID = "2ac5d8f1-f58d-48ac-a16b-cdeba0892d65"
+        private const val SERIAL_PORT_UUID = "00001101-0000-1000-8000-00805F9B34FB"
         private const val TEST_SERVER_NAME = "RFCOMM Server"
     }
 }
