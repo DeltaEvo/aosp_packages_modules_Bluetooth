@@ -28,7 +28,6 @@
 #include "audio_a2dp_hw/include/audio_a2dp_hw.h"
 #include "audio_hal_interface/a2dp_encoding.h"
 #include "bta_av_api.h"
-#include "btif_a2dp_control.h"
 #include "btif_a2dp_sink.h"
 #include "btif_a2dp_source.h"
 #include "btif_av.h"
@@ -82,11 +81,7 @@ bool btif_a2dp_on_started(const RawAddress& peer_addr,
     }
     /* just ack back a local start request, do not start the media encoder since
      * this is not for BTA_AV_START_EVT. */
-    if (bluetooth::audio::a2dp::is_hal_enabled()) {
-      bluetooth::audio::a2dp::ack_stream_started(status);
-    } else {
-      btif_a2dp_command_ack(status);
-    }
+    bluetooth::audio::a2dp::ack_stream_started(status);
     return true;
   }
 
@@ -101,7 +96,7 @@ bool btif_a2dp_on_started(const RawAddress& peer_addr,
     }
     if (btif_av_is_a2dp_offload_running()) {
       btif_av_stream_start_offload();
-    } else if (bluetooth::audio::a2dp::is_hal_enabled()) {
+    } else {
       if (btif_av_get_peer_sep(local_a2dp_type) == AVDT_TSEP_SNK) {
         /* Start the media encoder to do the SW audio stream */
         btif_a2dp_source_start_audio_req();
@@ -110,21 +105,11 @@ bool btif_a2dp_on_started(const RawAddress& peer_addr,
         bluetooth::audio::a2dp::ack_stream_started(A2DP_CTRL_ACK_SUCCESS);
         return true;
       }
-    } else {
-      if (p_av_start->initiator) {
-        btif_a2dp_command_ack(A2DP_CTRL_ACK_SUCCESS);
-        return true;
-      }
-      /* media task is auto-started upon UIPC connection of a2dp audiopath */
     }
   } else if (p_av_start->initiator) {
     log::error("peer {} A2DP start request failed: status = {}", peer_addr,
                p_av_start->status);
-    if (bluetooth::audio::a2dp::is_hal_enabled()) {
-      bluetooth::audio::a2dp::ack_stream_started(A2DP_CTRL_ACK_FAILURE);
-    } else {
-      btif_a2dp_command_ack(A2DP_CTRL_ACK_FAILURE);
-    }
+    bluetooth::audio::a2dp::ack_stream_started(A2DP_CTRL_ACK_FAILURE);
     return true;
   }
   return false;
@@ -205,11 +190,8 @@ void btif_a2dp_on_offload_started(const RawAddress& peer_addr,
       btif_av_source_disconnect(peer_addr);
     }
   }
-  if (bluetooth::audio::a2dp::is_hal_enabled()) {
-    bluetooth::audio::a2dp::ack_stream_started(ack);
-  } else {
-    btif_a2dp_command_ack(ack);
-  }
+
+  bluetooth::audio::a2dp::ack_stream_started(ack);
 }
 
 void btif_debug_a2dp_dump(int fd) {

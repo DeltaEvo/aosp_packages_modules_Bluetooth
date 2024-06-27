@@ -58,7 +58,6 @@ struct btif_av_peer_prefers_mandatory_codec
     btif_av_peer_prefers_mandatory_codec;
 struct btif_av_peer_supports_3mbps btif_av_peer_supports_3mbps;
 struct btif_av_report_source_codec_state btif_av_report_source_codec_state;
-struct btif_av_reset_audio_delay btif_av_reset_audio_delay;
 struct btif_av_set_audio_delay btif_av_set_audio_delay;
 struct btif_av_set_dynamic_audio_buffer_size
     btif_av_set_dynamic_audio_buffer_size;
@@ -213,10 +212,6 @@ void btif_av_report_source_codec_state(
   test::mock::btif_av::btif_av_report_source_codec_state(
       peer_address, codec_config, codecs_local_capabilities,
       codecs_selectable_capabilities);
-}
-void btif_av_reset_audio_delay(void) {
-  inc_func_call_count(__func__);
-  test::mock::btif_av::btif_av_reset_audio_delay();
 }
 void btif_av_set_audio_delay(const RawAddress& peer_address, uint16_t delay,
                              const A2dpType local_a2dp_type) {
