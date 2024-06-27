@@ -32,12 +32,12 @@
 #include "base/functional/bind.h"
 #include "hci/controller_interface.h"
 #include "main/shim/entry.h"
-#include "os/log.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/gatt/gatt_int.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/btm_ble_api.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/btu_hcif.h"
 #include "stack/include/gatt_api.h"
 #include "stack/include/hcimsgs.h"
@@ -181,7 +181,7 @@ void BTM_BleReadPhy(
     return;
   }
 
-  uint16_t handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
+  uint16_t handle = get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
 
   const uint8_t len = HCIC_PARAM_SIZE_BLE_READ_PHY;
   uint8_t data[len];
@@ -206,7 +206,7 @@ void BTM_BleSetPhy(const RawAddress& bd_addr, uint8_t tx_phys, uint8_t rx_phys,
   if (tx_phys == 0) all_phys &= 0x01;
   if (rx_phys == 0) all_phys &= 0x02;
 
-  uint16_t handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
+  uint16_t handle = get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
 
   // checking if local controller supports it!
   if (!bluetooth::shim::GetController()->SupportsBle2mPhy() &&

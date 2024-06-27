@@ -51,3 +51,33 @@ class RemoteNameRequest {
 
 }  // namespace rnr
 }  // namespace bluetooth
+
+/*******************************************************************************
+ *
+ * Function         BTM_SecAddRmtNameNotifyCallback
+ *
+ * Description      Any profile can register to be notified when name of the
+ *                  remote device is resolved.
+ *
+ * Parameters:      p_callback: Callback to add after each remote name
+ *                  request has completed or timed out.
+ *
+ * Returns          true if registered OK, else false
+ *
+ ******************************************************************************/
+bool BTM_SecAddRmtNameNotifyCallback(tBTM_RMT_NAME_CALLBACK* p_callback);
+
+/*******************************************************************************
+ *
+ * Function         BTM_SecDeleteRmtNameNotifyCallback
+ *
+ * Description      Any profile can deregister notification when a new Link Key
+ *                  is generated per connection.
+ *
+ * Parameters:      p_callback: Callback to remove after each remote name
+ *                  request has completed or timed out.
+ *
+ * Returns          true if unregistered OK, else false
+ *
+ ******************************************************************************/
+bool BTM_SecDeleteRmtNameNotifyCallback(tBTM_RMT_NAME_CALLBACK* p_callback);

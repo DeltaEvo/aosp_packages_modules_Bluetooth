@@ -33,6 +33,7 @@
 #include "module.h"
 #include "os/fake_timer/fake_timerfd.h"
 #include "os/handler.h"
+#include "os/system_properties.h"
 #include "os/thread.h"
 #include "packet/raw_builder.h"
 
@@ -73,6 +74,19 @@ std::vector<uint8_t> GetPacketBytes(std::unique_ptr<packet::BasePacketBuilder> p
   bytes.reserve(packet->size());
   packet->Serialize(i);
   return bytes;
+}
+
+static std::chrono::milliseconds getHciTimeoutMs() {
+  static auto sHciTimeoutMs = std::chrono::milliseconds(bluetooth::os::GetSystemPropertyUint32Base(
+      "bluetooth.hci.timeout_milliseconds", HciLayer::kHciTimeoutMs.count()));
+  return sHciTimeoutMs;
+}
+
+static std::chrono::milliseconds getHciTimeoutRestartMs() {
+  static auto sRestartHciTimeoutMs =
+      std::chrono::milliseconds(bluetooth::os::GetSystemPropertyUint32Base(
+          "bluetooth.hci.restart_timeout_milliseconds", HciLayer::kHciTimeoutRestartMs.count()));
+  return sRestartHciTimeoutMs;
 }
 
 class HciLayerTest : public ::testing::Test {
@@ -132,7 +146,7 @@ TEST_F(HciLayerTest, reset_command_sent_on_start) {
 
 TEST_F(HciLayerTest, controller_debug_info_requested_on_hci_timeout) {
   FailIfResetNotSent();
-  FakeTimerAdvance(HciLayer::kHciTimeoutMs.count());
+  FakeTimerAdvance(getHciTimeoutMs().count());
 
   sync_handler();
 
@@ -144,7 +158,7 @@ TEST_F(HciLayerTest, controller_debug_info_requested_on_hci_timeout) {
 
 TEST_F(HciLayerDeathTest, abort_after_hci_restart_timeout) {
   FailIfResetNotSent();
-  FakeTimerAdvance(HciLayer::kHciTimeoutMs.count());
+  FakeTimerAdvance(getHciTimeoutMs().count());
 
   auto sent_command = hal_->GetSentCommand();
   ASSERT_TRUE(sent_command.has_value());
@@ -154,7 +168,7 @@ TEST_F(HciLayerDeathTest, abort_after_hci_restart_timeout) {
   ASSERT_DEATH(
       {
         sync_handler();
-        FakeTimerAdvance(HciLayer::kHciTimeoutRestartMs.count());
+        FakeTimerAdvance(getHciTimeoutRestartMs().count());
         sync_handler();
       },
       "");
@@ -162,7 +176,7 @@ TEST_F(HciLayerDeathTest, abort_after_hci_restart_timeout) {
 
 TEST_F(HciLayerDeathTest, discard_event_after_hci_timeout) {
   FailIfResetNotSent();
-  FakeTimerAdvance(HciLayer::kHciTimeoutMs.count());
+  FakeTimerAdvance(getHciTimeoutMs().count());
 
   auto sent_command = hal_->GetSentCommand();
   ASSERT_TRUE(sent_command.has_value());
@@ -175,7 +189,7 @@ TEST_F(HciLayerDeathTest, discard_event_after_hci_timeout) {
 
   ASSERT_DEATH(
       {
-        FakeTimerAdvance(HciLayer::kHciTimeoutRestartMs.count());
+        FakeTimerAdvance(getHciTimeoutRestartMs().count());
         sync_handler();
       },
       "");
@@ -189,7 +203,7 @@ TEST_F(HciLayerDeathTest, abort_on_root_inflammation_event) {
         sync_handler();
         hal_->InjectEvent(BqrRootInflammationEventBuilder::Create(
             0x01, 0x01, std::make_unique<packet::RawBuilder>()));
-        FakeTimerAdvance(HciLayer::kHciTimeoutRestartMs.count());
+        FakeTimerAdvance(getHciTimeoutRestartMs().count());
         sync_handler();
       },
       "");

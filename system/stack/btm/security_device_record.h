@@ -154,7 +154,7 @@ enum : uint16_t {
   BTM_SEC_16_DIGIT_PIN_AUTHED = 0x4000,
 };
 
-typedef enum : uint8_t {
+enum class tSECURITY_STATE : uint8_t {
   BTM_SEC_STATE_IDLE = 0,
   BTM_SEC_STATE_AUTHENTICATING = 1,
   BTM_SEC_STATE_ENCRYPTING = 2,
@@ -169,23 +169,23 @@ typedef enum : uint8_t {
   BTM_SEC_STATE_DISCONNECTING_BLE = 8,
   BTM_SEC_STATE_DISCONNECTING_BOTH = 9,
   BTM_SEC_STATE_LE_ENCRYPTING = 10,
-} tSECURITY_STATE;
+};
 
 static inline std::string security_state_text(const tSECURITY_STATE& state) {
   switch (state) {
-    CASE_RETURN_TEXT(BTM_SEC_STATE_IDLE);
-    CASE_RETURN_TEXT(BTM_SEC_STATE_AUTHENTICATING);
-    CASE_RETURN_TEXT(BTM_SEC_STATE_ENCRYPTING);
-    CASE_RETURN_TEXT(BTM_SEC_STATE_GETTING_NAME);
-    CASE_RETURN_TEXT(BTM_SEC_STATE_AUTHORIZING);
-    CASE_RETURN_TEXT(BTM_SEC_STATE_SWITCHING_ROLE);
-    CASE_RETURN_TEXT(BTM_SEC_STATE_DISCONNECTING);
-    CASE_RETURN_TEXT(BTM_SEC_STATE_DELAY_FOR_ENC);
-    CASE_RETURN_TEXT(BTM_SEC_STATE_DISCONNECTING_BLE);
-    CASE_RETURN_TEXT(BTM_SEC_STATE_DISCONNECTING_BOTH);
-    CASE_RETURN_TEXT(BTM_SEC_STATE_LE_ENCRYPTING);
+    CASE_RETURN_STRING(tSECURITY_STATE::BTM_SEC_STATE_IDLE);
+    CASE_RETURN_STRING(tSECURITY_STATE::BTM_SEC_STATE_AUTHENTICATING);
+    CASE_RETURN_STRING(tSECURITY_STATE::BTM_SEC_STATE_ENCRYPTING);
+    CASE_RETURN_STRING(tSECURITY_STATE::BTM_SEC_STATE_GETTING_NAME);
+    CASE_RETURN_STRING(tSECURITY_STATE::BTM_SEC_STATE_AUTHORIZING);
+    CASE_RETURN_STRING(tSECURITY_STATE::BTM_SEC_STATE_SWITCHING_ROLE);
+    CASE_RETURN_STRING(tSECURITY_STATE::BTM_SEC_STATE_DISCONNECTING);
+    CASE_RETURN_STRING(tSECURITY_STATE::BTM_SEC_STATE_DELAY_FOR_ENC);
+    CASE_RETURN_STRING(tSECURITY_STATE::BTM_SEC_STATE_DISCONNECTING_BLE);
+    CASE_RETURN_STRING(tSECURITY_STATE::BTM_SEC_STATE_DISCONNECTING_BOTH);
+    CASE_RETURN_STRING(tSECURITY_STATE::BTM_SEC_STATE_LE_ENCRYPTING);
     default:
-      return base::StringPrintf("UNKNOWN[%hhu]", state);
+      RETURN_UNKNOWN_TYPE_STRING(tSECURITY_STATE, state);
   }
 }
 
@@ -304,42 +304,40 @@ struct tBTM_SEC_REC {
     sec_flags &= ~BTM_SEC_16_DIGIT_PIN_AUTHED;
   }
 
-  bool is_security_state_idle() const {
-    return sec_state == BTM_SEC_STATE_IDLE;
-  }
+  bool is_security_state_idle() const { return sec_state == tSECURITY_STATE::BTM_SEC_STATE_IDLE; }
   bool is_security_state_authenticating() const {
-    return sec_state == BTM_SEC_STATE_AUTHENTICATING;
+    return sec_state == tSECURITY_STATE::BTM_SEC_STATE_AUTHENTICATING;
   }
   bool is_security_state_bredr_encrypting() const {
-    return sec_state == BTM_SEC_STATE_ENCRYPTING;
+    return sec_state == tSECURITY_STATE::BTM_SEC_STATE_ENCRYPTING;
   }
   bool is_security_state_le_encrypting() const {
-    return sec_state == BTM_SEC_STATE_LE_ENCRYPTING;
+    return sec_state == tSECURITY_STATE::BTM_SEC_STATE_LE_ENCRYPTING;
   }
   bool is_security_state_encrypting() const {
     return (is_security_state_bredr_encrypting() ||
             is_security_state_le_encrypting());
   }
   bool is_security_state_getting_name() const {
-    return sec_state == BTM_SEC_STATE_GETTING_NAME;
+    return sec_state == tSECURITY_STATE::BTM_SEC_STATE_GETTING_NAME;
   }
   bool is_security_state_authorizing() const {
-    return sec_state == BTM_SEC_STATE_AUTHORIZING;
+    return sec_state == tSECURITY_STATE::BTM_SEC_STATE_AUTHORIZING;
   }
   bool is_security_state_switching_role() const {
-    return sec_state == BTM_SEC_STATE_SWITCHING_ROLE;
+    return sec_state == tSECURITY_STATE::BTM_SEC_STATE_SWITCHING_ROLE;
   }
   bool is_security_state_disconnecting() const {
-    return sec_state == BTM_SEC_STATE_DISCONNECTING;
+    return sec_state == tSECURITY_STATE::BTM_SEC_STATE_DISCONNECTING;
   }
   bool is_security_state_wait_for_encryption() const {
-    return sec_state == BTM_SEC_STATE_DELAY_FOR_ENC;
+    return sec_state == tSECURITY_STATE::BTM_SEC_STATE_DELAY_FOR_ENC;
   }
   bool is_security_state_ble_disconnecting() const {
-    return sec_state == BTM_SEC_STATE_DISCONNECTING_BLE;
+    return sec_state == tSECURITY_STATE::BTM_SEC_STATE_DISCONNECTING_BLE;
   }
   bool is_security_state_br_edr_and_ble() const {
-    return sec_state == BTM_SEC_STATE_DISCONNECTING_BOTH;
+    return sec_state == tSECURITY_STATE::BTM_SEC_STATE_DISCONNECTING_BOTH;
   }
 
   bool is_bond_type_unknown() const { return bond_type == BOND_TYPE_UNKNOWN; }

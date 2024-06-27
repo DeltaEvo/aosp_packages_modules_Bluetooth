@@ -184,6 +184,7 @@ class LeAudioDeviceGroup {
       types::DataPathState data_path_state) const;
   bool IsDeviceInTheGroup(LeAudioDevice* leAudioDevice) const;
   bool HaveAllActiveDevicesAsesTheSameState(types::AseState state) const;
+  bool HaveAnyActiveDeviceInStreamingState() const;
   bool HaveAnyActiveDeviceInUnconfiguredState() const;
   bool IsGroupStreamReady(void) const;
   bool IsGroupReadyToCreateStream(void) const;

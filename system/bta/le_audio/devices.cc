@@ -32,8 +32,8 @@
 #include "le_audio_log_history.h"
 #include "le_audio_utils.h"
 #include "main/shim/entry.h"
-#include "os/log.h"
 #include "osi/include/properties.h"
+#include "stack/include/btm_client_interface.h"
 
 using bluetooth::hci::kIsoCigPhy1M;
 using bluetooth::hci::kIsoCigPhy2M;
@@ -425,9 +425,6 @@ void LeAudioDevice::ClearPACs(void) {
 
 LeAudioDevice::~LeAudioDevice(void) {
   alarm_free(link_quality_timer);
-  for (auto& ase : ases_) {
-    alarm_free(ase.autonomous_operation_timer_);
-  }
   this->ClearPACs();
 }
 
@@ -722,6 +719,19 @@ bool LeAudioDevice::HaveActiveAse(void) {
   return iter != ases_.end();
 }
 
+bool LeAudioDevice::HaveAnyStreamingAses(void) {
+  /* In configuring state when active in Idle or Configured and reconfigure */
+  auto iter = std::find_if(ases_.begin(), ases_.end(), [](const auto& ase) {
+    if (!ase.active) return false;
+
+    if (ase.state == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) return true;
+
+    return false;
+  });
+
+  return iter != ases_.end();
+}
+
 bool LeAudioDevice::HaveAnyUnconfiguredAses(void) {
   /* In configuring state when active in Idle or Configured and reconfigure */
   auto iter = std::find_if(ases_.begin(), ases_.end(), [](const auto& ase) {
@@ -884,8 +894,9 @@ uint8_t LeAudioDevice::GetSupportedAudioChannelCounts(uint8_t direction) const {
 uint8_t LeAudioDevice::GetPhyBitmask(void) const {
   uint8_t phy_bitfield = kIsoCigPhy1M;
 
-  if (BTM_IsPhy2mSupported(address_, BT_TRANSPORT_LE))
+  if (get_btm_client_interface().peer.BTM_IsPhy2mSupported(address_, BT_TRANSPORT_LE)) {
     phy_bitfield |= kIsoCigPhy2M;
+  }
 
   return phy_bitfield;
 }
@@ -1008,7 +1019,8 @@ static std::string locationToString(uint32_t location) {
 }
 
 void LeAudioDevice::Dump(int fd) {
-  uint16_t acl_handle = BTM_GetHCIConnHandle(address_, BT_TRANSPORT_LE);
+  uint16_t acl_handle =
+          get_btm_client_interface().peer.BTM_GetHCIConnHandle(address_, BT_TRANSPORT_LE);
   std::string snk_location = locationToString(snk_audio_locations_.to_ulong());
   std::string src_location = locationToString(src_audio_locations_.to_ulong());
 
@@ -1054,7 +1066,7 @@ void LeAudioDevice::DisconnectAcl(void) {
   if (conn_id_ == GATT_INVALID_CONN_ID) return;
 
   uint16_t acl_handle =
-      BTM_GetHCIConnHandle(address_, BT_TRANSPORT_LE);
+          get_btm_client_interface().peer.BTM_GetHCIConnHandle(address_, BT_TRANSPORT_LE);
   if (acl_handle != HCI_INVALID_HANDLE) {
     acl_disconnect_from_handle(acl_handle, HCI_ERR_PEER_USER,
                                "bta::bluetooth::le_audio::client disconnect");
@@ -1130,11 +1142,9 @@ void LeAudioDevice::DeactivateAllAses(void) {
           bluetooth::common::ToString(ase.cis_state),
           bluetooth::common::ToString(ase.data_path_state));
     }
-    if (alarm_is_scheduled(ase.autonomous_operation_timer_)) {
-      alarm_free(ase.autonomous_operation_timer_);
-      ase.autonomous_operation_timer_ = NULL;
-      ase.autonomous_target_state_ = AseState::BTA_LE_AUDIO_ASE_STATE_IDLE;
-    }
+
+    log::verbose("{}, ase_id {}", address_, ase.id);
+
     ase.state = AseState::BTA_LE_AUDIO_ASE_STATE_IDLE;
     ase.cis_state = CisState::IDLE;
     ase.data_path_state = DataPathState::IDLE;

@@ -24,6 +24,7 @@
 #include "hci/controller_interface.h"
 #include "main/shim/entry.h"
 #include "stack/include/bt_types.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/hcimsgs.h"
 #include "types/raw_address.h"
 
@@ -136,7 +137,8 @@ class BleScannerImplBase : public BleScannerHciInterface {
   void PeriodicAdvSyncTransfer(
       const RawAddress& bd_addr, uint16_t service_data, uint16_t sync_handle,
       BleScannerHciInterface::handle_cb command_complete) override {
-    uint16_t acl_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
+    uint16_t acl_handle =
+            get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
 
     if (acl_handle == HCI_INVALID_HANDLE) {
       log::error("Wrong mode: no LE link exist or LE not supported");
@@ -151,7 +153,8 @@ class BleScannerImplBase : public BleScannerHciInterface {
   void PeriodicAdvSetInfoTransfer(const RawAddress& bd_addr,
                                   uint16_t service_data, uint8_t adv_handle,
                                   handle_cb command_complete) override {
-    uint16_t acl_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
+    uint16_t acl_handle =
+            get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
 
     if (acl_handle == HCI_INVALID_HANDLE) {
       log::error("Wrong mode: no LE link exist or LE not supported");
@@ -167,7 +170,8 @@ class BleScannerImplBase : public BleScannerHciInterface {
                                         uint16_t skip, uint16_t sync_timeout,
                                         uint8_t cte_type, bool set_defaults,
                                         status_cb command_complete) override {
-    uint16_t acl_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
+    uint16_t acl_handle =
+            get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
 
     if (acl_handle == HCI_INVALID_HANDLE) {
       log::error("Wrong mode: no LE link exist or LE not supported");
@@ -244,7 +248,8 @@ class BleScannerSyncTransferImpl : public virtual BleScannerImplBase {
   void PeriodicAdvSyncTransfer(
       const RawAddress& bd_addr, uint16_t service_data, uint16_t sync_handle,
       BleScannerHciInterface::handle_cb command_complete) override {
-    uint16_t acl_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
+    uint16_t acl_handle =
+            get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
 
     if (acl_handle == HCI_INVALID_HANDLE) {
       log::error("Wrong mode: no LE link exist or LE not supported");
@@ -259,7 +264,8 @@ class BleScannerSyncTransferImpl : public virtual BleScannerImplBase {
   void PeriodicAdvSetInfoTransfer(const RawAddress& bd_addr,
                                   uint16_t service_data, uint8_t adv_handle,
                                   handle_cb command_complete) override {
-    uint16_t acl_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
+    uint16_t acl_handle =
+            get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
 
     if (acl_handle == HCI_INVALID_HANDLE) {
       log::error("Wrong mode: no LE link exist or LE not supported");
@@ -275,7 +281,8 @@ class BleScannerSyncTransferImpl : public virtual BleScannerImplBase {
                                         uint16_t skip, uint16_t sync_timeout,
                                         uint8_t cte_type, bool set_defaults,
                                         status_cb command_complete) override {
-    uint16_t acl_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
+    uint16_t acl_handle =
+            get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
 
     if (acl_handle == HCI_INVALID_HANDLE) {
       log::error("Wrong mode: no LE link exist or LE not supported");

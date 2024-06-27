@@ -656,6 +656,7 @@ cc_test {
     ],
     srcs: [
         ":TestCommonMockFunctions",
+        ":TestMockStackBtmInterface",
         ":TestStubOsi",
         "gatt/database.cc",
         "gatt/database_builder.cc",
@@ -1204,6 +1205,7 @@ cc_test {
         "libbt_shim_ffi",
         "libchrome",
         "libevent",
+        "libflagtest",
         "libflatbuffers-cpp",
         "libgmock",
         "libgtest",
@@ -1241,6 +1243,7 @@ cc_test {
     ],
     srcs: [
         ":TestCommonMockFunctions",
+        ":TestMockStackBtmInterface",
         ":TestStubOsi",
         "gatt/database.cc",
         "gatt/database_builder.cc",

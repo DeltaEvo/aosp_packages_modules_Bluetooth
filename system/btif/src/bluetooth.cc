@@ -486,6 +486,14 @@ static void cleanup(void) {
   stack_manager_get_interface()->clean_up_stack(&stop_profiles);
 }
 
+static void start_rust_module(void) {
+  stack_manager_get_interface()->start_up_rust_module_async();
+}
+
+static void stop_rust_module(void) {
+  stack_manager_get_interface()->shut_down_rust_module_async();
+}
+
 bool is_restricted_mode() { return restricted_mode; }
 
 static bool get_wbs_supported() {
@@ -1158,6 +1166,8 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     .enable = enable,
     .disable = disable,
     .cleanup = cleanup,
+    .start_rust_module = start_rust_module,
+    .stop_rust_module = stop_rust_module,
     .get_adapter_properties = get_adapter_properties,
     .get_adapter_property = get_adapter_property,
     .set_scan_mode = set_scan_mode,

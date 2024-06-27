@@ -161,53 +161,25 @@ class RfcommTest {
 
     @Test
     fun clientConnectToOpenServerSocketBondedInsecure() {
-        startServer {
-            val serverId = it
+        startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
 
-            // Insecure connection to RFCOMM Server
-            val insecureSocket =
-                mBumbleDevice.createInsecureRfcommSocketToServiceRecord(UUID.fromString(TEST_UUID))
-            insecureSocket.connect()
-
-            val connectionResponse =
-                mBumble
-                    .rfcommBlocking()
-                    .withDeadlineAfter(GRPC_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
-                    .acceptConnection(
-                        RfcommProto.AcceptConnectionRequest.newBuilder().setServer(serverId).build()
-                    )
-            Truth.assertThat(connectionResponse.connection.id).isEqualTo(mConnectionCounter)
-            Truth.assertThat(insecureSocket.isConnected).isTrue()
+            createAndConnectSocket(isSecure = false, serverId)
         }
     }
 
     @Test
     fun clientConnectToOpenServerSocketBondedSecure() {
-        startServer {
-            val serverId = it
+        startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
-            // Secure connection to RFCOMM Server
-            val secureSocket =
-                mBumbleDevice.createRfcommSocketToServiceRecord(UUID.fromString(TEST_UUID))
-            secureSocket.connect()
 
-            val connectionResponse =
-                mBumble
-                    .rfcommBlocking()
-                    .withDeadlineAfter(GRPC_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
-                    .acceptConnection(
-                        RfcommProto.AcceptConnectionRequest.newBuilder().setServer(serverId).build()
-                    )
-            Truth.assertThat(connectionResponse.connection.id).isEqualTo(mConnectionCounter)
-            Truth.assertThat(secureSocket.isConnected).isTrue()
+            createAndConnectSocket(isSecure = true, serverId)
         }
     }
 
     @Test
     fun clientSendDataOverInsecureSocket() {
-        startServer {
-            val serverId = it
+        startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
 
             val (insecureSocket, connection) = createAndConnectSocket(isSecure = false, serverId)
@@ -226,8 +198,7 @@ class RfcommTest {
 
     @Test
     fun clientSendDataOverSecureSocket() {
-        startServer {
-            val serverId = it
+        startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
 
             val (secureSocket, connection) = createAndConnectSocket(isSecure = true, serverId)
@@ -246,8 +217,7 @@ class RfcommTest {
 
     @Test
     fun clientReceiveDataOverInsecureSocket() {
-        startServer {
-            val serverId = it
+        startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
 
             val (insecureSocket, connection) = createAndConnectSocket(isSecure = false, serverId)
@@ -267,8 +237,7 @@ class RfcommTest {
 
     @Test
     fun clientReceiveDataOverSecureSocket() {
-        startServer {
-            val serverId = it
+        startServer { serverId ->
             runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
 
             val (secureSocket, connection) = createAndConnectSocket(isSecure = true, serverId)
@@ -288,13 +257,14 @@ class RfcommTest {
 
     private fun createAndConnectSocket(
         isSecure: Boolean,
-        server: ServerId
+        server: ServerId,
+        uuid: String = TEST_UUID
     ): Pair<BluetoothSocket, RfcommProto.RfcommConnection> {
         val socket =
             if (isSecure) {
-                mBumbleDevice.createRfcommSocketToServiceRecord(UUID.fromString(TEST_UUID))
+                mBumbleDevice.createRfcommSocketToServiceRecord(UUID.fromString(uuid))
             } else {
-                mBumbleDevice.createInsecureRfcommSocketToServiceRecord(UUID.fromString(TEST_UUID))
+                mBumbleDevice.createInsecureRfcommSocketToServiceRecord(UUID.fromString(uuid))
             }
         socket.connect()
 

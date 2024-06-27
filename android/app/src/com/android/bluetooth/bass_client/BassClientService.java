@@ -1958,13 +1958,13 @@ public class BassClientService extends ProfileService {
                 log("No PA record found");
                 return;
             }
+            BaseData baseData = getBase(syncHandle);
+            if (baseData == null) {
+                log("No BaseData found");
+                return;
+            }
             if (!result.isNotified()) {
                 result.setNotified(true);
-                BaseData baseData = getBase(syncHandle);
-                if (baseData == null) {
-                    log("No BaseData found");
-                    return;
-                }
                 BluetoothLeBroadcastMetadata metaData =
                         getBroadcastMetadataFromBaseData(
                                 baseData, srcDevice, syncHandle, encrypted);
@@ -2263,8 +2263,8 @@ public class BassClientService extends ProfileService {
             }
         }
 
-        if (broadcastId == BassConstants.INVALID_BROADCAST_ID || pbData == null) {
-            Log.w(TAG, "Invalid broadcast ID or public broadcast data");
+        if (broadcastId == BassConstants.INVALID_BROADCAST_ID) {
+            Log.w(TAG, "Invalid broadcast ID");
             mPeriodicAdvCallbacksMap.remove(BassConstants.INVALID_SYNC_HANDLE);
             handleSelectSourceRequest();
             return;

@@ -46,6 +46,7 @@
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_psm_types.h"
 #include "stack/include/bt_types.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/l2cap_acl_interface.h"
 #include "stack/include/l2cdefs.h"
 #include "stack/include/srvc_api.h"  // tDIS_VALUE
@@ -379,9 +380,8 @@ void gatt_update_app_use_link_flag(tGATT_IF gatt_if, tGATT_TCB* p_tcb,
     return;
   }
 
-  bool is_valid_handle =
-      (BTM_GetHCIConnHandle(p_tcb->peer_bda, p_tcb->transport) !=
-       GATT_INVALID_ACL_HANDLE);
+  bool is_valid_handle = (get_btm_client_interface().peer.BTM_GetHCIConnHandle(
+                                  p_tcb->peer_bda, p_tcb->transport) != GATT_INVALID_ACL_HANDLE);
 
   if (is_add) {
     if (p_tcb->att_lcid == L2CAP_ATT_CID && is_valid_handle) {
