@@ -25,13 +25,6 @@ flag {
 }
 
 flag {
-    name: "leaudio_unicast_inactivate_device_based_on_context"
-    namespace: "bluetooth"
-    description: "Inactivate audio device when stream cannot be created due to unavailable context type"
-    bug: "313054788"
-}
-
-flag {
     name: "leaudio_multicodec_aidl_support"
     namespace: "bluetooth"
     description: "Enables support for the multicodec AIDL"
