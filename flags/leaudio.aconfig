@@ -99,16 +99,6 @@ flag {
 }
 
 flag {
-    name: "leaudio_volume_change_on_ringtone_fix"
-    namespace: "bluetooth"
-    description: "Apply the volume update to call volume during ringtone"
-    bug: "324041939"
-    metadata {
-        purpose: PURPOSE_BUGFIX
-    }
-}
-
-flag {
     name: "leaudio_active_device_manager_group_handling_fix"
     namespace: "bluetooth"
     description: "Make sure Active Device Manager understands LeAudio groups"
