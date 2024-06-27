@@ -993,13 +993,11 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
             if (device == null) {
                 success = leAudioService.removeActiveDevice(hasFallbackDevice);
             } else {
-                if (Flags.leaudioActiveDeviceManagerGroupHandlingFix()) {
-                    if ((mLeAudioActiveDevice != null)
-                            && (Objects.equals(
-                                    mLeAudioActiveDevice, leAudioService.getLeadDevice(device)))) {
-                        Log.d(TAG, "New LeAudioDevice is a part of an active group");
-                        return true;
-                    }
+                if ((mLeAudioActiveDevice != null)
+                        && (Objects.equals(
+                                mLeAudioActiveDevice, leAudioService.getLeadDevice(device)))) {
+                    Log.d(TAG, "New LeAudioDevice is a part of an active group");
+                    return true;
                 }
                 success = leAudioService.setActiveDevice(device);
             }
@@ -1008,11 +1006,7 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
                 return false;
             }
 
-            if (Flags.leaudioActiveDeviceManagerGroupHandlingFix()) {
-                mLeAudioActiveDevice = leAudioService.getLeadDevice(device);
-            } else {
-                mLeAudioActiveDevice = device;
-            }
+            mLeAudioActiveDevice = leAudioService.getLeadDevice(device);
 
             if (device == null) {
                 mLeHearingAidActiveDevice = null;
