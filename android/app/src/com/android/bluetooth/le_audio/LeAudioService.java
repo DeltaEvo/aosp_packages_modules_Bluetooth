@@ -4382,11 +4382,6 @@ public class LeAudioService extends ProfileService {
     }
 
     void removeAuthorizationInfoForRelatedProfiles(BluetoothDevice device) {
-        if (!Flags.leaudioMcsTbsAuthorizationRebondFix()) {
-            Log.i(TAG, "leaudio_mcs_tbs_authorization_rebond_fix is disabled");
-            return;
-        }
-
         McpService mcpService = getMcpService();
         if (mcpService != null) {
             mcpService.removeDeviceAuthorizationInfo(device);

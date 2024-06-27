@@ -91,16 +91,6 @@ flag {
 }
 
 flag {
-    name: "leaudio_mcs_tbs_authorization_rebond_fix"
-    namespace: "bluetooth"
-    description: "Removes authorization data for unbonded devices in MCS and TBS service"
-    bug: "323339440"
-    metadata {
-        purpose: PURPOSE_BUGFIX
-    }
-}
-
-flag {
     name: "leaudio_multiple_vocs_instances_api"
     is_exported: true
     namespace: "bluetooth"
