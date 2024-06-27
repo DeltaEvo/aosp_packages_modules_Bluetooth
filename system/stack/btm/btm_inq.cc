@@ -35,8 +35,6 @@
 
 #include <mutex>
 
-#include "advertise_data_parser.h"
-#include "bt_name.h"
 #include "btif/include/btif_acl.h"
 #include "btif/include/btif_config.h"
 #include "common/time_util.h"
@@ -48,7 +46,6 @@
 #include "main/shim/entry.h"
 #include "main/shim/helpers.h"
 #include "main/shim/shim.h"
-#include "neighbor_inquiry.h"
 #include "osi/include/allocator.h"
 #include "osi/include/properties.h"
 #include "osi/include/stack_power_telemetry.h"
@@ -58,8 +55,10 @@
 #include "stack/btm/btm_sec.h"
 #include "stack/btm/neighbor_inquiry.h"
 #include "stack/include/acl_api_types.h"
+#include "stack/include/advertise_data_parser.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_lap.h"
+#include "stack/include/bt_name.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/btm_ble_api.h"
@@ -899,7 +898,7 @@ tBTM_INQ_INFO* BTM_InqDbFirst(void) {
   }
 
   /* If here, no used entry found */
-  return (tBTM_INQ_INFO*)NULL;
+  return nullptr;
 }
 
 /*******************************************************************************
@@ -929,7 +928,7 @@ tBTM_INQ_INFO* BTM_InqDbNext(tBTM_INQ_INFO* p_cur) {
     }
 
     /* If here, more entries found */
-    return (tBTM_INQ_INFO*)NULL;
+    return nullptr;
   } else {
     return BTM_InqDbFirst();
   }
@@ -1011,8 +1010,8 @@ void btm_inq_db_reset(void) {
 
   /* If an inquiry or periodic inquiry is active, reset the mode to inactive */
   if (btm_cb.btm_inq_vars.inq_active != BTM_INQUIRY_INACTIVE) {
-    temp_inq_active = btm_cb.btm_inq_vars.inq_active; /* Save so state can change BEFORE
-                                                callback is called */
+    /* Save so state can change BEFORE callback is called */
+    temp_inq_active = btm_cb.btm_inq_vars.inq_active;
     btm_cb.btm_inq_vars.inq_active = BTM_INQUIRY_INACTIVE;
 
     /* If not a periodic inquiry, the complete callback must be called to notify
@@ -1184,7 +1183,7 @@ tINQ_DB_ENT* btm_inq_db_find(const RawAddress& p_bda) {
   }
 
   /* If here, not found */
-  return NULL;
+  return nullptr;
 }
 
 /*******************************************************************************
@@ -1302,15 +1301,15 @@ static void btm_process_inq_results_standard(bluetooth::hci::EventView event) {
     if (p_i == NULL) {
       p_i = btm_inq_db_new(bda, false);
       is_new = true;
-    }
-
-    /* If an entry for the device already exists, overwrite it ONLY if it is
-       from a previous inquiry. (Ignore it if it is a duplicate response from
-       the same inquiry.
-    */
-    else if (p_i->inq_count == btm_cb.btm_inq_vars.inq_counter &&
-             (p_i->inq_info.results.device_type == BT_DEVICE_TYPE_BREDR)) {
-      is_new = false;
+    } else {
+      /* If an entry for the device already exists, overwrite it ONLY if it is
+         from a previous inquiry. (Ignore it if it is a duplicate response from
+         the same inquiry.
+      */
+      if (p_i->inq_count == btm_cb.btm_inq_vars.inq_counter &&
+          (p_i->inq_info.results.device_type == BT_DEVICE_TYPE_BREDR)) {
+        is_new = false;
+      }
     }
 
     p_i->inq_info.results.rssi = BTM_INQ_RES_IGNORE_RSSI;
@@ -1433,9 +1432,8 @@ static void btm_process_inq_results_rssi(bluetooth::hci::EventView event) {
         log::verbose("update RSSI new:{}, old:{}", i_rssi, p_cur->rssi);
         p_cur->rssi = i_rssi;
         update = true;
-      }
-      /* If no update needed continue with next response (if any) */
-      else {
+      } else {
+        /* If no update needed continue with next response (if any) */
         continue;
       }
     }
@@ -1445,15 +1443,15 @@ static void btm_process_inq_results_rssi(bluetooth::hci::EventView event) {
     if (p_i == NULL) {
       p_i = btm_inq_db_new(bda, false);
       is_new = true;
-    }
-
-    /* If an entry for the device already exists, overwrite it ONLY if it is
-       from a previous inquiry. (Ignore it if it is a duplicate response from
-       the same inquiry.
-    */
-    else if (p_i->inq_count == btm_cb.btm_inq_vars.inq_counter &&
-             (p_i->inq_info.results.device_type == BT_DEVICE_TYPE_BREDR)) {
-      is_new = false;
+    } else {
+      /* If an entry for the device already exists, overwrite it ONLY if it is
+         from a previous inquiry. (Ignore it if it is a duplicate response from
+         the same inquiry.
+      */
+      if (p_i->inq_count == btm_cb.btm_inq_vars.inq_counter &&
+          (p_i->inq_info.results.device_type == BT_DEVICE_TYPE_BREDR)) {
+        is_new = false;
+      }
     }
 
     /* keep updating RSSI to have latest value */
@@ -1573,17 +1571,17 @@ static void btm_process_inq_results_extended(bluetooth::hci::EventView event) {
         log::verbose("update RSSI new:{}, old:{}", i_rssi, p_cur->rssi);
         p_cur->rssi = i_rssi;
         update = true;
-      }
-      /* If we received a second Extended Inq Event for an already */
-      /* discovered device, this is because for the first one EIR was not
-         received */
-      else if (p_i) {
-        p_cur = &p_i->inq_info.results;
-        update = true;
-      }
-      /* If no update needed continue with next response (if any) */
-      else {
-        return;
+      } else {
+        /* If we received a second Extended Inq Event for an already */
+        /* discovered device, this is because for the first one EIR was not
+           received */
+        if (p_i) {
+          p_cur = &p_i->inq_info.results;
+          update = true;
+        } else {
+          /* If no update needed continue with next response (if any) */
+          return;
+        }
       }
     }
 
@@ -1592,17 +1590,17 @@ static void btm_process_inq_results_extended(bluetooth::hci::EventView event) {
     if (p_i == NULL) {
       p_i = btm_inq_db_new(bda, false);
       is_new = true;
-    }
-
-    /* If an entry for the device already exists, overwrite it ONLY if it is
-       from
-       a previous inquiry. (Ignore it if it is a duplicate response from the
-       same
-       inquiry.
-    */
-    else if (p_i->inq_count == btm_cb.btm_inq_vars.inq_counter &&
-             (p_i->inq_info.results.device_type == BT_DEVICE_TYPE_BREDR)) {
-      is_new = false;
+    } else {
+      /* If an entry for the device already exists, overwrite it ONLY if it is
+         from
+         a previous inquiry. (Ignore it if it is a duplicate response from the
+         same
+         inquiry.
+      */
+      if (p_i->inq_count == btm_cb.btm_inq_vars.inq_counter &&
+          (p_i->inq_info.results.device_type == BT_DEVICE_TYPE_BREDR)) {
+        is_new = false;
+      }
     }
 
     /* keep updating RSSI to have latest value */
@@ -2135,9 +2133,8 @@ uint8_t BTM_GetEirSupportedServices(uint32_t* p_eir_uuid, uint8_t** p, uint8_t m
       if (*p_num_uuid16 < max_num_uuid16) {
         UINT16_TO_STREAM(*p, BTM_EIR_UUID_LKUP_TBL[service_index]);
         (*p_num_uuid16)++;
-      }
-      /* if max number of UUIDs are stored and found one more */
-      else {
+      } else {
+        /* if max number of UUIDs are stored and found one more */
         return HCI_EIR_MORE_16BITS_UUID_TYPE;
       }
     }
