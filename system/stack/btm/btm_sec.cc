@@ -2645,8 +2645,9 @@ void btm_io_capabilities_req(RawAddress p) {
 
   btm_sec_cb.pairing_bda = evt_data.bd_addr;
 
-  if (evt_data.bd_addr == btm_sec_cb.connecting_bda)
+  if (evt_data.bd_addr == btm_sec_cb.connecting_bda) {
     p_dev_rec->dev_class = btm_sec_cb.connecting_dc;
+  }
 
   btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_WAIT_LOCAL_IOCAPS);
 
@@ -2769,6 +2770,7 @@ void btm_proc_sp_req_evt(tBTM_SP_EVT event, const RawAddress bda,
       (btm_sec_cb.pairing_bda == p_bda)) {
     evt_data.cfm_req.bd_addr = p_dev_rec->bd_addr;
     evt_data.cfm_req.dev_class = p_dev_rec->dev_class;
+    log::info("CoD: evt_data.cfm_req.dev_class = {}", dev_class_text(evt_data.cfm_req.dev_class));
     bd_name_copy(evt_data.cfm_req.bd_name, p_dev_rec->sec_bd_name);
 
     switch (event) {
@@ -4434,9 +4436,11 @@ void btm_sec_pin_code_request(const RawAddress p_bda) {
   }
 
   /* Use the connecting device's CoD for the connection */
-  if ((p_bda == p_cb->connecting_bda) &&
-      (p_cb->connecting_dc != kDevClassEmpty))
+  if ((p_bda == p_cb->connecting_bda) && (p_cb->connecting_dc != kDevClassEmpty)) {
+    log::info("CoD: previous value {}, replaced with {}", dev_class_text(p_dev_rec->dev_class),
+              dev_class_text(p_cb->connecting_dc));
     p_dev_rec->dev_class = p_cb->connecting_dc;
+  }
 
   /* We could have started connection after asking user for the PIN code */
   if (btm_sec_cb.pin_code_len != 0) {
