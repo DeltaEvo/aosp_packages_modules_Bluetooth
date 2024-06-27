@@ -12,16 +12,10 @@ mod ffi {
 
         fn dump() -> Vec<InitFlagWithValue>;
 
-        fn always_send_services_if_gatt_disc_done_is_enabled() -> bool;
-        fn always_use_private_gatt_for_debugging_is_enabled() -> bool;
-        fn bluetooth_power_telemetry_is_enabled() -> bool;
-        fn btm_dm_flush_discovery_queue_on_search_cancel_is_enabled() -> bool;
         fn classic_discovery_only_is_enabled() -> bool;
         fn dynamic_avrcp_version_enhancement_is_enabled() -> bool;
         fn gatt_robust_caching_server_is_enabled() -> bool;
         fn get_hci_adapter() -> i32;
-        fn get_asha_packet_drop_frequency_threshold() -> i32;
-        fn get_asha_phy_update_retry_limit() -> i32;
         fn hfp_dynamic_version_is_enabled() -> bool;
         fn irk_rotation_is_enabled() -> bool;
         fn leaudio_targeted_announcement_reconnection_mode_is_enabled() -> bool;

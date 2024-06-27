@@ -843,11 +843,7 @@ static void bta_dm_search_cmpl() {
 
   std::vector<Uuid> gatt_services;
 
-  bool send_gatt_results =
-      bluetooth::common::init_flags::
-              always_send_services_if_gatt_disc_done_is_enabled()
-          ? bta_dm_search_cb.gatt_disc_active
-          : false;
+  bool send_gatt_results = bta_dm_search_cb.gatt_disc_active;
 
   /* no BLE connection, i.e. Classic service discovery end */
   if (conn_id == GATT_INVALID_CONN_ID) {
@@ -1039,13 +1035,7 @@ bool bta_dm_is_search_request_queued() {
  * Returns          void
  *
  ******************************************************************************/
-static void bta_dm_search_clear_queue() {
-  bta_dm_search_cb.p_pending_search.reset();
-  if (bluetooth::common::InitFlags::
-          IsBtmDmFlushDiscoveryQueueOnSearchCancel()) {
-    bta_dm_search_cb.pending_discovery_queue = {};
-  }
-}
+static void bta_dm_search_clear_queue() { bta_dm_search_cb.p_pending_search.reset(); }
 
 /*******************************************************************************
  *
