@@ -141,9 +141,6 @@ bool is_local_device_atv = false;
 
 /* handsfree profile - client */
 extern const bthf_client_interface_t* btif_hf_client_get_interface();
-/* advanced audio profile */
-extern const btav_source_interface_t* btif_av_get_src_interface();
-extern const btav_sink_interface_t* btif_av_get_sink_interface();
 /*rfc l2cap*/
 extern const btsock_interface_t* btif_sock_get_interface();
 /* hid host profile */
@@ -489,6 +486,14 @@ static void cleanup(void) {
   stack_manager_get_interface()->clean_up_stack(&stop_profiles);
 }
 
+static void start_rust_module(void) {
+  stack_manager_get_interface()->start_up_rust_module_async();
+}
+
+static void stop_rust_module(void) {
+  stack_manager_get_interface()->shut_down_rust_module_async();
+}
+
 bool is_restricted_mode() { return restricted_mode; }
 
 static bool get_wbs_supported() {
@@ -532,12 +537,15 @@ static int get_adapter_property(bt_property_type_t type) {
   return BT_STATUS_SUCCESS;
 }
 
+static void set_scan_mode(bt_scan_mode_t mode) {
+  do_in_main_thread(FROM_HERE, base::BindOnce(btif_set_scan_mode, mode));
+}
+
 static int set_adapter_property(const bt_property_t* property) {
   if (!btif_is_enabled()) return BT_STATUS_NOT_READY;
 
   switch (property->type) {
     case BT_PROPERTY_BDNAME:
-    case BT_PROPERTY_ADAPTER_SCAN_MODE:
     case BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT:
     case BT_PROPERTY_CLASS_OF_DEVICE:
       break;
@@ -886,12 +894,6 @@ static const void* get_profile_interface(const char* profile_id) {
   if (is_profile(profile_id, BT_PROFILE_PAN_ID))
     return btif_pan_get_interface();
 
-  if (is_profile(profile_id, BT_PROFILE_ADVANCED_AUDIO_ID))
-    return btif_av_get_src_interface();
-
-  if (is_profile(profile_id, BT_PROFILE_ADVANCED_AUDIO_SINK_ID))
-    return btif_av_get_sink_interface();
-
   if (is_profile(profile_id, BT_PROFILE_HIDHOST_ID))
     return btif_hh_get_interface();
 
@@ -1164,8 +1166,11 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     .enable = enable,
     .disable = disable,
     .cleanup = cleanup,
+    .start_rust_module = start_rust_module,
+    .stop_rust_module = stop_rust_module,
     .get_adapter_properties = get_adapter_properties,
     .get_adapter_property = get_adapter_property,
+    .set_scan_mode = set_scan_mode,
     .set_adapter_property = set_adapter_property,
     .get_remote_device_properties = get_remote_device_properties,
     .get_remote_device_property = get_remote_device_property,

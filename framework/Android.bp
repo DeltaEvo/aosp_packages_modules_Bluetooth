@@ -117,6 +117,7 @@ java_sdk_library {
     },
     lint: {
         strict_updatability_linting: true,
+        baseline_filename: "lint-baseline.xml",
     },
 }
 

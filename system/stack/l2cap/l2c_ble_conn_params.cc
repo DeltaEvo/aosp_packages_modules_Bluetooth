@@ -28,6 +28,9 @@
 #include <bluetooth/log.h>
 
 #include "hci/controller_interface.h"
+#include "hci/event_checkers.h"
+#include "hci/hci_interface.h"
+#include "hci/hci_packets.h"
 #include "internal_include/stack_config.h"
 #include "main/shim/acl_api.h"
 #include "main/shim/entry.h"
@@ -35,6 +38,7 @@
 #include "stack/include/acl_api.h"
 #include "stack/include/btm_ble_api_types.h"
 #include "stack/include/l2c_api.h"
+#include "stack/include/main_thread.h"
 #include "stack/l2cap/l2c_int.h"
 #include "types/raw_address.h"
 
@@ -308,6 +312,50 @@ void l2cble_process_conn_update_evt(uint16_t handle, uint8_t status,
 
   log::verbose("conn_update_mask={} , subrate_req_mask={}",
                p_lcb->conn_update_mask, p_lcb->subrate_req_mask);
+}
+
+/*******************************************************************************
+ *
+ * Function         l2cble_process_rc_param_request_evt
+ *
+ * Description      process LE Remote Connection Parameter Request Event.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void l2cble_process_rc_param_request_evt(uint16_t handle, uint16_t int_min,
+                                         uint16_t int_max, uint16_t latency,
+                                         uint16_t timeout) {
+  tL2C_LCB* p_lcb = l2cu_find_lcb_by_handle(handle);
+  if (!p_lcb) {
+    log::warn("No link to update connection parameter");
+    return;
+  }
+
+  p_lcb->min_interval = int_min;
+  p_lcb->max_interval = int_max;
+  p_lcb->latency = latency;
+  p_lcb->timeout = timeout;
+
+  /* if update is enabled, always accept connection parameter update */
+  if ((p_lcb->conn_update_mask & L2C_BLE_CONN_UPDATE_DISABLE) == 0) {
+    shim::GetHciLayer()->EnqueueCommand(
+        hci::LeRemoteConnectionParameterRequestReplyBuilder::Create(
+            handle, int_min, int_max, latency, timeout, 0, 0),
+        get_main()->BindOnce(
+            hci::check_complete<
+                hci::LeRemoteConnectionParameterRequestReplyCompleteView>));
+  } else {
+    log::verbose("L2CAP - LE - update currently disabled");
+    p_lcb->conn_update_mask |= L2C_BLE_NEW_CONN_PARAM;
+    shim::GetHciLayer()->EnqueueCommand(
+        hci::LeRemoteConnectionParameterRequestNegativeReplyBuilder::Create(
+            handle, hci::ErrorCode::UNACCEPTABLE_CONNECTION_PARAMETERS),
+        get_main()->BindOnce(
+            hci::check_complete<
+                hci::
+                    LeRemoteConnectionParameterRequestNegativeReplyCompleteView>));
+  }
 }
 
 void l2cble_use_preferred_conn_params(const RawAddress& bda) {

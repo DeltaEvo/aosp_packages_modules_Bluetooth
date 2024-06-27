@@ -304,12 +304,7 @@ typedef enum {
   BT_PROPERTY_SERVICE_RECORD,
 
   /* Properties unique to adapter */
-  /**
-   * Description - Bluetooth Adapter scan mode
-   * Access mode - GET and SET
-   * Data type   - bt_scan_mode_t.
-   */
-  BT_PROPERTY_ADAPTER_SCAN_MODE,
+  BT_PROPERTY_RESERVED_07,
   /**
    * Description - List of bonded devices
    * Access mode - Only GET.
@@ -710,15 +705,23 @@ typedef struct {
   /** Closes the interface. */
   void (*cleanup)(void);
 
+  /** Start Rust Module */
+  void (*start_rust_module)(void);
+
+  /** Stop Rust Module */
+  void (*stop_rust_module)(void);
+
   /** Get all Bluetooth Adapter properties at init */
   int (*get_adapter_properties)(void);
 
   /** Get Bluetooth Adapter property of 'type' */
   int (*get_adapter_property)(bt_property_type_t type);
 
+  void (*set_scan_mode)(bt_scan_mode_t mode);
+
   /** Set Bluetooth Adapter property of 'type' */
   /* Based on the type, val shall be one of
-   * RawAddress or bt_bdname_t or bt_scanmode_t etc
+   * RawAddress or bt_bdname_t etc
    */
   int (*set_adapter_property)(const bt_property_t* property);
 
@@ -737,7 +740,7 @@ typedef struct {
   int (*get_remote_service_record)(const RawAddress& remote_addr,
                                    const bluetooth::Uuid& uuid);
 
-  /** Start service discovery with tranport to get remote services */
+  /** Start service discovery with transport to get remote services */
   int (*get_remote_services)(RawAddress* remote_addr, int transport);
 
   /** Start Discovery */

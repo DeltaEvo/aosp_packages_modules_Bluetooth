@@ -489,17 +489,20 @@ static void bta_hf_client_handle_ciev(tBTA_HF_CLIENT_CB* client_cb,
 
 static void bta_hf_client_handle_bcs(tBTA_HF_CLIENT_CB* client_cb,
                                      uint32_t codec) {
+  tBTA_AG_UUID_CODEC uuid_codec = static_cast<tBTA_AG_UUID_CODEC>(codec);
   log::verbose("codec: {} sco listen state: {}", codec, client_cb->sco_state);
-  if (codec == UUID_CODEC_CVSD || codec == UUID_CODEC_MSBC ||
-      (bta_hf_client_cb_arr.is_support_lc3 && codec == UUID_CODEC_LC3)) {
-    switch (codec) {
-      case UUID_CODEC_CVSD:
+  if (uuid_codec == tBTA_AG_UUID_CODEC::UUID_CODEC_CVSD ||
+      uuid_codec == tBTA_AG_UUID_CODEC::UUID_CODEC_MSBC ||
+      (bta_hf_client_cb_arr.is_support_lc3 &&
+       uuid_codec == tBTA_AG_UUID_CODEC::UUID_CODEC_LC3)) {
+    switch (uuid_codec) {
+      case tBTA_AG_UUID_CODEC::UUID_CODEC_CVSD:
         client_cb->negotiated_codec = BTM_SCO_CODEC_CVSD;
         break;
-      case UUID_CODEC_MSBC:
+      case tBTA_AG_UUID_CODEC::UUID_CODEC_MSBC:
         client_cb->negotiated_codec = BTM_SCO_CODEC_MSBC;
         break;
-      case UUID_CODEC_LC3:
+      case tBTA_AG_UUID_CODEC::UUID_CODEC_LC3:
         client_cb->negotiated_codec = BTM_SCO_CODEC_LC3;
         break;
       default:
@@ -1917,7 +1920,7 @@ void bta_hf_client_send_at_biev(tBTA_HF_CLIENT_CB* client_cb, int indicator_id,
   char buf[32];
   tBTA_HF_CLIENT_AT_CMD cmd = BTA_HF_CLIENT_AT_BIEV;
 
-  if ((client_cb->peer_features & BTA_HF_CLIENT_FEAT_HF_IND) == 0) {
+  if ((client_cb->peer_features & BTA_HF_CLIENT_PEER_HF_IND) == 0) {
     log::error("peer does not support HF Indicators");
     return;
   }

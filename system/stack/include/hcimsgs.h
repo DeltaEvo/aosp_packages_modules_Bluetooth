@@ -183,9 +183,6 @@ void btsnd_hcic_delete_stored_key(const RawAddress& bd_addr,
                                   bool delete_all_flag);
 /* Delete Stored Key */
 
-/* Change Local Name */
-void btsnd_hcic_change_name(BD_NAME name);
-
 #define HCIC_PARAM_SIZE_READ_CMD 0
 
 #define HCIC_PARAM_SIZE_WRITE_PARAM1 1

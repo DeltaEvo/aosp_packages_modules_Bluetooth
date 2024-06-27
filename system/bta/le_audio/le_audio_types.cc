@@ -133,7 +133,9 @@ uint32_t CodecConfigSetting::GetSamplingFrequencyHz() const {
 uint32_t CodecConfigSetting::GetDataIntervalUs() const {
   switch (id.coding_format) {
     case kLeAudioCodingFormatLC3:
-      return params.GetAsCoreCodecConfig().GetFrameDurationUs();
+      return params.GetAsCoreCodecConfig().GetFrameDurationUs() *
+             params.GetAsCoreCodecConfig().codec_frames_blocks_per_sdu.value_or(
+                 1);
     default:
       log::warn(", invalid codec id: 0x{:02x}", id.coding_format);
       return 0;

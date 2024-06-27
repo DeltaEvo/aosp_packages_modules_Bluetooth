@@ -28,10 +28,7 @@
 
 #include "bta/sys/bta_sys.h"
 #include "bta/sys/bta_sys_int.h"
-#include "internal_include/bt_target.h"
-#include "main/shim/dumpsys.h"
-#include "os/log.h"
-#include "stack/include/btm_api.h"
+#include "stack/include/btm_client_interface.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
 
@@ -305,7 +302,7 @@ void bta_sys_sco_close(tBTA_SYS_ID id, uint8_t app_id,
   uint8_t num_sco_links;
 
   if ((id != BTA_ID_AG) && (bta_sys_cb.p_sco_cb)) {
-    num_sco_links = BTM_GetNumScoLinks();
+    num_sco_links = get_btm_client_interface().sco.BTM_GetNumScoLinks();
     bta_sys_cb.p_sco_cb(BTA_SYS_SCO_CLOSE, num_sco_links, app_id, peer_addr);
   }
 
@@ -346,7 +343,7 @@ void bta_sys_sco_use(tBTA_SYS_ID /* id */, uint8_t app_id,
 void bta_sys_sco_unuse(tBTA_SYS_ID /* id */, uint8_t app_id,
                        const RawAddress& peer_addr) {
   if ((bta_sys_cb.p_sco_cb)) {
-    uint8_t num_sco_links = BTM_GetNumScoLinks();
+    uint8_t num_sco_links = get_btm_client_interface().sco.BTM_GetNumScoLinks();
     bta_sys_cb.p_sco_cb(BTA_SYS_SCO_CLOSE, num_sco_links, app_id, peer_addr);
   }
 }

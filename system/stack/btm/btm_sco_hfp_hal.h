@@ -20,6 +20,7 @@
 
 #include <vector>
 
+#include "btm_api_types.h"
 #include "device/include/esco_parameters.h"
 #include "internal_include/bt_target.h"
 #include "raw_address.h"
@@ -91,7 +92,7 @@ bool get_offload_enabled();
 bool enable_offload(bool enable);
 
 // Notify the codec datapath to lower layer for offload mode.
-void set_codec_datapath(int codec_uuid);
+void set_codec_datapath(tBTA_AG_UUID_CODEC codec_uuid);
 
 // Get the maximum supported packet size from the lower layer.
 size_t get_packet_size(int codec);

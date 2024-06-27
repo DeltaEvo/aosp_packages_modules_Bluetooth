@@ -49,9 +49,9 @@ bool HfpClientInterface::ReleaseOffload(HfpClientInterface::Offload* offload) {
 
 HfpClientInterface* HfpClientInterface::Get() { return nullptr; }
 
-std::unordered_map<int, ::hfp::sco_config>
+std::unordered_map<tBTA_AG_UUID_CODEC, ::hfp::sco_config>
 HfpClientInterface::Offload::GetHfpScoConfig() {
-  return std::unordered_map<int, ::hfp::sco_config>();
+  return std::unordered_map<tBTA_AG_UUID_CODEC, ::hfp::sco_config>();
 }
 
 }  // namespace hfp

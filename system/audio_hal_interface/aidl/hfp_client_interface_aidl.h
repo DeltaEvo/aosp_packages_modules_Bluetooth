@@ -72,8 +72,8 @@ class HfpTransport {
 
   void LogBytesProcessed(size_t bytes_read);
 
-  static std::unordered_map<int, ::hfp::sco_config> GetHfpScoConfig(
-      SessionType sessionType);
+  static std::unordered_map<tBTA_AG_UUID_CODEC, ::hfp::sco_config>
+  GetHfpScoConfig(SessionType sessionType);
 
  private:
   tHFP_CTRL_CMD hfp_pending_cmd_;

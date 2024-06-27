@@ -35,7 +35,7 @@
 #include "osi/include/alarm.h"
 #include "osi/include/compat.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/btm_api.h"
+#include "stack/include/btm_client_interface.h"
 #include "types/raw_address.h"
 
 using namespace bluetooth;
@@ -420,7 +420,7 @@ void bta_ag_api_enable(tBTA_AG_CBACK* p_cback) {
   bta_ag_cb.p_cback = p_cback;
 
   /* call init call-out */
-  BTM_WriteVoiceSettings(AG_VOICE_SETTINGS);
+  get_btm_client_interface().sco.BTM_WriteVoiceSettings(AG_VOICE_SETTINGS);
 
   bta_sys_collision_register(BTA_ID_AG, bta_ag_collision_cback);
 

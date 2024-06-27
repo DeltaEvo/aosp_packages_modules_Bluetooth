@@ -30,7 +30,6 @@
 #include "btif/include/btif_storage.h"
 #include "crypto_toolbox/crypto_toolbox.h"
 #include "device/include/interop.h"
-#include "device/include/interop_config.h"
 #include "hci/controller_interface.h"
 #include "main/shim/entry.h"
 #include "osi/include/allocator.h"
@@ -87,8 +86,10 @@ void BTM_SecAddBleDevice(const RawAddress& bd_addr, tBT_DEVICE_TYPE dev_type,
     p_dev_rec = btm_sec_allocate_dev_rec();
 
     p_dev_rec->bd_addr = bd_addr;
-    p_dev_rec->hci_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_BR_EDR);
-    p_dev_rec->ble_hci_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
+    p_dev_rec->hci_handle =
+            get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_BR_EDR);
+    p_dev_rec->ble_hci_handle =
+            get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
 
     /* update conn params, use default value for background connection params */
     p_dev_rec->conn_params.min_conn_int = BTM_BLE_CONN_PARAM_UNDEF;
@@ -611,7 +612,8 @@ tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr,
     return BTM_WRONG_MODE;
   }
 
-  uint16_t hci_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
+  uint16_t hci_handle =
+          get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
 
   if (!acl_peer_supports_ble_packet_extension(hci_handle)) {
     log::info("Remote device unable to support le packet extension");
@@ -1065,7 +1067,7 @@ void btm_ble_link_sec_check(const RawAddress& bd_addr,
   }
 
   if (p_dev_rec->sec_rec.is_security_state_encrypting() ||
-      p_dev_rec->sec_rec.sec_state == BTM_SEC_STATE_AUTHENTICATING) {
+      p_dev_rec->sec_rec.sec_state == tSECURITY_STATE::BTM_SEC_STATE_AUTHENTICATING) {
     /* race condition: discard the security request while central is encrypting
      * the link */
     *p_sec_req_act = BTM_BLE_SEC_REQ_ACT_DISCARD;
@@ -1169,7 +1171,7 @@ tBTM_STATUS btm_ble_set_encryption(const RawAddress& bd_addr,
 
       if (SMP_Pair(bd_addr) == SMP_STARTED) {
         cmd = BTM_CMD_STARTED;
-        p_rec->sec_rec.sec_state = BTM_SEC_STATE_AUTHENTICATING;
+        p_rec->sec_rec.sec_state = tSECURITY_STATE::BTM_SEC_STATE_AUTHENTICATING;
       }
       break;
 
@@ -1250,8 +1252,9 @@ tBTM_STATUS btm_ble_start_encrypt(const RawAddress& bda, bool use_stk,
     return BTM_ERR_KEY_MISSING;
   }
 
-  if (p_rec->sec_rec.sec_state == BTM_SEC_STATE_IDLE)
-    p_rec->sec_rec.sec_state = BTM_SEC_STATE_LE_ENCRYPTING;
+  if (p_rec->sec_rec.sec_state == tSECURITY_STATE::BTM_SEC_STATE_IDLE) {
+    p_rec->sec_rec.sec_state = tSECURITY_STATE::BTM_SEC_STATE_LE_ENCRYPTING;
+  }
 
   return BTM_CMD_STARTED;
 }
@@ -1321,7 +1324,7 @@ void btm_ble_link_encrypted(const RawAddress& bd_addr, uint8_t encr_enable) {
   if (encr_enable && p_dev_rec->sec_rec.enc_key_size == 0)
     p_dev_rec->sec_rec.enc_key_size = p_dev_rec->sec_rec.ble_keys.key_size;
 
-  p_dev_rec->sec_rec.sec_state = BTM_SEC_STATE_IDLE;
+  p_dev_rec->sec_rec.sec_state = tSECURITY_STATE::BTM_SEC_STATE_IDLE;
   if (p_dev_rec->sec_rec.p_callback && enc_cback) {
     if (encr_enable) btm_sec_dev_rec_cback_event(p_dev_rec, BTM_SUCCESS, true);
     /* LTK missing on peripheral */
@@ -1591,7 +1594,7 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
         }
         btm_sec_cb.pairing_bda = bd_addr;
         if (event != SMP_CONSENT_REQ_EVT) {
-          p_dev_rec->sec_rec.sec_state = BTM_SEC_STATE_AUTHENTICATING;
+          p_dev_rec->sec_rec.sec_state = tSECURITY_STATE::BTM_SEC_STATE_AUTHENTICATING;
         }
         btm_sec_cb.pairing_flags |= BTM_PAIR_FLAGS_LE_ACTIVE;
         FALLTHROUGH_INTENDED; /* FALLTHROUGH */
@@ -1648,7 +1651,7 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
           }
 
           if (res == BTM_SUCCESS) {
-            p_dev_rec->sec_rec.sec_state = BTM_SEC_STATE_IDLE;
+            p_dev_rec->sec_rec.sec_state = tSECURITY_STATE::BTM_SEC_STATE_IDLE;
 
             if (p_dev_rec->sec_rec.bond_type != BOND_TYPE_TEMPORARY) {
               // Add all bonded device into resolving list if IRK is available.

@@ -128,25 +128,23 @@ typedef struct {
                            attributes in the responses */
 } tSDP_CONT_INFO;
 
-enum : uint8_t {
-  SDP_STATE_IDLE = 0,
-  SDP_STATE_CONN_SETUP = 1,
-  SDP_STATE_CFG_SETUP = 2,
-  SDP_STATE_CONNECTED = 3,
-  SDP_STATE_CONN_PEND = 4,
+enum class tSDP_STATE : uint8_t {
+  IDLE = 0,
+  CONN_SETUP = 1,
+  CFG_SETUP = 2,
+  CONNECTED = 3,
+  CONN_PEND = 4,
 };
-typedef uint8_t tSDP_STATE;
 
 inline std::string sdp_state_text(const tSDP_STATE& state) {
   switch (state) {
-    CASE_RETURN_TEXT(SDP_STATE_IDLE);
-    CASE_RETURN_TEXT(SDP_STATE_CONN_SETUP);
-    CASE_RETURN_TEXT(SDP_STATE_CFG_SETUP);
-    CASE_RETURN_TEXT(SDP_STATE_CONNECTED);
-    CASE_RETURN_TEXT(SDP_STATE_CONN_PEND);
-    default:
-      return std::string("UNKNOWN[") + std::to_string(state) + std::string("]");
+    CASE_RETURN_STRING(tSDP_STATE::IDLE);
+    CASE_RETURN_STRING(tSDP_STATE::CONN_SETUP);
+    CASE_RETURN_STRING(tSDP_STATE::CFG_SETUP);
+    CASE_RETURN_STRING(tSDP_STATE::CONNECTED);
+    CASE_RETURN_STRING(tSDP_STATE::CONN_PEND);
   }
+  RETURN_UNKNOWN_TYPE_STRING(tSDP_STATE, state);
 }
 
 enum : uint8_t {

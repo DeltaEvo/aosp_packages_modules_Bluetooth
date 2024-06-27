@@ -809,15 +809,20 @@ public class HidHostService extends ProfileService {
 
         @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
         private HidHostService getService(AttributionSource source) {
+            // Cache mService because it can change while getService is called
+            HidHostService service = mService;
+
             if (Utils.isInstrumentationTestMode()) {
-                return mService;
+                return service;
             }
-            if (!Utils.checkServiceAvailable(mService, TAG)
-                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
-                    || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
+
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG)
+                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return null;
             }
-            return mService;
+
+            return service;
         }
 
         @Override

@@ -1696,22 +1696,21 @@ tBTM_STATUS btm_ble_read_remote_name(const RawAddress& remote_bda,
   }
 
   /* read remote device name using GATT procedure */
-  if (btm_cb.btm_inq_vars.remname_active) {
-    log::warn(
-        "Unable to start GATT RNR procedure for peer:{} busy with peer:{}",
-        remote_bda, btm_cb.btm_inq_vars.remname_bda);
+  if (btm_cb.rnr.remname_active) {
+    log::warn("Unable to start GATT RNR procedure for peer:{} busy with peer:{}", remote_bda,
+              btm_cb.rnr.remname_bda);
     return BTM_BUSY;
   }
+
   if (!GAP_BleReadPeerDevName(remote_bda, btm_ble_read_remote_name_cmpl))
     return BTM_BUSY;
 
-  btm_cb.btm_inq_vars.p_remname_cmpl_cb = p_cb;
-  btm_cb.btm_inq_vars.remname_active = true;
-  btm_cb.btm_inq_vars.remname_bda = remote_bda;
-  btm_cb.btm_inq_vars.remname_dev_type = BT_DEVICE_TYPE_BLE;
+  btm_cb.rnr.p_remname_cmpl_cb = p_cb;
+  btm_cb.rnr.remname_active = true;
+  btm_cb.rnr.remname_bda = remote_bda;
+  btm_cb.rnr.remname_dev_type = BT_DEVICE_TYPE_BLE;
 
-  alarm_set_on_mloop(btm_cb.btm_inq_vars.remote_name_timer,
-                     BTM_EXT_BLE_RMT_NAME_TIMEOUT_MS,
+  alarm_set_on_mloop(btm_cb.rnr.remote_name_timer, BTM_EXT_BLE_RMT_NAME_TIMEOUT_MS,
                      btm_inq_remote_name_timer_timeout, NULL);
 
   return BTM_CMD_STARTED;
@@ -1733,10 +1732,10 @@ bool btm_ble_cancel_remote_name(const RawAddress& remote_bda) {
 
   status = GAP_BleCancelReadPeerDevName(remote_bda);
 
-  btm_cb.btm_inq_vars.remname_active = false;
-  btm_cb.btm_inq_vars.remname_bda = RawAddress::kEmpty;
-  btm_cb.btm_inq_vars.remname_dev_type = BT_DEVICE_TYPE_UNKNOWN;
-  alarm_cancel(btm_cb.btm_inq_vars.remote_name_timer);
+  btm_cb.rnr.remname_active = false;
+  btm_cb.rnr.remname_bda = RawAddress::kEmpty;
+  btm_cb.rnr.remname_dev_type = BT_DEVICE_TYPE_UNKNOWN;
+  alarm_cancel(btm_cb.rnr.remote_name_timer);
 
   return status;
 }

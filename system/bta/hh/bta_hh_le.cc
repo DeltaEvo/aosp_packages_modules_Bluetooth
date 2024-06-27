@@ -1422,6 +1422,11 @@ static void read_pref_conn_params_cb(uint16_t conn_id, tGATT_STATUS status,
     if (timeout < 300) timeout = 300;
   }
 
+  if (interop_match_addr(INTEROP_HID_PREF_CONN_ZERO_LATENCY,
+                         (RawAddress*)&p_dev_cb->link_spec.addrt.bda)) {
+    latency = 0;
+  }
+
   BTM_BleSetPrefConnParams(p_dev_cb->link_spec.addrt.bda, min_interval,
                            max_interval, latency, timeout);
   if (!L2CA_UpdateBleConnParams(p_dev_cb->link_spec.addrt.bda, min_interval,

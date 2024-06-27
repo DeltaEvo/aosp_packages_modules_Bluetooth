@@ -747,7 +747,8 @@ tBTM_STATUS BTM_CreateSco(const RawAddress* remote_bda, bool is_orig,
       log::error("remote_bda is null");
       return BTM_ILLEGAL_VALUE;
     }
-    acl_handle = BTM_GetHCIConnHandle(*remote_bda, BT_TRANSPORT_BR_EDR);
+    acl_handle =
+            get_btm_client_interface().peer.BTM_GetHCIConnHandle(*remote_bda, BT_TRANSPORT_BR_EDR);
     if (acl_handle == HCI_INVALID_HANDLE) {
       log::error("cannot find ACL handle for remote device {}", *remote_bda);
       return BTM_UNKNOWN_ADDR;
@@ -884,8 +885,8 @@ tBTM_STATUS BTM_CreateSco(const RawAddress* remote_bda, bool is_orig,
 void btm_sco_chk_pend_unpark(tHCI_STATUS hci_status, uint16_t hci_handle) {
   tSCO_CONN* p = &btm_cb.sco_cb.sco_db[0];
   for (uint16_t xx = 0; xx < BTM_MAX_SCO_LINKS; xx++, p++) {
-    uint16_t acl_handle =
-        BTM_GetHCIConnHandle(p->esco.data.bd_addr, BT_TRANSPORT_BR_EDR);
+    uint16_t acl_handle = get_btm_client_interface().peer.BTM_GetHCIConnHandle(p->esco.data.bd_addr,
+                                                                               BT_TRANSPORT_BR_EDR);
     if ((p->state == SCO_ST_PEND_UNPARK) && (acl_handle == hci_handle)) {
       log::info(
           "{} unparked, sending connection request, acl_handle={}, "
@@ -920,8 +921,8 @@ void btm_sco_chk_pend_rolechange(uint16_t hci_handle) {
 
   for (xx = 0; xx < BTM_MAX_SCO_LINKS; xx++, p++) {
     if ((p->state == SCO_ST_PEND_ROLECHANGE) &&
-        ((acl_handle = BTM_GetHCIConnHandle(
-              p->esco.data.bd_addr, BT_TRANSPORT_BR_EDR)) == hci_handle))
+        ((acl_handle = get_btm_client_interface().peer.BTM_GetHCIConnHandle(
+                  p->esco.data.bd_addr, BT_TRANSPORT_BR_EDR)) == hci_handle))
 
     {
       log::verbose(
@@ -956,8 +957,8 @@ void btm_sco_disc_chk_pend_for_modechange(uint16_t hci_handle) {
 
   for (uint16_t xx = 0; xx < BTM_MAX_SCO_LINKS; xx++, p++) {
     if ((p->state == SCO_ST_PEND_MODECHANGE) &&
-        (BTM_GetHCIConnHandle(p->esco.data.bd_addr, BT_TRANSPORT_BR_EDR)) ==
-            hci_handle)
+        (get_btm_client_interface().peer.BTM_GetHCIConnHandle(p->esco.data.bd_addr,
+                                                              BT_TRANSPORT_BR_EDR)) == hci_handle)
 
     {
       log::debug("Removing SCO Link handle 0x{:04x}", p->hci_handle);
@@ -1795,21 +1796,31 @@ tBTM_SCO_DEBUG_DUMP BTM_GetScoDebugDump() {
 
   tBTM_SCO_CODEC_TYPE codec_type = active_sco->get_codec_type();
   debug_dump.codec_id = sco_codec_type_to_id(codec_type);
-  if (debug_dump.codec_id != UUID_CODEC_MSBC &&
-      debug_dump.codec_id != UUID_CODEC_LC3)
+  if (debug_dump.codec_id !=
+          static_cast<std::underlying_type_t<tBTA_AG_UUID_CODEC>>(
+              tBTA_AG_UUID_CODEC::UUID_CODEC_MSBC) &&
+      debug_dump.codec_id !=
+          static_cast<std::underlying_type_t<tBTA_AG_UUID_CODEC>>(
+              tBTA_AG_UUID_CODEC::UUID_CODEC_LC3))
     return debug_dump;
 
-  auto fill_plc_stats = debug_dump.codec_id == UUID_CODEC_LC3
-                            ? &bluetooth::audio::sco::swb::fill_plc_stats
-                            : &bluetooth::audio::sco::wbs::fill_plc_stats;
+  auto fill_plc_stats =
+      debug_dump.codec_id ==
+              static_cast<std::underlying_type_t<tBTA_AG_UUID_CODEC>>(
+                  tBTA_AG_UUID_CODEC::UUID_CODEC_LC3)
+          ? &bluetooth::audio::sco::swb::fill_plc_stats
+          : &bluetooth::audio::sco::wbs::fill_plc_stats;
 
   if (!fill_plc_stats(&debug_dump.total_num_decoded_frames,
                       &debug_dump.pkt_loss_ratio))
     return debug_dump;
 
-  auto get_pkt_status = debug_dump.codec_id == UUID_CODEC_LC3
-                            ? &bluetooth::audio::sco::swb::get_pkt_status
-                            : &bluetooth::audio::sco::wbs::get_pkt_status;
+  auto get_pkt_status =
+      debug_dump.codec_id ==
+              static_cast<std::underlying_type_t<tBTA_AG_UUID_CODEC>>(
+                  tBTA_AG_UUID_CODEC::UUID_CODEC_LC3)
+          ? &bluetooth::audio::sco::swb::get_pkt_status
+          : &bluetooth::audio::sco::wbs::get_pkt_status;
 
   tBTM_SCO_PKT_STATUS* pkt_status = get_pkt_status();
   if (pkt_status == nullptr) return debug_dump;

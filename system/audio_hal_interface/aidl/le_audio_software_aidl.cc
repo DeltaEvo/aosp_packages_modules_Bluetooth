@@ -162,8 +162,10 @@ BluetoothAudioCtrlAck LeAudioTransport::SuspendRequest() {
   log::info("");
   if (stream_cb_.on_suspend_()) {
     flush_();
+    log::info("completed with a success");
     return BluetoothAudioCtrlAck::SUCCESS_FINISHED;
   } else {
+    log::info("completed with a failure");
     return BluetoothAudioCtrlAck::FAILURE;
   }
 }
@@ -172,6 +174,7 @@ void LeAudioTransport::StopRequest() {
   log::info("");
   if (stream_cb_.on_suspend_()) {
     flush_();
+    log::info("completed with a success");
   }
 }
 

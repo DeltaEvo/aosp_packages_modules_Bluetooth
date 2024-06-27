@@ -27,14 +27,14 @@
 #include <memory>
 #include <set>
 
-#include "internal_include/bt_trace.h"
 #include "main/shim/le_scanning_manager.h"
-#include "os/log.h"
+#include "os/logging/log_adapter.h"
 #include "osi/include/alarm.h"
 #include "stack/btm/btm_ble_bgconn.h"
 #include "stack/include/advertise_data_parser.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/btm_ble_api.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_log_history.h"
 #include "stack/include/main_thread.h"
 #include "types/raw_address.h"
@@ -177,7 +177,7 @@ static void target_announcement_observe_results_cb(tBTM_INQ_RESULTS* p_inq,
     return;
   }
 
-  if (BTM_GetHCIConnHandle(addr, BT_TRANSPORT_LE) != 0xFFFF) {
+  if (get_btm_client_interface().peer.BTM_GetHCIConnHandle(addr, BT_TRANSPORT_LE) != 0xFFFF) {
     log::debug("Device {} already connected", addr);
     return;
   }

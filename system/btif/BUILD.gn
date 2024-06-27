@@ -118,6 +118,7 @@ static_library("btif") {
     "//bt/system/common",
     "//bt/system/gd/rust/shim:init_flags_bridge_header",
     "//bt/system/profile/avrcp:profile_avrcp",
+    "//bt/system/gd:libbluetooth-gdx",
   ]
 
   configs += [

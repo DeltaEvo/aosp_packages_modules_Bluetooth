@@ -17,6 +17,7 @@
 
 #include <base/functional/bind.h>
 #include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 #include <lc3.h>
 
 #include <mutex>
@@ -83,19 +84,14 @@ std::mutex instance_mutex;
  * for test purposes.
  */
 class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
-  enum class AudioDataPathState {
-    INACTIVE,
-    ACTIVE,
-    SUSPENDED,
-  };
+  enum class AudioState { SUSPENDED, ACTIVE };
 
- public:
-  LeAudioBroadcasterImpl(
-      bluetooth::le_audio::LeAudioBroadcasterCallbacks* callbacks_)
+public:
+  LeAudioBroadcasterImpl(bluetooth::le_audio::LeAudioBroadcasterCallbacks* callbacks_)
       : callbacks_(callbacks_),
         current_phy_(PHY_LE_2M),
-        audio_data_path_state_(AudioDataPathState::INACTIVE),
-        le_audio_source_hal_client_(nullptr) {
+        le_audio_source_hal_client_(nullptr),
+        audio_state_(AudioState::SUSPENDED) {
     log::info("");
 
     /* Register State machine callbacks */
@@ -141,12 +137,11 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
 
     if (le_audio_source_hal_client_) {
       le_audio_source_hal_client_->Stop();
-      auto result =
-          CodecManager::GetInstance()->UpdateActiveBroadcastAudioHalClient(
-              le_audio_source_hal_client_.get(), false);
-      log::assert_that(result, "Could not update session in codec manager");
+      CodecManager::GetInstance()->UpdateActiveBroadcastAudioHalClient(
+          le_audio_source_hal_client_.get(), false);
       le_audio_source_hal_client_.reset();
     }
+    audio_state_ = AudioState::SUSPENDED;
   }
 
   void Stop() {
@@ -330,6 +325,46 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
     }
   }
 
+  void UpdateAudioActiveStateInPublicAnnouncement() {
+    for (auto const& kv_it : broadcasts_) {
+      auto& broadcast = kv_it.second;
+
+      bool audio_active_state = (audio_state_ == AudioState::ACTIVE) &&
+                                (broadcast->GetState() == BroadcastStateMachine::State::STREAMING);
+
+      log::info("broadcast_id={}, audio_active_state={}", broadcast->GetBroadcastId(),
+                audio_active_state);
+
+      auto updateLtv = [](bool audio_active_state, LeAudioLtvMap& ltv) -> bool {
+        auto existing_audio_active_state =
+                ltv.Find(bluetooth::le_audio::types::kLeAudioMetadataTypeAudioActiveState);
+
+        if (existing_audio_active_state && !existing_audio_active_state->empty()) {
+          if (audio_active_state != static_cast<bool>(existing_audio_active_state->at(0))) {
+            ltv.Add(bluetooth::le_audio::types::kLeAudioMetadataTypeAudioActiveState,
+                    audio_active_state);
+            return true;
+          }
+        } else {
+          ltv.Add(bluetooth::le_audio::types::kLeAudioMetadataTypeAudioActiveState,
+                  audio_active_state);
+          return true;
+        }
+
+        return false;
+      };
+
+      auto public_announcement = broadcast->GetPublicBroadcastAnnouncement();
+      auto public_ltv = LeAudioLtvMap(public_announcement.metadata);
+
+      if (updateLtv(audio_active_state, public_ltv)) {
+        public_announcement.metadata = public_ltv.Values();
+        broadcast->UpdatePublicBroadcastAnnouncement(
+                broadcast->GetBroadcastId(), broadcast->GetBroadcastName(), public_announcement);
+      }
+    }
+  }
+
   void UpdateMetadata(
       uint32_t broadcast_id, const std::string& broadcast_name,
       const std::vector<uint8_t>& public_metadata,
@@ -411,6 +446,16 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
         log::error("Invalid public metadata provided.");
         return;
       }
+
+      if (com::android::bluetooth::flags::leaudio_big_depends_on_audio_state()) {
+        // Append the Audio Active State
+        bool audio_active_state =
+                (audio_state_ == AudioState::ACTIVE) &&
+                (broadcasts_[broadcast_id]->GetState() == BroadcastStateMachine::State::STREAMING);
+        public_ltv.Add(bluetooth::le_audio::types::kLeAudioMetadataTypeAudioActiveState,
+                       audio_active_state);
+      }
+
       PublicBroadcastAnnouncementData pb_announcement =
           preparePublicAnnouncement(broadcasts_[broadcast_id]
                                         ->GetPublicBroadcastAnnouncement()
@@ -483,6 +528,11 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
         callbacks_->OnBroadcastCreated(bluetooth::le_audio::kBroadcastIdInvalid,
                                        false);
         return;
+      }
+
+      if (com::android::bluetooth::flags::leaudio_big_depends_on_audio_state()) {
+        // Append the Audio Active State
+        public_ltv.Add(bluetooth::le_audio::types::kLeAudioMetadataTypeAudioActiveState, false);
       }
       // Prepare public features byte
       // bit 0 Encryption broadcast stream encrypted or not
@@ -661,6 +711,7 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
     if (broadcasts_.count(broadcast_id) != 0) {
       log::info("Stopping AudioHalClient");
       if (le_audio_source_hal_client_) le_audio_source_hal_client_->Stop();
+      audio_state_ = AudioState::SUSPENDED;
       broadcasts_[broadcast_id]->SetMuted(true);
       broadcasts_[broadcast_id]->ProcessMessage(
           BroadcastStateMachine::Message::SUSPEND, nullptr);
@@ -732,6 +783,7 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
     log::info("Stopping AudioHalClient, broadcast_id={}", broadcast_id);
 
     if (le_audio_source_hal_client_) le_audio_source_hal_client_->Stop();
+    audio_state_ = AudioState::SUSPENDED;
     broadcasts_[broadcast_id]->SetMuted(true);
     broadcasts_[broadcast_id]->ProcessMessage(
         BroadcastStateMachine::Message::STOP, nullptr);
@@ -977,13 +1029,15 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
 
       switch (state) {
         case BroadcastStateMachine::State::STOPPED:
-          /* Pass through */
+          break;
         case BroadcastStateMachine::State::CONFIGURING:
-          /* Pass through */
+          break;
         case BroadcastStateMachine::State::CONFIGURED:
-          /* Pass through */
+          if (com::android::bluetooth::flags::leaudio_big_depends_on_audio_state()) {
+            instance->UpdateAudioActiveStateInPublicAnnouncement();
+          }
+          break;
         case BroadcastStateMachine::State::STOPPING:
-          /* Nothing to do here? */
           break;
         case BroadcastStateMachine::State::STREAMING:
           if (getStreamerCount() == 1) {
@@ -1005,7 +1059,9 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
                 return;
               }
 
-              instance->audio_data_path_state_ = AudioDataPathState::ACTIVE;
+              if (com::android::bluetooth::flags::leaudio_big_depends_on_audio_state()) {
+                instance->UpdateAudioActiveStateInPublicAnnouncement();
+              }
             }
           }
           break;
@@ -1028,6 +1084,10 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
               &LeAudioSourceAudioHalClient::UpdateBroadcastAudioConfigToHal,
               instance->le_audio_source_hal_client_.get(),
               std::placeholders::_1));
+    }
+
+    void OnAnnouncementUpdated(uint32_t broadcast_id) {
+      instance->GetBroadcastMetadata(broadcast_id);
     }
   } state_machine_callbacks_;
 
@@ -1066,10 +1126,27 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
     }
 
     void OnAdvertisingDataSet(uint8_t advertiser_id, uint8_t status) {
-      log::warn(
-          "Not being used, ignored OnAdvertisingDataSet callback "
-          "advertiser_id:{}",
-          advertiser_id);
+      if (com::android::bluetooth::flags::
+              leaudio_broadcast_update_metadata_callback()) {
+        if (!instance) return;
+
+        auto const& iter = std::find_if(
+            instance->broadcasts_.cbegin(), instance->broadcasts_.cend(),
+            [advertiser_id](auto const& sm) {
+              return sm.second->GetAdvertisingSid() == advertiser_id;
+            });
+        if (iter != instance->broadcasts_.cend()) {
+          iter->second->OnUpdateAnnouncement(status);
+        } else {
+          log::warn("Ignored OnAdvertisingDataSet callback advertiser_id:{}",
+                    advertiser_id);
+        }
+      } else {
+        log::warn(
+            "Not being used, ignored OnAdvertisingDataSet callback "
+            "advertiser_id:{}",
+            advertiser_id);
+      }
     }
 
     void OnScanResponseDataSet(uint8_t advertiser_id, uint8_t status) {
@@ -1096,10 +1173,28 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
     }
 
     void OnPeriodicAdvertisingDataSet(uint8_t advertiser_id, uint8_t status) {
-      log::warn(
-          "Not being used, ignored OnPeriodicAdvertisingDataSet callback "
-          "advertiser_id:{}",
-          advertiser_id);
+      if (com::android::bluetooth::flags::
+              leaudio_broadcast_update_metadata_callback()) {
+        if (!instance) return;
+
+        auto const& iter = std::find_if(
+            instance->broadcasts_.cbegin(), instance->broadcasts_.cend(),
+            [advertiser_id](auto const& sm) {
+              return sm.second->GetAdvertisingSid() == advertiser_id;
+            });
+        if (iter != instance->broadcasts_.cend()) {
+          iter->second->OnUpdateAnnouncement(status);
+        } else {
+          log::warn(
+              "Ignored OnPeriodicAdvertisingDataSet callback advertiser_id:{}",
+              advertiser_id);
+        }
+      } else {
+        log::warn(
+            "Not being used, ignored OnPeriodicAdvertisingDataSet callback "
+            "advertiser_id:{}",
+            advertiser_id);
+      }
     }
 
     void OnPeriodicAdvertisingEnabled(uint8_t advertiser_id, bool enable,
@@ -1231,8 +1326,15 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
     virtual void OnAudioSuspend(void) override {
       log::info("");
       /* TODO: Should we suspend all broadcasts - remove BIGs? */
-      if (instance)
-        instance->audio_data_path_state_ = AudioDataPathState::SUSPENDED;
+      if (!instance) {
+        return;
+      }
+
+      instance->audio_state_ = AudioState::SUSPENDED;
+
+      if (com::android::bluetooth::flags::leaudio_big_depends_on_audio_state()) {
+        instance->UpdateAudioActiveStateInPublicAnnouncement();
+      }
     }
 
     virtual void OnAudioResume(void) override {
@@ -1240,7 +1342,7 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
       if (!instance) return;
 
       /* TODO: Should we resume all broadcasts - recreate BIGs? */
-      instance->audio_data_path_state_ = AudioDataPathState::ACTIVE;
+      instance->audio_state_ = AudioState::ACTIVE;
 
       if (!IsAnyoneStreaming()) {
         instance->le_audio_source_hal_client_->CancelStreamingRequest();
@@ -1248,6 +1350,10 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
       }
 
       instance->le_audio_source_hal_client_->ConfirmStreamingRequest();
+
+      if (com::android::bluetooth::flags::leaudio_big_depends_on_audio_state()) {
+        instance->UpdateAudioActiveStateInPublicAnnouncement();
+      }
     }
 
     virtual void OnAudioMetadataUpdate(
@@ -1282,9 +1388,11 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
 
   /* Some BIG params are set globally */
   uint8_t current_phy_;
-  AudioDataPathState audio_data_path_state_;
   std::unique_ptr<LeAudioSourceAudioHalClient> le_audio_source_hal_client_;
   std::vector<BroadcastId> available_broadcast_ids_;
+
+  // Current state of audio playback
+  AudioState audio_state_;
 
   // Flag to track iso state
   bool is_iso_running_ = false;

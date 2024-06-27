@@ -27,7 +27,7 @@
 #include "internal_include/bt_target.h"
 #include "osi/include/allocator.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/btm_api.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/sdp_api.h"
 #include "types/raw_address.h"
 
@@ -440,7 +440,7 @@ tBTA_STATUS bta_hf_client_api_enable(tBTA_HF_CLIENT_CBACK* p_cback,
   bta_hf_client_create_record(&bta_hf_client_cb_arr, p_service_name);
 
   /* set same setting as AG does */
-  BTM_WriteVoiceSettings(AG_VOICE_SETTINGS);
+  get_btm_client_interface().sco.BTM_WriteVoiceSettings(AG_VOICE_SETTINGS);
 
   bta_sys_collision_register(BTA_ID_HS, bta_hf_client_collision_cback);
 

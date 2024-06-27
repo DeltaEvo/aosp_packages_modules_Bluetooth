@@ -72,11 +72,6 @@ void BTCorePropertyFuzzer::process(const uint8_t* data, size_t size) {
   (void)property_as_rssi(property);
   property_free(property);
 
-  bt_scan_mode_t mode = (bt_scan_mode_t)(mFdp->ConsumeIntegral<uint32_t>());
-  property = property_new_scan_mode(mode);
-  (void)property_as_scan_mode(property);
-  property_free(property);
-
   size_t uuidSize = sizeof(uint8_t) * bluetooth::Uuid::kNumBytes128;
   uint8_t uuid[bluetooth::Uuid::kNumBytes128];
   mFdp->ConsumeData(uuid, uuidSize);

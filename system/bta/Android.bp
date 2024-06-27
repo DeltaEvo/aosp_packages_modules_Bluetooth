@@ -304,7 +304,6 @@ cc_test {
         "android.hardware.common-V2-ndk",
         "android.hardware.common.fmq-V1-ndk",
         "bluetooth_flags_c_lib",
-        "libaconfig_storage_read_api_cc",
         "libbase",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
@@ -657,6 +656,7 @@ cc_test {
     ],
     srcs: [
         ":TestCommonMockFunctions",
+        ":TestMockStackBtmInterface",
         ":TestStubOsi",
         "gatt/database.cc",
         "gatt/database_builder.cc",
@@ -771,6 +771,7 @@ cc_test {
     name: "bluetooth_le_audio_codec_manager_test",
     test_suites: ["general-tests"],
     defaults: [
+        "aconfig_lib_cc_shared_link.defaults",
         "bluetooth_flatbuffer_bundler_defaults",
         "fluoride_defaults",
         "mts_defaults",
@@ -1084,6 +1085,7 @@ cc_test {
     name: "bluetooth_test_broadcaster_state_machine",
     test_suites: ["general-tests"],
     defaults: [
+        "aconfig_lib_cc_shared_link.defaults",
         "fluoride_bta_defaults",
         "mts_defaults",
     ],
@@ -1115,6 +1117,7 @@ cc_test {
         "libbase",
         "libcrypto",
         "liblog",
+        "server_configurable_flags",
     ],
     static_libs: [
         "libbluetooth-types",
@@ -1126,6 +1129,7 @@ cc_test {
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libchrome",
+        "libflagtest",
         "libflatbuffers-cpp",
         "libgmock",
         "libgtest",
@@ -1149,6 +1153,7 @@ cc_test {
     name: "bluetooth_test_broadcaster",
     test_suites: ["general-tests"],
     defaults: [
+        "aconfig_lib_cc_shared_link.defaults",
         "bluetooth_flatbuffer_bundler_defaults",
         "fluoride_bta_defaults",
         "mts_defaults",
@@ -1200,6 +1205,7 @@ cc_test {
         "libbt_shim_ffi",
         "libchrome",
         "libevent",
+        "libflagtest",
         "libflatbuffers-cpp",
         "libgmock",
         "libgtest",
@@ -1237,6 +1243,7 @@ cc_test {
     ],
     srcs: [
         ":TestCommonMockFunctions",
+        ":TestMockStackBtmInterface",
         ":TestStubOsi",
         "gatt/database.cc",
         "gatt/database_builder.cc",

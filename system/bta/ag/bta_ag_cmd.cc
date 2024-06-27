@@ -456,7 +456,7 @@ static uint8_t bta_ag_parse_chld(tBTA_AG_SCB* /* p_scb */, char* p_s) {
 static tBTA_AG_PEER_CODEC bta_ag_parse_bac(tBTA_AG_SCB* p_scb, char* p_s,
                                            char* p_end) {
   tBTA_AG_PEER_CODEC retval = BTM_SCO_CODEC_NONE;
-  uint16_t uuid_codec;
+  tBTA_AG_UUID_CODEC uuid_codec;
   char* p;
 
   while (p_s) {
@@ -473,19 +473,20 @@ static tBTA_AG_PEER_CODEC bta_ag_parse_bac(tBTA_AG_SCB* p_scb, char* p_s,
       *p = 0;
       cont = true;
     }
-    uuid_codec = utl_str2int(p_s);
+    uuid_codec = static_cast<tBTA_AG_UUID_CODEC>(utl_str2int(p_s));
     switch (uuid_codec) {
-      case UUID_CODEC_CVSD:
+      case tBTA_AG_UUID_CODEC::UUID_CODEC_CVSD:
         retval |= BTM_SCO_CODEC_CVSD;
         break;
-      case UUID_CODEC_MSBC:
+      case tBTA_AG_UUID_CODEC::UUID_CODEC_MSBC:
         retval |= BTM_SCO_CODEC_MSBC;
         break;
-      case UUID_CODEC_LC3:
+      case tBTA_AG_UUID_CODEC::UUID_CODEC_LC3:
         retval |= BTM_SCO_CODEC_LC3;
         break;
       default:
-        log::error("Unknown Codec UUID({}) received", uuid_codec);
+        log::error("Unknown Codec UUID({}) received",
+                   bta_ag_uuid_codec_text(uuid_codec));
         break;
     }
 
@@ -1294,14 +1295,14 @@ void bta_ag_at_hfp_cback(tBTA_AG_SCB* p_scb, uint16_t cmd, uint8_t arg_type,
       bta_ag_send_ok(p_scb);
       alarm_cancel(p_scb->codec_negotiation_timer);
 
-      switch (int_arg) {
-        case UUID_CODEC_CVSD:
+      switch (static_cast<tBTA_AG_UUID_CODEC>(int_arg)) {
+        case tBTA_AG_UUID_CODEC::UUID_CODEC_CVSD:
           codec_type = BTM_SCO_CODEC_CVSD;
           break;
-        case UUID_CODEC_MSBC:
+        case tBTA_AG_UUID_CODEC::UUID_CODEC_MSBC:
           codec_type = BTM_SCO_CODEC_MSBC;
           break;
-        case UUID_CODEC_LC3:
+        case tBTA_AG_UUID_CODEC::UUID_CODEC_LC3:
           codec_type = BTM_SCO_CODEC_LC3;
           break;
         default:
@@ -1869,35 +1870,36 @@ void bta_ag_result(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
  *
  ******************************************************************************/
 void bta_ag_send_bcs(tBTA_AG_SCB* p_scb) {
-  uint16_t codec_uuid;
+  tBTA_AG_UUID_CODEC codec_uuid;
 
   if (p_scb->codec_fallback) {
-    codec_uuid = UUID_CODEC_CVSD;
+    codec_uuid = tBTA_AG_UUID_CODEC::UUID_CODEC_CVSD;
   } else {
     switch (p_scb->sco_codec) {
       case BTM_SCO_CODEC_NONE:
-        codec_uuid = UUID_CODEC_CVSD;
+        codec_uuid = tBTA_AG_UUID_CODEC::UUID_CODEC_CVSD;
         break;
       case BTM_SCO_CODEC_CVSD:
-        codec_uuid = UUID_CODEC_CVSD;
+        codec_uuid = tBTA_AG_UUID_CODEC::UUID_CODEC_CVSD;
         break;
       case BTM_SCO_CODEC_MSBC:
-        codec_uuid = UUID_CODEC_MSBC;
+        codec_uuid = tBTA_AG_UUID_CODEC::UUID_CODEC_MSBC;
         break;
       case BTM_SCO_CODEC_LC3:
-        codec_uuid = UUID_CODEC_LC3;
+        codec_uuid = tBTA_AG_UUID_CODEC::UUID_CODEC_LC3;
         break;
       default:
         log::error("bta_ag_send_bcs: unknown codec {}, use CVSD",
                    p_scb->sco_codec);
-        codec_uuid = UUID_CODEC_CVSD;
+        codec_uuid = tBTA_AG_UUID_CODEC::UUID_CODEC_CVSD;
         break;
     }
   }
 
   /* send +BCS */
-  log::verbose("send +BCS codec is {}", codec_uuid);
-  bta_ag_send_result(p_scb, BTA_AG_LOCAL_RES_BCS, nullptr, codec_uuid);
+  log::verbose("send +BCS codec is {}", bta_ag_uuid_codec_text(codec_uuid));
+  bta_ag_send_result(p_scb, BTA_AG_LOCAL_RES_BCS, nullptr,
+                     static_cast<int16_t>(codec_uuid));
 }
 
 /*******************************************************************************
@@ -1968,19 +1970,20 @@ void bta_ag_send_ring(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& /* data */) {
  *
  ******************************************************************************/
 void bta_ag_send_qcs(tBTA_AG_SCB* p_scb, tBTA_AG_DATA* p_data) {
-  uint16_t codec_uuid;
+  tBTA_AG_UUID_CODEC codec_uuid;
   if (p_scb->codec_fallback) {
     if (p_scb->peer_codecs & BTM_SCO_CODEC_MSBC) {
-      codec_uuid = UUID_CODEC_MSBC;
+      codec_uuid = tBTA_AG_UUID_CODEC::UUID_CODEC_MSBC;
     } else {
-      codec_uuid = UUID_CODEC_CVSD;
+      codec_uuid = tBTA_AG_UUID_CODEC::UUID_CODEC_CVSD;
     }
   } else {
-    codec_uuid = BTA_AG_SCO_APTX_SWB_SETTINGS_Q0;
+    codec_uuid = tBTA_AG_UUID_CODEC::BTA_AG_SCO_APTX_SWB_SETTINGS_Q0;
   }
 
-  log::verbose("send +QCS codec is {}", codec_uuid);
-  bta_ag_send_result(p_scb, BTA_AG_LOCAL_RES_QCS, NULL, codec_uuid);
+  log::verbose("send +QCS codec is {}", bta_ag_uuid_codec_text(codec_uuid));
+  bta_ag_send_result(p_scb, BTA_AG_LOCAL_RES_QCS, NULL,
+                     static_cast<int16_t>(codec_uuid));
 }
 
 /*******************************************************************************

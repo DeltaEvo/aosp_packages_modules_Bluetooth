@@ -120,20 +120,6 @@ TEST_F(PropertyTest, rssi) {
   property_free(property);
 }
 
-TEST_F(PropertyTest, scan_mode) {
-  bt_scan_mode_t mode0 = (bt_scan_mode_t)3;
-  bt_property_t* property = property_new_scan_mode(mode0);
-
-  EXPECT_EQ(*(int*)property->val, mode0);
-  EXPECT_EQ(BT_PROPERTY_ADAPTER_SCAN_MODE, property->type);
-  EXPECT_EQ((int)sizeof(int), property->len);
-
-  bt_scan_mode_t mode1 = property_as_scan_mode(property);
-  EXPECT_EQ((int)mode0, (int)mode1);
-
-  property_free(property);
-}
-
 TEST_F(PropertyTest, uuids) {
   Uuid uuid0 = Uuid::From128BitBE({{
       0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb,

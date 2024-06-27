@@ -106,17 +106,20 @@ public class ContextMapTest {
     public void advertisingSetAndData() {
         ContextMap contextMap = new ContextMap<>();
 
+        int appUid = Binder.getCallingUid();
         int id = 12345;
         doReturn(appAdvertiseStats)
                 .when(mMapMethodProxy)
-                .createAppAdvertiseStats(id, APP_NAME, contextMap, mMockGatt);
+                .createAppAdvertiseStats(appUid, id, APP_NAME, contextMap, mMockGatt);
 
         contextMap.add(id, null, mMockGatt);
 
         int duration = 60;
         int maxExtAdvEvents = 100;
+        int instanceCount = 1;
         contextMap.enableAdvertisingSet(id, true, duration, maxExtAdvEvents);
-        verify(appAdvertiseStats).enableAdvertisingSet(true, duration, maxExtAdvEvents);
+        verify(appAdvertiseStats)
+                .enableAdvertisingSet(true, duration, maxExtAdvEvents, instanceCount);
 
         AdvertiseData advertiseData = new AdvertiseData.Builder().build();
         contextMap.setAdvertisingData(id, advertiseData);

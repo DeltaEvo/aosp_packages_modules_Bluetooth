@@ -266,8 +266,8 @@ public class BluetoothMethodProxy {
 
     /** Proxies {@link AppAdvertiseStats}. */
     public AppAdvertiseStats createAppAdvertiseStats(
-            int id, String name, ContextMap map, GattService service) {
-        return new AppAdvertiseStats(id, name, map, service);
+            int appUid, int id, String name, ContextMap map, GattService service) {
+        return new AppAdvertiseStats(appUid, id, name, map, service);
     }
 
     /** Proxies {@link Thread#start()}. */

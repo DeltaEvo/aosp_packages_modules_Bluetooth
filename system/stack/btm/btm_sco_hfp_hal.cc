@@ -89,7 +89,7 @@ bool enable_offload(bool enable) {
 }
 
 // On Android, this is a no-op because the settings default to offloaded case.
-void set_codec_datapath(int /* codec_uuid */) {}
+void set_codec_datapath(tBTA_AG_UUID_CODEC /* codec_uuid */) {}
 
 // No packet size limits on Android since it will be offloaded.
 size_t get_packet_size(int /* codec */) { return kDefaultPacketSize; }

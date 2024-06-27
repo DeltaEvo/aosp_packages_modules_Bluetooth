@@ -163,6 +163,7 @@ source_set("stack") {
     "rfcomm/rfc_port_if.cc",
     "rfcomm/rfc_ts_frames.cc",
     "rfcomm/rfc_utils.cc",
+    "rnr/remote_name_request.cc",
     "sdp/sdp_api.cc",
     "sdp/sdp_db.cc",
     "sdp/sdp_discovery.cc",

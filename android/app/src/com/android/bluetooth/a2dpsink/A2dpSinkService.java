@@ -195,19 +195,6 @@ public class A2dpSinkService extends ProfileService {
             implements IProfileServiceBinder {
         private A2dpSinkService mService;
 
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-        private A2dpSinkService getService(AttributionSource source) {
-            if (Utils.isInstrumentationTestMode()) {
-                return mService;
-            }
-            if (!Utils.checkServiceAvailable(mService, TAG)
-                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
-                    || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
-                return null;
-            }
-            return mService;
-        }
-
         A2dpSinkServiceBinder(A2dpSinkService svc) {
             mService = svc;
         }
@@ -215,6 +202,24 @@ public class A2dpSinkService extends ProfileService {
         @Override
         public void cleanup() {
             mService = null;
+        }
+
+        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+        private A2dpSinkService getService(AttributionSource source) {
+            // Cache mService because it can change while getService is called
+            A2dpSinkService service = mService;
+
+            if (Utils.isInstrumentationTestMode()) {
+                return service;
+            }
+
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG)
+                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
+                return null;
+            }
+
+            return service;
         }
 
         @Override

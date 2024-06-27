@@ -22,6 +22,7 @@ import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
 
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothCsipSetCoordinator;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHapClient;
@@ -51,6 +52,7 @@ import com.android.bluetooth.btservice.ServiceFactory;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
 import com.android.bluetooth.csip.CsipSetCoordinatorService;
 import com.android.bluetooth.flags.Flags;
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
@@ -80,7 +82,9 @@ public class HapClientService extends ProfileService {
     private final Map<BluetoothDevice, Integer> mDeviceFeaturesMap = new HashMap<>();
     private final Map<BluetoothDevice, List<BluetoothHapPresetInfo>> mPresetsMap = new HashMap<>();
 
-    @VisibleForTesting RemoteCallbackList<IBluetoothHapClientCallback> mCallbacks;
+    @VisibleForTesting
+    @GuardedBy("mCallbacks")
+    final RemoteCallbackList<IBluetoothHapClientCallback> mCallbacks = new RemoteCallbackList<>();
 
     @VisibleForTesting ServiceFactory mFactory = new ServiceFactory();
 
@@ -152,8 +156,6 @@ public class HapClientService extends ProfileService {
         mStateMachines.clear();
         mStateMachinesThread = new HandlerThread("HapClientService.StateMachines");
         mStateMachinesThread.start();
-
-        mCallbacks = new RemoteCallbackList<IBluetoothHapClientCallback>();
 
         // Initialize native interface
         mHapClientNativeInterface.init();
@@ -576,7 +578,7 @@ public class HapClientService extends ProfileService {
      */
     public void selectPreset(BluetoothDevice device, int presetIndex) {
         if (presetIndex == BluetoothHapClient.PRESET_INDEX_UNAVAILABLE) {
-            if (mCallbacks != null) {
+            synchronized (mCallbacks) {
                 int n = mCallbacks.beginBroadcast();
                 for (int i = 0; i < n; i++) {
                     try {
@@ -613,7 +615,7 @@ public class HapClientService extends ProfileService {
         }
 
         if (status != BluetoothStatusCodes.SUCCESS) {
-            if (mCallbacks != null) {
+            synchronized (mCallbacks) {
                 int n = mCallbacks.beginBroadcast();
                 for (int i = 0; i < n; i++) {
                     try {
@@ -744,7 +746,7 @@ public class HapClientService extends ProfileService {
         List current_presets = mPresetsMap.get(device);
         if (current_presets == null) return;
 
-        if (mCallbacks != null) {
+        synchronized (mCallbacks) {
             int n = mCallbacks.beginBroadcast();
             for (int i = 0; i < n; i++) {
                 try {
@@ -775,7 +777,7 @@ public class HapClientService extends ProfileService {
 
     private void notifyActivePresetChanged(
             BluetoothDevice device, int presetIndex, int reasonCode) {
-        if (mCallbacks != null) {
+        synchronized (mCallbacks) {
             int n = mCallbacks.beginBroadcast();
             for (int i = 0; i < n; i++) {
                 try {
@@ -819,7 +821,7 @@ public class HapClientService extends ProfileService {
     }
 
     private void notifySelectActivePresetFailed(BluetoothDevice device, int statusCode) {
-        if (mCallbacks != null) {
+        synchronized (mCallbacks) {
             int n = mCallbacks.beginBroadcast();
             for (int i = 0; i < n; i++) {
                 try {
@@ -836,7 +838,7 @@ public class HapClientService extends ProfileService {
     }
 
     private void notifySelectActivePresetForGroupFailed(int groupId, int statusCode) {
-        if (mCallbacks != null) {
+        synchronized (mCallbacks) {
             int n = mCallbacks.beginBroadcast();
             for (int i = 0; i < n; i++) {
                 try {
@@ -853,7 +855,7 @@ public class HapClientService extends ProfileService {
     }
 
     private void notifySetPresetNameFailed(BluetoothDevice device, int statusCode) {
-        if (mCallbacks != null) {
+        synchronized (mCallbacks) {
             int n = mCallbacks.beginBroadcast();
             for (int i = 0; i < n; i++) {
                 try {
@@ -870,7 +872,7 @@ public class HapClientService extends ProfileService {
     }
 
     private void notifySetPresetNameForGroupFailed(int groupId, int statusCode) {
-        if (mCallbacks != null) {
+        synchronized (mCallbacks) {
             int n = mCallbacks.beginBroadcast();
             for (int i = 0; i < n; i++) {
                 try {
@@ -930,7 +932,7 @@ public class HapClientService extends ProfileService {
      */
     public void setPresetName(BluetoothDevice device, int presetIndex, String name) {
         if (!isPresetIndexValid(device, presetIndex)) {
-            if (mCallbacks != null) {
+            synchronized (mCallbacks) {
                 int n = mCallbacks.beginBroadcast();
                 for (int i = 0; i < n; i++) {
                     try {
@@ -969,7 +971,7 @@ public class HapClientService extends ProfileService {
             status = BluetoothStatusCodes.ERROR_HAP_INVALID_PRESET_INDEX;
         }
         if (status != BluetoothStatusCodes.SUCCESS) {
-            if (mCallbacks != null) {
+            synchronized (mCallbacks) {
                 int n = mCallbacks.beginBroadcast();
                 for (int i = 0; i < n; i++) {
                     try {
@@ -1217,33 +1219,32 @@ public class HapClientService extends ProfileService {
     @VisibleForTesting
     static class BluetoothHapClientBinder extends IBluetoothHapClient.Stub
             implements IProfileServiceBinder {
-        @VisibleForTesting boolean mIsTesting = false;
         private HapClientService mService;
 
         BluetoothHapClientBinder(HapClientService svc) {
             mService = svc;
         }
 
-        private HapClientService getService(AttributionSource source) {
-            if (mIsTesting) {
-                return mService;
-            }
-            if (!Utils.checkServiceAvailable(mService, TAG)
-                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
-                    || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
-                Log.w(TAG, "Hearing Access call not allowed for non-active user");
-                return null;
-            }
-
-            if (mService != null && mService.isAvailable()) {
-                return mService;
-            }
-            return null;
-        }
-
         @Override
         public void cleanup() {
             mService = null;
+        }
+
+        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+        private HapClientService getService(AttributionSource source) {
+            // Cache mService because it can change while getService is called
+            HapClientService service = mService;
+
+            if (Utils.isInstrumentationTestMode()) {
+                return service;
+            }
+
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG)
+                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
+                return null;
+            }
+            return service;
         }
 
         @Override
@@ -1557,7 +1558,9 @@ public class HapClientService extends ProfileService {
             }
 
             enforceBluetoothPrivilegedPermission(service);
-            service.mCallbacks.register(callback);
+            synchronized (service.mCallbacks) {
+                service.mCallbacks.register(callback);
+            }
         }
 
         @Override
@@ -1572,7 +1575,9 @@ public class HapClientService extends ProfileService {
             }
 
             enforceBluetoothPrivilegedPermission(service);
-            service.mCallbacks.unregister(callback);
+            synchronized (service.mCallbacks) {
+                service.mCallbacks.unregister(callback);
+            }
         }
     }
 }
