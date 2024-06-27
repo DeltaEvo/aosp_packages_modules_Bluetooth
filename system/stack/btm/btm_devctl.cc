@@ -122,7 +122,9 @@ void BTM_db_reset(void) {
     p_cb = btm_cb.devcb.p_rln_cmpl_cb;
     btm_cb.devcb.p_rln_cmpl_cb = NULL;
 
-    if (p_cb) (*p_cb)((void*)NULL);
+    if (p_cb) {
+      (*p_cb)(nullptr);
+    }
   }
 
   if (btm_cb.devcb.p_rssi_cmpl_cb) {
@@ -324,19 +326,19 @@ static void decode_controller_support() {
  *
  ******************************************************************************/
 tBTM_STATUS BTM_SetLocalDeviceName(const char* p_name) {
-  uint8_t* p;
+  if (!p_name || !p_name[0] || (strlen(p_name) > BD_NAME_LEN)) {
+    return BTM_ILLEGAL_VALUE;
+  }
 
-  if (!p_name || !p_name[0] || (strlen((char*)p_name) > BD_NAME_LEN))
-    return (BTM_ILLEGAL_VALUE);
-
-  if (bluetooth::shim::GetController() == nullptr) return (BTM_DEV_RESET);
+  if (bluetooth::shim::GetController() == nullptr) {
+    return BTM_DEV_RESET;
+  }
   /* Save the device name if local storage is enabled */
-  p = (uint8_t*)btm_sec_cb.cfg.bd_name;
-  if (p != (uint8_t*)p_name)
-    bd_name_from_char_pointer(btm_sec_cb.cfg.bd_name, p_name);
 
-  btsnd_hcic_change_name(p);
-  return (BTM_CMD_STARTED);
+  bd_name_from_char_pointer(btm_sec_cb.cfg.bd_name, p_name);
+
+  bluetooth::shim::GetController()->WriteLocalName(p_name);
+  return BTM_CMD_STARTED;
 }
 
 /*******************************************************************************
