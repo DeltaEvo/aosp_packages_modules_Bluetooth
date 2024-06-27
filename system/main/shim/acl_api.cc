@@ -35,8 +35,8 @@
 #include "stack/btm/btm_sec.h"
 #include "stack/btm/security_device_record.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/inq_hci_link_interface.h"
 #include "stack/include/main_thread.h"
+#include "stack/rnr/remote_name_request.h"
 #include "types/ble_address_with_type.h"
 #include "types/raw_address.h"
 #ifndef PROPERTY_BLE_PRIVACY_OWN_ADDRESS_ENABLED
