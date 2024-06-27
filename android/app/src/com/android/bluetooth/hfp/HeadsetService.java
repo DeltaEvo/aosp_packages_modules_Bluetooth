@@ -240,7 +240,10 @@ public class HeadsetService extends ProfileService {
         unregisterReceiver(mHeadsetReceiver);
         synchronized (mStateMachines) {
             // Reset active device to null
-            mActiveDevice = null;
+            if (mActiveDevice != null) {
+                mActiveDevice = null;
+                broadcastActiveDevice(null);
+            }
             mInbandRingingRuntimeDisable = false;
             mForceScoAudio = false;
             mAudioRouteAllowed = true;
@@ -498,7 +501,7 @@ public class HeadsetService extends ProfileService {
     @VisibleForTesting
     static class BluetoothHeadsetBinder extends IBluetoothHeadset.Stub
             implements IProfileServiceBinder {
-        private volatile HeadsetService mService;
+        private HeadsetService mService;
 
         BluetoothHeadsetBinder(HeadsetService svc) {
             mService = svc;
@@ -511,15 +514,19 @@ public class HeadsetService extends ProfileService {
 
         @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
         private HeadsetService getService(AttributionSource source) {
+            // Cache mService because it can change while getService is called
+            HeadsetService service = mService;
+
             if (Utils.isInstrumentationTestMode()) {
-                return mService;
+                return service;
             }
-            if (!Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
-                    || !Utils.checkServiceAvailable(mService, TAG)
-                    || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
+
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG)
+                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return null;
             }
-            return mService;
+            return service;
         }
 
         @Override

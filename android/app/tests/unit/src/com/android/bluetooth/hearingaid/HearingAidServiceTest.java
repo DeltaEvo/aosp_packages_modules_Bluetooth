@@ -134,7 +134,6 @@ public class HearingAidServiceTest {
         HearingAidNativeInterface.setInstance(mNativeInterface);
         startService();
         mServiceBinder = (HearingAidService.BluetoothHearingAidBinder) mService.initBinder();
-        mServiceBinder.mIsTesting = true;
 
         // Override the timeout value to speed up the test
         HearingAidStateMachine.sConnectTimeoutMs = (int) TIMEOUT.toMillis(); // 1s
