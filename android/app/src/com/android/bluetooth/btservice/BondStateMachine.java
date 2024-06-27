@@ -18,7 +18,6 @@ package com.android.bluetooth.btservice;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 
-import android.annotation.RequiresPermission;
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothClass;
@@ -366,7 +365,6 @@ final class BondStateMachine extends StateMachine {
         }
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     private boolean cancelBond(BluetoothDevice dev) {
         if (mRemoteDevices.getBondState(dev) == BluetoothDevice.BOND_BONDING) {
             byte[] addr = Utils.getBytesFromAddress(dev.getAddress());
@@ -403,10 +401,6 @@ final class BondStateMachine extends StateMachine {
         return false;
     }
 
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-            })
     private boolean createBond(
             BluetoothDevice dev,
             int transport,
@@ -645,7 +639,6 @@ final class BondStateMachine extends StateMachine {
         sendMessage(msg);
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     void sspRequestCallback(byte[] address, int pairingVariant, int passkey) {
         BluetoothDevice bdDevice = mRemoteDevices.getDevice(address);
         if (bdDevice == null) {
@@ -711,7 +704,6 @@ final class BondStateMachine extends StateMachine {
         sendMessage(msg);
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     void pinRequestCallback(byte[] address, byte[] name, int cod, boolean min16Digits) {
         // TODO(BT): Get wakelock and update name and cod
 
@@ -761,7 +753,6 @@ final class BondStateMachine extends StateMachine {
         removeMessages(what);
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     private void clearProfilePriority(BluetoothDevice device) {
         HidHostService hidService = HidHostService.getHidHostService();
         A2dpService a2dpService = A2dpService.getA2dpService();

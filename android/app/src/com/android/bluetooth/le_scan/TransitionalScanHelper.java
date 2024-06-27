@@ -127,7 +127,7 @@ public class TransitionalScanHelper {
             new PendingIntent.CancelListener() {
                 public void onCanceled(PendingIntent intent) {
                     Log.d(TAG, "scanning PendingIntent canceled");
-                    stopScan(intent, mContext.getAttributionSource());
+                    stopScanInternal(intent);
                 }
             };
 
@@ -478,8 +478,8 @@ public class TransitionalScanHelper {
         } catch (PendingIntent.CanceledException e) {
             final long token = Binder.clearCallingIdentity();
             try {
-                stopScan(client.scannerId, mContext.getAttributionSource());
-                unregisterScanner(client.scannerId, mContext.getAttributionSource());
+                stopScanInternal(client.scannerId);
+                unregisterScannerInternal(client.scannerId);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -584,7 +584,7 @@ public class TransitionalScanHelper {
         }
         client.appDied = true;
         client.stats.isAppDead = true;
-        stopScan(client.scannerId, mContext.getAttributionSource());
+        stopScanInternal(client.scannerId);
     }
 
     /** Callback method for scan filter enablement/disablement. */
@@ -907,10 +907,9 @@ public class TransitionalScanHelper {
         return bytes;
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_SCAN)
     public void onBatchScanThresholdCrossed(int clientIf) {
         Log.d(TAG, "onBatchScanThresholdCrossed() - clientIf=" + clientIf);
-        flushPendingBatchResults(clientIf, mContext.getAttributionSource());
+        flushPendingBatchResultsInternal(clientIf);
     }
 
     public AdvtFilterOnFoundOnLostInfo createOnTrackAdvFoundLostObject(
@@ -1323,7 +1322,11 @@ public class TransitionalScanHelper {
                 mContext, attributionSource, "ScanHelper flushPendingBatchResults")) {
             return;
         }
-        Log.d(TAG, "flushPendingBatchResults - scannerId=" + scannerId);
+        flushPendingBatchResultsInternal(scannerId);
+    }
+
+    private void flushPendingBatchResultsInternal(int scannerId) {
+        Log.d(TAG, "flushPendingBatchResultsInternal - scannerId=" + scannerId);
         mScanManager.flushBatchScanResults(new ScanClient(scannerId));
     }
 
@@ -1356,6 +1359,11 @@ public class TransitionalScanHelper {
                 mContext, attributionSource, "ScanHelper stopScan")) {
             return;
         }
+        stopScanInternal(intent);
+    }
+
+    /** Intended for internal use within the Bluetooth app. Bypass permission check */
+    private void stopScanInternal(PendingIntent intent) {
         PendingIntentInfo pii = new PendingIntentInfo();
         pii.intent = intent;
         ScannerMap.ScannerApp app = mScannerMap.getByPendingIntentInfo(pii);
@@ -1363,9 +1371,9 @@ public class TransitionalScanHelper {
         if (app != null) {
             intent.removeCancelListener(mScanIntentCancelListener);
             final int scannerId = app.mId;
-            stopScan(scannerId, attributionSource);
+            stopScanInternal(scannerId);
             // Also unregister the scanner
-            unregisterScanner(scannerId, attributionSource);
+            unregisterScannerInternal(scannerId);
         }
     }
 
@@ -1396,6 +1404,7 @@ public class TransitionalScanHelper {
         mPeriodicScanManager.stopSync(callback);
     }
 
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_SCAN)
     public void transferSync(
             BluetoothDevice bda,
             int serviceData,
@@ -1408,6 +1417,7 @@ public class TransitionalScanHelper {
         mPeriodicScanManager.transferSync(bda, serviceData, syncHandle);
     }
 
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_SCAN)
     public void transferSetInfo(
             BluetoothDevice bda,
             int serviceData,
@@ -1461,7 +1471,7 @@ public class TransitionalScanHelper {
                 } else {
                     client.appDied = true;
                     client.stats.isAppDead = true;
-                    stopScan(client.scannerId, mContext.getAttributionSource());
+                    stopScanInternal(client.scannerId);
                 }
             }
         }

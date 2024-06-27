@@ -16,6 +16,7 @@
 
 package com.android.bluetooth.le_audio;
 
+import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCharacteristic;
@@ -153,12 +154,14 @@ public class LeAudioTmapGattServer {
          * @param callback callback to invoke
          * @return true on success
          */
+        @SuppressLint("AndroidFrameworkRequiresPermission") // TODO: b/350563786
         public boolean open(BluetoothGattServerCallback callback) {
             mBluetoothGattServer = mBluetoothManager.openGattServer(mContext, callback);
             return mBluetoothGattServer != null;
         }
 
         /** Close the GATT server, should be called as soon as the server is not needed */
+        @SuppressLint("AndroidFrameworkRequiresPermission") // TODO: b/350563786
         public void close() {
             if (mBluetoothGattServer == null) {
                 Log.w(TAG, "BluetoothGattServerProxy.close() called without open()");
@@ -174,6 +177,7 @@ public class LeAudioTmapGattServer {
          * @param service added service
          * @return true on success
          */
+        @SuppressLint("AndroidFrameworkRequiresPermission") // TODO: b/350563786
         public boolean addService(BluetoothGattService service) {
             return mBluetoothGattServer.addService(service);
         }
@@ -188,6 +192,7 @@ public class LeAudioTmapGattServer {
          * @param value value content
          * @return true on success
          */
+        @SuppressLint("AndroidFrameworkRequiresPermission") // TODO: b/350563786
         public boolean sendResponse(
                 BluetoothDevice device, int requestId, int status, int offset, byte[] value) {
             return mBluetoothGattServer.sendResponse(device, requestId, status, offset, value);

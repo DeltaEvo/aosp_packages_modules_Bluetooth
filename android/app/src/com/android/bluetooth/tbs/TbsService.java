@@ -17,8 +17,12 @@
 
 package com.android.bluetooth.tbs;
 
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
+import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
+
 import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
 
+import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothLeCall;
 import android.bluetooth.BluetoothProfile;
@@ -230,6 +234,7 @@ public class TbsService extends ProfileService {
             mService = null;
         }
 
+        @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
         private TbsService getService(AttributionSource source) {
             // Cache mService because it can change while getService is called
             TbsService service = mService;

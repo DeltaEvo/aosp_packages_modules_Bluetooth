@@ -29,6 +29,7 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.IBluetoothLeBroadcastAssistantCallback;
 import android.bluetooth.le.ScanFilter;
+import android.content.AttributionSource;
 
 import com.android.bluetooth.TestUtils;
 
@@ -51,6 +52,7 @@ public class BleBroadcastAssistantBinderTest {
     @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
 
     private final BluetoothAdapter mAdapter = BluetoothAdapter.getDefaultAdapter();
+    private final AttributionSource mAttributionSource = mAdapter.getAttributionSource();
     private final BluetoothDevice mDevice = TestUtils.getTestDevice(mAdapter, 0);
 
     @Mock private BassClientService mService;
@@ -70,50 +72,57 @@ public class BleBroadcastAssistantBinderTest {
 
     @Test
     public void getConnectionState() {
-        mBinder.getConnectionState(mDevice);
+        mBinder.getConnectionState(mDevice, mAttributionSource);
         verify(mService).getConnectionState(mDevice);
 
         mBinder.cleanup();
-        assertThat(mBinder.getConnectionState(mDevice)).isEqualTo(STATE_DISCONNECTED);
+        assertThat(mBinder.getConnectionState(mDevice, mAttributionSource))
+                .isEqualTo(STATE_DISCONNECTED);
     }
 
     @Test
     public void getDevicesMatchingConnectionStates() {
         int[] states = new int[] {STATE_DISCONNECTED};
-        mBinder.getDevicesMatchingConnectionStates(states);
+        mBinder.getDevicesMatchingConnectionStates(states, mAttributionSource);
         verify(mService).getDevicesMatchingConnectionStates(states);
 
         mBinder.cleanup();
-        assertThat(mBinder.getDevicesMatchingConnectionStates(states))
+        assertThat(mBinder.getDevicesMatchingConnectionStates(states, mAttributionSource))
                 .isEqualTo(Collections.emptyList());
     }
 
     @Test
     public void getConnectedDevices() {
-        mBinder.getConnectedDevices();
+        mBinder.getConnectedDevices(mAttributionSource);
         verify(mService).getConnectedDevices();
 
         mBinder.cleanup();
-        assertThat(mBinder.getConnectedDevices()).isEqualTo(Collections.emptyList());
+        assertThat(mBinder.getConnectedDevices(mAttributionSource))
+                .isEqualTo(Collections.emptyList());
     }
 
     @Test
     public void setConnectionPolicy() {
-        mBinder.setConnectionPolicy(mDevice, BluetoothProfile.CONNECTION_POLICY_ALLOWED);
+        mBinder.setConnectionPolicy(
+                mDevice, BluetoothProfile.CONNECTION_POLICY_ALLOWED, mAttributionSource);
         verify(mService).setConnectionPolicy(mDevice, BluetoothProfile.CONNECTION_POLICY_ALLOWED);
 
         mBinder.cleanup();
-        assertThat(mBinder.setConnectionPolicy(mDevice, BluetoothProfile.CONNECTION_POLICY_ALLOWED))
+        assertThat(
+                        mBinder.setConnectionPolicy(
+                                mDevice,
+                                BluetoothProfile.CONNECTION_POLICY_ALLOWED,
+                                mAttributionSource))
                 .isFalse();
     }
 
     @Test
     public void getConnectionPolicy() {
-        mBinder.getConnectionPolicy(mDevice);
+        mBinder.getConnectionPolicy(mDevice, mAttributionSource);
         verify(mService).getConnectionPolicy(mDevice);
 
         mBinder.cleanup();
-        assertThat(mBinder.getConnectionPolicy(mDevice))
+        assertThat(mBinder.getConnectionPolicy(mDevice, mAttributionSource))
                 .isEqualTo(BluetoothProfile.CONNECTION_POLICY_FORBIDDEN);
     }
 
@@ -121,14 +130,14 @@ public class BleBroadcastAssistantBinderTest {
     public void registerCallback() {
         IBluetoothLeBroadcastAssistantCallback cb =
                 Mockito.mock(IBluetoothLeBroadcastAssistantCallback.class);
-        mBinder.registerCallback(cb);
+        mBinder.registerCallback(cb, mAttributionSource);
         verify(mService).registerCallback(cb);
     }
 
     @Test
     public void registerCallback_afterCleanup_doNothing() {
         mBinder.cleanup();
-        mBinder.registerCallback(null);
+        mBinder.registerCallback(null, mAttributionSource);
         verify(mService, never()).registerCallback(any());
     }
 
@@ -136,107 +145,108 @@ public class BleBroadcastAssistantBinderTest {
     public void unregisterCallback() {
         IBluetoothLeBroadcastAssistantCallback cb =
                 Mockito.mock(IBluetoothLeBroadcastAssistantCallback.class);
-        mBinder.unregisterCallback(cb);
+        mBinder.unregisterCallback(cb, mAttributionSource);
         verify(mService).unregisterCallback(cb);
     }
 
     @Test
     public void unregisterCallback_afterCleanup_doNothing() {
         mBinder.cleanup();
-        mBinder.unregisterCallback(null);
+        mBinder.unregisterCallback(null, mAttributionSource);
         verify(mService, never()).unregisterCallback(any());
     }
 
     @Test
     public void startSearchingForSources() {
         List<ScanFilter> filters = Collections.EMPTY_LIST;
-        mBinder.startSearchingForSources(filters);
+        mBinder.startSearchingForSources(filters, mAttributionSource);
         verify(mService).startSearchingForSources(filters);
     }
 
     @Test
     public void startSearchingForSources_afterCleanup_doNothing() {
         mBinder.cleanup();
-        mBinder.startSearchingForSources(null);
+        mBinder.startSearchingForSources(null, mAttributionSource);
         verify(mService, never()).startSearchingForSources(any());
     }
 
     @Test
     public void stopSearchingForSources() {
-        mBinder.stopSearchingForSources();
+        mBinder.stopSearchingForSources(mAttributionSource);
         verify(mService).stopSearchingForSources();
     }
 
     @Test
     public void stopSearchingForSources_afterCleanup_doNothing() {
         mBinder.cleanup();
-        mBinder.stopSearchingForSources();
+        mBinder.stopSearchingForSources(mAttributionSource);
         verify(mService, never()).stopSearchingForSources();
     }
 
     @Test
     public void isSearchInProgress() {
-        mBinder.isSearchInProgress();
+        mBinder.isSearchInProgress(mAttributionSource);
         verify(mService).isSearchInProgress();
 
         mBinder.cleanup();
-        assertThat(mBinder.isSearchInProgress()).isFalse();
+        assertThat(mBinder.isSearchInProgress(mAttributionSource)).isFalse();
     }
 
     @Test
     public void addSource() {
-        mBinder.addSource(mDevice, null, false);
+        mBinder.addSource(mDevice, null, false, mAttributionSource);
         verify(mService).addSource(mDevice, null, false);
     }
 
     @Test
     public void addSource_afterCleanup_doNothing() {
         mBinder.cleanup();
-        mBinder.addSource(mDevice, null, false);
+        mBinder.addSource(mDevice, null, false, mAttributionSource);
         verify(mService, never()).addSource(mDevice, null, false);
     }
 
     @Test
     public void modifySource() {
-        mBinder.modifySource(mDevice, 0, null);
+        mBinder.modifySource(mDevice, 0, null, mAttributionSource);
         verify(mService).modifySource(mDevice, 0, null);
     }
 
     @Test
     public void modifySource_afterCleanup_doNothing() {
         mBinder.cleanup();
-        mBinder.modifySource(mDevice, 0, null);
+        mBinder.modifySource(mDevice, 0, null, mAttributionSource);
         verify(mService, never()).modifySource(mDevice, 0, null);
     }
 
     @Test
     public void removeSource() {
-        mBinder.removeSource(mDevice, 0);
+        mBinder.removeSource(mDevice, 0, mAttributionSource);
         verify(mService).removeSource(mDevice, 0);
     }
 
     @Test
     public void removeSource_afterCleanup_doNothing() {
         mBinder.cleanup();
-        mBinder.removeSource(mDevice, 0);
+        mBinder.removeSource(mDevice, 0, mAttributionSource);
         verify(mService, never()).removeSource(mDevice, 0);
     }
 
     @Test
     public void getAllSources() {
-        mBinder.getAllSources(mDevice);
+        mBinder.getAllSources(mDevice, mAttributionSource);
         verify(mService).getAllSources(mDevice);
 
         mBinder.cleanup();
-        assertThat(mBinder.getAllSources(mDevice)).isEqualTo(Collections.emptyList());
+        assertThat(mBinder.getAllSources(mDevice, mAttributionSource))
+                .isEqualTo(Collections.emptyList());
     }
 
     @Test
     public void getMaximumSourceCapacity() {
-        mBinder.getMaximumSourceCapacity(mDevice);
+        mBinder.getMaximumSourceCapacity(mDevice, mAttributionSource);
         verify(mService).getMaximumSourceCapacity(mDevice);
 
         mBinder.cleanup();
-        assertThat(mBinder.getMaximumSourceCapacity(mDevice)).isEqualTo(0);
+        assertThat(mBinder.getMaximumSourceCapacity(mDevice, mAttributionSource)).isEqualTo(0);
     }
 }

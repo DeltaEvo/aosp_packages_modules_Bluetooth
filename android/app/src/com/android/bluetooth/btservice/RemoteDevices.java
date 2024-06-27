@@ -1149,11 +1149,6 @@ public class RemoteDevices {
         deviceProperties.mIdentityAddress = Utils.getAddressStringFromByte(secondaryAddress);
     }
 
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-            })
     void aclStateChangeCallback(
             int status,
             byte[] address,

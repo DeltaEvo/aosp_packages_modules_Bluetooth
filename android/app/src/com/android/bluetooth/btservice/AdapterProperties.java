@@ -21,7 +21,6 @@ import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_SCAN;
 
 import android.annotation.NonNull;
-import android.annotation.RequiresPermission;
 import android.app.BroadcastOptions;
 import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothA2dpSink;
@@ -1171,7 +1170,6 @@ class AdapterProperties {
         return options.toBundle();
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     protected void dump(FileDescriptor fd, PrintWriter writer, String[] args) {
         writer.println(TAG);
         writer.println("  " + "Name: " + getName());

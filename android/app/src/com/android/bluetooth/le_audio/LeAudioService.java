@@ -2882,6 +2882,7 @@ public class LeAudioService extends ProfileService {
         }
     }
 
+    @SuppressLint("AndroidFrameworkRequiresPermission") // TODO: b/348562830 - Remove with flag
     void stopAudioServersBackgroundScan() {
         Log.d(TAG, "stopAudioServersBackgroundScan");
 
@@ -2905,6 +2906,7 @@ public class LeAudioService extends ProfileService {
         mScanCallback = null;
     }
 
+    @SuppressLint("AndroidFrameworkRequiresPermission") // TODO: b/348562830 - Remove with flag
     void startAudioServersBackgroundScan(boolean retry) {
         Log.d(TAG, "startAudioServersBackgroundScan, retry: " + retry);
 
@@ -4154,10 +4156,7 @@ public class LeAudioService extends ProfileService {
      * @param connectionPolicy is the connection policy to set to for this profile
      * @return true on success, otherwise false
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public boolean setConnectionPolicy(BluetoothDevice device, int connectionPolicy) {
-        enforceCallingOrSelfPermission(
-                BLUETOOTH_PRIVILEGED, "Need BLUETOOTH_PRIVILEGED permission");
         Log.d(TAG, "Saved connectionPolicy " + device + " = " + connectionPolicy);
 
         if (!mDatabaseManager.setProfileConnectionPolicy(
@@ -5068,6 +5067,21 @@ public class LeAudioService extends ProfileService {
             return service;
         }
 
+        private LeAudioService getService() {
+            // Cache mService because it can change while getService is called
+            LeAudioService service = mService;
+
+            if (Utils.isInstrumentationTestMode()) {
+                return service;
+            }
+
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG)) {
+                return null;
+            }
+            return service;
+        }
+
         @Override
         public boolean connect(BluetoothDevice device, AttributionSource source) {
             Objects.requireNonNull(device, "device cannot be null");
@@ -5461,8 +5475,8 @@ public class LeAudioService extends ProfileService {
         }
 
         @Override
-        public int getMaximumNumberOfBroadcasts(AttributionSource source) {
-            LeAudioService service = getService(source);
+        public int getMaximumNumberOfBroadcasts() {
+            LeAudioService service = getService();
             if (service == null) {
                 return 0;
             }
@@ -5472,8 +5486,8 @@ public class LeAudioService extends ProfileService {
         }
 
         @Override
-        public int getMaximumStreamsPerBroadcast(AttributionSource source) {
-            LeAudioService service = getService(source);
+        public int getMaximumStreamsPerBroadcast() {
+            LeAudioService service = getService();
             if (service == null) {
                 return 0;
             }
@@ -5483,8 +5497,8 @@ public class LeAudioService extends ProfileService {
         }
 
         @Override
-        public int getMaximumSubgroupsPerBroadcast(AttributionSource source) {
-            LeAudioService service = getService(source);
+        public int getMaximumSubgroupsPerBroadcast() {
+            LeAudioService service = getService();
             if (service == null) {
                 return 0;
             }

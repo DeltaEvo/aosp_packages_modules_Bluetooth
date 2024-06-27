@@ -19,6 +19,7 @@ package com.android.bluetooth.sap;
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 
 import android.annotation.RequiresPermission;
+import android.annotation.SuppressLint;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.bluetooth.BluetoothAdapter;
@@ -165,6 +166,7 @@ public class SapService extends ProfileService implements AdapterService.Bluetoo
 
     private static final int CREATE_RETRY_TIME = 10;
 
+    @SuppressLint("AndroidFrameworkRequiresPermission")
     private boolean initSocket() {
         Log.v(TAG, "Sap Service initSocket");
 
