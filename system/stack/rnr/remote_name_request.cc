@@ -19,7 +19,9 @@
 #include <bluetooth/log.h>
 #include <com_android_bluetooth_flags.h>
 
+#include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_int_types.h"
+#include "stack/btm/security_device_record.h"
 
 extern tBTM_CB btm_cb;
 using namespace bluetooth;
@@ -48,4 +50,9 @@ bool BTM_SecDeleteRmtNameNotifyCallback(tBTM_RMT_NAME_CALLBACK* p_callback) {
   }
 
   return false;
+}
+
+bool BTM_IsRemoteNameKnown(const RawAddress& bd_addr, tBT_TRANSPORT /* transport */) {
+  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
+  return (p_dev_rec == nullptr) ? false : p_dev_rec->sec_rec.is_name_known();
 }

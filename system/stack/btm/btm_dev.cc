@@ -36,11 +36,8 @@
 #include "btm_sec_api.h"
 #include "btm_sec_cb.h"
 #include "common/init_flags.h"
-#include "hci/controller_interface.h"
 #include "internal_include/bt_target.h"
 #include "l2c_api.h"
-#include "main/shim/entry.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "rust/src/connection/ffi/connection_shim.h"
 #include "stack/btm/btm_sec.h"
@@ -744,12 +741,6 @@ const tBLE_BD_ADDR BTM_Sec_GetAddressWithType(const RawAddress& bd_addr) {
 #endif
     return p_dev_rec->ble.identity_address_with_type;
   }
-}
-
-bool BTM_IsRemoteNameKnown(const RawAddress& bd_addr,
-                           tBT_TRANSPORT /* transport */) {
-  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
-  return (p_dev_rec == nullptr) ? false : p_dev_rec->sec_rec.is_name_known();
 }
 
 namespace bluetooth {

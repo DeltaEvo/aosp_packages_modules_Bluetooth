@@ -47,14 +47,15 @@
 #include "stack/include/bt_dev_class.h"
 #include "stack/include/bt_name.h"
 #include "stack/include/bt_uuid16.h"
+#include "stack/include/btm_ble_api.h"
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_inq.h"
 #include "stack/include/btm_log_history.h"
-#include "stack/include/btm_sec_api.h"  // BTM_IsRemoteNameKnown
 #include "stack/include/gap_api.h"      // GAP_BleReadPeerPrefConnParams
 #include "stack/include/hidh_api.h"
 #include "stack/include/main_thread.h"
 #include "stack/include/sdp_status.h"
+#include "stack/rnr/remote_name_request.h"
 #include "stack/sdp/sdpint.h"  // is_sdp_pbap_pce_disabled
 #include "storage/config_keys.h"
 #include "types/raw_address.h"
