@@ -60,16 +60,16 @@ enum class tL2CAP_DW_RESULT : uint8_t {
 };
 
 /* Values for priority parameter to L2CA_SetAclPriority */
-typedef enum : uint8_t {
+enum tL2CAP_PRIORITY : uint8_t {
   L2CAP_PRIORITY_NORMAL = 0,
   L2CAP_PRIORITY_HIGH = 1,
-} tL2CAP_PRIORITY;
+};
 
 /* Values for priority parameter to L2CA_SetAclLatency */
-typedef enum : uint8_t {
+enum tL2CAP_LATENCY : uint8_t {
   L2CAP_LATENCY_NORMAL = 0,
   L2CAP_LATENCY_LOW = 1,
-} tL2CAP_LATENCY;
+};
 
 /* Values for priority parameter to L2CA_SetTxPriority */
 #define L2CAP_CHNL_PRIORITY_HIGH 0
@@ -115,7 +115,7 @@ typedef uint8_t tL2CAP_CHNL_DATA_RATE;
  *  Type Definitions
  ****************************************************************************/
 
-typedef struct {
+struct tL2CAP_FCR_OPTS {
 #define L2CAP_FCR_BASIC_MODE 0x00
 #define L2CAP_FCR_ERTM_MODE 0x03
 #define L2CAP_FCR_LE_COC_MODE 0x05
@@ -127,7 +127,7 @@ typedef struct {
   uint16_t rtrans_tout;
   uint16_t mon_tout;
   uint16_t mps;
-} tL2CAP_FCR_OPTS;
+};
 
 /* default options for ERTM mode */
 constexpr tL2CAP_FCR_OPTS kDefaultErtmOptions = {
@@ -139,7 +139,7 @@ constexpr tL2CAP_FCR_OPTS kDefaultErtmOptions = {
     1010   /* MPS segment size */
 };
 
-typedef struct {
+struct FLOW_SPEC {
   uint8_t qos_flags;          /* TBD */
   uint8_t service_type;       /* see below */
   uint32_t token_rate;        /* bytes/second */
@@ -147,7 +147,7 @@ typedef struct {
   uint32_t peak_bandwidth;    /* bytes/second */
   uint32_t latency;           /* microseconds */
   uint32_t delay_variation;   /* microseconds */
-} FLOW_SPEC;
+};
 
 /* Values for service_type */
 #define SVC_TYPE_BEST_EFFORT 1
@@ -157,7 +157,7 @@ typedef struct {
  * parameters are optional, for each parameter there is a boolean to
  * use to signify its presence or absence.
  */
-typedef struct {
+struct tL2CAP_CFG_INFO {
   uint16_t result; /* Only used in confirm messages */
   bool mtu_present;
   uint16_t mtu;
@@ -172,7 +172,7 @@ typedef struct {
   bool ext_flow_spec_present;
   tHCI_EXT_FLOW_SPEC ext_flow_spec;
   uint16_t flags; /* bit 0: 0-no continuation, 1-continuation */
-} tL2CAP_CFG_INFO;
+};
 
 /* LE credit based L2CAP connection parameters */
 constexpr uint16_t L2CAP_LE_MIN_MTU = 23;  // Minimum SDU size
@@ -332,7 +332,7 @@ typedef void(tL2CA_CREDIT_BASED_RECONFIG_COMPLETED_CB)(
  * MUST be provided, with the exception of the "connect pending"
  * callback and "congestion status" callback.
  */
-typedef struct {
+struct tL2CAP_APPL_INFO {
   tL2CA_CONNECT_IND_CB* pL2CA_ConnectInd_Cb;
   tL2CA_CONNECT_CFM_CB* pL2CA_ConnectCfm_Cb;
   tL2CA_CONFIG_IND_CB* pL2CA_ConfigInd_Cb;
@@ -348,14 +348,14 @@ typedef struct {
   tL2CA_CREDIT_BASED_RECONFIG_COMPLETED_CB*
       pL2CA_CreditBasedReconfigCompleted_Cb;
   tL2CA_CREDIT_BASED_COLLISION_IND_CB* pL2CA_CreditBasedCollisionInd_Cb;
-} tL2CAP_APPL_INFO;
+};
 
 /* Define the structure that applications use to create or accept
  * connections with enhanced retransmission mode.
  */
-typedef struct {
+struct tL2CAP_ERTM_INFO {
   uint8_t preferred_mode;
-} tL2CAP_ERTM_INFO;
+};
 
 /*****************************************************************************
  *  External Function Declarations
@@ -522,7 +522,6 @@ void L2CA_DeregisterLECoc(uint16_t psm);
  *  Return value:    true if peer is connected
  *
  ******************************************************************************/
-
 [[nodiscard]] bool L2CA_ReconfigCreditBasedConnsReq(
     const RawAddress& bd_addr, std::vector<uint16_t>& lcids,
     tL2CAP_LE_CFG_INFO* p_cfg);
@@ -756,7 +755,7 @@ typedef void(tL2CA_FIXED_CONGESTION_STATUS_CB)(const RawAddress&, bool);
 
 /* Fixed channel registration info (the callback addresses and channel config)
  */
-typedef struct {
+struct tL2CAP_FIXED_CHNL_REG {
   tL2CA_FIXED_CHNL_CB* pL2CA_FixedConn_Cb;
   tL2CA_FIXED_DATA_CB* pL2CA_FixedData_Cb;
   tL2CA_FIXED_CONGESTION_STATUS_CB* pL2CA_FixedCong_Cb;
@@ -764,7 +763,7 @@ typedef struct {
   uint16_t default_idle_tout;
   tL2CA_TX_COMPLETE_CB*
       pL2CA_FixedTxComplete_Cb; /* fixed channel tx complete callback */
-} tL2CAP_FIXED_CHNL_REG;
+};
 
 /*******************************************************************************
  *
