@@ -1955,6 +1955,7 @@ class HearingAidImpl : public HearingAid {
     audio_running = false;
     encoder_state_release();
     current_volume = VOLUME_UNKNOWN;
+    ResetAsrc();
   }
 
   void SetVolume(int8_t volume) {
