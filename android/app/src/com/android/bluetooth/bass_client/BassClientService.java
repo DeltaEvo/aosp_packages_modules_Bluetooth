@@ -878,9 +878,45 @@ public class BassClientService extends ProfileService {
                 && (leAudioService.getActiveDevices().contains(device));
     }
 
-    private boolean isAnyDeviceFromActiveUnicastGroupReceivingBroadcast() {
-        return getActiveBroadcastSinks().stream()
-                .anyMatch(d -> isDevicePartOfActiveUnicastGroup(d));
+    private boolean isEmptyBluetoothDevice(BluetoothDevice device) {
+        if (device == null) {
+            Log.e(TAG, "Device is null!");
+            return true;
+        }
+
+        return device.getAddress().equals("00:00:00:00:00:00");
+    }
+
+    private boolean hasAnyConnectedDeviceExternalBroadcastSource() {
+        for (BluetoothDevice device : getConnectedDevices()) {
+            // Check if any connected device has add some source
+            if (getAllSources(device).stream()
+                    .anyMatch(
+                            receiveState ->
+                                    (!isEmptyBluetoothDevice(receiveState.getSourceDevice())
+                                            && !isLocalBroadcast(receiveState)))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void checkAndResetGroupAllowedContextMask() {
+        LeAudioService leAudioService = mServiceFactory.getLeAudioService();
+        if (leAudioService == null) {
+            return;
+        }
+
+        if (leaudioAllowedContextMask()) {
+            /* Restore allowed context mask for Unicast */
+            if (mIsAllowedContextOfActiveGroupModified
+                    && !hasAnyConnectedDeviceExternalBroadcastSource()) {
+                leAudioService.setActiveGroupAllowedContextMask(
+                        BluetoothLeAudio.CONTEXTS_ALL, BluetoothLeAudio.CONTEXTS_ALL);
+                mIsAllowedContextOfActiveGroupModified = false;
+            }
+        }
     }
 
     private void localNotifyReceiveStateChanged(BluetoothDevice sink) {
@@ -918,16 +954,10 @@ public class BassClientService extends ProfileService {
                 leAudioService.activeBroadcastAssistantNotification(false);
             }
 
-            if (leaudioAllowedContextMask()) {
-                /* Restore allowed context mask for active device */
-                if (mIsAllowedContextOfActiveGroupModified) {
-                    if (!isAnyDeviceFromActiveUnicastGroupReceivingBroadcast()) {
-                        leAudioService.setActiveGroupAllowedContextMask(
-                                BluetoothLeAudio.CONTEXTS_ALL, BluetoothLeAudio.CONTEXTS_ALL);
-                    }
-                    mIsAllowedContextOfActiveGroupModified = false;
-                }
-            }
+            /* Restore allowed context mask for unicast in case if last connected broadcast
+             * delegator device which has external source removes this source
+             */
+            checkAndResetGroupAllowedContextMask();
         }
     }
 
@@ -1074,9 +1104,8 @@ public class BassClientService extends ProfileService {
             return false;
         }
         boolean isRoomAvailable = false;
-        String emptyBluetoothDevice = "00:00:00:00:00:00";
         for (BluetoothLeBroadcastReceiveState recvState : stateMachine.getAllSources()) {
-            if (recvState.getSourceDevice().getAddress().equals(emptyBluetoothDevice)) {
+            if (isEmptyBluetoothDevice(recvState.getSourceDevice())) {
                 isRoomAvailable = true;
                 break;
             }
@@ -1348,6 +1377,11 @@ public class BassClientService extends ProfileService {
                 log("Unbonded " + device + ". Removing state machine");
                 removeStateMachine(device);
             }
+
+            /* Restore allowed context mask for unicast in case if last connected broadcast
+             * delegator device which has external source disconnectes.
+             */
+            checkAndResetGroupAllowedContextMask();
         } else if (toState == BluetoothProfile.STATE_CONNECTED) {
             handleReconnectingAudioSharingModeDevice(device);
         }
@@ -2730,8 +2764,7 @@ public class BassClientService extends ProfileService {
             List<BluetoothLeBroadcastReceiveState> recvStates =
                     new ArrayList<BluetoothLeBroadcastReceiveState>();
             for (BluetoothLeBroadcastReceiveState rs : stateMachine.getAllSources()) {
-                String emptyBluetoothDevice = "00:00:00:00:00:00";
-                if (!rs.getSourceDevice().getAddress().equals(emptyBluetoothDevice)) {
+                if (!isEmptyBluetoothDevice(rs.getSourceDevice())) {
                     recvStates.add(rs);
                 }
             }
