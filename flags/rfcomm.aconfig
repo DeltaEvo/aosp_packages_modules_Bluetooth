@@ -17,3 +17,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "rfcomm_prevent_unnecessary_collisions"
+    namespace: "bluetooth"
+    description: "Restrict collision handling to exclude unrelated connections"
+    bug: "349892756"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
