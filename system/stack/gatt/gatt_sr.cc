@@ -23,6 +23,7 @@
  ******************************************************************************/
 
 #include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 #include <string.h>
 
 #include <algorithm>
@@ -865,12 +866,21 @@ static void gatts_process_mtu_req(tGATT_TCB& tcb, uint16_t cid, uint16_t len, ui
 
   tGATTS_DATA gatts_data;
   gatts_data.mtu = tcb.payload_size;
-  /* Notify all registered application with new MTU size. Us a transaction ID */
-  /* of 0, as no response is allowed from application */
-  for (int i = 0; i < GATT_MAX_APPS; i++) {
-    if (gatt_cb.cl_rcb[i].in_use) {
-      uint16_t conn_id = GATT_CREATE_CONN_ID(tcb.tcb_idx, gatt_cb.cl_rcb[i].gatt_if);
-      gatt_sr_send_req_callback(conn_id, 0, GATTS_REQ_TYPE_MTU, &gatts_data);
+  /* Notify all registered application with new MTU size. Use a transaction ID */
+  /* of 0, as no response is allowed from applications */
+  if (com::android::bluetooth::flags::gatt_client_dynamic_allocation()) {
+    for (auto& [i, p_reg] : gatt_cb.cl_rcb_map) {
+      if (p_reg->in_use) {
+        uint16_t conn_id = GATT_CREATE_CONN_ID(tcb.tcb_idx, p_reg->gatt_if);
+        gatt_sr_send_req_callback(conn_id, 0, GATTS_REQ_TYPE_MTU, &gatts_data);
+      }
+    }
+  } else {
+    for (int i = 0; i < GATT_MAX_APPS; i++) {
+      if (gatt_cb.cl_rcb[i].in_use) {
+        uint16_t conn_id = GATT_CREATE_CONN_ID(tcb.tcb_idx, gatt_cb.cl_rcb[i].gatt_if);
+        gatt_sr_send_req_callback(conn_id, 0, GATTS_REQ_TYPE_MTU, &gatts_data);
+      }
     }
   }
 }

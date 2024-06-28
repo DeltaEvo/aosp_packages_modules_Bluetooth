@@ -25,6 +25,7 @@
 #define LOG_TAG "bt_bta_gattc"
 
 #include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 
 #include <cstdint>
 
@@ -555,20 +556,38 @@ bool bta_gattc_mark_bg_conn(tGATT_IF client_if, const RawAddress& remote_bda_ptr
   for (i = 0; i < ble_acceptlist_size(); i++, p_bg_tck++) {
     if (p_bg_tck->in_use &&
         ((p_bg_tck->remote_bda == remote_bda_ptr) || (p_bg_tck->remote_bda.IsEmpty()))) {
-      p_cif_mask = &p_bg_tck->cif_mask;
-
-      if (add) { /* mask on the cif bit */
-        *p_cif_mask |= (1 << (client_if - 1));
-      } else {
-        if (client_if != 0) {
-          *p_cif_mask &= (~(1 << (client_if - 1)));
+      if (com::android::bluetooth::flags::gatt_client_dynamic_allocation()) {
+        auto& p_cif_set = p_bg_tck->cif_set;
+        if (add) { /* mask on the cif bit */
+          p_cif_set.insert(client_if);
         } else {
-          *p_cif_mask = 0;
+          if (client_if != 0) {
+            p_cif_set.erase(client_if);
+          } else {
+            p_cif_set.clear();
+          }
         }
-      }
-      /* no BG connection for this device, make it available */
-      if (p_bg_tck->cif_mask == 0) {
-        memset(p_bg_tck, 0, sizeof(tBTA_GATTC_BG_TCK));
+        /* no BG connection for this device, make it available */
+        if (p_bg_tck->cif_set.empty()) {
+          p_bg_tck->in_use = false;
+          p_bg_tck->remote_bda = RawAddress::kEmpty;
+        }
+      } else {
+        p_cif_mask = &p_bg_tck->cif_mask;
+
+        if (add) { /* mask on the cif bit */
+          *p_cif_mask |= (1 << (client_if - 1));
+        } else {
+          if (client_if != 0) {
+            *p_cif_mask &= (~(1 << (client_if - 1)));
+          } else {
+            *p_cif_mask = 0;
+          }
+        }
+        /* no BG connection for this device, make it available */
+        if (p_bg_tck->cif_mask == 0) {
+          memset(p_bg_tck, 0, sizeof(tBTA_GATTC_BG_TCK));
+        }
       }
       return true;
     }

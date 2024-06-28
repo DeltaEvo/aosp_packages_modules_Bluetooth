@@ -28,6 +28,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <unordered_set>
 
 #include "bta/gatt/database.h"
 #include "bta/gatt/database_builder.h"
@@ -322,7 +323,7 @@ typedef struct {
   bool in_use;
   RawAddress remote_bda;
   tBTA_GATTC_CIF_MASK cif_mask;
-
+  std::unordered_set<tGATT_IF> cif_set;
 } tBTA_GATTC_BG_TCK;
 
 typedef struct {
