@@ -1108,7 +1108,7 @@ class HearingAidImpl : public HearingAid {
         /// The L2CAP will automatically reconnect the LE-ACL link on
         /// disconnection when there is a pending channel request,
         /// which invalidates all encryption checks performed here.
-        com::android::bluetooth::flags::asha_asrc()
+        com::android::bluetooth::flags::asha_encrypted_l2c_coc()
             ? BTM_SEC_IN_ENCRYPT | BTM_SEC_OUT_ENCRYPT
             : BTM_SEC_NONE,
         HearingAidImpl::GapCallbackStatic, BT_TRANSPORT_LE);
