@@ -192,13 +192,23 @@ void bta_ag_start_open(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
   p_scb->open_services = p_scb->reg_services;
 
   /* Check if RFCOMM has any incoming connection to avoid collision. */
-  RawAddress pending_bd_addr = RawAddress::kEmpty;
-  if (PORT_IsOpening(&pending_bd_addr)) {
-    /* Let the incoming connection goes through.                        */
-    /* Issue collision for this scb for now.                            */
-    /* We will decide what to do when we find incoming connetion later. */
-    bta_ag_collision_cback(BTA_SYS_CONN_OPEN, BTA_ID_AG, 0, p_scb->peer_addr);
-    return;
+  if (com::android::bluetooth::flags::rfcomm_prevent_unnecessary_collisions()) {
+    if (PORT_IsCollisionDetected(p_scb->peer_addr)) {
+      /* Let the incoming connection go through.                           */
+      /* Issue collision for this scb for now.                             */
+      /* We will decide what to do when we find incoming connection later. */
+      bta_ag_collision_cback(BTA_SYS_CONN_OPEN, BTA_ID_AG, 0, p_scb->peer_addr);
+      return;
+    }
+  } else {
+    RawAddress pending_bd_addr = RawAddress::kEmpty;
+    if (PORT_IsOpening(&pending_bd_addr)) {
+      /* Let the incoming connection go through.                           */
+      /* Issue collision for this scb for now.                             */
+      /* We will decide what to do when we find incoming connection later. */
+      bta_ag_collision_cback(BTA_SYS_CONN_OPEN, BTA_ID_AG, 0, p_scb->peer_addr);
+      return;
+    }
   }
 
   /* close servers */
