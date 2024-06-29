@@ -1993,7 +1993,7 @@ void BTIF_dm_enable() {
   BTA_DmBleConfigLocalPrivacy(ble_privacy_enabled);
 
   if (com::android::bluetooth::flags::separate_service_and_device_discovery()) {
-    BTM_SecAddRmtNameNotifyCallback(btif_on_name_read_from_btm);
+    get_security_client_interface().BTM_SecAddRmtNameNotifyCallback(btif_on_name_read_from_btm);
   }
 
   /* for each of the enabled services in the mask, trigger the profile
@@ -2021,7 +2021,7 @@ void BTIF_dm_enable() {
 
 void BTIF_dm_disable() {
   if (com::android::bluetooth::flags::separate_service_and_device_discovery()) {
-    BTM_SecDeleteRmtNameNotifyCallback(&btif_on_name_read_from_btm);
+    get_security_client_interface().BTM_SecDeleteRmtNameNotifyCallback(&btif_on_name_read_from_btm);
   }
 
   /* for each of the enabled services in the mask, trigger the profile
