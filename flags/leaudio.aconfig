@@ -344,3 +344,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "headtracker_sdu_size"
+    namespace: "bluetooth"
+    description: "Use updated headtracker SDU size"
+    bug: "350090733"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
