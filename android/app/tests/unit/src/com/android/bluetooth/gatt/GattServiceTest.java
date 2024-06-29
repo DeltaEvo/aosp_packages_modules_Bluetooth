@@ -28,6 +28,7 @@ import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothStatusCodes;
 import android.bluetooth.IBluetoothGattCallback;
+import android.bluetooth.IBluetoothGattServerCallback;
 import android.bluetooth.le.AdvertiseData;
 import android.bluetooth.le.AdvertisingSetParameters;
 import android.bluetooth.le.DistanceMeasurementMethod;
@@ -81,12 +82,12 @@ public class GattServiceTest {
     private GattService mService;
     @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
 
-    @Mock private GattService.ClientMap mClientMap;
+    @Mock private ContextMap<IBluetoothGattCallback> mClientMap;
     @Mock private ScannerMap mScannerMap;
 
     @Mock private ScanManager mScanManager;
     @Mock private Set<String> mReliableQueue;
-    @Mock private GattService.ServerMap mServerMap;
+    @Mock private ContextMap<IBluetoothGattServerCallback> mServerMap;
     @Mock private DistanceMeasurementManager mDistanceMeasurementManager;
     @Mock private AdvertiseManagerNativeInterface mAdvertiseManagerNativeInterface;
 
@@ -698,8 +699,7 @@ public class GattServiceTest {
         int connId = 1;
         ArrayList<GattDbElement> db = new ArrayList<>();
 
-        @SuppressWarnings("NonCanonicalType")
-        GattService.ClientMap.App app = mock(GattService.ClientMap.App.class);
+        ContextMap<IBluetoothGattCallback>.App app = mock(ContextMap.App.class);
         IBluetoothGattCallback callback = mock(IBluetoothGattCallback.class);
 
         doReturn(app).when(mClientMap).getByConnId(connId);
