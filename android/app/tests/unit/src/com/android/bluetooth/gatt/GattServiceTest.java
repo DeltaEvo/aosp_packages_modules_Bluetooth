@@ -51,7 +51,7 @@ import com.android.bluetooth.btservice.CompanionManager;
 import com.android.bluetooth.flags.Flags;
 import com.android.bluetooth.le_scan.ScanManager;
 import com.android.bluetooth.le_scan.ScanObjectsFactory;
-import com.android.bluetooth.le_scan.TransitionalScanHelper;
+import com.android.bluetooth.le_scan.ScannerMap;
 
 import org.junit.After;
 import org.junit.Before;
@@ -82,7 +82,7 @@ public class GattServiceTest {
     @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
 
     @Mock private GattService.ClientMap mClientMap;
-    @Mock private TransitionalScanHelper.ScannerMap mScannerMap;
+    @Mock private ScannerMap mScannerMap;
 
     @Mock private ScanManager mScanManager;
     @Mock private Set<String> mReliableQueue;
