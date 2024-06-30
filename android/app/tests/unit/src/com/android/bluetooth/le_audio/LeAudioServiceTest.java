@@ -381,19 +381,6 @@ public class LeAudioServiceTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(mService::stop);
     }
 
-    /** Test if stop during init is ok. */
-    @Test
-    public void testStopStartStopService() throws Exception {
-        InstrumentationRegistry.getInstrumentation()
-                .runOnMainSync(
-                        () -> {
-                            mService.stop();
-                            mService.start();
-                            mService.stop();
-                            mService.start();
-                        });
-    }
-
     /** Test get/set priority for BluetoothDevice */
     @Test
     public void testGetSetPriority() {
@@ -1696,6 +1683,12 @@ public class LeAudioServiceTest {
         // Verify only update the fallback group and not proceed to change active
         assertThat(mService.setActiveDevice(mSingleDevice)).isTrue();
         assertThat(mService.mUnicastGroupIdDeactivatedForBroadcastTransition).isEqualTo(groupId);
+
+        // Verify only update the fallback group to INVALID and not proceed to change active
+        assertThat(mService.setActiveDevice(null)).isTrue();
+        assertThat(mService.mUnicastGroupIdDeactivatedForBroadcastTransition)
+                .isEqualTo(BluetoothLeAudio.GROUP_ID_INVALID);
+
         verify(mNativeInterface, times(0)).groupSetActive(anyInt());
     }
 

@@ -84,15 +84,6 @@ struct btsnd_hcic_auth_request {
 };
 extern struct btsnd_hcic_auth_request btsnd_hcic_auth_request;
 
-// Name: btsnd_hcic_change_name
-// Params: BD_NAME name
-// Return: void
-struct btsnd_hcic_change_name {
-  std::function<void(BD_NAME name)> body{[](BD_NAME /* name */) {}};
-  void operator()(BD_NAME name) { body(name); };
-};
-extern struct btsnd_hcic_change_name btsnd_hcic_change_name;
-
 // Name: btsnd_hcic_create_conn_cancel
 // Params: const RawAddress& dest
 // Return: void

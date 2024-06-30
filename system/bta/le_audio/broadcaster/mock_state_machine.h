@@ -169,6 +169,7 @@ class MockBroadcastStateMachine
               (override));
   MOCK_METHOD((void), OnEnableAnnouncement, (bool enable, uint8_t status),
               (override));
+  MOCK_METHOD((void), OnUpdateAnnouncement, (uint8_t status), (override));
 
   bool result_ = true;
   std::optional<bluetooth::le_audio::broadcaster::BigConfig> big_config_ =

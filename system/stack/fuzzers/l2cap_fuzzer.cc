@@ -34,6 +34,7 @@
 #include "stack/include/l2cap_acl_interface.h"
 #include "stack/include/l2cap_controller_interface.h"
 #include "stack/include/l2cap_hci_link_interface.h"
+#include "stack/include/l2cap_module.h"
 #include "stack/include/l2cdefs.h"
 #include "test/fake/fake_osi.h"
 #include "test/mock/mock_main_shim_entry.h"
@@ -68,6 +69,7 @@ bt_status_t do_in_main_thread_delayed(base::Location const&,
   abort();
 }
 bluetooth::common::MessageLoopThread* get_main_thread() { return nullptr; }
+bluetooth::common::PostableContext* get_main() { return nullptr; }
 
 namespace bluetooth {
 namespace os {

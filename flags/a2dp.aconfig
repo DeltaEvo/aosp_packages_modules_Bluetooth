@@ -85,3 +85,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "a2dp_aidl_encoding_interval"
+    namespace: "bluetooth"
+    description: "Configure the data interval in audio BT HAL's PcmConfig"
+    bug: "347781402"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}

@@ -17,11 +17,10 @@
 
 package com.android.bluetooth.tbs;
 
+import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothLeCall;
 import android.bluetooth.BluetoothLeCallControl;
-import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
-import android.content.Context;
 
 import java.util.List;
 import java.util.UUID;
@@ -52,13 +51,8 @@ public class BluetoothLeCallControlProxy {
         mBluetoothLeCallControl = tbs;
     }
 
-    public void closeBluetoothLeCallControlProxy(Context context) {
-        final BluetoothManager btManager = context.getSystemService(BluetoothManager.class);
-        if (btManager != null) {
-            btManager
-                    .getAdapter()
-                    .closeProfileProxy(BluetoothProfile.LE_CALL_CONTROL, mBluetoothLeCallControl);
-        }
+    public void closeBluetoothLeCallControlProxy(BluetoothAdapter adapter) {
+        adapter.closeProfileProxy(BluetoothProfile.LE_CALL_CONTROL, mBluetoothLeCallControl);
     }
 
     public boolean registerBearer(

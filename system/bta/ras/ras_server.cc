@@ -103,7 +103,7 @@ class RasServerImpl : public bluetooth::ras::RasServer {
     if (trackers_.find(ble_bd_addr.bda) == trackers_.end()) {
       log::warn("Can't find tracker for address {}", address);
       return;
-    };
+    }
     auto response = trackers_[ble_bd_addr.bda].pending_write_response_;
     tGATTS_RSP p_msg;
     p_msg.attr_value.handle = response.write_req_handle_;
@@ -131,11 +131,11 @@ class RasServerImpl : public bluetooth::ras::RasServer {
         tracker.ccc_values_[kRasRangingDataOverWrittenCharacteristic];
 
     if (ccc_real_time != GATT_CLT_CONFIG_NONE) {
-      bool need_confirm = ccc_real_time == GATT_CHAR_CLIENT_CONFIG_INDICTION;
+      bool need_confirm = ccc_real_time & GATT_CLT_CONFIG_INDICATION;
       uint16_t attr_id =
           GetCharacteristic(kRasRealTimeRangingDataCharacteristic)
               ->attribute_handle_;
-      log::debug("Send Real-time Ranging Data");
+      log::debug("Send Real-time Ranging Data is_last {}", is_last);
       BTA_GATTS_HandleValueIndication(tracker.conn_id_, attr_id, data,
                                       need_confirm);
     }
@@ -151,11 +151,13 @@ class RasServerImpl : public bluetooth::ras::RasServer {
 
     // Send data ready
     if (is_last) {
-      if (ccc_data_ready == GATT_CLT_CONFIG_NONE) {
+      if (ccc_data_ready == GATT_CLT_CONFIG_NONE ||
+          ccc_real_time != GATT_CLT_CONFIG_NONE) {
         log::debug("Skip Ranging Data Ready");
       } else {
         bool need_confirm = ccc_data_ready & GATT_CLT_CONFIG_INDICATION;
-        log::debug("Send data ready, ranging_counter {}", procedure_counter);
+        log::debug("Send data ready, ranging_counter {}, total fragment {}",
+                   procedure_counter, data_buffer.segments_.size());
         uint16_t attr_id = GetCharacteristic(kRasRangingDataReadyCharacteristic)
                                ->attribute_handle_;
         std::vector<uint8_t> value(kRingingCounterSize);
@@ -169,7 +171,8 @@ class RasServerImpl : public bluetooth::ras::RasServer {
     // Send data overwritten
     if (tracker.buffers_.size() > kBufferSize) {
       auto begin = tracker.buffers_.begin();
-      if (ccc_data_over_written == GATT_CLT_CONFIG_NONE) {
+      if (ccc_data_over_written == GATT_CLT_CONFIG_NONE ||
+          ccc_real_time != GATT_CLT_CONFIG_NONE) {
         log::debug("Skip Ranging Data Over Written");
         tracker.buffers_.erase(begin);
         return;
@@ -532,12 +535,38 @@ class RasServerImpl : public bluetooth::ras::RasServer {
                         &p_msg);
       return;
     }
+
+    if (trackers_.find(remote_bda) == trackers_.end()) {
+      BTA_GATTS_SendRsp(conn_id, p_data->req_data.trans_id,
+                        GATT_ILLEGAL_PARAMETER, &p_msg);
+      return;
+    }
+    ClientTracker* tracker = &trackers_[p_data->req_data.remote_bda];
     const uint8_t* value = p_data->req_data.p_data->write_req.value;
     uint16_t ccc_value;
     STREAM_TO_UINT16(ccc_value, value);
-    if (trackers_.find(remote_bda) != trackers_.end()) {
-      trackers_[remote_bda].ccc_values_[characteristic->uuid_] = ccc_value;
+
+    // Check that On-demand and Real-time are not registered at the same time
+    uint16_t ccc_on_demand_temp =
+        tracker->ccc_values_[kRasOnDemandDataCharacteristic];
+    uint16_t ccc_real_time_temp =
+        tracker->ccc_values_[kRasRealTimeRangingDataCharacteristic];
+    if (characteristic->uuid_ == kRasRealTimeRangingDataCharacteristic) {
+      ccc_real_time_temp = ccc_value;
+    } else if (characteristic->uuid_ == kRasOnDemandDataCharacteristic) {
+      ccc_on_demand_temp = ccc_value;
     }
+    if (ccc_real_time_temp != GATT_CLT_CONFIG_NONE &&
+        ccc_on_demand_temp != GATT_CLT_CONFIG_NONE) {
+      log::warn(
+          "Client Characteristic Configuration Descriptor Improperly "
+          "Configured");
+      BTA_GATTS_SendRsp(conn_id, p_data->req_data.trans_id, GATT_CCC_CFG_ERR,
+                        &p_msg);
+      return;
+    }
+
+    trackers_[remote_bda].ccc_values_[characteristic->uuid_] = ccc_value;
     log::info("Write CCC for {}, conn_id:{}, value:0x{:04x}",
               getUuidName(characteristic->uuid_), conn_id, ccc_value);
     BTA_GATTS_SendRsp(conn_id, p_data->req_data.trans_id, GATT_SUCCESS, &p_msg);
@@ -545,7 +574,10 @@ class RasServerImpl : public bluetooth::ras::RasServer {
 
   void HandleControlPoint(ClientTracker* tracker, tGATT_WRITE_REQ* write_req) {
     ControlPointCommand command;
-    if (!ParseControlPointCommand(&command, write_req->value, write_req->len)) {
+    ParseControlPointCommand(&command, write_req->value, write_req->len);
+
+    if (!command.isValid_) {
+      SendResponseCode(ResponseCodeValue::INVALID_PARAMETER, tracker);
       return;
     }
 
@@ -600,7 +632,7 @@ class RasServerImpl : public bluetooth::ras::RasServer {
       }
       log::info("Send COMPLETE_RANGING_DATA_RESPONSE, ranging_counter:{}",
                 ranging_counter);
-      std::vector<uint8_t> response(8, 0);
+      std::vector<uint8_t> response(3, 0);
       response[0] = (uint8_t)EventCode::COMPLETE_RANGING_DATA_RESPONSE;
       response[1] = (ranging_counter & 0xFF);
       response[2] = (ranging_counter >> 8) & 0xFF;
@@ -614,7 +646,7 @@ class RasServerImpl : public bluetooth::ras::RasServer {
       log::warn("No Records Found");
       SendResponseCode(ResponseCodeValue::NO_RECORDS_FOUND, tracker);
     }
-  };
+  }
 
   void OnAckRangingData(ControlPointCommand* command, ClientTracker* tracker) {
     const uint8_t* value = command->parameter_;
@@ -636,13 +668,13 @@ class RasServerImpl : public bluetooth::ras::RasServer {
       log::warn("No Records Found");
       SendResponseCode(ResponseCodeValue::NO_RECORDS_FOUND, tracker);
     }
-  };
+  }
 
   void SendResponseCode(ResponseCodeValue response_code_value,
                         ClientTracker* tracker) {
     log::info("0x{:02x}, {}", (uint16_t)response_code_value,
               GetResponseOpcodeValueText(response_code_value));
-    std::vector<uint8_t> response(8, 0);
+    std::vector<uint8_t> response(2, 0);
     response[0] = (uint8_t)EventCode::RESPONSE_CODE;
     response[1] = (uint8_t)response_code_value;
     BTA_GATTS_HandleValueIndication(
@@ -742,4 +774,4 @@ bluetooth::ras::RasServer* bluetooth::ras::GetRasServer() {
     instance = new RasServerImpl();
   }
   return instance;
-};
+}

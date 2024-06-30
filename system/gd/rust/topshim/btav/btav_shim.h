@@ -34,7 +34,7 @@ struct RustPlayStatus;
 
 class A2dpIntf {
  public:
-  A2dpIntf(const btav_source_interface_t* intf) : intf_(intf){};
+  A2dpIntf() {}
   ~A2dpIntf();
 
   // interface for Settings
@@ -52,9 +52,6 @@ class A2dpIntf {
   bool stop_audio_request() const;
   bool suspend_audio_request() const;
   RustPresentationPosition get_presentation_position() const;
-
- private:
-  const btav_source_interface_t* intf_;
 };
 
 std::unique_ptr<A2dpIntf> GetA2dpProfile(const unsigned char* btif);

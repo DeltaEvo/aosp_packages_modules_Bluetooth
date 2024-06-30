@@ -314,6 +314,7 @@ public class TransitionalScanHelperTest {
 
         mApp.callback = callback;
         mApp.appScanStats = appScanStats;
+        scanClient.stats = appScanStats;
         Set<ScanClient> scanClientSet = Collections.singleton(scanClient);
 
         doReturn(address).when(mAdapterService).getIdentityAddress(anyString());

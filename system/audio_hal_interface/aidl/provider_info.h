@@ -36,11 +36,13 @@ class ProviderInfo {
 
   ~ProviderInfo() = default;
 
-  const std::unordered_map<int, ::hfp::sco_config>& GetHfpScoConfig();
+  const std::unordered_map<tBTA_AG_UUID_CODEC, ::hfp::sco_config>&
+  GetHfpScoConfig();
 
  private:
   const std::vector<CodecInfo> codecInfos;
-  std::unordered_map<int /* HFP CODEC in UUID_CODEC_XXX */, ::hfp::sco_config>
+  std::unordered_map<tBTA_AG_UUID_CODEC /* HFP CODEC in UUID_CODEC_XXX */,
+                     ::hfp::sco_config>
       hfpScoConfigMap;
 };
 }  // namespace bluetooth::audio::aidl

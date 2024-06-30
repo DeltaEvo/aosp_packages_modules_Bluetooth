@@ -21,10 +21,11 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <future>
 
 #include "common/bidi_queue.h"
 #include "hci/acl_manager/le_connection_callbacks.h"
-#include "hci/acl_manager/le_connection_management_callbacks.h"
+#include "hci/acl_manager/le_connection_management_callbacks_mock.h"
 #include "hci/address_with_type.h"
 #include "hci/controller.h"
 #include "hci/hci_layer_fake.h"
@@ -238,41 +239,6 @@ class MockLeAcceptlistCallbacks : public LeAcceptlistCallbacks {
   MOCK_METHOD(void, OnLeConnectFail, (AddressWithType address, ErrorCode reason), (override));
   MOCK_METHOD(void, OnLeDisconnection, (AddressWithType address), (override));
   MOCK_METHOD(void, OnResolvingListChange, (), (override));
-};
-
-class MockLeConnectionManagementCallbacks : public LeConnectionManagementCallbacks {
- public:
-  MOCK_METHOD(
-      void,
-      OnConnectionUpdate,
-      (hci::ErrorCode hci_status,
-       uint16_t connection_interval,
-       uint16_t connection_latency,
-       uint16_t supervision_timeout),
-      (override));
-  MOCK_METHOD(
-      void,
-      OnDataLengthChange,
-      (uint16_t tx_octets, uint16_t tx_time, uint16_t rx_octets, uint16_t rx_time),
-      (override));
-  MOCK_METHOD(void, OnDisconnection, (ErrorCode reason), (override));
-  MOCK_METHOD(
-      void,
-      OnReadRemoteVersionInformationComplete,
-      (hci::ErrorCode hci_status, uint8_t lmp_version, uint16_t manufacturer_name, uint16_t sub_version),
-      (override));
-  MOCK_METHOD(void, OnLeReadRemoteFeaturesComplete, (hci::ErrorCode hci_status, uint64_t features), (override));
-  MOCK_METHOD(
-      void, OnPhyUpdate, (hci::ErrorCode hci_status, uint8_t tx_phy, uint8_t rx_phy), (override));
-  MOCK_METHOD(
-      void,
-      OnLeSubrateChange,
-      (hci::ErrorCode hci_status,
-       uint16_t subrate_factor,
-       uint16_t peripheral_latency,
-       uint16_t continuation_number,
-       uint16_t supervision_timeout),
-      (override));
 };
 
 class LeImplTest : public ::testing::Test {
@@ -1149,6 +1115,13 @@ TEST_F(LeImplWithConnectionTest, on_le_event__DATA_LENGTH_CHANGE) {
 }
 
 TEST_F(LeImplWithConnectionTest, on_le_event__REMOTE_CONNECTION_PARAMETER_REQUEST) {
+  std::promise<void> request_promise;
+  auto request = request_promise.get_future();
+  EXPECT_CALL(
+      connection_management_callbacks_,
+      OnParameterUpdateRequest(kIntervalMin, kIntervalMax, kLatency, kTimeout))
+      .WillOnce([&request_promise]() { request_promise.set_value(); });
+
   // Send a remote connection parameter request
   auto command = hci::LeRemoteConnectionParameterRequestBuilder::Create(
       kHciHandle, kIntervalMin, kIntervalMax, kLatency, kTimeout);
@@ -1159,16 +1132,7 @@ TEST_F(LeImplWithConnectionTest, on_le_event__REMOTE_CONNECTION_PARAMETER_REQUES
     le_impl_->on_le_event(view);
   }
 
-  sync_handler();
-
-  auto view = CreateLeConnectionManagementCommandView<LeRemoteConnectionParameterRequestReplyView>(
-      hci_layer_->GetCommand());
-  ASSERT_TRUE(view.IsValid());
-
-  ASSERT_EQ(kIntervalMin, view.GetIntervalMin());
-  ASSERT_EQ(kIntervalMax, view.GetIntervalMax());
-  ASSERT_EQ(kLatency, view.GetLatency());
-  ASSERT_EQ(kTimeout, view.GetTimeout());
+  ASSERT_EQ(std::future_status::ready, request.wait_for(std::chrono::seconds(1)));
 }
 
 // b/260920739

@@ -67,13 +67,6 @@ flag {
 }
 
 flag {
-    name: "le_audio_dev_type_detection_fix"
-    namespace: "bluetooth"
-    description: "Better LE Audio devices detection"
-    bug: "319511584"
-}
-
-flag {
     name: "metadata_api_inactive_audio_device_upon_connection"
     is_exported: true
     namespace: "bluetooth"
@@ -320,6 +313,16 @@ flag {
 }
 
 flag {
+    name: "leaudio_call_start_scan_directly"
+    namespace: "bluetooth"
+    description: "Calling the framework is working only when we are expecting IPC. This will call the underlying implementation directly"
+    bug: "348562830"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
     name: "leaudio_no_context_validate_streaming_request"
     namespace: "bluetooth"
     description: "Request streaming would be send without available cotext validation"
@@ -334,16 +337,6 @@ flag {
     namespace: "bluetooth"
     description: "Do not post on main looper when starting le_audio"
     bug: "341385684"
-    metadata {
-        purpose: PURPOSE_BUGFIX
-    }
-}
-
-flag {
-    name: "leaudio_broadcast_stop_on_streaming_request"
-    namespace: "bluetooth"
-    description: "Stop instead of pause on unicast stream request"
-    bug: "336740254"
     metadata {
         purpose: PURPOSE_BUGFIX
     }

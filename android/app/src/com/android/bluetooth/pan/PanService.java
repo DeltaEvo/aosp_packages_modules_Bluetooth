@@ -57,6 +57,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Provides Bluetooth Pan Device profile, as a service in the Bluetooth application. */
 public class PanService extends ProfileService {
@@ -65,7 +66,8 @@ public class PanService extends ProfileService {
 
     private static final int BLUETOOTH_MAX_PAN_CONNECTIONS = 5;
 
-    @VisibleForTesting HashMap<BluetoothDevice, BluetoothPanDevice> mPanDevices;
+    @VisibleForTesting ConcurrentHashMap<BluetoothDevice, BluetoothPanDevice> mPanDevices;
+
     private int mMaxPanDevices;
     private String mPanIfName;
     @VisibleForTesting boolean mIsTethering = false;
@@ -151,7 +153,7 @@ public class PanService extends ProfileService {
                         "PanNativeInterface cannot be null when PanService starts");
 
         mBluetoothTetheringCallbacks = new HashMap<>();
-        mPanDevices = new HashMap<BluetoothDevice, BluetoothPanDevice>();
+        mPanDevices = new ConcurrentHashMap<BluetoothDevice, BluetoothPanDevice>();
         try {
             mMaxPanDevices =
                     getResources()
@@ -693,7 +695,6 @@ public class PanService extends ProfileService {
             }
         } else if (mStarted) {
             // PANU Role = reverse Tether
-
             Log.d(
                     TAG,
                     "handlePanDeviceStateChange LOCAL_PANU_ROLE:REMOTE_NAP_ROLE state = "
@@ -713,7 +714,6 @@ public class PanService extends ProfileService {
                 mPanDevices.remove(device);
             }
         }
-
         if (state == BluetoothProfile.STATE_CONNECTED) {
             MetricsLogger.logProfileConnectionEvent(BluetoothMetricsProto.ProfileId.PAN);
         }

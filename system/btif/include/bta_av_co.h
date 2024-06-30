@@ -346,6 +346,13 @@ class BtaAvCo {
   int GetSourceEncoderEffectiveFrameSize();
 
   /**
+   * Get the Source encoder preferred encoding interval.
+   *
+   * @return the preferred encoding interval for the current codec
+   */
+  int GetSourceEncoderPreferredIntervalUs();
+
+  /**
    * Report the source codec state for a peer
    *
    * @param p_peer the peer to report

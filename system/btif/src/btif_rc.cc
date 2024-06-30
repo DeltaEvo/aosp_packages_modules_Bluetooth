@@ -472,10 +472,8 @@ void initialize_device(btif_rc_device_cb_t* p_dev) {
   p_dev->peer_tg_features = 0;
   p_dev->launch_cmd_pending = 0;
 
-  // Leaving the value of the default constructor for the lbllock mutex is fine
-  // but we still need to clear out the transaction label set
-  memset(&p_dev->transaction_set.transaction, 0,
-         sizeof(p_dev->transaction_set.transaction));
+  // Reset the transaction set for this device. If this initialize_device() call
+  // is made due to a disconnect event, this cancels any pending timers too.
   init_all_transactions(p_dev);
 }
 
@@ -929,7 +927,8 @@ void handle_rc_disconnect(tBTA_AV_RC_CLOSE* p_rc_close) {
   }
 
   // We'll re-initialize the device state back to what it looked like before
-  // the connection
+  // the connection. This will free ongoing transaction labels and clear any
+  // running label timers
   initialize_device(p_dev);
 }
 
@@ -5365,7 +5364,11 @@ static void initialize_transaction(btif_rc_device_cb_t* p_dev, uint8_t lbl) {
   rc_transaction_set_t* transaction_set = &(p_dev->transaction_set);
   std::unique_lock<std::recursive_mutex> lock(transaction_set->label_lock);
   if (lbl < MAX_TRANSACTIONS_PER_SESSION) {
+    log::verbose("initialize transaction, dev={}, label={}", p_dev->rc_addr,
+                 lbl);
     if (alarm_is_scheduled(transaction_set->transaction[lbl].timer)) {
+      log::warn("clearing pending timer event, dev={}, label={}",
+                p_dev->rc_addr, lbl);
       clear_cmd_timeout(p_dev, lbl);
     }
     transaction_set->transaction[lbl] = {
@@ -5373,6 +5376,7 @@ static void initialize_transaction(btif_rc_device_cb_t* p_dev, uint8_t lbl) {
         .label = lbl,
         .context =
             {
+                .rc_addr = RawAddress::kEmpty,
                 .label = MAX_LABEL,
                 .opcode = AVRC_OP_INVALID,
                 .command = {},
@@ -5447,7 +5451,8 @@ static bt_status_t get_transaction(btif_rc_device_cb_t* p_dev,
       transaction_set->transaction[i].context = context;
       transaction_set->transaction[i].in_use = true;
       *ptransaction = &(transaction_set->transaction[i]);
-      log::verbose("Assigned transaction={}", dump_transaction(*ptransaction));
+      log::verbose("Assigned transaction, dev={}, transaction={}",
+                   p_dev->rc_addr, dump_transaction(*ptransaction));
       return BT_STATUS_SUCCESS;
     }
   }
@@ -5495,11 +5500,10 @@ static void start_transaction_timer(btif_rc_device_cb_t* p_dev, uint8_t label,
  * Returns          bt_status_t
  ******************************************************************************/
 void release_transaction(btif_rc_device_cb_t* p_dev, uint8_t lbl) {
-  log::verbose(
-      "p_dev={}, label={}",
-      p_dev == NULL ? "null" : ADDRESS_TO_LOGGABLE_CSTR(p_dev->rc_addr), lbl);
-
-  if (p_dev == nullptr) return;
+  if (p_dev == nullptr) {
+    log::warn("Failed to release transaction, dev=null, label={}", lbl);
+    return;
+  }
   rc_transaction_set_t* transaction_set = &(p_dev->transaction_set);
   std::unique_lock<std::recursive_mutex> lock(transaction_set->label_lock);
 
@@ -5507,7 +5511,11 @@ void release_transaction(btif_rc_device_cb_t* p_dev, uint8_t lbl) {
 
   /* If the transaction is in use... */
   if (transaction != NULL) {
+    log::verbose("Released transaction, dev={}, label={}", p_dev->rc_addr, lbl);
     initialize_transaction(p_dev, lbl);
+  } else {
+    log::warn("Failed to release transaction, could not find dev={}, label={}",
+              p_dev->rc_addr, lbl);
   }
 }
 

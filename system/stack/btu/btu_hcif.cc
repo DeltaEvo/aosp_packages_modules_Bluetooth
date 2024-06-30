@@ -994,7 +994,6 @@ static void btu_hcif_hdl_command_complete(uint16_t opcode, uint8_t* p,
     case HCI_BLE_READ_RESOLVABLE_ADDR_LOCAL:
     case HCI_BLE_SET_ADDR_RESOLUTION_ENABLE:
     case HCI_BLE_SET_RAND_PRIV_ADDR_TIMOUT:
-    case HCI_CHANGE_LOCAL_NAME:
     case HCI_WRITE_CLASS_OF_DEVICE:
     case HCI_WRITE_DEF_POLICY_SETTINGS:
     case HCI_WRITE_EXT_INQ_RESPONSE:

@@ -30,7 +30,7 @@
 
 #define LOG_TAG "bt_btif_storage"
 
-#include "btif_storage.h"
+#include "btif/include/btif_storage.h"
 
 #include <alloca.h>
 #include <bluetooth/log.h>
@@ -41,13 +41,12 @@
 #include <unordered_set>
 #include <vector>
 
+#include "btif/include/btif_api.h"
+#include "btif/include/btif_config.h"
+#include "btif/include/btif_util.h"
+#include "btif/include/core_callbacks.h"
 #include "btif/include/stack_manager_t.h"
-#include "btif_api.h"
-#include "btif_config.h"
-#include "btif_storage.h"
-#include "btif_util.h"
 #include "common/init_flags.h"
-#include "core_callbacks.h"
 #include "hci/controller_interface.h"
 #include "internal_include/bt_target.h"
 #include "main/shim/entry.h"
@@ -127,7 +126,7 @@ static bool prop2cfg(const RawAddress* remote_bd_addr, bt_property_t* prop) {
   }
 
   char value[1024];
-  if (prop->len <= 0 || prop->len > (int)sizeof(value) - 1) {
+  if (prop->len <= 0 || prop->len > static_cast<int>(sizeof(value)) - 1) {
     log::warn(
         "Unable to save property to configuration file type:{},  len:{} is "
         "invalid",
@@ -136,11 +135,12 @@ static bool prop2cfg(const RawAddress* remote_bd_addr, bt_property_t* prop) {
   }
   switch (prop->type) {
     case BT_PROPERTY_REMOTE_DEVICE_TIMESTAMP:
-      btif_config_set_int(bdstr, BTIF_STORAGE_KEY_TIMESTAMP, (int)time(NULL));
+      btif_config_set_int(bdstr, BTIF_STORAGE_KEY_TIMESTAMP,
+                          static_cast<int>(time(NULL)));
       break;
     case BT_PROPERTY_BDNAME: {
       int name_length = prop->len > BD_NAME_LEN ? BD_NAME_LEN : prop->len;
-      strncpy(value, (char*)prop->val, name_length);
+      strncpy(value, reinterpret_cast<char*>(prop->val), name_length);
       value[name_length] = '\0';
       if (remote_bd_addr) {
         btif_config_set_str(bdstr, BTIF_STORAGE_KEY_NAME, value);
@@ -151,23 +151,22 @@ static bool prop2cfg(const RawAddress* remote_bd_addr, bt_property_t* prop) {
       break;
     }
     case BT_PROPERTY_REMOTE_FRIENDLY_NAME:
-      strncpy(value, (char*)prop->val, prop->len);
+      strncpy(value, reinterpret_cast<char*>(prop->val), prop->len);
       value[prop->len] = '\0';
       btif_config_set_str(bdstr, BTIF_STORAGE_KEY_ALIAS, value);
       break;
-    case BT_PROPERTY_ADAPTER_SCAN_MODE:
-      btif_config_set_int(BTIF_STORAGE_SECTION_ADAPTER,
-                          BTIF_STORAGE_KEY_SCANMODE, *(int*)prop->val);
-      break;
     case BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT:
       btif_config_set_int(BTIF_STORAGE_SECTION_ADAPTER,
-                          BTIF_STORAGE_KEY_DISC_TIMEOUT, *(int*)prop->val);
+                          BTIF_STORAGE_KEY_DISC_TIMEOUT,
+                          *reinterpret_cast<int*>(prop->val));
       break;
     case BT_PROPERTY_CLASS_OF_DEVICE:
-      btif_config_set_int(bdstr, BTIF_STORAGE_KEY_DEV_CLASS, *(int*)prop->val);
+      btif_config_set_int(bdstr, BTIF_STORAGE_KEY_DEV_CLASS,
+                          *reinterpret_cast<int*>(prop->val));
       break;
     case BT_PROPERTY_TYPE_OF_DEVICE:
-      btif_config_set_int(bdstr, BTIF_STORAGE_KEY_DEV_TYPE, *(int*)prop->val);
+      btif_config_set_int(bdstr, BTIF_STORAGE_KEY_DEV_TYPE,
+                          *reinterpret_cast<int*>(prop->val));
       break;
     case BT_PROPERTY_UUIDS: {
       std::string val;
@@ -179,7 +178,8 @@ static bool prop2cfg(const RawAddress* remote_bd_addr, bt_property_t* prop) {
       break;
     }
     case BT_PROPERTY_REMOTE_VERSION_INFO: {
-      bt_remote_version_t* info = (bt_remote_version_t*)prop->val;
+      bt_remote_version_t* info =
+          reinterpret_cast<bt_remote_version_t*>(prop->val);
 
       if (!info) return false;
 
@@ -191,11 +191,12 @@ static bool prop2cfg(const RawAddress* remote_bd_addr, bt_property_t* prop) {
                           info->sub_ver);
     } break;
     case BT_PROPERTY_APPEARANCE: {
-      int val = *(uint16_t*)prop->val;
+      int val = *reinterpret_cast<uint16_t*>(prop->val);
       btif_config_set_int(bdstr, BTIF_STORAGE_KEY_APPEARANCE, val);
     } break;
     case BT_PROPERTY_VENDOR_PRODUCT_INFO: {
-      bt_vendor_product_info_t* info = (bt_vendor_product_info_t*)prop->val;
+      bt_vendor_product_info_t* info =
+          reinterpret_cast<bt_vendor_product_info_t*>(prop->val);
       if (!info) return false;
 
       btif_config_set_int(bdstr, BTIF_STORAGE_KEY_VENDOR_ID_SOURCE,
@@ -205,17 +206,17 @@ static bool prop2cfg(const RawAddress* remote_bd_addr, bt_property_t* prop) {
       btif_config_set_int(bdstr, BTIF_STORAGE_KEY_VERSION, info->version);
     } break;
     case BT_PROPERTY_REMOTE_MODEL_NUM: {
-      strncpy(value, (char*)prop->val, prop->len);
+      strncpy(value, reinterpret_cast<char*>(prop->val), prop->len);
       value[prop->len] = '\0';
       btif_config_set_str(bdstr, BTIF_STORAGE_KEY_DIS_MODEL_NUM, value);
     } break;
     case BT_PROPERTY_REMOTE_SECURE_CONNECTIONS_SUPPORTED:
       btif_config_set_int(bdstr, BTIF_STORAGE_KEY_SECURE_CONNECTIONS_SUPPORTED,
-                          *(uint8_t*)prop->val);
+                          *reinterpret_cast<uint8_t*>(prop->val));
       break;
     case BT_PROPERTY_REMOTE_MAX_SESSION_KEY_SIZE:
       btif_config_set_int(bdstr, BTIF_STORAGE_KEY_MAX_SESSION_KEY_SIZE,
-                          *(uint8_t*)prop->val);
+                          *reinterpret_cast<uint8_t*>(prop->val));
       break;
     default:
       log::error("Unknown prop type:{}", prop->type);
@@ -238,22 +239,22 @@ static bool cfg2prop(const RawAddress* remote_bd_addr, bt_property_t* prop) {
   bool ret = false;
   switch (prop->type) {
     case BT_PROPERTY_REMOTE_DEVICE_TIMESTAMP:
-      if (prop->len >= (int)sizeof(int))
+      if (prop->len >= static_cast<int>(sizeof(int)))
         ret = btif_config_get_int(bdstr, BTIF_STORAGE_KEY_TIMESTAMP,
-                                  (int*)prop->val);
+                                  reinterpret_cast<int*>(prop->val));
       break;
     case BT_PROPERTY_BDNAME: {
       int len = prop->len;
       if (remote_bd_addr)
         ret = btif_config_get_str(bdstr, BTIF_STORAGE_KEY_NAME,
-                                  (char*)prop->val, &len);
+                                  reinterpret_cast<char*>(prop->val), &len);
       else
-        ret =
-            btif_config_get_str(BTIF_STORAGE_SECTION_ADAPTER,
-                                BTIF_STORAGE_KEY_NAME, (char*)prop->val, &len);
-      if (ret && len && len <= prop->len)
+        ret = btif_config_get_str(BTIF_STORAGE_SECTION_ADAPTER,
+                                  BTIF_STORAGE_KEY_NAME,
+                                  reinterpret_cast<char*>(prop->val), &len);
+      if (ret && len && len <= prop->len) {
         prop->len = len - 1;
-      else {
+      } else {
         prop->len = 0;
         ret = false;
       }
@@ -261,37 +262,31 @@ static bool cfg2prop(const RawAddress* remote_bd_addr, bt_property_t* prop) {
     }
     case BT_PROPERTY_REMOTE_FRIENDLY_NAME: {
       int len = prop->len;
-      ret = btif_config_get_str(bdstr, BTIF_STORAGE_KEY_ALIAS, (char*)prop->val,
-                                &len);
-      if (ret && len && len <= prop->len)
+      ret = btif_config_get_str(bdstr, BTIF_STORAGE_KEY_ALIAS,
+                                reinterpret_cast<char*>(prop->val), &len);
+      if (ret && len && len <= prop->len) {
         prop->len = len - 1;
-      else {
+      } else {
         prop->len = 0;
         ret = false;
       }
       break;
     }
-    case BT_PROPERTY_ADAPTER_SCAN_MODE:
-      if (prop->len >= (int)sizeof(int))
-        ret = btif_config_get_int(BTIF_STORAGE_SECTION_ADAPTER,
-                                  BTIF_STORAGE_KEY_SCANMODE, (int*)prop->val);
-      break;
-
     case BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT:
-      if (prop->len >= (int)sizeof(int))
-        ret =
-            btif_config_get_int(BTIF_STORAGE_SECTION_ADAPTER,
-                                BTIF_STORAGE_KEY_DISC_TIMEOUT, (int*)prop->val);
+      if (prop->len >= static_cast<int>(sizeof(int)))
+        ret = btif_config_get_int(BTIF_STORAGE_SECTION_ADAPTER,
+                                  BTIF_STORAGE_KEY_DISC_TIMEOUT,
+                                  reinterpret_cast<int*>(prop->val));
       break;
     case BT_PROPERTY_CLASS_OF_DEVICE:
-      if (prop->len >= (int)sizeof(int))
+      if (prop->len >= static_cast<int>(sizeof(int)))
         ret = btif_config_get_int(bdstr, BTIF_STORAGE_KEY_DEV_CLASS,
-                                  (int*)prop->val);
+                                  reinterpret_cast<int*>(prop->val));
       break;
     case BT_PROPERTY_TYPE_OF_DEVICE:
-      if (prop->len >= (int)sizeof(int))
+      if (prop->len >= static_cast<int>(sizeof(int)))
         ret = btif_config_get_int(bdstr, BTIF_STORAGE_KEY_DEV_TYPE,
-                                  (int*)prop->val);
+                                  reinterpret_cast<int*>(prop->val));
       break;
     case BT_PROPERTY_UUIDS: {
       char value[1280];
@@ -310,9 +305,10 @@ static bool cfg2prop(const RawAddress* remote_bd_addr, bt_property_t* prop) {
     } break;
 
     case BT_PROPERTY_REMOTE_VERSION_INFO: {
-      bt_remote_version_t* info = (bt_remote_version_t*)prop->val;
+      bt_remote_version_t* info =
+          reinterpret_cast<bt_remote_version_t*>(prop->val);
 
-      if (prop->len >= (int)sizeof(bt_remote_version_t)) {
+      if (prop->len >= static_cast<int>(sizeof(bt_remote_version_t))) {
         ret = btif_config_get_int(bdstr, BTIF_STORAGE_KEY_REMOTE_VER_MFCT,
                                   &info->manufacturer);
 
@@ -329,32 +325,33 @@ static bool cfg2prop(const RawAddress* remote_bd_addr, bt_property_t* prop) {
     case BT_PROPERTY_APPEARANCE: {
       int val;
 
-      if (prop->len >= (int)sizeof(uint16_t)) {
+      if (prop->len >= static_cast<int>(sizeof(uint16_t))) {
         ret = btif_config_get_int(bdstr, BTIF_STORAGE_KEY_APPEARANCE, &val);
-        *(uint16_t*)prop->val = (uint16_t)val;
+        *reinterpret_cast<uint16_t*>(prop->val) = (uint16_t)val;
       }
     } break;
 
     case BT_PROPERTY_VENDOR_PRODUCT_INFO: {
-      bt_vendor_product_info_t* info = (bt_vendor_product_info_t*)prop->val;
+      bt_vendor_product_info_t* info =
+          reinterpret_cast<bt_vendor_product_info_t*>(prop->val);
       int val;
 
-      if (prop->len >= (int)sizeof(bt_vendor_product_info_t)) {
+      if (prop->len >= static_cast<int>(sizeof(bt_vendor_product_info_t))) {
         ret =
             btif_config_get_int(bdstr, BTIF_STORAGE_KEY_VENDOR_ID_SOURCE, &val);
-        info->vendor_id_src = (uint8_t)val;
+        info->vendor_id_src = static_cast<uint8_t>(val);
 
         if (ret) {
           ret = btif_config_get_int(bdstr, BTIF_STORAGE_KEY_VENDOR_ID, &val);
-          info->vendor_id = (uint16_t)val;
+          info->vendor_id = static_cast<uint16_t>(val);
         }
         if (ret) {
           ret = btif_config_get_int(bdstr, BTIF_STORAGE_KEY_PRODUCT_ID, &val);
-          info->product_id = (uint16_t)val;
+          info->product_id = static_cast<uint16_t>(val);
         }
         if (ret) {
           ret = btif_config_get_int(bdstr, BTIF_STORAGE_KEY_VERSION, &val);
-          info->version = (uint16_t)val;
+          info->version = static_cast<uint16_t>(val);
         }
       }
     } break;
@@ -362,10 +359,10 @@ static bool cfg2prop(const RawAddress* remote_bd_addr, bt_property_t* prop) {
     case BT_PROPERTY_REMOTE_MODEL_NUM: {
       int len = prop->len;
       ret = btif_config_get_str(bdstr, BTIF_STORAGE_KEY_DIS_MODEL_NUM,
-                                (char*)prop->val, &len);
-      if (ret && len && len <= prop->len)
+                                reinterpret_cast<char*>(prop->val), &len);
+      if (ret && len && len <= prop->len) {
         prop->len = len - 1;
-      else {
+      } else {
         prop->len = 0;
         ret = false;
       }
@@ -374,29 +371,29 @@ static bool cfg2prop(const RawAddress* remote_bd_addr, bt_property_t* prop) {
     case BT_PROPERTY_REMOTE_ADDR_TYPE: {
       int val;
 
-      if (prop->len >= (int)sizeof(uint8_t)) {
+      if (prop->len >= static_cast<int>(sizeof(uint8_t))) {
         ret = btif_config_get_int(bdstr, BTIF_STORAGE_KEY_ADDR_TYPE, &val);
-        *(uint8_t*)prop->val = (uint8_t)val;
+        *reinterpret_cast<uint8_t*>(prop->val) = (uint8_t)val;
       }
     } break;
 
     case BT_PROPERTY_REMOTE_SECURE_CONNECTIONS_SUPPORTED: {
       int val;
 
-      if (prop->len >= (int)sizeof(uint8_t)) {
+      if (prop->len >= static_cast<int>(sizeof(uint8_t))) {
         ret = btif_config_get_int(
             bdstr, BTIF_STORAGE_KEY_SECURE_CONNECTIONS_SUPPORTED, &val);
-        *(uint8_t*)prop->val = (uint8_t)val;
+        *reinterpret_cast<uint8_t*>(prop->val) = (uint8_t)val;
       }
     } break;
 
     case BT_PROPERTY_REMOTE_MAX_SESSION_KEY_SIZE: {
       int val;
 
-      if (prop->len >= (int)sizeof(uint8_t)) {
+      if (prop->len >= static_cast<int>(sizeof(uint8_t))) {
         ret = btif_config_get_int(bdstr, BTIF_STORAGE_KEY_MAX_SESSION_KEY_SIZE,
                                   &val);
-        *(uint8_t*)prop->val = (uint8_t)val;
+        *reinterpret_cast<uint8_t*>(prop->val) = (uint8_t)val;
       }
     } break;
 
@@ -513,7 +510,8 @@ static void btif_read_le_key(const uint8_t key_type, const size_t key_len,
   tBTA_LE_KEY_VALUE key;
   memset(&key, 0, sizeof(key));
 
-  if (btif_storage_get_ble_bonding_key(bd_addr, key_type, (uint8_t*)&key,
+  if (btif_storage_get_ble_bonding_key(bd_addr, key_type,
+                                       reinterpret_cast<uint8_t*>(&key),
                                        key_len) == BT_STATUS_SUCCESS) {
     if (add_key) {
       if (!*device_added) {
@@ -597,7 +595,7 @@ bt_status_t btif_storage_get_adapter_prop(bt_property_type_t type, void* buf,
 bt_status_t btif_storage_get_adapter_property(bt_property_t* property) {
   /* Special handling for adapter address and BONDED_DEVICES */
   if (property->type == BT_PROPERTY_BDADDR) {
-    RawAddress* bd_addr = (RawAddress*)property->val;
+    RawAddress* bd_addr = reinterpret_cast<RawAddress*>(property->val);
     /* Fetch the local BD ADDR */
     if (bluetooth::shim::GetController() == nullptr) {
       log::error("Controller not ready! Unable to return Bluetooth Address");
@@ -813,10 +811,10 @@ bt_status_t btif_storage_add_bonded_device(RawAddress* remote_bd_addr,
                                            LinkKey link_key, uint8_t key_type,
                                            uint8_t pin_length) {
   std::string bdstr = remote_bd_addr->ToString();
-  bool ret =
-      btif_config_set_int(bdstr, BTIF_STORAGE_KEY_LINK_KEY_TYPE, (int)key_type);
-  ret &=
-      btif_config_set_int(bdstr, BTIF_STORAGE_KEY_PIN_LENGTH, (int)pin_length);
+  bool ret = btif_config_set_int(bdstr, BTIF_STORAGE_KEY_LINK_KEY_TYPE,
+                                 static_cast<int>(key_type));
+  ret &= btif_config_set_int(bdstr, BTIF_STORAGE_KEY_PIN_LENGTH,
+                             static_cast<int>(pin_length));
   ret &= btif_config_set_bin(bdstr, BTIF_STORAGE_KEY_LINK_KEY, link_key.data(),
                              link_key.size());
 
@@ -869,7 +867,7 @@ static void remove_devices_with_sample_ltk() {
     memset(&key, 0, sizeof(key));
 
     if (btif_storage_get_ble_bonding_key(
-            bd_addr, BTM_LE_KEY_PENC, (uint8_t*)&key,
+            bd_addr, BTM_LE_KEY_PENC, reinterpret_cast<uint8_t*>(&key),
             sizeof(tBTM_LE_PENC_KEYS)) == BT_STATUS_SUCCESS) {
       if (is_sample_ltk(key.penc_key.ltk)) {
         bad_ltk.push_back(bd_addr);
@@ -909,7 +907,8 @@ void btif_storage_load_le_devices(void) {
     // RawAddress* p_remote_addr;
     tBTA_LE_KEY_VALUE key = {};
     if (btif_storage_get_ble_bonding_key(
-            bonded_devices.devices[i], BTM_LE_KEY_PID, (uint8_t*)&key,
+            bonded_devices.devices[i], BTM_LE_KEY_PID,
+            reinterpret_cast<uint8_t*>(&key),
             sizeof(tBTM_LE_PID_KEYS)) == BT_STATUS_SUCCESS) {
       if (bonded_devices.devices[i] != key.pid_key.identity_addr) {
         log::info("Found device with a known identity address {} {}",
@@ -1004,17 +1003,6 @@ bt_status_t btif_storage_load_bonded_devices(void) {
                                   &adapter_props[num_props]);
     num_props++;
 
-    /* SCAN_MODE */
-    /* TODO: At the time of BT on, always report the scan mode as 0 irrespective
-     of the scan_mode during the previous enable cycle.
-     This needs to be re-visited as part of the app/stack enable sequence
-     synchronization */
-    mode = BT_SCAN_MODE_NONE;
-    adapter_props[num_props].type = BT_PROPERTY_ADAPTER_SCAN_MODE;
-    adapter_props[num_props].len = sizeof(mode);
-    adapter_props[num_props].val = &mode;
-    num_props++;
-
     /* DISC_TIMEOUT */
     btif_storage_get_adapter_prop(BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT,
                                   &disc_timeout, sizeof(disc_timeout),
@@ -1022,8 +1010,8 @@ bt_status_t btif_storage_load_bonded_devices(void) {
     num_props++;
 
     /* BONDED_DEVICES */
-    RawAddress* devices_list = (RawAddress*)osi_malloc(
-        sizeof(RawAddress) * bonded_devices.num_devices);
+    RawAddress* devices_list = reinterpret_cast<RawAddress*>(
+        osi_malloc(sizeof(RawAddress) * bonded_devices.num_devices));
     adapter_props[num_props].type = BT_PROPERTY_ADAPTER_BONDED_DEVICES;
     adapter_props[num_props].len =
         bonded_devices.num_devices * sizeof(RawAddress);
@@ -1304,7 +1292,8 @@ void btif_storage_invoke_addr_type_update(const RawAddress& remote_bd_addr,
                                           const tBLE_ADDR_TYPE& addr_type) {
   bt_property_t prop;
   prop.type = BT_PROPERTY_REMOTE_ADDR_TYPE;
-  prop.val = (tBLE_ADDR_TYPE*)&addr_type;
+  prop.val = const_cast<tBLE_ADDR_TYPE*>(
+      reinterpret_cast<const tBLE_ADDR_TYPE*>(&addr_type));
   prop.len = sizeof(tBLE_ADDR_TYPE);
   GetInterfaceToProfiles()->events->invoke_remote_device_properties_cb(
       BT_STATUS_SUCCESS, remote_bd_addr, 1, &prop);
@@ -1313,7 +1302,8 @@ void btif_storage_invoke_addr_type_update(const RawAddress& remote_bd_addr,
 bt_status_t btif_storage_set_remote_addr_type(const RawAddress* remote_bd_addr,
                                               tBLE_ADDR_TYPE addr_type) {
   bool ret = btif_config_set_int(remote_bd_addr->ToString(),
-                                 BTIF_STORAGE_KEY_ADDR_TYPE, (int)addr_type);
+                                 BTIF_STORAGE_KEY_ADDR_TYPE,
+                                 static_cast<int>(addr_type));
 
 #if TARGET_FLOSS
   // Floss needs to get address type for diagnosis API.

@@ -43,6 +43,7 @@ namespace bluetooth {
 namespace hci {
 
 constexpr uint16_t kQualcommDebugHandle = 0xedc;
+constexpr uint16_t kSamsungDebugHandle = 0xeef;
 
 using acl_manager::AclConnection;
 using common::Bind;
@@ -161,7 +162,7 @@ struct AclManager::impl {
       return;
     }
     uint16_t handle = packet->GetHandle();
-    if (handle == kQualcommDebugHandle) return;
+    if (handle == kQualcommDebugHandle || handle == kSamsungDebugHandle) return;
     if (classic_impl_->send_packet_upward(
             handle, [&packet](struct acl_manager::assembler* assembler) { assembler->on_incoming_packet(*packet); }))
       return;

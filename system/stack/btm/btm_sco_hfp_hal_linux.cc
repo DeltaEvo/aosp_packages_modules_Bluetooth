@@ -136,7 +136,7 @@ constexpr uint16_t HCI_DEV_NONE = 0xffff;
 int btsocket_open_mgmt(uint16_t hci) {
   int fd = socket(PF_BLUETOOTH, SOCK_RAW | SOCK_NONBLOCK, BTPROTO_HCI);
   if (fd < 0) {
-    log::debug("Failed to open BT socket.");
+    log::debug("Failed to open BT socket, hci: %u", hci);
     return -errno;
   }
 
@@ -364,7 +364,7 @@ bool enable_offload(bool enable) {
 
 static bool get_single_codec(int codec, bt_codec** out) {
   for (cached_codec_info& c : cached_codecs) {
-    if (c.inner.codec == codec) {
+    if (c.inner.codec == static_cast<uint64_t>(codec)) {
       *out = &c.inner;
       return true;
     }
@@ -376,28 +376,30 @@ static bool get_single_codec(int codec, bt_codec** out) {
 constexpr uint8_t OFFLOAD_DATAPATH = 0x01;
 
 // Notify the codec datapath to lower layer for offload mode
-void set_codec_datapath(int codec_uuid) {
+void set_codec_datapath(tBTA_AG_UUID_CODEC codec_uuid) {
   bool found;
   bt_codec* codec;
   uint8_t codec_id;
 
-  if (codec_uuid == UUID_CODEC_LC3 && get_offload_enabled()) {
+  if (codec_uuid == tBTA_AG_UUID_CODEC::UUID_CODEC_LC3 &&
+      get_offload_enabled()) {
     log::error("Offload path for LC3 is not implemented.");
     return;
   }
 
   switch (codec_uuid) {
-    case UUID_CODEC_CVSD:
+    case tBTA_AG_UUID_CODEC::UUID_CODEC_CVSD:
       codec_id = codec::CVSD;
       break;
-    case UUID_CODEC_MSBC:
+    case tBTA_AG_UUID_CODEC::UUID_CODEC_MSBC:
       codec_id = get_offload_enabled() ? codec::MSBC : codec::MSBC_TRANSPARENT;
       break;
-    case UUID_CODEC_LC3:
+    case tBTA_AG_UUID_CODEC::UUID_CODEC_LC3:
       codec_id = get_offload_enabled() ? codec::LC3 : codec::MSBC_TRANSPARENT;
       break;
     default:
-      log::warn("Unsupported codec ({}). Won't set datapath.", codec_uuid);
+      log::warn("Unsupported codec ({}). Won't set datapath.",
+                bta_ag_uuid_codec_text(codec_uuid));
       return;
   }
 
@@ -405,26 +407,27 @@ void set_codec_datapath(int codec_uuid) {
   if (!found) {
     log::error(
         "Failed to find codec config for codec ({}). Won't set datapath.",
-        codec_uuid);
+        bta_ag_uuid_codec_text(codec_uuid));
     return;
   }
 
-  log::info("Configuring datapath for codec ({})", codec_uuid);
+  log::info("Configuring datapath for codec ({})",
+            bta_ag_uuid_codec_text(codec_uuid));
   if (codec->codec == codec::MSBC && !get_offload_enabled()) {
     log::error(
         "Tried to configure offload data path for format ({}) with offload "
         "disabled. Won't set datapath.",
-        codec_uuid);
+        bta_ag_uuid_codec_text(codec_uuid));
     return;
   }
 
   if (get_offload_enabled()) {
     std::vector<uint8_t> data;
     switch (codec_uuid) {
-      case UUID_CODEC_CVSD:
+      case tBTA_AG_UUID_CODEC::UUID_CODEC_CVSD:
         data = {0x00};
         break;
-      case UUID_CODEC_MSBC:
+      case tBTA_AG_UUID_CODEC::UUID_CODEC_MSBC:
         data = {0x01};
         break;
       default:
@@ -440,7 +443,7 @@ void set_codec_datapath(int codec_uuid) {
 
 size_t get_packet_size(int codec) {
   for (const cached_codec_info& c : cached_codecs) {
-    if (c.inner.codec == codec) {
+    if (c.inner.codec == static_cast<uint64_t>(codec)) {
       return c.pkt_size;
     }
   }

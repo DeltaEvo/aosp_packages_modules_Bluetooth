@@ -103,6 +103,30 @@ void Link::OnConnectionUpdate(
   }
 }
 
+void Link::OnParameterUpdateRequest(
+    uint16_t interval_min, uint16_t interval_max, uint16_t latency, uint16_t supervision_timeout) {
+  log::info(
+      "interval_min {:x} interval_max {:x} latency {:x} supervision_timeout {:x}",
+      interval_min,
+      interval_max,
+      latency,
+      supervision_timeout);
+  hci::ErrorCode result = hci::ErrorCode::SUCCESS;
+  if (interval_max > update_request_interval_max_ || interval_min < update_request_interval_min_ ||
+      latency != update_request_latency_ ||
+      supervision_timeout != update_request_supervision_timeout_) {
+    log::info(
+        "Received connection update complete with different parameters that provided by the "
+        "Host");
+  }
+
+  if (!CheckConnectionParameters(interval_min, interval_max, latency, supervision_timeout)) {
+    // TODO: Reject
+  } else {
+    // TODO: Accept
+  }
+}
+
 void Link::OnDataLengthChange(uint16_t tx_octets, uint16_t tx_time, uint16_t rx_octets, uint16_t rx_time) {
   log::info(
       "tx_octets {:x} tx_time {:x} rx_octets {:x} rx_time {:x}",

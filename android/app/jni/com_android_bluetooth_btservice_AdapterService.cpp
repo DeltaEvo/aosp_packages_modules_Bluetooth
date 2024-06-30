@@ -1541,6 +1541,16 @@ static jboolean sspReplyNative(JNIEnv* env, jobject /* obj */,
   return (ret == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
+static jboolean setScanModeNative(JNIEnv* /* env */, jobject /* obj */,
+                                  jint mode) {
+  log::verbose("");
+
+  if (!sBluetoothInterface) return JNI_FALSE;
+
+  sBluetoothInterface->set_scan_mode((bt_scan_mode_t)mode);
+  return JNI_TRUE;
+}
+
 static jboolean setAdapterPropertyNative(JNIEnv* env, jobject /* obj */,
                                          jint type, jbyteArray value) {
   log::verbose("");
@@ -2144,6 +2154,7 @@ int register_com_android_bluetooth_btservice_AdapterService(JNIEnv* env) {
       {"cleanupNative", "()V", (void*)cleanupNative},
       {"enableNative", "()Z", (void*)enableNative},
       {"disableNative", "()Z", (void*)disableNative},
+      {"setScanModeNative", "(I)Z", (void*)setScanModeNative},
       {"setAdapterPropertyNative", "(I[B)Z", (void*)setAdapterPropertyNative},
       {"getAdapterPropertiesNative", "()Z", (void*)getAdapterPropertiesNative},
       {"getAdapterPropertyNative", "(I)Z", (void*)getAdapterPropertyNative},

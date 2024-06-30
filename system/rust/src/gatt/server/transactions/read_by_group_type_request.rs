@@ -8,7 +8,7 @@ use crate::{
         },
     },
     packets::{
-        AttAttributeDataBuilder, AttChild, AttErrorCode, AttErrorResponseBuilder, AttOpcode,
+        AttChild, AttErrorCode, AttErrorResponseBuilder, AttOpcode,
         AttReadByGroupTypeDataElementBuilder, AttReadByGroupTypeRequestView,
         AttReadByGroupTypeResponseBuilder, ParseError,
     },
@@ -74,7 +74,7 @@ pub async fn handle_read_by_group_type_request(
                         .expect("should never be None, since grouping UUID was validated earlier")
                         .handle
                         .into(),
-                    value: AttAttributeDataBuilder { _child_: value },
+                    value: value.into(),
                 }) {
                     break;
                 }
@@ -104,8 +104,8 @@ mod test {
                 test::test_att_db::TestAttDatabase,
             },
         },
-        packets::{AttAttributeDataChild, AttReadByGroupTypeRequestBuilder},
-        utils::packet::{build_att_data, build_view_or_crash},
+        packets::AttReadByGroupTypeRequestBuilder,
+        utils::packet::build_view_or_crash,
     };
 
     use super::*;
@@ -161,12 +161,12 @@ mod test {
                     AttReadByGroupTypeDataElementBuilder {
                         handle: AttHandle(3).into(),
                         end_group_handle: AttHandle(4).into(),
-                        value: build_att_data(AttAttributeDataChild::RawData([4, 5].into())),
+                        value: [4, 5].into(),
                     },
                     AttReadByGroupTypeDataElementBuilder {
                         handle: AttHandle(5).into(),
                         end_group_handle: AttHandle(5).into(),
-                        value: build_att_data(AttAttributeDataChild::RawData([6, 7].into())),
+                        value: [6, 7].into(),
                     },
                 ]
                 .into()
@@ -261,7 +261,7 @@ mod test {
                 data: [AttReadByGroupTypeDataElementBuilder {
                     handle: AttHandle(3).into(),
                     end_group_handle: AttHandle(3).into(),
-                    value: build_att_data(AttAttributeDataChild::RawData([1].into())),
+                    value: [1].into(),
                 },]
                 .into()
             }
@@ -310,7 +310,7 @@ mod test {
                 data: [AttReadByGroupTypeDataElementBuilder {
                     handle: AttHandle(3).into(),
                     end_group_handle: AttHandle(3).into(),
-                    value: build_att_data(AttAttributeDataChild::RawData([4, 5, 6].into()))
+                    value: [4, 5, 6].into()
                 },]
                 .into()
             }
@@ -360,7 +360,7 @@ mod test {
                 data: [AttReadByGroupTypeDataElementBuilder {
                     handle: AttHandle(3).into(),
                     end_group_handle: AttHandle(4).into(),
-                    value: build_att_data(AttAttributeDataChild::RawData([4, 5].into())),
+                    value: [4, 5].into(),
                 },]
                 .into()
             }

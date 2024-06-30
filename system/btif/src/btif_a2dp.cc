@@ -202,7 +202,7 @@ void btif_a2dp_on_offload_started(const RawAddress& peer_addr,
       // suspend is triggered for remote start. Disconnect only if SoC
       // returned failure for offload VSC
       log::error("peer {} offload start failed", peer_addr);
-      btif_av_src_disconnect_sink(peer_addr);
+      btif_av_source_disconnect(peer_addr);
     }
   }
   if (bluetooth::audio::a2dp::is_hal_enabled()) {

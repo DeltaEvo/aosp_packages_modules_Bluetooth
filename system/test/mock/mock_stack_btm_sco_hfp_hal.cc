@@ -117,7 +117,7 @@ void notify_sco_connection_change(RawAddress device, bool is_connected,
   test::mock::stack_btm_sco_hfp_hal::notify_sco_connection_change(
       device, is_connected, codec);
 }
-void set_codec_datapath(int coding_format) {
+void set_codec_datapath(tBTA_AG_UUID_CODEC coding_format) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_sco_hfp_hal::set_codec_datapath(coding_format);
 }

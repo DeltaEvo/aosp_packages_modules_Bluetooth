@@ -1001,6 +1001,11 @@ int BtaAvCo::GetSourceEncoderEffectiveFrameSize() {
       bta_av_legacy_state_.getCodecConfig());
 }
 
+int BtaAvCo::GetSourceEncoderPreferredIntervalUs() {
+  const tA2DP_ENCODER_INTERFACE* encoder = GetSourceEncoderInterface();
+  return encoder == nullptr ? 0 : encoder->get_encoder_interval_ms() * 1000;
+}
+
 bool BtaAvCo::ReportSourceCodecState(BtaAvCoPeer* p_peer) {
   btav_a2dp_codec_config_t codec_config = {
     .codec_type = BTAV_A2DP_CODEC_INDEX_SINK_MAX,
@@ -1684,6 +1689,10 @@ bool bta_av_co_set_codec_audio_config(
 
 int bta_av_co_get_encoder_effective_frame_size() {
   return bta_av_co_cb.GetSourceEncoderEffectiveFrameSize();
+}
+
+int bta_av_co_get_encoder_preferred_interval_us() {
+  return bta_av_co_cb.GetSourceEncoderPreferredIntervalUs();
 }
 
 btav_a2dp_scmst_info_t bta_av_co_get_scmst_info(

@@ -79,7 +79,7 @@ class HfpClientInterface {
     void UpdateAudioConfigToHal(const ::hfp::offload_config& config) override;
     void ConfirmStreamingRequest() override;
     void CancelStreamingRequest() override;
-    std::unordered_map<int, ::hfp::sco_config> GetHfpScoConfig();
+    std::unordered_map<tBTA_AG_UUID_CODEC, ::hfp::sco_config> GetHfpScoConfig();
   };
 
   // Get HFP software decoding client interface if it's not previously acquired

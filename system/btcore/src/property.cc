@@ -112,11 +112,6 @@ bt_property_t* property_new_rssi(int8_t rssi) {
   return property_new_((void*)&rssi, sizeof(int8_t), BT_PROPERTY_REMOTE_RSSI);
 }
 
-bt_property_t* property_new_scan_mode(bt_scan_mode_t scan_mode) {
-  return property_new_((void*)&scan_mode, sizeof(bt_scan_mode_t),
-                       BT_PROPERTY_ADAPTER_SCAN_MODE);
-}
-
 bt_property_t* property_new_uuids(const Uuid* uuid, size_t count) {
   log::assert_that(uuid != NULL, "assert failed: uuid != NULL");
   return property_new_((void*)uuid, sizeof(Uuid) * count, BT_PROPERTY_UUIDS);
@@ -166,11 +161,6 @@ bool property_is_rssi(const bt_property_t* property) {
   return property->type == BT_PROPERTY_REMOTE_RSSI;
 }
 
-bool property_is_scan_mode(const bt_property_t* property) {
-  log::assert_that(property != NULL, "assert failed: property != NULL");
-  return property->type == BT_PROPERTY_ADAPTER_SCAN_MODE;
-}
-
 bool property_is_uuids(const bt_property_t* property) {
   log::assert_that(property != NULL, "assert failed: property != NULL");
   return property->type == BT_PROPERTY_UUIDS;
@@ -212,12 +202,6 @@ int8_t property_as_rssi(const bt_property_t* property) {
   log::assert_that(property_is_rssi(property),
                    "assert failed: property_is_rssi(property)");
   return *(const int8_t*)property->val;
-}
-
-bt_scan_mode_t property_as_scan_mode(const bt_property_t* property) {
-  log::assert_that(property_is_scan_mode(property),
-                   "assert failed: property_is_scan_mode(property)");
-  return *(const bt_scan_mode_t*)property->val;
 }
 
 const Uuid* property_as_uuids(const bt_property_t* property, size_t* count) {

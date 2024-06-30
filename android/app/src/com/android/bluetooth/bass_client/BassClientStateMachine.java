@@ -461,8 +461,8 @@ public class BassClientStateMachine extends StateMachine {
                 }
             }
 
-            if (broadcastId == BassConstants.INVALID_BROADCAST_ID || pbData == null) {
-                Log.w(TAG, "Invalid broadcast ID or public broadcast data");
+            if (broadcastId == BassConstants.INVALID_BROADCAST_ID) {
+                Log.w(TAG, "Invalid broadcast ID");
                 return false;
             }
 

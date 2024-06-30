@@ -27,6 +27,7 @@
 #include "stack/btm/btm_int_types.h"
 #include "stack/include/l2cap_controller_interface.h"
 #include "stack/include/l2cap_hci_link_interface.h"
+#include "stack/include/l2cap_module.h"
 #include "stack/include/l2cdefs.h"
 #include "stack/l2cap/l2c_int.h"
 #include "test/mock/mock_main_shim_entry.h"

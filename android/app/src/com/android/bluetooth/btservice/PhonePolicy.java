@@ -887,11 +887,6 @@ public class PhonePolicy implements AdapterService.BluetoothStateCallback {
             return;
         }
 
-        if (!Flags.autoConnectOnHfpWhenNoA2dpDevice()) {
-            debugLog("HFP auto connect is not enabled");
-            return;
-        }
-
         if (Flags.autoConnectOnMultipleHfpWhenNoA2dpDevice()) {
             final List<BluetoothDevice> mostRecentlyConnectedHfpDevices =
                     mDatabaseManager.getMostRecentlyActiveHfpDevices();

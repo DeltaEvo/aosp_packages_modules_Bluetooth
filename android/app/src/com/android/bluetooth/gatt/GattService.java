@@ -292,7 +292,7 @@ public class GattService extends ProfileService {
         sGattService = instance;
     }
 
-    TransitionalScanHelper getTransitionalScanHelper() {
+    public TransitionalScanHelper getTransitionalScanHelper() {
         return mTransitionalScanHelper;
     }
 
