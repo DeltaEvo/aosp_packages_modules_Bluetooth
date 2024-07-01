@@ -617,17 +617,6 @@ public class AdapterService extends Service {
     }
 
     @Override
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.INTERACT_ACROSS_USERS_FULL,
-                android.Manifest.permission.READ_DEVICE_CONFIG,
-            },
-            anyOf = {
-                android.Manifest.permission.INTERACT_ACROSS_USERS_FULL,
-                android.Manifest.permission.INTERACT_ACROSS_USERS,
-                android.Manifest.permission.CREATE_USERS,
-                android.Manifest.permission.MANAGE_USERS,
-            })
     public void onCreate() {
         super.onCreate();
         Log.d(TAG, "onCreate()");
@@ -4700,11 +4689,6 @@ public class AdapterService extends Service {
         return BluetoothAdapter.STATE_OFF;
     }
 
-    @RequiresPermission(
-            anyOf = {
-                android.Manifest.permission.INTERACT_ACROSS_USERS,
-                android.Manifest.permission.MANAGE_USERS,
-            })
     public synchronized void enable(boolean quietMode) {
         // Enforce the user restriction for disallowing Bluetooth if it was set.
         if (mUserManager.hasUserRestrictionForUser(

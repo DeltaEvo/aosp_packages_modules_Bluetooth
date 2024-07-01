@@ -16,8 +16,6 @@
 
 package com.android.bluetooth.bas;
 
-import static android.Manifest.permission.BLUETOOTH_CONNECT;
-
 import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
@@ -339,9 +337,7 @@ public class BatteryService extends ProfileService {
     }
 
     /** Gets the connection state of the given device's battery service */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public int getConnectionState(BluetoothDevice device) {
-        enforceCallingOrSelfPermission(BLUETOOTH_CONNECT, "Need BLUETOOTH_CONNECT permission");
         synchronized (mStateMachines) {
             BatteryStateMachine sm = mStateMachines.get(device);
             if (sm == null) {
