@@ -5347,7 +5347,6 @@ public:
           handleAsymmetricPhyForUnicast(group);
           UpdateLocationsAndContextsAvailability(group);
           if (group->IsPendingConfiguration()) {
-            SuspendedForReconfiguration();
             auto remote_direction = kLeAudioContextAllRemoteSource.test(configuration_context_type_)
                                             ? bluetooth::le_audio::types::kLeAudioDirectionSource
                                             : bluetooth::le_audio::types::kLeAudioDirectionSink;
@@ -5415,6 +5414,10 @@ public:
           audio_receiver_state_ = AudioState::RELEASING;
         }
 
+        if (group && group->IsPendingConfiguration()) {
+          log::info("Releasing for reconfiguration, don't send anything on CISes");
+          SuspendedForReconfiguration();
+        }
         break;
       default:
         break;
