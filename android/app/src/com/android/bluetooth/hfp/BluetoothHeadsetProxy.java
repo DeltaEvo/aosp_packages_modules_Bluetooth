@@ -16,6 +16,10 @@
 
 package com.android.bluetooth.hfp;
 
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
+import static android.Manifest.permission.MODIFY_PHONE_STATE;
+
+import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadset;
@@ -42,12 +46,16 @@ public class BluetoothHeadsetProxy {
         adapter.closeProfileProxy(BluetoothProfile.HEADSET, mBluetoothHeadset);
     }
 
+    /** call clccResponse in Framework */
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, MODIFY_PHONE_STATE})
     public void clccResponse(
             int index, int direction, int status, int mode, boolean mpty, String number, int type) {
 
         mBluetoothHeadset.clccResponse(index, direction, status, mode, mpty, number, type);
     }
 
+    /** call phoneStateChanged in Framework */
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, MODIFY_PHONE_STATE})
     public void phoneStateChanged(
             int numActive, int numHeld, int callState, String number, int type, String name) {
 
@@ -75,6 +83,8 @@ public class BluetoothHeadsetProxy {
         return mBluetoothHeadset.connectAudio();
     }
 
+    /** call setActiveDevice in Framework */
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, MODIFY_PHONE_STATE})
     public boolean setActiveDevice(BluetoothDevice device) {
         return mBluetoothHeadset.setActiveDevice(device);
     }
