@@ -1956,6 +1956,7 @@ class CsisClientImpl : public CsisClient {
         callbacks_->OnConnectionState(evt.remote_bda,
                                       ConnectionState::DISCONNECTED);
       DoDisconnectCleanUp(device);
+      StartOpportunisticConnect(evt.remote_bda);
       return;
     }
 
