@@ -645,16 +645,6 @@ public class HeadsetService extends ProfileService {
         }
 
         @Override
-        public boolean isAudioOn(AttributionSource source) {
-            HeadsetService service = getService(source);
-            if (service == null) {
-                return false;
-            }
-
-            return service.isAudioOn();
-        }
-
-        @Override
         public boolean isAudioConnected(BluetoothDevice device, AttributionSource source) {
             HeadsetService service = getService(source);
             if (service == null) {

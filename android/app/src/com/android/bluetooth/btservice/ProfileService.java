@@ -16,8 +16,6 @@
 
 package com.android.bluetooth.btservice;
 
-import static java.util.Objects.requireNonNull;
-
 import android.annotation.RequiresPermission;
 import android.annotation.SuppressLint;
 import android.content.ComponentName;
@@ -88,7 +86,7 @@ public abstract class ProfileService extends ContextWrapper {
         super(ctx);
         mName = getName();
         Log.d(mName, "Service created");
-        mBinder = requireNonNull(initBinder(), "Binder null is not allowed for " + mName);
+        mBinder = initBinder();
     }
 
     /** return the binder of the profile */

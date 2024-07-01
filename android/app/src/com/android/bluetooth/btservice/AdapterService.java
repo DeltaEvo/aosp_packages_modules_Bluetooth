@@ -1577,7 +1577,9 @@ public class AdapterService extends Service {
                 profileService.stop();
                 removeProfile(profileService);
                 profileService.cleanup();
-                profileService.getBinder().cleanup();
+                if (profileService.getBinder() != null) {
+                    profileService.getBinder().cleanup();
+                }
             } else {
                 Log.e(
                         TAG,

@@ -30,10 +30,6 @@ import java.util.Map;
  * @hide
  */
 interface IBluetoothCsipSetCoordinator {
-  @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)")
-  boolean connect(in BluetoothDevice device, in AttributionSource attributionSource);
-  @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)")
-  boolean disconnect(in BluetoothDevice device, in AttributionSource attributionSource);
   @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)")
   List<BluetoothDevice> getConnectedDevices(in AttributionSource attributionSource);
   @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)")
