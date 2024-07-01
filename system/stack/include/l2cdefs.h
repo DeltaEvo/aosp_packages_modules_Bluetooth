@@ -114,7 +114,7 @@
 
 /* Define the LE L2CAP Connection Response Result codes
  */
-typedef enum : uint8_t {
+typedef enum : uint16_t {
   L2CAP_LE_RESULT_CONN_OK = 0,
   L2CAP_LE_RESULT_NO_PSM = 2,
   L2CAP_LE_RESULT_NO_RESOURCES = 4,
