@@ -422,14 +422,15 @@ class VolumeControlTest : public ::testing::Test {
     TestAppUnregister();
   }
 
-  void GetConnectedEvent(const RawAddress& address, uint16_t conn_id) {
+  void GetConnectedEvent(const RawAddress& address, uint16_t conn_id,
+                         tGATT_STATUS status = GATT_SUCCESS) {
     tBTA_GATTC_OPEN event_data = {
-        .status = GATT_SUCCESS,
-        .conn_id = conn_id,
-        .client_if = gatt_if,
-        .remote_bda = address,
-        .transport = GATT_TRANSPORT_LE,
-        .mtu = 240,
+            .status = status,
+            .conn_id = conn_id,
+            .client_if = gatt_if,
+            .remote_bda = address,
+            .transport = GATT_TRANSPORT_LE,
+            .mtu = 240,
     };
 
     gatt_callback(BTA_GATTC_OPEN_EVT, (tBTA_GATTC*)&event_data);
@@ -647,6 +648,25 @@ TEST_F(VolumeControlTest, test_reconnect_after_interrupted_discovery) {
   // device
   Mock::VerifyAndClearExpectations(callbacks.get());
 
+  TestAppUnregister();
+}
+
+TEST_F(VolumeControlTest, test_verify_opportunistic_connect_active_after_connect_timeout) {
+  const RawAddress address = GetTestAddress(0);
+
+  TestAppRegister();
+  TestAddFromStorage(address);
+  Mock::VerifyAndClearExpectations(&gatt_interface);
+
+  EXPECT_CALL(*callbacks, OnConnectionState(ConnectionState::DISCONNECTED, address)).Times(1);
+  TestConnect(address);
+
+  EXPECT_CALL(gatt_interface, CancelOpen(gatt_if, address, _)).Times(0);
+  EXPECT_CALL(gatt_interface, Open(gatt_if, address, BTM_BLE_DIRECT_CONNECTION, true)).Times(1);
+
+  GetConnectedEvent(address, 1, GATT_ERROR);
+  Mock::VerifyAndClearExpectations(callbacks.get());
+  Mock::VerifyAndClearExpectations(&gatt_interface);
   TestAppUnregister();
 }
 
