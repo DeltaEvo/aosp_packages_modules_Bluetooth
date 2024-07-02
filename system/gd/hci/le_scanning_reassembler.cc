@@ -86,6 +86,9 @@ LeScanningReassembler::ProcessAdvertisingReport(
   // - For extended advertising, when the current data is marked
   //   incomplete OR when a scan response is expected.
   if (data_status == DataStatus::CONTINUING || expect_scan_response) {
+    log::verbose(
+            "Ignoring advertising report when scan response is expected or current data is marked "
+            "incomplete");
     return {};
   }
 
@@ -95,6 +98,7 @@ LeScanningReassembler::ProcessAdvertisingReport(
       .extended_event_type = advertising_fragment->extended_event_type,
       .data = std::move(advertising_fragment->data)};
   cache_.erase(advertising_fragment);
+  log::verbose("Full advertising report has been reassembled");
   return result;
 }
 
