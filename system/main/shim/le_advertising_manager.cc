@@ -250,8 +250,7 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
                        advertiser_id, tx_power, status));
   }
 
-  void OnAdvertisingEnabled(uint8_t advertiser_id, bool enable,
-                            uint8_t status) {
+  void OnAdvertisingEnabled(uint8_t advertiser_id, bool enable, AdvertisingStatus status) {
     int reg_id =
         bluetooth::shim::GetAdvertising()->GetAdvertiserRegId(advertiser_id);
     uint8_t client_id = is_native_advertiser(reg_id);

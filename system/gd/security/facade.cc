@@ -278,7 +278,8 @@ class SecurityModuleFacadeService : public SecurityModuleFacade::Service,
     advertising_callback_events_.OnIncomingEvent(advertising_set_started);
   }
 
-  void OnAdvertisingEnabled(uint8_t /* advertiser_id */, bool /* enable */, uint8_t /* status */) {
+  void OnAdvertisingEnabled(uint8_t /* advertiser_id */, bool /* enable */,
+                            AdvertisingStatus /* status */) {
     // Not used yet
   }
 
