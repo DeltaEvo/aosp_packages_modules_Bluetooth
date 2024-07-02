@@ -442,13 +442,13 @@ class LeAdvertisingManagerFacadeService : public LeAdvertisingManagerFacade::Ser
     callback_events_.OnIncomingEvent(msg);
   }
 
-  void OnScanResponseDataSet(uint8_t advertiser_id, uint8_t status) {
+  void OnScanResponseDataSet(uint8_t advertiser_id, AdvertisingStatus status) {
     AdvertisingCallbackMsg msg;
     msg.set_message_type(AdvertisingCallbackMsgType::SCAN_RESPONSE_DATA_SET);
     msg.set_advertiser_id(advertiser_id);
     msg.set_status(static_cast<facade::AdvertisingStatus>(status));
     callback_events_.OnIncomingEvent(msg);
-  };
+  }
 
   void OnAdvertisingParametersUpdated(
       uint8_t advertiser_id, int8_t /* tx_power */, uint8_t status) {
