@@ -43,7 +43,6 @@ using ::aidl::android::hardware::bluetooth::audio::A2dpRemoteCapabilities;
 using ::aidl::android::hardware::bluetooth::audio::A2dpStatus;
 using ::aidl::android::hardware::bluetooth::audio::AudioCapabilities;
 using ::aidl::android::hardware::bluetooth::audio::AudioConfiguration;
-using ::aidl::android::hardware::bluetooth::audio::BluetoothAudioStatus;
 using ::aidl::android::hardware::bluetooth::audio::CodecId;
 using ::aidl::android::hardware::bluetooth::audio::CodecInfo;
 using ::aidl::android::hardware::bluetooth::audio::CodecParameters;

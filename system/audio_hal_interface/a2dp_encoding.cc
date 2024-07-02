@@ -94,6 +94,7 @@ void start_session() {
   }
   aidl::a2dp::start_session();
 }
+
 void end_session() {
   if (HalVersionManager::GetHalTransport() ==
       BluetoothAudioHalTransport::AIDL) {
@@ -105,7 +106,8 @@ void end_session() {
     return;
   }
 }
-void ack_stream_started(const tA2DP_CTRL_ACK& status) {
+
+void ack_stream_started(BluetoothAudioStatus status) {
   if (HalVersionManager::GetHalTransport() ==
       BluetoothAudioHalTransport::HIDL) {
     hidl::a2dp::ack_stream_started(status);
@@ -113,7 +115,8 @@ void ack_stream_started(const tA2DP_CTRL_ACK& status) {
   }
   return aidl::a2dp::ack_stream_started(status);
 }
-void ack_stream_suspended(const tA2DP_CTRL_ACK& status) {
+
+void ack_stream_suspended(BluetoothAudioStatus status) {
   if (HalVersionManager::GetHalTransport() ==
       BluetoothAudioHalTransport::HIDL) {
     hidl::a2dp::ack_stream_suspended(status);
