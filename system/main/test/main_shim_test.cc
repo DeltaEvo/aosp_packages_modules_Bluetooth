@@ -524,11 +524,11 @@ TEST_F(MainShimTest, is_flushable) {
     alignas(BT_HDR) std::byte hdr_data[sizeof(BT_HDR) + sizeof(HciDataPreamble) + offset]{};
     BT_HDR* bt_hdr = reinterpret_cast<BT_HDR*>(hdr_data);
 
-    uint8_t* p = ToPacketData<uint8_t>(bt_hdr, L2CAP_SEND_CMD_OFFSET);
+    uint8_t* p = ToPacketData<uint8_t>(bt_hdr);
     UINT16_TO_STREAM(p, 0x123 | (L2CAP_PKT_START_NON_FLUSHABLE << L2CAP_PKT_TYPE_SHIFT));
     ASSERT_TRUE(!IsPacketFlushable(bt_hdr));
 
-    p = ToPacketData<uint8_t>(bt_hdr, L2CAP_SEND_CMD_OFFSET);
+    p = ToPacketData<uint8_t>(bt_hdr);
     UINT16_TO_STREAM(p, 0x123 | (L2CAP_PKT_START << L2CAP_PKT_TYPE_SHIFT));
     ASSERT_TRUE(IsPacketFlushable(bt_hdr));
   }
