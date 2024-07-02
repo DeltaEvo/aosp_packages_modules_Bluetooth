@@ -1803,7 +1803,9 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
   LeAudioDevice* getDeviceTryingToAttachTheStream(LeAudioDeviceGroup* group) {
     /* Device which is attaching the stream is just an active device not in
-     * STREAMING state. the precondition is, that TargetState is Streaming  */
+     * STREAMING state and NOT in  the RELEASING state.
+     * The precondition is, that TargetState is Streaming
+     */
 
     log::debug("group_id: {}, targetState: {}", group->group_id_,
                ToString(group->GetTargetState()));
@@ -1814,8 +1816,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
     for (auto dev = group->GetFirstActiveDevice(); dev != nullptr;
          dev = group->GetNextActiveDevice(dev)) {
-      if (!dev->HaveAllActiveAsesSameState(
-              AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING)) {
+      if (!dev->HaveAllActiveAsesSameState(AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) &&
+          !dev->HaveAnyReleasingAse()) {
         log::debug("Attaching device {} to group_id: {}", dev->address_,
                    group->group_id_);
         return dev;
@@ -3189,6 +3191,18 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
           log::debug("Nothing to do ase data path state: {}",
                      static_cast<int>(ase->data_path_state));
         }
+
+        if (group->HaveAllActiveDevicesAsesTheSameState(
+                    AseState::BTA_LE_AUDIO_ASE_STATE_RELEASING)) {
+          group->SetState(AseState::BTA_LE_AUDIO_ASE_STATE_RELEASING);
+          if (group->GetTargetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
+            log::info("Group {} is doing autonomous release", group->group_id_);
+            SetTargetState(group, AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
+            state_machine_callbacks_->StatusReportCb(group->group_id_,
+                                                     GroupStreamStatus::RELEASING);
+          }
+        }
+
         break;
       }
       default:
