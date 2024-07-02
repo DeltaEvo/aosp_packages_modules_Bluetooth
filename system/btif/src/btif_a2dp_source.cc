@@ -33,7 +33,6 @@
 #include <algorithm>
 #include <future>
 
-#include "audio_a2dp_hw/include/audio_a2dp_hw.h"
 #include "audio_hal_interface/a2dp_encoding.h"
 #include "bta_av_ci.h"
 #include "btif_a2dp_source.h"
@@ -832,6 +831,7 @@ static void btif_a2dp_source_audio_tx_stop_event(void) {
                                     &btif_a2dp_source_cb.accumulated_stats);
 
   /* Drain data still left in the queue */
+  static constexpr size_t AUDIO_STREAM_OUTPUT_BUFFER_SZ = 28 * 512;
   uint8_t p_buf[AUDIO_STREAM_OUTPUT_BUFFER_SZ * 2];
   bluetooth::audio::a2dp::read(p_buf, sizeof(p_buf));
 

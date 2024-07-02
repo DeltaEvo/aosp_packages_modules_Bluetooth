@@ -44,7 +44,6 @@
 #include <cerrno>
 #include <mutex>
 
-#include "audio_a2dp_hw/include/audio_a2dp_hw.h"
 #include "os/log.h"
 #include "osi/include/osi.h"
 #include "osi/include/socket_utils/sockets.h"
@@ -54,6 +53,21 @@ using namespace bluetooth;
 /*****************************************************************************
  *  Constants & Macros
  *****************************************************************************/
+
+// AUDIO_STREAM_OUTPUT_BUFFER_SZ controls the size of the audio socket buffer.
+// If one assumes the write buffer is always full during normal BT playback,
+// then increasing this value increases our playback latency.
+//
+// FIXME: The BT HAL should consume data at a constant rate.
+// AudioFlinger assumes that the HAL draws data at a constant rate, which is
+// true for most audio devices; however, the BT engine reads data at a variable
+// rate (over the short term), which confuses both AudioFlinger as well as
+// applications which deliver data at a (generally) fixed rate.
+//
+// 20 * 512 is not sufficient to smooth the variability for some BT devices,
+// resulting in mixer sleep and throttling. We increase this to 28 * 512 to help
+// reduce the effect of variable data consumption.
+#define AUDIO_STREAM_OUTPUT_BUFFER_SZ (28 * 512)
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
