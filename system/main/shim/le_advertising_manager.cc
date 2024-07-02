@@ -289,14 +289,14 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
                                     advertiser_id, status));
   }
 
-  void OnScanResponseDataSet(uint8_t advertiser_id, uint8_t status) {
+  void OnScanResponseDataSet(uint8_t advertiser_id, AdvertisingStatus status) {
     do_in_jni_thread(base::BindOnce(
         &AdvertisingCallbacks::OnScanResponseDataSet,
         base::Unretained(advertising_callbacks_), advertiser_id, status));
   }
 
   void OnAdvertisingParametersUpdated(uint8_t advertiser_id, int8_t tx_power,
-                                      uint8_t status) {
+                                      AdvertisingStatus status) {
     do_in_jni_thread(
         base::BindOnce(&AdvertisingCallbacks::OnAdvertisingParametersUpdated,
                        base::Unretained(advertising_callbacks_), advertiser_id,

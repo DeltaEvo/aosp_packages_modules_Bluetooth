@@ -291,8 +291,8 @@ class SecurityModuleFacadeService : public SecurityModuleFacade::Service,
     // Not used yet
   }
 
-  void OnAdvertisingParametersUpdated(
-      uint8_t /* advertiser_id */, int8_t /* tx_power */, uint8_t /* status */) {
+  void OnAdvertisingParametersUpdated(uint8_t /* advertiser_id */, int8_t /* tx_power */,
+                                      AdvertisingStatus /* status */) {
     // Not used yet
   }
 
