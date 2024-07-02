@@ -16,13 +16,6 @@ flag {
 }
 
 flag {
-    name: "bluffs_mitigation"
-    namespace: "bluetooth"
-    description: "Cache security values to mitigate BLUFFS"
-    bug: "314331379"
-}
-
-flag {
     name: "fix_le_pairing_passkey_entry_bypass"
     namespace: "bluetooth"
     description: "Fix the passkey entry bypassing bug in SMP"
