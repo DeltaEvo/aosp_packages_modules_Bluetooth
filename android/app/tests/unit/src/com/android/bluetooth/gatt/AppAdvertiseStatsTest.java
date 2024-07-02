@@ -64,10 +64,6 @@ public class AppAdvertiseStatsTest {
 
     @Rule public final SetFlagsRule mSetFlagsRule = new SetFlagsRule();
 
-    @Mock private ContextMap map;
-
-    @Mock private GattService service;
-
     @Mock private MetricsLogger mMetricsLogger;
 
     @Captor ArgumentCaptor<Long> mAdvDurationCaptor;
@@ -95,24 +91,12 @@ public class AppAdvertiseStatsTest {
     }
 
     @Test
-    public void constructor() {
-        int appUid = 0;
-        int id = 1;
-        String name = "name";
-
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
-
-        assertThat(appAdvertiseStats.mContextMap).isEqualTo(map);
-        assertThat(appAdvertiseStats.mGattService).isEqualTo(service);
-    }
-
-    @Test
     public void recordAdvertiseStart() {
         int appUid = 0;
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name);
 
         assertThat(appAdvertiseStats.mAdvertiserRecords.size()).isEqualTo(0);
 
@@ -150,7 +134,7 @@ public class AppAdvertiseStatsTest {
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name);
 
         int duration = 1;
         int maxExtAdvEvents = 2;
@@ -190,7 +174,7 @@ public class AppAdvertiseStatsTest {
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name);
 
         int duration = 1;
         int maxExtAdvEvents = 2;
@@ -212,7 +196,7 @@ public class AppAdvertiseStatsTest {
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name);
 
         AdvertiseData advertiseData = new AdvertiseData.Builder().build();
         appAdvertiseStats.setAdvertisingData(advertiseData);
@@ -226,7 +210,7 @@ public class AppAdvertiseStatsTest {
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name);
 
         AdvertiseData scanResponse = new AdvertiseData.Builder().build();
         appAdvertiseStats.setScanResponseData(scanResponse);
@@ -240,7 +224,7 @@ public class AppAdvertiseStatsTest {
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name);
 
         AdvertisingSetParameters parameters = new AdvertisingSetParameters.Builder().build();
         appAdvertiseStats.setAdvertisingParameters(parameters);
@@ -252,7 +236,7 @@ public class AppAdvertiseStatsTest {
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name);
 
         PeriodicAdvertisingParameters periodicParameters =
                 new PeriodicAdvertisingParameters.Builder().build();
@@ -265,7 +249,7 @@ public class AppAdvertiseStatsTest {
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name);
 
         AdvertiseData periodicData = new AdvertiseData.Builder().build();
         appAdvertiseStats.setPeriodicAdvertisingData(periodicData);
@@ -281,7 +265,7 @@ public class AppAdvertiseStatsTest {
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name);
 
         AdvertisingSetParameters parameters = new AdvertisingSetParameters.Builder().build();
         AdvertiseData advertiseData = new AdvertiseData.Builder().build();
@@ -313,7 +297,7 @@ public class AppAdvertiseStatsTest {
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name);
 
         AdvertisingSetParameters parameters =
                 new AdvertisingSetParameters.Builder().setConnectable(true).build();
