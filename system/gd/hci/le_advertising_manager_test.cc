@@ -241,7 +241,7 @@ class LeAdvertisingManagerTest : public ::testing::Test {
         OnAdvertisingSetStarted, void(int reg_id, uint8_t advertiser_id, int8_t tx_power, AdvertisingStatus status));
     MOCK_METHOD3(OnAdvertisingEnabled,
                  void(uint8_t advertiser_id, bool enable, AdvertisingStatus status));
-    MOCK_METHOD2(OnAdvertisingDataSet, void(uint8_t advertiser_id, uint8_t status));
+    MOCK_METHOD2(OnAdvertisingDataSet, void(uint8_t advertiser_id, AdvertisingStatus status));
     MOCK_METHOD2(OnScanResponseDataSet, void(uint8_t advertiser_id, uint8_t status));
     MOCK_METHOD3(OnAdvertisingParametersUpdated, void(uint8_t advertiser_id, int8_t tx_power, uint8_t status));
     MOCK_METHOD2(OnPeriodicAdvertisingParametersUpdated, void(uint8_t advertiser_id, uint8_t status));

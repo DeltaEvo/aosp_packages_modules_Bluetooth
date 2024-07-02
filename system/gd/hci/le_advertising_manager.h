@@ -93,7 +93,7 @@ class AdvertisingCallback {
                                         AdvertisingStatus status) = 0;
    virtual void OnAdvertisingEnabled(uint8_t advertiser_id, bool enable,
                                      AdvertisingStatus status) = 0;
-   virtual void OnAdvertisingDataSet(uint8_t advertiser_id, uint8_t status) = 0;
+   virtual void OnAdvertisingDataSet(uint8_t advertiser_id, AdvertisingStatus status) = 0;
    virtual void OnScanResponseDataSet(uint8_t advertiser_id, uint8_t status) = 0;
    virtual void OnAdvertisingParametersUpdated(uint8_t advertiser_id, int8_t tx_power,
                                                uint8_t status) = 0;

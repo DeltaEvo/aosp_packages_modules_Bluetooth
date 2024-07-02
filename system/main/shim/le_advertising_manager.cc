@@ -268,7 +268,7 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
                                     advertiser_id, enable, status));
   }
 
-  void OnAdvertisingDataSet(uint8_t advertiser_id, uint8_t status) {
+  void OnAdvertisingDataSet(uint8_t advertiser_id, AdvertisingStatus status) {
     if (com::android::bluetooth::flags::
             leaudio_broadcast_update_metadata_callback()) {
       int reg_id =
