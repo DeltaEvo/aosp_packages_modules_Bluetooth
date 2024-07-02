@@ -330,8 +330,7 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
         base::Unretained(advertising_callbacks_), advertiser_id, status));
   }
 
-  void OnPeriodicAdvertisingEnabled(uint8_t advertiser_id, bool enable,
-                                    uint8_t status) {
+  void OnPeriodicAdvertisingEnabled(uint8_t advertiser_id, bool enable, AdvertisingStatus status) {
     do_in_jni_thread(
         base::BindOnce(&AdvertisingCallbacks::OnPeriodicAdvertisingEnabled,
                        base::Unretained(advertising_callbacks_), advertiser_id,

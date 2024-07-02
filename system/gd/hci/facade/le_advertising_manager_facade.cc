@@ -475,13 +475,14 @@ class LeAdvertisingManagerFacadeService : public LeAdvertisingManagerFacade::Ser
     callback_events_.OnIncomingEvent(msg);
   }
 
-  void OnPeriodicAdvertisingEnabled(uint8_t advertiser_id, bool /* enable */, uint8_t status) {
+  void OnPeriodicAdvertisingEnabled(uint8_t advertiser_id, bool /* enable */,
+                                    AdvertisingStatus status) {
     AdvertisingCallbackMsg msg;
     msg.set_message_type(AdvertisingCallbackMsgType::PERIODIC_ADVERTISING_ENABLED);
     msg.set_advertiser_id(advertiser_id);
     msg.set_status(static_cast<facade::AdvertisingStatus>(status));
     callback_events_.OnIncomingEvent(msg);
-  };
+  }
 
   void OnOwnAddressRead(uint8_t advertiser_id, uint8_t address_type, Address address) {
     log::info("OnOwnAddressRead Address:{}, address_type:{}", address, address_type);

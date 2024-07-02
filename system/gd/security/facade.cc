@@ -305,8 +305,8 @@ class SecurityModuleFacadeService : public SecurityModuleFacade::Service,
     // Not used yet
   }
 
-  void OnPeriodicAdvertisingEnabled(
-      uint8_t /* advertiser_id */, bool /* enable */, uint8_t /* status */) {
+  void OnPeriodicAdvertisingEnabled(uint8_t /* advertiser_id */, bool /* enable */,
+                                    AdvertisingStatus /* status */) {
     // Not used yet
   }
 

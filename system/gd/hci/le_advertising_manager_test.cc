@@ -249,7 +249,8 @@ class LeAdvertisingManagerTest : public ::testing::Test {
                  void(uint8_t advertiser_id, AdvertisingStatus status));
     MOCK_METHOD2(OnPeriodicAdvertisingDataSet,
                  void(uint8_t advertiser_id, AdvertisingStatus status));
-    MOCK_METHOD3(OnPeriodicAdvertisingEnabled, void(uint8_t advertiser_id, bool enable, uint8_t status));
+    MOCK_METHOD3(OnPeriodicAdvertisingEnabled,
+                 void(uint8_t advertiser_id, bool enable, AdvertisingStatus status));
     MOCK_METHOD3(OnOwnAddressRead, void(uint8_t advertiser_id, uint8_t address_type, Address address));
   } mock_advertising_callback_;
 };
