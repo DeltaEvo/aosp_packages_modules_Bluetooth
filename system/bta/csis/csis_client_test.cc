@@ -580,14 +580,15 @@ class CsisClientTest : public ::testing::Test {
     gatt_callback(BTA_GATTC_ENC_CMPL_CB_EVT, (tBTA_GATTC*)&event_data);
   }
 
-  void InjectConnectedEvent(const RawAddress& address, uint16_t conn_id) {
+  void InjectConnectedEvent(const RawAddress& address, uint16_t conn_id,
+                            tGATT_STATUS status = GATT_SUCCESS) {
     tBTA_GATTC_OPEN event_data = {
-        .status = GATT_SUCCESS,
-        .conn_id = conn_id,
-        .client_if = gatt_if,
-        .remote_bda = address,
-        .transport = GATT_TRANSPORT_LE,
-        .mtu = 240,
+            .status = status,
+            .conn_id = conn_id,
+            .client_if = gatt_if,
+            .remote_bda = address,
+            .transport = GATT_TRANSPORT_LE,
+            .mtu = 240,
     };
 
     gatt_callback(BTA_GATTC_OPEN_EVT, (tBTA_GATTC*)&event_data);
@@ -757,6 +758,30 @@ TEST_F(CsisClientTest, test_app_registration) {
 TEST_F(CsisClientTest, test_connect) {
   TestAppRegister();
   TestConnect(GetTestAddress(0));
+  TestAppUnregister();
+}
+
+TEST_F(CsisClientTest, test_verify_opportunistic_connect_active_after_connect_timeout) {
+  TestAppRegister();
+
+  std::vector<uint8_t> no_set_info;
+
+  DeviceGroups::AddFromStorage(test_address, no_set_info);
+  CsisClient::AddFromStorage(test_address, no_set_info);
+
+  Mock::VerifyAndClearExpectations(&gatt_interface);
+  Mock::VerifyAndClearExpectations(callbacks.get());
+
+  EXPECT_CALL(*callbacks, OnConnectionState(test_address, ConnectionState::DISCONNECTED)).Times(1);
+  TestConnect(test_address);
+
+  EXPECT_CALL(gatt_interface, CancelOpen(gatt_if, test_address, _)).Times(0);
+  EXPECT_CALL(gatt_interface, Open(gatt_if, test_address, BTM_BLE_DIRECT_CONNECTION, true))
+          .Times(1);
+
+  InjectConnectedEvent(test_address, 0, GATT_ERROR);
+  Mock::VerifyAndClearExpectations(&gatt_interface);
+  Mock::VerifyAndClearExpectations(callbacks.get());
   TestAppUnregister();
 }
 
