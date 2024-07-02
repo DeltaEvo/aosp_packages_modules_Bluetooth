@@ -303,8 +303,7 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
                        tx_power, status));
   }
 
-  void OnPeriodicAdvertisingParametersUpdated(uint8_t advertiser_id,
-                                              uint8_t status) {
+  void OnPeriodicAdvertisingParametersUpdated(uint8_t advertiser_id, AdvertisingStatus status) {
     do_in_jni_thread(base::BindOnce(
         &AdvertisingCallbacks::OnPeriodicAdvertisingParametersUpdated,
         base::Unretained(advertising_callbacks_), advertiser_id, status));
