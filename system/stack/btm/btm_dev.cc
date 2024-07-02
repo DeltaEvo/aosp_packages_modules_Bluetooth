@@ -685,12 +685,16 @@ std::vector<tBTM_SEC_DEV_REC*> btm_get_sec_dev_rec() {
 bool BTM_Sec_AddressKnown(const RawAddress& address) {
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(address);
 
-  //  not a known device, or a classic device, we assume public address
-  if (p_dev_rec == NULL || (p_dev_rec->device_type & BT_DEVICE_TYPE_BLE) == 0)
+  // not a known device, we assume public address
+  if (p_dev_rec == NULL) {
+    log::warn("{}, unknown device", address);
     return true;
-
-  log::warn("{}, device type not BLE: 0x{:02x}", address,
-            p_dev_rec->device_type);
+  }
+  // a classic device, we assume public address
+  if ((p_dev_rec->device_type & BT_DEVICE_TYPE_BLE) == 0) {
+    log::warn("{}, device type not BLE: 0x{:02x}", address, p_dev_rec->device_type);
+    return true;
+  }
 
   // bonded device with identity address known
   if (!p_dev_rec->ble.identity_address_with_type.bda.IsEmpty()) {
