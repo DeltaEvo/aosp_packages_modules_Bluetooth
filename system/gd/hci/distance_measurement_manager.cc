@@ -231,14 +231,16 @@ struct DistanceMeasurementManager::impl : bluetooth::hal::RangingHalCallback {
 
   void register_distance_measurement_callbacks(DistanceMeasurementCallbacks* callbacks) {
     distance_measurement_callbacks_ = callbacks;
-    if (ranging_hal_->IsBound()) {
-      distance_measurement_callbacks_->OnVendorSpecificCharacteristics(
-          ranging_hal_->GetVendorSpecificCharacteristics());
+    if (com::android::bluetooth::flags::channel_sounding_in_stack() && ranging_hal_->IsBound()) {
+      auto vendor_specific_data = ranging_hal_->GetVendorSpecificCharacteristics();
+      if (!vendor_specific_data.empty()) {
+        distance_measurement_callbacks_->OnVendorSpecificCharacteristics(vendor_specific_data);
+      }
     }
   }
 
-  void start_distance_measurement(
-      const Address& address, uint16_t interval, DistanceMeasurementMethod method) {
+  void start_distance_measurement(const Address address, uint16_t interval,
+                                  DistanceMeasurementMethod method) {
     log::info("Address:{}, method:{}", address, method);
     uint16_t connection_handle = acl_manager_->HACK_GetLeHandle(address);
 
@@ -328,7 +330,7 @@ struct DistanceMeasurementManager::impl : bluetooth::hal::RangingHalCallback {
         std::chrono::milliseconds(cs_trackers_[connection_handle].interval_ms));
   }
 
-  void stop_distance_measurement(const Address& address, DistanceMeasurementMethod method) {
+  void stop_distance_measurement(const Address address, DistanceMeasurementMethod method) {
     log::info("Address:{}, method:{}", address, method);
     switch (method) {
       case METHOD_AUTO:
