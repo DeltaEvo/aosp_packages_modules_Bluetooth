@@ -1849,7 +1849,7 @@ public final class BluetoothAdapter {
                 return mService.getScanMode(mAttributionSource);
             }
         } catch (RemoteException e) {
-            throw e.rethrowAsRuntimeException();
+            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
         } finally {
             mServiceLock.readLock().unlock();
         }
@@ -1896,7 +1896,7 @@ public final class BluetoothAdapter {
                 return mService.setScanMode(mode, mAttributionSource);
             }
         } catch (RemoteException e) {
-            throw e.rethrowAsRuntimeException();
+            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
         } finally {
             mServiceLock.readLock().unlock();
         }
@@ -1921,7 +1921,7 @@ public final class BluetoothAdapter {
                 return (timeout == -1) ? null : Duration.ofSeconds(timeout);
             }
         } catch (RemoteException e) {
-            throw e.rethrowAsRuntimeException();
+            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
         } finally {
             mServiceLock.readLock().unlock();
         }
@@ -1965,7 +1965,7 @@ public final class BluetoothAdapter {
                 return mService.setDiscoverableTimeout(timeout.toSeconds(), mAttributionSource);
             }
         } catch (RemoteException e) {
-            throw e.rethrowAsRuntimeException();
+            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
         } finally {
             mServiceLock.readLock().unlock();
         }
@@ -2527,7 +2527,8 @@ public final class BluetoothAdapter {
                         "LE state is on, but there is no bluetooth service.");
             }
         } catch (RemoteException e) {
-            throw e.rethrowAsRuntimeException();
+            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
         } finally {
             mServiceLock.readLock().unlock();
         }
@@ -2555,7 +2556,8 @@ public final class BluetoothAdapter {
                         "LE state is on, but there is no bluetooth service.");
             }
         } catch (RemoteException e) {
-            throw e.rethrowAsRuntimeException();
+            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
         } finally {
             mServiceLock.readLock().unlock();
         }
@@ -2583,7 +2585,8 @@ public final class BluetoothAdapter {
                         "LE state is on, but there is no bluetooth service.");
             }
         } catch (RemoteException e) {
-            throw e.rethrowAsRuntimeException();
+            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
         } finally {
             mServiceLock.readLock().unlock();
         }
@@ -2615,7 +2618,8 @@ public final class BluetoothAdapter {
                         "LE state is on, but there is no bluetooth service.");
             }
         } catch (RemoteException e) {
-            throw e.rethrowAsRuntimeException();
+            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
         } finally {
             mServiceLock.readLock().unlock();
         }
@@ -4929,7 +4933,7 @@ public final class BluetoothAdapter {
             }
         } catch (RemoteException e) {
             Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
-            throw e.rethrowAsRuntimeException();
+            return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
         } finally {
             mServiceLock.readLock().unlock();
         }
@@ -4989,7 +4993,6 @@ public final class BluetoothAdapter {
             }
         } catch (RemoteException e) {
             Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
-            throw e.rethrowAsRuntimeException();
         } finally {
             mServiceLock.readLock().unlock();
         }
@@ -5047,7 +5050,6 @@ public final class BluetoothAdapter {
             }
         } catch (RemoteException e) {
             Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
-            throw e.rethrowAsRuntimeException();
         } finally {
             mServiceLock.readLock().unlock();
         }
@@ -5128,7 +5130,7 @@ public final class BluetoothAdapter {
                                         mPreferredAudioProfilesChangedCallback, mAttributionSource);
                     }
                 } catch (RemoteException e) {
-                    throw e.rethrowAsRuntimeException();
+                    Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
                 } finally {
                     mServiceLock.readLock().unlock();
                 }
@@ -5203,7 +5205,7 @@ public final class BluetoothAdapter {
                         mPreferredAudioProfilesChangedCallback, mAttributionSource);
             }
         } catch (RemoteException e) {
-            throw e.rethrowAsRuntimeException();
+            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
         } finally {
             mServiceLock.readLock().unlock();
         }
@@ -5322,7 +5324,7 @@ public final class BluetoothAdapter {
                                         mBluetoothQualityReportReadyCallback, mAttributionSource);
                     }
                 } catch (RemoteException e) {
-                    throw e.rethrowAsRuntimeException();
+                    Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
                 } finally {
                     mServiceLock.readLock().unlock();
                 }
@@ -5395,7 +5397,7 @@ public final class BluetoothAdapter {
                         mBluetoothQualityReportReadyCallback, mAttributionSource);
             }
         } catch (RemoteException e) {
-            throw e.rethrowAsRuntimeException();
+            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
         } finally {
             mServiceLock.readLock().unlock();
         }

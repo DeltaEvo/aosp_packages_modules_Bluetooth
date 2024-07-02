@@ -209,3 +209,13 @@ flag {
     description: "Allocate GATT clients in heap to unlimit the number of clients"
     bug: "348559823"
 }
+
+flag {
+    name: "gatt_fix_multiple_direct_connect"
+    namespace: "bluetooth"
+    description: "Do not remove device when multiple clients attempt to connect"
+    bug: "349232327"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}

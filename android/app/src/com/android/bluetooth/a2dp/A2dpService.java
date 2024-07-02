@@ -1378,18 +1378,19 @@ public class A2dpService extends ProfileService {
 
         @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
         private A2dpService getService(AttributionSource source) {
-            if (Utils.isInstrumentationTestMode()) {
-                return mService;
-            }
-            A2dpService currService = mService;
+            // Cache mService because it can change while getService is called
+            A2dpService service = mService;
 
-            if (currService == null
-                    || !Utils.checkServiceAvailable(currService, TAG)
-                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(currService, TAG)
-                    || !Utils.checkConnectPermissionForDataDelivery(currService, source, TAG)) {
+            if (Utils.isInstrumentationTestMode()) {
+                return service;
+            }
+
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG)
+                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return null;
             }
-            return currService;
+            return service;
         }
 
         BluetoothA2dpBinder(A2dpService svc) {

@@ -330,9 +330,9 @@ static bool gatt_update_app_hold_link_status(tGATT_IF gatt_if, tGATT_TCB* p_tcb,
   if (is_add) {
     auto ret = holders.insert(gatt_if);
     if (ret.second) {
-      log::debug("added gatt_if={}", gatt_if);
+      log::info("added gatt_if={}", gatt_if);
     } else {
-      log::debug("attempt to add already existing gatt_if={}", gatt_if);
+      log::warn("attempt to add already existing gatt_if={}", gatt_if);
     }
     return true;
   }

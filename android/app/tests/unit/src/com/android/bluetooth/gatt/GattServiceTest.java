@@ -28,6 +28,7 @@ import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothStatusCodes;
 import android.bluetooth.IBluetoothGattCallback;
+import android.bluetooth.IBluetoothGattServerCallback;
 import android.bluetooth.le.AdvertiseData;
 import android.bluetooth.le.AdvertisingSetParameters;
 import android.bluetooth.le.DistanceMeasurementMethod;
@@ -51,7 +52,7 @@ import com.android.bluetooth.btservice.CompanionManager;
 import com.android.bluetooth.flags.Flags;
 import com.android.bluetooth.le_scan.ScanManager;
 import com.android.bluetooth.le_scan.ScanObjectsFactory;
-import com.android.bluetooth.le_scan.TransitionalScanHelper;
+import com.android.bluetooth.le_scan.ScannerMap;
 
 import org.junit.After;
 import org.junit.Before;
@@ -81,12 +82,12 @@ public class GattServiceTest {
     private GattService mService;
     @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
 
-    @Mock private GattService.ClientMap mClientMap;
-    @Mock private TransitionalScanHelper.ScannerMap mScannerMap;
+    @Mock private ContextMap<IBluetoothGattCallback> mClientMap;
+    @Mock private ScannerMap mScannerMap;
 
     @Mock private ScanManager mScanManager;
     @Mock private Set<String> mReliableQueue;
-    @Mock private GattService.ServerMap mServerMap;
+    @Mock private ContextMap<IBluetoothGattServerCallback> mServerMap;
     @Mock private DistanceMeasurementManager mDistanceMeasurementManager;
     @Mock private AdvertiseManagerNativeInterface mAdvertiseManagerNativeInterface;
 
@@ -698,8 +699,7 @@ public class GattServiceTest {
         int connId = 1;
         ArrayList<GattDbElement> db = new ArrayList<>();
 
-        @SuppressWarnings("NonCanonicalType")
-        GattService.ClientMap.App app = mock(GattService.ClientMap.App.class);
+        ContextMap<IBluetoothGattCallback>.App app = mock(ContextMap.App.class);
         IBluetoothGattCallback callback = mock(IBluetoothGattCallback.class);
 
         doReturn(app).when(mClientMap).getByConnId(connId);

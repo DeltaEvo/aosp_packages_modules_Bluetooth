@@ -2570,19 +2570,13 @@ public class LeAudioService extends ProfileService {
                                 1);
                 break;
             case LeAudioStackEvent.HEALTH_RECOMMENDATION_ACTION_INACTIVATE_GROUP:
-                if (Flags.leaudioUnicastInactivateDeviceBasedOnContext()) {
-                    LeAudioGroupDescriptor groupDescriptor = getGroupDescriptor(groupId);
-                    if (groupDescriptor != null
-                            && groupDescriptor.isActive()
-                            && !isGroupReceivingBroadcast(groupId)) {
-                        Log.i(
-                                TAG,
-                                "Group "
-                                        + groupId
-                                        + " is inactivated due to blocked media context");
-                        groupDescriptor.mInactivatedDueToContextType = true;
-                        setActiveGroupWithDevice(null, false);
-                    }
+                LeAudioGroupDescriptor groupDescriptor = getGroupDescriptor(groupId);
+                if (groupDescriptor != null
+                        && groupDescriptor.isActive()
+                        && !isGroupReceivingBroadcast(groupId)) {
+                    Log.i(TAG, "Group " + groupId + " is inactivated due to blocked media context");
+                    groupDescriptor.mInactivatedDueToContextType = true;
+                    setActiveGroupWithDevice(null, false);
                 }
             default:
                 break;
@@ -4382,11 +4376,6 @@ public class LeAudioService extends ProfileService {
     }
 
     void removeAuthorizationInfoForRelatedProfiles(BluetoothDevice device) {
-        if (!Flags.leaudioMcsTbsAuthorizationRebondFix()) {
-            Log.i(TAG, "leaudio_mcs_tbs_authorization_rebond_fix is disabled");
-            return;
-        }
-
         McpService mcpService = getMcpService();
         if (mcpService != null) {
             mcpService.removeDeviceAuthorizationInfo(device);
@@ -5056,19 +5045,6 @@ public class LeAudioService extends ProfileService {
             implements IProfileServiceBinder {
         private LeAudioService mService;
 
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-        private LeAudioService getService(AttributionSource source) {
-            if (Utils.isInstrumentationTestMode()) {
-                return mService;
-            }
-            if (!Utils.checkServiceAvailable(mService, TAG)
-                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
-                    || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
-                return null;
-            }
-            return mService;
-        }
-
         BluetoothLeAudioBinder(LeAudioService svc) {
             mService = svc;
         }
@@ -5076,6 +5052,23 @@ public class LeAudioService extends ProfileService {
         @Override
         public void cleanup() {
             mService = null;
+        }
+
+        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+        private LeAudioService getService(AttributionSource source) {
+            // Cache mService because it can change while getService is called
+            LeAudioService service = mService;
+
+            if (Utils.isInstrumentationTestMode()) {
+                return service;
+            }
+
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG)
+                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
+                return null;
+            }
+            return service;
         }
 
         @Override

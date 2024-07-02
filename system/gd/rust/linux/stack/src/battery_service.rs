@@ -10,7 +10,7 @@ use crate::callbacks::Callbacks;
 use crate::Message;
 use crate::RPCProxy;
 use crate::{uuid, APIMessage, BluetoothAPI};
-use bt_topshim::btif::{BtTransport, DisplayAddress, RawAddress, Uuid};
+use bt_topshim::btif::{BtAclState, BtBondState, BtTransport, DisplayAddress, RawAddress, Uuid};
 use bt_topshim::profiles::gatt::{GattStatus, LePhy};
 use log::debug;
 use std::collections::HashMap;
@@ -56,7 +56,7 @@ pub enum BatteryServiceActions {
     /// Params: addr, handle, value
     OnNotify(RawAddress, i32, Vec<u8>),
     /// Params: remote_device, transport
-    Connect(BluetoothDevice, BtTransport),
+    Connect(BluetoothDevice, BtAclState, BtBondState, BtTransport),
     /// Params: remote_device
     Disconnect(BluetoothDevice),
 }
@@ -222,10 +222,14 @@ impl BatteryService {
                 });
             }
 
-            BatteryServiceActions::Connect(device, transport) => {
-                if transport != BtTransport::Le {
+            BatteryServiceActions::Connect(device, acl_state, bond_state, transport) => {
+                if transport != BtTransport::Le
+                    || acl_state != BtAclState::Connected
+                    || bond_state != BtBondState::Bonded
+                {
                     return;
                 }
+
                 self.init_device(device.address, transport);
             }
 

@@ -1039,18 +1039,6 @@ public class CsipSetCoordinatorService extends ProfileService {
             implements IProfileServiceBinder {
         private CsipSetCoordinatorService mService;
 
-        private CsipSetCoordinatorService getService() {
-            if (Utils.isInstrumentationTestMode()) {
-                return mService;
-            }
-            if (!Utils.checkServiceAvailable(mService, TAG)
-                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)) {
-                return null;
-            }
-
-            return mService;
-        }
-
         BluetoothCsisBinder(CsipSetCoordinatorService svc) {
             mService = svc;
         }
@@ -1058,6 +1046,21 @@ public class CsipSetCoordinatorService extends ProfileService {
         @Override
         public void cleanup() {
             mService = null;
+        }
+
+        private CsipSetCoordinatorService getService() {
+            // Cache mService because it can change while getService is called
+            CsipSetCoordinatorService service = mService;
+
+            if (Utils.isInstrumentationTestMode()) {
+                return service;
+            }
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG)) {
+                return null;
+            }
+
+            return service;
         }
 
         @Override

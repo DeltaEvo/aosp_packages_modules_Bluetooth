@@ -2305,10 +2305,13 @@ public class AdapterService extends Service {
         }
 
         public AdapterService getService() {
-            if (mService != null && mService.isAvailable()) {
-                return mService;
+            // Cache mService because it can change while getService is called
+            AdapterService service = mService;
+
+            if (service == null || !service.isAvailable()) {
+                return null;
             }
-            return null;
+            return service;
         }
 
         @Override

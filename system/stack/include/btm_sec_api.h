@@ -110,19 +110,3 @@ tBTM_STATUS BTM_DeleteStoredLinkKey(const RawAddress* bd_addr,
 void BTM_BleSirkConfirmDeviceReply(const RawAddress& bd_addr, uint8_t res);
 
 uint8_t btm_ble_read_sec_key_size(const RawAddress& bd_addr);
-
-/*******************************************************************************
- *
- * Function         BTM_IsRemoteNameKnown
- *
- * Description      This function checks if the remote name is known.
- *
- * Input Params:    bd_addr: Address of remote
- *                  transport: Transport, auto if unknown
- *
- * Returns
- *                  true if name is known, false otherwise
- *
- ******************************************************************************/
-bool BTM_IsRemoteNameKnown(const RawAddress& remote_bda,
-                           tBT_TRANSPORT transport);

@@ -270,9 +270,8 @@ class HearingAidImpl : public HearingAid {
   bool needs_parameter_update = false;
   std::chrono::time_point<std::chrono::steady_clock> last_drop_time_point =
       std::chrono::steady_clock::now();
-  // at most 1 packet DROP per DROP_FREQUENCY_THRESHOLD seconds
-  const int DROP_FREQUENCY_THRESHOLD =
-      bluetooth::common::init_flags::get_asha_packet_drop_frequency_threshold();
+  // at most 1 packet DROP per kDropFrequencyThreshold seconds
+  static constexpr int64_t kDropFrequencyThreshold = 60;
 
   // Resampler context for audio stream.
   // Clock recovery uses L2CAP Flow Control Credit Ind acknowledgments
@@ -450,9 +449,8 @@ class HearingAidImpl : public HearingAid {
   bool IsBelowDropFrequency(
       std::chrono::time_point<std::chrono::steady_clock> tp) {
     auto duration = tp - last_drop_time_point;
-    bool droppable =
-        std::chrono::duration_cast<std::chrono::seconds>(duration).count() >=
-        DROP_FREQUENCY_THRESHOLD;
+    bool droppable = std::chrono::duration_cast<std::chrono::seconds>(duration).count() >=
+                     kDropFrequencyThreshold;
     log::info("IsBelowDropFrequency {}", droppable);
     return droppable;
   }
@@ -746,7 +744,7 @@ class HearingAidImpl : public HearingAid {
     if (tx_phys == PHY_LE_2M && rx_phys == PHY_LE_2M) {
       log::info("phy update to 2M successful: bd_addr={}",
                 hearingDevice->address);
-      hearingDevice->phy_update_retry_remain = PHY_UPDATE_RETRY_LIMIT;
+      hearingDevice->phy_update_retry_remain = kPhyUpdateRetryLimit;
       return;
     }
 
@@ -1108,7 +1106,7 @@ class HearingAidImpl : public HearingAid {
         /// The L2CAP will automatically reconnect the LE-ACL link on
         /// disconnection when there is a pending channel request,
         /// which invalidates all encryption checks performed here.
-        com::android::bluetooth::flags::asha_asrc()
+        com::android::bluetooth::flags::asha_encrypted_l2c_coc()
             ? BTM_SEC_IN_ENCRYPT | BTM_SEC_OUT_ENCRYPT
             : BTM_SEC_NONE,
         HearingAidImpl::GapCallbackStatic, BT_TRANSPORT_LE);
@@ -1955,6 +1953,7 @@ class HearingAidImpl : public HearingAid {
     audio_running = false;
     encoder_state_release();
     current_volume = VOLUME_UNKNOWN;
+    ResetAsrc();
   }
 
   void SetVolume(int8_t volume) {

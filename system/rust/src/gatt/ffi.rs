@@ -4,7 +4,6 @@
 use std::iter::Peekable;
 
 use anyhow::{bail, Result};
-use bt_common::init_flags::always_use_private_gatt_for_debugging_is_enabled;
 use cxx::UniquePtr;
 pub use inner::*;
 use log::{error, info, trace, warn};
@@ -281,7 +280,8 @@ fn open_server(server_id: u8) {
     let server_id = ServerId(server_id);
 
     do_in_rust_thread(move |modules| {
-        if always_use_private_gatt_for_debugging_is_enabled() {
+        if false {
+            // Enable to always use private GATT for debugging
             modules
                 .gatt_module
                 .get_isolation_manager()

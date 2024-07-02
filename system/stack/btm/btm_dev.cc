@@ -36,11 +36,8 @@
 #include "btm_sec_api.h"
 #include "btm_sec_cb.h"
 #include "common/init_flags.h"
-#include "hci/controller_interface.h"
 #include "internal_include/bt_target.h"
 #include "l2c_api.h"
-#include "main/shim/entry.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "rust/src/connection/ffi/connection_shim.h"
 #include "stack/btm/btm_sec.h"
@@ -214,7 +211,7 @@ void BTM_SecClearSecurityFlags(const RawAddress& bd_addr) {
   if (p_dev_rec == NULL) return;
 
   p_dev_rec->sec_rec.sec_flags = 0;
-  p_dev_rec->sec_rec.sec_state = tSECURITY_STATE::BTM_SEC_STATE_IDLE;
+  p_dev_rec->sec_rec.sec_state = tSECURITY_STATE::IDLE;
   p_dev_rec->sm4 = BTM_SM4_UNKNOWN;
 }
 
@@ -688,12 +685,16 @@ std::vector<tBTM_SEC_DEV_REC*> btm_get_sec_dev_rec() {
 bool BTM_Sec_AddressKnown(const RawAddress& address) {
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(address);
 
-  //  not a known device, or a classic device, we assume public address
-  if (p_dev_rec == NULL || (p_dev_rec->device_type & BT_DEVICE_TYPE_BLE) == 0)
+  // not a known device, we assume public address
+  if (p_dev_rec == NULL) {
+    log::warn("{}, unknown device", address);
     return true;
-
-  log::warn("{}, device type not BLE: 0x{:02x}", address,
-            p_dev_rec->device_type);
+  }
+  // a classic device, we assume public address
+  if ((p_dev_rec->device_type & BT_DEVICE_TYPE_BLE) == 0) {
+    log::warn("{}, device type not BLE: 0x{:02x}", address, p_dev_rec->device_type);
+    return true;
+  }
 
   // bonded device with identity address known
   if (!p_dev_rec->ble.identity_address_with_type.bda.IsEmpty()) {
@@ -744,12 +745,6 @@ const tBLE_BD_ADDR BTM_Sec_GetAddressWithType(const RawAddress& bd_addr) {
 #endif
     return p_dev_rec->ble.identity_address_with_type;
   }
-}
-
-bool BTM_IsRemoteNameKnown(const RawAddress& bd_addr,
-                           tBT_TRANSPORT /* transport */) {
-  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
-  return (p_dev_rec == nullptr) ? false : p_dev_rec->sec_rec.is_name_known();
 }
 
 namespace bluetooth {

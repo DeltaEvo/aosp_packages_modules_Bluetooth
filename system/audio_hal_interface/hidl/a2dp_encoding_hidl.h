@@ -18,8 +18,9 @@
 
 #include <vector>
 
-#include "audio_a2dp_hw/include/audio_a2dp_hw.h"
+#include "a2dp_encoding.h"
 #include "common/message_loop_thread.h"
+#include "hardware/bt_av.h"
 
 namespace bluetooth {
 namespace audio {
@@ -48,8 +49,8 @@ bool setup_codec();
 // StreamStarted, StreamSuspended
 void start_session();
 void end_session();
-void ack_stream_started(const tA2DP_CTRL_ACK& status);
-void ack_stream_suspended(const tA2DP_CTRL_ACK& status);
+void ack_stream_started(::bluetooth::audio::a2dp::BluetoothAudioStatus status);
+void ack_stream_suspended(::bluetooth::audio::a2dp::BluetoothAudioStatus status);
 
 // Read from the FMQ of BluetoothAudio HAL
 size_t read(uint8_t* p_buf, uint32_t len);
