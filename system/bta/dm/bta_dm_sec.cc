@@ -21,17 +21,16 @@
 #include <cstdint>
 
 #include "bta/dm/bta_dm_act.h"
-#include "bta/dm/bta_dm_disc.h"
 #include "bta/dm/bta_dm_int.h"
 #include "bta/dm/bta_dm_sec_int.h"
 #include "bta/include/bta_dm_ci.h"  // bta_dm_ci_rmt_oob
 #include "btif/include/btif_dm.h"
-#include "btif/include/btif_storage.h"
 #include "internal_include/bt_target.h"
 #include "stack/include/bt_dev_class.h"
 #include "stack/include/btm_ble_sec_api_types.h"
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_sec_api.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/gatt_api.h"
 #include "stack/include/security_client_callbacks.h"
 #include "types/bt_transport.h"
@@ -47,7 +46,7 @@ static uint8_t bta_dm_new_link_key_cback(const RawAddress& bd_addr, DEV_CLASS de
                                          bool is_ctkd);
 static uint8_t bta_dm_pin_cback(const RawAddress& bd_addr, DEV_CLASS dev_class,
                                 const BD_NAME bd_name, bool min_16_digit);
-static uint8_t bta_dm_sirk_verifiction_cback(const RawAddress& bd_addr);
+static tBTM_STATUS bta_dm_sirk_verifiction_cback(const RawAddress& bd_addr);
 static void bta_dm_authentication_complete_cback(const RawAddress& bd_addr, DEV_CLASS dev_class,
                                                  BD_NAME bd_name, tHCI_REASON result);
 static void bta_dm_ble_id_key_cback(uint8_t key_type, tBTM_BLE_LOCAL_KEYS* p_key);
@@ -896,7 +895,7 @@ static void bta_dm_ble_id_key_cback(uint8_t key_type, tBTM_BLE_LOCAL_KEYS* p_key
  * Returns          void
  *
  ******************************************************************************/
-static uint8_t bta_dm_sirk_verifiction_cback(const RawAddress& bd_addr) {
+static tBTM_STATUS bta_dm_sirk_verifiction_cback(const RawAddress& bd_addr) {
   tBTA_DM_SEC sec_event = {.ble_req = {
                                    .bd_addr = bd_addr,
                            }};
