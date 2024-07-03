@@ -93,7 +93,7 @@ static const uint8_t avrc_ctrl_event_map[] = {
  *
  *****************************************************************************/
 bool avrcp_absolute_volume_is_enabled() {
-  return GET_SYSPROP(Avrcp, absolute_volume, true);
+  return android::sysprop::bluetooth::Avrcp::absolute_volume().value_or(true);
 }
 
 /******************************************************************************

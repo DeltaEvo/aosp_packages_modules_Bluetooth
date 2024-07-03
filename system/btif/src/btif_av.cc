@@ -3494,7 +3494,7 @@ bool btif_av_src_sink_coexist_enabled(void) {
   if (com::android::bluetooth::flags::a2dp_concurrent_source_sink()) {
     return is_a2dp_sink_property_enabled() && is_a2dp_source_property_enabled();
   }
-  return GET_SYSPROP(A2dp, src_sink_coexist, false);
+  return android::sysprop::bluetooth::A2dp::src_sink_coexist().value_or(false);
 }
 
 static void bta_av_source_callback(tBTA_AV_EVT event, tBTA_AV* p_data) {
