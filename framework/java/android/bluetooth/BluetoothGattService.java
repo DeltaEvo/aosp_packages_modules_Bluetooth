@@ -183,7 +183,7 @@ public class BluetoothGattService implements Parcelable {
 
         ArrayList<BluetoothGattIncludedService> inclSvcs =
                 in.createTypedArrayList(BluetoothGattIncludedService.CREATOR);
-        if (chrcs != null) {
+        if (inclSvcs != null) {
             for (BluetoothGattIncludedService isvc : inclSvcs) {
                 mIncludedServices.add(
                         new BluetoothGattService(
