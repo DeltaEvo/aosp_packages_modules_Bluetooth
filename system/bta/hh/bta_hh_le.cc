@@ -666,25 +666,19 @@ static bool bta_hh_le_write_rpt_clt_cfg(tBTA_HH_DEV_CB* p_cb);
 
 static void write_rpt_clt_cfg_cb(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
                                  uint16_t len, const uint8_t* value, void* data) {
-  uint8_t srvc_inst_id;
-
   tBTA_HH_DEV_CB* p_dev_cb = (tBTA_HH_DEV_CB*)data;
   const gatt::Characteristic* characteristic = BTA_GATTC_GetOwningCharacteristic(conn_id, handle);
   if (characteristic == nullptr) {
     log::error("Characteristic with handle {} not found clt cfg", handle);
     return;
   }
-  if (!characteristic->uuid.Is16Bit()) {
-    log::error("Unexpected len characteristic ID clt cfg: {}", characteristic->uuid.ToString());
-    return;
-  }
 
   uint16_t char_uuid = bta_hh_get_uuid16(p_dev_cb, characteristic->uuid);
-
-  srvc_inst_id = BTA_GATTC_GetOwningService(conn_id, handle)->handle;
   switch (char_uuid) {
-    case GATT_UUID_BATTERY_LEVEL: /* battery level clt cfg registered */
+    case GATT_UUID_BATTERY_LEVEL: /* battery level clt cfg registered */ {
+      uint8_t srvc_inst_id = BTA_GATTC_GetOwningService(conn_id, handle)->handle;
       bta_hh_le_find_service_inst_by_battery_inst_id(p_dev_cb, srvc_inst_id);
+    }
       FALLTHROUGH_INTENDED; /* FALLTHROUGH */
     case GATT_UUID_HID_BT_KB_INPUT:
     case GATT_UUID_HID_BT_MOUSE_INPUT:
@@ -698,7 +692,7 @@ static void write_rpt_clt_cfg_cb(uint16_t conn_id, tGATT_STATUS status, uint16_t
       break;
 
     default:
-      log::error("Unknown char ID clt cfg:0x{:04x}", char_uuid);
+      log::error("Unknown char ID clt cfg:{}", characteristic->uuid.ToString());
   }
 }
 
@@ -1630,11 +1624,6 @@ static void bta_hh_le_input_rpt_notify(tBTA_GATTC_NOTIFY* p_data) {
 
   const gatt::Service* p_svc = BTA_GATTC_GetOwningService(p_dev_cb->conn_id, p_char->value_handle);
 
-  if (!p_char->uuid.Is16Bit()) {
-    log::error("Unexpected characteristic len: {}", p_char->uuid.ToString());
-    return;
-  }
-
   p_rpt = bta_hh_le_find_report_entry(
           p_dev_cb, p_svc->handle, bta_hh_get_uuid16(p_dev_cb, p_char->uuid), p_char->value_handle);
   if (p_rpt == NULL) {
@@ -1814,13 +1803,8 @@ static void read_report_cb(uint16_t conn_id, tGATT_STATUS status, uint16_t handl
     log::error("Unknown handle");
     return;
   }
-  if (!p_char->uuid.Is16Bit()) {
-    log::error("Unexpected characteristic len: {}", p_char->uuid.ToString());
-    return;
-  }
 
   uint16_t char_uuid = bta_hh_get_uuid16(p_dev_cb, p_char->uuid);
-
   switch (char_uuid) {
     case GATT_UUID_HID_REPORT:
     case GATT_UUID_HID_BT_KB_INPUT:
@@ -1829,7 +1813,7 @@ static void read_report_cb(uint16_t conn_id, tGATT_STATUS status, uint16_t handl
     case GATT_UUID_BATTERY_LEVEL:
       break;
     default:
-      log::error("Unexpected Read UUID: 0x{:04x}", char_uuid);
+      log::error("Unexpected Read UUID: {}", p_char->uuid.ToString());
       return;
   }
 
@@ -1898,18 +1882,15 @@ static void write_report_cb(uint16_t conn_id, tGATT_STATUS status, uint16_t hand
   log::verbose("w4_evt:{}", bta_hh_event_text(p_dev_cb->w4_evt));
 
   const gatt::Characteristic* p_char = BTA_GATTC_GetCharacteristic(conn_id, handle);
-
   if (p_char == nullptr) {
-    return;
-  }
-  if (!p_char->uuid.Is16Bit()) {
-    log::error("Unexpected characteristic len: {}", p_char->uuid.ToString());
+    log::error("Unknown characteristic handle: {}", handle);
     return;
   }
 
   uint16_t uuid16 = bta_hh_get_uuid16(p_dev_cb, p_char->uuid);
   if (uuid16 != GATT_UUID_HID_REPORT && uuid16 != GATT_UUID_HID_BT_KB_INPUT &&
       uuid16 != GATT_UUID_HID_BT_MOUSE_INPUT && uuid16 != GATT_UUID_HID_BT_KB_OUTPUT) {
+    log::error("Unexpected characteristic UUID: {}", p_char->uuid.ToString());
     return;
   }
 
