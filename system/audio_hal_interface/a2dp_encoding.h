@@ -29,16 +29,14 @@ namespace bluetooth {
 namespace audio {
 namespace a2dp {
 
-/// Copied after the definition from the Bluetooth Audio interface:
+/// Loosely copied after the definition from the Bluetooth Audio interface:
 /// hardware/interfaces/bluetooth/audio/aidl/android/hardware/bluetooth/audio/BluetoothAudioStatus.aidl
-enum BluetoothAudioStatus {
-  UNKNOWN = 0,
-  SUCCESS = 1,
-  UNSUPPORTED_CODEC_CONFIGURATION = 2,
-  FAILURE = 3,
-  // Not defined in BluetoothAudioStatus, but used internally for
-  // state keeping.
-  PENDING = 5,
+enum class BluetoothAudioStatus {
+  SUCCESS = 0,
+  UNKNOWN,
+  UNSUPPORTED_CODEC_CONFIGURATION,
+  FAILURE,
+  PENDING,
 };
 
 bool update_codec_offloading_capabilities(
