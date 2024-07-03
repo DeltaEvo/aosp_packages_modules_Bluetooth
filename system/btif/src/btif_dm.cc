@@ -3104,7 +3104,7 @@ static void id_status_callback(tBT_TRANSPORT transport, bool is_valid, const Oct
   log::info("oob_advertiser_id: {}", id);
 
   auto advertiser = bluetooth::shim::get_ble_advertiser_instance();
-  AdvertiseParameters parameters{};
+  ::AdvertiseParameters parameters{};
   parameters.advertising_event_properties = 0x0045 /* connectable, discoverable, tx power */;
   parameters.min_interval = 0xa0;   // 100 ms
   parameters.max_interval = 0x500;  // 800 ms

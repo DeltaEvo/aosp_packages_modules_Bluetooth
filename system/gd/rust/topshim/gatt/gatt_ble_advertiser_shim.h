@@ -29,9 +29,9 @@ namespace rust {
 //
 // This shim implementation just calls the underlying interface and binds the
 // local callbacks in order to dispatch the Rust callbacks.
-class BleAdvertiserIntf : public AdvertisingCallbacks {
+class BleAdvertiserIntf : public ::AdvertisingCallbacks {
 public:
-  BleAdvertiserIntf(BleAdvertiserInterface* adv_intf) : adv_intf_(adv_intf) {}
+  BleAdvertiserIntf(::BleAdvertiserInterface* adv_intf) : adv_intf_(adv_intf) {}
   ~BleAdvertiserIntf() = default;
 
   // AdvertisingCallbacks overrides
@@ -53,19 +53,19 @@ public:
   void Unregister(uint8_t adv_id);
 
   void GetOwnAddress(uint8_t adv_id);
-  void SetParameters(uint8_t adv_id, AdvertiseParameters params);
+  void SetParameters(uint8_t adv_id, ::AdvertiseParameters params);
   void SetData(uint8_t adv_id, bool set_scan_rsp, ::rust::Vec<uint8_t> data);
   void Enable(uint8_t adv_id, bool enable, uint16_t duration, uint8_t max_ext_adv_events);
-  void StartAdvertising(uint8_t adv_id, AdvertiseParameters params,
+  void StartAdvertising(uint8_t adv_id, ::AdvertiseParameters params,
                         ::rust::Vec<uint8_t> advertise_data,
                         ::rust::Vec<uint8_t> scan_response_data, int32_t timeout_in_sec);
-  void StartAdvertisingSet(int32_t reg_id, AdvertiseParameters params,
+  void StartAdvertisingSet(int32_t reg_id, ::AdvertiseParameters params,
                            ::rust::Vec<uint8_t> advertise_data,
                            ::rust::Vec<uint8_t> scan_response_data,
-                           PeriodicAdvertisingParameters periodic_params,
+                           ::PeriodicAdvertisingParameters periodic_params,
                            ::rust::Vec<uint8_t> periodic_data, uint16_t duration,
                            uint8_t max_ext_adv_events);
-  void SetPeriodicAdvertisingParameters(uint8_t adv_id, PeriodicAdvertisingParameters params);
+  void SetPeriodicAdvertisingParameters(uint8_t adv_id, ::PeriodicAdvertisingParameters params);
   void SetPeriodicAdvertisingData(uint8_t adv_id, ::rust::Vec<uint8_t> data);
   void SetPeriodicAdvertisingEnable(uint8_t adv_id, bool enable, bool include_adi);
 
@@ -79,7 +79,7 @@ private:
   void OnParametersCallback(uint8_t adv_id, uint8_t status, int8_t tx_power);
   void OnGetAddressCallback(uint8_t adv_id, uint8_t addr_type, RawAddress address);
 
-  BleAdvertiserInterface* adv_intf_;
+  ::BleAdvertiserInterface* adv_intf_;
 };
 
 std::unique_ptr<BleAdvertiserIntf> GetBleAdvertiserIntf(const unsigned char* gatt_intf);
