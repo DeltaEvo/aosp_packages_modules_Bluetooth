@@ -94,10 +94,20 @@ public final class BluetoothCodecType implements Parcelable {
     }
 
     /**
-     * Returns the codec unique identifier. The codec identifier is 40 bits, - Bits 0-7: Audio Codec
-     * ID, as defined by [ID 6.5.1] 0x00: SBC 0x02: AAC 0xFF: Vendor - Bits 8-23: Company ID, set to
-     * 0, if octet 0 is not 0xFF. - Bits 24-39: Vendor-defined codec ID, set to 0, if octet 0 is not
-     * 0xFF.
+     * Returns the codec unique identifier.
+     *
+     * <p>The codec identifier is 40 bits:
+     *
+     * <ul>
+     *   <li>Bits 0-7: Audio Codec ID, as defined by [ID 6.5.1]
+     *       <ul>
+     *         <li>0x00: SBC
+     *         <li>0x02: AAC
+     *         <li>0xFF: Vendor
+     *       </ul>
+     *   <li>Bits 8-23: Company ID, set to 0, if octet 0 is not 0xFF.
+     *   <li>Bits 24-39: Vendor-defined codec ID, set to 0, if octet 0 is not 0xFF.
+     * </ul>
      */
     @FlaggedApi(Flags.FLAG_A2DP_OFFLOAD_CODEC_EXTENSIBILITY)
     public long getCodecId() {
