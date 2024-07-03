@@ -52,6 +52,7 @@ import android.media.BluetoothProfileConnectionInfo;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelUuid;
+import android.sysprop.BluetoothProperties;
 import android.platform.test.flag.junit.SetFlagsRule;
 
 import androidx.test.filters.MediumTest;
@@ -1188,6 +1189,7 @@ public class LeAudioServiceTest {
     /** Test setting connection policy */
     @Test
     public void testSetConnectionPolicy() {
+        mSetFlagsRule.enableFlags(Flags.FLAG_LEAUDIO_BROADCAST_FEATURE_SUPPORT);
         doReturn(true).when(mNativeInterface).connectLeAudio(any(BluetoothDevice.class));
         doReturn(true).when(mNativeInterface).disconnectLeAudio(any(BluetoothDevice.class));
         doReturn(true)
@@ -1196,6 +1198,7 @@ public class LeAudioServiceTest {
         when(mVolumeControlService.setConnectionPolicy(any(), anyInt())).thenReturn(true);
         when(mCsipSetCoordinatorService.setConnectionPolicy(any(), anyInt())).thenReturn(true);
         when(mHapClientService.setConnectionPolicy(any(), anyInt())).thenReturn(true);
+        when(mBassClientService.setConnectionPolicy(any(), anyInt())).thenReturn(true);
         when(mDatabaseManager.getProfileConnectionPolicy(mSingleDevice, BluetoothProfile.LE_AUDIO))
                 .thenReturn(BluetoothProfile.CONNECTION_POLICY_UNKNOWN);
 
@@ -1211,7 +1214,10 @@ public class LeAudioServiceTest {
                 .setConnectionPolicy(mSingleDevice, BluetoothProfile.CONNECTION_POLICY_ALLOWED);
         verify(mHapClientService, times(1))
                 .setConnectionPolicy(mSingleDevice, BluetoothProfile.CONNECTION_POLICY_ALLOWED);
-
+        if (BluetoothProperties.isProfileBapBroadcastAssistEnabled().orElse(false)) {
+            verify(mBassClientService, times(1))
+                    .setConnectionPolicy(mSingleDevice, BluetoothProfile.CONNECTION_POLICY_ALLOWED);
+        }
         // Verify the connection state broadcast, and that we are in Connecting state
         verifyConnectionStateIntent(
                 TIMEOUT_MS,
@@ -1251,7 +1257,11 @@ public class LeAudioServiceTest {
                 .setConnectionPolicy(mSingleDevice, BluetoothProfile.CONNECTION_POLICY_FORBIDDEN);
         verify(mHapClientService, times(1))
                 .setConnectionPolicy(mSingleDevice, BluetoothProfile.CONNECTION_POLICY_FORBIDDEN);
-
+        if (BluetoothProperties.isProfileBapBroadcastAssistEnabled().orElse(false)) {
+            verify(mBassClientService, times(1))
+                    .setConnectionPolicy(
+                            mSingleDevice, BluetoothProfile.CONNECTION_POLICY_FORBIDDEN);
+        }
         // Verify the connection state broadcast, and that we are in Connecting state
         verifyConnectionStateIntent(
                 TIMEOUT_MS,
