@@ -450,10 +450,6 @@ A2dpCodecConfigAptxHd::A2dpCodecConfigAptxHd(btav_a2dp_codec_priority_t codec_pr
 A2dpCodecConfigAptxHd::~A2dpCodecConfigAptxHd() {}
 
 bool A2dpCodecConfigAptxHd::init() {
-  if (!isValid()) {
-    return false;
-  }
-
   // Load the encoder
   if (A2DP_VendorLoadEncoderAptxHd() != LOAD_SUCCESS) {
     log::error("cannot load the encoder");

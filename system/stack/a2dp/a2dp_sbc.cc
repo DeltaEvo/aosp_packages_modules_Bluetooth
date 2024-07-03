@@ -874,16 +874,6 @@ A2dpCodecConfigSbcSource::A2dpCodecConfigSbcSource(btav_a2dp_codec_priority_t co
 A2dpCodecConfigSbcSource::~A2dpCodecConfigSbcSource() {}
 
 bool A2dpCodecConfigSbcSource::init() {
-  if (!isValid()) {
-    return false;
-  }
-
-  // Load the encoder
-  if (!A2DP_LoadEncoderSbc()) {
-    log::error("cannot load the encoder");
-    return false;
-  }
-
   return true;
 }
 
@@ -1501,16 +1491,6 @@ A2dpCodecConfigSbcSink::A2dpCodecConfigSbcSink(btav_a2dp_codec_priority_t codec_
 A2dpCodecConfigSbcSink::~A2dpCodecConfigSbcSink() {}
 
 bool A2dpCodecConfigSbcSink::init() {
-  if (!isValid()) {
-    return false;
-  }
-
-  // Load the decoder
-  if (!A2DP_LoadDecoderSbc()) {
-    log::error("cannot load the decoder");
-    return false;
-  }
-
   return true;
 }
 

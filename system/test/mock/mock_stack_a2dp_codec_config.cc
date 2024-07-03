@@ -124,10 +124,6 @@ bool A2dpCodecConfig::isCodecConfigEmpty(const btav_a2dp_codec_config_t& /* code
   inc_func_call_count(__func__);
   return false;
 }
-bool A2dpCodecConfig::isValid() const {
-  inc_func_call_count(__func__);
-  return false;
-}
 bool A2dpCodecConfig::setCodecUserConfig(const btav_a2dp_codec_config_t& /* codec_user_config */,
                                          const btav_a2dp_codec_config_t& /* codec_audio_config */,
                                          const tA2DP_ENCODER_INIT_PEER_PARAMS* /* p_peer_params */,

@@ -253,8 +253,6 @@ bool A2dpCodecConfig::getCodecSpecificConfig(tBT_A2DP_OFFLOAD* p_a2dp_offload) {
   return true;
 }
 
-bool A2dpCodecConfig::isValid() const { return true; }
-
 bool A2dpCodecConfig::copyOutOtaCodecConfig(uint8_t* p_codec_info) {
   std::lock_guard<std::recursive_mutex> lock(codec_mutex_);
 

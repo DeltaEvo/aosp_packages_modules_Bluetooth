@@ -680,10 +680,6 @@ A2dpCodecConfigOpusSource::A2dpCodecConfigOpusSource(btav_a2dp_codec_priority_t 
 A2dpCodecConfigOpusSource::~A2dpCodecConfigOpusSource() {}
 
 bool A2dpCodecConfigOpusSource::init() {
-  if (!isValid()) {
-    return false;
-  }
-
   return true;
 }
 
@@ -1251,10 +1247,6 @@ A2dpCodecConfigOpusSink::A2dpCodecConfigOpusSink(btav_a2dp_codec_priority_t code
 A2dpCodecConfigOpusSink::~A2dpCodecConfigOpusSink() {}
 
 bool A2dpCodecConfigOpusSink::init() {
-  if (!isValid()) {
-    return false;
-  }
-
   return true;
 }
 

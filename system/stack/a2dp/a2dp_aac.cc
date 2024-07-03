@@ -314,11 +314,6 @@ static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilityAac(const tA2DP_AAC_CIE* p_ca
   return A2DP_SUCCESS;
 }
 
-bool A2DP_UsesRtpHeaderAac(bool /* content_protection_enabled */,
-                           const uint8_t* /* p_codec_info */) {
-  return true;
-}
-
 const char* A2DP_CodecNameAac(const uint8_t* /* p_codec_info */) { return "AAC"; }
 
 bool A2DP_CodecTypeEqualsAac(const uint8_t* p_codec_info_a, const uint8_t* p_codec_info_b) {
@@ -762,10 +757,6 @@ A2dpCodecConfigAacSource::A2dpCodecConfigAacSource(btav_a2dp_codec_priority_t co
 A2dpCodecConfigAacSource::~A2dpCodecConfigAacSource() {}
 
 bool A2dpCodecConfigAacSource::init() {
-  if (!isValid()) {
-    return false;
-  }
-
   // Load the encoder
   if (!A2DP_LoadEncoderAac()) {
     log::error("cannot load the encoder");
@@ -1434,10 +1425,6 @@ A2dpCodecConfigAacSink::A2dpCodecConfigAacSink(btav_a2dp_codec_priority_t codec_
 A2dpCodecConfigAacSink::~A2dpCodecConfigAacSink() {}
 
 bool A2dpCodecConfigAacSink::init() {
-  if (!isValid()) {
-    return false;
-  }
-
   // Load the decoder
   if (!A2DP_LoadDecoderAac()) {
     log::error("cannot load the decoder");

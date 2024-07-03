@@ -207,9 +207,6 @@ protected:
   // Returns true on success, otherwise false.
   virtual bool init() = 0;
 
-  // Checks whether the internal state is valid
-  virtual bool isValid() const;
-
   // Checks whether the A2DP Codec Configuration is valid.
   // Returns true if A2DP Codec Configuration stored in |codec_config|
   // is valid, otherwise false.

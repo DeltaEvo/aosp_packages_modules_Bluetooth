@@ -153,18 +153,6 @@ static void a2dp_sdp_cback(const RawAddress& /* bd_addr */, tSDP_STATUS status) 
   return;
 }
 
-/*******************************************************************************
- *
- * Function         a2dp_set_avdt_sdp_ver
- *
- * Description      This function allows the script wrapper to change the
- *                  avdt version of a2dp.
- *
- * Returns          None
- *
- ******************************************************************************/
-void a2dp_set_avdt_sdp_ver(uint16_t avdt_sdp_ver) { a2dp_cb.avdt_sdp_ver = avdt_sdp_ver; }
-
 /******************************************************************************
  *
  * Function         A2DP_AddRecord
@@ -222,7 +210,7 @@ tA2DP_STATUS A2DP_AddRecord(uint16_t service_uuid, char* p_service_name, char* p
   proto_list[0].params[0] = AVDT_PSM;
   proto_list[1].protocol_uuid = UUID_PROTOCOL_AVDTP;
   proto_list[1].num_params = 1;
-  proto_list[1].params[0] = a2dp_cb.avdt_sdp_ver;
+  proto_list[1].params[0] = A2DP_GetAvdtpVersion();
 
   result &= get_legacy_stack_sdp_api()->handle.SDP_AddProtocolList(sdp_handle, A2DP_NUM_PROTO_ELEMS,
                                                                    proto_list);
@@ -377,8 +365,6 @@ uint8_t A2DP_BitsSet(uint64_t num) {
  ******************************************************************************/
 void A2DP_Init(void) {
   memset(&a2dp_cb, 0, sizeof(tA2DP_CB));
-
-  a2dp_cb.avdt_sdp_ver = AVDT_VERSION;
 }
 
-uint16_t A2DP_GetAvdtpVersion() { return a2dp_cb.avdt_sdp_ver; }
+uint16_t A2DP_GetAvdtpVersion() { return AVDT_VERSION; }
