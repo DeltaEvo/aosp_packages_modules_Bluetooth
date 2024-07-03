@@ -971,6 +971,22 @@ bool LeAudioDeviceGroup::SetPreferredAudioSetConfiguration(
   return is_updated;
 }
 
+bool LeAudioDeviceGroup::IsUsingPreferredAudioSetConfiguration(
+        const LeAudioContextType& context_type) const {
+  if (!preferred_config_.sink || !preferred_config_.source) {
+    log::assert_that(!preferred_config_.sink && !preferred_config_.source,
+                     "Preferred config should be null for both direction");
+    return false;
+  }
+
+  if (preferred_config_.sink->codec_priority == -1 ||
+      preferred_config_.source->codec_priority == -1) {
+    return false;
+  }
+
+  return GetPreferredConfiguration(context_type).get();
+}
+
 void LeAudioDeviceGroup::ResetPreferredAudioSetConfiguration(void) const {
   log::info("Reset preferred configuration cached for all cotexts.");
   context_to_preferred_configuration_cache_map_.clear();
@@ -1712,14 +1728,29 @@ LeAudioDeviceGroup::GetCachedConfiguration(LeAudioContextType context_type) cons
 }
 
 std::shared_ptr<const set_configurations::AudioSetConfiguration>
+LeAudioDeviceGroup::GetCachedPreferredConfiguration(LeAudioContextType context_type) const {
+  if (context_to_preferred_configuration_cache_map_.count(context_type) != 0) {
+    return context_to_preferred_configuration_cache_map_.at(context_type).second;
+  }
+  return nullptr;
+}
+
+std::shared_ptr<const set_configurations::AudioSetConfiguration>
 LeAudioDeviceGroup::GetActiveConfiguration(void) const {
-  return GetCachedConfiguration(configuration_context_type_);
+  return IsUsingPreferredAudioSetConfiguration(configuration_context_type_)
+                 ? GetCachedPreferredConfiguration(configuration_context_type_)
+                 : GetCachedConfiguration(configuration_context_type_);
 }
 
 std::shared_ptr<const set_configurations::AudioSetConfiguration>
 LeAudioDeviceGroup::GetConfiguration(LeAudioContextType context_type) const {
   if (context_type == LeAudioContextType::UNINITIALIZED) {
     return nullptr;
+  }
+
+  if (IsUsingPreferredAudioSetConfiguration(context_type)) {
+    log::debug("Using preferred codec config: {}", common::ToString(context_type));
+    return GetCachedPreferredConfiguration(context_type);
   }
 
   const set_configurations::AudioSetConfiguration* conf = nullptr;
@@ -1736,6 +1767,27 @@ LeAudioDeviceGroup::GetConfiguration(LeAudioContextType context_type) const {
   }
 
   return GetCachedConfiguration(context_type);
+}
+
+std::shared_ptr<const set_configurations::AudioSetConfiguration>
+LeAudioDeviceGroup::GetPreferredConfiguration(LeAudioContextType context_type) const {
+  if (context_type == LeAudioContextType::UNINITIALIZED) {
+    return nullptr;
+  }
+
+  const set_configurations::AudioSetConfiguration* conf = nullptr;
+  bool is_valid = false;
+
+  if (context_to_preferred_configuration_cache_map_.count(context_type) != 0) {
+    auto& valid_config_pair = context_to_preferred_configuration_cache_map_.at(context_type);
+    is_valid = valid_config_pair.first;
+    conf = valid_config_pair.second.get();
+  }
+  if (!is_valid || conf == nullptr) {
+    UpdateAudioSetConfigurationCache(context_type, true);
+  }
+
+  return GetCachedPreferredConfiguration(context_type);
 }
 
 LeAudioCodecConfiguration LeAudioDeviceGroup::GetAudioSessionCodecConfigForDirection(

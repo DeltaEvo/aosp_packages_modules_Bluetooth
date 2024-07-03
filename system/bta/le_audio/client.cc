@@ -47,6 +47,7 @@
 #include "gatt_api.h"
 #include "hci/controller_interface.h"
 #include "internal_include/stack_config.h"
+#include "le_audio/device_groups.h"
 #include "le_audio_health_status.h"
 #include "le_audio_set_configuration_provider.h"
 #include "le_audio_types.h"
@@ -987,7 +988,45 @@ public:
   void SetCodecConfigPreference(
           int group_id, bluetooth::le_audio::btle_audio_codec_config_t input_codec_config,
           bluetooth::le_audio::btle_audio_codec_config_t output_codec_config) override {
-    // TODO Implement
+    if (!com::android::bluetooth::flags::leaudio_set_codec_config_preference()) {
+      log::debug("leaudio_set_codec_config_preference flag is not enabled");
+      return;
+    }
+
+    LeAudioDeviceGroup* group = aseGroups_.FindById(group_id);
+
+    if (!group) {
+      log::error("Unknown group id: %d", group_id);
+    }
+
+    if (group->SetPreferredAudioSetConfiguration(input_codec_config, output_codec_config)) {
+      log::info("group id: {}, setting preferred codec is successful.", group_id);
+    } else {
+      log::warn("group id: {}, setting preferred codec is failed.", group_id);
+      return;
+    }
+
+    if (group_id != active_group_id_) {
+      log::warn("Selected group is not active.");
+      return;
+    }
+
+    if (SetConfigurationAndStopStreamWhenNeeded(group, group->GetConfigurationContextType())) {
+      log::debug("Group id {} do the reconfiguration based on preferred codec config", group_id);
+    } else {
+      log::debug("Group id {} preferred codec config is not changed", group_id);
+    }
+  }
+
+  bool IsUsingPreferredCodecConfig(int group_id, int context_type) {
+    LeAudioDeviceGroup* group = aseGroups_.FindById(group_id);
+    if (!group) {
+      log::error("Unknown group id: %d", group_id);
+      return false;
+    }
+
+    return group->IsUsingPreferredAudioSetConfiguration(
+            static_cast<LeAudioContextType>(context_type));
   }
 
   void SetCcidInformation(int ccid, int context_type) override {
@@ -4170,7 +4209,10 @@ public:
 
   inline bool IsDirectionAvailableForCurrentConfiguration(const LeAudioDeviceGroup* group,
                                                           uint8_t direction) const {
-    auto current_config = group->GetCachedConfiguration(configuration_context_type_);
+    auto current_config =
+            group->IsUsingPreferredAudioSetConfiguration(configuration_context_type_)
+                    ? group->GetCachedPreferredConfiguration(configuration_context_type_)
+                    : group->GetCachedConfiguration(configuration_context_type_);
     if (current_config) {
       return current_config->confs.get(direction).size() != 0;
     }
