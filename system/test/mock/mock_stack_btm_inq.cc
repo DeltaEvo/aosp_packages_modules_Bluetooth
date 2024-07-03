@@ -78,8 +78,8 @@ namespace test {
 namespace mock {
 namespace stack_btm_inq {
 
-tBTM_STATUS BTM_CancelRemoteDeviceName::return_value = 0;
-tBTM_STATUS BTM_ClearInqDb::return_value = 0;
+tBTM_STATUS BTM_CancelRemoteDeviceName::return_value = BTM_SUCCESS;
+tBTM_STATUS BTM_ClearInqDb::return_value = BTM_SUCCESS;
 uint8_t BTM_GetEirSupportedServices::return_value = 0;
 uint8_t BTM_GetEirUuidList::return_value = 0;
 bool BTM_HasEirService::return_value = false;
@@ -87,12 +87,12 @@ tBTM_INQ_INFO* BTM_InqDbFirst::return_value = nullptr;
 tBTM_INQ_INFO* BTM_InqDbNext::return_value = nullptr;
 tBTM_INQ_INFO* BTM_InqDbRead::return_value = nullptr;
 uint16_t BTM_IsInquiryActive::return_value = 0;
-tBTM_STATUS BTM_ReadRemoteDeviceName::return_value = 0;
-tBTM_STATUS BTM_SetConnectability::return_value = 0;
-tBTM_STATUS BTM_SetDiscoverability::return_value = 0;
-tBTM_STATUS BTM_SetInquiryMode::return_value = 0;
-tBTM_STATUS BTM_StartInquiry::return_value = 0;
-tBTM_STATUS BTM_WriteEIR::return_value = 0;
+tBTM_STATUS BTM_ReadRemoteDeviceName::return_value = BTM_SUCCESS;
+tBTM_STATUS BTM_SetConnectability::return_value = BTM_SUCCESS;
+tBTM_STATUS BTM_SetDiscoverability::return_value = BTM_SUCCESS;
+tBTM_STATUS BTM_SetInquiryMode::return_value = BTM_SUCCESS;
+tBTM_STATUS BTM_StartInquiry::return_value = BTM_SUCCESS;
+tBTM_STATUS BTM_WriteEIR::return_value = BTM_SUCCESS;
 tINQ_DB_ENT* btm_inq_db_find::return_value = nullptr;
 tINQ_DB_ENT* btm_inq_db_new::return_value = nullptr;
 bool btm_inq_find_bdaddr::return_value = false;
