@@ -63,11 +63,14 @@ public:
 
     bluetooth::shim::GetAdvertising()->RegisterAdvertiser(
             bluetooth::shim::GetGdShimHandler()->BindOnce(
-                    [](::BleAdvertiserInterface::IdStatusCallback cb, uint8_t id, uint8_t status) {
-                      do_in_main_thread(
-                              base::BindOnce([](::BleAdvertiserInterface::IdStatusCallback cb,
-                                                uint8_t id, uint8_t status) { cb.Run(id, status); },
-                                             cb, id, status));
+                    [](::BleAdvertiserInterface::IdStatusCallback cb, uint8_t id,
+                       AdvertisingCallback::AdvertisingStatus status) {
+                      do_in_main_thread(base::BindOnce(
+                              [](::BleAdvertiserInterface::IdStatusCallback cb, uint8_t id,
+                                 AdvertisingCallback::AdvertisingStatus status) {
+                                cb.Run(id, static_cast<uint8_t>(status));
+                              },
+                              cb, id, status));
                     },
                     cb));
   }
