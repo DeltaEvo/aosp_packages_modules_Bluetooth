@@ -1485,11 +1485,14 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
                 group->dsa_.active = true;
 
-                /* Todo: Replace literal values */
-                param.sdu_itv_stom = 20000;
-                param.max_trans_lat_stom = 20;
-                it->max_sdu_size_stom = 15;
-                it->rtn_stom = 2;
+                param.sdu_itv_stom = bluetooth::le_audio::types::kLeAudioHeadtrackerSduItv;
+                param.max_trans_lat_stom =
+                        bluetooth::le_audio::types::kLeAudioHeadtrackerMaxTransLat;
+                it->max_sdu_size_stom = bluetooth::le_audio::types::kLeAudioHeadtrackerMaxSduSize;
+                if (!com::android::bluetooth::flags::headtracker_sdu_size()) {
+                  it->max_sdu_size_stom = 15;
+                }
+                it->rtn_stom = bluetooth::le_audio::types::kLeAudioHeadtrackerRtn;
 
                 it++;
               }
