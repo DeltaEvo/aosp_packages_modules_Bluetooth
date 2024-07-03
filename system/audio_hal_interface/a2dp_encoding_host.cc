@@ -24,7 +24,6 @@
 #include <vector>
 
 #include "a2dp_encoding.h"
-#include "audio_a2dp_hw/include/audio_a2dp_hw.h"
 #include "btif/include/btif_a2dp_source.h"
 #include "btif/include/btif_av.h"
 #include "btif/include/btif_hf.h"
@@ -37,6 +36,18 @@
 #define A2DP_HOST_DATA_PATH "/var/run/bluetooth/audio/.a2dp_data"
 // TODO(b/198260375): Make A2DP data owner group configurable.
 #define A2DP_HOST_DATA_GROUP "bluetooth-audio"
+
+typedef enum {
+  A2DP_CTRL_CMD_NONE,
+  A2DP_CTRL_CMD_CHECK_READY,
+  A2DP_CTRL_CMD_START,
+  A2DP_CTRL_CMD_STOP,
+  A2DP_CTRL_CMD_SUSPEND,
+  A2DP_CTRL_GET_INPUT_AUDIO_CONFIG,
+  A2DP_CTRL_GET_OUTPUT_AUDIO_CONFIG,
+  A2DP_CTRL_SET_OUTPUT_AUDIO_CONFIG,
+  A2DP_CTRL_GET_PRESENTATION_POSITION,
+} tA2DP_CTRL_CMD;
 
 namespace fmt {
 template <>
