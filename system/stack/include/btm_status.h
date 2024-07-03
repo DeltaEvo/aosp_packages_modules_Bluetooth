@@ -23,7 +23,7 @@
 #include "macros.h"
 
 /* BTM application return status codes */
-enum : uint8_t {
+enum tBTM_STATUS : uint8_t {
   BTM_SUCCESS = 0,                   /* 0  Command succeeded                 */
   BTM_CMD_STARTED,                   /* 1  Command started OK.               */
   BTM_BUSY,                          /* 2  Device busy with another command  */
@@ -55,7 +55,6 @@ enum : uint8_t {
   BTM_MAX_STATUS_VALUE,
   BTM_UNDEFINED = 0xFF,
 };
-typedef uint8_t tBTM_STATUS;
 
 inline uint8_t btm_status_value(const tBTM_STATUS& status) { return static_cast<uint8_t>(status); }
 
@@ -98,3 +97,8 @@ inline std::string btm_status_text(const tBTM_STATUS& status) {
       return base::StringPrintf("UNKNOWN[%hhu]", status);
   }
 }
+
+namespace fmt {
+template <>
+struct formatter<tBTM_STATUS> : enum_formatter<tBTM_STATUS> {};
+}  // namespace fmt
