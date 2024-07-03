@@ -77,16 +77,14 @@ uint16_t L2CA_RegisterWithSecurity(
 }
 
 uint16_t L2CA_LeCreditDefault() {
-  static const uint16_t sL2CAP_LE_CREDIT_DEFAULT =
-      bluetooth::os::GetSystemPropertyUint32Base(
-          "bluetooth.l2cap.le.credit_default.value", 0xffff);
+  static const uint16_t sL2CAP_LE_CREDIT_DEFAULT = bluetooth::os::GetSystemPropertyUint32Base(
+          "bluetooth.l2cap.le.credit_default.value", L2CAP_LE_CREDIT_MAX);
   return sL2CAP_LE_CREDIT_DEFAULT;
 }
 
 uint16_t L2CA_LeCreditThreshold() {
-  static const uint16_t sL2CAP_LE_CREDIT_THRESHOLD =
-      bluetooth::os::GetSystemPropertyUint32Base(
-          "bluetooth.l2cap.le.credit_threshold.value", 0x0040);
+  static const uint16_t sL2CAP_LE_CREDIT_THRESHOLD = bluetooth::os::GetSystemPropertyUint32Base(
+          "bluetooth.l2cap.le.credit_threshold.value", L2CAP_LE_CREDIT_THRESHOLD);
   return sL2CAP_LE_CREDIT_THRESHOLD;
 }
 

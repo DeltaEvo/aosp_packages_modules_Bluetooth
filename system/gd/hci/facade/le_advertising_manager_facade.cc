@@ -425,63 +425,64 @@ class LeAdvertisingManagerFacadeService : public LeAdvertisingManagerFacade::Ser
     callback_events_.OnIncomingEvent(msg);
   };
 
-  void OnAdvertisingEnabled(uint8_t advertiser_id, bool enable, uint8_t status) {
+  void OnAdvertisingEnabled(uint8_t advertiser_id, bool enable, AdvertisingStatus status) {
     AdvertisingCallbackMsg msg;
     msg.set_message_type(AdvertisingCallbackMsgType::ADVERTISING_ENABLED);
     msg.set_advertiser_id(advertiser_id);
     msg.set_status(static_cast<facade::AdvertisingStatus>(status));
     msg.set_data(enable ? 1 : 0);
     callback_events_.OnIncomingEvent(msg);
-  };
+  }
 
-  void OnAdvertisingDataSet(uint8_t advertiser_id, uint8_t status) {
+  void OnAdvertisingDataSet(uint8_t advertiser_id, AdvertisingStatus status) {
     AdvertisingCallbackMsg msg;
     msg.set_message_type(AdvertisingCallbackMsgType::ADVERTISING_DATA_SET);
     msg.set_advertiser_id(advertiser_id);
     msg.set_status(static_cast<facade::AdvertisingStatus>(status));
     callback_events_.OnIncomingEvent(msg);
-  };
+  }
 
-  void OnScanResponseDataSet(uint8_t advertiser_id, uint8_t status) {
+  void OnScanResponseDataSet(uint8_t advertiser_id, AdvertisingStatus status) {
     AdvertisingCallbackMsg msg;
     msg.set_message_type(AdvertisingCallbackMsgType::SCAN_RESPONSE_DATA_SET);
     msg.set_advertiser_id(advertiser_id);
     msg.set_status(static_cast<facade::AdvertisingStatus>(status));
     callback_events_.OnIncomingEvent(msg);
-  };
+  }
 
-  void OnAdvertisingParametersUpdated(
-      uint8_t advertiser_id, int8_t /* tx_power */, uint8_t status) {
+  void OnAdvertisingParametersUpdated(uint8_t advertiser_id, int8_t /* tx_power */,
+                                      AdvertisingStatus status) {
     AdvertisingCallbackMsg msg;
     msg.set_message_type(AdvertisingCallbackMsgType::ADVERTISING_PARAMETERS_UPDATED);
     msg.set_advertiser_id(advertiser_id);
     msg.set_status(static_cast<facade::AdvertisingStatus>(status));
     callback_events_.OnIncomingEvent(msg);
-  };
+  }
 
-  void OnPeriodicAdvertisingParametersUpdated(uint8_t advertiser_id, uint8_t status) {
+  void OnPeriodicAdvertisingParametersUpdated(uint8_t advertiser_id, AdvertisingStatus status) {
     AdvertisingCallbackMsg msg;
     msg.set_message_type(AdvertisingCallbackMsgType::PERIODIC_ADVERTISING_PARAMETERS_UPDATED);
     msg.set_advertiser_id(advertiser_id);
     msg.set_status(static_cast<facade::AdvertisingStatus>(status));
     callback_events_.OnIncomingEvent(msg);
-  };
+  }
 
-  void OnPeriodicAdvertisingDataSet(uint8_t advertiser_id, uint8_t status) {
+  void OnPeriodicAdvertisingDataSet(uint8_t advertiser_id, AdvertisingStatus status) {
     AdvertisingCallbackMsg msg;
     msg.set_message_type(AdvertisingCallbackMsgType::PERIODIC_ADVERTISING_DATA_SET);
     msg.set_advertiser_id(advertiser_id);
     msg.set_status(static_cast<facade::AdvertisingStatus>(status));
     callback_events_.OnIncomingEvent(msg);
-  };
+  }
 
-  void OnPeriodicAdvertisingEnabled(uint8_t advertiser_id, bool /* enable */, uint8_t status) {
+  void OnPeriodicAdvertisingEnabled(uint8_t advertiser_id, bool /* enable */,
+                                    AdvertisingStatus status) {
     AdvertisingCallbackMsg msg;
     msg.set_message_type(AdvertisingCallbackMsgType::PERIODIC_ADVERTISING_ENABLED);
     msg.set_advertiser_id(advertiser_id);
     msg.set_status(static_cast<facade::AdvertisingStatus>(status));
     callback_events_.OnIncomingEvent(msg);
-  };
+  }
 
   void OnOwnAddressRead(uint8_t advertiser_id, uint8_t address_type, Address address) {
     log::info("OnOwnAddressRead Address:{}, address_type:{}", address, address_type);

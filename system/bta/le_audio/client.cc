@@ -5818,10 +5818,10 @@ class LeAudioClientImpl : public LeAudioClient {
       case GroupStreamStatus::RELEASING:
       case GroupStreamStatus::SUSPENDING:
         if (active_group_id_ != bluetooth::groups::kGroupUnknown &&
-            (active_group_id_ == group->group_id_) &&
-            !group->IsPendingConfiguration() &&
+            (active_group_id_ == group->group_id_) && !group->IsPendingConfiguration() &&
             (audio_sender_state_ == AudioState::STARTED ||
-             audio_receiver_state_ == AudioState::STARTED)) {
+             audio_receiver_state_ == AudioState::STARTED) &&
+            group->GetTargetState() != AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {
           /* If releasing state is happening but it was not initiated either by
            * reconfiguration or Audio Framework actions either by the Active group change,
            * it means that it is some internal state machine error. This is very unlikely and
@@ -5927,7 +5927,7 @@ class LeAudioClientImpl : public LeAudioClient {
   std::vector<uint8_t> encoded_data;
   std::unique_ptr<LeAudioSourceAudioHalClient> le_audio_source_hal_client_;
   std::unique_ptr<LeAudioSinkAudioHalClient> le_audio_sink_hal_client_;
-  static constexpr uint64_t kAudioSuspentKeepIsoAliveTimeoutMs = 5000;
+  static constexpr uint64_t kAudioSuspentKeepIsoAliveTimeoutMs = 500;
   static constexpr uint64_t kAudioDisableTimeoutMs = 3000;
   static constexpr char kAudioSuspentKeepIsoAliveTimeoutMsProp[] =
       "persist.bluetooth.leaudio.audio.suspend.timeoutms";

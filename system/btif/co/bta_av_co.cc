@@ -593,7 +593,6 @@ void BtaAvCo::ProcessOpen(tBTA_AV_HNDL bta_av_handle,
 void BtaAvCo::ProcessClose(tBTA_AV_HNDL bta_av_handle,
                            const RawAddress& peer_address) {
   log::verbose("peer {} bta_av_handle: 0x{:x}", peer_address, bta_av_handle);
-  btif_av_reset_audio_delay();
 
   // Find the peer
   BtaAvCoPeer* p_peer =

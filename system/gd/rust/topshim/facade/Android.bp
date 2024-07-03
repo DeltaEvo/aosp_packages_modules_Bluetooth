@@ -43,7 +43,6 @@ rust_defaults {
         "libbluetooth-dumpsys",
         "libbluetooth-gdx",
         "libbluetooth-types",
-        "libbluetooth_core_rs",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_gd", // Gabeldorsche
         "libbluetooth_log",

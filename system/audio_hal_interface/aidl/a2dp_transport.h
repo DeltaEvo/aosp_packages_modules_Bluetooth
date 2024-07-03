@@ -27,8 +27,6 @@ namespace {
 
 using ::bluetooth::audio::aidl::LatencyMode;
 
-BluetoothAudioCtrlAck a2dp_ack_to_bt_audio_ctrl_ack(tA2DP_CTRL_ACK ack);
-
 // Provide call-in APIs for the Bluetooth Audio HAL
 class A2dpTransport
     : public ::bluetooth::audio::aidl::IBluetoothSinkTransportInstance {

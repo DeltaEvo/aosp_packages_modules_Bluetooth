@@ -218,7 +218,7 @@ typedef enum : uint16_t {
 
 typedef uint8_t tL2C_BLE_FIXED_CHNLS_MASK;
 
-typedef struct {
+struct tL2C_FCRB {
   uint8_t next_tx_seq;       /* Next sequence number to be Tx'ed */
   uint8_t last_rx_ack;       /* Last sequence number ack'ed by the peer */
   uint8_t next_seq_expected; /* Next peer sequence number expected */
@@ -244,10 +244,9 @@ typedef struct {
 
   alarm_t* ack_timer;         /* Timer delaying RR */
   alarm_t* mon_retrans_timer; /* Timer Monitor or Retransmission */
+};
 
-} tL2C_FCRB;
-
-typedef struct {
+struct tL2C_RCB {
   bool in_use;
   bool log_packets;
   uint16_t psm;
@@ -255,29 +254,31 @@ typedef struct {
                      /* this is the real PSM that we need to connect to */
   tL2CAP_APPL_INFO api;
   tL2CAP_ERTM_INFO ertm_info;
-  tL2CAP_LE_CFG_INFO coc_cfg;
+  tL2CAP_LE_CFG_INFO coc_cfg{};
   uint16_t my_mtu;
   uint16_t required_remote_mtu;
-} tL2C_RCB;
+};
 
 #ifndef L2CAP_CBB_DEFAULT_DATA_RATE_BUFF_QUOTA
 #define L2CAP_CBB_DEFAULT_DATA_RATE_BUFF_QUOTA 100
 #endif
 
-typedef struct {
+struct tL2CAP_SEC_DATA {
   uint16_t psm;
   tBT_TRANSPORT transport;
   bool is_originator;
   tBTM_SEC_CALLBACK* p_callback;
   void* p_ref_data;
-} tL2CAP_SEC_DATA;
+};
+
+struct tL2C_LCB;
 
 /* Define a channel control block (CCB). There may be many channel control
  * blocks between the same two Bluetooth devices (i.e. on the same link).
  * Each CCB has unique local and remote CIDs. All channel control blocks on
  * the same physical link and are chained together.
 */
-typedef struct t_l2c_ccb {
+struct tL2C_CCB {
   bool in_use;                /* true when in use, false when not */
   tL2C_CHNL_STATE chnl_state; /* Channel state */
   tL2CAP_LE_CFG_INFO
@@ -288,9 +289,9 @@ typedef struct t_l2c_ccb {
                               segment or not */
   BT_HDR* ble_sdu;         /* Buffer for storing unassembled sdu*/
   uint16_t ble_sdu_length; /* Length of unassembled sdu length*/
-  struct t_l2c_ccb* p_next_ccb; /* Next CCB in the chain */
-  struct t_l2c_ccb* p_prev_ccb; /* Previous CCB in the chain */
-  struct t_l2c_linkcb* p_lcb;   /* Link this CCB is assigned to */
+  tL2C_CCB* p_next_ccb;    /* Next CCB in the chain */
+  tL2C_CCB* p_prev_ccb;    /* Previous CCB in the chain */
+  tL2C_LCB* p_lcb;         /* Link this CCB is assigned to */
 
   uint16_t local_cid;  /* Local CID */
   uint16_t remote_cid; /* Remote CID */
@@ -368,16 +369,15 @@ typedef struct t_l2c_ccb {
       } rx, tx;
     } dropped;
   } metrics;
-
-} tL2C_CCB;
+};
 
 /***********************************************************************
  * Define a queue of linked CCBs.
 */
-typedef struct {
+struct tL2C_CCB_Q {
   tL2C_CCB* p_first_ccb; /* The first channel in this queue */
   tL2C_CCB* p_last_ccb;  /* The last  channel in this queue */
-} tL2C_CCB_Q;
+};
 
 /* Round-Robin service for the same priority channels */
 #define L2CAP_NUM_CHNL_PRIORITY \
@@ -393,14 +393,14 @@ typedef struct {
  * channel) is congested.
  */
 
-typedef struct {
+struct tL2C_RR_SERV {
   tL2C_CCB* p_serve_ccb; /* current serving ccb within priority group */
   tL2C_CCB* p_first_ccb; /* first ccb of priority group */
   uint8_t num_ccb;       /* number of channels in priority group */
   uint8_t quota;         /* burst transmission quota */
-} tL2C_RR_SERV;
+};
 
-typedef enum : uint8_t {
+enum tCONN_UPDATE_MASK : uint8_t {
   /* disable update connection parameters */
   L2C_BLE_CONN_UPDATE_DISABLE = (1u << 0),
   /* new connection parameter to be set */
@@ -409,12 +409,12 @@ typedef enum : uint8_t {
   L2C_BLE_UPDATE_PENDING = (1u << 2),
   /* not using default connection parameters */
   L2C_BLE_NOT_DEFAULT_PARAM = (1u << 3),
-} tCONN_UPDATE_MASK;
+};
 
 /* Define a link control block. There is one link control block between
  * this device and any other device (i.e. BD ADDR).
 */
-typedef struct t_l2c_linkcb {
+struct tL2C_LCB {
   bool in_use; /* true when in use, false when not */
   tL2C_LINK_STATE link_state;
 
@@ -428,7 +428,7 @@ typedef struct t_l2c_linkcb {
 
  private:
   uint16_t handle_; /* The handle used with LM */
-  friend void l2cu_set_lcb_handle(struct t_l2c_linkcb& p_lcb, uint16_t handle);
+  friend void l2cu_set_lcb_handle(tL2C_LCB& p_lcb, uint16_t handle);
   void SetHandle(uint16_t handle) { handle_ = handle; }
 
  public:
@@ -577,11 +577,11 @@ typedef struct t_l2c_linkcb {
     }
     return cnt;
   }
-} tL2C_LCB;
+};
 
 /* Define the L2CAP control structure
 */
-typedef struct {
+struct tL2C_CB {
   uint16_t controller_xmit_window; /* Total ACL window for all links */
 
   uint16_t round_robin_quota;   /* Round-robin link quota */
@@ -646,14 +646,13 @@ typedef struct {
 
   uint16_t le_dyn_psm; /* Next LE dynamic PSM value to try to assign */
   bool le_dyn_psm_assigned[LE_DYNAMIC_PSM_RANGE]; /* Table of assigned LE PSM */
-
-} tL2C_CB;
+};
 
 /* Define a structure that contains the information about a connection.
  * This structure is used to pass between functions, and not all the
  * fields will always be filled in.
 */
-typedef struct {
+struct tL2C_CONN_INFO {
   RawAddress bd_addr;    /* Remote BD address */
   uint8_t status;        /* Connection status */
   uint16_t psm;          /* PSM of the connection */
@@ -662,23 +661,23 @@ typedef struct {
   uint16_t remote_cid;   /* Remote CID */
   std::vector<uint16_t> lcids; /* Used when credit based is used*/
   uint16_t peer_mtu;     /* Peer MTU */
-} tL2C_CONN_INFO;
+};
 
-typedef struct {
+struct tL2C_AVDT_CHANNEL_INFO {
   bool is_active;     /* is channel active */
   uint16_t local_cid; /* Remote CID */
   tL2C_CCB* p_ccb;    /* CCB */
-} tL2C_AVDT_CHANNEL_INFO;
+};
 
 typedef void(tL2C_FCR_MGMT_EVT_HDLR)(uint8_t, tL2C_CCB*);
 
 /* Necessary info for postponed TX completion callback
  */
-typedef struct {
+struct tL2C_TX_COMPLETE_CB_INFO {
   uint16_t local_cid;
   uint16_t num_sdu;
   tL2CA_TX_COMPLETE_CB* cb;
-} tL2C_TX_COMPLETE_CB_INFO;
+};
 
 /* The offset in a buffer that L2CAP will use when building commands.
 */

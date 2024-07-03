@@ -80,8 +80,6 @@ public class BluetoothMapService extends ProfileService {
      */
 
     /** The component names for the owned provider and activity */
-    private static final String MAP_SETTINGS_ACTIVITY =
-            BluetoothMapSettings.class.getCanonicalName();
 
     private static final String MAP_FILE_PROVIDER = MmsFileProvider.class.getCanonicalName();
 
@@ -684,7 +682,6 @@ public class BluetoothMapService extends ProfileService {
                         AdapterService.getAdapterService().getDatabase(),
                         "DatabaseManager cannot be null when MapService starts");
 
-        setComponentAvailable(MAP_SETTINGS_ACTIVITY, true);
         setComponentAvailable(MAP_FILE_PROVIDER, true);
 
         HandlerThread thread = new HandlerThread("BluetoothMapHandler");
@@ -908,7 +905,6 @@ public class BluetoothMapService extends ProfileService {
             mAppObserver.shutdown();
         }
         sendShutdownMessage();
-        setComponentAvailable(MAP_SETTINGS_ACTIVITY, false);
         setComponentAvailable(MAP_FILE_PROVIDER, false);
     }
 

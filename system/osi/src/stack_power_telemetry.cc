@@ -28,7 +28,6 @@
 #include <map>
 #include <mutex>
 
-#include "common/init_flags.h"
 #include "os/log.h"
 #include "osi/include/properties.h"
 #include "stack/include/acl_api_types.h"

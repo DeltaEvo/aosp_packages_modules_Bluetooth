@@ -250,8 +250,7 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
                        advertiser_id, tx_power, status));
   }
 
-  void OnAdvertisingEnabled(uint8_t advertiser_id, bool enable,
-                            uint8_t status) {
+  void OnAdvertisingEnabled(uint8_t advertiser_id, bool enable, AdvertisingStatus status) {
     int reg_id =
         bluetooth::shim::GetAdvertising()->GetAdvertiserRegId(advertiser_id);
     uint8_t client_id = is_native_advertiser(reg_id);
@@ -269,7 +268,7 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
                                     advertiser_id, enable, status));
   }
 
-  void OnAdvertisingDataSet(uint8_t advertiser_id, uint8_t status) {
+  void OnAdvertisingDataSet(uint8_t advertiser_id, AdvertisingStatus status) {
     if (com::android::bluetooth::flags::
             leaudio_broadcast_update_metadata_callback()) {
       int reg_id =
@@ -290,28 +289,27 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
                                     advertiser_id, status));
   }
 
-  void OnScanResponseDataSet(uint8_t advertiser_id, uint8_t status) {
+  void OnScanResponseDataSet(uint8_t advertiser_id, AdvertisingStatus status) {
     do_in_jni_thread(base::BindOnce(
         &AdvertisingCallbacks::OnScanResponseDataSet,
         base::Unretained(advertising_callbacks_), advertiser_id, status));
   }
 
   void OnAdvertisingParametersUpdated(uint8_t advertiser_id, int8_t tx_power,
-                                      uint8_t status) {
+                                      AdvertisingStatus status) {
     do_in_jni_thread(
         base::BindOnce(&AdvertisingCallbacks::OnAdvertisingParametersUpdated,
                        base::Unretained(advertising_callbacks_), advertiser_id,
                        tx_power, status));
   }
 
-  void OnPeriodicAdvertisingParametersUpdated(uint8_t advertiser_id,
-                                              uint8_t status) {
+  void OnPeriodicAdvertisingParametersUpdated(uint8_t advertiser_id, AdvertisingStatus status) {
     do_in_jni_thread(base::BindOnce(
         &AdvertisingCallbacks::OnPeriodicAdvertisingParametersUpdated,
         base::Unretained(advertising_callbacks_), advertiser_id, status));
   }
 
-  void OnPeriodicAdvertisingDataSet(uint8_t advertiser_id, uint8_t status) {
+  void OnPeriodicAdvertisingDataSet(uint8_t advertiser_id, AdvertisingStatus status) {
     if (com::android::bluetooth::flags::
             leaudio_broadcast_update_metadata_callback()) {
       int reg_id =
@@ -332,8 +330,7 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
         base::Unretained(advertising_callbacks_), advertiser_id, status));
   }
 
-  void OnPeriodicAdvertisingEnabled(uint8_t advertiser_id, bool enable,
-                                    uint8_t status) {
+  void OnPeriodicAdvertisingEnabled(uint8_t advertiser_id, bool enable, AdvertisingStatus status) {
     do_in_jni_thread(
         base::BindOnce(&AdvertisingCallbacks::OnPeriodicAdvertisingEnabled,
                        base::Unretained(advertising_callbacks_), advertiser_id,

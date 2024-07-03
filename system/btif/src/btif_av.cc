@@ -37,7 +37,6 @@
 #include "audio_hal_interface/a2dp_encoding.h"
 #include "btif/avrcp/avrcp_service.h"
 #include "btif/include/btif_a2dp.h"
-#include "btif/include/btif_a2dp_control.h"
 #include "btif/include/btif_a2dp_sink.h"
 #include "btif/include/btif_a2dp_source.h"
 #include "btif/include/btif_av_co.h"
@@ -2570,7 +2569,8 @@ bool BtifAvStateMachine::StateOpened::ProcessEvent(uint32_t event,
           log::error("Peer {} : cannot proceed to do AvStart",
                      peer_.PeerAddress());
           peer_.ClearFlags(BtifAvPeer::kFlagPendingStart);
-          btif_a2dp_command_ack(A2DP_CTRL_ACK_FAILURE);
+          bluetooth::audio::a2dp::ack_stream_started(
+                  bluetooth::audio::a2dp::BluetoothAudioStatus::FAILURE);
         }
         if (peer_.IsSink()) {
           btif_av_source_disconnect(peer_.PeerAddress());
@@ -4244,8 +4244,6 @@ void btif_av_set_audio_delay(const RawAddress& peer_address, uint16_t delay,
                              const A2dpType local_a2dp_type) {
   log::info("peer={} delay={}", peer_address, delay);
 
-  btif_a2dp_control_set_audio_delay(delay);
-
   BtifAvPeer* peer = btif_av_find_peer(peer_address, local_a2dp_type);
   if (peer != nullptr && peer->IsSink()) {
     peer->SetDelayReport(delay);
@@ -4262,8 +4260,6 @@ uint16_t btif_av_get_audio_delay(const A2dpType local_a2dp_type) {
   }
   return 0;
 }
-
-void btif_av_reset_audio_delay(void) { btif_a2dp_control_reset_audio_delay(); }
 
 bool btif_av_is_a2dp_offload_enabled() {
   return btif_av_source.A2dpOffloadEnabled();

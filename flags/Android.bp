@@ -27,6 +27,7 @@ aconfig_declarations {
         "gap.aconfig",
         "hal.aconfig",
         "hap.aconfig",
+        "hci.aconfig",
         "hfp.aconfig",
         "hid.aconfig",
         "l2cap.aconfig",

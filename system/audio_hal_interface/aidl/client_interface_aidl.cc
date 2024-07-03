@@ -469,8 +469,8 @@ void BluetoothAudioClientInterface::StreamStarted(
     log::info("{} ignored", ack);
     return;
   }
-  BluetoothAudioStatus status = BluetoothAudioCtrlAckToHalStatus(ack);
 
+  auto status = BluetoothAudioCtrlAckToHalStatus(ack);
   auto aidl_retval = provider_->streamStarted(status);
 
   if (!aidl_retval.isOk()) {
@@ -488,8 +488,8 @@ void BluetoothAudioClientInterface::StreamSuspended(
     log::info("{} ignored", ack);
     return;
   }
-  BluetoothAudioStatus status = BluetoothAudioCtrlAckToHalStatus(ack);
 
+  auto status = BluetoothAudioCtrlAckToHalStatus(ack);
   auto aidl_retval = provider_->streamSuspended(status);
 
   if (!aidl_retval.isOk()) {
