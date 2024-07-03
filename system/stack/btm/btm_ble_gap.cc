@@ -197,7 +197,7 @@ AdvertisingCache cache;
 
 bool ble_vnd_is_included() {
   // replace build time config BLE_VND_INCLUDED with runtime
-  return GET_SYSPROP(Ble, vnd_included, true);
+  return android::sysprop::bluetooth::Ble::vnd_included().value_or(true);
 }
 
 static tBTM_BLE_CTRL_FEATURES_CBACK* p_ctrl_le_feature_rd_cmpl_cback = NULL;

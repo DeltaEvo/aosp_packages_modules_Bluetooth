@@ -117,9 +117,9 @@ void SecurityManagerImpl::Init() {
   /* Default to 7 minutes minimum, 15 minutes maximum for random address refreshing;
    * device can override. */
   auto minimum_rotation_time = std::chrono::minutes(
-      GET_SYSPROP(Ble, random_address_rotation_interval_min, 7));
+          android::sysprop::bluetooth::Ble::random_address_rotation_interval_min().value_or(7));
   auto maximum_rotation_time = std::chrono::minutes(
-      GET_SYSPROP(Ble, random_address_rotation_interval_max, 15));
+          android::sysprop::bluetooth::Ble::random_address_rotation_interval_max().value_or(15));
 
   acl_manager_->SetPrivacyPolicyForInitiatorAddress(
       address_policy, address_with_type, minimum_rotation_time, maximum_rotation_time);
