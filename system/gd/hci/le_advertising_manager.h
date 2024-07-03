@@ -21,7 +21,6 @@
 #include <vector>
 
 #include "common/callback.h"
-#include "hci/address_with_type.h"
 #include "hci/hci_packets.h"
 #include "module.h"
 
@@ -79,26 +78,31 @@ using AdvertiserId = uint8_t;
 
 class AdvertisingCallback {
  public:
-  enum AdvertisingStatus {
-    SUCCESS,
-    DATA_TOO_LARGE,
-    TOO_MANY_ADVERTISERS,
-    ALREADY_STARTED,
-    INTERNAL_ERROR,
-    FEATURE_UNSUPPORTED
-  };
+   enum AdvertisingStatus {
+     SUCCESS,
+     DATA_TOO_LARGE,
+     TOO_MANY_ADVERTISERS,
+     ALREADY_STARTED,
+     INTERNAL_ERROR,
+     FEATURE_UNSUPPORTED,
+     TIMEOUT
+   };
 
-  virtual ~AdvertisingCallback() = default;
-  virtual void OnAdvertisingSetStarted(
-      int reg_id, uint8_t advertiser_id, int8_t tx_power, AdvertisingStatus status) = 0;
-  virtual void OnAdvertisingEnabled(uint8_t advertiser_id, bool enable, uint8_t status) = 0;
-  virtual void OnAdvertisingDataSet(uint8_t advertiser_id, uint8_t status) = 0;
-  virtual void OnScanResponseDataSet(uint8_t advertiser_id, uint8_t status) = 0;
-  virtual void OnAdvertisingParametersUpdated(uint8_t advertiser_id, int8_t tx_power, uint8_t status) = 0;
-  virtual void OnPeriodicAdvertisingParametersUpdated(uint8_t advertiser_id, uint8_t status) = 0;
-  virtual void OnPeriodicAdvertisingDataSet(uint8_t advertiser_id, uint8_t status) = 0;
-  virtual void OnPeriodicAdvertisingEnabled(uint8_t advertiser_id, bool enable, uint8_t status) = 0;
-  virtual void OnOwnAddressRead(uint8_t advertiser_id, uint8_t address_type, Address address) = 0;
+   virtual ~AdvertisingCallback() = default;
+   virtual void OnAdvertisingSetStarted(int reg_id, uint8_t advertiser_id, int8_t tx_power,
+                                        AdvertisingStatus status) = 0;
+   virtual void OnAdvertisingEnabled(uint8_t advertiser_id, bool enable,
+                                     AdvertisingStatus status) = 0;
+   virtual void OnAdvertisingDataSet(uint8_t advertiser_id, AdvertisingStatus status) = 0;
+   virtual void OnScanResponseDataSet(uint8_t advertiser_id, AdvertisingStatus status) = 0;
+   virtual void OnAdvertisingParametersUpdated(uint8_t advertiser_id, int8_t tx_power,
+                                               AdvertisingStatus status) = 0;
+   virtual void OnPeriodicAdvertisingParametersUpdated(uint8_t advertiser_id,
+                                                       AdvertisingStatus status) = 0;
+   virtual void OnPeriodicAdvertisingDataSet(uint8_t advertiser_id, AdvertisingStatus status) = 0;
+   virtual void OnPeriodicAdvertisingEnabled(uint8_t advertiser_id, bool enable,
+                                             AdvertisingStatus status) = 0;
+   virtual void OnOwnAddressRead(uint8_t advertiser_id, uint8_t address_type, Address address) = 0;
 };
 
 class LeAdvertisingManager : public bluetooth::Module {

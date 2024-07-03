@@ -34,7 +34,6 @@
 #include "hci/controller_interface.h"
 #include "internal_include/stack_config.h"
 #include "main/shim/entry.h"
-#include "os/log.h"
 #include "osi/include/properties.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/btm_api_types.h"
@@ -1091,7 +1090,7 @@ public:
     }
   } state_machine_callbacks_;
 
-  static class BroadcastAdvertisingCallbacks : public AdvertisingCallbacks {
+  static class BroadcastAdvertisingCallbacks : public ::AdvertisingCallbacks {
     void OnAdvertisingSetStarted(int reg_id, uint8_t advertiser_id,
                                  int8_t tx_power, uint8_t status) {
       if (!instance) return;
