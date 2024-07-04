@@ -234,31 +234,7 @@ static void A2DP_BuildMediaPayloadHeaderLdac(uint8_t* p_dst, bool frag, bool sta
   *p_dst |= (A2DP_LDAC_HDR_NUM_MSK & num);
 }
 
-bool A2DP_IsVendorSourceCodecValidLdac(const uint8_t* p_codec_info) {
-  tA2DP_LDAC_CIE cfg_cie;
-
-  /* Use a liberal check when parsing the codec info */
-  return (A2DP_ParseInfoLdac(&cfg_cie, p_codec_info, false) == A2DP_SUCCESS) ||
-         (A2DP_ParseInfoLdac(&cfg_cie, p_codec_info, true) == A2DP_SUCCESS);
-}
-
-bool A2DP_IsVendorSinkCodecValidLdac(const uint8_t* p_codec_info) {
-  tA2DP_LDAC_CIE cfg_cie;
-
-  /* Use a liberal check when parsing the codec info */
-  return (A2DP_ParseInfoLdac(&cfg_cie, p_codec_info, false) == A2DP_SUCCESS) ||
-         (A2DP_ParseInfoLdac(&cfg_cie, p_codec_info, true) == A2DP_SUCCESS);
-}
-
-bool A2DP_IsVendorPeerSourceCodecValidLdac(const uint8_t* p_codec_info) {
-  tA2DP_LDAC_CIE cfg_cie;
-
-  /* Use a liberal check when parsing the codec info */
-  return (A2DP_ParseInfoLdac(&cfg_cie, p_codec_info, false) == A2DP_SUCCESS) ||
-         (A2DP_ParseInfoLdac(&cfg_cie, p_codec_info, true) == A2DP_SUCCESS);
-}
-
-bool A2DP_IsVendorPeerSinkCodecValidLdac(const uint8_t* p_codec_info) {
+bool A2DP_IsCodecValidLdac(const uint8_t* p_codec_info) {
   tA2DP_LDAC_CIE cfg_cie;
 
   /* Use a liberal check when parsing the codec info */
@@ -578,16 +554,18 @@ std::string A2DP_VendorCodecInfoStringLdac(const uint8_t* p_codec_info) {
   return res.str();
 }
 
-const tA2DP_ENCODER_INTERFACE* A2DP_VendorGetEncoderInterfaceLdac(const uint8_t* p_codec_info) {
-  if (!A2DP_IsVendorSourceCodecValidLdac(p_codec_info)) {
+const tA2DP_ENCODER_INTERFACE* A2DP_VendorGetEncoderInterfaceLdac(
+    const uint8_t* p_codec_info) {
+  if (!A2DP_IsCodecValidLdac(p_codec_info)) {
     return NULL;
   }
 
   return &a2dp_encoder_interface_ldac;
 }
 
-const tA2DP_DECODER_INTERFACE* A2DP_VendorGetDecoderInterfaceLdac(const uint8_t* p_codec_info) {
-  if (!A2DP_IsVendorSinkCodecValidLdac(p_codec_info)) {
+const tA2DP_DECODER_INTERFACE* A2DP_VendorGetDecoderInterfaceLdac(
+    const uint8_t* p_codec_info) {
+  if (!A2DP_IsCodecValidLdac(p_codec_info)) {
     return NULL;
   }
 

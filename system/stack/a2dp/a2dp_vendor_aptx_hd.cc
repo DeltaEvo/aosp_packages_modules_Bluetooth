@@ -194,15 +194,7 @@ static tA2DP_STATUS A2DP_ParseInfoAptxHd(tA2DP_APTX_HD_CIE* p_ie, const uint8_t*
   return A2DP_SUCCESS;
 }
 
-bool A2DP_IsVendorSourceCodecValidAptxHd(const uint8_t* p_codec_info) {
-  tA2DP_APTX_HD_CIE cfg_cie;
-
-  /* Use a liberal check when parsing the codec info */
-  return (A2DP_ParseInfoAptxHd(&cfg_cie, p_codec_info, false) == A2DP_SUCCESS) ||
-         (A2DP_ParseInfoAptxHd(&cfg_cie, p_codec_info, true) == A2DP_SUCCESS);
-}
-
-bool A2DP_IsVendorPeerSinkCodecValidAptxHd(const uint8_t* p_codec_info) {
+bool A2DP_IsCodecValidAptxHd(const uint8_t* p_codec_info) {
   tA2DP_APTX_HD_CIE cfg_cie;
 
   /* Use a liberal check when parsing the codec info */
@@ -401,8 +393,9 @@ std::string A2DP_VendorCodecInfoStringAptxHd(const uint8_t* p_codec_info) {
   return res.str();
 }
 
-const tA2DP_ENCODER_INTERFACE* A2DP_VendorGetEncoderInterfaceAptxHd(const uint8_t* p_codec_info) {
-  if (!A2DP_IsVendorSourceCodecValidAptxHd(p_codec_info)) {
+const tA2DP_ENCODER_INTERFACE* A2DP_VendorGetEncoderInterfaceAptxHd(
+    const uint8_t* p_codec_info) {
+  if (!A2DP_IsCodecValidAptxHd(p_codec_info)) {
     return NULL;
   }
 

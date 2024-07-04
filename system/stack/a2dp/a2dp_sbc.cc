@@ -302,31 +302,7 @@ UNUSED_ATTR static void A2DP_ParseMplHeaderSbc(uint8_t* p_src, bool* p_frag, boo
 
 const char* A2DP_CodecNameSbc(const uint8_t* /* p_codec_info */) { return "SBC"; }
 
-bool A2DP_IsSourceCodecValidSbc(const uint8_t* p_codec_info) {
-  tA2DP_SBC_CIE cfg_cie;
-
-  /* Use a liberal check when parsing the codec info */
-  return (A2DP_ParseInfoSbc(&cfg_cie, p_codec_info, false) == A2DP_SUCCESS) ||
-         (A2DP_ParseInfoSbc(&cfg_cie, p_codec_info, true) == A2DP_SUCCESS);
-}
-
-bool A2DP_IsSinkCodecValidSbc(const uint8_t* p_codec_info) {
-  tA2DP_SBC_CIE cfg_cie;
-
-  /* Use a liberal check when parsing the codec info */
-  return (A2DP_ParseInfoSbc(&cfg_cie, p_codec_info, false) == A2DP_SUCCESS) ||
-         (A2DP_ParseInfoSbc(&cfg_cie, p_codec_info, true) == A2DP_SUCCESS);
-}
-
-bool A2DP_IsPeerSourceCodecValidSbc(const uint8_t* p_codec_info) {
-  tA2DP_SBC_CIE cfg_cie;
-
-  /* Use a liberal check when parsing the codec info */
-  return (A2DP_ParseInfoSbc(&cfg_cie, p_codec_info, false) == A2DP_SUCCESS) ||
-         (A2DP_ParseInfoSbc(&cfg_cie, p_codec_info, true) == A2DP_SUCCESS);
-}
-
-bool A2DP_IsPeerSinkCodecValidSbc(const uint8_t* p_codec_info) {
+bool A2DP_IsCodecValidSbc(const uint8_t* p_codec_info) {
   tA2DP_SBC_CIE cfg_cie;
 
   /* Use a liberal check when parsing the codec info */
@@ -789,16 +765,18 @@ std::string A2DP_CodecInfoStringSbc(const uint8_t* p_codec_info) {
   return res.str();
 }
 
-const tA2DP_ENCODER_INTERFACE* A2DP_GetEncoderInterfaceSbc(const uint8_t* p_codec_info) {
-  if (!A2DP_IsSourceCodecValidSbc(p_codec_info)) {
+const tA2DP_ENCODER_INTERFACE* A2DP_GetEncoderInterfaceSbc(
+    const uint8_t* p_codec_info) {
+  if (!A2DP_IsCodecValidSbc(p_codec_info)) {
     return NULL;
   }
 
   return &a2dp_encoder_interface_sbc;
 }
 
-const tA2DP_DECODER_INTERFACE* A2DP_GetDecoderInterfaceSbc(const uint8_t* p_codec_info) {
-  if (!A2DP_IsSinkCodecValidSbc(p_codec_info)) {
+const tA2DP_DECODER_INTERFACE* A2DP_GetDecoderInterfaceSbc(
+    const uint8_t* p_codec_info) {
+  if (!A2DP_IsCodecValidSbc(p_codec_info)) {
     return NULL;
   }
 
@@ -1108,12 +1086,14 @@ bool A2dpCodecConfigSbcBase::setCodecConfig(const uint8_t* p_peer_codec_info, bo
   // capability.
   if (is_capability) {
     if (is_source_) {
-      if (A2DP_IsPeerSinkCodecValidSbc(ota_codec_peer_config_)) {
-        status = A2DP_ParseInfoSbc(&peer_info_cie, ota_codec_peer_config_, false);
+      if (A2DP_IsCodecValidSbc(ota_codec_peer_config_)) {
+        status =
+            A2DP_ParseInfoSbc(&peer_info_cie, ota_codec_peer_config_, false);
       }
     } else {
-      if (A2DP_IsPeerSourceCodecValidSbc(ota_codec_peer_config_)) {
-        status = A2DP_ParseInfoSbc(&peer_info_cie, ota_codec_peer_config_, false);
+      if (A2DP_IsCodecValidSbc(ota_codec_peer_config_)) {
+        status =
+            A2DP_ParseInfoSbc(&peer_info_cie, ota_codec_peer_config_, false);
       }
     }
     if (status != A2DP_SUCCESS) {

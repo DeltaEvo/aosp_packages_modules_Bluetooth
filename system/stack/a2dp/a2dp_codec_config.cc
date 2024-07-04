@@ -1058,10 +1058,10 @@ bool A2DP_IsSourceCodecValid(const uint8_t* p_codec_info) {
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
-      return A2DP_IsSourceCodecValidSbc(p_codec_info);
+      return A2DP_IsCodecValidSbc(p_codec_info);
 #if !defined(EXCLUDE_NONSTANDARD_CODECS)
     case A2DP_MEDIA_CT_AAC:
-      return A2DP_IsSourceCodecValidAac(p_codec_info);
+      return A2DP_IsCodecValidAac(p_codec_info);
     case A2DP_MEDIA_CT_NON_A2DP:
       return A2DP_IsVendorSourceCodecValid(p_codec_info);
 #endif
@@ -1077,10 +1077,10 @@ bool A2DP_IsSinkCodecValid(const uint8_t* p_codec_info) {
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
-      return A2DP_IsSinkCodecValidSbc(p_codec_info);
+      return A2DP_IsCodecValidSbc(p_codec_info);
 #if !defined(EXCLUDE_NONSTANDARD_CODECS)
     case A2DP_MEDIA_CT_AAC:
-      return A2DP_IsSinkCodecValidAac(p_codec_info);
+      return A2DP_IsCodecValidAac(p_codec_info);
     case A2DP_MEDIA_CT_NON_A2DP:
       return A2DP_IsVendorSinkCodecValid(p_codec_info);
 #endif
@@ -1096,10 +1096,10 @@ bool A2DP_IsPeerSourceCodecValid(const uint8_t* p_codec_info) {
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
-      return A2DP_IsPeerSourceCodecValidSbc(p_codec_info);
+      return A2DP_IsCodecValidSbc(p_codec_info);
 #if !defined(EXCLUDE_NONSTANDARD_CODECS)
     case A2DP_MEDIA_CT_AAC:
-      return A2DP_IsPeerSourceCodecValidAac(p_codec_info);
+      return A2DP_IsCodecValidAac(p_codec_info);
     case A2DP_MEDIA_CT_NON_A2DP:
       return A2DP_IsVendorPeerSourceCodecValid(p_codec_info);
 #endif
@@ -1115,10 +1115,10 @@ bool A2DP_IsPeerSinkCodecValid(const uint8_t* p_codec_info) {
 
   switch (codec_type) {
     case A2DP_MEDIA_CT_SBC:
-      return A2DP_IsPeerSinkCodecValidSbc(p_codec_info);
+      return A2DP_IsCodecValidSbc(p_codec_info);
 #if !defined(EXCLUDE_NONSTANDARD_CODECS)
     case A2DP_MEDIA_CT_AAC:
-      return A2DP_IsPeerSinkCodecValidAac(p_codec_info);
+      return A2DP_IsCodecValidAac(p_codec_info);
     case A2DP_MEDIA_CT_NON_A2DP:
       return A2DP_IsVendorPeerSinkCodecValid(p_codec_info);
 #endif

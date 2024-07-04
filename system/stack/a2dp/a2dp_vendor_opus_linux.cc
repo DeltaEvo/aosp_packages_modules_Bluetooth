@@ -19,28 +19,32 @@
 #include "a2dp_vendor.h"
 #include "a2dp_vendor_opus.h"
 
-bool A2DP_IsVendorSourceCodecValidOpus(const uint8_t* p_codec_info) { return false; }
+bool A2DP_IsCodecValidOpus(const uint8_t* p_codec_info) { return false; }
 
-bool A2DP_IsVendorSinkCodecValidOpus(const uint8_t* p_codec_info) { return false; }
-
-bool A2DP_IsVendorPeerSourceCodecValidOpus(const uint8_t* p_codec_info) { return false; }
-
-bool A2DP_IsVendorPeerSinkCodecValidOpus(const uint8_t* p_codec_info) { return false; }
-
-bool A2DP_IsVendorSinkCodecSupportedOpus(const uint8_t* p_codec_info) { return false; }
-bool A2DP_IsPeerSourceCodecSupportedOpus(const uint8_t* p_codec_info) { return false; }
-
-bool A2DP_VendorUsesRtpHeaderOpus(bool content_protection_enabled, const uint8_t* p_codec_info) {
+bool A2DP_IsVendorSinkCodecSupportedOpus(const uint8_t* p_codec_info) {
   return false;
 }
 
-const char* A2DP_VendorCodecNameOpus(const uint8_t* p_codec_info) { return "Opus"; }
-
-bool A2DP_VendorCodecTypeEqualsOpus(const uint8_t* p_codec_info_a, const uint8_t* p_codec_info_b) {
+bool A2DP_IsPeerSourceCodecSupportedOpus(const uint8_t* p_codec_info) {
   return false;
 }
 
-bool A2DP_VendorCodecEqualsOpus(const uint8_t* p_codec_info_a, const uint8_t* p_codec_info_b) {
+bool A2DP_VendorUsesRtpHeaderOpus(bool content_protection_enabled,
+                                  const uint8_t* p_codec_info) {
+  return false;
+}
+
+const char* A2DP_VendorCodecNameOpus(const uint8_t* p_codec_info) {
+  return "Opus";
+}
+
+bool A2DP_VendorCodecTypeEqualsOpus(const uint8_t* p_codec_info_a,
+                                    const uint8_t* p_codec_info_b) {
+  return false;
+}
+
+bool A2DP_VendorCodecEqualsOpus(const uint8_t* p_codec_info_a,
+                                const uint8_t* p_codec_info_b) {
   return false;
 }
 

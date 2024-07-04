@@ -20,15 +20,16 @@
 
 #include "a2dp_vendor_aptx_hd.h"
 
-bool A2DP_IsVendorSourceCodecValidAptxHd(const uint8_t* p_codec_info) { return false; }
+bool A2DP_IsCodecValidAptxHd(const uint8_t* p_codec_info) { return false; }
 
-bool A2DP_IsVendorPeerSinkCodecValidAptxHd(const uint8_t* p_codec_info) { return false; }
-
-bool A2DP_VendorUsesRtpHeaderAptxHd(bool content_protection_enabled, const uint8_t* p_codec_info) {
+bool A2DP_VendorUsesRtpHeaderAptxHd(bool content_protection_enabled,
+                                    const uint8_t* p_codec_info) {
   return false;
 }
 
-const char* A2DP_VendorCodecNameAptxHd(const uint8_t* p_codec_info) { return "AptxHd"; }
+const char* A2DP_VendorCodecNameAptxHd(const uint8_t* p_codec_info) {
+  return "AptxHd";
+}
 
 bool A2DP_VendorCodecTypeEqualsAptxHd(const uint8_t* p_codec_info_a,
                                       const uint8_t* p_codec_info_b) {
