@@ -180,8 +180,7 @@ void btif_a2dp_on_offload_started(const RawAddress& peer_addr,
   }
 
   if (btif_av_is_a2dp_offload_running()) {
-    if (ack != BTA_AV_SUCCESS &&
-        btif_av_stream_started_ready(A2dpType::kSource)) {
+    if (ack != BluetoothAudioStatus::SUCCESS && btif_av_stream_started_ready(A2dpType::kSource)) {
       // Offload request will return with failure from btif_av sm if
       // suspend is triggered for remote start. Disconnect only if SoC
       // returned failure for offload VSC
