@@ -33,12 +33,15 @@
 #include <vector>
 
 #include "a2dp_api.h"
-#include "audio_a2dp_hw/include/audio_a2dp_hw.h"
 #include "avdt_api.h"
 #include "stack/include/bt_hdr.h"
 #include "types/raw_address.h"
 
 class tBT_A2DP_OFFLOAD;
+
+typedef uint32_t tA2DP_SAMPLE_RATE;
+typedef uint8_t tA2DP_CHANNEL_COUNT;
+typedef uint8_t tA2DP_BITS_PER_SAMPLE;
 
 /**
  * Structure used to initialize the A2DP encoder with A2DP peer information

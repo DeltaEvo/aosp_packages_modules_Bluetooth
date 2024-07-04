@@ -36,6 +36,7 @@
 #include "stack/include/btm_iso_api.h"
 #include "test/common/mock_functions.h"
 #include "test/mock/mock_main_shim_entry.h"
+#include "test/mock/mock_osi_alarm.h"
 #include "test/mock/mock_stack_btm_iso.h"
 
 #define TEST_BT com::android::bluetooth::flags
@@ -70,6 +71,16 @@ using bluetooth::le_audio::broadcaster::BroadcastSubgroupCodecConfig;
 extern "C" const char* __asan_default_options() {
   return "detect_container_overflow=0";
 }
+
+struct alarm_t {
+  alarm_callback_t cb;
+  void* data;
+
+  alarm_t(const char* /* name */) {
+    cb = nullptr;
+    data = nullptr;
+  }
+};
 
 static base::Callback<void(BT_OCTET8)> generator_cb;
 
@@ -222,6 +233,9 @@ static const std::vector<uint8_t> media_metadata = {
     media_context & 0x00FF, (media_context & 0xFF00) >> 8};
 static const std::string test_broadcast_name = "Test";
 
+static const std::string big_terminate_timer_name = "BigTerminateTimer";
+static const std::string broadcast_stop_timer_name = "BroadcastStopTimer";
+
 class MockLeAudioBroadcasterCallbacks
     : public bluetooth::le_audio::LeAudioBroadcasterCallbacks {
  public:
@@ -277,6 +291,37 @@ class MockAudioHalClientEndpoint : public LeAudioSourceAudioHalClient {
 class BroadcasterTest : public Test {
  protected:
   void SetUp() override {
+    test::mock::osi_alarm::alarm_free.body = [](alarm_t* alarm) {
+      if (alarm) {
+        delete alarm;
+      }
+    };
+
+    test::mock::osi_alarm::alarm_new.body = [this](const char* name) {
+      if (std::string(name) == big_terminate_timer_name) {
+        this->big_terminate_timer_ = new alarm_t(name);
+        return this->big_terminate_timer_;
+      } else if (std::string(name) == broadcast_stop_timer_name) {
+        this->broadcast_stop_timer_ = new alarm_t(name);
+        return this->broadcast_stop_timer_;
+      } else {
+        return (alarm_t*)(nullptr);
+      }
+    };
+
+    test::mock::osi_alarm::alarm_set_on_mloop.body = [](alarm_t* alarm, uint64_t interval_ms,
+                                                        alarm_callback_t cb, void* data) {
+      alarm->cb = cb;
+      alarm->data = data;
+    };
+
+    test::mock::osi_alarm::alarm_cancel.body = [](alarm_t* alarm) {
+      if (alarm) {
+        alarm->cb = nullptr;
+        alarm->data = nullptr;
+      }
+    };
+
     init_message_loop_thread();
 
     reset_mock_function_count_map();
@@ -375,6 +420,13 @@ class BroadcasterTest : public Test {
       codec_manager_->Stop();
       mock_codec_manager_ = nullptr;
     }
+
+    test::mock::osi_alarm::alarm_free = {};
+    test::mock::osi_alarm::alarm_new = {};
+    test::mock::osi_alarm::alarm_set_on_mloop = {};
+    test::mock::osi_alarm::alarm_cancel = {};
+    big_terminate_timer_ = nullptr;
+    broadcast_stop_timer_ = nullptr;
   }
 
   uint32_t InstantiateBroadcast(
@@ -440,6 +492,9 @@ class BroadcasterTest : public Test {
 
   le_audio::CodecManager* codec_manager_ = nullptr;
   MockCodecManager* mock_codec_manager_ = nullptr;
+
+  alarm_t* big_terminate_timer_ = nullptr;
+  alarm_t* broadcast_stop_timer_ = nullptr;
 };
 
 TEST_F(BroadcasterTest, Initialize) {
@@ -608,12 +663,8 @@ TEST_F(BroadcasterTest, StartAudioBroadcastMedia) {
 }
 
 TEST_F(BroadcasterTest, StopAudioBroadcast) {
-  EXPECT_CALL(*mock_codec_manager_,
-              UpdateActiveBroadcastAudioHalClient(mock_audio_source_, true))
-      .Times(1);
-  EXPECT_CALL(*mock_codec_manager_,
-              UpdateActiveBroadcastAudioHalClient(mock_audio_source_, false))
-      .Times(1);
+  EXPECT_CALL(*mock_codec_manager_, UpdateActiveBroadcastAudioHalClient(mock_audio_source_, true))
+          .Times(1);
   auto broadcast_id = InstantiateBroadcast();
   LeAudioBroadcaster::Get()->StartAudioBroadcast(broadcast_id);
 
@@ -636,6 +687,12 @@ TEST_F(BroadcasterTest, StopAudioBroadcast) {
 
   EXPECT_CALL(*mock_audio_source_, Stop).Times(AtLeast(1));
   LeAudioBroadcaster::Get()->StopAudioBroadcast(broadcast_id);
+
+  if (!com::android::bluetooth::flags::leaudio_big_depends_on_audio_state()) {
+    EXPECT_CALL(*mock_codec_manager_,
+                UpdateActiveBroadcastAudioHalClient(mock_audio_source_, false))
+            .Times(1);
+  }
   InjectBigTerminateComplete(big_cfg.big_id, 0x16);
   Mock::VerifyAndClearExpectations(mock_codec_manager_);
 }
@@ -1233,7 +1290,8 @@ TEST_F_WITH_FLAGS(BroadcasterTest, AudioActiveState,
 
   LeAudioSourceAudioHalClient::Callbacks* audio_receiver;
   EXPECT_CALL(*mock_audio_source_, Start)
-          .WillOnce(DoAll(SaveArg<1>(&audio_receiver), Return(true)));
+          .WillOnce(DoAll(SaveArg<1>(&audio_receiver), Return(true)))
+          .WillRepeatedly(Return(false));
   LeAudioBroadcaster::Get()->StartAudioBroadcast(broadcast_id);
   ASSERT_NE(audio_receiver, nullptr);
 
@@ -1278,11 +1336,191 @@ TEST_F_WITH_FLAGS(BroadcasterTest, AudioActiveState,
   EXPECT_CALL(*sm, UpdatePublicBroadcastAnnouncement);
   LeAudioBroadcaster::Get()->SuspendAudioBroadcast(broadcast_id);
   ASSERT_EQ(updated_public_meta, public_metadata_audio_false);
+}
 
-  // No update to true Audio Active State while audio resumed when not in
-  // streaming state
-  EXPECT_CALL(*sm, UpdatePublicBroadcastAnnouncement).Times(0);
+TEST_F_WITH_FLAGS(BroadcasterTest, BigTerminationAndBroadcastStopWhenNoSoundFromTheBeginning,
+                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(TEST_BT,
+                                                      leaudio_big_depends_on_audio_state))) {
+  // Timers created
+  ASSERT_TRUE(big_terminate_timer_ != nullptr);
+  ASSERT_TRUE(broadcast_stop_timer_ != nullptr);
+
+  auto broadcast_id = InstantiateBroadcast();
+  LeAudioSourceAudioHalClient::Callbacks* audio_receiver;
+  EXPECT_CALL(*mock_audio_source_, Start)
+          .WillOnce(DoAll(SaveArg<1>(&audio_receiver), Return(true)))
+          .WillRepeatedly(Return(false));
+  EXPECT_CALL(mock_broadcaster_callbacks_,
+              OnBroadcastStateChanged(broadcast_id, BroadcastState::STREAMING))
+          .Times(1);
+  // Timers not started
+  ASSERT_TRUE(big_terminate_timer_->cb == nullptr);
+  ASSERT_TRUE(broadcast_stop_timer_->cb == nullptr);
+
+  // Start Broadcast
+  LeAudioBroadcaster::Get()->StartAudioBroadcast(broadcast_id);
+  // Timers started
+  ASSERT_EQ(2, get_func_call_count("alarm_set_on_mloop"));
+  ASSERT_TRUE(big_terminate_timer_->cb != nullptr);
+  ASSERT_TRUE(broadcast_stop_timer_->cb != nullptr);
+  ASSERT_NE(audio_receiver, nullptr);
+
+  // BIG termination timer execution, state machine go to CONFIGURED state so BIG terminated
+  EXPECT_CALL(mock_broadcaster_callbacks_,
+              OnBroadcastStateChanged(broadcast_id, BroadcastState::CONFIGURED))
+          .Times(1);
+  // Imitate execution of BIG termination timer
+  big_terminate_timer_->cb(big_terminate_timer_->data);
+
+  // Broadcast stop timer execution, state machine go to STOPPED state
+  EXPECT_CALL(mock_broadcaster_callbacks_,
+              OnBroadcastStateChanged(broadcast_id, BroadcastState::STOPPED))
+          .Times(1);
+  // Imitate execution of BIG termination timer
+  broadcast_stop_timer_->cb(broadcast_stop_timer_->data);
+}
+
+TEST_F_WITH_FLAGS(BroadcasterTest, BigTerminationAndBroadcastStopWhenNoSoundAfterSuspend,
+                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(TEST_BT,
+                                                      leaudio_big_depends_on_audio_state))) {
+  // Timers created
+  ASSERT_TRUE(big_terminate_timer_ != nullptr);
+  ASSERT_TRUE(broadcast_stop_timer_ != nullptr);
+
+  auto broadcast_id = InstantiateBroadcast();
+  LeAudioSourceAudioHalClient::Callbacks* audio_receiver;
+  EXPECT_CALL(*mock_audio_source_, Start)
+          .WillOnce(DoAll(SaveArg<1>(&audio_receiver), Return(true)))
+          .WillRepeatedly(Return(false));
+  EXPECT_CALL(mock_broadcaster_callbacks_,
+              OnBroadcastStateChanged(broadcast_id, BroadcastState::STREAMING))
+          .Times(1);
+  // Timers not started
+  ASSERT_TRUE(big_terminate_timer_->cb == nullptr);
+  ASSERT_TRUE(broadcast_stop_timer_->cb == nullptr);
+
+  // Start Broadcast
+  LeAudioBroadcaster::Get()->StartAudioBroadcast(broadcast_id);
+  // Timers started
+  ASSERT_EQ(2, get_func_call_count("alarm_set_on_mloop"));
+  ASSERT_TRUE(big_terminate_timer_->cb != nullptr);
+  ASSERT_TRUE(broadcast_stop_timer_->cb != nullptr);
+  ASSERT_NE(audio_receiver, nullptr);
+
+  // First onAudioResume when BIG already created, not cause any state change
+  EXPECT_CALL(mock_broadcaster_callbacks_, OnBroadcastStateChanged(broadcast_id, _)).Times(0);
   audio_receiver->OnAudioResume();
+  // Timers cancelled
+  ASSERT_EQ(2, get_func_call_count("alarm_cancel"));
+  ASSERT_TRUE(big_terminate_timer_->cb == nullptr);
+  ASSERT_TRUE(broadcast_stop_timer_->cb == nullptr);
+
+  // OnAudioSuspend cause starting the BIG termination timer
+  audio_receiver->OnAudioSuspend();
+  ASSERT_EQ(4, get_func_call_count("alarm_set_on_mloop"));
+  ASSERT_TRUE(big_terminate_timer_->cb != nullptr);
+  ASSERT_TRUE(broadcast_stop_timer_->cb != nullptr);
+
+  // OnAudioResume before timer execution cancel them and not change the broadcast state
+  EXPECT_CALL(mock_broadcaster_callbacks_, OnBroadcastStateChanged(broadcast_id, _)).Times(0);
+  audio_receiver->OnAudioResume();
+  // Timers cancelled
+  ASSERT_EQ(4, get_func_call_count("alarm_cancel"));
+  ASSERT_TRUE(big_terminate_timer_->cb == nullptr);
+  ASSERT_TRUE(broadcast_stop_timer_->cb == nullptr);
+
+  // OnAudioSuspend cause starting the BIG termination timer
+  audio_receiver->OnAudioSuspend();
+  ASSERT_EQ(6, get_func_call_count("alarm_set_on_mloop"));
+  ASSERT_TRUE(big_terminate_timer_->cb != nullptr);
+  ASSERT_TRUE(broadcast_stop_timer_->cb != nullptr);
+
+  // BIG termination timer execution, state machine go to CONFIGURED state so BIG terminated
+  EXPECT_CALL(mock_broadcaster_callbacks_,
+              OnBroadcastStateChanged(broadcast_id, BroadcastState::CONFIGURED))
+          .Times(1);
+  // Imitate execution of BIG termination timer
+  big_terminate_timer_->cb(big_terminate_timer_->data);
+
+  // Broadcast stop timer execution, state machine go to STOPPED state
+  EXPECT_CALL(mock_broadcaster_callbacks_,
+              OnBroadcastStateChanged(broadcast_id, BroadcastState::STOPPED))
+          .Times(1);
+  // Imitate execution of BIG termination timer
+  broadcast_stop_timer_->cb(broadcast_stop_timer_->data);
+}
+
+TEST_F_WITH_FLAGS(BroadcasterTest, BigCreationTerminationDependsOnAudioResumeSuspend,
+                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(TEST_BT,
+                                                      leaudio_big_depends_on_audio_state))) {
+  // Timers created
+  ASSERT_TRUE(big_terminate_timer_ != nullptr);
+  ASSERT_TRUE(broadcast_stop_timer_ != nullptr);
+
+  auto broadcast_id = InstantiateBroadcast();
+  LeAudioSourceAudioHalClient::Callbacks* audio_receiver;
+  EXPECT_CALL(*mock_audio_source_, Start)
+          .WillOnce(DoAll(SaveArg<1>(&audio_receiver), Return(true)))
+          .WillRepeatedly(Return(false));
+  EXPECT_CALL(mock_broadcaster_callbacks_,
+              OnBroadcastStateChanged(broadcast_id, BroadcastState::STREAMING))
+          .Times(1);
+  // Timers not started
+  ASSERT_TRUE(big_terminate_timer_->cb == nullptr);
+  ASSERT_TRUE(broadcast_stop_timer_->cb == nullptr);
+
+  // Start Broadcast
+  LeAudioBroadcaster::Get()->StartAudioBroadcast(broadcast_id);
+  // Timers started
+  ASSERT_EQ(2, get_func_call_count("alarm_set_on_mloop"));
+  ASSERT_TRUE(big_terminate_timer_->cb != nullptr);
+  ASSERT_TRUE(broadcast_stop_timer_->cb != nullptr);
+  ASSERT_NE(audio_receiver, nullptr);
+
+  // First onAudioResume when BIG already created, not cause any state change
+  EXPECT_CALL(mock_broadcaster_callbacks_, OnBroadcastStateChanged(broadcast_id, _)).Times(0);
+  audio_receiver->OnAudioResume();
+  // Timers cancelled
+  ASSERT_EQ(2, get_func_call_count("alarm_cancel"));
+  ASSERT_TRUE(big_terminate_timer_->cb == nullptr);
+  ASSERT_TRUE(broadcast_stop_timer_->cb == nullptr);
+
+  // OnAudioSuspend cause starting the BIG termination timer
+  audio_receiver->OnAudioSuspend();
+  ASSERT_EQ(4, get_func_call_count("alarm_set_on_mloop"));
+  ASSERT_TRUE(big_terminate_timer_->cb != nullptr);
+  ASSERT_TRUE(broadcast_stop_timer_->cb != nullptr);
+
+  // OnAudioResume before timer execution cancel them and not change the broadcast state
+  EXPECT_CALL(mock_broadcaster_callbacks_, OnBroadcastStateChanged(broadcast_id, _)).Times(0);
+  audio_receiver->OnAudioResume();
+  // Timers cancelled
+  ASSERT_EQ(4, get_func_call_count("alarm_cancel"));
+  ASSERT_TRUE(big_terminate_timer_->cb == nullptr);
+  ASSERT_TRUE(broadcast_stop_timer_->cb == nullptr);
+
+  // OnAudioSuspend cause starting the BIG termination timer
+  audio_receiver->OnAudioSuspend();
+  ASSERT_EQ(6, get_func_call_count("alarm_set_on_mloop"));
+  ASSERT_TRUE(big_terminate_timer_->cb != nullptr);
+  ASSERT_TRUE(broadcast_stop_timer_->cb != nullptr);
+
+  // BIG termination timer execution, state machine go to CONFIGURED state so BIG terminated
+  EXPECT_CALL(mock_broadcaster_callbacks_,
+              OnBroadcastStateChanged(broadcast_id, BroadcastState::CONFIGURED))
+          .Times(1);
+  // Imitate execution of BIG termination timer
+  big_terminate_timer_->cb(big_terminate_timer_->data);
+
+  // onAudioResume cause state machine go to STREAMING state so BIG creation
+  EXPECT_CALL(mock_broadcaster_callbacks_,
+              OnBroadcastStateChanged(broadcast_id, BroadcastState::STREAMING))
+          .Times(1);
+  audio_receiver->OnAudioResume();
+  // Timers Cancelled
+  ASSERT_EQ(6, get_func_call_count("alarm_cancel"));
+  ASSERT_TRUE(big_terminate_timer_->cb == nullptr);
+  ASSERT_TRUE(broadcast_stop_timer_->cb == nullptr);
 }
 
 // TODO: Add tests for:

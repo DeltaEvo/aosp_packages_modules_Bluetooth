@@ -82,7 +82,6 @@ cc_binary {
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
         "libFraunhoferAAC",
-        "libaudio-a2dp-hw-utils",
         "libbase",
         "libbluetooth-dumpsys",
         "libbluetooth-gdx",

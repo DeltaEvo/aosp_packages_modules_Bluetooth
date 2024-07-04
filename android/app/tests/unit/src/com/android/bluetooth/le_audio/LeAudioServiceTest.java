@@ -1012,13 +1012,6 @@ public class LeAudioServiceTest {
         verify(mMcpService, times(1)).removeDeviceAuthorizationInfo(mLeftDevice);
     }
 
-    @Test
-    public void testAuthorizationInfoRemovedFromTbsMcsOnUnbondEventsWithSynchBlockFixFlag() {
-        mSetFlagsRule.enableFlags(Flags.FLAG_LEAUDIO_API_SYNCHRONIZED_BLOCK_FIX);
-
-        testAuthorizationInfoRemovedFromTbsMcsOnUnbondEvents();
-    }
-
     /**
      * Test that a CONNECTION_STATE_DISCONNECTED Le Audio stack event will remove the state machine
      * only if the device is unbond.

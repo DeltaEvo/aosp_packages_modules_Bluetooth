@@ -218,12 +218,15 @@ void btif_enable_bluetooth_evt() {
     bte_load_did_conf(BTE_DID_CONF_FILE);
   } else {
     tSDP_DI_RECORD record = {
-        .vendor = uint16_t(
-            GET_SYSPROP(DeviceIDProperties, vendor_id, LMP_COMPID_GOOGLE)),
-        .vendor_id_source = uint16_t(GET_SYSPROP(
-            DeviceIDProperties, vendor_id_source, DI_VENDOR_ID_SOURCE_BTSIG)),
-        .product = uint16_t(GET_SYSPROP(DeviceIDProperties, product_id, 0)),
-        .primary_record = true,
+            .vendor =
+                    uint16_t(android::sysprop::bluetooth::DeviceIDProperties::vendor_id().value_or(
+                            LMP_COMPID_GOOGLE)),
+            .vendor_id_source = uint16_t(
+                    android::sysprop::bluetooth::DeviceIDProperties::vendor_id_source().value_or(
+                            DI_VENDOR_ID_SOURCE_BTSIG)),
+            .product = uint16_t(
+                    android::sysprop::bluetooth::DeviceIDProperties::product_id().value_or(0)),
+            .primary_record = true,
     };
 
     uint32_t record_handle;

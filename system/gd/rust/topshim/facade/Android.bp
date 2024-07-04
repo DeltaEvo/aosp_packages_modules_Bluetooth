@@ -39,7 +39,6 @@ rust_defaults {
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
         "libFraunhoferAAC",
-        "libaudio-a2dp-hw-utils",
         "libbluetooth-dumpsys",
         "libbluetooth-gdx",
         "libbluetooth-types",

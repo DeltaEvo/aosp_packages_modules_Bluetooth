@@ -25,7 +25,6 @@
 #include <cstdint>
 #include <future>
 
-#include "audio_a2dp_hw/include/audio_a2dp_hw.h"
 #include "bta/include/bta_av_api.h"
 #include "stack/include/bt_hdr.h"
 #include "types/raw_address.h"
@@ -84,15 +83,6 @@ void btif_a2dp_sink_shutdown(void);
 // This function should be called by the BTIF state machine during graceful
 // cleanup.
 void btif_a2dp_sink_cleanup(void);
-
-// Get the audio sample rate for the A2DP Sink module.
-tA2DP_SAMPLE_RATE btif_a2dp_sink_get_sample_rate(void);
-
-// Get the audio channel count for the A2DP Sink module.
-tA2DP_CHANNEL_COUNT btif_a2dp_sink_get_channel_count(void);
-
-// Get the audio bits per sample for the A2DP Sink module.
-tA2DP_BITS_PER_SAMPLE btif_a2dp_sink_get_bits_per_sample(void);
 
 // Update the decoder for the A2DP Sink module.
 // |p_codec_info| contains the new codec information.
