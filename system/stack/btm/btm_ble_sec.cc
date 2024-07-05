@@ -572,7 +572,7 @@ bool BTM_ReadConnectedTransportAddress(RawAddress* remote_bda, tBT_TRANSPORT tra
 tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr, uint16_t tx_pdu_length) {
   if (!bluetooth::shim::GetController()->SupportsBleDataPacketLengthExtension()) {
     log::info("Local controller does not support le packet extension");
-    return BTM_ILLEGAL_VALUE;
+    return tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
 
   log::info("bd_addr:{}, tx_pdu_length:{}", bd_addr, tx_pdu_length);
@@ -612,7 +612,7 @@ tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr, uint16_t tx_pdu_leng
 
   if (!acl_peer_supports_ble_packet_extension(hci_handle)) {
     log::info("Remote device unable to support le packet extension");
-    return BTM_ILLEGAL_VALUE;
+    return tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
 
   tx_pdu_length = std::min<uint16_t>(
@@ -731,7 +731,7 @@ tBTM_STATUS btm_ble_start_sec_check(const RawAddress& bd_addr, uint16_t psm, boo
   if (!p_serv_rec) {
     log::warn("PSM: {} no application registered", psm);
     (*p_callback)(bd_addr, BT_TRANSPORT_LE, p_ref_data, BTM_MODE_UNSUPPORTED);
-    return BTM_ILLEGAL_VALUE;
+    return tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
 
   bool is_encrypted = BTM_IsEncrypted(bd_addr, BT_TRANSPORT_LE);

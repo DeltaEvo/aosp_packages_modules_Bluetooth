@@ -1346,7 +1346,7 @@ tL2CAP_LE_RESULT_CODE l2ble_sec_access_req(const RawAddress& bd_addr, uint16_t p
   switch (result) {
     case tBTM_STATUS::BTM_SUCCESS:
       return L2CAP_LE_RESULT_CONN_OK;
-    case BTM_ILLEGAL_VALUE:
+    case tBTM_STATUS::BTM_ILLEGAL_VALUE:
       return L2CAP_LE_RESULT_NO_PSM;
     case BTM_NOT_AUTHENTICATED:
       return L2CAP_LE_RESULT_INSUFFICIENT_AUTHENTICATION;

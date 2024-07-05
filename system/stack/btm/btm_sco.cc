@@ -709,7 +709,7 @@ tBTM_STATUS BTM_CreateSco(const RawAddress* remote_bda, bool is_orig, uint16_t p
   if (is_orig) {
     if (!remote_bda) {
       log::error("remote_bda is null");
-      return BTM_ILLEGAL_VALUE;
+      return tBTM_STATUS::BTM_ILLEGAL_VALUE;
     }
     acl_handle =
             get_btm_client_interface().peer.BTM_GetHCIConnHandle(*remote_bda, BT_TRANSPORT_BR_EDR);
@@ -1397,7 +1397,7 @@ tBTM_STATUS BTM_SetEScoMode(enh_esco_params_t* p_parms) {
  *                  events.
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if the successful.
- *                  BTM_ILLEGAL_VALUE if there is an illegal sco_inx
+ *                  tBTM_STATUS::BTM_ILLEGAL_VALUE if there is an illegal sco_inx
  *                  BTM_MODE_UNSUPPORTED if controller version is not BT1.2 or
  *                          later or does not support eSCO.
  *
@@ -1416,7 +1416,7 @@ tBTM_STATUS BTM_RegForEScoEvts(uint16_t sco_inx, tBTM_ESCO_CBACK* p_esco_cback) 
     btm_cb.sco_cb.sco_db[sco_inx].esco.p_esco_cback = p_esco_cback;
     return tBTM_STATUS::BTM_SUCCESS;
   }
-  return BTM_ILLEGAL_VALUE;
+  return tBTM_STATUS::BTM_ILLEGAL_VALUE;
 }
 
 /*******************************************************************************

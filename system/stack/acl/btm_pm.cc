@@ -122,14 +122,14 @@ static tBTM_STATUS btm_pm_snd_md_req(uint16_t handle, uint8_t pm_id, int link_in
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if successful,
  *                  BTM_NO_RESOURCES if no room to hold registration
- *                  BTM_ILLEGAL_VALUE
+ *                  tBTM_STATUS::BTM_ILLEGAL_VALUE
  *
  ******************************************************************************/
 tBTM_STATUS BTM_PmRegister(uint8_t mask, uint8_t* p_pm_id, tBTM_PM_STATUS_CBACK* p_cb) {
   /* de-register */
   if (mask & BTM_PM_DEREG) {
     if (*p_pm_id >= BTM_MAX_PM_RECORDS) {
-      return BTM_ILLEGAL_VALUE;
+      return tBTM_STATUS::BTM_ILLEGAL_VALUE;
     }
     pm_reg_db.mask = BTM_PM_REC_NOT_USED;
     return tBTM_STATUS::BTM_SUCCESS;
@@ -138,7 +138,7 @@ tBTM_STATUS BTM_PmRegister(uint8_t mask, uint8_t* p_pm_id, tBTM_PM_STATUS_CBACK*
   if (pm_reg_db.mask == BTM_PM_REC_NOT_USED) {
     /* if register for notification, should provide callback routine */
     if (p_cb == NULL) {
-      return BTM_ILLEGAL_VALUE;
+      return tBTM_STATUS::BTM_ILLEGAL_VALUE;
     }
     pm_reg_db.cback = p_cb;
     pm_reg_db.mask = mask;
@@ -186,7 +186,7 @@ tBTM_STATUS BTM_SetPowerMode(uint8_t pm_id, const RawAddress& remote_bda,
 
   if (!p_mode) {
     log::error("pm_id: {}, p_mode is null for {}", unsigned(pm_id), remote_bda);
-    return BTM_ILLEGAL_VALUE;
+    return tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
 
   // per ACL link
@@ -200,7 +200,7 @@ tBTM_STATUS BTM_SetPowerMode(uint8_t pm_id, const RawAddress& remote_bda,
   tBTM_PM_MODE mode = p_mode->mode;
   if (!is_legal_power_mode(mode)) {
     log::error("Unable to set illegal power mode value:0x{:02x}", mode);
-    return BTM_ILLEGAL_VALUE;
+    return tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
 
   if (p_mode->mode & BTM_PM_MD_FORCE) {

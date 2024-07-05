@@ -329,7 +329,7 @@ static void decode_controller_support() {
  ******************************************************************************/
 tBTM_STATUS BTM_SetLocalDeviceName(const char* p_name) {
   if (!p_name || !p_name[0] || (strlen(p_name) > BD_NAME_LEN)) {
-    return BTM_ILLEGAL_VALUE;
+    return tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
 
   if (bluetooth::shim::GetController() == nullptr) {

@@ -506,7 +506,7 @@ void btm_acl_device_down(void) {
 
 tBTM_STATUS BTM_GetRole(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role) {
   if (p_role == nullptr) {
-    return BTM_ILLEGAL_VALUE;
+    return tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
   *p_role = HCI_ROLE_UNKNOWN;
 

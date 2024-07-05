@@ -528,7 +528,7 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration, tBTM_INQ_RESULTS_CB* p_
                ll_scan_window);
 
   if (!bluetooth::shim::GetController()->SupportsBle()) {
-    return BTM_ILLEGAL_VALUE;
+    return tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
 
   if (start) {
@@ -1321,7 +1321,7 @@ tBTM_STATUS btm_ble_set_discoverability(uint16_t combined_mode) {
 
   /*** Check mode parameter ***/
   if (mode > BTM_BLE_MAX_DISCOVERABLE) {
-    return BTM_ILLEGAL_VALUE;
+    return tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
 
   btm_cb.ble_ctr_cb.inq_var.discoverable_mode = mode;
@@ -1408,7 +1408,7 @@ tBTM_STATUS btm_ble_set_connectability(uint16_t combined_mode) {
 
   /*** Check mode parameter ***/
   if (mode > BTM_BLE_MAX_CONNECTABLE) {
-    return BTM_ILLEGAL_VALUE;
+    return tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
 
   btm_cb.ble_ctr_cb.inq_var.connectable_mode = mode;

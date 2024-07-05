@@ -568,7 +568,7 @@ void BTM_PINCodeReply(const RawAddress& bd_addr, tBTM_STATUS res, uint8_t pin_le
   }
 
   if ((pin_len > PIN_CODE_LEN) || (pin_len == 0) || (p_pin == NULL)) {
-    res = BTM_ILLEGAL_VALUE;
+    res = tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
 
   if (res != tBTM_STATUS::BTM_SUCCESS) {
@@ -1213,7 +1213,7 @@ void BTM_PasskeyReqReply(tBTM_STATUS res, const RawAddress& bd_addr, uint32_t pa
   }
 
   if (passkey > BTM_MAX_PASSKEY_VAL) {
-    res = BTM_ILLEGAL_VALUE;
+    res = tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
 
   btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_WAIT_AUTH_COMPLETE);
