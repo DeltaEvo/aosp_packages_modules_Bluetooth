@@ -1319,7 +1319,7 @@ void btm_ble_link_encrypted(const RawAddress& bd_addr, uint8_t encr_enable) {
     } else if (!(p_dev_rec->sec_rec.sec_flags & BTM_SEC_LE_LINK_KEY_KNOWN)) {
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_FAILED_ON_SECURITY, true);
     } else if (p_dev_rec->role_central) {
-      btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_PROCESSING, true);
+      btm_sec_dev_rec_cback_event(p_dev_rec, tBTM_STATUS::BTM_ERR_PROCESSING, true);
     }
   }
 
@@ -1615,7 +1615,7 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
                        p_dev_rec->sec_rec.sec_flags);
 
           res = (p_data->cmplt.reason == SMP_SUCCESS) ? tBTM_STATUS::BTM_SUCCESS
-                                                      : BTM_ERR_PROCESSING;
+                                                      : tBTM_STATUS::BTM_ERR_PROCESSING;
 
           log::verbose("after update result={} sec_level=0x{:x} sec_flags=0x{:x}", res,
                        p_data->cmplt.sec_level, p_dev_rec->sec_rec.sec_flags);

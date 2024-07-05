@@ -140,7 +140,8 @@ static void btm_flt_update_cb(uint8_t expected_ocf, tBTM_BLE_PF_CFG_CBACK cb, ui
     return;
   }
 
-  tBTM_STATUS btm_status = (status == 0) ? tBTM_STATUS::BTM_SUCCESS : BTM_ERR_PROCESSING;
+  tBTM_STATUS btm_status =
+          (status == 0) ? tBTM_STATUS::BTM_SUCCESS : tBTM_STATUS::BTM_ERR_PROCESSING;
 
   if (op_subcode == BTM_BLE_META_PF_FEAT_SEL) {
     cb.Run(num_avail, static_cast<tBTM_BLE_SCAN_COND_OP>(action), btm_status);

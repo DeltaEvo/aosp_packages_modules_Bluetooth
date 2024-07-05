@@ -1622,13 +1622,13 @@ void btm_ble_read_remote_name_cmpl(bool status, const RawAddress& bda, uint16_t 
  ******************************************************************************/
 tBTM_STATUS btm_ble_read_remote_name(const RawAddress& remote_bda, tBTM_NAME_CMPL_CB* p_cb) {
   if (!bluetooth::shim::GetController()->SupportsBle()) {
-    return BTM_ERR_PROCESSING;
+    return tBTM_STATUS::BTM_ERR_PROCESSING;
   }
 
   tINQ_DB_ENT* p_i = btm_inq_db_find(remote_bda);
   if (p_i && !ble_evt_type_is_connectable(p_i->inq_info.results.ble_evt_type)) {
     log::verbose("name request to non-connectable device failed.");
-    return BTM_ERR_PROCESSING;
+    return tBTM_STATUS::BTM_ERR_PROCESSING;
   }
 
   /* read remote device name using GATT procedure */

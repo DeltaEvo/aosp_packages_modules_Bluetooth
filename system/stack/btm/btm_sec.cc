@@ -1938,7 +1938,7 @@ void btm_create_conn_cancel_complete(uint8_t status, const RawAddress bd_addr) {
     default:
       /* Notify application of the error */
       if (btm_sec_cb.api.p_bond_cancel_cmpl_callback) {
-        btm_sec_cb.api.p_bond_cancel_cmpl_callback(BTM_ERR_PROCESSING);
+        btm_sec_cb.api.p_bond_cancel_cmpl_callback(tBTM_STATUS::BTM_ERR_PROCESSING);
       }
       break;
   }
@@ -2367,7 +2367,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr, const uint8_
 
   /* If get name failed, notify the waiting layer */
   if (hci_status != HCI_SUCCESS) {
-    btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_PROCESSING, false);
+    btm_sec_dev_rec_cback_event(p_dev_rec, tBTM_STATUS::BTM_ERR_PROCESSING, false);
     return;
   }
 
@@ -2663,7 +2663,7 @@ void btm_io_capabilities_rsp(const tBTM_SP_IO_RSP evt_data) {
  *
  ******************************************************************************/
 void btm_proc_sp_req_evt(tBTM_SP_EVT event, const RawAddress bda, const uint32_t value) {
-  tBTM_STATUS status = BTM_ERR_PROCESSING;
+  tBTM_STATUS status = tBTM_STATUS::BTM_ERR_PROCESSING;
   tBTM_SP_EVT_DATA evt_data;
   RawAddress& p_bda = evt_data.cfm_req.bd_addr;
   tBTM_SEC_DEV_REC* p_dev_rec;
@@ -3136,7 +3136,7 @@ void btm_sec_auth_complete(uint16_t handle, tHCI_STATUS status) {
 
   /* If authentication failed, notify the waiting layer */
   if (status != HCI_SUCCESS) {
-    btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_PROCESSING, false);
+    btm_sec_dev_rec_cback_event(p_dev_rec, tBTM_STATUS::BTM_ERR_PROCESSING, false);
 
     if (btm_sec_cb.pairing_flags & BTM_PAIR_FLAGS_DISC_WHEN_DONE) {
       btm_sec_send_hci_disconnect(p_dev_rec, HCI_ERR_AUTH_FAILURE, p_dev_rec->hci_handle,
@@ -3334,7 +3334,7 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status, uint8_t encr_en
   p_dev_rec->sec_rec.classic_link = tSECURITY_STATE::IDLE;
   /* If encryption setup failed, notify the waiting layer */
   if (status != HCI_SUCCESS) {
-    btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_PROCESSING, false);
+    btm_sec_dev_rec_cback_event(p_dev_rec, tBTM_STATUS::BTM_ERR_PROCESSING, false);
     return;
   }
 
@@ -3644,7 +3644,7 @@ void btm_sec_connected(const RawAddress& bda, uint16_t handle, tHCI_STATUS statu
         status == HCI_ERR_UNSPECIFIED || status == HCI_ERR_PAGE_TIMEOUT) {
       btm_sec_dev_rec_cback_event(p_dev_rec, tBTM_STATUS::BTM_DEVICE_TIMEOUT, false);
     } else {
-      btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_PROCESSING, false);
+      btm_sec_dev_rec_cback_event(p_dev_rec, tBTM_STATUS::BTM_ERR_PROCESSING, false);
     }
 
     return;
@@ -3900,7 +3900,8 @@ void btm_sec_disconnected(uint16_t handle, tHCI_REASON reason, std::string comme
     /* when the peer device time out the authentication before
        we do, this call back must be reset here */
     p_dev_rec->sec_rec.p_callback = nullptr;
-    (*p_callback)(p_dev_rec->bd_addr, transport, p_dev_rec->sec_rec.p_ref_data, BTM_ERR_PROCESSING);
+    (*p_callback)(p_dev_rec->bd_addr, transport, p_dev_rec->sec_rec.p_ref_data,
+                  tBTM_STATUS::BTM_ERR_PROCESSING);
     log::debug("Cleaned up pending security state device:{} transport:{}", p_dev_rec->bd_addr,
                bt_transport_text(transport));
   }
@@ -4902,7 +4903,7 @@ static void btm_sec_check_pending_enc_req(tBTM_SEC_DEV_REC* p_dev_rec, tBT_TRANS
     return;
   }
 
-  const tBTM_STATUS res = encr_enable ? tBTM_STATUS::BTM_SUCCESS : BTM_ERR_PROCESSING;
+  const tBTM_STATUS res = encr_enable ? tBTM_STATUS::BTM_SUCCESS : tBTM_STATUS::BTM_ERR_PROCESSING;
   list_t* list = fixed_queue_get_list(btm_sec_cb.sec_pending_q);
   for (const list_node_t* node = list_begin(list); node != list_end(list);) {
     tBTM_SEC_QUEUE_ENTRY* p_e = (tBTM_SEC_QUEUE_ENTRY*)list_node(node);

@@ -1758,7 +1758,7 @@ void btm_read_tx_power_complete(uint8_t* p, uint16_t evt_len, bool is_ble) {
       log::debug("Transmit power complete: tx_power:{} hci status:{}", result.tx_power,
                  hci_error_code_text(static_cast<tHCI_STATUS>(result.hci_status)));
     } else {
-      result.status = BTM_ERR_PROCESSING;
+      result.status = tBTM_STATUS::BTM_ERR_PROCESSING;
     }
 
     (*p_cb)(&result);
@@ -1813,7 +1813,7 @@ void btm_read_rssi_complete(uint8_t* p, uint16_t evt_len) {
     }
 
     STREAM_TO_UINT8(result.hci_status, p);
-    result.status = BTM_ERR_PROCESSING;
+    result.status = tBTM_STATUS::BTM_ERR_PROCESSING;
 
     if (result.hci_status == HCI_SUCCESS) {
       uint16_t handle;
@@ -1899,7 +1899,7 @@ void btm_read_failed_contact_counter_complete(uint8_t* p) {
         result.rem_bda = p_acl_cb->remote_addr;
       }
     } else {
-      result.status = BTM_ERR_PROCESSING;
+      result.status = tBTM_STATUS::BTM_ERR_PROCESSING;
     }
 
     (*p_cb)(&result);
@@ -1928,7 +1928,7 @@ void btm_read_automatic_flush_timeout_complete(uint8_t* p) {
   if (p_cb) {
     uint16_t handle;
     STREAM_TO_UINT8(result.hci_status, p);
-    result.status = BTM_ERR_PROCESSING;
+    result.status = tBTM_STATUS::BTM_ERR_PROCESSING;
 
     if (result.hci_status == HCI_SUCCESS) {
       result.status = tBTM_STATUS::BTM_SUCCESS;
