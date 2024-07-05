@@ -101,7 +101,7 @@ tBTM_STATUS BTM_DeleteStoredLinkKey(const RawAddress* bd_addr, tBTM_CMPL_CB* p_c
  * Description      This procedure confirms requested to validate set device.
  *
  * Parameter        bd_addr     - BD address of the peer
- *                  res         - confirmation result BTM_SUCCESS if success
+ *                  res         - confirmation result tBTM_STATUS::BTM_SUCCESS if success
  *
  * Returns          void
  *

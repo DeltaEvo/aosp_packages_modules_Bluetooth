@@ -60,6 +60,7 @@
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_log_history.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/hci_error_code.h"
 #include "stack/include/hcidefs.h"
 #include "stack/include/hcimsgs.h"
@@ -256,7 +257,7 @@ static bool is_inquery_by_rssi() { return osi_property_get_bool(PROPERTY_INQ_BY_
  *                  scans are enabled.  If a value of '0' is entered for window
  *                  or interval, the default values are used.
  *
- * Returns          BTM_SUCCESS if successful
+ * Returns          tBTM_STATUS::BTM_SUCCESS if successful
  *                  BTM_BUSY if a setting of the filter is already in progress
  *                  BTM_NO_RESOURCES if couldn't get a memory pool buffer
  *                  BTM_ILLEGAL_VALUE if a bad parameter was detected
@@ -274,7 +275,7 @@ tBTM_STATUS BTM_SetDiscoverability(uint16_t inq_mode) {
 
   log::verbose("");
   if (bluetooth::shim::GetController()->SupportsBle()) {
-    if (btm_ble_set_discoverability((uint16_t)(inq_mode)) == BTM_SUCCESS) {
+    if (btm_ble_set_discoverability((uint16_t)(inq_mode)) == tBTM_STATUS::BTM_SUCCESS) {
       btm_cb.btm_inq_vars.discoverable_mode &= (~BTM_BLE_DISCOVERABLE_MASK);
       btm_cb.btm_inq_vars.discoverable_mode |= (inq_mode & BTM_BLE_DISCOVERABLE_MASK);
     }
@@ -345,7 +346,7 @@ tBTM_STATUS BTM_SetDiscoverability(uint16_t inq_mode) {
     (void)get_btm_client_interface().local.BTM_SetDeviceClass(cod);
   }
 
-  return BTM_SUCCESS;
+  return tBTM_STATUS::BTM_SUCCESS;
 }
 
 void BTM_EnableInterlacedInquiryScan() {
@@ -400,7 +401,7 @@ void BTM_EnableInterlacedPageScan() {
  *
  * Output Params:   mode - standard, with RSSI, extended
  *
- * Returns          BTM_SUCCESS if successful
+ * Returns          tBTM_STATUS::BTM_SUCCESS if successful
  *                  BTM_NO_RESOURCES if couldn't get a memory pool buffer
  *                  BTM_ILLEGAL_VALUE if a bad parameter was detected
  *                  BTM_WRONG_MODE if the device is not up.
@@ -428,7 +429,7 @@ tBTM_STATUS BTM_SetInquiryMode(uint8_t mode) {
 
   btsnd_hcic_write_inquiry_mode(mode);
 
-  return BTM_SUCCESS;
+  return tBTM_STATUS::BTM_SUCCESS;
 }
 
 /*******************************************************************************
@@ -439,7 +440,7 @@ tBTM_STATUS BTM_SetInquiryMode(uint8_t mode) {
  *                  connectable mode. Discoverable mode means page scans are
  *                  enabled.
  *
- * Returns          BTM_SUCCESS if successful
+ * Returns          tBTM_STATUS::BTM_SUCCESS if successful
  *                  BTM_ILLEGAL_VALUE if a bad parameter is detected
  *                  BTM_NO_RESOURCES if could not allocate a message buffer
  *                  BTM_WRONG_MODE if the device is not up.
@@ -449,7 +450,7 @@ tBTM_STATUS BTM_SetConnectability(uint16_t page_mode) {
   uint8_t scan_mode = 0;
 
   if (bluetooth::shim::GetController()->SupportsBle()) {
-    if (btm_ble_set_connectability(page_mode) != BTM_SUCCESS) {
+    if (btm_ble_set_connectability(page_mode) != tBTM_STATUS::BTM_SUCCESS) {
       return BTM_NO_RESOURCES;
     }
     btm_cb.btm_inq_vars.connectable_mode &= (~BTM_BLE_CONNECTABLE_MASK);
@@ -491,7 +492,7 @@ tBTM_STATUS BTM_SetConnectability(uint16_t page_mode) {
   btsnd_hcic_write_scan_enable(scan_mode);
   btm_cb.btm_inq_vars.connectable_mode &= (~BTM_CONNECTABLE_MASK);
   btm_cb.btm_inq_vars.connectable_mode |= page_mode;
-  return BTM_SUCCESS;
+  return tBTM_STATUS::BTM_SUCCESS;
 }
 
 /*******************************************************************************
@@ -862,7 +863,7 @@ tBTM_INQ_INFO* BTM_InqDbNext(tBTM_INQ_INFO* p_cur) {
  *                                              (NULL clears all entries)
  *
  * Returns          BTM_BUSY if an inquiry, get remote name, or event filter
- *                          is active, otherwise BTM_SUCCESS
+ *                          is active, otherwise tBTM_STATUS::BTM_SUCCESS
  *
  ******************************************************************************/
 tBTM_STATUS BTM_ClearInqDb(const RawAddress* p_bda) {
@@ -873,7 +874,7 @@ tBTM_STATUS BTM_ClearInqDb(const RawAddress* p_bda) {
 
   btm_clr_inq_db(p_bda);
 
-  return BTM_SUCCESS;
+  return tBTM_STATUS::BTM_SUCCESS;
 }
 
 /*******************************************************************************
@@ -1738,7 +1739,7 @@ static void btm_process_cancel_complete(tHCI_STATUS status, uint8_t mode) {
  * Parameters       p_buff - allocated HCI command buffer including extended
  *                           inquriry response
  *
- * Returns          BTM_SUCCESS  - if successful
+ * Returns          tBTM_STATUS::BTM_SUCCESS  - if successful
  *                  BTM_MODE_UNSUPPORTED - if local device cannot support it
  *
  ******************************************************************************/
@@ -1746,7 +1747,7 @@ tBTM_STATUS BTM_WriteEIR(BT_HDR* p_buff) {
   if (bluetooth::shim::GetController()->SupportsExtendedInquiryResponse()) {
     log::verbose("Write Extended Inquiry Response to controller");
     btsnd_hcic_write_ext_inquiry_response(p_buff, TRUE);
-    return BTM_SUCCESS;
+    return tBTM_STATUS::BTM_SUCCESS;
   } else {
     osi_free(p_buff);
     return BTM_MODE_UNSUPPORTED;

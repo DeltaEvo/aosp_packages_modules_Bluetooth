@@ -50,6 +50,7 @@
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_inq.h"
 #include "stack/include/btm_log_history.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/gap_api.h"  // GAP_BleReadPeerPrefConnParams
 #include "stack/include/hidh_api.h"
 #include "stack/include/main_thread.h"
@@ -264,7 +265,7 @@ static tBTA_DM_STATE bta_dm_search_get_state() { return bta_dm_search_cb.state; 
 static void bta_dm_search_start(tBTA_DM_API_SEARCH& search) {
   bta_dm_gattc_register();
 
-  if (get_btm_client_interface().db.BTM_ClearInqDb(nullptr) != BTM_SUCCESS) {
+  if (get_btm_client_interface().db.BTM_ClearInqDb(nullptr) != tBTM_STATUS::BTM_SUCCESS) {
     log::warn("Unable to clear inquiry db for device discovery");
   }
 
@@ -1380,7 +1381,7 @@ static void bta_dm_service_search_remname_cback(const RawAddress& bd_addr, DEV_C
   if (bta_dm_search_cb.peer_bdaddr == bd_addr) {
     rem_name.bd_addr = bd_addr;
     bd_name_copy(rem_name.remote_bd_name, bd_name);
-    rem_name.status = BTM_SUCCESS;
+    rem_name.status = tBTM_STATUS::BTM_SUCCESS;
     rem_name.hci_status = HCI_SUCCESS;
     bta_dm_remname_cback(&rem_name);
   } else {

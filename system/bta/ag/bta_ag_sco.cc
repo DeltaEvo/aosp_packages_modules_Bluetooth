@@ -41,6 +41,7 @@
 #include "stack/btm/btm_sco_hfp_hal.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_client_interface.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/main_thread.h"
 #include "types/raw_address.h"
 
@@ -173,7 +174,7 @@ static void bta_ag_sco_conn_cback(uint16_t sco_idx) {
     /* no match found; disconnect sco, init sco variables */
     bta_ag_cb.sco.p_curr_scb = nullptr;
     bta_ag_cb.sco.state = BTA_AG_SCO_SHUTDOWN_ST;
-    if (get_btm_client_interface().sco.BTM_RemoveSco(sco_idx) != BTM_SUCCESS) {
+    if (get_btm_client_interface().sco.BTM_RemoveSco(sco_idx) != tBTM_STATUS::BTM_SUCCESS) {
       log::warn("Unable to remove SCO idx:{}", sco_idx);
     }
   }
@@ -324,7 +325,7 @@ static bool bta_ag_remove_sco(tBTA_AG_SCB* p_scb, bool only_active) {
         /* SCO is connected; set current control block */
         bta_ag_cb.sco.p_curr_scb = p_scb;
         return true;
-      } else if ((status == BTM_SUCCESS) || (status == BTM_UNKNOWN_ADDR)) {
+      } else if ((status == tBTM_STATUS::BTM_SUCCESS) || (status == BTM_UNKNOWN_ADDR)) {
         /* If no connection reset the SCO handle */
         p_scb->sco_idx = BTM_INVALID_SCO_INDEX;
       }
@@ -529,7 +530,7 @@ void bta_ag_create_sco(tBTA_AG_SCB* p_scb, bool is_orig) {
   if (is_orig) {
     bta_ag_cb.sco.is_local = true;
     /* Set eSCO Mode */
-    if (get_btm_client_interface().sco.BTM_SetEScoMode(&params) != BTM_SUCCESS) {
+    if (get_btm_client_interface().sco.BTM_SetEScoMode(&params) != tBTM_STATUS::BTM_SUCCESS) {
       log::warn("Unable to set ESCO mode");
     }
     bta_ag_cb.sco.p_curr_scb = p_scb;
@@ -571,7 +572,7 @@ void bta_ag_create_sco(tBTA_AG_SCB* p_scb, bool is_orig) {
             bta_ag_sco_disc_cback);
     if (btm_status == BTM_CMD_STARTED) {
       if (get_btm_client_interface().sco.BTM_RegForEScoEvts(
-                  p_scb->sco_idx, bta_ag_esco_connreq_cback) != BTM_SUCCESS) {
+                  p_scb->sco_idx, bta_ag_esco_connreq_cback) != tBTM_STATUS::BTM_SUCCESS) {
         log::warn("Unable to register for ESCO events");
       }
     }

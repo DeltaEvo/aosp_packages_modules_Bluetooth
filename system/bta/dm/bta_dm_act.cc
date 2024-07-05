@@ -59,6 +59,7 @@
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_inq.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/gatt_api.h"
 #include "stack/include/l2c_api.h"
 #include "stack/include/main_thread.h"
@@ -235,7 +236,7 @@ void BTA_dm_on_hw_on() {
   log::info("Read default class of device [0x{:x}, 0x{:x}, 0x{:x}]", dev_class[0], dev_class[1],
             dev_class[2]);
 
-  if (get_btm_client_interface().local.BTM_SetDeviceClass(dev_class) != BTM_SUCCESS) {
+  if (get_btm_client_interface().local.BTM_SetDeviceClass(dev_class) != tBTM_STATUS::BTM_SUCCESS) {
     log::warn("Unable to set local device class:{}", dev_class_text(dev_class));
   }
 
@@ -314,10 +315,10 @@ void bta_dm_disable() {
   /* disable all active subsystems */
   bta_sys_disable();
 
-  if (BTM_SetDiscoverability(BTM_NON_DISCOVERABLE) != BTM_SUCCESS) {
+  if (BTM_SetDiscoverability(BTM_NON_DISCOVERABLE) != tBTM_STATUS::BTM_SUCCESS) {
     log::warn("Unable to disable classic BR/EDR discoverability");
   }
-  if (BTM_SetConnectability(BTM_NON_CONNECTABLE) != BTM_SUCCESS) {
+  if (BTM_SetConnectability(BTM_NON_CONNECTABLE) != tBTM_STATUS::BTM_SUCCESS) {
     log::warn("Unable to disable classic BR/EDR connectability");
   }
 
@@ -448,10 +449,10 @@ bool BTA_DmSetVisibility(bt_scan_mode_t mode) {
       return false;
   }
 
-  if (BTM_SetDiscoverability(disc_mode_param) != BTM_SUCCESS) {
+  if (BTM_SetDiscoverability(disc_mode_param) != tBTM_STATUS::BTM_SUCCESS) {
     log::warn("Unable to set classic BR/EDR discoverability 0x{:04x}", disc_mode_param);
   }
-  if (BTM_SetConnectability(conn_mode_param) != BTM_SUCCESS) {
+  if (BTM_SetConnectability(conn_mode_param) != tBTM_STATUS::BTM_SUCCESS) {
     log::warn("Unable to set classic BR/EDR connectability 0x{:04x}", conn_mode_param);
   }
   return true;
@@ -609,11 +610,11 @@ void bta_dm_remove_device(const RawAddress& target) {
   // Disconnect LE transport
   if (le_connected) {
     tBTM_STATUS status = btm_remove_acl(pseudo_addr, BT_TRANSPORT_LE);
-    if (status != BTM_SUCCESS && identity_addr != pseudo_addr) {
+    if (status != tBTM_STATUS::BTM_SUCCESS && identity_addr != pseudo_addr) {
       status = btm_remove_acl(identity_addr, BT_TRANSPORT_LE);
     }
 
-    if (status != BTM_SUCCESS) {
+    if (status != tBTM_STATUS::BTM_SUCCESS) {
       le_connected = false;
       log::error("Unable to disconnect LE connection {}", pseudo_addr);
     }
@@ -622,11 +623,11 @@ void bta_dm_remove_device(const RawAddress& target) {
   // Disconnect BR/EDR transport
   if (bredr_connected) {
     tBTM_STATUS status = btm_remove_acl(identity_addr, BT_TRANSPORT_BR_EDR);
-    if (status != BTM_SUCCESS && identity_addr != pseudo_addr) {
+    if (status != tBTM_STATUS::BTM_SUCCESS && identity_addr != pseudo_addr) {
       status = btm_remove_acl(pseudo_addr, BT_TRANSPORT_BR_EDR);
     }
 
-    if (status != BTM_SUCCESS) {
+    if (status != tBTM_STATUS::BTM_SUCCESS) {
       bredr_connected = false;
       log::error("Unable to disconnect BR/EDR connection {}", identity_addr);
     }
@@ -721,7 +722,7 @@ static void handle_role_change(const RawAddress& bd_addr, tHCI_ROLE new_role,
       const tBTM_STATUS status =
               get_btm_client_interface().link_policy.BTM_SwitchRoleToCentral(bd_addr);
       switch (status) {
-        case BTM_SUCCESS:
+        case tBTM_STATUS::BTM_SUCCESS:
           log::debug("Role policy already set to central peer:{}", bd_addr);
           break;
         case BTM_CMD_STARTED:
@@ -1022,7 +1023,7 @@ static void bta_dm_check_av() {
         const tBTM_STATUS status =
                 get_btm_client_interface().link_policy.BTM_SwitchRoleToCentral(p_dev->peer_bdaddr);
         switch (status) {
-          case BTM_SUCCESS:
+          case tBTM_STATUS::BTM_SUCCESS:
             log::debug("Role policy already set to central peer:{}", p_dev->peer_bdaddr);
             break;
           case BTM_CMD_STARTED:
@@ -1175,7 +1176,7 @@ static void bta_dm_adjust_roles(bool delay_role_switch) {
                     get_btm_client_interface().link_policy.BTM_SwitchRoleToCentral(
                             bta_dm_cb.device_list.peer_device[i].peer_bdaddr);
             switch (status) {
-              case BTM_SUCCESS:
+              case tBTM_STATUS::BTM_SUCCESS:
                 log::debug("Role policy already set to central peer:{}",
                            bta_dm_cb.device_list.peer_device[i].peer_bdaddr);
                 break;
@@ -1257,7 +1258,7 @@ static void bta_dm_set_eir(char* local_name) {
   /* if local name is not provided, get it from controller */
   if (local_name == NULL) {
     if (get_btm_client_interface().local.BTM_ReadLocalDeviceName((const char**)&local_name) !=
-        BTM_SUCCESS) {
+        tBTM_STATUS::BTM_SUCCESS) {
       log::error("Fail to read local device name for EIR");
     }
   }
@@ -1441,7 +1442,7 @@ static void bta_dm_set_eir(char* local_name) {
     UINT8_TO_STREAM(p, 0); /* terminator of significant part */
   }
 
-  if (get_btm_client_interface().eir.BTM_WriteEIR(p_buf) != BTM_SUCCESS) {
+  if (get_btm_client_interface().eir.BTM_WriteEIR(p_buf) != tBTM_STATUS::BTM_SUCCESS) {
     log::warn("Unable to write EIR data");
   }
 }
@@ -1603,7 +1604,8 @@ void bta_dm_ble_set_data_length(const RawAddress& bd_addr) {
   uint16_t max_len =
           bluetooth::shim::GetController()->GetLeMaximumDataLength().supported_max_tx_octets_;
 
-  if (get_btm_client_interface().ble.BTM_SetBleDataLength(bd_addr, max_len) != BTM_SUCCESS) {
+  if (get_btm_client_interface().ble.BTM_SetBleDataLength(bd_addr, max_len) !=
+      tBTM_STATUS::BTM_SUCCESS) {
     log::info("Unable to set ble data length:{}", max_len);
   }
 }
@@ -1795,7 +1797,7 @@ void bta_dm_allow_wake_by_hid(std::vector<RawAddress> classic_hid_devices,
   // If there are any entries in the classic hid list, we should also make
   // the adapter connectable for classic.
   if (classic_hid_devices.size() > 0) {
-    if (BTM_SetConnectability(BTM_CONNECTABLE) != BTM_SUCCESS) {
+    if (BTM_SetConnectability(BTM_CONNECTABLE) != tBTM_STATUS::BTM_SUCCESS) {
       log::warn("Unable to enable classic BR/EDR connectability");
     }
   }

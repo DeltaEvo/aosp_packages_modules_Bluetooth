@@ -77,7 +77,7 @@ const Octet16& BTM_GetDeviceDHK();
  * Description      This function is called to grant security process.
  *
  * Parameters       bd_addr - peer device bd address.
- *                  res     - result of the operation BTM_SUCCESS if success.
+ *                  res     - result of the operation tBTM_STATUS::BTM_SUCCESS if success.
  *                            Otherwise, BTM_REPEATED_ATTEMPTS is too many
  *                            attempts.
  *
@@ -112,7 +112,7 @@ void BTM_BlePasskeyReply(const RawAddress& bd_addr, tBTM_STATUS res, uint32_t pa
  *
  * Parameters:      bd_addr      - Address of the device with which numeric
  *                                 comparison was requested
- *                  res          - comparison result BTM_SUCCESS if success
+ *                  res          - comparison result tBTM_STATUS::BTM_SUCCESS if success
  *
  ******************************************************************************/
 void BTM_BleConfirmReply(const RawAddress& bd_addr, tBTM_STATUS res);

@@ -88,7 +88,7 @@ bool BTM_IsAclConnectionUpAndHandleValid(const RawAddress& remote_bda, tBT_TRANS
  * Description      This function is called to get the role of the local device
  *                  for the ACL connection with the specified remote device
  *
- * Returns          BTM_SUCCESS if connection exists.
+ * Returns          tBTM_STATUS::BTM_SUCCESS if connection exists.
  *                  BTM_UNKNOWN_ADDR if no active link with bd addr specified
  *
  ******************************************************************************/
@@ -101,7 +101,7 @@ tBTM_STATUS BTM_GetRole(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role);
  * Description      This function is called to switch role between central and
  *                  peripheral.  If role is already set it will do nothing.
  *
- * Returns          BTM_SUCCESS if already in specified role.
+ * Returns          tBTM_STATUS::BTM_SUCCESS if already in specified role.
  *                  BTM_CMD_STARTED if command issued to controller.
  *                  BTM_NO_RESOURCES if memory couldn't be allocated to issue
  *                                   the command
@@ -262,7 +262,7 @@ void btm_acl_notif_conn_collision(const RawAddress& bda);
  *                          BTM_ACL_MODE_HOLD
  *                          BTM_ACL_MODE_SNIFF
  *                          BTM_ACL_MODE_PARK
- *                          (valid only if return code is BTM_SUCCESS)
+ *                          (valid only if return code is tBTM_STATUS::BTM_SUCCESS)
  *
  * Returns          true if successful, false otherwise.
  *

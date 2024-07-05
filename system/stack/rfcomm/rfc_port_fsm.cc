@@ -36,6 +36,7 @@
 #include "stack/btm/btm_sec.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_uuid16.h"
+#include "stack/include/btm_status.h"
 #include "stack/l2cap/l2c_int.h"
 #include "stack/rfcomm/port_int.h"
 #include "stack/rfcomm/rfc_int.h"
@@ -290,7 +291,7 @@ void rfc_port_sm_sabme_wait_ua(tPORT* p_port, tRFC_PORT_EVENT event, void* p_dat
 void rfc_port_sm_term_wait_sec_check(tPORT* p_port, tRFC_PORT_EVENT event, void* p_data) {
   switch (event) {
     case RFC_PORT_EVENT_SEC_COMPLETE:
-      if (*((tBTM_STATUS*)p_data) != BTM_SUCCESS) {
+      if (*((tBTM_STATUS*)p_data) != tBTM_STATUS::BTM_SUCCESS) {
         log::error("Security check failed result:{} state:{} port_handle:{}",
                    btm_status_text(*((tBTM_STATUS*)p_data)),
                    rfcomm_port_state_text(p_port->rfc.state), p_port->handle);
@@ -392,7 +393,7 @@ void rfc_port_sm_term_wait_sec_check(tPORT* p_port, tRFC_PORT_EVENT event, void*
 void rfc_port_sm_orig_wait_sec_check(tPORT* p_port, tRFC_PORT_EVENT event, void* p_data) {
   switch (event) {
     case RFC_PORT_EVENT_SEC_COMPLETE:
-      if (*((tBTM_STATUS*)p_data) != BTM_SUCCESS) {
+      if (*((tBTM_STATUS*)p_data) != tBTM_STATUS::BTM_SUCCESS) {
         log::error("Security check failed result:{} state:{} port_handle:{}",
                    btm_status_text(*((tBTM_STATUS*)p_data)),
                    rfcomm_port_state_text(p_port->rfc.state), p_port->handle);

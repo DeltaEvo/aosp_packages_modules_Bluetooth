@@ -35,6 +35,7 @@
 #include "osi/include/osi.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/btm_status.h"
 #include "types/raw_address.h"
 
 using namespace bluetooth;
@@ -119,7 +120,7 @@ static void avdt_sec_check_complete_orig(const RawAddress* bd_addr, tBT_TRANSPOR
     return;
   }
 
-  if (res == BTM_SUCCESS) {
+  if (res == tBTM_STATUS::BTM_SUCCESS) {
     /* set channel state */
     p_tbl->state = AVDT_AD_ST_CFG;
   } else {
@@ -270,7 +271,7 @@ void avdt_l2c_connect_cfm_cback(uint16_t lcid, uint16_t result) {
 
             /* Assume security check is complete */
             avdt_sec_check_complete_orig(&p_ccb->peer_addr, BT_TRANSPORT_BR_EDR, nullptr,
-                                         BTM_SUCCESS);
+                                         tBTM_STATUS::BTM_SUCCESS);
           }
         }
       }

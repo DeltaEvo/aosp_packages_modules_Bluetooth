@@ -71,6 +71,7 @@
 #include "stack/include/btm_ble_api.h"
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_iso_api.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/hci_error_code.h"
 #include "stack/include/hcimsgs.h"
 #include "stack/include/l2cap_acl_interface.h"
@@ -514,7 +515,7 @@ tBTM_STATUS BTM_GetRole(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role) {
     return BTM_UNKNOWN_ADDR;
   }
   *p_role = p_acl->link_role;
-  return BTM_SUCCESS;
+  return tBTM_STATUS::BTM_SUCCESS;
 }
 
 /*******************************************************************************
@@ -524,7 +525,7 @@ tBTM_STATUS BTM_GetRole(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role) {
  * Description      This function is called to switch role between central and
  *                  peripheral.  If role is already set it will do nothing.
  *
- * Returns          BTM_SUCCESS if already in specified role.
+ * Returns          tBTM_STATUS::BTM_SUCCESS if already in specified role.
  *                  BTM_CMD_STARTED if command issued to controller.
  *                  BTM_NO_RESOURCES if couldn't allocate memory to issue
  *                                   command
@@ -548,7 +549,7 @@ tBTM_STATUS BTM_SwitchRoleToCentral(const RawAddress& remote_bd_addr) {
 
   if (p_acl->link_role == HCI_ROLE_CENTRAL) {
     log::info("Requested role is already in effect");
-    return BTM_SUCCESS;
+    return tBTM_STATUS::BTM_SUCCESS;
   }
 
   if (interop_match_addr(INTEROP_DISABLE_ROLE_SWITCH, &remote_bd_addr)) {
@@ -1032,7 +1033,7 @@ tBTM_STATUS BTM_GetLinkSuperTout(const RawAddress& remote_bda, uint16_t* p_timeo
     return BTM_UNKNOWN_ADDR;
   }
   *p_timeout = p_acl->link_super_tout;
-  return BTM_SUCCESS;
+  return tBTM_STATUS::BTM_SUCCESS;
 }
 
 /*******************************************************************************
@@ -1071,7 +1072,7 @@ tBTM_STATUS BTM_SetLinkSuperTout(const RawAddress& remote_bda, uint16_t timeout)
             "Role is peripheral so unable to set supervision timeout:{:.2f}ms "
             "bd_addr:{}",
             supervision_timeout_to_seconds(timeout), remote_bda);
-    return BTM_SUCCESS;
+    return tBTM_STATUS::BTM_SUCCESS;
   }
 }
 
@@ -1727,7 +1728,7 @@ void btm_read_tx_power_complete(uint8_t* p, uint16_t evt_len, bool is_ble) {
     STREAM_TO_UINT8(result.hci_status, p);
 
     if (result.hci_status == HCI_SUCCESS) {
-      result.status = BTM_SUCCESS;
+      result.status = tBTM_STATUS::BTM_SUCCESS;
 
       if (!is_ble) {
         uint16_t handle;
@@ -1826,7 +1827,7 @@ void btm_read_rssi_complete(uint8_t* p, uint16_t evt_len) {
       tACL_CONN* p_acl_cb = internal_.acl_get_connection_from_handle(handle);
       if (p_acl_cb != nullptr) {
         result.rem_bda = p_acl_cb->remote_addr;
-        result.status = BTM_SUCCESS;
+        result.status = tBTM_STATUS::BTM_SUCCESS;
       }
     }
     (*p_cb)(&result);
@@ -1881,7 +1882,7 @@ void btm_read_failed_contact_counter_complete(uint8_t* p) {
     STREAM_TO_UINT8(result.hci_status, p);
 
     if (result.hci_status == HCI_SUCCESS) {
-      result.status = BTM_SUCCESS;
+      result.status = tBTM_STATUS::BTM_SUCCESS;
 
       STREAM_TO_UINT16(handle, p);
 
@@ -1927,7 +1928,7 @@ void btm_read_automatic_flush_timeout_complete(uint8_t* p) {
     result.status = BTM_ERR_PROCESSING;
 
     if (result.hci_status == HCI_SUCCESS) {
-      result.status = BTM_SUCCESS;
+      result.status = tBTM_STATUS::BTM_SUCCESS;
 
       STREAM_TO_UINT16(handle, p);
       STREAM_TO_UINT16(result.automatic_flush_timeout, p);
@@ -1950,7 +1951,7 @@ void btm_read_automatic_flush_timeout_complete(uint8_t* p) {
  *
  * Description      This function is called to disconnect an ACL connection
  *
- * Returns          BTM_SUCCESS if successfully initiated, otherwise
+ * Returns          tBTM_STATUS::BTM_SUCCESS if successfully initiated, otherwise
  *                  BTM_UNKNOWN_ADDR.
  *
  ******************************************************************************/
@@ -1973,11 +1974,11 @@ tBTM_STATUS btm_remove_acl(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
             "transport:{}",
             bd_addr, bt_transport_text(transport));
     p_acl->rs_disc_pending = BTM_SEC_DISC_PENDING;
-    return BTM_SUCCESS;
+    return tBTM_STATUS::BTM_SUCCESS;
   }
 
   disconnect_acl(*p_acl, HCI_ERR_PEER_USER, "stack::acl::btm_acl::btm_remove_acl");
-  return BTM_SUCCESS;
+  return tBTM_STATUS::BTM_SUCCESS;
 }
 
 void btm_cont_rswitch_from_handle(uint16_t hci_handle) {

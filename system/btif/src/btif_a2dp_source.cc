@@ -50,6 +50,7 @@
 #include "stack/include/acl_api_types.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_client_interface.h"
+#include "stack/include/btm_status.h"
 #include "types/raw_address.h"
 
 using bluetooth::audio::a2dp::BluetoothAudioStatus;
@@ -1240,7 +1241,7 @@ static void btm_read_rssi_cb(void* data) {
   }
 
   tBTM_RSSI_RESULT* result = (tBTM_RSSI_RESULT*)data;
-  if (result->status != BTM_SUCCESS) {
+  if (result->status != tBTM_STATUS::BTM_SUCCESS) {
     log::error("unable to read remote RSSI (status {})", result->status);
     return;
   }
@@ -1258,7 +1259,7 @@ static void btm_read_failed_contact_counter_cb(void* data) {
   }
 
   tBTM_FAILED_CONTACT_COUNTER_RESULT* result = (tBTM_FAILED_CONTACT_COUNTER_RESULT*)data;
-  if (result->status != BTM_SUCCESS) {
+  if (result->status != tBTM_STATUS::BTM_SUCCESS) {
     log::error("unable to read Failed Contact Counter (status {})", result->status);
     return;
   }
@@ -1277,7 +1278,7 @@ static void btm_read_tx_power_cb(void* data) {
   }
 
   tBTM_TX_POWER_RESULT* result = (tBTM_TX_POWER_RESULT*)data;
-  if (result->status != BTM_SUCCESS) {
+  if (result->status != tBTM_STATUS::BTM_SUCCESS) {
     log::error("unable to read Tx Power (status {})", result->status);
     return;
   }

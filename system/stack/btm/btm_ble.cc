@@ -156,10 +156,7 @@ void read_phy_cb(base::Callback<void(uint8_t tx_phy, uint8_t rx_phy, uint8_t sta
  * Description      To read the current PHYs for specified LE connection
  *
  *
- * Returns          BTM_SUCCESS if command successfully sent to controller,
- *                  BTM_MODE_UNSUPPORTED if local controller doesn't support LE
- *                  2M or LE Coded PHY,
- *                  BTM_WRONG_MODE if Device in wrong mode for request.
+ * Returns          void
  *
  ******************************************************************************/
 void BTM_BleReadPhy(const RawAddress& bd_addr,

@@ -29,6 +29,7 @@
 #include "os/log.h"
 #include "osi/include/allocator.h"
 #include "stack/include/btm_client_interface.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/sdp_api.h"
 #include "types/raw_address.h"
 
@@ -326,7 +327,7 @@ tBTA_HH_STATUS bta_hh_read_ssr_param(const tAclLinkSpec& link_spec, uint16_t* p_
 
     uint16_t ssr_max_latency;
     if (get_btm_client_interface().link_controller.BTM_GetLinkSuperTout(
-                p_cb->link_spec.addrt.bda, &ssr_max_latency) != BTM_SUCCESS) {
+                p_cb->link_spec.addrt.bda, &ssr_max_latency) != tBTM_STATUS::BTM_SUCCESS) {
       log::warn("Unable to get supervision timeout for peer:{}", p_cb->link_spec);
       return BTA_HH_ERR;
     }

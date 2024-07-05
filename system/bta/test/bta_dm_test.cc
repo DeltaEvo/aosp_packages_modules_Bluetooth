@@ -269,12 +269,12 @@ TEST_F(BtaDmTest, bta_dm_encrypt_cback) {
 
   // Encryption with no callback set
   device->p_encrypt_cback = nullptr;
-  bta_dm_encrypt_cback(kRawAddress, transport, nullptr, BTM_SUCCESS);
+  bta_dm_encrypt_cback(kRawAddress, transport, nullptr, tBTM_STATUS::BTM_SUCCESS);
   ASSERT_EQ(0UL, BTA_DM_ENCRYPT_CBACK_queue.size());
 
   // Encryption with callback
   device->p_encrypt_cback = BTA_DM_ENCRYPT_CBACK;
-  bta_dm_encrypt_cback(kRawAddress, transport, nullptr, BTM_SUCCESS);
+  bta_dm_encrypt_cback(kRawAddress, transport, nullptr, tBTM_STATUS::BTM_SUCCESS);
   device->p_encrypt_cback = BTA_DM_ENCRYPT_CBACK;
   bta_dm_encrypt_cback(kRawAddress, transport, nullptr, BTM_WRONG_MODE);
   device->p_encrypt_cback = BTA_DM_ENCRYPT_CBACK;
@@ -309,7 +309,7 @@ TEST_F(BtaDmTest, bta_dm_remname_cback__typical) {
   search_cb.name_discover_done = false;
 
   tBTM_REMOTE_DEV_NAME name = {
-          .status = BTM_SUCCESS,
+          .status = tBTM_STATUS::BTM_SUCCESS,
           .bd_addr = kRawAddress,
           .remote_bd_name = {},
           .hci_status = HCI_SUCCESS,
@@ -330,7 +330,7 @@ TEST_F(BtaDmTest, bta_dm_remname_cback__wrong_address) {
   search_cb.name_discover_done = false;
 
   tBTM_REMOTE_DEV_NAME name = {
-          .status = BTM_SUCCESS,
+          .status = tBTM_STATUS::BTM_SUCCESS,
           .bd_addr = kRawAddress2,
           .remote_bd_name = {},
           .hci_status = HCI_SUCCESS,
@@ -348,7 +348,7 @@ TEST_F(BtaDmTest, bta_dm_remname_cback__HCI_ERR_CONNECTION_EXISTS) {
   search_cb.name_discover_done = false;
 
   tBTM_REMOTE_DEV_NAME name = {
-          .status = BTM_SUCCESS,
+          .status = tBTM_STATUS::BTM_SUCCESS,
           .bd_addr = RawAddress::kEmpty,
           .remote_bd_name = {},
           .hci_status = HCI_ERR_CONNECTION_EXISTS,

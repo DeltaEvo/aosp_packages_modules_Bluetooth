@@ -26,6 +26,7 @@
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_client_interface.h"
+#include "stack/include/btm_status.h"
 
 #define BTA_HF_CLIENT_NO_EDR_ESCO                                                               \
   (ESCO_PKT_TYPES_MASK_NO_2_EV3 | ESCO_PKT_TYPES_MASK_NO_3_EV3 | ESCO_PKT_TYPES_MASK_NO_2_EV5 | \
@@ -66,7 +67,7 @@ static bool bta_hf_client_sco_remove(tBTA_HF_CLIENT_CB* client_cb) {
       removed_started = true;
     }
     /* If no connection reset the SCO handle */
-    else if ((status == BTM_SUCCESS) || (status == BTM_UNKNOWN_ADDR)) {
+    else if ((status == tBTM_STATUS::BTM_SUCCESS) || (status == BTM_UNKNOWN_ADDR)) {
       client_cb->sco_idx = BTM_INVALID_SCO_INDEX;
     }
   }
@@ -252,7 +253,7 @@ static void bta_hf_client_sco_create(tBTA_HF_CLIENT_CB* client_cb, bool is_orig)
 
   /* if initiating set current scb and peer bd addr */
   if (is_orig) {
-    if (get_btm_client_interface().sco.BTM_SetEScoMode(&params) != BTM_SUCCESS) {
+    if (get_btm_client_interface().sco.BTM_SetEScoMode(&params) != tBTM_STATUS::BTM_SUCCESS) {
       log::warn("Unable to set ESCO mode");
     }
     /* tell sys to stop av if any */
@@ -264,7 +265,7 @@ static void bta_hf_client_sco_create(tBTA_HF_CLIENT_CB* client_cb, bool is_orig)
           bta_hf_client_sco_conn_cback, bta_hf_client_sco_disc_cback);
   if (status == BTM_CMD_STARTED && !is_orig) {
     if (get_btm_client_interface().sco.BTM_RegForEScoEvts(
-                client_cb->sco_idx, bta_hf_client_esco_connreq_cback) == BTM_SUCCESS) {
+                client_cb->sco_idx, bta_hf_client_esco_connreq_cback) == tBTM_STATUS::BTM_SUCCESS) {
       log::verbose("SCO registration success");
     }
   }

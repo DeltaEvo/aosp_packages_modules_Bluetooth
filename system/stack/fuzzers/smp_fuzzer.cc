@@ -23,6 +23,7 @@
 #include "common/message_loop_thread.h"
 #include "osi/include/allocator.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/smp_api.h"
 #include "stack/smp/smp_int.h"
 #include "test/fake/fake_osi.h"
@@ -167,7 +168,7 @@ tBTM_STATUS smp_callback(tSMP_EVT event, const RawAddress& bd_addr, const tSMP_E
     default:
       break;
   }
-  return BTM_SUCCESS;
+  return tBTM_STATUS::BTM_SUCCESS;
 }
 
 void Fuzz(const uint8_t* data, size_t size) {

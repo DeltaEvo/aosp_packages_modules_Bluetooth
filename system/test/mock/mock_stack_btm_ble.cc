@@ -101,11 +101,11 @@ const Octet16 BTM_GetDeviceIDRoot::return_value{0xd5, 0xcb, 0x84, 0x54, 0xd1, 0x
 bool btm_ble_get_acl_remote_addr::return_value = false;
 bool btm_ble_get_enc_key_type::return_value = false;
 uint8_t btm_ble_read_sec_key_size::return_value = 0;
-tBTM_STATUS btm_ble_set_encryption::return_value = BTM_SUCCESS;
-tBTM_STATUS btm_ble_start_encrypt::return_value = BTM_SUCCESS;
-tBTM_STATUS btm_ble_start_sec_check::return_value = BTM_SUCCESS;
+tBTM_STATUS btm_ble_set_encryption::return_value = tBTM_STATUS::BTM_SUCCESS;
+tBTM_STATUS btm_ble_start_encrypt::return_value = tBTM_STATUS::BTM_SUCCESS;
+tBTM_STATUS btm_ble_start_sec_check::return_value = tBTM_STATUS::BTM_SUCCESS;
 bool btm_get_local_div::return_value = false;
-tBTM_STATUS btm_proc_smp_cback::return_value = BTM_SUCCESS;
+tBTM_STATUS btm_proc_smp_cback::return_value = tBTM_STATUS::BTM_SUCCESS;
 
 }  // namespace stack_btm_ble
 }  // namespace mock

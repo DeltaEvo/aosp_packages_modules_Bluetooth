@@ -39,11 +39,11 @@ namespace stack_btm_devctl {
 
 tBTM_STATUS BTM_DeleteStoredLinkKey(const RawAddress* /* bd_addr */, tBTM_CMPL_CB* /* p_cb */) {
   inc_func_call_count(__func__);
-  return BTM_SUCCESS;
+  return tBTM_STATUS::BTM_SUCCESS;
 }
 tBTM_STATUS BTM_EnableTestMode(void) {
   inc_func_call_count(__func__);
-  return BTM_SUCCESS;
+  return tBTM_STATUS::BTM_SUCCESS;
 }
 DEV_CLASS BTM_ReadDeviceClass(void) {
   inc_func_call_count(__func__);

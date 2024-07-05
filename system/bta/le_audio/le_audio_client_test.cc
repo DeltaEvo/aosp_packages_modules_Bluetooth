@@ -51,6 +51,7 @@
 #include "mock_csis_client.h"
 #include "mock_device_groups.h"
 #include "mock_state_machine.h"
+#include "stack/include/btm_status.h"
 #include "test/common/mock_functions.h"
 #include "test/mock/mock_main_shim_entry.h"
 #include "test/mock/mock_stack_btm_iso.h"
@@ -4269,7 +4270,7 @@ TEST_F(UnicastTestNoInit, LoadStoredEarbudsCsisGroupedDifferently) {
   ON_CALL(mock_btm_interface_, BTM_IsEncrypted(test_address0, _))
           .WillByDefault(DoAll(Return(false)));
   ON_CALL(mock_btm_interface_, SetEncryption(test_address0, _, _, _, _))
-          .WillByDefault(Return(BTM_SUCCESS));
+          .WillByDefault(Return(tBTM_STATUS::BTM_SUCCESS));
 
   /* For background connect, test needs to Inject Connected Event */
   InjectConnectedEvent(test_address0, 1);

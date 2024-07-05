@@ -40,6 +40,7 @@
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/btm_client_interface.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/hci_error_code.h"
 #include "stack/include/hcidefs.h"
 #include "stack/include/l2c_api.h"
@@ -2792,7 +2793,7 @@ void l2cu_no_dynamic_ccbs(tL2C_LCB* p_lcb) {
       l2cu_process_fixed_disc_cback(p_lcb);
       p_lcb->link_state = LST_DISCONNECTING;
       timeout_ms = L2CAP_LINK_DISCONNECT_TIMEOUT_MS;
-    } else if (rc == BTM_SUCCESS) {
+    } else if (rc == tBTM_STATUS::BTM_SUCCESS) {
       l2cu_process_fixed_disc_cback(p_lcb);
       /* BTM SEC will make sure that link is release (probably after pairing is
        * done) */
