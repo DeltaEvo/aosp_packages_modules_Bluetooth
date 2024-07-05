@@ -67,7 +67,7 @@ int bluetooth::test::headless::Name::Run() {
         fprintf(stdout, "Name result mac:%s name:%s\n", raw_address.ToString().c_str(),
                 name.c_str());
       } break;
-      case BTM_BAD_VALUE_RET:
+      case tBTM_STATUS::BTM_BAD_VALUE_RET:
         fprintf(stdout, "Name Timeout or other failure");
         return -2;
       default:
