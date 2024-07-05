@@ -256,7 +256,7 @@ tBTM_STATUS BTM_SetPowerMode(uint8_t pm_id, const RawAddress& remote_bda,
       p_cb->state |= BTM_PM_STORED_MASK;
       log::info("Setting stored bitmask for peer:{}", remote_bda);
     }
-    return BTM_CMD_STORED;
+    return tBTM_STATUS::BTM_CMD_STORED;
   }
 
   log::info("Setting power mode for peer:{} current_mode:{}[{}] new_mode:{}[{}]", remote_bda,
@@ -272,7 +272,7 @@ bool BTM_SetLinkPolicyActiveMode(const RawAddress& remote_bda) {
   settings.mode = BTM_PM_MD_ACTIVE;
 
   switch (BTM_SetPowerMode(BTM_PM_SET_ONLY_ID, remote_bda, &settings)) {
-    case BTM_CMD_STORED:
+    case tBTM_STATUS::BTM_CMD_STORED:
     case tBTM_STATUS::BTM_SUCCESS:
       return true;
     default:
@@ -309,7 +309,7 @@ bool BTM_ReadPowerMode(const RawAddress& remote_bda, tBTM_PM_MODE* p_mode) {
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if the HCI command is issued successful,
  *                  BTM_UNKNOWN_ADDR if bd addr is not active or bad
- *                  BTM_CMD_STORED if the command is stored
+ *                  tBTM_STATUS::BTM_CMD_STORED if the command is stored
  *
  ******************************************************************************/
 tBTM_STATUS BTM_SetSsrParams(const RawAddress& remote_bda, uint16_t max_lat, uint16_t min_rmt_to,
@@ -337,7 +337,7 @@ tBTM_STATUS BTM_SetSsrParams(const RawAddress& remote_bda, uint16_t max_lat, uin
   p_cb->max_lat = max_lat;
   p_cb->min_rmt_to = min_rmt_to;
   p_cb->min_loc_to = min_loc_to;
-  return BTM_CMD_STORED;
+  return tBTM_STATUS::BTM_CMD_STORED;
 }
 
 /*******************************************************************************
@@ -522,7 +522,7 @@ static tBTM_STATUS btm_pm_snd_md_req(uint16_t handle, uint8_t pm_id, int link_in
     if ((mode == BTM_PM_MD_ACTIVE) ||
         ((md_res.max >= p_cb->interval) && (md_res.min <= p_cb->interval))) {
       log::debug("Storing command");
-      return BTM_CMD_STORED;
+      return tBTM_STATUS::BTM_CMD_STORED;
     }
     log::debug("Need to wake then sleep");
     chg_ind = true;

@@ -469,7 +469,7 @@ void l2c_link_timeout(tL2C_LCB* p_lcb) {
       rc = btm_sec_disconnect(p_lcb->Handle(), HCI_ERR_PEER_USER,
                               "stack::l2cap::l2c_link::l2c_link_timeout All channels closed");
 
-      if (rc == BTM_CMD_STORED) {
+      if (rc == tBTM_STATUS::BTM_CMD_STORED) {
         /* Security Manager will take care of disconnecting, state will be
          * updated at that time */
         start_timeout = false;
