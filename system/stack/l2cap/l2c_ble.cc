@@ -1354,7 +1354,7 @@ tL2CAP_LE_RESULT_CODE l2ble_sec_access_req(const RawAddress& bd_addr, uint16_t p
       return L2CAP_LE_RESULT_INSUFFICIENT_ENCRYP;
     case BTM_NOT_AUTHORIZED:
       return L2CAP_LE_RESULT_INSUFFICIENT_AUTHORIZATION;
-    case BTM_INSUFFICIENT_ENCRYPT_KEY_SIZE:
+    case tBTM_STATUS::BTM_INSUFFICIENT_ENCRYPT_KEY_SIZE:
       return L2CAP_LE_RESULT_INSUFFICIENT_ENCRYP_KEY_SIZE;
     default:
       log::error("unexpected return value: {}", btm_status_text(result));
