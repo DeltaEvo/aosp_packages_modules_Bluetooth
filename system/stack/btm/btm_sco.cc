@@ -1398,18 +1398,18 @@ tBTM_STATUS BTM_SetEScoMode(enh_esco_params_t* p_parms) {
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if the successful.
  *                  tBTM_STATUS::BTM_ILLEGAL_VALUE if there is an illegal sco_inx
- *                  BTM_MODE_UNSUPPORTED if controller version is not BT1.2 or
+ *                  tBTM_STATUS::BTM_MODE_UNSUPPORTED if controller version is not BT1.2 or
  *                          later or does not support eSCO.
  *
  ******************************************************************************/
 tBTM_STATUS BTM_RegForEScoEvts(uint16_t sco_inx, tBTM_ESCO_CBACK* p_esco_cback) {
   if (BTM_MAX_SCO_LINKS == 0) {
-    return BTM_MODE_UNSUPPORTED;
+    return tBTM_STATUS::BTM_MODE_UNSUPPORTED;
   }
 
   if (!btm_cb.sco_cb.esco_supported) {
     btm_cb.sco_cb.sco_db[sco_inx].esco.p_esco_cback = NULL;
-    return BTM_MODE_UNSUPPORTED;
+    return tBTM_STATUS::BTM_MODE_UNSUPPORTED;
   }
 
   if (sco_inx < BTM_MAX_SCO_LINKS && btm_cb.sco_cb.sco_db[sco_inx].state != SCO_ST_UNUSED) {

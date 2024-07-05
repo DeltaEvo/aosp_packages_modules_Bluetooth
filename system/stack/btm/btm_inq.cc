@@ -413,11 +413,11 @@ tBTM_STATUS BTM_SetInquiryMode(uint8_t mode) {
     /* mandatory mode */
   } else if (mode == BTM_INQ_RESULT_WITH_RSSI) {
     if (!bluetooth::shim::GetController()->SupportsRssiWithInquiryResults()) {
-      return BTM_MODE_UNSUPPORTED;
+      return tBTM_STATUS::BTM_MODE_UNSUPPORTED;
     }
   } else if (mode == BTM_INQ_RESULT_EXTENDED) {
     if (!bluetooth::shim::GetController()->SupportsExtendedInquiryResponse()) {
-      return BTM_MODE_UNSUPPORTED;
+      return tBTM_STATUS::BTM_MODE_UNSUPPORTED;
     }
   } else {
     return tBTM_STATUS::BTM_ILLEGAL_VALUE;
@@ -1740,7 +1740,7 @@ static void btm_process_cancel_complete(tHCI_STATUS status, uint8_t mode) {
  *                           inquriry response
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS  - if successful
- *                  BTM_MODE_UNSUPPORTED - if local device cannot support it
+ *                  tBTM_STATUS::BTM_MODE_UNSUPPORTED - if local device cannot support it
  *
  ******************************************************************************/
 tBTM_STATUS BTM_WriteEIR(BT_HDR* p_buff) {
@@ -1750,7 +1750,7 @@ tBTM_STATUS BTM_WriteEIR(BT_HDR* p_buff) {
     return tBTM_STATUS::BTM_SUCCESS;
   } else {
     osi_free(p_buff);
-    return BTM_MODE_UNSUPPORTED;
+    return tBTM_STATUS::BTM_MODE_UNSUPPORTED;
   }
 }
 

@@ -1642,8 +1642,8 @@ tBTM_STATUS btm_sec_l2cap_access_req(const RawAddress& bd_addr, uint16_t psm, bo
   // If there is no application registered with this PSM do not allow connection
   if (!p_serv_rec) {
     log::warn("PSM: 0x{:04x} no application registered", psm);
-    (*p_callback)(bd_addr, transport, p_ref_data, BTM_MODE_UNSUPPORTED);
-    return BTM_MODE_UNSUPPORTED;
+    (*p_callback)(bd_addr, transport, p_ref_data, tBTM_STATUS::BTM_MODE_UNSUPPORTED);
+    return tBTM_STATUS::BTM_MODE_UNSUPPORTED;
   }
 
   /* Services level0 by default have no security */

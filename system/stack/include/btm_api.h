@@ -513,7 +513,7 @@ void BTM_RequestPeerSCA(const RawAddress& remote_bda, tBT_TRANSPORT transport);
  *                           inquriry response
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS  - if successful
- *                  BTM_MODE_UNSUPPORTED - if local device cannot support it
+ *                  tBTM_STATUS::BTM_MODE_UNSUPPORTED - if local device cannot support it
  *
  ******************************************************************************/
 [[nodiscard]] tBTM_STATUS BTM_WriteEIR(BT_HDR* p_buff);

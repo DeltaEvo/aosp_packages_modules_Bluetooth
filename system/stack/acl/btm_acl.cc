@@ -531,7 +531,7 @@ tBTM_STATUS BTM_GetRole(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role) {
  *                  BTM_NO_RESOURCES if couldn't allocate memory to issue
  *                                   command
  *                  BTM_UNKNOWN_ADDR if no active link with bd addr specified
- *                  BTM_MODE_UNSUPPORTED if local device does not support role
+ *                  tBTM_STATUS::BTM_MODE_UNSUPPORTED if local device does not support role
  *                                       switching
  *                  tBTM_STATUS::BTM_BUSY if the previous command is not completed
  *
@@ -539,7 +539,7 @@ tBTM_STATUS BTM_GetRole(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role) {
 tBTM_STATUS BTM_SwitchRoleToCentral(const RawAddress& remote_bd_addr) {
   if (!bluetooth::shim::GetController()->SupportsRoleSwitch()) {
     log::info("Local controller does not support role switching");
-    return BTM_MODE_UNSUPPORTED;
+    return tBTM_STATUS::BTM_MODE_UNSUPPORTED;
   }
 
   tACL_CONN* p_acl = internal_.btm_bda_to_acl(remote_bd_addr, BT_TRANSPORT_BR_EDR);
@@ -1063,7 +1063,7 @@ tBTM_STATUS BTM_SetLinkSuperTout(const RawAddress& remote_bda, uint16_t timeout)
               "UNSUPPORTED by controller write link supervision timeout:{:.2f}ms "
               "bd_addr:{}",
               supervision_timeout_to_seconds(timeout), remote_bda);
-      return BTM_MODE_UNSUPPORTED;
+      return tBTM_STATUS::BTM_MODE_UNSUPPORTED;
     }
     p_acl->link_super_tout = timeout;
     btsnd_hcic_write_link_super_tout(p_acl->hci_handle, timeout);

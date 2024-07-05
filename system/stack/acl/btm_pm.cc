@@ -216,7 +216,7 @@ tBTM_STATUS BTM_SetPowerMode(uint8_t pm_id, const RawAddress& remote_bda,
         (mode == BTM_PM_MD_PARK && !controller->SupportsParkMode()) ||
         interop_match_addr(INTEROP_DISABLE_SNIFF, &remote_bda)) {
       log::error("pm_id {} mode {} is not supported for {}", pm_id, mode, remote_bda);
-      return BTM_MODE_UNSUPPORTED;
+      return tBTM_STATUS::BTM_MODE_UNSUPPORTED;
     }
   }
 

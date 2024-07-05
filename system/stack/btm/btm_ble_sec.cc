@@ -730,7 +730,7 @@ tBTM_STATUS btm_ble_start_sec_check(const RawAddress& bd_addr, uint16_t psm, boo
    */
   if (!p_serv_rec) {
     log::warn("PSM: {} no application registered", psm);
-    (*p_callback)(bd_addr, BT_TRANSPORT_LE, p_ref_data, BTM_MODE_UNSUPPORTED);
+    (*p_callback)(bd_addr, BT_TRANSPORT_LE, p_ref_data, tBTM_STATUS::BTM_MODE_UNSUPPORTED);
     return tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
 
