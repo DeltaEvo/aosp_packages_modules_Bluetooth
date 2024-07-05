@@ -1848,7 +1848,7 @@ private:
         if (BTM_IsEncrypted(p_data->enc_cmpl.remote_bda, BT_TRANSPORT_LE)) {
           encryption_status = tBTM_STATUS::BTM_SUCCESS;
         } else {
-          encryption_status = BTM_FAILED_ON_SECURITY;
+          encryption_status = tBTM_STATUS::BTM_FAILED_ON_SECURITY;
         }
         OnLeEncryptionComplete(p_data->enc_cmpl.remote_bda, encryption_status);
       } break;

@@ -1507,7 +1507,7 @@ tBTM_STATUS btm_sec_l2cap_access_req_by_requirement(const RawAddress& bd_addr,
           log::error(
                   "Trying to access a secure service from a temp bonding, "
                   "rejecting");
-          rc = BTM_FAILED_ON_SECURITY;
+          rc = tBTM_STATUS::BTM_FAILED_ON_SECURITY;
         }
 
         if (p_callback) {
@@ -1757,7 +1757,7 @@ tBTM_STATUS btm_sec_mx_access_request(const RawAddress& bd_addr, bool is_origina
         log::error(
                 "Trying to access a secure rfcomm service from a temp bonding, "
                 "rejecting");
-        rc = BTM_FAILED_ON_SECURITY;
+        rc = tBTM_STATUS::BTM_FAILED_ON_SECURITY;
       }
       if (p_callback) {
         log::debug("Notifying client that security access has been granted");
@@ -4513,13 +4513,13 @@ tBTM_STATUS btm_sec_execute_procedure(tBTM_SEC_DEV_REC* p_dev_rec) {
             "Security Manager: SC only service, but link key type is 0x{:02x} "
             "-security failure",
             p_dev_rec->sec_rec.link_key_type);
-    return BTM_FAILED_ON_SECURITY;
+    return tBTM_STATUS::BTM_FAILED_ON_SECURITY;
   }
 
   if (access_secure_service_from_temp_bond(p_dev_rec, p_dev_rec->IsLocallyInitiated(),
                                            p_dev_rec->sec_rec.security_required)) {
     log::error("Trying to access a secure service from a temp bonding, rejecting");
-    return BTM_FAILED_ON_SECURITY;
+    return tBTM_STATUS::BTM_FAILED_ON_SECURITY;
   }
 
   /* All required  security procedures already established */

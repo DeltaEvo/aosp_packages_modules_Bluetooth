@@ -1269,7 +1269,8 @@ void l2cble_sec_comp(RawAddress bda, tBT_TRANSPORT transport, void* /* p_ref_dat
           (*(p_buf->p_callback))(bda, BT_TRANSPORT_LE, p_buf->p_ref_data, btm_status);
         } else {
           log::verbose("MITM Protection Not present");
-          (*(p_buf->p_callback))(bda, BT_TRANSPORT_LE, p_buf->p_ref_data, BTM_FAILED_ON_SECURITY);
+          (*(p_buf->p_callback))(bda, BT_TRANSPORT_LE, p_buf->p_ref_data,
+                                 tBTM_STATUS::BTM_FAILED_ON_SECURITY);
         }
       } else {
         log::verbose("MITM Protection not required sec_act = {}", p_lcb->sec_act);

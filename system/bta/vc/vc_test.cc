@@ -484,7 +484,8 @@ protected:
                                             tBTM_BLE_SEC_ACT sec_act) -> tBTM_STATUS {
                       if (p_callback) {
                         p_callback(bd_addr, transport, p_ref_data,
-                                   success ? tBTM_STATUS::BTM_SUCCESS : BTM_FAILED_ON_SECURITY);
+                                   success ? tBTM_STATUS::BTM_SUCCESS
+                                           : tBTM_STATUS::BTM_FAILED_ON_SECURITY);
                       }
                       GetEncryptionCompleteEvt(bd_addr);
                       return tBTM_STATUS::BTM_SUCCESS;
