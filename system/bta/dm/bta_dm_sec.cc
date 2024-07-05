@@ -80,7 +80,7 @@ void bta_dm_ble_sirk_sec_cb_register(tBTA_DM_SEC_CBACK* p_cback) {
 void bta_dm_ble_sirk_confirm_device_reply(const RawAddress& bd_addr, bool accept) {
   log::debug("addr:{}", bd_addr);
   get_btm_client_interface().security.BTM_BleSirkConfirmDeviceReply(
-          bd_addr, accept ? tBTM_STATUS::BTM_SUCCESS : BTM_NOT_AUTHORIZED);
+          bd_addr, accept ? tBTM_STATUS::BTM_SUCCESS : tBTM_STATUS::BTM_NOT_AUTHORIZED);
 }
 
 void bta_dm_consolidate(const RawAddress& identity_addr, const RawAddress& rpa) {
@@ -169,21 +169,23 @@ void bta_dm_pin_reply(std::unique_ptr<tBTA_DM_API_PIN_REPLY> msg) {
     get_btm_client_interface().security.BTM_PINCodeReply(msg->bd_addr, tBTM_STATUS::BTM_SUCCESS,
                                                          msg->pin_len, msg->p_pin);
   } else {
-    get_btm_client_interface().security.BTM_PINCodeReply(msg->bd_addr, BTM_NOT_AUTHORIZED, 0, NULL);
+    get_btm_client_interface().security.BTM_PINCodeReply(msg->bd_addr,
+                                                         tBTM_STATUS::BTM_NOT_AUTHORIZED, 0, NULL);
   }
 }
 
 /** Send the user confirm request reply in response to a request from BTM */
 void bta_dm_confirm(const RawAddress& bd_addr, bool accept) {
   get_btm_client_interface().security.BTM_SecConfirmReqReply(
-          accept ? tBTM_STATUS::BTM_SUCCESS : BTM_NOT_AUTHORIZED, BT_TRANSPORT_BR_EDR, bd_addr);
+          accept ? tBTM_STATUS::BTM_SUCCESS : tBTM_STATUS::BTM_NOT_AUTHORIZED, BT_TRANSPORT_BR_EDR,
+          bd_addr);
 }
 
 /** respond to the OOB data request for the remote device from BTM */
 void bta_dm_ci_rmt_oob_act(std::unique_ptr<tBTA_DM_CI_RMT_OOB> msg) {
   get_btm_client_interface().security.BTM_RemoteOobDataReply(
-          msg->accept ? tBTM_STATUS::BTM_SUCCESS : BTM_NOT_AUTHORIZED, msg->bd_addr, msg->c,
-          msg->r);
+          msg->accept ? tBTM_STATUS::BTM_SUCCESS : tBTM_STATUS::BTM_NOT_AUTHORIZED, msg->bd_addr,
+          msg->c, msg->r);
 }
 
 /*******************************************************************************
@@ -254,7 +256,7 @@ static void bta_dm_pinname_cback(const tBTM_REMOTE_DEV_NAME* p_data) {
 static tBTM_STATUS bta_dm_pin_cback(const RawAddress& bd_addr, DEV_CLASS dev_class,
                                     const BD_NAME bd_name, bool min_16_digit) {
   if (!bta_dm_sec_cb.p_sec_cback) {
-    return BTM_NOT_AUTHORIZED;
+    return tBTM_STATUS::BTM_NOT_AUTHORIZED;
   }
 
   /* If the device name is not known, save bdaddr and devclass and initiate a
@@ -395,7 +397,7 @@ static tBTM_STATUS bta_dm_sp_cback(tBTM_SP_EVT event, tBTM_SP_EVT_DATA* p_data) 
 
   log::verbose("event:{}", sp_evt_to_text(event));
   if (!bta_dm_sec_cb.p_sec_cback) {
-    return BTM_NOT_AUTHORIZED;
+    return tBTM_STATUS::BTM_NOT_AUTHORIZED;
   }
 
   bool sp_rmt_result = false;
@@ -509,7 +511,7 @@ static tBTM_STATUS bta_dm_sp_cback(tBTM_SP_EVT event, tBTM_SP_EVT_DATA* p_data) 
     }
 
     default:
-      status = BTM_NOT_AUTHORIZED;
+      status = tBTM_STATUS::BTM_NOT_AUTHORIZED;
       break;
   }
   log::verbose("dm status:{}", status);
@@ -660,7 +662,7 @@ static tBTM_STATUS bta_dm_ble_smp_cback(tBTM_LE_EVT event, const RawAddress& bda
   log::debug("addr:{},event:{}", bda, ble_evt_to_text(event));
 
   if (!bta_dm_sec_cb.p_sec_cback) {
-    return BTM_NOT_AUTHORIZED;
+    return tBTM_STATUS::BTM_NOT_AUTHORIZED;
   }
 
   memset(&sec_event, 0, sizeof(tBTA_DM_SEC));
@@ -774,7 +776,7 @@ static tBTM_STATUS bta_dm_ble_smp_cback(tBTM_LE_EVT event, const RawAddress& bda
       break;
 
     default:
-      status = BTM_NOT_AUTHORIZED;
+      status = tBTM_STATUS::BTM_NOT_AUTHORIZED;
       break;
   }
   return status;
@@ -966,14 +968,15 @@ void bta_dm_add_ble_device(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
  ******************************************************************************/
 void bta_dm_ble_passkey_reply(const RawAddress& bd_addr, bool accept, uint32_t passkey) {
   get_btm_client_interface().security.BTM_BlePasskeyReply(
-          bd_addr, accept ? tBTM_STATUS::BTM_SUCCESS : BTM_NOT_AUTHORIZED, passkey);
+          bd_addr, accept ? tBTM_STATUS::BTM_SUCCESS : tBTM_STATUS::BTM_NOT_AUTHORIZED, passkey);
 }
 
 /** This is response to SM numeric comparison request submitted to application.
  */
 void bta_dm_ble_confirm_reply(const RawAddress& bd_addr, bool accept) {
   get_btm_client_interface().security.BTM_SecConfirmReqReply(
-          accept ? tBTM_STATUS::BTM_SUCCESS : BTM_NOT_AUTHORIZED, BT_TRANSPORT_LE, bd_addr);
+          accept ? tBTM_STATUS::BTM_SUCCESS : tBTM_STATUS::BTM_NOT_AUTHORIZED, BT_TRANSPORT_LE,
+          bd_addr);
 }
 
 /** This function set the local device LE privacy settings. */

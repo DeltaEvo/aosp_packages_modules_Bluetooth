@@ -889,7 +889,7 @@ tBTM_STATUS BTM_SecBondCancel(const RawAddress& bd_addr) {
         l2cu_update_lcb_4_bonding(bd_addr, false);
       }
 
-      return BTM_NOT_AUTHORIZED;
+      return tBTM_STATUS::BTM_NOT_AUTHORIZED;
     } else /*HCI link is not up */
     {
       /* If the HCI link creation was started by Bonding process */
@@ -905,7 +905,7 @@ tBTM_STATUS BTM_SecBondCancel(const RawAddress& bd_addr) {
         btm_sec_cb.pairing_flags |= BTM_PAIR_FLAGS_WE_CANCEL_DD;
         return tBTM_STATUS::BTM_CMD_STARTED;
       }
-      return BTM_NOT_AUTHORIZED;
+      return tBTM_STATUS::BTM_NOT_AUTHORIZED;
     }
   }
 
@@ -2748,10 +2748,10 @@ void btm_proc_sp_req_evt(tBTM_SP_EVT event, const RawAddress bda, const uint32_t
 
     if (btm_sec_cb.api.p_sp_callback) {
       status = (*btm_sec_cb.api.p_sp_callback)(event, &evt_data);
-      if (status != BTM_NOT_AUTHORIZED) {
+      if (status != tBTM_STATUS::BTM_NOT_AUTHORIZED) {
         return;
       }
-      /* else BTM_NOT_AUTHORIZED means when the app wants to reject the req
+      /* else tBTM_STATUS::BTM_NOT_AUTHORIZED means when the app wants to reject the req
        * right now */
     } else if ((event == BTM_SP_CFM_REQ_EVT) && (evt_data.cfm_req.just_works)) {
       /* automatically reply with just works if no sp_cback */
@@ -2873,7 +2873,7 @@ void btm_rem_oob_req(const RawAddress bd_addr) {
 
     btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_WAIT_LOCAL_OOB_RSP);
     if ((*btm_sec_cb.api.p_sp_callback)(BTM_SP_RMT_OOB_EVT, (tBTM_SP_EVT_DATA*)&evt_data) ==
-        BTM_NOT_AUTHORIZED) {
+        tBTM_STATUS::BTM_NOT_AUTHORIZED) {
       BTM_RemoteOobDataReply(static_cast<tBTM_STATUS>(true), p_bda, c, r);
     }
     return;
