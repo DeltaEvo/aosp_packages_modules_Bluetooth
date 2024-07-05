@@ -339,7 +339,7 @@ void BTM_BleAdvFilterParamSetup(tBTM_BLE_SCAN_COND_OP action, tBTM_BLE_PF_FILT_I
     p_bda_filter = btm_ble_find_addr_filter_counter(nullptr);
     if (NULL == p_bda_filter) {
       log::error("BD Address not found!");
-      cb.Run(0, BTM_BLE_PF_ENABLE, BTM_UNKNOWN_ADDR);
+      cb.Run(0, BTM_BLE_PF_ENABLE, tBTM_STATUS::BTM_UNKNOWN_ADDR);
       return;
     }
 

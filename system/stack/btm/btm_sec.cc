@@ -849,7 +849,7 @@ tBTM_STATUS BTM_SecBondCancel(const RawAddress& bd_addr) {
                btm_sec_cb.pairing_flags);
   p_dev_rec = btm_find_dev(bd_addr);
   if (!p_dev_rec || btm_sec_cb.pairing_bda != bd_addr) {
-    return BTM_UNKNOWN_ADDR;
+    return tBTM_STATUS::BTM_UNKNOWN_ADDR;
   }
 
   if (btm_sec_cb.pairing_flags & BTM_PAIR_FLAGS_LE_ACTIVE) {
@@ -919,7 +919,7 @@ tBTM_STATUS BTM_SecBondCancel(const RawAddress& bd_addr) {
  * Description      This function is called to obtain link key type for the
  *                  device.
  *                  it returns tBTM_STATUS::BTM_SUCCESS if link key is available, or
- *                  BTM_UNKNOWN_ADDR if Security Manager does not know about
+ *                  tBTM_STATUS::BTM_UNKNOWN_ADDR if Security Manager does not know about
  *                  the device or device record does not contain link key info
  *
  * Returns          BTM_LKEY_TYPE_IGNORE if link key is unknown, link type

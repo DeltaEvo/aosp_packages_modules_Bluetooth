@@ -230,7 +230,7 @@ void BTM_PM_OnDisconnected(uint16_t handle);
  *                  alter ACL connection behavior.
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if successful,
- *                  BTM_UNKNOWN_ADDR if bd addr is not active or bad
+ *                  tBTM_STATUS::BTM_UNKNOWN_ADDR if bd addr is not active or bad
  *
  ******************************************************************************/
 tBTM_STATUS BTM_SetPowerMode(uint8_t pm_id, const RawAddress& remote_bda,
@@ -251,7 +251,7 @@ bool BTM_SetLinkPolicyActiveMode(const RawAddress& remote_bda);
  *
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if the HCI command is issued successful,
- *                  BTM_UNKNOWN_ADDR if bd addr is not active or bad
+ *                  tBTM_STATUS::BTM_UNKNOWN_ADDR if bd addr is not active or bad
  *                  tBTM_STATUS::BTM_CMD_STORED if the command is stored
  *
  ******************************************************************************/

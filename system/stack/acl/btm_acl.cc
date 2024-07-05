@@ -513,7 +513,7 @@ tBTM_STATUS BTM_GetRole(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role) {
   tACL_CONN* p_acl = internal_.btm_bda_to_acl(remote_bd_addr, BT_TRANSPORT_BR_EDR);
   if (p_acl == nullptr) {
     log::warn("Unable to find active acl");
-    return BTM_UNKNOWN_ADDR;
+    return tBTM_STATUS::BTM_UNKNOWN_ADDR;
   }
   *p_role = p_acl->link_role;
   return tBTM_STATUS::BTM_SUCCESS;
@@ -530,7 +530,7 @@ tBTM_STATUS BTM_GetRole(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role) {
  *                  tBTM_STATUS::BTM_CMD_STARTED if command issued to controller.
  *                  tBTM_STATUS::BTM_NO_RESOURCES if couldn't allocate memory to issue
  *                                   command
- *                  BTM_UNKNOWN_ADDR if no active link with bd addr specified
+ *                  tBTM_STATUS::BTM_UNKNOWN_ADDR if no active link with bd addr specified
  *                  tBTM_STATUS::BTM_MODE_UNSUPPORTED if local device does not support role
  *                                       switching
  *                  tBTM_STATUS::BTM_BUSY if the previous command is not completed
@@ -545,7 +545,7 @@ tBTM_STATUS BTM_SwitchRoleToCentral(const RawAddress& remote_bd_addr) {
   tACL_CONN* p_acl = internal_.btm_bda_to_acl(remote_bd_addr, BT_TRANSPORT_BR_EDR);
   if (p_acl == nullptr) {
     log::warn("Unable to find active acl");
-    return BTM_UNKNOWN_ADDR;
+    return tBTM_STATUS::BTM_UNKNOWN_ADDR;
   }
 
   if (p_acl->link_role == HCI_ROLE_CENTRAL) {
@@ -578,7 +578,7 @@ tBTM_STATUS BTM_SwitchRoleToCentral(const RawAddress& remote_bd_addr) {
     log::warn(
             "Unable to find device to read current power mode prior to role "
             "switch");
-    return BTM_UNKNOWN_ADDR;
+    return tBTM_STATUS::BTM_UNKNOWN_ADDR;
   };
 
   if (pwr_mode == BTM_PM_MD_PARK || pwr_mode == BTM_PM_MD_SNIFF) {
@@ -1033,7 +1033,7 @@ tBTM_STATUS BTM_GetLinkSuperTout(const RawAddress& remote_bda, uint16_t* p_timeo
   const tACL_CONN* p_acl = internal_.btm_bda_to_acl(remote_bda, BT_TRANSPORT_BR_EDR);
   if (p_acl == nullptr) {
     log::warn("Unable to find active acl");
-    return BTM_UNKNOWN_ADDR;
+    return tBTM_STATUS::BTM_UNKNOWN_ADDR;
   }
   *p_timeout = p_acl->link_super_tout;
   return tBTM_STATUS::BTM_SUCCESS;
@@ -1052,7 +1052,7 @@ tBTM_STATUS BTM_SetLinkSuperTout(const RawAddress& remote_bda, uint16_t timeout)
   tACL_CONN* p_acl = internal_.btm_bda_to_acl(remote_bda, BT_TRANSPORT_BR_EDR);
   if (p_acl == nullptr) {
     log::warn("Unable to find active acl");
-    return BTM_UNKNOWN_ADDR;
+    return tBTM_STATUS::BTM_UNKNOWN_ADDR;
   }
 
   /* Only send if current role is Central; 2.0 spec requires this */
@@ -1596,7 +1596,7 @@ tBTM_STATUS BTM_ReadRSSI(const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb) {
   log::warn("Unable to find active acl");
 
   /* If here, no BD Addr found */
-  return BTM_UNKNOWN_ADDR;
+  return tBTM_STATUS::BTM_UNKNOWN_ADDR;
 }
 
 /*******************************************************************************
@@ -1638,7 +1638,7 @@ tBTM_STATUS BTM_ReadFailedContactCounter(const RawAddress& remote_bda, tBTM_CMPL
   log::warn("Unable to find active acl");
 
   /* If here, no BD Addr found */
-  return BTM_UNKNOWN_ADDR;
+  return tBTM_STATUS::BTM_UNKNOWN_ADDR;
 }
 
 /*******************************************************************************
@@ -1685,7 +1685,7 @@ tBTM_STATUS BTM_ReadTxPower(const RawAddress& remote_bda, tBT_TRANSPORT transpor
   log::warn("Unable to find active acl");
 
   /* If here, no BD Addr found */
-  return BTM_UNKNOWN_ADDR;
+  return tBTM_STATUS::BTM_UNKNOWN_ADDR;
 }
 
 /*******************************************************************************
@@ -1955,20 +1955,20 @@ void btm_read_automatic_flush_timeout_complete(uint8_t* p) {
  * Description      This function is called to disconnect an ACL connection
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if successfully initiated, otherwise
- *                  BTM_UNKNOWN_ADDR.
+ *                  tBTM_STATUS::BTM_UNKNOWN_ADDR.
  *
  ******************************************************************************/
 tBTM_STATUS btm_remove_acl(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
   tACL_CONN* p_acl = internal_.btm_bda_to_acl(bd_addr, transport);
   if (p_acl == nullptr) {
     log::warn("Unable to find active acl");
-    return BTM_UNKNOWN_ADDR;
+    return tBTM_STATUS::BTM_UNKNOWN_ADDR;
   }
 
   if (p_acl->Handle() == HCI_INVALID_HANDLE) {
     log::warn("Cannot remove unknown acl bd_addr:{} transport:{}", bd_addr,
               bt_transport_text(transport));
-    return BTM_UNKNOWN_ADDR;
+    return tBTM_STATUS::BTM_UNKNOWN_ADDR;
   }
 
   if (p_acl->rs_disc_pending == BTM_SEC_RS_PENDING) {

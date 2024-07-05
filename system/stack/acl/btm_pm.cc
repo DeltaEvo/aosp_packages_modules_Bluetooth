@@ -175,7 +175,7 @@ void BTM_PM_OnDisconnected(uint16_t handle) {
  *                  alter ACL connection behavior.
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if successful,
- *                  BTM_UNKNOWN_ADDR if bd addr is not active or bad
+ *                  tBTM_STATUS::BTM_UNKNOWN_ADDR if bd addr is not active or bad
  *
  ******************************************************************************/
 tBTM_STATUS BTM_SetPowerMode(uint8_t pm_id, const RawAddress& remote_bda,
@@ -193,7 +193,7 @@ tBTM_STATUS BTM_SetPowerMode(uint8_t pm_id, const RawAddress& remote_bda,
   auto* p_cb = btm_pm_get_power_manager_from_address(remote_bda);
   if (p_cb == nullptr) {
     log::warn("Unable to find power manager for peer: {}", remote_bda);
-    return BTM_UNKNOWN_ADDR;
+    return tBTM_STATUS::BTM_UNKNOWN_ADDR;
   }
   uint16_t handle = p_cb->handle_;
 
@@ -308,7 +308,7 @@ bool BTM_ReadPowerMode(const RawAddress& remote_bda, tBTM_PM_MODE* p_mode) {
  *
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if the HCI command is issued successful,
- *                  BTM_UNKNOWN_ADDR if bd addr is not active or bad
+ *                  tBTM_STATUS::BTM_UNKNOWN_ADDR if bd addr is not active or bad
  *                  tBTM_STATUS::BTM_CMD_STORED if the command is stored
  *
  ******************************************************************************/
@@ -317,7 +317,7 @@ tBTM_STATUS BTM_SetSsrParams(const RawAddress& remote_bda, uint16_t max_lat, uin
   tBTM_PM_MCB* p_cb = btm_pm_get_power_manager_from_address(remote_bda);
   if (p_cb == nullptr) {
     log::warn("Unable to find power manager for peer:{}", remote_bda);
-    return BTM_UNKNOWN_ADDR;
+    return tBTM_STATUS::BTM_UNKNOWN_ADDR;
   }
 
   if (!bluetooth::shim::GetController()->SupportsSniffSubrating()) {

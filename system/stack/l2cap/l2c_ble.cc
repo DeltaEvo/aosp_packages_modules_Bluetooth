@@ -1324,7 +1324,7 @@ tL2CAP_LE_RESULT_CODE l2ble_sec_access_req(const RawAddress& bd_addr, uint16_t p
 
   if (!p_lcb) {
     log::error("Security check for unknown device");
-    p_callback(bd_addr, BT_TRANSPORT_LE, p_ref_data, BTM_UNKNOWN_ADDR);
+    p_callback(bd_addr, BT_TRANSPORT_LE, p_ref_data, tBTM_STATUS::BTM_UNKNOWN_ADDR);
     return L2CAP_LE_RESULT_NO_RESOURCES;
   }
 

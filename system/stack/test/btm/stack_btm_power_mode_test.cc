@@ -93,7 +93,7 @@ protected:
 
 TEST_F(StackBtmPowerMode, BTM_SetPowerMode__Undefined) {
   tBTM_PM_PWR_MD mode = {};
-  ASSERT_EQ(BTM_UNKNOWN_ADDR, ::BTM_SetPowerMode(pm_id_, kRawAddress, &mode));
+  ASSERT_EQ(tBTM_STATUS::BTM_UNKNOWN_ADDR, ::BTM_SetPowerMode(pm_id_, kRawAddress, &mode));
 }
 
 TEST_F(StackBtmPowerModeConnected, BTM_SetPowerMode__AlreadyActive) {

@@ -186,7 +186,7 @@ void BTM_WriteVoiceSettings(uint16_t settings);
  *                  tBTM_STATUS::BTM_CMD_STARTED is returned if the request was successfully
  *                                  sent to HCI.
  *                  tBTM_STATUS::BTM_BUSY if already in progress
- *                  BTM_UNKNOWN_ADDR if device address is bad
+ *                  tBTM_STATUS::BTM_UNKNOWN_ADDR if device address is bad
  *                  tBTM_STATUS::BTM_NO_RESOURCES if resources could not be allocated to
  *                                   start the command
  *                  BTM_WRONG_MODE if the device is not up.
@@ -319,7 +319,7 @@ void BTM_WriteVoiceSettings(uint16_t settings);
  *                  "is_orig" flag is true, the connection will be originated,
  *                  otherwise BTM will wait for the other side to connect.
  *
- * Returns          BTM_UNKNOWN_ADDR if the ACL connection is not up
+ * Returns          tBTM_STATUS::BTM_UNKNOWN_ADDR if the ACL connection is not up
  *                  tBTM_STATUS::BTM_BUSY         if another SCO being set up to
  *                                   the same BD address
  *                  tBTM_STATUS::BTM_NO_RESOURCES if the max SCO limit has been reached

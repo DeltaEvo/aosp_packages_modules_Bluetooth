@@ -325,7 +325,8 @@ static bool bta_ag_remove_sco(tBTA_AG_SCB* p_scb, bool only_active) {
         /* SCO is connected; set current control block */
         bta_ag_cb.sco.p_curr_scb = p_scb;
         return true;
-      } else if ((status == tBTM_STATUS::BTM_SUCCESS) || (status == BTM_UNKNOWN_ADDR)) {
+      } else if ((status == tBTM_STATUS::BTM_SUCCESS) ||
+                 (status == tBTM_STATUS::BTM_UNKNOWN_ADDR)) {
         /* If no connection reset the SCO handle */
         p_scb->sco_idx = BTM_INVALID_SCO_INDEX;
       }

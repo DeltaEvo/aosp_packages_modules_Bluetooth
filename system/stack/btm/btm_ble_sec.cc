@@ -580,7 +580,7 @@ tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr, uint16_t tx_pdu_leng
   auto p_dev_rec = btm_find_dev(bd_addr);
   if (p_dev_rec == NULL) {
     log::error("Device {} not found", bd_addr);
-    return BTM_UNKNOWN_ADDR;
+    return tBTM_STATUS::BTM_UNKNOWN_ADDR;
   }
 
   if (tx_pdu_length > BTM_BLE_DATA_SIZE_MAX) {

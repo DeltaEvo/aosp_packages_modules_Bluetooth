@@ -683,7 +683,7 @@ static tBTM_STATUS btm_send_connect_request(uint16_t acl_handle, enh_esco_params
  *                  NOTE:  If BTM_IGNORE_SCO_PKT_TYPE is passed in the pkt_types
  *                      parameter the default packet types is used.
  *
- * Returns          BTM_UNKNOWN_ADDR if the ACL connection is not up
+ * Returns          tBTM_STATUS::BTM_UNKNOWN_ADDR if the ACL connection is not up
  *                  tBTM_STATUS::BTM_BUSY         if another SCO being set up to
  *                                   the same BD address
  *                  tBTM_STATUS::BTM_NO_RESOURCES if the max SCO limit has been reached
@@ -715,7 +715,7 @@ tBTM_STATUS BTM_CreateSco(const RawAddress* remote_bda, bool is_orig, uint16_t p
             get_btm_client_interface().peer.BTM_GetHCIConnHandle(*remote_bda, BT_TRANSPORT_BR_EDR);
     if (acl_handle == HCI_INVALID_HANDLE) {
       log::error("cannot find ACL handle for remote device {}", *remote_bda);
-      return BTM_UNKNOWN_ADDR;
+      return tBTM_STATUS::BTM_UNKNOWN_ADDR;
     }
   }
 
@@ -1149,7 +1149,7 @@ tBTM_STATUS BTM_RemoveSco(uint16_t sco_inx) {
 
   /* Validity check */
   if ((sco_inx >= BTM_MAX_SCO_LINKS) || (p->state == SCO_ST_UNUSED)) {
-    return BTM_UNKNOWN_ADDR;
+    return tBTM_STATUS::BTM_UNKNOWN_ADDR;
   }
 
   /* If no HCI handle, simply drop the connection and return */
