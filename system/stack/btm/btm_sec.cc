@@ -1453,10 +1453,10 @@ tBTM_STATUS btm_sec_l2cap_access_req_by_requirement(const RawAddress& bd_addr,
               "rmt_support_for_sc={}, failing connection",
               local_supports_sc, p_dev_rec->SupportsSecureConnections());
       if (p_callback) {
-        (*p_callback)(bd_addr, transport, (void*)p_ref_data, BTM_MODE4_LEVEL4_NOT_SUPPORTED);
+        (*p_callback)(bd_addr, transport, (void*)p_ref_data,
+                      tBTM_STATUS::BTM_MODE4_LEVEL4_NOT_SUPPORTED);
       }
-
-      return BTM_MODE4_LEVEL4_NOT_SUPPORTED;
+      return tBTM_STATUS::BTM_MODE4_LEVEL4_NOT_SUPPORTED;
     }
   }
 
@@ -1778,10 +1778,11 @@ tBTM_STATUS btm_sec_mx_access_request(const RawAddress& bd_addr, bool is_origina
               "remote_SC_support:{}",
               local_supports_sc, p_dev_rec->SupportsSecureConnections());
       if (p_callback) {
-        (*p_callback)(bd_addr, transport, (void*)p_ref_data, BTM_MODE4_LEVEL4_NOT_SUPPORTED);
+        (*p_callback)(bd_addr, transport, (void*)p_ref_data,
+                      tBTM_STATUS::BTM_MODE4_LEVEL4_NOT_SUPPORTED);
       }
 
-      return BTM_MODE4_LEVEL4_NOT_SUPPORTED;
+      return tBTM_STATUS::BTM_MODE4_LEVEL4_NOT_SUPPORTED;
     }
   }
 
