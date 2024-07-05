@@ -1565,7 +1565,7 @@ tBTM_STATUS btm_sec_l2cap_access_req_by_requirement(const RawAddress& bd_addr,
      * as long as we have a link key, it's OK */
     if ((0 == (p_dev_rec->sec_rec.sec_flags & BTM_SEC_AUTHENTICATED)) ||
         (0 == (p_dev_rec->sec_rec.sec_flags & BTM_SEC_ENCRYPTED))) {
-      rc = BTM_DELAY_CHECK;
+      rc = tBTM_STATUS::BTM_DELAY_CHECK;
       /*
       2046 may report HCI_Encryption_Change and L2C Connection Request out of
       sequence
