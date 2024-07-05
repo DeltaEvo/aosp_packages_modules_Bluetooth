@@ -215,7 +215,7 @@ protected:
     bluetooth::hci::testing::mock_hci_layer_ = &hci_layer_;
 
     // Start Inquiry
-    EXPECT_EQ(BTM_CMD_STARTED, BTM_StartInquiry(btm_inq_results_cb, btm_inq_cmpl_cb));
+    EXPECT_EQ(tBTM_STATUS::BTM_CMD_STARTED, BTM_StartInquiry(btm_inq_results_cb, btm_inq_cmpl_cb));
     auto view = hci_layer_.GetCommand(OpCode::INQUIRY);
     hci_layer_.IncomingEvent(
             InquiryStatusBuilder::Create(bluetooth::hci::ErrorCode::SUCCESS, kNumCommandPackets));

@@ -245,7 +245,7 @@ TEST_F(BtaDmTest, bta_dm_set_encryption) {
           [](const RawAddress& bd_addr, tBT_TRANSPORT transport, tBTM_SEC_CALLBACK* p_callback,
              void* p_ref_data, tBTM_BLE_SEC_ACT sec_act) -> tBTM_STATUS {
     inc_func_call_count("BTM_SetEncryption");
-    return BTM_CMD_STARTED;
+    return tBTM_STATUS::BTM_CMD_STARTED;
   };
 
   bta_dm_set_encryption(kRawAddress, transport, BTA_DM_ENCRYPT_CBACK, sec_act);

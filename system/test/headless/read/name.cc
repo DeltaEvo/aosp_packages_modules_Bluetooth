@@ -53,7 +53,7 @@ int bluetooth::test::headless::Name::Run() {
 
     tBTM_STATUS status = get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
             raw_address, &RemoteNameCallback, BT_TRANSPORT_BR_EDR);
-    if (status != BTM_CMD_STARTED) {
+    if (status != tBTM_STATUS::BTM_CMD_STARTED) {
       fprintf(stdout, "Failure to start read remote device\n");
       return -1;
     }

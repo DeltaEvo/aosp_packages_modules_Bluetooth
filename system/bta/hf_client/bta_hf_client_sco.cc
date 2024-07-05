@@ -63,7 +63,7 @@ static bool bta_hf_client_sco_remove(tBTA_HF_CLIENT_CB* client_cb) {
 
     log::verbose("idx 0x{:04x}, status:0x{:x}", client_cb->sco_idx, status);
 
-    if (status == BTM_CMD_STARTED) {
+    if (status == tBTM_STATUS::BTM_CMD_STARTED) {
       removed_started = true;
     }
     /* If no connection reset the SCO handle */
@@ -263,7 +263,7 @@ static void bta_hf_client_sco_create(tBTA_HF_CLIENT_CB* client_cb, bool is_orig)
   status = get_btm_client_interface().sco.BTM_CreateSco(
           &client_cb->peer_addr, is_orig, params.packet_types, &client_cb->sco_idx,
           bta_hf_client_sco_conn_cback, bta_hf_client_sco_disc_cback);
-  if (status == BTM_CMD_STARTED && !is_orig) {
+  if (status == tBTM_STATUS::BTM_CMD_STARTED && !is_orig) {
     if (get_btm_client_interface().sco.BTM_RegForEScoEvts(
                 client_cb->sco_idx, bta_hf_client_esco_connreq_cback) == tBTM_STATUS::BTM_SUCCESS) {
       log::verbose("SCO registration success");

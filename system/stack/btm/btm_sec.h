@@ -395,7 +395,7 @@ tBTM_STATUS btm_sec_l2cap_access_req_by_requirement(const RawAddress& bd_addr,
  *required procedures are completed p_ref_data    - Pointer to any reference
  *data needed by the the callback function.
  *
- * Returns          BTM_CMD_STARTED
+ * Returns          tBTM_STATUS::BTM_CMD_STARTED
  *
  ******************************************************************************/
 tBTM_STATUS btm_sec_mx_access_request(const RawAddress& bd_addr, bool is_originator,

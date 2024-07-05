@@ -340,7 +340,7 @@ tBTM_STATUS BTM_SetLocalDeviceName(const char* p_name) {
   bd_name_from_char_pointer(btm_sec_cb.cfg.bd_name, p_name);
 
   bluetooth::shim::GetController()->WriteLocalName(p_name);
-  return BTM_CMD_STARTED;
+  return tBTM_STATUS::BTM_CMD_STARTED;
 }
 
 /*******************************************************************************
@@ -368,7 +368,7 @@ tBTM_STATUS BTM_ReadLocalDeviceName(const char** p_name) {
  * Description      Get local device name from controller. Do not use cached
  *                  name (used to get chip-id prior to btm reset complete).
  *
- * Returns          BTM_CMD_STARTED if successful, otherwise an error
+ * Returns          tBTM_STATUS::BTM_CMD_STARTED if successful, otherwise an error
  *
  ******************************************************************************/
 tBTM_STATUS BTM_ReadLocalDeviceNameFromController(tBTM_CMPL_CB* p_rln_cmpl_cback) {
@@ -384,7 +384,7 @@ tBTM_STATUS BTM_ReadLocalDeviceNameFromController(tBTM_CMPL_CB* p_rln_cmpl_cback
   alarm_set_on_mloop(btm_cb.devcb.read_local_name_timer, BTM_DEV_NAME_REPLY_TIMEOUT_MS,
                      btm_read_local_name_timeout, NULL);
 
-  return BTM_CMD_STARTED;
+  return tBTM_STATUS::BTM_CMD_STARTED;
 }
 
 /*******************************************************************************

@@ -473,7 +473,7 @@ void l2c_link_timeout(tL2C_LCB* p_lcb) {
         /* Security Manager will take care of disconnecting, state will be
          * updated at that time */
         start_timeout = false;
-      } else if (rc == BTM_CMD_STARTED) {
+      } else if (rc == tBTM_STATUS::BTM_CMD_STARTED) {
         p_lcb->link_state = LST_DISCONNECTING;
         timeout_ms = L2CAP_LINK_DISCONNECT_TIMEOUT_MS;
       } else if (rc == tBTM_STATUS::BTM_SUCCESS) {
@@ -1188,7 +1188,7 @@ tBTM_STATUS l2cu_ConnectAclForSecurity(const RawAddress& bd_addr) {
   tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(bd_addr, BT_TRANSPORT_BR_EDR);
   if (p_lcb && (p_lcb->link_state == LST_CONNECTED || p_lcb->link_state == LST_CONNECTING)) {
     log::warn("Connection already exists");
-    return BTM_CMD_STARTED;
+    return tBTM_STATUS::BTM_CMD_STARTED;
   }
 
   /* Make sure an L2cap link control block is available */

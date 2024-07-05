@@ -620,7 +620,7 @@ static tBTM_STATUS BTM_StartLeScan() {
 #else
   if (shim::GetController()->SupportsBle()) {
     btm_ble_start_inquiry(btm_cb.btm_inq_vars.inqparms.duration);
-    return BTM_CMD_STARTED;
+    return tBTM_STATUS::BTM_CMD_STARTED;
   }
   log::warn("Trying to do LE scan on a non-LE adapter");
   btm_cb.btm_inq_vars.inqparms.mode &= ~BTM_BLE_GENERAL_INQUIRY;
@@ -657,7 +657,7 @@ static tBTM_STATUS BTM_StartLeScan() {
  *                                NULL, the application is not notified when
  *                                completed.
  * Returns          tBTM_STATUS
- *                  BTM_CMD_STARTED if successfully initiated
+ *                  tBTM_STATUS::BTM_CMD_STARTED if successfully initiated
  *                  tBTM_STATUS::BTM_BUSY if already in progress
  *                  BTM_ILLEGAL_VALUE if parameter(s) are out of range
  *                  BTM_NO_RESOURCES if could not allocate resources to start
@@ -771,7 +771,7 @@ tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb, tBTM_CMPL_CB* p_
   }
 #endif
 
-  return BTM_CMD_STARTED;
+  return tBTM_STATUS::BTM_CMD_STARTED;
 }
 
 /*******************************************************************************

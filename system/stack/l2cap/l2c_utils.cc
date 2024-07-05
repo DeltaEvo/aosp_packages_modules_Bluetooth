@@ -2157,7 +2157,7 @@ void l2cu_create_conn_br_edr(tL2C_LCB* p_lcb) {
       p_lcb->SetLinkRoleAsCentral();
 
       if (get_btm_client_interface().link_policy.BTM_SwitchRoleToCentral(
-                  p_lcb_cur->remote_bd_addr) == BTM_CMD_STARTED) {
+                  p_lcb_cur->remote_bd_addr) == tBTM_STATUS::BTM_CMD_STARTED) {
         alarm_set_on_mloop(p_lcb->l2c_lcb_timer, L2CAP_LINK_ROLE_SWITCH_TIMEOUT_MS,
                            l2c_lcb_timer_timeout, p_lcb);
         return;
@@ -2789,7 +2789,7 @@ void l2cu_no_dynamic_ccbs(tL2C_LCB* p_lcb) {
 
     rc = btm_sec_disconnect(p_lcb->Handle(), HCI_ERR_PEER_USER,
                             "stack::l2cap::l2c_utils::l2cu_no_dynamic_ccbs Idle timer popped");
-    if (rc == BTM_CMD_STARTED) {
+    if (rc == tBTM_STATUS::BTM_CMD_STARTED) {
       l2cu_process_fixed_disc_cback(p_lcb);
       p_lcb->link_state = LST_DISCONNECTING;
       timeout_ms = L2CAP_LINK_DISCONNECT_TIMEOUT_MS;

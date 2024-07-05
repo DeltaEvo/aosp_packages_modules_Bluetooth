@@ -66,7 +66,7 @@
  *                                NULL, the application is not notified when
  *                                completed.
  * Returns          tBTM_STATUS
- *                  BTM_CMD_STARTED if successfully initiated
+ *                  tBTM_STATUS::BTM_CMD_STARTED if successfully initiated
  *                  tBTM_STATUS::BTM_BUSY if already in progress
  *                  BTM_ILLEGAL_VALUE if parameter(s) are out of range
  *                  BTM_NO_RESOURCES if could not allocate resources to start
