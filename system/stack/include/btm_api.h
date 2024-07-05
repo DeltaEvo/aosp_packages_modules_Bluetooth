@@ -185,7 +185,7 @@ void BTM_WriteVoiceSettings(uint16_t settings);
  * Returns
  *                  BTM_CMD_STARTED is returned if the request was successfully
  *                                  sent to HCI.
- *                  BTM_BUSY if already in progress
+ *                  tBTM_STATUS::BTM_BUSY if already in progress
  *                  BTM_UNKNOWN_ADDR if device address is bad
  *                  BTM_NO_RESOURCES if resources could not be allocated to
  *                                   start the command
@@ -302,7 +302,7 @@ void BTM_WriteVoiceSettings(uint16_t settings);
  * Parameter        p_bda - (input) BD_ADDR ->  Address of device to clear
  *                                              (NULL clears all entries)
  *
- * Returns          BTM_BUSY if an inquiry, get remote name, or event filter
+ * Returns          tBTM_STATUS::BTM_BUSY if an inquiry, get remote name, or event filter
  *                          is active, otherwise tBTM_STATUS::BTM_SUCCESS
  *
  ******************************************************************************/
@@ -320,7 +320,7 @@ void BTM_WriteVoiceSettings(uint16_t settings);
  *                  otherwise BTM will wait for the other side to connect.
  *
  * Returns          BTM_UNKNOWN_ADDR if the ACL connection is not up
- *                  BTM_BUSY         if another SCO being set up to
+ *                  tBTM_STATUS::BTM_BUSY         if another SCO being set up to
  *                                   the same BD address
  *                  BTM_NO_RESOURCES if the max SCO limit has been reached
  *                  BTM_CMD_STARTED  if the connection establishment is started.
@@ -378,7 +378,7 @@ void BTM_RemoveScoByBdaddr(const RawAddress& bda);
  *                  active (e)SCO links.
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if the successful.
- *                  BTM_BUSY if there are one or more active (e)SCO links.
+ *                  tBTM_STATUS::BTM_BUSY if there are one or more active (e)SCO links.
  *
  ******************************************************************************/
 [[nodiscard]] tBTM_STATUS BTM_SetEScoMode(enh_esco_params_t* p_parms);
