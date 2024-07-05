@@ -661,7 +661,7 @@ tBTM_STATUS btm_sec_bond_by_transport(const RawAddress& bd_addr, tBLE_ADDR_TYPE 
   if (btm_sec_cb.pairing_state != BTM_PAIR_STATE_IDLE) {
     log::error("BTM_SecBond: already busy in state: {}",
                tBTM_SEC_CB::btm_pair_state_descr(btm_sec_cb.pairing_state));
-    return BTM_WRONG_MODE;
+    return tBTM_STATUS::BTM_WRONG_MODE;
   }
 
   p_dev_rec = btm_find_or_alloc_dev(bd_addr);
@@ -859,7 +859,7 @@ tBTM_STATUS BTM_SecBondCancel(const RawAddress& bd_addr) {
         return tBTM_STATUS::BTM_CMD_STARTED;
       }
     }
-    return BTM_WRONG_MODE;
+    return tBTM_STATUS::BTM_WRONG_MODE;
   }
 
   log::verbose("hci_handle:0x{:x} le_link:{} classic_link:{}", p_dev_rec->hci_handle,
@@ -909,7 +909,7 @@ tBTM_STATUS BTM_SecBondCancel(const RawAddress& bd_addr) {
     }
   }
 
-  return BTM_WRONG_MODE;
+  return tBTM_STATUS::BTM_WRONG_MODE;
 }
 
 /*******************************************************************************
@@ -956,7 +956,7 @@ tBTM_LINK_KEY_TYPE BTM_SecGetDeviceLinkKeyType(const RawAddress& bd_addr) {
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS   - already encrypted
  *                  BTM_PENDING   - command will be returned in the callback
- *                  BTM_WRONG_MODE- connection not up.
+ *                  tBTM_STATUS::BTM_WRONG_MODE- connection not up.
  *                  tBTM_STATUS::BTM_BUSY      - security procedures are currently active
  *                  tBTM_STATUS::BTM_MODE_UNSUPPORTED - if security manager not linked in.
  *
@@ -967,7 +967,7 @@ tBTM_STATUS BTM_SetEncryption(const RawAddress& bd_addr, tBT_TRANSPORT transport
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
   if (p_dev_rec == nullptr) {
     log::error("Unable to set encryption for unknown device");
-    return BTM_WRONG_MODE;
+    return tBTM_STATUS::BTM_WRONG_MODE;
   }
 
   switch (transport) {
@@ -978,10 +978,10 @@ tBTM_STATUS BTM_SetEncryption(const RawAddress& bd_addr, tBT_TRANSPORT transport
                 "transport:{}",
                 bd_addr, bt_transport_text(transport));
         if (p_callback) {
-          do_in_main_thread(
-                  base::BindOnce(p_callback, bd_addr, transport, p_ref_data, BTM_WRONG_MODE));
+          do_in_main_thread(base::BindOnce(p_callback, bd_addr, transport, p_ref_data,
+                                           tBTM_STATUS::BTM_WRONG_MODE));
         }
-        return BTM_WRONG_MODE;
+        return tBTM_STATUS::BTM_WRONG_MODE;
       }
       if (p_dev_rec->sec_rec.sec_flags & BTM_SEC_ENCRYPTED) {
         log::debug(
@@ -1003,10 +1003,10 @@ tBTM_STATUS BTM_SetEncryption(const RawAddress& bd_addr, tBT_TRANSPORT transport
                 "transport:{}",
                 bd_addr, bt_transport_text(transport));
         if (p_callback) {
-          do_in_main_thread(
-                  base::BindOnce(p_callback, bd_addr, transport, p_ref_data, BTM_WRONG_MODE));
+          do_in_main_thread(base::BindOnce(p_callback, bd_addr, transport, p_ref_data,
+                                           tBTM_STATUS::BTM_WRONG_MODE));
         }
-        return BTM_WRONG_MODE;
+        return tBTM_STATUS::BTM_WRONG_MODE;
       }
       if (p_dev_rec->sec_rec.sec_flags & BTM_SEC_LE_ENCRYPTED) {
         log::debug(
@@ -1057,7 +1057,7 @@ tBTM_STATUS BTM_SetEncryption(const RawAddress& bd_addr, tBT_TRANSPORT transport
       if (get_btm_client_interface().peer.BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
         rc = btm_ble_set_encryption(bd_addr, sec_act, L2CA_GetBleConnRole(bd_addr));
       } else {
-        rc = BTM_WRONG_MODE;
+        rc = tBTM_STATUS::BTM_WRONG_MODE;
         log::warn("cannot call btm_ble_set_encryption, p is NULL");
       }
       break;
@@ -2698,7 +2698,7 @@ void btm_proc_sp_req_evt(tBTM_SP_EVT event, const RawAddress bda, const uint32_t
             log::error(
                     "did not receive IO cap response prior to BTM_SP_CFM_REQ_EVT, "
                     "failing pairing request");
-            status = BTM_WRONG_MODE;
+            status = tBTM_STATUS::BTM_WRONG_MODE;
             BTM_ConfirmReqReply(status, p_bda);
             return;
           }

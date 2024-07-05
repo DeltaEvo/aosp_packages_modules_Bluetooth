@@ -189,7 +189,7 @@ void BTM_WriteVoiceSettings(uint16_t settings);
  *                  tBTM_STATUS::BTM_UNKNOWN_ADDR if device address is bad
  *                  tBTM_STATUS::BTM_NO_RESOURCES if resources could not be allocated to
  *                                   start the command
- *                  BTM_WRONG_MODE if the device is not up.
+ *                  tBTM_STATUS::BTM_WRONG_MODE if the device is not up.
  *
  ******************************************************************************/
 [[nodiscard]] tBTM_STATUS BTM_ReadRemoteDeviceName(const RawAddress& remote_bda,
@@ -210,7 +210,7 @@ void BTM_WriteVoiceSettings(uint16_t settings);
  *                                  sent to HCI.
  *                  tBTM_STATUS::BTM_NO_RESOURCES if resources could not be allocated to
  *                                   start the command
- *                  BTM_WRONG_MODE if there is no active remote name request.
+ *                  tBTM_STATUS::BTM_WRONG_MODE if there is no active remote name request.
  *
  ******************************************************************************/
 [[nodiscard]] tBTM_STATUS BTM_CancelRemoteDeviceName(void);

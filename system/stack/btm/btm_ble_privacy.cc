@@ -440,7 +440,7 @@ static void btm_ble_resolving_list_vsc_op_cmpl(tBTM_VSC_CMPL* p_params) {
 static tBTM_STATUS btm_ble_remove_resolving_list_entry(tBTM_SEC_DEV_REC* p_dev_rec) {
   /* if controller does not support RPA offloading or privacy 1.2, skip */
   if (bluetooth::shim::GetController()->GetLeResolvingListSize() == 0) {
-    return BTM_WRONG_MODE;
+    return tBTM_STATUS::BTM_WRONG_MODE;
   }
 
   if (bluetooth::shim::GetController()->SupportsBlePrivacy()) {

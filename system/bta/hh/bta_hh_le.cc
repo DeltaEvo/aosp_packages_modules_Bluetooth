@@ -1021,7 +1021,7 @@ void bta_hh_security_cmpl(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* /* p_buf */)
     if (!(p_cb->status == BTA_HH_ERR_SEC &&
           (p_cb->btm_status == tBTM_STATUS::BTM_ERR_PROCESSING ||
            p_cb->btm_status == tBTM_STATUS::BTM_FAILED_ON_SECURITY ||
-           p_cb->btm_status == BTM_WRONG_MODE))) {
+           p_cb->btm_status == tBTM_STATUS::BTM_WRONG_MODE))) {
       bta_hh_le_api_disc_act(p_cb);
     }
   }

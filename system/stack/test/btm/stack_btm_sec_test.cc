@@ -168,7 +168,8 @@ TEST_F(StackBtmSecWithInitFreeTest, BTM_SetEncryption) {
   tBTM_BLE_SEC_ACT sec_act{BTM_BLE_SEC_ENCRYPT};
 
   // No device
-  ASSERT_EQ(BTM_WRONG_MODE, BTM_SetEncryption(bd_addr, transport, p_callback, nullptr, sec_act));
+  ASSERT_EQ(tBTM_STATUS::BTM_WRONG_MODE,
+            BTM_SetEncryption(bd_addr, transport, p_callback, nullptr, sec_act));
 
   // With device
   tBTM_SEC_DEV_REC* device_record = btm_sec_allocate_dev_rec();
@@ -176,7 +177,8 @@ TEST_F(StackBtmSecWithInitFreeTest, BTM_SetEncryption) {
   device_record->bd_addr = bd_addr;
   device_record->hci_handle = 0x1234;
 
-  ASSERT_EQ(BTM_WRONG_MODE, BTM_SetEncryption(bd_addr, transport, p_callback, nullptr, sec_act));
+  ASSERT_EQ(tBTM_STATUS::BTM_WRONG_MODE,
+            BTM_SetEncryption(bd_addr, transport, p_callback, nullptr, sec_act));
 
   wipe_secrets_and_remove(device_record);
 }

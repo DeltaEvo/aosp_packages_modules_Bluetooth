@@ -584,7 +584,7 @@ tBTM_STATUS BTM_SwitchRoleToCentral(const RawAddress& remote_bd_addr) {
   if (pwr_mode == BTM_PM_MD_PARK || pwr_mode == BTM_PM_MD_SNIFF) {
     if (!BTM_SetLinkPolicyActiveMode(p_acl->remote_addr)) {
       log::warn("Unable to set link policy active before attempting switch");
-      return BTM_WRONG_MODE;
+      return tBTM_STATUS::BTM_WRONG_MODE;
     }
     p_acl->set_switch_role_changing();
   }

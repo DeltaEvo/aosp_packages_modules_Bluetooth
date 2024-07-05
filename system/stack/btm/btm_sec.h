@@ -257,7 +257,7 @@ tBTM_LINK_KEY_TYPE BTM_SecGetDeviceLinkKeyType(const RawAddress& bd_addr);
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS   - already encrypted
  *                  BTM_PENDING   - command will be returned in the callback
- *                  BTM_WRONG_MODE- connection not up.
+ *                  tBTM_STATUS::BTM_WRONG_MODE- connection not up.
  *                  tBTM_STATUS::BTM_BUSY      - security procedures are currently active
  *                  tBTM_STATUS::BTM_ERR_KEY_MISSING  - link key is missing.
  *                  tBTM_STATUS::BTM_MODE_UNSUPPORTED - if security manager not linked in.

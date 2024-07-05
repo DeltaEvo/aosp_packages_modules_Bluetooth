@@ -516,7 +516,7 @@ std::pair<uint16_t /* interval */, uint16_t /* window */> get_low_latency_scan_p
  ******************************************************************************/
 tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration, tBTM_INQ_RESULTS_CB* p_results_cb,
                            tBTM_CMPL_CB* p_cmpl_cb) {
-  tBTM_STATUS status = BTM_WRONG_MODE;
+  tBTM_STATUS status = tBTM_STATUS::BTM_WRONG_MODE;
   uint8_t scan_phy = !btm_cb.ble_ctr_cb.inq_var.scan_phy ? BTM_BLE_DEFAULT_PHYS
                                                          : btm_cb.ble_ctr_cb.inq_var.scan_phy;
 
@@ -2497,7 +2497,7 @@ static bool btm_ble_adv_states_operation(BTM_TOPOLOGY_FUNC_PTR* p_handler, uint8
  ******************************************************************************/
 static tBTM_STATUS btm_ble_start_adv(void) {
   if (!btm_ble_adv_states_operation(btm_ble_topology_check, btm_cb.ble_ctr_cb.inq_var.evt_type)) {
-    return BTM_WRONG_MODE;
+    return tBTM_STATUS::BTM_WRONG_MODE;
   }
 
   btsnd_hcic_ble_set_adv_enable(BTM_BLE_ADV_ENABLE);

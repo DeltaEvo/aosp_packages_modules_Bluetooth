@@ -604,7 +604,7 @@ tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr, uint16_t tx_pdu_leng
 
   if (!get_btm_client_interface().peer.BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
     log::info("Unable to set data length because no le acl link connected to device");
-    return BTM_WRONG_MODE;
+    return tBTM_STATUS::BTM_WRONG_MODE;
   }
 
   uint16_t hci_handle =
@@ -1121,7 +1121,7 @@ tBTM_STATUS btm_ble_set_encryption(const RawAddress& bd_addr, tBTM_BLE_SEC_ACT s
 
   if (p_rec == NULL) {
     log::warn("NULL device record!! sec_act=0x{:x}", sec_act);
-    return BTM_WRONG_MODE;
+    return tBTM_STATUS::BTM_WRONG_MODE;
   }
 
   log::verbose("sec_act=0x{:x} role_central={}", sec_act, p_rec->role_central);
@@ -1164,7 +1164,7 @@ tBTM_STATUS btm_ble_set_encryption(const RawAddress& bd_addr, tBTM_BLE_SEC_ACT s
       break;
 
     default:
-      cmd = BTM_WRONG_MODE;
+      cmd = tBTM_STATUS::BTM_WRONG_MODE;
       break;
   }
   return cmd;
@@ -1210,7 +1210,7 @@ tBTM_STATUS btm_ble_start_encrypt(const RawAddress& bda, bool use_stk, Octet16* 
 
   if (!p_rec) {
     log::error("Link is not active, can not encrypt!");
-    return BTM_WRONG_MODE;
+    return tBTM_STATUS::BTM_WRONG_MODE;
   }
 
   if (p_rec->sec_rec.is_security_state_le_encrypting()) {

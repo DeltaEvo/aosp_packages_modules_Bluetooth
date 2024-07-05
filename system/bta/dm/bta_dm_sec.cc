@@ -808,7 +808,7 @@ void bta_dm_encrypt_cback(RawAddress bd_addr, tBT_TRANSPORT transport, void* /* 
   switch (result) {
     case tBTM_STATUS::BTM_SUCCESS:
       break;
-    case BTM_WRONG_MODE:
+    case tBTM_STATUS::BTM_WRONG_MODE:
       bta_status = BTA_WRONG_MODE;
       break;
     case tBTM_STATUS::BTM_NO_RESOURCES:

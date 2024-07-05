@@ -608,7 +608,7 @@ static tBTM_STATUS btm_send_connect_request(uint16_t acl_handle, enh_esco_params
                   "SCO connection cannot support any packet types for "
                   "acl_handle:0x{:04x}",
                   acl_handle);
-          return BTM_WRONG_MODE;
+          return tBTM_STATUS::BTM_WRONG_MODE;
         }
         log::debug(
                 "Both local and remote controllers support SCO secure connections "
@@ -1435,14 +1435,14 @@ tBTM_STATUS BTM_RegForEScoEvts(uint16_t sco_inx, tBTM_ESCO_CBACK* p_esco_cback) 
  *
  * Returns          tBTM_STATUS::BTM_CMD_STARTED if command is successfully initiated.
  *                  tBTM_STATUS::BTM_NO_RESOURCES - not enough resources to initiate command.
- *                  BTM_WRONG_MODE if no connection with a peer device or bad
+ *                  tBTM_STATUS::BTM_WRONG_MODE if no connection with a peer device or bad
  *                                 sco_inx.
  *
  ******************************************************************************/
 static tBTM_STATUS BTM_ChangeEScoLinkParms(uint16_t sco_inx, tBTM_CHG_ESCO_PARAMS* p_parms) {
   /* Make sure sco handle is valid and on an active link */
   if (sco_inx >= BTM_MAX_SCO_LINKS || btm_cb.sco_cb.sco_db[sco_inx].state != SCO_ST_CONNECTED) {
-    return BTM_WRONG_MODE;
+    return tBTM_STATUS::BTM_WRONG_MODE;
   }
 
   tSCO_CONN* p_sco = &btm_cb.sco_cb.sco_db[sco_inx];

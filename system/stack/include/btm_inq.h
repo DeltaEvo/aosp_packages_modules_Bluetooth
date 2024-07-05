@@ -35,7 +35,7 @@
  *                  tBTM_STATUS::BTM_BUSY if a setting of the filter is already in progress
  *                  tBTM_STATUS::BTM_NO_RESOURCES if couldn't get a memory pool buffer
  *                  tBTM_STATUS::BTM_ILLEGAL_VALUE if a bad parameter was detected
- *                  BTM_WRONG_MODE if the device is not up.
+ *                  tBTM_STATUS::BTM_WRONG_MODE if the device is not up.
  *
  ******************************************************************************/
 [[nodiscard]] tBTM_STATUS BTM_SetDiscoverability(uint16_t inq_mode);
@@ -71,7 +71,7 @@
  *                  tBTM_STATUS::BTM_ILLEGAL_VALUE if parameter(s) are out of range
  *                  tBTM_STATUS::BTM_NO_RESOURCES if could not allocate resources to start
  *                                   the command
- *                  BTM_WRONG_MODE if the device is not up.
+ *                  tBTM_STATUS::BTM_WRONG_MODE if the device is not up.
  *
  ******************************************************************************/
 [[nodiscard]] tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb,
@@ -108,7 +108,7 @@ void BTM_CancelInquiry(void);
  * Returns          tBTM_STATUS::BTM_SUCCESS if successful
  *                  tBTM_STATUS::BTM_ILLEGAL_VALUE if a bad parameter is detected
  *                  tBTM_STATUS::BTM_NO_RESOURCES if could not allocate a message buffer
- *                  BTM_WRONG_MODE if the device is not up.
+ *                  tBTM_STATUS::BTM_WRONG_MODE if the device is not up.
  *
  ******************************************************************************/
 [[nodiscard]] tBTM_STATUS BTM_SetConnectability(uint16_t page_mode);
@@ -126,7 +126,7 @@ void BTM_CancelInquiry(void);
  * Returns          tBTM_STATUS::BTM_SUCCESS if successful
  *                  tBTM_STATUS::BTM_NO_RESOURCES if couldn't get a memory pool buffer
  *                  tBTM_STATUS::BTM_ILLEGAL_VALUE if a bad parameter was detected
- *                  BTM_WRONG_MODE if the device is not up.
+ *                  tBTM_STATUS::BTM_WRONG_MODE if the device is not up.
  *
  ******************************************************************************/
 [[nodiscard]] tBTM_STATUS BTM_SetInquiryMode(uint8_t mode);
