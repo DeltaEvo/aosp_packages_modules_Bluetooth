@@ -555,7 +555,7 @@ tBTM_STATUS BTM_SwitchRoleToCentral(const RawAddress& remote_bd_addr) {
 
   if (interop_match_addr(INTEROP_DISABLE_ROLE_SWITCH, &remote_bd_addr)) {
     log::info("Remote device is on list preventing role switch");
-    return BTM_DEV_RESTRICT_LISTED;
+    return tBTM_STATUS::BTM_DEV_RESTRICT_LISTED;
   }
 
   if (get_btm_client_interface().sco.BTM_IsScoActiveByBdaddr(remote_bd_addr)) {
@@ -570,7 +570,7 @@ tBTM_STATUS BTM_SwitchRoleToCentral(const RawAddress& remote_bd_addr) {
 
   if (interop_match_addr(INTEROP_DYNAMIC_ROLE_SWITCH, &remote_bd_addr)) {
     log::debug("Device restrict listed under INTEROP_DYNAMIC_ROLE_SWITCH");
-    return BTM_DEV_RESTRICT_LISTED;
+    return tBTM_STATUS::BTM_DEV_RESTRICT_LISTED;
   }
 
   tBTM_PM_MODE pwr_mode;
