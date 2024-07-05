@@ -1275,7 +1275,7 @@ TEST_F(HasClientTest, test_disconnect_when_link_key_is_gone) {
 
   ON_CALL(btm_interface, BTM_IsEncrypted(test_address, _)).WillByDefault(DoAll(Return(false)));
   ON_CALL(btm_interface, SetEncryption(test_address, _, _, _, _))
-          .WillByDefault(Return(BTM_ERR_KEY_MISSING));
+          .WillByDefault(Return(tBTM_STATUS::BTM_ERR_KEY_MISSING));
 
   auto test_conn_id = GetTestConnId(test_address);
   EXPECT_CALL(gatt_interface, Close(test_conn_id)).Times(1);
