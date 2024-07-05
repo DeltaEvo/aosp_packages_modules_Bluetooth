@@ -1783,7 +1783,7 @@ void btm_read_rssi_timeout(void* /* data */) {
   tBTM_RSSI_RESULT result;
   tBTM_CMPL_CB* p_cb = btm_cb.devcb.p_rssi_cmpl_cb;
   btm_cb.devcb.p_rssi_cmpl_cb = NULL;
-  result.status = BTM_DEVICE_TIMEOUT;
+  result.status = tBTM_STATUS::BTM_DEVICE_TIMEOUT;
   if (p_cb) {
     (*p_cb)(&result);
   }
@@ -1855,7 +1855,7 @@ void btm_read_failed_contact_counter_timeout(void* /* data */) {
   tBTM_FAILED_CONTACT_COUNTER_RESULT result;
   tBTM_CMPL_CB* p_cb = btm_cb.devcb.p_failed_contact_counter_cmpl_cb;
   btm_cb.devcb.p_failed_contact_counter_cmpl_cb = NULL;
-  result.status = BTM_DEVICE_TIMEOUT;
+  result.status = tBTM_STATUS::BTM_DEVICE_TIMEOUT;
   if (p_cb) {
     (*p_cb)(&result);
   }

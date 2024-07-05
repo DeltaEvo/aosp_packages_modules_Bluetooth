@@ -3642,7 +3642,7 @@ void btm_sec_connected(const RawAddress& bda, uint16_t handle, tHCI_STATUS statu
 
     if (status == HCI_ERR_CONNECTION_TOUT || status == HCI_ERR_LMP_RESPONSE_TIMEOUT ||
         status == HCI_ERR_UNSPECIFIED || status == HCI_ERR_PAGE_TIMEOUT) {
-      btm_sec_dev_rec_cback_event(p_dev_rec, BTM_DEVICE_TIMEOUT, false);
+      btm_sec_dev_rec_cback_event(p_dev_rec, tBTM_STATUS::BTM_DEVICE_TIMEOUT, false);
     } else {
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_PROCESSING, false);
     }
