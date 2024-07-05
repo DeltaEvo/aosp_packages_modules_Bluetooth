@@ -1202,53 +1202,10 @@ protected:
               if (!group) {
                 return;
               }
-              auto* stream_conf = &group->stream_conf;
-              if (!stream_conf->stream_params.sink.stream_locations.empty() ||
-                  !stream_conf->stream_params.source.stream_locations.empty()) {
-                stream_conf->stream_params.sink.stream_locations.erase(
-                        std::remove_if(
-                                stream_conf->stream_params.sink.stream_locations.begin(),
-                                stream_conf->stream_params.sink.stream_locations.end(),
-                                [leAudioDevice, &stream_conf](auto& pair) {
-                                  auto ases = leAudioDevice->GetAsesByCisConnHdl(pair.first);
-                                  if (ases.sink) {
-                                    stream_conf->stream_params.sink.num_of_devices--;
-                                    stream_conf->stream_params.sink.num_of_channels -=
-                                            ases.sink->channel_count;
 
-                                    log::info(
-                                            ", Source Number Of Devices: {}"
-                                            ", Source Number Of Channels: {}",
-                                            stream_conf->stream_params.source.num_of_devices,
-                                            stream_conf->stream_params.source.num_of_channels);
-                                  }
-                                  return ases.sink;
-                                }),
-                        stream_conf->stream_params.sink.stream_locations.end());
-
-                stream_conf->stream_params.source.stream_locations.erase(
-                        std::remove_if(
-                                stream_conf->stream_params.source.stream_locations.begin(),
-                                stream_conf->stream_params.source.stream_locations.end(),
-                                [leAudioDevice, &stream_conf](auto& pair) {
-                                  auto ases = leAudioDevice->GetAsesByCisConnHdl(pair.first);
-                                  if (ases.source) {
-                                    stream_conf->stream_params.source.num_of_devices--;
-                                    stream_conf->stream_params.source.num_of_channels -=
-                                            ases.source->channel_count;
-
-                                    log::info(
-                                            ", Source Number Of Devices: {}, Source Number Of "
-                                            "Channels: {}",
-                                            stream_conf->stream_params.source.num_of_devices,
-                                            stream_conf->stream_params.source.num_of_channels);
-                                  }
-                                  return ases.source;
-                                }),
-                        stream_conf->stream_params.source.stream_locations.end());
+              for (auto& ase : leAudioDevice->ases_) {
+                group->RemoveCisFromStreamIfNeeded(leAudioDevice, ase.cis_conn_hdl);
               }
-
-              group->cig.UnassignCis(leAudioDevice);
 
               if (group->IsEmpty()) {
                 group->cig.SetState(bluetooth::le_audio::types::CigState::NONE);
