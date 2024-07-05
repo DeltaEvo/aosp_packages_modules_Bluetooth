@@ -210,7 +210,7 @@ inline void set_le_scan_mode_to_ctrl_state(uint32_t duty_cycle, tBTM_CONTRL_STAT
  * Description      register or deregister with power manager
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if successful,
- *                  BTM_NO_RESOURCES if no room to hold registration
+ *                  tBTM_STATUS::BTM_NO_RESOURCES if no room to hold registration
  *                  tBTM_STATUS::BTM_ILLEGAL_VALUE
  *
  ******************************************************************************/

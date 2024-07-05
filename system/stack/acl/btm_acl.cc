@@ -528,7 +528,7 @@ tBTM_STATUS BTM_GetRole(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role) {
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if already in specified role.
  *                  tBTM_STATUS::BTM_CMD_STARTED if command issued to controller.
- *                  BTM_NO_RESOURCES if couldn't allocate memory to issue
+ *                  tBTM_STATUS::BTM_NO_RESOURCES if couldn't allocate memory to issue
  *                                   command
  *                  BTM_UNKNOWN_ADDR if no active link with bd addr specified
  *                  tBTM_STATUS::BTM_MODE_UNSUPPORTED if local device does not support role
@@ -560,7 +560,7 @@ tBTM_STATUS BTM_SwitchRoleToCentral(const RawAddress& remote_bd_addr) {
 
   if (get_btm_client_interface().sco.BTM_IsScoActiveByBdaddr(remote_bd_addr)) {
     log::info("An active SCO to device prevents role switch at this time");
-    return BTM_NO_RESOURCES;
+    return tBTM_STATUS::BTM_NO_RESOURCES;
   }
 
   if (!p_acl->is_switch_role_idle()) {

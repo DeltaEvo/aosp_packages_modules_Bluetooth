@@ -809,7 +809,7 @@ void bta_dm_encrypt_cback(RawAddress bd_addr, tBT_TRANSPORT transport, void* /* 
     case BTM_WRONG_MODE:
       bta_status = BTA_WRONG_MODE;
       break;
-    case BTM_NO_RESOURCES:
+    case tBTM_STATUS::BTM_NO_RESOURCES:
       bta_status = BTA_NO_RESOURCES;
       break;
     case tBTM_STATUS::BTM_BUSY:

@@ -667,12 +667,12 @@ tBTM_STATUS btm_sec_bond_by_transport(const RawAddress& bd_addr, tBLE_ADDR_TYPE 
   p_dev_rec = btm_find_or_alloc_dev(bd_addr);
   if (p_dev_rec == NULL) {
     log::error("No memory to allocate new p_dev_rec");
-    return BTM_NO_RESOURCES;
+    return tBTM_STATUS::BTM_NO_RESOURCES;
   }
 
   if (bluetooth::shim::GetController() == nullptr) {
     log::error("controller module is not ready");
-    return BTM_NO_RESOURCES;
+    return tBTM_STATUS::BTM_NO_RESOURCES;
   }
 
   log::verbose("before update sec_flags=0x{:x}", p_dev_rec->sec_rec.sec_flags);
@@ -689,7 +689,7 @@ tBTM_STATUS btm_sec_bond_by_transport(const RawAddress& bd_addr, tBLE_ADDR_TYPE 
   /* Tell controller to get rid of the link key if it has one stored */
   if ((BTM_DeleteStoredLinkKey(&bd_addr, NULL)) != tBTM_STATUS::BTM_SUCCESS) {
     log::error("Failed to delete stored link keys");
-    return BTM_NO_RESOURCES;
+    return tBTM_STATUS::BTM_NO_RESOURCES;
   }
 
   btm_sec_cb.pairing_bda = bd_addr;
@@ -713,7 +713,7 @@ tBTM_STATUS btm_sec_bond_by_transport(const RawAddress& bd_addr, tBLE_ADDR_TYPE 
     }
 
     btm_sec_cb.pairing_flags = 0;
-    return BTM_NO_RESOURCES;
+    return tBTM_STATUS::BTM_NO_RESOURCES;
   }
 
   p_dev_rec->sec_rec.sec_flags &=
@@ -2053,7 +2053,7 @@ void btm_sec_abort_access_req(const RawAddress& bd_addr) {
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if an ACL connection is already up
  *                  tBTM_STATUS::BTM_CMD_STARTED if the ACL connection has been requested
- *                  BTM_NO_RESOURCES if failed to start the ACL connection
+ *                  tBTM_STATUS::BTM_NO_RESOURCES if failed to start the ACL connection
  *
  ******************************************************************************/
 static tBTM_STATUS btm_sec_dd_create_conn(tBTM_SEC_DEV_REC* p_dev_rec) {
@@ -2066,8 +2066,8 @@ static tBTM_STATUS btm_sec_dd_create_conn(tBTM_SEC_DEV_REC* p_dev_rec) {
       return tBTM_STATUS::BTM_SUCCESS;
     }
     return tBTM_STATUS::BTM_CMD_STARTED;
-  } else if (status == BTM_NO_RESOURCES) {
-    return BTM_NO_RESOURCES;
+  } else if (status == tBTM_STATUS::BTM_NO_RESOURCES) {
+    return tBTM_STATUS::BTM_NO_RESOURCES;
   }
 
   /* set up the control block to indicated dedicated bonding */
@@ -4402,7 +4402,7 @@ void btm_sec_update_clock_offset(uint16_t handle, uint16_t clock_offset) {
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS     - permission is granted
  *                  tBTM_STATUS::BTM_CMD_STARTED - in process
- *                  BTM_NO_RESOURCES  - permission declined
+ *                  tBTM_STATUS::BTM_NO_RESOURCES  - permission declined
  *
  ******************************************************************************/
 tBTM_STATUS btm_sec_execute_procedure(tBTM_SEC_DEV_REC* p_dev_rec) {
@@ -4423,7 +4423,7 @@ tBTM_STATUS btm_sec_execute_procedure(tBTM_SEC_DEV_REC* p_dev_rec) {
     log::debug("Security Manager: Start get name");
     if (!btm_sec_start_get_name(p_dev_rec)) {
       log::warn("Unable to start remote name request");
-      return BTM_NO_RESOURCES;
+      return tBTM_STATUS::BTM_NO_RESOURCES;
     }
     return tBTM_STATUS::BTM_CMD_STARTED;
   }

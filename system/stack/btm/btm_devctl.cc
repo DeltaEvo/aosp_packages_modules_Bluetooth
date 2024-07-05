@@ -352,7 +352,7 @@ tBTM_STATUS BTM_SetLocalDeviceName(const char* p_name) {
  * Returns          status of the operation
  *                  If success, tBTM_STATUS::BTM_SUCCESS is returned and p_name points stored
  *                              local device name
- *                  If BTM doesn't store local device name, BTM_NO_RESOURCES is
+ *                  If BTM doesn't store local device name, tBTM_STATUS::BTM_NO_RESOURCES is
  *                              is returned and p_name is set to NULL
  *
  ******************************************************************************/
@@ -374,7 +374,7 @@ tBTM_STATUS BTM_ReadLocalDeviceName(const char** p_name) {
 tBTM_STATUS BTM_ReadLocalDeviceNameFromController(tBTM_CMPL_CB* p_rln_cmpl_cback) {
   /* Check if rln already in progress */
   if (btm_cb.devcb.p_rln_cmpl_cb) {
-    return BTM_NO_RESOURCES;
+    return tBTM_STATUS::BTM_NO_RESOURCES;
   }
 
   /* Save callback */
@@ -511,7 +511,7 @@ void BTM_WriteVoiceSettings(uint16_t settings) {
  *
  * Returns
  *      tBTM_STATUS::BTM_SUCCESS         Command sent.
- *      BTM_NO_RESOURCES    If out of resources to send the command.
+ *      tBTM_STATUS::BTM_NO_RESOURCES    If out of resources to send the command.
  *
  *
  ******************************************************************************/
@@ -528,12 +528,12 @@ tBTM_STATUS BTM_EnableTestMode(void) {
 
   /* put device to connectable mode */
   if (BTM_SetConnectability(BTM_CONNECTABLE) != tBTM_STATUS::BTM_SUCCESS) {
-    return BTM_NO_RESOURCES;
+    return tBTM_STATUS::BTM_NO_RESOURCES;
   }
 
   /* put device to discoverable mode */
   if (BTM_SetDiscoverability(BTM_GENERAL_DISCOVERABLE) != tBTM_STATUS::BTM_SUCCESS) {
-    return BTM_NO_RESOURCES;
+    return tBTM_STATUS::BTM_NO_RESOURCES;
   }
 
   /* mask off all of event from controller */

@@ -259,7 +259,7 @@ static bool is_inquery_by_rssi() { return osi_property_get_bool(PROPERTY_INQ_BY_
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if successful
  *                  tBTM_STATUS::BTM_BUSY if a setting of the filter is already in progress
- *                  BTM_NO_RESOURCES if couldn't get a memory pool buffer
+ *                  tBTM_STATUS::BTM_NO_RESOURCES if couldn't get a memory pool buffer
  *                  tBTM_STATUS::BTM_ILLEGAL_VALUE if a bad parameter was detected
  *                  BTM_WRONG_MODE if the device is not up.
  *
@@ -402,7 +402,7 @@ void BTM_EnableInterlacedPageScan() {
  * Output Params:   mode - standard, with RSSI, extended
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if successful
- *                  BTM_NO_RESOURCES if couldn't get a memory pool buffer
+ *                  tBTM_STATUS::BTM_NO_RESOURCES if couldn't get a memory pool buffer
  *                  tBTM_STATUS::BTM_ILLEGAL_VALUE if a bad parameter was detected
  *                  BTM_WRONG_MODE if the device is not up.
  *
@@ -442,7 +442,7 @@ tBTM_STATUS BTM_SetInquiryMode(uint8_t mode) {
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if successful
  *                  tBTM_STATUS::BTM_ILLEGAL_VALUE if a bad parameter is detected
- *                  BTM_NO_RESOURCES if could not allocate a message buffer
+ *                  tBTM_STATUS::BTM_NO_RESOURCES if could not allocate a message buffer
  *                  BTM_WRONG_MODE if the device is not up.
  *
  ******************************************************************************/
@@ -451,7 +451,7 @@ tBTM_STATUS BTM_SetConnectability(uint16_t page_mode) {
 
   if (bluetooth::shim::GetController()->SupportsBle()) {
     if (btm_ble_set_connectability(page_mode) != tBTM_STATUS::BTM_SUCCESS) {
-      return BTM_NO_RESOURCES;
+      return tBTM_STATUS::BTM_NO_RESOURCES;
     }
     btm_cb.btm_inq_vars.connectable_mode &= (~BTM_BLE_CONNECTABLE_MASK);
     btm_cb.btm_inq_vars.connectable_mode |= (page_mode & BTM_BLE_CONNECTABLE_MASK);
@@ -660,7 +660,7 @@ static tBTM_STATUS BTM_StartLeScan() {
  *                  tBTM_STATUS::BTM_CMD_STARTED if successfully initiated
  *                  tBTM_STATUS::BTM_BUSY if already in progress
  *                  tBTM_STATUS::BTM_ILLEGAL_VALUE if parameter(s) are out of range
- *                  BTM_NO_RESOURCES if could not allocate resources to start
+ *                  tBTM_STATUS::BTM_NO_RESOURCES if could not allocate resources to start
  *                                   the command
  *                  BTM_WRONG_MODE if the device is not up.
  *

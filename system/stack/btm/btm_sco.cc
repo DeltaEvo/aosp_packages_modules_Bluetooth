@@ -686,7 +686,7 @@ static tBTM_STATUS btm_send_connect_request(uint16_t acl_handle, enh_esco_params
  * Returns          BTM_UNKNOWN_ADDR if the ACL connection is not up
  *                  tBTM_STATUS::BTM_BUSY         if another SCO being set up to
  *                                   the same BD address
- *                  BTM_NO_RESOURCES if the max SCO limit has been reached
+ *                  tBTM_STATUS::BTM_NO_RESOURCES if the max SCO limit has been reached
  *                  tBTM_STATUS::BTM_CMD_STARTED  if the connection establishment is started.
  *                                   In this case, "*p_sco_inx" is filled in
  *                                   with the sco index used for the connection.
@@ -701,7 +701,7 @@ tBTM_STATUS BTM_CreateSco(const RawAddress* remote_bda, bool is_orig, uint16_t p
   *p_sco_inx = BTM_INVALID_SCO_INDEX;
 
   if (BTM_MAX_SCO_LINKS == 0) {
-    return BTM_NO_RESOURCES;
+    return tBTM_STATUS::BTM_NO_RESOURCES;
   }
 
   /* If originating, ensure that there is an ACL connection to the BD Address */
@@ -800,7 +800,7 @@ tBTM_STATUS BTM_CreateSco(const RawAddress* remote_bda, bool is_orig, uint16_t p
 
           if ((btm_send_connect_request(acl_handle, p_setup)) != tBTM_STATUS::BTM_CMD_STARTED) {
             log::error("failed to send connect request for {}", *remote_bda);
-            return BTM_NO_RESOURCES;
+            return tBTM_STATUS::BTM_NO_RESOURCES;
           }
 
           p->state = SCO_ST_CONNECTING;
@@ -822,7 +822,7 @@ tBTM_STATUS BTM_CreateSco(const RawAddress* remote_bda, bool is_orig, uint16_t p
 
   /* If here, all SCO blocks in use */
   log::error("all SCO control blocks are in use");
-  return BTM_NO_RESOURCES;
+  return tBTM_STATUS::BTM_NO_RESOURCES;
 }
 
 /*******************************************************************************
@@ -1144,7 +1144,7 @@ tBTM_STATUS BTM_RemoveSco(uint16_t sco_inx) {
   log::verbose("");
 
   if (BTM_MAX_SCO_LINKS == 0) {
-    return BTM_NO_RESOURCES;
+    return tBTM_STATUS::BTM_NO_RESOURCES;
   }
 
   /* Validity check */
@@ -1434,7 +1434,7 @@ tBTM_STATUS BTM_RegForEScoEvts(uint16_t sco_inx, tBTM_ESCO_CBACK* p_esco_cback) 
  *                        a change packet type request is sent out instead.
  *
  * Returns          tBTM_STATUS::BTM_CMD_STARTED if command is successfully initiated.
- *                  BTM_NO_RESOURCES - not enough resources to initiate command.
+ *                  tBTM_STATUS::BTM_NO_RESOURCES - not enough resources to initiate command.
  *                  BTM_WRONG_MODE if no connection with a peer device or bad
  *                                 sco_inx.
  *

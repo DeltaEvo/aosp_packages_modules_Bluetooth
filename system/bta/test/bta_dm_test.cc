@@ -278,7 +278,7 @@ TEST_F(BtaDmTest, bta_dm_encrypt_cback) {
   device->p_encrypt_cback = BTA_DM_ENCRYPT_CBACK;
   bta_dm_encrypt_cback(kRawAddress, transport, nullptr, BTM_WRONG_MODE);
   device->p_encrypt_cback = BTA_DM_ENCRYPT_CBACK;
-  bta_dm_encrypt_cback(kRawAddress, transport, nullptr, BTM_NO_RESOURCES);
+  bta_dm_encrypt_cback(kRawAddress, transport, nullptr, tBTM_STATUS::BTM_NO_RESOURCES);
   device->p_encrypt_cback = BTA_DM_ENCRYPT_CBACK;
   bta_dm_encrypt_cback(kRawAddress, transport, nullptr, tBTM_STATUS::BTM_BUSY);
   device->p_encrypt_cback = BTA_DM_ENCRYPT_CBACK;

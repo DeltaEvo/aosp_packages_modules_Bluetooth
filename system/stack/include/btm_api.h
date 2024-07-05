@@ -93,7 +93,7 @@ void BTM_reset_complete();
  * Returns          status of the operation
  *                  If success, tBTM_STATUS::BTM_SUCCESS is returned and p_name points stored
  *                              local device name
- *                  If BTM doesn't store local device name, BTM_NO_RESOURCES is
+ *                  If BTM doesn't store local device name, tBTM_STATUS::BTM_NO_RESOURCES is
  *                              is returned and p_name is set to NULL
  *
  ******************************************************************************/
@@ -162,7 +162,7 @@ void BTM_WriteVoiceSettings(uint16_t settings);
  *
  * Returns
  *      tBTM_STATUS::BTM_SUCCESS         Command sent.
- *      BTM_NO_RESOURCES    If out of resources to send the command.
+ *      tBTM_STATUS::BTM_NO_RESOURCES    If out of resources to send the command.
  *
  *
  ******************************************************************************/
@@ -187,7 +187,7 @@ void BTM_WriteVoiceSettings(uint16_t settings);
  *                                  sent to HCI.
  *                  tBTM_STATUS::BTM_BUSY if already in progress
  *                  BTM_UNKNOWN_ADDR if device address is bad
- *                  BTM_NO_RESOURCES if resources could not be allocated to
+ *                  tBTM_STATUS::BTM_NO_RESOURCES if resources could not be allocated to
  *                                   start the command
  *                  BTM_WRONG_MODE if the device is not up.
  *
@@ -208,7 +208,7 @@ void BTM_WriteVoiceSettings(uint16_t settings);
  * Returns
  *                  tBTM_STATUS::BTM_CMD_STARTED is returned if the request was successfully
  *                                  sent to HCI.
- *                  BTM_NO_RESOURCES if resources could not be allocated to
+ *                  tBTM_STATUS::BTM_NO_RESOURCES if resources could not be allocated to
  *                                   start the command
  *                  BTM_WRONG_MODE if there is no active remote name request.
  *
@@ -322,7 +322,7 @@ void BTM_WriteVoiceSettings(uint16_t settings);
  * Returns          BTM_UNKNOWN_ADDR if the ACL connection is not up
  *                  tBTM_STATUS::BTM_BUSY         if another SCO being set up to
  *                                   the same BD address
- *                  BTM_NO_RESOURCES if the max SCO limit has been reached
+ *                  tBTM_STATUS::BTM_NO_RESOURCES if the max SCO limit has been reached
  *                  tBTM_STATUS::BTM_CMD_STARTED  if the connection establishment is started.
  *                                   In this case, "*p_sco_inx" is filled in
  *                                   with the sco index used for the connection.

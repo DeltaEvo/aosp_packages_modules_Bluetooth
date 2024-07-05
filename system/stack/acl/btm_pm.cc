@@ -121,7 +121,7 @@ static tBTM_STATUS btm_pm_snd_md_req(uint16_t handle, uint8_t pm_id, int link_in
  * Description      register or deregister with power manager
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if successful,
- *                  BTM_NO_RESOURCES if no room to hold registration
+ *                  tBTM_STATUS::BTM_NO_RESOURCES if no room to hold registration
  *                  tBTM_STATUS::BTM_ILLEGAL_VALUE
  *
  ******************************************************************************/
@@ -146,7 +146,7 @@ tBTM_STATUS BTM_PmRegister(uint8_t mask, uint8_t* p_pm_id, tBTM_PM_STATUS_CBACK*
     return tBTM_STATUS::BTM_SUCCESS;
   }
 
-  return BTM_NO_RESOURCES;
+  return tBTM_STATUS::BTM_NO_RESOURCES;
 }
 
 void BTM_PM_OnConnected(uint16_t handle, const RawAddress& remote_bda) {
@@ -597,7 +597,7 @@ static tBTM_STATUS btm_pm_snd_md_req(uint16_t handle, uint8_t pm_id, int link_in
   if (pm_pend_link == 0) {
     /* the command was not sent */
     log::error("pm_pending_link maxed out");
-    return BTM_NO_RESOURCES;
+    return tBTM_STATUS::BTM_NO_RESOURCES;
   }
 
   return tBTM_STATUS::BTM_CMD_STARTED;
