@@ -400,7 +400,8 @@ bool VolumeControlDevice::IsEncryptionEnabled() {
 }
 
 bool VolumeControlDevice::EnableEncryption() {
-  int result = BTM_SetEncryption(address, BT_TRANSPORT_LE, nullptr, nullptr, BTM_BLE_SEC_ENCRYPT);
+  tBTM_STATUS result =
+          BTM_SetEncryption(address, BT_TRANSPORT_LE, nullptr, nullptr, BTM_BLE_SEC_ENCRYPT);
   log::info("{}: result=0x{:02x}", address, result);
 
   return result != BTM_ERR_KEY_MISSING;

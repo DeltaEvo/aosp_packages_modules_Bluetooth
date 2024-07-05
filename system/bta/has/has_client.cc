@@ -1870,7 +1870,7 @@ private:
       return;
     }
 
-    int result =
+    tBTM_STATUS result =
             BTM_SetEncryption(device->addr, BT_TRANSPORT_LE, nullptr, nullptr, BTM_BLE_SEC_ENCRYPT);
 
     log::info("Encryption required for {}. Request result: 0x{:02x}", device->addr, result);

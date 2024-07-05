@@ -188,7 +188,7 @@ public:
     }
   }
 
-  void OnEncryptionComplete(const RawAddress& address, uint8_t success) {
+  void OnEncryptionComplete(const RawAddress& address, tBTM_STATUS success) {
     VolumeControlDevice* device = volume_control_devices_.FindByAddress(address);
     if (!device) {
       log::error("Skipping unknown device {}", address);
@@ -196,7 +196,7 @@ public:
     }
 
     if (success != BTM_SUCCESS) {
-      log::error("encryption failed status: {}", int{success});
+      log::error("encryption failed status: {}", btm_status_text(success));
       // If the encryption failed, do not remove the device.
       // Disconnect only, since the Android will try to re-enable encryption
       // after disconnection
@@ -1158,7 +1158,7 @@ private:
       } break;
 
       case BTA_GATTC_ENC_CMPL_CB_EVT: {
-        uint8_t encryption_status;
+        tBTM_STATUS encryption_status;
         if (BTM_IsEncrypted(p_data->enc_cmpl.remote_bda, BT_TRANSPORT_LE)) {
           encryption_status = BTM_SUCCESS;
         } else {
