@@ -31,7 +31,7 @@ using namespace bluetooth;
 
 bool is_hfp_aptx_voice_enabled() {
   return com::android::bluetooth::flags::hfp_codec_aptx_voice() &&
-         GET_SYSPROP(Hfp, codec_aptx_voice, false);
+         android::sysprop::bluetooth::Hfp::codec_aptx_voice().value_or(false);
 }
 
 static bool aptx_swb_codec_status;
@@ -97,7 +97,7 @@ void bta_ag_swb_handle_vs_at_events(tBTA_AG_SCB* p_scb, uint16_t cmd,
       if (p_scb->peer_codecs & BTA_AG_SCO_APTX_SWB_SETTINGS_Q0_MASK) {
         p_scb->sco_codec = BTA_AG_SCO_APTX_SWB_SETTINGS_Q0;
       } else if (p_scb->peer_codecs & BTM_SCO_CODEC_MSBC) {
-        p_scb->sco_codec = UUID_CODEC_MSBC;
+        p_scb->sco_codec = BTM_SCO_CODEC_MSBC;
       }
       bta_ag_send_qac(p_scb, NULL);
       log::verbose("Received AT+QAC, updating sco codec to SWB: {}",

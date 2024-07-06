@@ -125,7 +125,13 @@ cc_defaults {
                 "libcutils",
                 "libhidlbase",
                 "libstatslog_bt",
+                "libstatssocket",
                 "libutils",
+            ],
+            static_libs: [
+                "libexpresslog",
+                "libstatslog_express",
+                "libtextclassifier_hash_static",
             ],
             whole_static_libs: [
                 "android.hardware.bluetooth-V1-ndk",
@@ -520,6 +526,7 @@ cc_test {
     name: "bluetooth_test_gdx_unit",
     test_suites: ["device-tests"],
     defaults: [
+        "aconfig_lib_cc_shared_link.defaults",
         "gd_defaults",
         "mts_defaults",
     ],
@@ -548,7 +555,6 @@ cc_test {
         "BluetoothGeneratedDumpsysTestData_h",
     ],
     static_libs: [
-        "libaconfig_storage_read_api_cc",
         "libbase",
         "libbluetooth-dumpsys",
         "libbluetooth-dumpsys-test",

@@ -18,6 +18,18 @@
 
 #include "client_interface_aidl.h"
 
+typedef enum {
+  A2DP_CTRL_CMD_NONE,
+  A2DP_CTRL_CMD_CHECK_READY,
+  A2DP_CTRL_CMD_START,
+  A2DP_CTRL_CMD_STOP,
+  A2DP_CTRL_CMD_SUSPEND,
+  A2DP_CTRL_GET_INPUT_AUDIO_CONFIG,
+  A2DP_CTRL_GET_OUTPUT_AUDIO_CONFIG,
+  A2DP_CTRL_SET_OUTPUT_AUDIO_CONFIG,
+  A2DP_CTRL_GET_PRESENTATION_POSITION,
+} tA2DP_CTRL_CMD;
+
 namespace bluetooth {
 namespace audio {
 namespace aidl {
@@ -26,8 +38,6 @@ namespace a2dp {
 namespace {
 
 using ::bluetooth::audio::aidl::LatencyMode;
-
-BluetoothAudioCtrlAck a2dp_ack_to_bt_audio_ctrl_ack(tA2DP_CTRL_ACK ack);
 
 // Provide call-in APIs for the Bluetooth Audio HAL
 class A2dpTransport

@@ -43,7 +43,7 @@ pub async fn handle_find_by_type_value_request(
             continue;
         }
         if let Ok(value) = db.read_attribute(handle).await {
-            if value == request.get_attribute_value().get_raw_payload().collect::<Vec<_>>() {
+            if value == request.get_attribute_value_iter().collect::<Vec<_>>() {
                 // match found
                 if !matches.push(AttributeHandleRangeBuilder {
                     found_attribute_handle: handle.into(),
@@ -84,8 +84,8 @@ mod test {
                 test::test_att_db::TestAttDatabase,
             },
         },
-        packets::{AttAttributeDataChild, AttFindByTypeValueRequestBuilder},
-        utils::packet::{build_att_data, build_view_or_crash},
+        packets::AttFindByTypeValueRequestBuilder,
+        utils::packet::build_view_or_crash,
     };
 
     use super::*;
@@ -131,7 +131,7 @@ mod test {
             starting_handle: AttHandle(3).into(),
             ending_handle: AttHandle(5).into(),
             attribute_type: UUID.try_into().unwrap(),
-            attribute_value: build_att_data(AttAttributeDataChild::RawData(VALUE.into())),
+            attribute_value: VALUE.into(),
         });
         let response =
             tokio_test::block_on(handle_find_by_type_value_request(att_view.view(), 128, &db));
@@ -193,7 +193,7 @@ mod test {
             starting_handle: AttHandle(3).into(),
             ending_handle: AttHandle(5).into(),
             attribute_type: UUID.try_into().unwrap(),
-            attribute_value: build_att_data(AttAttributeDataChild::RawData(VALUE.into())),
+            attribute_value: VALUE.into(),
         });
         let response =
             tokio_test::block_on(handle_find_by_type_value_request(att_view.view(), 128, &db));
@@ -230,7 +230,7 @@ mod test {
             starting_handle: AttHandle(3).into(),
             ending_handle: AttHandle(1).into(),
             attribute_type: UUID.try_into().unwrap(),
-            attribute_value: build_att_data(AttAttributeDataChild::RawData(VALUE.into())),
+            attribute_value: VALUE.into(),
         });
         let response =
             tokio_test::block_on(handle_find_by_type_value_request(att_view.view(), 128, &db));
@@ -264,7 +264,7 @@ mod test {
             starting_handle: AttHandle(4).into(),
             ending_handle: AttHandle(5).into(),
             attribute_type: UUID.try_into().unwrap(),
-            attribute_value: build_att_data(AttAttributeDataChild::RawData(VALUE.into())),
+            attribute_value: VALUE.into(),
         });
         let response =
             tokio_test::block_on(handle_find_by_type_value_request(att_view.view(), 128, &db));
@@ -316,7 +316,7 @@ mod test {
             starting_handle: AttHandle(3).into(),
             ending_handle: AttHandle(4).into(),
             attribute_type: CHARACTERISTIC_UUID.try_into().unwrap(),
-            attribute_value: build_att_data(AttAttributeDataChild::RawData(VALUE.into())),
+            attribute_value: VALUE.into(),
         });
         let response =
             tokio_test::block_on(handle_find_by_type_value_request(att_view.view(), 128, &db));
@@ -364,7 +364,7 @@ mod test {
             starting_handle: AttHandle(3).into(),
             ending_handle: AttHandle(4).into(),
             attribute_type: UUID.try_into().unwrap(),
-            attribute_value: build_att_data(AttAttributeDataChild::RawData(VALUE.into())),
+            attribute_value: VALUE.into(),
         });
         let response =
             tokio_test::block_on(handle_find_by_type_value_request(att_view.view(), 5, &db));

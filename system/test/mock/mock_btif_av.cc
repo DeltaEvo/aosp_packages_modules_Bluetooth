@@ -42,8 +42,6 @@ struct btif_av_clear_remote_suspend_flag btif_av_clear_remote_suspend_flag;
 struct btif_av_find_by_handle btif_av_find_by_handle;
 struct btif_av_get_audio_delay btif_av_get_audio_delay;
 struct btif_av_get_peer_sep btif_av_get_peer_sep;
-struct btif_av_get_sink_interface btif_av_get_sink_interface;
-struct btif_av_get_src_interface btif_av_get_src_interface;
 struct btif_av_is_a2dp_offload_enabled btif_av_is_a2dp_offload_enabled;
 struct btif_av_is_a2dp_offload_running btif_av_is_a2dp_offload_running;
 struct btif_av_is_connected btif_av_is_connected;
@@ -60,7 +58,6 @@ struct btif_av_peer_prefers_mandatory_codec
     btif_av_peer_prefers_mandatory_codec;
 struct btif_av_peer_supports_3mbps btif_av_peer_supports_3mbps;
 struct btif_av_report_source_codec_state btif_av_report_source_codec_state;
-struct btif_av_reset_audio_delay btif_av_reset_audio_delay;
 struct btif_av_set_audio_delay btif_av_set_audio_delay;
 struct btif_av_set_dynamic_audio_buffer_size
     btif_av_set_dynamic_audio_buffer_size;
@@ -69,7 +66,6 @@ struct btif_av_sink_active_peer btif_av_sink_active_peer;
 struct btif_av_sink_execute_service btif_av_sink_execute_service;
 struct btif_av_source_active_peer btif_av_source_active_peer;
 struct btif_av_source_execute_service btif_av_source_execute_service;
-struct btif_av_src_disconnect_sink btif_av_src_disconnect_sink;
 struct btif_av_src_sink_coexist_enabled btif_av_src_sink_coexist_enabled;
 struct btif_av_stream_ready btif_av_stream_ready;
 struct btif_av_stream_start btif_av_stream_start;
@@ -93,9 +89,6 @@ namespace btif_av {
 const RawAddress& btif_av_find_by_handle::return_value = RawAddress::kEmpty;
 uint16_t btif_av_get_audio_delay::return_value = 0;
 uint8_t btif_av_get_peer_sep::return_value = 0;
-const btav_sink_interface_t* btif_av_get_sink_interface::return_value = nullptr;
-const btav_source_interface_t* btif_av_get_src_interface::return_value =
-    nullptr;
 bool btif_av_is_a2dp_offload_enabled::return_value = false;
 bool btif_av_is_a2dp_offload_running::return_value = false;
 bool btif_av_is_connected::return_value = false;
@@ -144,14 +137,6 @@ uint16_t btif_av_get_audio_delay(const A2dpType local_a2dp_type) {
 uint8_t btif_av_get_peer_sep(const A2dpType local_a2dp_type) {
   inc_func_call_count(__func__);
   return test::mock::btif_av::btif_av_get_peer_sep(local_a2dp_type);
-}
-const btav_sink_interface_t* btif_av_get_sink_interface(void) {
-  inc_func_call_count(__func__);
-  return test::mock::btif_av::btif_av_get_sink_interface();
-}
-const btav_source_interface_t* btif_av_get_src_interface(void) {
-  inc_func_call_count(__func__);
-  return test::mock::btif_av::btif_av_get_src_interface();
 }
 bool btif_av_is_a2dp_offload_enabled() {
   inc_func_call_count(__func__);
@@ -228,10 +213,6 @@ void btif_av_report_source_codec_state(
       peer_address, codec_config, codecs_local_capabilities,
       codecs_selectable_capabilities);
 }
-void btif_av_reset_audio_delay(void) {
-  inc_func_call_count(__func__);
-  test::mock::btif_av::btif_av_reset_audio_delay();
-}
 void btif_av_set_audio_delay(const RawAddress& peer_address, uint16_t delay,
                              const A2dpType local_a2dp_type) {
   inc_func_call_count(__func__);
@@ -262,10 +243,6 @@ RawAddress btif_av_source_active_peer(void) {
 bt_status_t btif_av_source_execute_service(bool enable) {
   inc_func_call_count(__func__);
   return test::mock::btif_av::btif_av_source_execute_service(enable);
-}
-void btif_av_src_disconnect_sink(const RawAddress& peer_address) {
-  inc_func_call_count(__func__);
-  test::mock::btif_av::btif_av_src_disconnect_sink(peer_address);
 }
 bool btif_av_src_sink_coexist_enabled(void) {
   inc_func_call_count(__func__);

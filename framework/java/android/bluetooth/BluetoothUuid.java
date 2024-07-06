@@ -16,15 +16,12 @@
 
 package android.bluetooth;
 
-import android.annotation.FlaggedApi;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.os.ParcelUuid;
-
-import com.android.bluetooth.flags.Flags;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -266,7 +263,6 @@ public final class BluetoothUuid {
      */
     @NonNull
     @SystemApi
-    @FlaggedApi(Flags.FLAG_MFI_HAS_UUID)
     public static final ParcelUuid MFI_HAS =
             ParcelUuid.fromString("7D74F4BD-C74A-4431-862C-CCE884371592");
 

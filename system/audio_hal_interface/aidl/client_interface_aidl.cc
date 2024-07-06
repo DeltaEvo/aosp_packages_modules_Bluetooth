@@ -469,8 +469,8 @@ void BluetoothAudioClientInterface::StreamStarted(
     log::info("{} ignored", ack);
     return;
   }
-  BluetoothAudioStatus status = BluetoothAudioCtrlAckToHalStatus(ack);
 
+  auto status = BluetoothAudioCtrlAckToHalStatus(ack);
   auto aidl_retval = provider_->streamStarted(status);
 
   if (!aidl_retval.isOk()) {
@@ -488,8 +488,8 @@ void BluetoothAudioClientInterface::StreamSuspended(
     log::info("{} ignored", ack);
     return;
   }
-  BluetoothAudioStatus status = BluetoothAudioCtrlAckToHalStatus(ack);
 
+  auto status = BluetoothAudioCtrlAckToHalStatus(ack);
   auto aidl_retval = provider_->streamSuspended(status);
 
   if (!aidl_retval.isOk()) {
@@ -538,6 +538,10 @@ void BluetoothAudioClientInterface::FlushAudioData() {
     return;
   }
   size_t size = data_mq_->availableToRead();
+  if (size == 0) {
+    return;
+  }
+
   std::vector<MqDataType> buffer(size);
 
   if (data_mq_->read(buffer.data(), size) != size) {

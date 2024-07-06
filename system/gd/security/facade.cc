@@ -278,33 +278,35 @@ class SecurityModuleFacadeService : public SecurityModuleFacade::Service,
     advertising_callback_events_.OnIncomingEvent(advertising_set_started);
   }
 
-  void OnAdvertisingEnabled(uint8_t /* advertiser_id */, bool /* enable */, uint8_t /* status */) {
+  void OnAdvertisingEnabled(uint8_t /* advertiser_id */, bool /* enable */,
+                            AdvertisingStatus /* status */) {
     // Not used yet
   }
 
-  void OnAdvertisingDataSet(uint8_t /* advertiser_id */, uint8_t /* status */) {
+  void OnAdvertisingDataSet(uint8_t /* advertiser_id */, AdvertisingStatus /* status */) {
     // Not used yet
   }
 
-  void OnScanResponseDataSet(uint8_t /* advertiser_id */, uint8_t /* status */) {
+  void OnScanResponseDataSet(uint8_t /* advertiser_id */, AdvertisingStatus /* status */) {
     // Not used yet
   }
 
-  void OnAdvertisingParametersUpdated(
-      uint8_t /* advertiser_id */, int8_t /* tx_power */, uint8_t /* status */) {
+  void OnAdvertisingParametersUpdated(uint8_t /* advertiser_id */, int8_t /* tx_power */,
+                                      AdvertisingStatus /* status */) {
     // Not used yet
   }
 
-  void OnPeriodicAdvertisingParametersUpdated(uint8_t /* advertiser_id */, uint8_t /* status */) {
+  void OnPeriodicAdvertisingParametersUpdated(uint8_t /* advertiser_id */,
+                                              AdvertisingStatus /* status */) {
     // Not used yet
   }
 
-  void OnPeriodicAdvertisingDataSet(uint8_t /* advertiser_id */, uint8_t /* status */) {
+  void OnPeriodicAdvertisingDataSet(uint8_t /* advertiser_id */, AdvertisingStatus /* status */) {
     // Not used yet
   }
 
-  void OnPeriodicAdvertisingEnabled(
-      uint8_t /* advertiser_id */, bool /* enable */, uint8_t /* status */) {
+  void OnPeriodicAdvertisingEnabled(uint8_t /* advertiser_id */, bool /* enable */,
+                                    AdvertisingStatus /* status */) {
     // Not used yet
   }
 

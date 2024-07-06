@@ -54,3 +54,23 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "pairing_name_discovery_addresss_mismatch"
+    namespace: "bluetooth"
+    description: "Do not abort pairing if name discovery for a another device fails"
+    bug: "349144497"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "guest_mode_bond"
+    namespace: "bluetooth"
+    description: "Do not remove guest mode bonded devices on BT restart in guest mode"
+    bug: "349882273"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}

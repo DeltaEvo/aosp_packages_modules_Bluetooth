@@ -20,12 +20,12 @@
 
 #include "a2dp_encoding.h"
 #include "a2dp_sbc_constants.h"
-#include "audio_a2dp_hw/include/audio_a2dp_hw.h"
 #include "btif/include/btif_a2dp_source.h"
 #include "btif/include/btif_av.h"
 #include "btif/include/btif_av_co.h"
 #include "btif/include/btif_hf.h"
 #include "common/message_loop_thread.h"
+#include "hardware/bt_av.h"
 #include "os/log.h"
 #include "osi/include/properties.h"
 #include "types/raw_address.h"
@@ -70,8 +70,8 @@ bool setup_codec();
  ***/
 void start_session();
 void end_session();
-void ack_stream_started(const tA2DP_CTRL_ACK& status);
-void ack_stream_suspended(const tA2DP_CTRL_ACK& status);
+void ack_stream_started(::bluetooth::audio::a2dp::BluetoothAudioStatus status);
+void ack_stream_suspended(::bluetooth::audio::a2dp::BluetoothAudioStatus status);
 
 /***
  * Read from the FMQ of BluetoothAudio HAL

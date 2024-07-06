@@ -92,11 +92,11 @@ bool update_codec_offloading_capabilities::return_value = false;
 }  // namespace test
 
 // Mocked functions, if any
-void ack_stream_started(const tA2DP_CTRL_ACK& status) {
+void ack_stream_started(BluetoothAudioStatus status) {
   inc_func_call_count(__func__);
   test::mock::audio_hal_interface_a2dp_encoding::ack_stream_started(status);
 }
-void ack_stream_suspended(const tA2DP_CTRL_ACK& status) {
+void ack_stream_suspended(BluetoothAudioStatus status) {
   inc_func_call_count(__func__);
   test::mock::audio_hal_interface_a2dp_encoding::ack_stream_suspended(status);
 }

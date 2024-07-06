@@ -28,7 +28,6 @@
 #include <frameworks/proto_logging/stats/enums/bluetooth/a2dp/enums.pb.h>
 #include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
 
-#include <chrono>
 #include <cstdint>
 #include <future>
 #include <mutex>
@@ -38,7 +37,6 @@
 #include "audio_hal_interface/a2dp_encoding.h"
 #include "btif/avrcp/avrcp_service.h"
 #include "btif/include/btif_a2dp.h"
-#include "btif/include/btif_a2dp_control.h"
 #include "btif/include/btif_a2dp_sink.h"
 #include "btif/include/btif_a2dp_source.h"
 #include "btif/include/btif_av_co.h"
@@ -53,9 +51,9 @@
 #include "device/include/device_iot_config.h"
 #include "hardware/bt_av.h"
 #include "include/hardware/bt_rc.h"
-#include "internal_include/bt_trace.h"
 #include "osi/include/alarm.h"
 #include "osi/include/allocator.h"
+#include "osi/include/properties.h"
 #include "stack/include/avrc_api.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_uuid16.h"
@@ -73,13 +71,17 @@ using namespace bluetooth;
 /*****************************************************************************
  *  Constants & Macros
  *****************************************************************************/
-static const std::string kBtifAvSourceServiceName = "Advanced Audio Source";
-static const std::string kBtifAvSinkServiceName = "Advanced Audio Sink";
+static const char kBtifAvSourceServiceName[] = "Advanced Audio Source";
+static const char kBtifAvSinkServiceName[] = "Advanced Audio Sink";
 static constexpr int kDefaultMaxConnectedAudioDevices = 1;
 static constexpr tBTA_AV_HNDL kBtaHandleUnknown = 0;
 
 namespace {
 constexpr char kBtmLogHistoryTag[] = "A2DP";
+}
+
+static bool delay_reporting_enabled() {
+  return !osi_property_get_bool("persist.bluetooth.disabledelayreports", false);
 }
 
 /*****************************************************************************
@@ -143,7 +145,6 @@ class BtifAvEvent {
 };
 
 class BtifAvPeer;
-static bt_status_t sink_set_active_device(const RawAddress& peer_address);
 
 static void btif_av_sink_delete_active_peer(void);
 static void btif_av_source_delete_active_peer(void);
@@ -164,7 +165,7 @@ class BtifAvStateMachine : public bluetooth::common::StateMachine {
 
   class StateIdle : public State {
    public:
-    StateIdle(BtifAvStateMachine& sm)
+    explicit StateIdle(BtifAvStateMachine& sm)
         : State(sm, kStateIdle), peer_(sm.Peer()) {}
     void OnEnter() override;
     void OnExit() override;
@@ -176,7 +177,7 @@ class BtifAvStateMachine : public bluetooth::common::StateMachine {
 
   class StateOpening : public State {
    public:
-    StateOpening(BtifAvStateMachine& sm)
+    explicit StateOpening(BtifAvStateMachine& sm)
         : State(sm, kStateOpening), peer_(sm.Peer()) {}
     void OnEnter() override;
     void OnExit() override;
@@ -188,7 +189,7 @@ class BtifAvStateMachine : public bluetooth::common::StateMachine {
 
   class StateOpened : public State {
    public:
-    StateOpened(BtifAvStateMachine& sm)
+    explicit StateOpened(BtifAvStateMachine& sm)
         : State(sm, kStateOpened), peer_(sm.Peer()) {}
     void OnEnter() override;
     void OnExit() override;
@@ -200,7 +201,7 @@ class BtifAvStateMachine : public bluetooth::common::StateMachine {
 
   class StateStarted : public State {
    public:
-    StateStarted(BtifAvStateMachine& sm)
+    explicit StateStarted(BtifAvStateMachine& sm)
         : State(sm, kStateStarted), peer_(sm.Peer()) {}
     void OnEnter() override;
     void OnExit() override;
@@ -212,7 +213,7 @@ class BtifAvStateMachine : public bluetooth::common::StateMachine {
 
   class StateClosing : public State {
    public:
-    StateClosing(BtifAvStateMachine& sm)
+    explicit StateClosing(BtifAvStateMachine& sm)
         : State(sm, kStateClosing), peer_(sm.Peer()) {}
     void OnEnter() override;
     void OnExit() override;
@@ -222,7 +223,7 @@ class BtifAvStateMachine : public bluetooth::common::StateMachine {
     BtifAvPeer& peer_;
   };
 
-  BtifAvStateMachine(BtifAvPeer& btif_av_peer) : peer_(btif_av_peer) {
+  explicit BtifAvStateMachine(BtifAvPeer& btif_av_peer) : peer_(btif_av_peer) {
     state_idle_ = new StateIdle(*this);
     state_opening_ = new StateOpening(*this);
     state_opened_ = new StateOpened(*this);
@@ -410,7 +411,7 @@ class BtifAvSource {
   btav_source_callbacks_t* Callbacks() { return callbacks_; }
   bool Enabled() const { return enabled_; }
   bool A2dpOffloadEnabled() const { return a2dp_offload_enabled_; }
-  // TODO: b/321806163: Remove this method as part of flag cleanup
+  // TODO(b/321806163): Remove this method as part of flag cleanup
   void SetInvalidPeerCheck(bool invalid_peer_check) {
     invalid_peer_check_ = invalid_peer_check;
   }
@@ -654,7 +655,7 @@ class BtifAvSink {
   btav_sink_callbacks_t* Callbacks() { return callbacks_; }
   bool Enabled() const { return enabled_; }
 
-  // TODO: b/321806163: Remove this method as part of flag cleanup
+  // TODO(b/321806163): Remove this method as part of flag cleanup
   void SetInvalidPeerCheck(bool invalid_peer_check) {
     invalid_peer_check_ = invalid_peer_check;
   }
@@ -816,8 +817,6 @@ static BtifAvSink btif_av_sink;
     btif_rc_handler(e, d);         \
   } break;
 
-static bt_status_t src_disconnect_sink(const RawAddress& peer_address);
-static bt_status_t sink_disconnect_src(const RawAddress& peer_address);
 static void btif_av_source_dispatch_sm_event(const RawAddress& peer_address,
                                              btif_av_sm_event_t event);
 static void btif_av_sink_dispatch_sm_event(const RawAddress& peer_address,
@@ -844,19 +843,15 @@ static void btif_av_sink_initiate_av_open_timer_timeout(void* data);
 static void bta_av_sink_media_callback(const RawAddress& peer_address,
                                        tBTA_AV_EVT event,
                                        tBTA_AV_MEDIA* p_data);
-extern bool btif_av_both_enable(void);
-extern bool btif_av_is_connected_addr(const RawAddress& peer_address,
-                                      const A2dpType local_a2dp_type);
-extern bool btif_av_peer_is_sink(const RawAddress& peer_address);
-extern void btif_rc_check_pending_cmd(const RawAddress& peer_address);
-extern void btif_rc_get_addr_by_handle(uint8_t handle, RawAddress& rc_addr);
 
 static BtifAvPeer* btif_av_source_find_peer(const RawAddress& peer_address) {
   return btif_av_source.FindPeer(peer_address);
 }
+
 static BtifAvPeer* btif_av_sink_find_peer(const RawAddress& peer_address) {
   return btif_av_sink.FindPeer(peer_address);
 }
+
 static BtifAvPeer* btif_av_find_peer(const RawAddress& peer_address,
                                      const A2dpType local_a2dp_type) {
   if (com::android::bluetooth::flags::a2dp_concurrent_source_sink()) {
@@ -899,6 +894,7 @@ static BtifAvPeer* btif_av_find_peer(const RawAddress& peer_address,
   if (btif_av_sink.Enabled()) return btif_av_sink_find_peer(peer_address);
   return nullptr;
 }
+
 static BtifAvPeer* btif_av_find_active_peer(const A2dpType local_a2dp_type) {
   if (com::android::bluetooth::flags::a2dp_concurrent_source_sink()) {
     if (btif_av_source.Enabled() && local_a2dp_type == A2dpType::kSource)
@@ -948,7 +944,7 @@ const RawAddress& btif_av_find_by_handle(tBTA_AV_HNDL bta_handle) {
  *****************************************************************************/
 
 const char* dump_av_sm_event_name(btif_av_sm_event_t event) {
-  switch ((int)event) {
+  switch (static_cast<int>(event)) {
     CASE_RETURN_STR(BTA_AV_ENABLE_EVT)
     CASE_RETURN_STR(BTA_AV_REGISTER_EVT)
     CASE_RETURN_STR(BTA_AV_OPEN_EVT)
@@ -1039,15 +1035,17 @@ void BtifAvEvent::DeepCopy(uint32_t event, const void* p_data,
       log::assert_that(data_length >= sizeof(tBTA_AV),
                        "assert failed: data_length >= sizeof(tBTA_AV)");
       const tBTA_AV* av_src = (const tBTA_AV*)p_data;
-      tBTA_AV* av_dest = (tBTA_AV*)data_;
+      tBTA_AV* av_dest = reinterpret_cast<tBTA_AV*>(data_);
       if (av_src->meta_msg.p_data && av_src->meta_msg.len) {
-        av_dest->meta_msg.p_data = (uint8_t*)osi_calloc(av_src->meta_msg.len);
+        av_dest->meta_msg.p_data =
+            reinterpret_cast<uint8_t*>(osi_calloc(av_src->meta_msg.len));
         memcpy(av_dest->meta_msg.p_data, av_src->meta_msg.p_data,
                av_src->meta_msg.len);
       }
 
       if (av_src->meta_msg.p_msg) {
-        av_dest->meta_msg.p_msg = (tAVRC_MSG*)osi_calloc(sizeof(tAVRC_MSG));
+        av_dest->meta_msg.p_msg =
+            reinterpret_cast<tAVRC_MSG*>(osi_calloc(sizeof(tAVRC_MSG)));
         memcpy(av_dest->meta_msg.p_msg, av_src->meta_msg.p_msg,
                sizeof(tAVRC_MSG));
 
@@ -1056,15 +1054,15 @@ void BtifAvEvent::DeepCopy(uint32_t event, const void* p_data,
 
         if ((p_msg_src->hdr.opcode == AVRC_OP_VENDOR) &&
             (p_msg_src->vendor.p_vendor_data && p_msg_src->vendor.vendor_len)) {
-          p_msg_dest->vendor.p_vendor_data =
-              (uint8_t*)osi_calloc(p_msg_src->vendor.vendor_len);
+          p_msg_dest->vendor.p_vendor_data = reinterpret_cast<uint8_t*>(
+              osi_calloc(p_msg_src->vendor.vendor_len));
           memcpy(p_msg_dest->vendor.p_vendor_data,
                  p_msg_src->vendor.p_vendor_data, p_msg_src->vendor.vendor_len);
         }
         if ((p_msg_src->hdr.opcode == AVRC_OP_BROWSE) &&
             p_msg_src->browse.p_browse_data && p_msg_src->browse.browse_len) {
-          p_msg_dest->browse.p_browse_data =
-              (uint8_t*)osi_calloc(p_msg_src->browse.browse_len);
+          p_msg_dest->browse.p_browse_data = reinterpret_cast<uint8_t*>(
+              osi_calloc(p_msg_src->browse.browse_len));
           memcpy(p_msg_dest->browse.p_browse_data,
                  p_msg_src->browse.p_browse_data, p_msg_src->browse.browse_len);
         }
@@ -1079,8 +1077,9 @@ void BtifAvEvent::DeepCopy(uint32_t event, const void* p_data,
 void BtifAvEvent::DeepFree() {
   switch (event_) {
     case BTA_AV_META_MSG_EVT: {
-      tBTA_AV* av = (tBTA_AV*)data_;
-      osi_free_and_reset((void**)&av->meta_msg.p_data);
+      tBTA_AV* av = reinterpret_cast<tBTA_AV*>(data_);
+      osi_free(av->meta_msg.p_data);
+      av->meta_msg.p_data = nullptr;
 
       if (av->meta_msg.p_msg) {
         if (av->meta_msg.p_msg->hdr.opcode == AVRC_OP_VENDOR) {
@@ -1089,7 +1088,8 @@ void BtifAvEvent::DeepFree() {
         if (av->meta_msg.p_msg->hdr.opcode == AVRC_OP_BROWSE) {
           osi_free(av->meta_msg.p_msg->browse.p_browse_data);
         }
-        osi_free_and_reset((void**)&av->meta_msg.p_msg);
+        osi_free(av->meta_msg.p_msg);
+        av->meta_msg.p_msg = nullptr;
       }
     } break;
 
@@ -1097,7 +1097,8 @@ void BtifAvEvent::DeepFree() {
       break;
   }
 
-  osi_free_and_reset((void**)&data_);
+  osi_free(data_);
+  data_ = nullptr;
   data_length_ = 0;
 }
 
@@ -1401,7 +1402,7 @@ void BtifAvSource::DispatchSuspendStreamEvent(btif_av_sm_event_t event) {
   if (event != BTIF_AV_SUSPEND_STREAM_REQ_EVT &&
       event != BTIF_AV_STOP_STREAM_REQ_EVT) {
     log::error("Invalid event: {} id: {}", dump_av_sm_event_name(event),
-               (int)event);
+               static_cast<int>(event));
     return;
   }
   bool av_stream_idle = true;
@@ -1447,7 +1448,7 @@ void BtifAvSource::CleanupAllPeers() {
 
 void BtifAvSource::RegisterAllBtaHandles() {
   for (int peer_id = kPeerIdMin; peer_id < kPeerIdMax; peer_id++) {
-    BTA_AvRegister(BTA_AV_CHNL_AUDIO, kBtifAvSourceServiceName.c_str(), peer_id,
+    BTA_AvRegister(BTA_AV_CHNL_AUDIO, kBtifAvSourceServiceName, peer_id,
                    nullptr, UUID_SERVCLASS_AUDIO_SOURCE);
   }
 }
@@ -1723,7 +1724,7 @@ void BtifAvSink::CleanupAllPeers() {
 
 void BtifAvSink::RegisterAllBtaHandles() {
   for (int peer_id = kPeerIdMin; peer_id < kPeerIdMax; peer_id++) {
-    BTA_AvRegister(BTA_AV_CHNL_AUDIO, kBtifAvSinkServiceName.c_str(), peer_id,
+    BTA_AvRegister(BTA_AV_CHNL_AUDIO, kBtifAvSinkServiceName, peer_id,
                    bta_av_sink_media_callback, UUID_SERVCLASS_AUDIO_SINK);
   }
 }
@@ -1847,10 +1848,10 @@ bool BtifAvStateMachine::StateIdle::ProcessEvent(uint32_t event, void* p_data) {
       // Check whether connection is allowed
       if (peer_.IsSink()) {
         can_connect = btif_av_source.AllowedToConnect(peer_.PeerAddress());
-        if (!can_connect) src_disconnect_sink(peer_.PeerAddress());
+        if (!can_connect) btif_av_source_disconnect(peer_.PeerAddress());
       } else if (peer_.IsSource()) {
         can_connect = btif_av_sink.AllowedToConnect(peer_.PeerAddress());
-        if (!can_connect) sink_disconnect_src(peer_.PeerAddress());
+        if (!can_connect) btif_av_sink_disconnect(peer_.PeerAddress());
       }
       if (!can_connect) {
         log::error("Cannot connect to peer {}: too many connected peers",
@@ -1899,9 +1900,10 @@ bool BtifAvStateMachine::StateIdle::ProcessEvent(uint32_t event, void* p_data) {
           log::error("Source profile doesn't allow connection to peer:{}",
                      peer_.PeerAddress());
           if (btif_av_src_sink_coexist_enabled())
-            BTA_AvCloseRc(((tBTA_AV*)p_data)->rc_open.rc_handle);
+            BTA_AvCloseRc(
+                (reinterpret_cast<tBTA_AV*>(p_data))->rc_open.rc_handle);
           else
-            src_disconnect_sink(peer_.PeerAddress());
+            btif_av_source_disconnect(peer_.PeerAddress());
         }
       } else if (peer_.IsSource()) {
         can_connect = btif_av_sink.AllowedToConnect(peer_.PeerAddress());
@@ -1909,9 +1911,10 @@ bool BtifAvStateMachine::StateIdle::ProcessEvent(uint32_t event, void* p_data) {
           log::error("Sink profile doesn't allow connection to peer:{}",
                      peer_.PeerAddress());
           if (btif_av_src_sink_coexist_enabled())
-            BTA_AvCloseRc(((tBTA_AV*)p_data)->rc_open.rc_handle);
+            BTA_AvCloseRc(
+                (reinterpret_cast<tBTA_AV*>(p_data))->rc_open.rc_handle);
           else
-            sink_disconnect_src(peer_.PeerAddress());
+            btif_av_sink_disconnect(peer_.PeerAddress());
         }
       }
       if (!can_connect) {
@@ -1942,12 +1945,12 @@ bool BtifAvStateMachine::StateIdle::ProcessEvent(uint32_t event, void* p_data) {
         }
       }
       if (event == BTA_AV_RC_OPEN_EVT) {
-        btif_rc_handler(event, (tBTA_AV*)p_data);
+        btif_rc_handler(event, reinterpret_cast<tBTA_AV*>(p_data));
       }
     } break;
 
     case BTA_AV_RC_BROWSE_OPEN_EVT:
-      btif_rc_handler(event, (tBTA_AV*)p_data);
+      btif_rc_handler(event, reinterpret_cast<tBTA_AV*>(p_data));
       break;
 
     // In case Signalling channel is not down and remote started Streaming
@@ -1962,7 +1965,7 @@ bool BtifAvStateMachine::StateIdle::ProcessEvent(uint32_t event, void* p_data) {
     } break;
 
     case BTA_AV_OPEN_EVT: {
-      tBTA_AV* p_bta_data = (tBTA_AV*)p_data;
+      tBTA_AV* p_bta_data = reinterpret_cast<tBTA_AV*>(p_data);
       tBTA_AV_STATUS status = p_bta_data->open.status;
       bool can_connect = true;
 
@@ -2030,9 +2033,9 @@ bool BtifAvStateMachine::StateIdle::ProcessEvent(uint32_t event, void* p_data) {
                      peer_.PeerAddress());
 
           if (peer_.IsSink()) {
-            src_disconnect_sink(peer_.PeerAddress());
+            btif_av_source_disconnect(peer_.PeerAddress());
           } else if (peer_.IsSource()) {
-            sink_disconnect_src(peer_.PeerAddress());
+            btif_av_sink_disconnect(peer_.PeerAddress());
           }
 
           btif_report_connection_state(
@@ -2075,7 +2078,7 @@ bool BtifAvStateMachine::StateIdle::ProcessEvent(uint32_t event, void* p_data) {
     case BTA_AV_RC_FEAT_EVT:
     case BTA_AV_RC_PSM_EVT:
     case BTA_AV_REMOTE_RSP_EVT:
-      btif_rc_handler(event, (tBTA_AV*)p_data);
+      btif_rc_handler(event, reinterpret_cast<tBTA_AV*>(p_data));
       break;
 
     case BTIF_AV_AVRCP_CLOSE_EVT:
@@ -2085,7 +2088,7 @@ bool BtifAvStateMachine::StateIdle::ProcessEvent(uint32_t event, void* p_data) {
       alarm_cancel(peer_.AvOpenOnRcTimer());
 
       if (event == BTA_AV_RC_CLOSE_EVT) {
-        btif_rc_handler(event, (tBTA_AV*)p_data);
+        btif_rc_handler(event, reinterpret_cast<tBTA_AV*>(p_data));
       }
     } break;
 
@@ -2169,7 +2172,7 @@ bool BtifAvStateMachine::StateOpening::ProcessEvent(uint32_t event,
       break;
 
     case BTA_AV_OPEN_EVT: {
-      tBTA_AV* p_bta_data = (tBTA_AV*)p_data;
+      tBTA_AV* p_bta_data = reinterpret_cast<tBTA_AV*>(p_data);
       int av_state;
       tBTA_AV_STATUS status = p_bta_data->open.status;
 
@@ -2233,10 +2236,10 @@ bool BtifAvStateMachine::StateOpening::ProcessEvent(uint32_t event,
           bool can_connect = true;
           if (peer_.IsSink()) {
             can_connect = btif_av_source.AllowedToConnect(peer_.PeerAddress());
-            if (!can_connect) src_disconnect_sink(peer_.PeerAddress());
+            if (!can_connect) btif_av_source_disconnect(peer_.PeerAddress());
           } else if (peer_.IsSource()) {
             can_connect = btif_av_sink.AllowedToConnect(peer_.PeerAddress());
-            if (!can_connect) sink_disconnect_src(peer_.PeerAddress());
+            if (!can_connect) btif_av_sink_disconnect(peer_.PeerAddress());
           }
         }
         /** @} */
@@ -2377,7 +2380,7 @@ bool BtifAvStateMachine::StateOpening::ProcessEvent(uint32_t event,
       }
       break;
 
-      CHECK_RC_EVENT(event, (tBTA_AV*)p_data);
+      CHECK_RC_EVENT(event, reinterpret_cast<tBTA_AV*>(p_data));
 
     default:
       log_counter_metrics_btif(android::bluetooth::CodePathCounterKeyEnum::
@@ -2419,7 +2422,7 @@ void BtifAvStateMachine::StateOpened::OnExit() {
 
 bool BtifAvStateMachine::StateOpened::ProcessEvent(uint32_t event,
                                                    void* p_data) {
-  tBTA_AV* p_av = (tBTA_AV*)p_data;
+  tBTA_AV* p_av = reinterpret_cast<tBTA_AV*>(p_data);
 
   log::info("state=Opened peer={} event={} flags={} active_peer={}",
             peer_.PeerAddress(), BtifAvEvent::EventName(event),
@@ -2439,6 +2442,9 @@ bool BtifAvStateMachine::StateOpened::ProcessEvent(uint32_t event,
     case BTIF_AV_ACL_DISCONNECTED:
       break;  // Ignore
 
+    // Event sent by the Bluetooth Audio HAL to a source A2DP stack
+    // when a stream is ready to play. The stack shall send AVDTP Start to the
+    // remote device to start the stream.
     case BTIF_AV_START_STREAM_REQ_EVT: {
       log::info("Peer {} : event={} flags={}", peer_.PeerAddress(),
                 BtifAvEvent::EventName(event), peer_.FlagsToString());
@@ -2454,6 +2460,10 @@ bool BtifAvStateMachine::StateOpened::ProcessEvent(uint32_t event,
       peer_.SetFlags(BtifAvPeer::kFlagPendingStart);
     } break;
 
+    // Event sent by lower layer to indicate that the AVDTP stream is started.
+    // May be initiated by the remote device to start a stream, in this case the
+    // event is ignored by source A2DP, and the stack shall immediately suspend
+    // the stream.
     case BTA_AV_START_EVT: {
       log::info(
           "Peer {} : event={} status={} suspending={} initiator={} flags={}",
@@ -2480,13 +2490,14 @@ bool BtifAvStateMachine::StateOpened::ProcessEvent(uint32_t event,
           should_suspend = true;
         }
 
-        // If peer is A2DP Source, do ACK commands to audio HAL and start
-        // media task
-        if (btif_a2dp_on_started(
-                peer_.PeerAddress(), &p_av->start,
-                peer_.IsSource() ? A2dpType::kSink : A2dpType::kSource)) {
-          // Only clear pending flag after acknowledgement
-          peer_.ClearFlags(BtifAvPeer::kFlagPendingStart);
+        // Invoke the started handler only when initiator.
+        if (!com::android::bluetooth::flags::a2dp_ignore_started_when_responder() ||
+            peer_.CheckFlags(BtifAvPeer::kFlagPendingStart)) {
+          if (btif_a2dp_on_started(
+                  peer_.PeerAddress(), &p_av->start, A2dpType::kSource)) {
+            // Only clear pending flag after acknowledgement
+            peer_.ClearFlags(BtifAvPeer::kFlagPendingStart);
+          }
         }
       }
 
@@ -2504,8 +2515,8 @@ bool BtifAvStateMachine::StateOpened::ProcessEvent(uint32_t event,
                                          BTIF_AV_SUSPEND_STREAM_REQ_EVT);
       }
       peer_.StateMachine().TransitionTo(BtifAvStateMachine::kStateStarted);
-
-    } break;
+      break;
+    }
 
     case BTIF_AV_DISCONNECT_REQ_EVT:
       BTA_AvClose(peer_.BtaHandle());
@@ -2563,12 +2574,13 @@ bool BtifAvStateMachine::StateOpened::ProcessEvent(uint32_t event,
           log::error("Peer {} : cannot proceed to do AvStart",
                      peer_.PeerAddress());
           peer_.ClearFlags(BtifAvPeer::kFlagPendingStart);
-          btif_a2dp_command_ack(A2DP_CTRL_ACK_FAILURE);
+          bluetooth::audio::a2dp::ack_stream_started(
+                  bluetooth::audio::a2dp::BluetoothAudioStatus::FAILURE);
         }
         if (peer_.IsSink()) {
-          src_disconnect_sink(peer_.PeerAddress());
+          btif_av_source_disconnect(peer_.PeerAddress());
         } else if (peer_.IsSource()) {
-          sink_disconnect_src(peer_.PeerAddress());
+          btif_av_sink_disconnect(peer_.PeerAddress());
         }
         break;
       }
@@ -2609,7 +2621,7 @@ bool BtifAvStateMachine::StateOpened::ProcessEvent(uint32_t event,
       }
       break;
 
-      CHECK_RC_EVENT(event, (tBTA_AV*)p_data);
+      CHECK_RC_EVENT(event, reinterpret_cast<tBTA_AV*>(p_data));
 
     case BTIF_AV_SET_LATENCY_REQ_EVT: {
       const btif_av_set_latency_req_t* p_set_latency_req =
@@ -2638,7 +2650,7 @@ void BtifAvStateMachine::StateStarted::OnEnter() {
   btif_a2dp_sink_set_rx_flush(false);
 
   // Report that we have entered the Streaming stage. Usually, this should
-  // be followed by focus grant. See update_audio_focus_state()
+  // be followed by focus grant. See set_audio_focus_state()
   btif_report_audio_state(
       peer_.PeerAddress(), BTAV_AUDIO_STATE_STARTED,
       peer_.IsSource() ? A2dpType::kSink : A2dpType::kSource);
@@ -2650,7 +2662,7 @@ void BtifAvStateMachine::StateStarted::OnExit() {
 
 bool BtifAvStateMachine::StateStarted::ProcessEvent(uint32_t event,
                                                     void* p_data) {
-  tBTA_AV* p_av = (tBTA_AV*)p_data;
+  tBTA_AV* p_av = reinterpret_cast<tBTA_AV*>(p_data);
 
   log::info("state=Started peer={} event={} flags={} active_peer={}",
             peer_.PeerAddress(), BtifAvEvent::EventName(event),
@@ -2853,7 +2865,7 @@ bool BtifAvStateMachine::StateStarted::ProcessEvent(uint32_t event,
       BTA_AvSetLatency(peer_.BtaHandle(), p_set_latency_req->is_low_latency);
     } break;
 
-      CHECK_RC_EVENT(event, (tBTA_AV*)p_data);
+      CHECK_RC_EVENT(event, reinterpret_cast<tBTA_AV*>(p_data));
 
     default:
       log::warn("Peer {} : Unhandled event={}", peer_.PeerAddress(),
@@ -2913,12 +2925,12 @@ bool BtifAvStateMachine::StateClosing::ProcessEvent(uint32_t event,
 
     // Handle the RC_CLOSE event for the cleanup
     case BTA_AV_RC_CLOSE_EVT:
-      btif_rc_handler(event, (tBTA_AV*)p_data);
+      btif_rc_handler(event, reinterpret_cast<tBTA_AV*>(p_data));
       break;
 
     // Handle the RC_BROWSE_CLOSE event for testing
     case BTA_AV_RC_BROWSE_CLOSE_EVT:
-      btif_rc_handler(event, (tBTA_AV*)p_data);
+      btif_rc_handler(event, reinterpret_cast<tBTA_AV*>(p_data));
       break;
 
     case BTIF_AV_OFFLOAD_START_REQ_EVT:
@@ -2948,7 +2960,7 @@ bool BtifAvStateMachine::StateClosing::ProcessEvent(uint32_t event,
  * interoperate with headsets that do establish AV after AVRCP connection.
  */
 static void btif_av_source_initiate_av_open_timer_timeout(void* data) {
-  BtifAvPeer* peer = (BtifAvPeer*)data;
+  BtifAvPeer* peer = reinterpret_cast<BtifAvPeer*>(data);
   bool device_connected = false;
 
   if (com::android::bluetooth::flags::avrcp_connect_a2dp_delayed() &&
@@ -2985,7 +2997,7 @@ static void btif_av_source_initiate_av_open_timer_timeout(void* data) {
  * establishes AVRCP connection without AV connection.
  */
 static void btif_av_sink_initiate_av_open_timer_timeout(void* data) {
-  BtifAvPeer* peer = (BtifAvPeer*)data;
+  BtifAvPeer* peer = reinterpret_cast<BtifAvPeer*>(data);
 
   log::verbose("Peer {}", peer->PeerAddress());
 
@@ -3301,7 +3313,7 @@ static void btif_av_handle_bta_av_event(uint8_t peer_sep,
   RawAddress peer_address = RawAddress::kEmpty;
   tBTA_AV_HNDL bta_handle = kBtaHandleUnknown;
   tBTA_AV_EVT event = btif_av_event.Event();
-  tBTA_AV* p_data = (tBTA_AV*)btif_av_event.Data();
+  tBTA_AV* p_data = reinterpret_cast<tBTA_AV*>(btif_av_event.Data());
   std::string msg;
 
   log::verbose("peer_sep={} event={}", peer_stream_endpoint_text(peer_sep),
@@ -3411,8 +3423,9 @@ static void btif_av_handle_bta_av_event(uint8_t peer_sep,
           peer_address = btif_av_sink.ActivePeer();
         }
         break;
-      } else
+      } else {
         FALLTHROUGH_INTENDED;
+      }
     }
     case BTA_AV_OFFLOAD_START_RSP_EVT: {
       // TODO: Might be wrong - this code will be removed once those
@@ -3486,7 +3499,7 @@ bool btif_av_src_sink_coexist_enabled(void) {
   if (com::android::bluetooth::flags::a2dp_concurrent_source_sink()) {
     return is_a2dp_sink_property_enabled() && is_a2dp_source_property_enabled();
   }
-  return GET_SYSPROP(A2dp, src_sink_coexist, false);
+  return android::sysprop::bluetooth::A2dp::src_sink_coexist().value_or(false);
 }
 
 static void bta_av_source_callback(tBTA_AV_EVT event, tBTA_AV* p_data) {
@@ -3535,7 +3548,8 @@ static void bta_av_sink_media_callback(const RawAddress& peer_address,
         int state = peer->StateMachine().StateId();
         if ((state == BtifAvStateMachine::kStateStarted) ||
             (state == BtifAvStateMachine::kStateOpened)) {
-          uint8_t queue_len = btif_a2dp_sink_enqueue_buf((BT_HDR*)p_data);
+          uint8_t queue_len =
+              btif_a2dp_sink_enqueue_buf(reinterpret_cast<BT_HDR*>(p_data));
           log::verbose("Packets in Sink queue {}", queue_len);
         }
       }
@@ -3547,7 +3561,8 @@ static void bta_av_sink_media_callback(const RawAddress& peer_address,
       log::verbose("address={}", p_data->avk_config.bd_addr);
 
       // Update the codec info of the A2DP Sink decoder
-      btif_a2dp_sink_update_decoder((uint8_t*)(p_data->avk_config.codec_info));
+      btif_a2dp_sink_update_decoder(
+          reinterpret_cast<uint8_t*>(p_data->avk_config.codec_info));
 
       config_req.sample_rate =
           A2DP_GetTrackSampleRate(p_data->avk_config.codec_info);
@@ -3577,7 +3592,7 @@ static void bta_av_sink_media_callback(const RawAddress& peer_address,
 }
 
 // Initializes the AV interface for source mode
-static bt_status_t init_src(
+bt_status_t btif_av_source_init(
     btav_source_callbacks_t* callbacks, int max_connected_audio_devices,
     const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
     const std::vector<btav_a2dp_codec_config_t>& offloading_preference,
@@ -3589,20 +3604,20 @@ static bt_status_t init_src(
 }
 
 // Initializes the AV interface for sink mode
-static bt_status_t init_sink(btav_sink_callbacks_t* callbacks,
-                             int max_connected_audio_devices) {
+bt_status_t btif_av_sink_init(btav_sink_callbacks_t* callbacks,
+                              int max_connected_audio_devices) {
   log::info("");
   return btif_av_sink.Init(callbacks, max_connected_audio_devices);
 }
 
 // Updates the final focus state reported by components calling this module
-static void update_audio_focus_state(int state) {
+void btif_av_sink_set_audio_focus_state(int state) {
   log::info("state={}", state);
   btif_a2dp_sink_set_focus_state_req((btif_a2dp_sink_focus_state_t)state);
 }
 
 // Updates the track gain (used for ducking).
-static void update_audio_track_gain(float gain) {
+void btif_av_sink_set_audio_track_gain(float gain) {
   log::info("gain={:f}", gain);
   btif_a2dp_sink_set_audio_track_gain(gain);
 }
@@ -3686,7 +3701,7 @@ static void set_active_peer_int(uint8_t peer_sep,
   peer_ready_promise.set_value();
 }
 
-static bt_status_t src_connect_sink(const RawAddress& peer_address) {
+bt_status_t btif_av_source_connect(const RawAddress& peer_address) {
   log::info("peer={}", peer_address);
 
   if (!btif_av_source.Enabled()) {
@@ -3699,7 +3714,7 @@ static bt_status_t src_connect_sink(const RawAddress& peer_address) {
                             connect_int);
 }
 
-static bt_status_t sink_connect_src(const RawAddress& peer_address) {
+bt_status_t btif_av_sink_connect(const RawAddress& peer_address) {
   log::info("peer={}", peer_address);
 
   if (!btif_av_sink.Enabled()) {
@@ -3712,7 +3727,7 @@ static bt_status_t sink_connect_src(const RawAddress& peer_address) {
                             connect_int);
 }
 
-static bt_status_t src_disconnect_sink(const RawAddress& peer_address) {
+bt_status_t btif_av_source_disconnect(const RawAddress& peer_address) {
   log::info("peer={}", peer_address);
 
   if (!btif_av_source.Enabled()) {
@@ -3729,7 +3744,7 @@ static bt_status_t src_disconnect_sink(const RawAddress& peer_address) {
                      peer_address, kBtaHandleUnknown, btif_av_event));
 }
 
-static bt_status_t sink_disconnect_src(const RawAddress& peer_address) {
+bt_status_t btif_av_sink_disconnect(const RawAddress& peer_address) {
   log::info("peer={}", peer_address);
 
   if (!btif_av_sink.Enabled()) {
@@ -3746,7 +3761,7 @@ static bt_status_t sink_disconnect_src(const RawAddress& peer_address) {
                      peer_address, kBtaHandleUnknown, btif_av_event));
 }
 
-static bt_status_t sink_set_active_device(const RawAddress& peer_address) {
+bt_status_t btif_av_sink_set_active_device(const RawAddress& peer_address) {
   log::info("peer={}", peer_address);
 
   if (!btif_av_sink.Enabled()) {
@@ -3768,8 +3783,8 @@ static bt_status_t sink_set_active_device(const RawAddress& peer_address) {
   return status;
 }
 
-static bt_status_t src_set_silence_sink(const RawAddress& peer_address,
-                                        bool silence) {
+bt_status_t btif_av_source_set_silence_device(const RawAddress& peer_address,
+                                              bool silence) {
   log::info("peer={} silence={}", peer_address, silence);
 
   if (!btif_av_source.Enabled()) {
@@ -3782,7 +3797,7 @@ static bt_status_t src_set_silence_sink(const RawAddress& peer_address,
       base::BindOnce(&set_source_silence_peer_int, peer_address, silence));
 }
 
-static bt_status_t src_set_active_sink(const RawAddress& peer_address) {
+bt_status_t btif_av_source_set_active_device(const RawAddress& peer_address) {
   log::info("peer={}", peer_address);
 
   if (!btif_av_source.Enabled()) {
@@ -3804,7 +3819,7 @@ static bt_status_t src_set_active_sink(const RawAddress& peer_address) {
   return status;
 }
 
-static bt_status_t codec_config_src(
+bt_status_t btif_av_source_set_codec_config_preference(
     const RawAddress& peer_address,
     std::vector<btav_a2dp_codec_config_t> codec_preferences) {
   log::info("peer={} codec_preferences=[{}]", peer_address,
@@ -3835,39 +3850,18 @@ static bt_status_t codec_config_src(
   return status;
 }
 
-static void cleanup_src(void) {
+void btif_av_source_cleanup(void) {
   log::info("");
   do_in_main_thread(FROM_HERE,
                     base::BindOnce(&BtifAvSource::Cleanup,
                                    base::Unretained(&btif_av_source)));
 }
 
-static void cleanup_sink(void) {
+void btif_av_sink_cleanup(void) {
   log::info("");
   do_in_main_thread(FROM_HERE, base::BindOnce(&BtifAvSink::Cleanup,
                                               base::Unretained(&btif_av_sink)));
 }
-
-static const btav_source_interface_t bt_av_src_interface = {
-    sizeof(btav_source_interface_t),
-    init_src,
-    src_connect_sink,
-    src_disconnect_sink,
-    src_set_silence_sink,
-    src_set_active_sink,
-    codec_config_src,
-    cleanup_src,
-};
-
-static const btav_sink_interface_t bt_av_sink_interface = {
-    sizeof(btav_sink_interface_t),
-    init_sink,
-    sink_connect_src,
-    sink_disconnect_src,
-    cleanup_sink,
-    update_audio_focus_state,
-    update_audio_track_gain,
-    sink_set_active_device};
 
 RawAddress btif_av_source_active_peer(void) {
   return btif_av_source.ActivePeer();
@@ -3927,12 +3921,6 @@ void btif_av_stream_start_offload(void) {
 
   btif_av_source_dispatch_sm_event(btif_av_source_active_peer(),
                                    BTIF_AV_OFFLOAD_START_REQ_EVT);
-}
-
-void btif_av_src_disconnect_sink(const RawAddress& peer_address) {
-  log::info("peer={}", peer_address);
-
-  src_disconnect_sink(peer_address);
 }
 
 bool btif_av_stream_ready(const A2dpType local_a2dp_type) {
@@ -4073,16 +4061,6 @@ bt_status_t btif_av_sink_execute_service(bool enable) {
   btif_av_sink.DeregisterAllBtaHandles();
   BTA_AvDisable();
   return BT_STATUS_SUCCESS;
-}
-
-// Get the AV callback interface for A2DP source profile
-const btav_source_interface_t* btif_av_get_src_interface(void) {
-  return &bt_av_src_interface;
-}
-
-// Get the AV callback interface for A2DP sink profile
-const btav_sink_interface_t* btif_av_get_sink_interface(void) {
-  return &bt_av_sink_interface;
 }
 
 bool btif_av_is_connected(const A2dpType local_a2dp_type) {
@@ -4271,8 +4249,6 @@ void btif_av_set_audio_delay(const RawAddress& peer_address, uint16_t delay,
                              const A2dpType local_a2dp_type) {
   log::info("peer={} delay={}", peer_address, delay);
 
-  btif_a2dp_control_set_audio_delay(delay);
-
   BtifAvPeer* peer = btif_av_find_peer(peer_address, local_a2dp_type);
   if (peer != nullptr && peer->IsSink()) {
     peer->SetDelayReport(delay);
@@ -4289,8 +4265,6 @@ uint16_t btif_av_get_audio_delay(const A2dpType local_a2dp_type) {
   }
   return 0;
 }
-
-void btif_av_reset_audio_delay(void) { btif_a2dp_control_reset_audio_delay(); }
 
 bool btif_av_is_a2dp_offload_enabled() {
   return btif_av_source.A2dpOffloadEnabled();

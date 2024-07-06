@@ -172,6 +172,7 @@ class VolumeControlImpl : public VolumeControl {
     if (status != GATT_SUCCESS) {
       log::info("Failed to connect to Volume Control device");
       device_cleanup_helper(device, device->connecting_actively);
+      StartOpportunisticConnect(address);
       return;
     }
 

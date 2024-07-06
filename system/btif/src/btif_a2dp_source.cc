@@ -33,10 +33,8 @@
 #include <algorithm>
 #include <future>
 
-#include "audio_a2dp_hw/include/audio_a2dp_hw.h"
 #include "audio_hal_interface/a2dp_encoding.h"
 #include "bta_av_ci.h"
-#include "btif_a2dp_control.h"
 #include "btif_a2dp_source.h"
 #include "btif_av.h"
 #include "btif_av_co.h"
@@ -53,14 +51,12 @@
 #include "stack/include/acl_api_types.h"
 #include "stack/include/bt_hdr.h"
 #include "types/raw_address.h"
-#include "udrv/include/uipc.h"
 
+using bluetooth::audio::a2dp::BluetoothAudioStatus;
 using bluetooth::common::A2dpSessionMetrics;
 using bluetooth::common::BluetoothMetricsLogger;
 using bluetooth::common::RepeatingTimer;
 using namespace bluetooth;
-
-extern std::unique_ptr<tUIPC_STATE> a2dp_uipc;
 
 /**
  * The typical runlevel of the tx queue size is ~1 buffer
@@ -376,13 +372,7 @@ static void btif_a2dp_source_startup_delayed() {
 #endif
   }
   if (!bluetooth::audio::a2dp::init(&btif_a2dp_source_thread)) {
-    if (btif_av_is_a2dp_offload_enabled()) {
-      // TODO: BluetoothA2dp@1.0 is deprecated
-      log::warn("Using BluetoothA2dp HAL");
-    } else {
-      log::warn("Using legacy HAL");
-      btif_a2dp_control_init();
-    }
+    log::warn("Failed to setup the bluetooth audio HAL");
   }
   btif_a2dp_source_cb.SetState(BtifA2dpSource::kStateRunning);
 }
@@ -509,11 +499,8 @@ static void btif_a2dp_source_shutdown_delayed(
   btif_a2dp_source_cb.media_alarm.CancelAndWait();
   wakelock_release();
 
-  if (bluetooth::audio::a2dp::is_hal_enabled()) {
-    bluetooth::audio::a2dp::cleanup();
-  } else {
-    btif_a2dp_control_cleanup();
-  }
+  bluetooth::audio::a2dp::cleanup();
+
   fixed_queue_free(btif_a2dp_source_cb.tx_audio_queue, nullptr);
   btif_a2dp_source_cb.tx_audio_queue = nullptr;
 
@@ -732,14 +719,10 @@ void btif_a2dp_source_on_stopped(tBTA_AV_SUSPEND* p_av_suspend) {
     log::error("A2DP stop failed: status={}, initiator={}",
                p_av_suspend->status, p_av_suspend->initiator);
     if (p_av_suspend->initiator) {
-      if (bluetooth::audio::a2dp::is_hal_enabled()) {
-        bluetooth::audio::a2dp::ack_stream_suspended(A2DP_CTRL_ACK_FAILURE);
-      } else {
-        btif_a2dp_command_ack(A2DP_CTRL_ACK_FAILURE);
-      }
+      bluetooth::audio::a2dp::ack_stream_suspended(BluetoothAudioStatus::FAILURE);
     }
   } else {
-    bluetooth::audio::a2dp::ack_stream_suspended(A2DP_CTRL_ACK_SUCCESS);
+    bluetooth::audio::a2dp::ack_stream_suspended(BluetoothAudioStatus::SUCCESS);
     return;
   }
 
@@ -769,14 +752,10 @@ void btif_a2dp_source_on_suspended(tBTA_AV_SUSPEND* p_av_suspend) {
     log::warn("A2DP suspend failed: status={}, initiator={}",
               p_av_suspend->status, p_av_suspend->initiator);
     if (p_av_suspend->initiator) {
-      if (bluetooth::audio::a2dp::is_hal_enabled()) {
-        bluetooth::audio::a2dp::ack_stream_suspended(A2DP_CTRL_ACK_FAILURE);
-      } else {
-        btif_a2dp_command_ack(A2DP_CTRL_ACK_FAILURE);
-      }
+      bluetooth::audio::a2dp::ack_stream_suspended(BluetoothAudioStatus::FAILURE);
     }
   } else if (btif_av_is_a2dp_offload_running()) {
-    bluetooth::audio::a2dp::ack_stream_suspended(A2DP_CTRL_ACK_SUCCESS);
+    bluetooth::audio::a2dp::ack_stream_suspended(BluetoothAudioStatus::SUCCESS);
     return;
   }
 
@@ -851,41 +830,16 @@ static void btif_a2dp_source_audio_tx_stop_event(void) {
   btif_a2dp_source_accumulate_stats(&btif_a2dp_source_cb.stats,
                                     &btif_a2dp_source_cb.accumulated_stats);
 
+  /* Drain data still left in the queue */
+  static constexpr size_t AUDIO_STREAM_OUTPUT_BUFFER_SZ = 28 * 512;
   uint8_t p_buf[AUDIO_STREAM_OUTPUT_BUFFER_SZ * 2];
-
-  // Keep track of audio data still left in the pipe
-  if (bluetooth::audio::a2dp::is_hal_enabled()) {
-    btif_a2dp_control_log_bytes_read(
-        bluetooth::audio::a2dp::read(p_buf, sizeof(p_buf)));
-  } else if (a2dp_uipc != nullptr) {
-    btif_a2dp_control_log_bytes_read(
-        UIPC_Read(*a2dp_uipc, UIPC_CH_ID_AV_AUDIO, p_buf, sizeof(p_buf)));
-  }
+  bluetooth::audio::a2dp::read(p_buf, sizeof(p_buf));
 
   /* Stop the timer first */
   btif_a2dp_source_cb.media_alarm.CancelAndWait();
   wakelock_release();
 
-  if (bluetooth::audio::a2dp::is_hal_enabled()) {
-    bluetooth::audio::a2dp::ack_stream_suspended(A2DP_CTRL_ACK_SUCCESS);
-  } else if (a2dp_uipc != nullptr) {
-    UIPC_Close(*a2dp_uipc, UIPC_CH_ID_AV_AUDIO);
-
-    /*
-     * Try to send acknowledgement once the media stream is
-     * stopped. This will make sure that the A2DP HAL layer is
-     * un-blocked on wait for acknowledgment for the sent command.
-     * This resolves a corner cases AVDTP SUSPEND collision
-     * when the DUT and the remote device issue SUSPEND simultaneously
-     * and due to the processing of the SUSPEND request from the remote,
-     * the media path is torn down. If the A2DP HAL happens to wait
-     * for ACK for the initiated SUSPEND, it would never receive it casuing
-     * a block/wait. Due to this acknowledgement, the A2DP HAL is guranteed
-     * to get the ACK for any pending command in such cases.
-     */
-
-    btif_a2dp_command_ack(A2DP_CTRL_ACK_SUCCESS);
-  }
+  bluetooth::audio::a2dp::ack_stream_suspended(BluetoothAudioStatus::SUCCESS);
 
   /* audio engine stopped, reset tx suspended flag */
   btif_a2dp_source_cb.tx_flush = false;
@@ -928,13 +882,7 @@ static void btif_a2dp_source_audio_handle_timer(void) {
 }
 
 static uint32_t btif_a2dp_source_read_callback(uint8_t* p_buf, uint32_t len) {
-  uint32_t bytes_read = 0;
-
-  if (bluetooth::audio::a2dp::is_hal_enabled()) {
-    bytes_read = bluetooth::audio::a2dp::read(p_buf, len);
-  } else if (a2dp_uipc != nullptr) {
-    bytes_read = UIPC_Read(*a2dp_uipc, UIPC_CH_ID_AV_AUDIO, p_buf, len);
-  }
+  uint32_t bytes_read = bluetooth::audio::a2dp::read(p_buf, len);
 
   if (btif_a2dp_source_cb.sw_audio_is_encoding && bytes_read < len) {
     log::warn("UNDERFLOW: ONLY READ {} BYTES OUT OF {}", bytes_read, len);
@@ -952,9 +900,8 @@ static uint32_t btif_a2dp_source_read_callback(uint8_t* p_buf, uint32_t len) {
 }
 
 static bool btif_a2dp_source_enqueue_callback(BT_HDR* p_buf, size_t frames_n,
-                                              uint32_t bytes_read) {
+                                              uint32_t /*bytes_read*/) {
   uint64_t now_us = bluetooth::common::time_get_os_boottime_us();
-  btif_a2dp_control_log_bytes_read(bytes_read);
 
   /* Check if timer was stopped (media task stopped) */
   if (!btif_a2dp_source_is_streaming()) {
@@ -1061,10 +1008,6 @@ static void btif_a2dp_source_audio_tx_flush_event(void) {
   btif_a2dp_source_cb.stats.tx_queue_last_flushed_us =
       bluetooth::common::time_get_os_boottime_us();
   fixed_queue_flush(btif_a2dp_source_cb.tx_audio_queue, osi_free);
-
-  if (!bluetooth::audio::a2dp::is_hal_enabled() && a2dp_uipc != nullptr) {
-    UIPC_Ioctl(*a2dp_uipc, UIPC_CH_ID_AV_AUDIO, UIPC_REQ_RX_FLUSH, nullptr);
-  }
 }
 
 static bool btif_a2dp_source_audio_tx_flush_req(void) {

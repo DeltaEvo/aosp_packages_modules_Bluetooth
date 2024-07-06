@@ -34,6 +34,7 @@
 #include "audio_hal_interface/a2dp_encoding.h"
 
 // Original usings
+using bluetooth::audio::a2dp::BluetoothAudioStatus;
 using bluetooth::audio::a2dp::provider::a2dp_configuration;
 using bluetooth::audio::a2dp::provider::a2dp_remote_capabilities;
 
@@ -45,22 +46,20 @@ namespace audio_hal_interface_a2dp_encoding {
 
 // Shared state between mocked functions and tests
 // Name: ack_stream_started
-// Params: const tA2DP_CTRL_ACK& status
+// Params: BluetoothAudioStatus
 // Return: void
 struct ack_stream_started {
-  std::function<void(const tA2DP_CTRL_ACK& status)> body{
-      [](const tA2DP_CTRL_ACK& /* status */) {}};
-  void operator()(const tA2DP_CTRL_ACK& status) { body(status); };
+  std::function<void(BluetoothAudioStatus status)> body{[](BluetoothAudioStatus /* status */) {}};
+  void operator()(BluetoothAudioStatus status) { body(status); }
 };
 extern struct ack_stream_started ack_stream_started;
 
 // Name: ack_stream_suspended
-// Params: const tA2DP_CTRL_ACK& status
+// Params: BluetoothAudioStatus
 // Return: void
 struct ack_stream_suspended {
-  std::function<void(const tA2DP_CTRL_ACK& status)> body{
-      [](const tA2DP_CTRL_ACK& /* status */) {}};
-  void operator()(const tA2DP_CTRL_ACK& status) { body(status); };
+  std::function<void(BluetoothAudioStatus status)> body{[](BluetoothAudioStatus /* status */) {}};
+  void operator()(BluetoothAudioStatus status) { body(status); }
 };
 extern struct ack_stream_suspended ack_stream_suspended;
 

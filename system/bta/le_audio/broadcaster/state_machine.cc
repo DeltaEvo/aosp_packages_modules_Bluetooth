@@ -196,6 +196,17 @@ class BroadcastStateMachineImpl : public BroadcastStateMachine {
     }
   }
 
+  void OnUpdateAnnouncement(uint8_t status) {
+    log::info("broadcast_id={}, status={}", GetBroadcastId(), status);
+
+    if (status ==
+        bluetooth::hci::AdvertisingCallback::AdvertisingStatus::SUCCESS) {
+      callbacks_->OnAnnouncementUpdated(GetBroadcastId());
+    } else {
+      log::error("Updating Announcement failed");
+    }
+  }
+
   void UpdatePublicBroadcastAnnouncement(
       uint32_t broadcast_id, const std::string& broadcast_name,
       const bluetooth::le_audio::PublicBroadcastAnnouncementData& announcement)

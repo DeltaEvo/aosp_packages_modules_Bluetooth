@@ -51,7 +51,7 @@
 #include "internal_include/bt_target.h"
 #include "stack/btm/btm_sco_hfp_hal.h"
 #include "stack/include/bt_uuid16.h"
-#include "stack/include/btm_api.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_log_history.h"
 #include "types/raw_address.h"
 
@@ -144,8 +144,8 @@ static bool is_active_device(const RawAddress& bd_addr) {
 }
 
 static tBTA_SERVICE_MASK get_BTIF_HF_SERVICES() {
-  return GET_SYSPROP(Hfp, hf_services,
-                     BTA_HSP_SERVICE_MASK | BTA_HFP_SERVICE_MASK);
+  return android::sysprop::bluetooth::Hfp::hf_services().value_or(BTA_HSP_SERVICE_MASK |
+                                                                  BTA_HFP_SERVICE_MASK);
 }
 
 /* HF features supported at runtime */
@@ -162,7 +162,7 @@ static uint32_t get_hf_features() {
    BTA_AG_FEAT_UNAT)
 #endif
 
-  return GET_SYSPROP(Hfp, hf_features, DEFAULT_BTIF_HF_FEATURES);
+  return android::sysprop::bluetooth::Hfp::hf_features().value_or(DEFAULT_BTIF_HF_FEATURES);
 }
 
 /*******************************************************************************
@@ -428,8 +428,33 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
                    btif_hf_cb[idx].connected_bda, p_data->open.status);
         RawAddress connected_bda = btif_hf_cb[idx].connected_bda;
         reset_control_block(&btif_hf_cb[idx]);
-        bt_hf_callbacks->ConnectionStateCallback(btif_hf_cb[idx].state,
-                                                 &connected_bda);
+
+        if (com::android::bluetooth::flags::
+                ignore_notify_when_already_connected()) {
+          bool notify_required = true;
+
+          for (int i = 0; i < BTA_AG_MAX_NUM_CLIENTS; i++) {
+            if ((i != idx) &&
+                (BTHF_CONNECTION_STATE_CONNECTED == btif_hf_cb[i].state) &&
+                (connected_bda == btif_hf_cb[i].connected_bda)) {
+              // There is already an active cnnection on this device
+              // skip upper layer notification
+              notify_required = false;
+              log::info("AG open failure for {} is ignored because there's an "
+                        "active connection on the same device", connected_bda);
+              break;
+            }
+          }
+
+          if (notify_required) {
+            bt_hf_callbacks->ConnectionStateCallback(btif_hf_cb[idx].state,
+                                                     &connected_bda);
+          }
+        } else {
+          bt_hf_callbacks->ConnectionStateCallback(btif_hf_cb[idx].state,
+                                                   &connected_bda);
+        }
+
         log_counter_metrics_btif(android::bluetooth::CodePathCounterKeyEnum::
                                      HFP_SELF_INITIATED_AG_FAILED,
                                  1);
@@ -1579,7 +1604,8 @@ bt_status_t HeadsetInterface::SetActiveDevice(RawAddress* active_device_addr) {
 
 bt_status_t HeadsetInterface::DebugDump() {
   CHECK_BTHF_INIT();
-  tBTM_SCO_DEBUG_DUMP debug_dump = BTM_GetScoDebugDump();
+  tBTM_SCO_DEBUG_DUMP debug_dump =
+      get_btm_client_interface().sco.BTM_GetScoDebugDump();
   bt_hf_callbacks->DebugDumpCallback(
       debug_dump.is_active, debug_dump.codec_id,
       debug_dump.total_num_decoded_frames, debug_dump.pkt_loss_ratio,

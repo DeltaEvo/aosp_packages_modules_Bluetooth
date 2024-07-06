@@ -173,13 +173,6 @@ class ServiceRecord : public BtPropertySimple<bt_service_record_t> {
   static std::shared_ptr<ServiceRecord> Create(const bt_service_record_t& record);
 };
 
-class AdapterScanMode : public BtPropertySimple<bt_scan_mode_t> {
- public:
-  AdapterScanMode(const bt_scan_mode_t& mode)
-      : BtPropertySimple<bt_scan_mode_t>(BT_PROPERTY_ADAPTER_SCAN_MODE, mode) {}
-  static std::shared_ptr<AdapterScanMode> Create(const bt_scan_mode_t& mode);
-};
-
 class AdapterBondedDevices : public BtPropertyVector<RawAddress> {
  public:
   AdapterBondedDevices(const RawAddress* bd_addr, size_t len)

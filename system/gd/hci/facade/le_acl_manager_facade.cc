@@ -373,6 +373,19 @@ class LeAclManagerFacadeService : public LeAclManagerFacade::Service, public LeC
           supervision_timeout);
     }
 
+    void OnParameterUpdateRequest(
+        uint16_t interval_min,
+        uint16_t interval_max,
+        uint16_t latency,
+        uint16_t supervision_timeout) override {
+      log::info(
+          "interval_min: 0x{:x}, interval_max: 0x{:x}, latency: 0x{:x}, timeout 0x{:x}",
+          interval_min,
+          interval_max,
+          latency,
+          supervision_timeout);
+    }
+
     void OnDataLengthChange(uint16_t tx_octets, uint16_t tx_time, uint16_t rx_octets, uint16_t rx_time) override {
       log::info(
           "tx_octets: 0x{:x}, tx_time: 0x{:x}, rx_octets 0x{:x}, rx_time 0x{:x}",

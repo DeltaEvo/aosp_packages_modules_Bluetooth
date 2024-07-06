@@ -25,7 +25,6 @@
 #include <string>
 
 #include "common/circular_buffer.h"
-#include "internal_include/bt_target.h"
 #include "osi/include/fixed_queue.h"
 #include "stack/acl/acl.h"
 #include "stack/btm/btm_ble_int_types.h"
@@ -33,6 +32,7 @@
 #include "stack/btm/neighbor_inquiry.h"
 #include "stack/include/btm_ble_api_types.h"
 #include "stack/include/security_client_callbacks.h"
+#include "stack/rnr/remote_name_request.h"
 #include "types/raw_address.h"
 
 constexpr size_t kMaxLogSize = 255;
@@ -143,9 +143,6 @@ typedef struct tBTM_CB {
   *****************************************************/
   tSCO_CB sco_cb;
 
-#define BTM_SEC_MAX_RMT_NAME_CALLBACKS 2
-  tBTM_RMT_NAME_CALLBACK* p_rmt_name_callback[BTM_SEC_MAX_RMT_NAME_CALLBACKS];
-
   uint16_t disc_handle{0};          /* for legacy devices */
   uint8_t disc_reason{0};           /* for legacy devices */
 
@@ -172,16 +169,19 @@ typedef struct tBTM_CB {
             kMaxInquiryScanHistory);
   } neighbor;
 
+  bluetooth::rnr::RemoteNameRequest rnr;
+
   void Init() {
     memset(&devcb, 0, sizeof(devcb));
     memset(&ble_ctr_cb, 0, sizeof(ble_ctr_cb));
     memset(&cmn_ble_vsc_cb, 0, sizeof(cmn_ble_vsc_cb));
     memset(&btm_inq_vars, 0, sizeof(btm_inq_vars));
     memset(&sco_cb, 0, sizeof(sco_cb));
-    memset(p_rmt_name_callback, 0, sizeof(p_rmt_name_callback));
 
     acl_cb_ = {};
     neighbor = {};
+    rnr = {};
+    rnr.remote_name_timer = alarm_new("rnr.remote_name_timer");
 
     /* Initialize BTM component structures */
     btm_inq_vars.Init(); /* Inquiry Database and Structures */
@@ -196,6 +196,7 @@ typedef struct tBTM_CB {
   }
 
   void Free() {
+    alarm_free(rnr.remote_name_timer);
     history_.reset();
 
     devcb.Free();

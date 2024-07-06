@@ -315,6 +315,12 @@ constexpr uint8_t kLeAudioMetadataHeadtrackerTransportVal = 1;
 constexpr uint8_t kLeAudioMetadataHeadtrackerTransportLeAcl = 1;
 constexpr uint8_t kLeAudioMetadataHeadtrackerTransportLeIso = 2;
 
+/* Android Headtracker config parameters */
+constexpr uint32_t kLeAudioHeadtrackerSduItv = 20000;
+constexpr uint16_t kLeAudioHeadtrackerMaxTransLat = 20;
+constexpr uint16_t kLeAudioHeadtrackerMaxSduSize = 13;
+constexpr uint8_t kLeAudioHeadtrackerRtn = 2;
+
 /* CSIS Types */
 constexpr uint8_t kDefaultScanDurationS = 5;
 constexpr uint8_t kDefaultCsisSetSize = 2;
@@ -1157,8 +1163,6 @@ struct ase {
         cis_state(CisState::IDLE),
         data_path_state(DataPathState::IDLE),
         configured_for_context_type(LeAudioContextType::UNINITIALIZED),
-        autonomous_operation_timer_(nullptr),
-        autonomous_target_state_(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE),
         state(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {}
 
   struct hdl_pair hdls;
@@ -1190,10 +1194,6 @@ struct ase {
   AseQosPreferences qos_preferences;
 
   std::vector<uint8_t> metadata;
-
-  /* Autonomous change data */
-  alarm_t* autonomous_operation_timer_;
-  types::AseState autonomous_target_state_;
 
   AseState state;
 };

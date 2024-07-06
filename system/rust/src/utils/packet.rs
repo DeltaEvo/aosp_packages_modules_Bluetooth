@@ -1,8 +1,7 @@
 //! Utility for packet manipulation on top of the codegen from PDL
 
 use crate::packets::{
-    AttAttributeDataBuilder, AttAttributeDataChild, AttBuilder, AttChild, AttOpcode, Builder,
-    OwnedAttView, OwnedPacket, Serializable,
+    AttBuilder, AttChild, AttOpcode, Builder, OwnedAttView, OwnedPacket, Serializable,
 };
 
 /// Convert an ATT builder child into an owned AttView, for use in test
@@ -44,9 +43,4 @@ pub fn HACK_child_to_opcode(child: &AttChild) -> AttOpcode {
         AttChild::AttExchangeMtuResponse(_) => AttOpcode::EXCHANGE_MTU_RESPONSE,
         AttChild::AttWriteCommand(_) => AttOpcode::WRITE_COMMAND,
     }
-}
-
-/// Utility to simplify assembly of AttData by reducing boilerplate
-pub fn build_att_data(child: impl Into<AttAttributeDataChild>) -> AttAttributeDataBuilder {
-    AttAttributeDataBuilder { _child_: child.into() }
 }

@@ -17,6 +17,8 @@
 
 #include "state_machine.h"
 
+#include <com_android_bluetooth_flags.h>
+#include <flag_macros.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -30,6 +32,8 @@
 #include "test/common/mock_functions.h"
 #include "test/mock/mock_main_shim_le_advertising_manager.h"
 #include "test/mock/mock_stack_btm_iso.h"
+
+#define TEST_BT com::android::bluetooth::flags
 
 using namespace bluetooth::hci::iso_manager;
 
@@ -81,6 +85,8 @@ class MockBroadcastStatMachineCallbacks
               (uint32_t broadcast_id, uint8_t addr_type, RawAddress addr),
               (override));
   MOCK_METHOD((void), OnBigCreated, (const std::vector<uint16_t>& conn_handle),
+              (override));
+  MOCK_METHOD((void), OnAnnouncementUpdated, (uint32_t broadcast_id),
               (override));
 };
 
@@ -171,6 +177,22 @@ class StateMachineTest : public Test {
               cb.Run(address_type, address);
             });
 
+    ON_CALL(*mock_ble_advertising_manager_, SetData)
+        .WillByDefault([this](int advertiser_id, bool set_scan_rsp,
+                              std::vector<uint8_t> data,
+                              BleAdvertiserInterface::StatusCallback cb) {
+          uint8_t status = 0;
+          this->adv_callbacks_->OnAdvertisingDataSet(advertiser_id, status);
+        });
+
+    ON_CALL(*mock_ble_advertising_manager_, SetPeriodicAdvertisingData)
+        .WillByDefault([this](int advertiser_id, std::vector<uint8_t> data,
+                              BleAdvertiserInterface::StatusCallback cb) {
+          uint8_t status = 0;
+          this->adv_callbacks_->OnPeriodicAdvertisingDataSet(advertiser_id,
+                                                             status);
+        });
+
     ON_CALL(*(sm_callbacks_.get()), OnStateMachineCreateStatus)
         .WillByDefault([this](uint32_t broadcast_id, bool initialized) {
           auto instance_it =
@@ -213,6 +235,31 @@ class StateMachineTest : public Test {
                 iter->second->OnEnableAnnouncement(enable, status);
               }
             });
+
+    ON_CALL(*(adv_callbacks_.get()), OnAdvertisingDataSet)
+        .WillByDefault([this](uint8_t advertiser_id, uint8_t status) {
+          auto const& iter = std::find_if(
+              broadcasts_.cbegin(), broadcasts_.cend(),
+              [advertiser_id](auto const& sm) {
+                return sm.second->GetAdvertisingSid() == advertiser_id;
+              });
+          if (iter != broadcasts_.cend()) {
+            iter->second->OnUpdateAnnouncement(status);
+          }
+        });
+
+    ON_CALL(*(adv_callbacks_.get()), OnPeriodicAdvertisingDataSet)
+        .WillByDefault([this](uint8_t advertiser_id, uint8_t status) {
+          auto const& iter = std::find_if(
+              broadcasts_.cbegin(), broadcasts_.cend(),
+              [advertiser_id](auto const& sm) {
+                return sm.second->GetAdvertisingSid() == advertiser_id;
+              });
+          if (iter != broadcasts_.cend()) {
+            iter->second->OnUpdateAnnouncement(status);
+          }
+        });
+
     ConfigureIsoManagerMock();
   }
 
@@ -516,6 +563,64 @@ TEST_F(StateMachineTest, UpdateAnnouncement) {
   // These should differ by the difference in metadata
   ASSERT_EQ(first_len + types::LeAudioLtvMap(metadata).RawPacketSize(),
             second_len);
+}
+
+TEST_F_WITH_FLAGS(StateMachineTest, UpdateBroadcastAnnouncementWithCallback,
+                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(
+                      TEST_BT, leaudio_broadcast_update_metadata_callback))) {
+  EXPECT_CALL(*(sm_callbacks_.get()), OnStateMachineCreateStatus(_, true))
+      .Times(1);
+
+  auto broadcast_id = InstantiateStateMachine();
+  auto adv_sid = broadcasts_[broadcast_id]->GetAdvertisingSid();
+
+  EXPECT_CALL(*mock_ble_advertising_manager_,
+              SetPeriodicAdvertisingData(adv_sid, _, _))
+      .Times(1)
+      .WillRepeatedly(testing::DoDefault());
+
+  EXPECT_CALL(*(sm_callbacks_.get()), OnAnnouncementUpdated(broadcast_id))
+      .Times(1);
+
+  std::map<uint8_t, std::vector<uint8_t>> metadata = {};
+  auto codec_config = lc3_mono_16_2;
+  auto announcement = prepareAnnouncement(codec_config, metadata);
+  broadcasts_[broadcast_id]->UpdateBroadcastAnnouncement(announcement);
+
+  ASSERT_EQ(announcement,
+            broadcasts_[broadcast_id]->GetBroadcastAnnouncement());
+}
+
+TEST_F_WITH_FLAGS(StateMachineTest,
+                  UpdatePublicBroadcastAnnouncementWithCallback,
+                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(
+                      TEST_BT, leaudio_broadcast_update_metadata_callback))) {
+  EXPECT_CALL(*(sm_callbacks_.get()), OnStateMachineCreateStatus(_, true))
+      .Times(1);
+
+  auto broadcast_id = InstantiateStateMachine();
+  auto adv_sid = broadcasts_[broadcast_id]->GetAdvertisingSid();
+
+  EXPECT_CALL(*mock_ble_advertising_manager_, SetData(adv_sid, _, _, _))
+      .Times(1)
+      .WillRepeatedly(testing::DoDefault());
+
+  EXPECT_CALL(*(sm_callbacks_.get()), OnAnnouncementUpdated(broadcast_id))
+      .Times(1);
+
+  bool is_public_metadata_valid;
+  types::LeAudioLtvMap public_ltv = types::LeAudioLtvMap::Parse(
+      default_public_metadata.data(), default_public_metadata.size(),
+      is_public_metadata_valid);
+  bluetooth::le_audio::PublicBroadcastAnnouncementData pb_announcement = {
+      .features = test_public_broadcast_features,
+      .metadata = public_ltv.Values()};
+
+  broadcasts_[broadcast_id]->UpdatePublicBroadcastAnnouncement(
+      broadcast_id, test_broadcast_name, pb_announcement);
+
+  ASSERT_EQ(pb_announcement,
+            broadcasts_[broadcast_id]->GetPublicBroadcastAnnouncement());
 }
 
 TEST_F(StateMachineTest, ProcessMessageStartWhenConfigured) {

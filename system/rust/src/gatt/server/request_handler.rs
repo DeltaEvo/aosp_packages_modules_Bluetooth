@@ -110,11 +110,8 @@ mod test {
             request_handler::AttRequestHandler,
             test::test_att_db::TestAttDatabase,
         },
-        packets::{
-            AttAttributeDataChild, AttReadRequestBuilder, AttReadResponseBuilder,
-            AttWriteResponseBuilder,
-        },
-        utils::packet::{build_att_data, build_att_view_or_crash},
+        packets::{AttReadRequestBuilder, AttReadResponseBuilder, AttWriteResponseBuilder},
+        utils::packet::build_att_view_or_crash,
     };
 
     #[test]
@@ -139,9 +136,7 @@ mod test {
         // assert
         assert_eq!(
             response,
-            AttChild::AttReadResponse(AttReadResponseBuilder {
-                value: build_att_data(AttAttributeDataChild::RawData([1, 2, 3].into()))
-            })
+            AttChild::AttReadResponse(AttReadResponseBuilder { value: [1, 2, 3].into() })
         );
     }
 

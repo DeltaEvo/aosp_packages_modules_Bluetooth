@@ -44,9 +44,6 @@ import android.provider.Telephony;
 import android.util.Log;
 
 import com.android.bluetooth.bass_client.BassClientPeriodicAdvertisingManager;
-import com.android.bluetooth.gatt.AppAdvertiseStats;
-import com.android.bluetooth.gatt.ContextMap;
-import com.android.bluetooth.gatt.GattService;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.obex.HeaderSet;
 
@@ -262,12 +259,6 @@ public class BluetoothMethodProxy {
             int advHandle,
             PeriodicAdvertisingCallback callback) {
         manager.transferSetInfo(bda, serviceData, advHandle, callback);
-    }
-
-    /** Proxies {@link AppAdvertiseStats}. */
-    public AppAdvertiseStats createAppAdvertiseStats(
-            int id, String name, ContextMap map, GattService service) {
-        return new AppAdvertiseStats(id, name, map, service);
     }
 
     /** Proxies {@link Thread#start()}. */

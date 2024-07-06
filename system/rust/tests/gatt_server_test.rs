@@ -30,7 +30,7 @@ use bluetooth_core::{
         },
     },
     packets::{
-        AttAttributeDataChild, AttBuilder, AttChild, AttErrorCode, AttErrorResponseBuilder,
+        AttBuilder, AttChild, AttErrorCode, AttErrorResponseBuilder,
         AttFindByTypeValueRequestBuilder, AttFindInformationRequestBuilder,
         AttFindInformationResponseChild, AttHandleValueConfirmationBuilder,
         AttHandleValueIndicationBuilder, AttOpcode, AttReadByTypeRequestBuilder,
@@ -39,7 +39,7 @@ use bluetooth_core::{
         GattClientCharacteristicConfigurationBuilder, GattServiceChangedBuilder,
         GattServiceDeclarationValueBuilder, Packet, Serializable, UuidAsAttDataBuilder,
     },
-    utils::packet::{build_att_data, build_att_view_or_crash},
+    utils::packet::build_att_view_or_crash,
 };
 
 use tokio::{
@@ -133,9 +133,10 @@ fn test_service_read() {
             AttBuilder {
                 opcode: AttOpcode::READ_RESPONSE,
                 _child_: AttReadResponseBuilder {
-                    value: build_att_data(GattServiceDeclarationValueBuilder {
-                        uuid: SERVICE_TYPE.into()
-                    })
+                    value: GattServiceDeclarationValueBuilder { uuid: SERVICE_TYPE.into() }
+                        .to_vec()
+                        .unwrap()
+                        .into(),
                 }
                 .into()
             }
@@ -182,9 +183,6 @@ fn test_characteristic_read() {
     start_test(async move {
         // arrange
         let (mut gatt, mut transport_rx) = start_gatt_module();
-
-        let data = AttAttributeDataChild::RawData(DATA.into());
-
         let mut data_rx = create_server_and_open_connection(&mut gatt);
 
         // act
@@ -214,7 +212,7 @@ fn test_characteristic_read() {
             resp,
             AttBuilder {
                 opcode: AttOpcode::READ_RESPONSE,
-                _child_: AttReadResponseBuilder { value: build_att_data(data) }.into()
+                _child_: AttReadResponseBuilder { value: DATA.into() }.into()
             }
         );
     })
@@ -225,16 +223,13 @@ fn test_characteristic_write() {
     start_test(async move {
         // arrange
         let (mut gatt, mut transport_rx) = start_gatt_module();
-
-        let data = AttAttributeDataChild::RawData(DATA.into());
-
         let mut data_rx = create_server_and_open_connection(&mut gatt);
 
         // act
         gatt.get_bearer(TCB_IDX).unwrap().handle_packet(
             build_att_view_or_crash(AttWriteRequestBuilder {
                 handle: CHARACTERISTIC_HANDLE.into(),
-                value: build_att_data(data.clone()),
+                value: DATA.into(),
             })
             .view(),
         );
@@ -262,7 +257,7 @@ fn test_characteristic_write() {
                 _child_: AttWriteResponseBuilder {}.into()
             }
         );
-        assert_eq!(data.to_vec().unwrap(), written_data)
+        assert_eq!(&DATA, written_data.as_slice());
     })
 }
 
@@ -271,14 +266,11 @@ fn test_send_indication() {
     start_test(async move {
         // arrange
         let (mut gatt, mut transport_rx) = start_gatt_module();
-
-        let data = AttAttributeDataChild::RawData(DATA.into());
-
         create_server_and_open_connection(&mut gatt);
 
         // act
         let pending_indication = spawn_local(
-            gatt.get_bearer(TCB_IDX).unwrap().send_indication(CHARACTERISTIC_HANDLE, data.clone()),
+            gatt.get_bearer(TCB_IDX).unwrap().send_indication(CHARACTERISTIC_HANDLE, DATA.into()),
         );
 
         let (tcb_idx, resp) = transport_rx.recv().await.unwrap();
@@ -296,7 +288,7 @@ fn test_send_indication() {
                 opcode: AttOpcode::HANDLE_VALUE_INDICATION,
                 _child_: AttHandleValueIndicationBuilder {
                     handle: CHARACTERISTIC_HANDLE.into(),
-                    value: build_att_data(data),
+                    value: DATA.into(),
                 }
                 .into()
             }
@@ -313,10 +305,11 @@ fn test_send_indication_and_disconnect() {
         create_server_and_open_connection(&mut gatt);
 
         // act: send an indication, then disconnect
-        let pending_indication = spawn_local(gatt.get_bearer(TCB_IDX).unwrap().send_indication(
-            CHARACTERISTIC_HANDLE,
-            AttAttributeDataChild::RawData([1, 2, 3, 4].into()),
-        ));
+        let pending_indication = spawn_local(
+            gatt.get_bearer(TCB_IDX)
+                .unwrap()
+                .send_indication(CHARACTERISTIC_HANDLE, vec![1, 2, 3, 4]),
+        );
         transport_rx.recv().await.unwrap();
         gatt.on_le_disconnect(TCB_IDX).unwrap();
 
@@ -333,16 +326,13 @@ fn test_write_to_descriptor() {
     start_test(async move {
         // arrange
         let (mut gatt, mut transport_rx) = start_gatt_module();
-
-        let data = AttAttributeDataChild::RawData(DATA.into());
-
         let mut data_rx = create_server_and_open_connection(&mut gatt);
 
         // act
         gatt.get_bearer(TCB_IDX).unwrap().handle_packet(
             build_att_view_or_crash(AttWriteRequestBuilder {
                 handle: DESCRIPTOR_HANDLE.into(),
-                value: build_att_data(data.clone()),
+                value: DATA.into(),
             })
             .view(),
         );
@@ -370,7 +360,7 @@ fn test_write_to_descriptor() {
                 _child_: AttWriteResponseBuilder {}.into()
             }
         );
-        assert_eq!(data.to_vec().unwrap(), written_data)
+        assert_eq!(&DATA, written_data.as_slice());
     })
 }
 
@@ -505,9 +495,10 @@ fn test_service_change_indication() {
                 starting_handle: AttHandle::MIN.into(),
                 ending_handle: AttHandle::MAX.into(),
                 attribute_type: PRIMARY_SERVICE_DECLARATION_UUID.try_into().unwrap(),
-                attribute_value: build_att_data(UuidAsAttDataBuilder {
-                    uuid: GATT_SERVICE_UUID.into(),
-                }),
+                attribute_value: UuidAsAttDataBuilder { uuid: GATT_SERVICE_UUID.into() }
+                    .to_vec()
+                    .unwrap()
+                    .into(),
             })
             .view(),
         );
@@ -538,7 +529,7 @@ fn test_service_change_indication() {
             .into_vec()
             .into_iter()
             .find_map(|characteristic| {
-                let value = characteristic.value.to_vec().unwrap();
+                let value = characteristic.value.to_vec();
                 let decl =
                     GattCharacteristicDeclarationValueView::try_parse_from_buffer(value.as_slice())
                         .unwrap();
@@ -583,10 +574,13 @@ fn test_service_change_indication() {
         gatt.get_bearer(TCB_IDX).unwrap().handle_packet(
             build_att_view_or_crash(AttWriteRequestBuilder {
                 handle: service_change_descriptor_handle,
-                value: build_att_data(GattClientCharacteristicConfigurationBuilder {
+                value: GattClientCharacteristicConfigurationBuilder {
                     notification: 0,
                     indication: 1,
-                }),
+                }
+                .to_vec()
+                .unwrap()
+                .into(),
             })
             .view(),
         );
@@ -614,11 +608,12 @@ fn test_service_change_indication() {
         };
         assert_eq!(indication.handle, service_change_char_handle.into());
         assert_eq!(
-            indication.value,
-            build_att_data(GattServiceChangedBuilder {
+            Ok(indication.value.into()),
+            GattServiceChangedBuilder {
                 start_handle: AttHandle(30).into(),
                 end_handle: AttHandle(30).into(),
-            })
+            }
+            .to_vec()
         );
     });
 }

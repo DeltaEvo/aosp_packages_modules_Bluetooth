@@ -1422,6 +1422,11 @@ static void read_pref_conn_params_cb(uint16_t conn_id, tGATT_STATUS status,
     if (timeout < 300) timeout = 300;
   }
 
+  if (interop_match_addr(INTEROP_HID_PREF_CONN_ZERO_LATENCY,
+                         (RawAddress*)&p_dev_cb->link_spec.addrt.bda)) {
+    latency = 0;
+  }
+
   BTM_BleSetPrefConnParams(p_dev_cb->link_spec.addrt.bda, min_interval,
                            max_interval, latency, timeout);
   if (!L2CA_UpdateBleConnParams(p_dev_cb->link_spec.addrt.bda, min_interval,
@@ -2359,6 +2364,23 @@ static bool bta_hh_le_iso_data_callback(const RawAddress& addr,
     return false;
   }
 
-  bta_hh_co_data(p_dev_cb->hid_handle, data, size);
+  uint8_t* report = data;
+  uint8_t len = size;
+  if (com::android::bluetooth::flags::headtracker_sdu_size()) {
+    if (size == ANDROID_HEADTRACKER_DATA_SIZE) {
+      report = (uint8_t*)osi_malloc(size + 1);
+      report[0] = ANDROID_HEADTRACKER_REPORT_ID;
+      mempcpy(&report[1], data, size);
+      len = size + 1;
+    } else if (size != ANDROID_HEADTRACKER_DATA_SIZE + 1) {
+      log::warn("Unexpected headtracker data size {} from {}", size, addr);
+    }
+  }
+
+  bta_hh_co_data(p_dev_cb->hid_handle, report, len);
+
+  if (report != data) {
+    osi_free(report);
+  }
   return true;
 }

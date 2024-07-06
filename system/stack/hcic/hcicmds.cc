@@ -341,12 +341,6 @@
 #define HCI_DELETE_KEY_ALL_FLAG_OFF 6
 /* Delete Stored Key */
 
-/* Change Local Name */
-#define HCIC_PARAM_SIZE_CHANGE_NAME BD_NAME_LEN
-
-#define HCI_CHANGE_NAME_NAME_OFF 0
-/* Change Local Name */
-
 #define HCIC_PARAM_SIZE_READ_CMD 0
 
 #define HCIC_PARAM_SIZE_WRITE_PARAM1 1
@@ -970,26 +964,6 @@ void btsnd_hcic_delete_stored_key(const RawAddress& bd_addr,
 
   BDADDR_TO_STREAM(pp, bd_addr);
   UINT8_TO_STREAM(pp, delete_all_flag);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
-}
-
-void btsnd_hcic_change_name(BD_NAME name) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-  uint16_t len = strlen((char*)name) + 1;
-
-  memset(pp, 0, HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_CHANGE_NAME);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_CHANGE_NAME;
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_CHANGE_LOCAL_NAME);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_CHANGE_NAME);
-
-  if (len > HCIC_PARAM_SIZE_CHANGE_NAME) len = HCIC_PARAM_SIZE_CHANGE_NAME;
-
-  ARRAY_TO_STREAM(pp, name, len);
 
   btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
 }

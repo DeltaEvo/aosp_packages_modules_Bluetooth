@@ -16,13 +16,6 @@ flag {
 }
 
 flag {
-    name: "use_dsp_codec_when_controller_does_not_support"
-    namespace: "bluetooth"
-    description: "use codec on the DSP when the BT controller does not support it"
-    bug: "308838380"
-}
-
-flag {
     name: "is_sco_managed_by_audio"
     namespace: "bluetooth"
     description: "start and stop of the SCO is managed by Audio instead of Bluetooth"
@@ -34,13 +27,6 @@ flag {
     namespace: "bluetooth"
     description: "retry eSCO connection based on retransmission_effort"
     bug: "316498257"
-}
-
-flag {
-    name: "close_rfcomm_instead_of_reset"
-    namespace: "bluetooth"
-    description: "Closing Rfcomm Connection instead of reset"
-    bug: "316993992"
 }
 
 flag {
@@ -125,6 +111,16 @@ flag {
     namespace: "bluetooth"
     description: "Avoid change of clcc call index after call disconnects from conference"
     bug: "345380335"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "ignore_notify_when_already_connected"
+    namespace: "bluetooth"
+    description: "Flag to ignore connect state notification from Native to Java layer when already connected"
+    bug: "346679106"
     metadata {
         purpose: PURPOSE_BUGFIX
     }

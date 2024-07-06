@@ -122,28 +122,6 @@ struct btif_av_get_peer_sep {
 };
 extern struct btif_av_get_peer_sep btif_av_get_peer_sep;
 
-// Name: btif_av_get_sink_interface
-// Params: void
-// Return: const btav_sink_interface_t*
-struct btif_av_get_sink_interface {
-  static const btav_sink_interface_t* return_value;
-  std::function<const btav_sink_interface_t*(void)> body{
-      [](void) { return return_value; }};
-  const btav_sink_interface_t* operator()(void) { return body(); };
-};
-extern struct btif_av_get_sink_interface btif_av_get_sink_interface;
-
-// Name: btif_av_get_src_interface
-// Params: void
-// Return: const btav_source_interface_t*
-struct btif_av_get_src_interface {
-  static const btav_source_interface_t* return_value;
-  std::function<const btav_source_interface_t*(void)> body{
-      [](void) { return return_value; }};
-  const btav_source_interface_t* operator()(void) { return body(); };
-};
-extern struct btif_av_get_src_interface btif_av_get_src_interface;
-
 // Name: btif_av_is_a2dp_offload_enabled
 // Params:
 // Return: bool
@@ -364,15 +342,6 @@ struct btif_av_report_source_codec_state {
 extern struct btif_av_report_source_codec_state
     btif_av_report_source_codec_state;
 
-// Name: btif_av_reset_audio_delay
-// Params: void
-// Return: void
-struct btif_av_reset_audio_delay {
-  std::function<void(void)> body{[](void) {}};
-  void operator()(void) { body(); };
-};
-extern struct btif_av_reset_audio_delay btif_av_reset_audio_delay;
-
 // Name: btif_av_set_audio_delay
 // Params: const RawAddress& peer_address, uint16_t delay, const A2dpType
 // local_a2dp_type Return: void
@@ -452,16 +421,6 @@ struct btif_av_source_execute_service {
   bt_status_t operator()(bool enable) { return body(enable); };
 };
 extern struct btif_av_source_execute_service btif_av_source_execute_service;
-
-// Name: btif_av_src_disconnect_sink
-// Params: const RawAddress& peer_address
-// Return: void
-struct btif_av_src_disconnect_sink {
-  std::function<void(const RawAddress& peer_address)> body{
-      [](const RawAddress& /* peer_address */) {}};
-  void operator()(const RawAddress& peer_address) { body(peer_address); };
-};
-extern struct btif_av_src_disconnect_sink btif_av_src_disconnect_sink;
 
 // Name: btif_av_src_sink_coexist_enabled
 // Params: void

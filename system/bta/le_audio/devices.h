@@ -165,6 +165,8 @@ class LeAudioDevice {
   bool HaveAllActiveAsesSameState(types::AseState state);
   bool HaveAllActiveAsesSameDataPathState(types::DataPathState state) const;
   bool HaveAnyUnconfiguredAses(void);
+  bool HaveAnyStreamingAses(void);
+  bool HaveAnyReleasingAse(void);
   bool IsReadyToCreateStream(void);
   bool IsReadyToStream(void) const {
     return HaveAllActiveAsesCisEst() &&

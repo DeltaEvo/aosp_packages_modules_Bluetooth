@@ -77,16 +77,14 @@ uint16_t L2CA_RegisterWithSecurity(
 }
 
 uint16_t L2CA_LeCreditDefault() {
-  static const uint16_t sL2CAP_LE_CREDIT_DEFAULT =
-      bluetooth::os::GetSystemPropertyUint32Base(
-          "bluetooth.l2cap.le.credit_default.value", 0xffff);
+  static const uint16_t sL2CAP_LE_CREDIT_DEFAULT = bluetooth::os::GetSystemPropertyUint32Base(
+          "bluetooth.l2cap.le.credit_default.value", L2CAP_LE_CREDIT_MAX);
   return sL2CAP_LE_CREDIT_DEFAULT;
 }
 
 uint16_t L2CA_LeCreditThreshold() {
-  static const uint16_t sL2CAP_LE_CREDIT_THRESHOLD =
-      bluetooth::os::GetSystemPropertyUint32Base(
-          "bluetooth.l2cap.le.credit_threshold.value", 0x0040);
+  static const uint16_t sL2CAP_LE_CREDIT_THRESHOLD = bluetooth::os::GetSystemPropertyUint32Base(
+          "bluetooth.l2cap.le.credit_threshold.value", L2CAP_LE_CREDIT_THRESHOLD);
   return sL2CAP_LE_CREDIT_THRESHOLD;
 }
 
@@ -317,7 +315,7 @@ uint16_t L2CA_ConnectReq(uint16_t psm, const RawAddress& p_bd_addr) {
   log::verbose("BDA {} PSM: 0x{:04x}", p_bd_addr, psm);
 
   /* Fail if we have not established communications with the controller */
-  if (!BTM_IsDeviceUp()) {
+  if (!get_btm_client_interface().local.BTM_IsDeviceUp()) {
     log::warn("BTU not ready");
     return 0;
   }
@@ -515,7 +513,7 @@ uint16_t L2CA_ConnectLECocReq(uint16_t psm, const RawAddress& p_bd_addr,
   log::verbose("BDA: {} PSM: 0x{:04x}", p_bd_addr, psm);
 
   /* Fail if we have not established communications with the controller */
-  if (!BTM_IsDeviceUp()) {
+  if (!get_btm_client_interface().local.BTM_IsDeviceUp()) {
     log::warn("BTU not ready");
     return 0;
   }
@@ -740,7 +738,7 @@ std::vector<uint16_t> L2CA_ConnectCreditBasedReq(uint16_t psm,
   std::vector<uint16_t> allocated_cids;
 
   /* Fail if we have not established communications with the controller */
-  if (!BTM_IsDeviceUp()) {
+  if (!get_btm_client_interface().local.BTM_IsDeviceUp()) {
     log::warn("BTU not ready");
     return allocated_cids;
   }
@@ -1191,7 +1189,7 @@ bool L2CA_ConnectFixedChnl(uint16_t fixed_cid, const RawAddress& rem_bda) {
   }
 
   // Fail if BT is not yet up
-  if (!BTM_IsDeviceUp()) {
+  if (!get_btm_client_interface().local.BTM_IsDeviceUp()) {
     log::warn("Bt controller is not ready fixed_cid:0x{:04x}", fixed_cid);
     return (false);
   }
@@ -1305,7 +1303,7 @@ tL2CAP_DW_RESULT L2CA_SendFixedChnlData(uint16_t fixed_cid,
     return (tL2CAP_DW_RESULT::FAILED);
   }
 
-  if (!BTM_IsDeviceUp()) {
+  if (!get_btm_client_interface().local.BTM_IsDeviceUp()) {
     log::warn("Controller is not ready CID: 0x{:04x}", fixed_cid);
     osi_free(p_buf);
     return (tL2CAP_DW_RESULT::FAILED);
@@ -1586,7 +1584,7 @@ uint16_t L2CA_FlushChannel(uint16_t lcid, uint16_t num_to_flush) {
       /* If the controller supports enhanced flush, flush the data queued at the
        * controller */
       if (bluetooth::shim::GetController()->SupportsNonFlushablePb() &&
-          (BTM_GetNumScoLinks() == 0)) {
+          (get_btm_client_interface().sco.BTM_GetNumScoLinks() == 0)) {
         /* The only packet type defined - 0 - Automatically-Flushable Only */
         l2c_acl_flush(p_lcb->Handle());
       }

@@ -36,6 +36,9 @@
 #include "stack/include/bt_hdr.h"
 #include "types/raw_address.h"
 
+#define ANDROID_HEADTRACKER_DATA_SIZE 13
+#define ANDROID_HEADTRACKER_REPORT_ID 1
+
 /* state machine events, these events are handled by the state machine */
 enum tBTA_HH_INT_EVT : uint16_t {
   BTA_HH_API_OPEN_EVT = BTA_SYS_EVT_START(BTA_ID_HH),

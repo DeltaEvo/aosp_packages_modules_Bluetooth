@@ -29,13 +29,39 @@
 #include "include/hardware/bt_av.h"
 #include "types/raw_address.h"
 
-// #include "bta/include/bta_av_api.h"
-// #include "btif/include/btif_common.h"
+/* Interface methods for the A2DP source stack. */
+
+bt_status_t btif_av_source_init(
+    btav_source_callbacks_t* callbacks, int max_connected_audio_devices,
+    const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
+    const std::vector<btav_a2dp_codec_config_t>& offloading_preference,
+    std::vector<btav_a2dp_codec_info_t>* supported_codecs);
+bt_status_t btif_av_source_connect(const RawAddress& peer_address);
+bt_status_t btif_av_source_disconnect(const RawAddress& peer_address);
+bt_status_t btif_av_source_set_silence_device(const RawAddress& peer_address,
+                                              bool silence);
+bt_status_t btif_av_source_set_active_device(const RawAddress& peer_address);
+bt_status_t btif_av_source_set_codec_config_preference(
+    const RawAddress& peer_address,
+    std::vector<btav_a2dp_codec_config_t> codec_preferences);
+void btif_av_source_cleanup();
+
+/* Interface methods for the A2DP sink stack. */
+
+bt_status_t btif_av_sink_init(btav_sink_callbacks_t* callbacks,
+                              int max_connected_audio_devices);
+bt_status_t btif_av_sink_connect(const RawAddress& peer_address);
+bt_status_t btif_av_sink_disconnect(const RawAddress& peer_address);
+void btif_av_sink_cleanup();
+void btif_av_sink_set_audio_focus_state(int focus_state);
+void btif_av_sink_set_audio_track_gain(float gain);
+bt_status_t btif_av_sink_set_active_device(const RawAddress& peer_address);
 
 /**
  * Enum to represent the type of local a2dp profile.
  */
 enum class A2dpType { kSource, kSink, kUnknown };
+
 /**
  * When the local device is A2DP source, get the address of the active peer.
  */
@@ -219,20 +245,6 @@ void btif_av_set_audio_delay(const RawAddress& peer_address, uint16_t delay,
 uint16_t btif_av_get_audio_delay(const A2dpType local_a2dp_type);
 
 /**
- * Reset the audio delay and count of audio bytes sent to zero.
- */
-void btif_av_reset_audio_delay(void);
-
-/**
- * Called to disconnect peer device when
- *  remote initiatied offload start failed
- *
- * @param peer_address to disconnect
- *
- */
-void btif_av_src_disconnect_sink(const RawAddress& peer_address);
-
-/**
  *  check A2DP offload support enabled
  *  @param  none
  */
@@ -287,14 +299,13 @@ void btif_av_connect_sink_delayed(uint8_t handle,
 /**
  * Check whether A2DP Source is enabled.
  */
-extern bool btif_av_is_source_enabled(void);
-extern bool btif_av_both_enable(void);
-extern bool btif_av_src_sink_coexist_enabled(void);
-extern bool btif_av_is_sink_enabled(void);
-extern bool btif_av_is_connected_addr(const RawAddress& peer_address,
-                                      const A2dpType local_a2dp_type);
-extern bool btif_av_peer_is_connected_sink(const RawAddress& peer_address);
-extern bool btif_av_peer_is_connected_source(const RawAddress& peer_address);
-extern bool btif_av_peer_is_sink(const RawAddress& peer_address);
-extern bool btif_av_peer_is_source(const RawAddress& peer_address);
+bool btif_av_is_source_enabled(void);
+bool btif_av_both_enable(void);
+bool btif_av_src_sink_coexist_enabled(void);
+bool btif_av_is_sink_enabled(void);
+bool btif_av_peer_is_connected_sink(const RawAddress& peer_address);
+bool btif_av_peer_is_connected_source(const RawAddress& peer_address);
+bool btif_av_peer_is_sink(const RawAddress& peer_address);
+bool btif_av_peer_is_source(const RawAddress& peer_address);
+
 #endif /* BTIF_AV_H */

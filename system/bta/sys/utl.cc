@@ -26,7 +26,8 @@
 #include <cstdint>
 
 #include "internal_include/bt_target.h"
-#include "stack/include/btm_api.h"
+#include "stack/include/bt_dev_class.h"
+#include "stack/include/btm_client_interface.h"
 
 /*******************************************************************************
  *
@@ -162,7 +163,7 @@ bool utl_set_device_class(tBTA_UTL_COD* p_cod, uint8_t cmd) {
   uint8_t minor, major;
   DEV_CLASS old_class;
 
-  old_class = BTM_ReadDeviceClass();
+  old_class = get_btm_client_interface().local.BTM_ReadDeviceClass();
   BTM_COD_SERVICE_CLASS(service, old_class);
   BTM_COD_MINOR_CLASS(minor, old_class);
   BTM_COD_MAJOR_CLASS(major, old_class);

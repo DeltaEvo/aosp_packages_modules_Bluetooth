@@ -106,7 +106,6 @@ cc_library_static {
         "src/bluetooth.cc",
         // BTIF implementation
         "src/btif_a2dp.cc",
-        "src/btif_a2dp_control.cc",
         "src/btif_a2dp_sink.cc",
         "src/btif_a2dp_source.cc",
         "src/btif_av.cc",
@@ -153,7 +152,6 @@ cc_library_static {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
-        "libaudio-a2dp-hw-utils",
         "libbluetooth-types",
         "libbluetooth_hci_pdl",
         "libbluetooth_log",
@@ -234,7 +232,6 @@ cc_library_static {
     static_libs: [
         "lib-bt-packets",
         "lib-bt-packets-base",
-        "libaudio-a2dp-hw-utils",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_hci_pdl",
         "libbluetooth_log",
@@ -348,7 +345,6 @@ cc_test {
                 "libstatssocket",
             ],
             static_libs: [
-                "android.hardware.bluetooth.a2dp@1.0",
                 "android.hardware.bluetooth@1.0",
                 "android.hardware.bluetooth@1.1",
                 "android.hardware.common-V2-ndk",
@@ -602,7 +598,6 @@ cc_test {
     ],
     static_libs: [
         "android.hardware.audio.common@5.0",
-        "android.hardware.bluetooth.a2dp@1.0",
         "android.hardware.bluetooth.audio@2.0",
         "android.hardware.bluetooth.audio@2.1",
         "avrcp-target-service",
@@ -610,7 +605,6 @@ cc_test {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
-        "libaudio-a2dp-hw-utils",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
@@ -732,7 +726,6 @@ cc_test {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
-        "libaudio-a2dp-hw-utils",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
@@ -761,7 +754,6 @@ cc_test {
     target: {
         android: {
             static_libs: [
-                "android.hardware.bluetooth.a2dp@1.0",
                 "android.hardware.common-V2-ndk",
                 "android.hardware.common.fmq-V1-ndk",
             ],

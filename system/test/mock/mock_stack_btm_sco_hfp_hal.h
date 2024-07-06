@@ -152,8 +152,9 @@ extern struct notify_sco_connection_change notify_sco_connection_change;
 // Params: esco_coding_format_t coding_format
 // Return: void
 struct set_codec_datapath {
-  std::function<void(int coding_format)> body{[](int /* coding_format */) {}};
-  void operator()(int coding_format) { body(coding_format); };
+  std::function<void(tBTA_AG_UUID_CODEC coding_format)> body{
+      [](tBTA_AG_UUID_CODEC /* coding_format */) {}};
+  void operator()(tBTA_AG_UUID_CODEC coding_format) { body(coding_format); };
 };
 extern struct set_codec_datapath set_codec_datapath;
 

@@ -914,15 +914,7 @@ impl Bluetooth {
 
     /// Returns whether the adapter is connectable.
     pub(crate) fn get_connectable_internal(&self) -> bool {
-        self.properties.get(&BtPropertyType::AdapterScanMode).map_or(false, |prop| match prop {
-            BluetoothProperty::AdapterScanMode(mode) => match *mode {
-                BtScanMode::Connectable
-                | BtScanMode::ConnectableDiscoverable
-                | BtScanMode::ConnectableLimitedDiscoverable => true,
-                BtScanMode::None_ => false,
-            },
-            _ => false,
-        })
+        self.discoverable_mode != BtDiscMode::NonDiscoverable || self.is_connectable
     }
 
     /// Sets the adapter's connectable mode for classic connections.
@@ -940,33 +932,18 @@ impl Bluetooth {
             self.is_connectable = mode;
             return true;
         }
-        let status =
-            self.intf.lock().unwrap().set_adapter_property(BluetoothProperty::AdapterScanMode(
-                if mode { BtScanMode::Connectable } else { BtScanMode::None_ },
-            ));
-        let status = BtStatus::from(status as u32);
-        if status != BtStatus::Success {
-            warn!("Failed to set connectable mode: {:?}", status);
-            return false;
-        }
+        self.intf.lock().unwrap().set_scan_mode(if mode {
+            BtScanMode::Connectable
+        } else {
+            BtScanMode::None_
+        });
         self.is_connectable = mode;
         true
     }
 
     /// Returns adapter's discoverable mode.
     pub(crate) fn get_discoverable_mode_internal(&self) -> BtDiscMode {
-        let off_mode = BtDiscMode::NonDiscoverable;
-
-        self.properties.get(&BtPropertyType::AdapterScanMode).map_or(off_mode.clone(), |prop| {
-            match prop {
-                BluetoothProperty::AdapterScanMode(mode) => match *mode {
-                    BtScanMode::ConnectableDiscoverable => BtDiscMode::GeneralDiscoverable,
-                    BtScanMode::ConnectableLimitedDiscoverable => BtDiscMode::LimitedDiscoverable,
-                    BtScanMode::Connectable | BtScanMode::None_ => off_mode,
-                },
-                _ => off_mode,
-            }
-        })
+        self.discoverable_mode.clone()
     }
 
     /// Set the suspend mode for scan mode (connectable/discoverable mode).
@@ -988,15 +965,7 @@ impl Bluetooth {
         }
         self.set_scan_suspend_mode(SuspendMode::Suspending);
 
-        if self
-            .intf
-            .lock()
-            .unwrap()
-            .set_adapter_property(BluetoothProperty::AdapterScanMode(BtScanMode::None_))
-            != 0
-        {
-            warn!("scan_mode_enter_suspend: Failed to set BtScanMode::None_");
-        }
+        self.intf.lock().unwrap().set_scan_mode(BtScanMode::None_);
 
         self.set_scan_suspend_mode(SuspendMode::Suspended);
 
@@ -1018,15 +987,7 @@ impl Bluetooth {
                 false => BtScanMode::None_,
             },
         };
-        if self
-            .intf
-            .lock()
-            .unwrap()
-            .set_adapter_property(BluetoothProperty::AdapterScanMode(mode.clone()))
-            != 0
-        {
-            warn!("scan_mode_exit_suspend: Failed to restore scan mode {:?}", mode);
-        }
+        self.intf.lock().unwrap().set_scan_mode(mode);
 
         self.set_scan_suspend_mode(SuspendMode::Normal);
 
@@ -1595,9 +1556,6 @@ impl BtifBluetoothCallbacks for Bluetooth {
                 self.ble_scanner_uuid =
                     Some(self.bluetooth_gatt.lock().unwrap().register_scanner(callback_id));
 
-                // LibBluetooth saves and restores the discoverable mode on the previous run.
-                // But on Floss we always want non-discoverable mode on start.
-                self.set_discoverable(BtDiscMode::NonDiscoverable, 0);
                 // Update connectable mode so that disconnected bonded classic device can reconnect
                 self.trigger_update_connectable_mode();
 
@@ -1685,12 +1643,6 @@ impl BtifBluetoothCallbacks for Bluetooth {
                 BluetoothProperty::BdName(bdname) => {
                     self.callbacks.for_all_callbacks(|callback| {
                         callback.on_name_changed(bdname.clone());
-                    });
-                }
-                BluetoothProperty::AdapterScanMode(mode) => {
-                    self.callbacks.for_all_callbacks(|callback| {
-                        callback
-                            .on_discoverable_changed(*mode == BtScanMode::ConnectableDiscoverable);
                     });
                 }
                 _ => {}
@@ -1884,16 +1836,36 @@ impl BtifBluetoothCallbacks for Bluetooth {
                         Instant::now(),
                         vec![],
                     ));
+                    let acl_reported_transport = device.acl_reported_transport.clone();
+                    let acl_state = device.ble_acl_state.clone();
                     let device_info = device.info.clone();
 
                     // Since this is a newly bonded device, we also need to trigger SDP on it.
                     device.services_resolved = false;
-                    self.fetch_remote_uuids(device_info);
+                    self.fetch_remote_uuids(device_info.clone());
                     if self.get_wake_allowed_device_bonded() {
                         self.create_uhid_for_suspend_wakesource();
                     }
                     // Update the connectable mode since bonded list is changed.
                     self.trigger_update_connectable_mode();
+
+                    let transport = match self.get_remote_type(device_info.clone()) {
+                        BtDeviceType::Bredr => BtTransport::Bredr,
+                        BtDeviceType::Ble => BtTransport::Le,
+                        _ => acl_reported_transport,
+                    };
+
+                    let tx = self.tx.clone();
+                    tokio::spawn(async move {
+                        let _ = tx
+                            .send(Message::OnDeviceConnectionStateChanged(
+                                device_info.clone(),
+                                acl_state,
+                                BtBondState::Bonded,
+                                transport,
+                            ))
+                            .await;
+                    });
                 }
                 BtBondState::Bonding => {}
             }
@@ -2046,6 +2018,7 @@ impl BtifBluetoothCallbacks for Bluetooth {
 
         let info = device.info.clone();
         device.acl_reported_transport = link_type;
+        let bond_state = device.bond_state.clone();
 
         metrics::acl_connection_state_changed(
             addr,
@@ -2069,7 +2042,14 @@ impl BtifBluetoothCallbacks for Bluetooth {
                     _ => acl_reported_transport,
                 };
                 tokio::spawn(async move {
-                    let _ = txl.send(Message::OnAclConnected(info, transport)).await;
+                    let _ = txl
+                        .send(Message::OnDeviceConnectionStateChanged(
+                            info,
+                            BtAclState::Connected,
+                            bond_state,
+                            transport,
+                        ))
+                        .await;
                 });
             }
             BtAclState::Disconnected => {
@@ -2079,7 +2059,7 @@ impl BtifBluetoothCallbacks for Bluetooth {
                     });
                 }
                 tokio::spawn(async move {
-                    let _ = txl.send(Message::OnAclDisconnected(info)).await;
+                    let _ = txl.send(Message::OnDeviceDisconnected(info)).await;
                 });
             }
         };
@@ -2274,12 +2254,15 @@ impl IBluetooth for Bluetooth {
             };
             if intf.set_adapter_property(BluetoothProperty::AdapterDiscoverableTimeout(duration))
                 != 0
-                || intf.set_adapter_property(BluetoothProperty::AdapterScanMode(scan_mode)) != 0
             {
                 return false;
             }
+            intf.set_scan_mode(scan_mode);
         }
 
+        self.callbacks.for_all_callbacks(|callback| {
+            callback.on_discoverable_changed(mode == BtDiscMode::GeneralDiscoverable);
+        });
         self.discoverable_mode = mode.clone();
 
         // The old timer should be overwritten regardless of what the new mode is.
@@ -2791,21 +2774,27 @@ impl IBluetooth for Bluetooth {
                             Profile::Bas => {
                                 has_supported_profile = true;
                                 let tx = self.tx.clone();
-                                let transport = match self.remote_devices.get(&addr) {
-                                    Some(context) => context.acl_reported_transport,
+                                let device_context = match self.remote_devices.get(&addr) {
+                                    Some(context) => context,
                                     None => return BtStatus::RemoteDeviceDown,
                                 };
+
+                                let acl_state = device_context.ble_acl_state.clone();
+                                let bond_state = device_context.bond_state.clone();
                                 let device_to_send = device.clone();
+
                                 let transport = match self.get_remote_type(device.clone()) {
                                     BtDeviceType::Bredr => BtTransport::Bredr,
                                     BtDeviceType::Ble => BtTransport::Le,
-                                    _ => transport,
+                                    _ => device_context.acl_reported_transport.clone(),
                                 };
                                 topstack::get_runtime().spawn(async move {
                                     let _ = tx
                                         .send(Message::BatteryService(
                                             BatteryServiceActions::Connect(
                                                 device_to_send,
+                                                acl_state,
+                                                bond_state,
                                                 transport,
                                             ),
                                         ))

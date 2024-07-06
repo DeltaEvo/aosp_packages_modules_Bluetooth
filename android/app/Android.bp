@@ -102,7 +102,6 @@ cc_library_shared {
         "lib-bt-packets-base",
         "libFraunhoferAAC",
         "libaconfig_storage_read_api_cc",
-        "libaudio-a2dp-hw-utils",
         "libbase",
         "libbluetooth",
         "libbluetooth-dumpsys",
@@ -134,6 +133,7 @@ cc_library_shared {
         "libchrome",
         "libcutils",
         "libevent",
+        "libexpresslog",
         "libflatbuffers-cpp",
         "libfmq",
         "libg722codec",
@@ -144,6 +144,8 @@ cc_library_shared {
         "libosi",
         "libprotobuf-cpp-lite",
         "libstatslog_bt",
+        "libstatslog_express",
+        "libtextclassifier_hash_static",
         "libudrv-uipc",
         "libutils",
         "server_configurable_flags",
@@ -164,7 +166,6 @@ cc_library_shared {
         "com.android.btservices",
     ],
     min_sdk_version: "Tiramisu",
-    ldflags: ["-Wl,--allow-multiple-definition"],
 
     // TODO(b/346919576) Workaround LTO build breakage.
     lto_O0: true,

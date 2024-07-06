@@ -10,6 +10,7 @@ aconfig_declarations {
     // LINT.IfChange
     srcs: [
         "a2dp.aconfig",
+        "active_device_manager.aconfig",
         "asha.aconfig",
         "audio_routing.aconfig",
         "avrcp.aconfig",
@@ -26,6 +27,7 @@ aconfig_declarations {
         "gap.aconfig",
         "hal.aconfig",
         "hap.aconfig",
+        "hci.aconfig",
         "hfp.aconfig",
         "hid.aconfig",
         "l2cap.aconfig",

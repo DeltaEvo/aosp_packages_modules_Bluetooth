@@ -40,8 +40,11 @@ import android.bluetooth.BluetoothLeBroadcastMetadata;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothSinkAudioPolicy;
 import android.content.Context;
+import android.media.AudioDeviceInfo;
+import android.media.AudioDevicePort;
 import android.media.AudioManager;
 import android.os.test.TestLooper;
+import android.platform.test.annotations.EnableFlags;
 import android.platform.test.flag.junit.SetFlagsRule;
 import android.util.ArrayMap;
 import android.util.SparseIntArray;
@@ -897,7 +900,6 @@ public class ActiveDeviceManagerTest {
 
     @Test
     public void leAudioSetConnectedGroupThenDisconnected_noFallback() {
-        mSetFlagsRule.enableFlags(Flags.FLAG_LEAUDIO_ACTIVE_DEVICE_MANAGER_GROUP_HANDLING_FIX);
         when(mAudioManager.getMode()).thenReturn(AudioManager.MODE_NORMAL);
 
         leAudioConnected(mLeAudioDevice);
@@ -1217,6 +1219,33 @@ public class ActiveDeviceManagerTest {
         verify(mHearingAidService, timeout(TIMEOUT_MS)).removeActiveDevice(false);
     }
 
+    /** A wired audio device is disconnected. Check if falls back to connected A2DP. */
+    @Test
+    @EnableFlags(Flags.FLAG_FALLBACK_WHEN_WIRED_AUDIO_DISCONNECTED)
+    public void wiredAudioDeviceDisconnected_setFallbackDevice() throws Exception {
+        AudioDeviceInfo[] testDevices = createAudioDeviceInfoTestDevices();
+
+        // Connect A2DP headphones
+        a2dpConnected(mA2dpDevice, false);
+        verify(mA2dpService, timeout(TIMEOUT_MS).times(1)).setActiveDevice(mA2dpDevice);
+        verify(mLeAudioService, timeout(TIMEOUT_MS).times(1)).removeActiveDevice(true);
+
+        // Connect wired audio device
+        mActiveDeviceManager.mAudioManagerAudioDeviceCallback.onAudioDevicesAdded(testDevices);
+
+        // Check wiredAudioDeviceConnected invoked properly
+        verify(mA2dpService, timeout(TIMEOUT_MS)).removeActiveDevice(false);
+        verify(mHeadsetService, timeout(TIMEOUT_MS)).setActiveDevice(isNull());
+        verify(mHearingAidService, timeout(TIMEOUT_MS)).removeActiveDevice(false);
+        verify(mLeAudioService, timeout(TIMEOUT_MS).times(2)).removeActiveDevice(true);
+
+        // Disconnect wired audio device
+        mActiveDeviceManager.mAudioManagerAudioDeviceCallback.onAudioDevicesRemoved(testDevices);
+
+        // Verify fallback to A2DP device
+        verify(mA2dpService, timeout(TIMEOUT_MS).times(2)).setActiveDevice(mA2dpDevice);
+    }
+
     /**
      * Verifies if Le Audio Broadcast is streaming, connected a2dp device should not be set as
      * active.
@@ -1456,6 +1485,20 @@ public class ActiveDeviceManagerTest {
                 device,
                 BluetoothProfile.STATE_CONNECTED,
                 BluetoothProfile.STATE_DISCONNECTED);
+    }
+
+    private AudioDeviceInfo[] createAudioDeviceInfoTestDevices() {
+        AudioDevicePort a2dpPort = mock(AudioDevicePort.class);
+        doReturn(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP).when(a2dpPort).type();
+        doReturn("a2dp").when(a2dpPort).name();
+
+        AudioDevicePort usbPort = mock(AudioDevicePort.class);
+        doReturn(AudioDeviceInfo.TYPE_USB_HEADSET).when(usbPort).type();
+        doReturn("usb").when(usbPort).name();
+
+        AudioDeviceInfo a2dpDevice = new AudioDeviceInfo(a2dpPort);
+        AudioDeviceInfo usbDevice = new AudioDeviceInfo(usbPort);
+        return new AudioDeviceInfo[] {a2dpDevice, usbDevice};
     }
 
     private class TestDatabaseManager extends DatabaseManager {
