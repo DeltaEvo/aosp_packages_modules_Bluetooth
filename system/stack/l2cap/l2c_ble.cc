@@ -273,7 +273,7 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
       if (reason == L2CAP_CMD_REJ_NOT_UNDERSTOOD && p_lcb->pending_ecoc_conn_cnt > 0) {
         tL2C_CONN_INFO con_info = {
                 .bd_addr{},
-                .status{},
+                .hci_status{},
                 .psm{},
                 .l2cap_result = L2CAP_LE_RESULT_NO_PSM,
                 .l2cap_status{},

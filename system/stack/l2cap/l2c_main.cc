@@ -347,7 +347,7 @@ static void process_l2cap_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
           p_lcb->w4_info_rsp = false;
           tL2C_CONN_INFO ci = {
                   .bd_addr = p_lcb->remote_bd_addr,
-                  .status = HCI_SUCCESS,
+                  .hci_status = HCI_SUCCESS,
                   .psm{},
                   .l2cap_result{},
                   .l2cap_status{},
@@ -810,7 +810,7 @@ static void process_l2cap_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
         {
           tL2C_CONN_INFO ci = {
                   .bd_addr = p_lcb->remote_bd_addr,
-                  .status = HCI_SUCCESS,
+                  .hci_status = HCI_SUCCESS,
                   .psm{},
                   .l2cap_result{},
                   .l2cap_status{},
