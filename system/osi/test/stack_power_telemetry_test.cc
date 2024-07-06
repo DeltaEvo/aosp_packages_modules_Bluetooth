@@ -112,7 +112,7 @@ TEST_F(PowerTelemetryTest, test_LogTxPower) {
 
   // Failed case
   dummy_res.tx_power = 99;
-  dummy_res.status = BTM_UNDEFINED;
+  dummy_res.status = tBTM_STATUS::BTM_UNDEFINED;
   power_telemetry::GetInstance().LogTxPower(p);
   ASSERT_NE(dummy_res.tx_power, ldc.acl.link_details_map[handle].tx_power_level);
 }
