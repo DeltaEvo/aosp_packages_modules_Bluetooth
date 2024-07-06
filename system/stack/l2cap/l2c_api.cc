@@ -50,8 +50,6 @@
 
 using namespace bluetooth;
 
-using base::StringPrintf;
-
 extern fixed_queue_t* btu_general_alarm_queue;
 tL2C_AVDT_CHANNEL_INFO av_media_channels[MAX_ACTIVE_AVDT_CONN];
 

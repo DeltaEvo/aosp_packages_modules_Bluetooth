@@ -31,7 +31,6 @@
 #include "hcimsgs.h"  // HCID_GET_
 #include "internal_include/bt_target.h"
 #include "main/shim/entry.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_psm_types.h"
