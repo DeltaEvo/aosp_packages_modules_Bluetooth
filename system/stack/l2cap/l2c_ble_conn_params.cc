@@ -61,10 +61,8 @@ static void l2cble_start_subrate_change(tL2C_LCB* p_lcb);
 bool L2CA_UpdateBleConnParams(const RawAddress& rem_bda, uint16_t min_int, uint16_t max_int,
                               uint16_t latency, uint16_t timeout, uint16_t min_ce_len,
                               uint16_t max_ce_len) {
-  tL2C_LCB* p_lcb;
-
   /* See if we have a link control block for the remote device */
-  p_lcb = l2cu_find_lcb_by_bd_addr(rem_bda, BT_TRANSPORT_LE);
+  tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(rem_bda, BT_TRANSPORT_LE);
 
   /* If we do not have one, create one and accept the connection. */
   if (!p_lcb || !BTM_IsAclConnectionUp(rem_bda, BT_TRANSPORT_LE)) {
@@ -474,10 +472,8 @@ void L2CA_SetDefaultSubrate(uint16_t subrate_min, uint16_t subrate_max, uint16_t
  ******************************************************************************/
 bool L2CA_SubrateRequest(const RawAddress& rem_bda, uint16_t subrate_min, uint16_t subrate_max,
                          uint16_t max_latency, uint16_t cont_num, uint16_t timeout) {
-  tL2C_LCB* p_lcb;
-
   /* See if we have a link control block for the remote device */
-  p_lcb = l2cu_find_lcb_by_bd_addr(rem_bda, BT_TRANSPORT_LE);
+  tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(rem_bda, BT_TRANSPORT_LE);
 
   /* If we don't have one, create one and accept the connection. */
   if (!p_lcb || !BTM_IsAclConnectionUp(rem_bda, BT_TRANSPORT_LE)) {
