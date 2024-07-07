@@ -22,6 +22,7 @@ import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
 
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothCsipSetCoordinator;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHapClient;
@@ -1218,33 +1219,32 @@ public class HapClientService extends ProfileService {
     @VisibleForTesting
     static class BluetoothHapClientBinder extends IBluetoothHapClient.Stub
             implements IProfileServiceBinder {
-        @VisibleForTesting boolean mIsTesting = false;
         private HapClientService mService;
 
         BluetoothHapClientBinder(HapClientService svc) {
             mService = svc;
         }
 
-        private HapClientService getService(AttributionSource source) {
-            if (mIsTesting) {
-                return mService;
-            }
-            if (!Utils.checkServiceAvailable(mService, TAG)
-                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
-                    || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
-                Log.w(TAG, "Hearing Access call not allowed for non-active user");
-                return null;
-            }
-
-            if (mService != null && mService.isAvailable()) {
-                return mService;
-            }
-            return null;
-        }
-
         @Override
         public void cleanup() {
             mService = null;
+        }
+
+        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+        private HapClientService getService(AttributionSource source) {
+            // Cache mService because it can change while getService is called
+            HapClientService service = mService;
+
+            if (Utils.isInstrumentationTestMode()) {
+                return service;
+            }
+
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG)
+                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
+                return null;
+            }
+            return service;
         }
 
         @Override

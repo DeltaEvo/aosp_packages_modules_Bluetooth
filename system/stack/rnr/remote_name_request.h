@@ -81,3 +81,19 @@ bool BTM_SecAddRmtNameNotifyCallback(tBTM_RMT_NAME_CALLBACK* p_callback);
  *
  ******************************************************************************/
 bool BTM_SecDeleteRmtNameNotifyCallback(tBTM_RMT_NAME_CALLBACK* p_callback);
+
+/*******************************************************************************
+ *
+ * Function         BTM_IsRemoteNameKnown
+ *
+ * Description      Look up the device record using the bluetooth device
+ *                  address and if a record is found check if the name
+ *                  has been acquired and cached.
+ *
+ * Parameters:      bd_addr: Bluetooth device address
+ *                  transport: UNUSED
+ *
+ * Returns          true if name is cached, false otherwise
+ *
+ ******************************************************************************/
+bool BTM_IsRemoteNameKnown(const RawAddress& bd_addr, tBT_TRANSPORT transport);

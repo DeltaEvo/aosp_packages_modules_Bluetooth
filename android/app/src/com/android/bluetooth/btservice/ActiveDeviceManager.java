@@ -983,12 +983,7 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
 
     private boolean setLeAudioActiveDevice(
             @Nullable BluetoothDevice device, boolean hasFallbackDevice) {
-        Log.d(
-                TAG,
-                "setLeAudioActiveDevice("
-                        + device
-                        + ")"
-                        + (device == null ? " hasFallbackDevice=" + hasFallbackDevice : ""));
+        Log.d(TAG, "setLeAudioActiveDevice(" + device + ", " + hasFallbackDevice + ")");
         synchronized (mLock) {
             final LeAudioService leAudioService = mFactory.getLeAudioService();
             if (leAudioService == null) {
@@ -998,13 +993,11 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
             if (device == null) {
                 success = leAudioService.removeActiveDevice(hasFallbackDevice);
             } else {
-                if (Flags.leaudioActiveDeviceManagerGroupHandlingFix()) {
-                    if ((mLeAudioActiveDevice != null)
-                            && (Objects.equals(
-                                    mLeAudioActiveDevice, leAudioService.getLeadDevice(device)))) {
-                        Log.d(TAG, "New LeAudioDevice is a part of an active group");
-                        return true;
-                    }
+                if ((mLeAudioActiveDevice != null)
+                        && (Objects.equals(
+                                mLeAudioActiveDevice, leAudioService.getLeadDevice(device)))) {
+                    Log.d(TAG, "New LeAudioDevice is a part of an active group");
+                    return true;
                 }
                 success = leAudioService.setActiveDevice(device);
             }
@@ -1013,11 +1006,7 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
                 return false;
             }
 
-            if (Flags.leaudioActiveDeviceManagerGroupHandlingFix()) {
-                mLeAudioActiveDevice = leAudioService.getLeadDevice(device);
-            } else {
-                mLeAudioActiveDevice = device;
-            }
+            mLeAudioActiveDevice = leAudioService.getLeadDevice(device);
 
             if (device == null) {
                 mLeHearingAidActiveDevice = null;
@@ -1114,62 +1103,61 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
                 }
         }
         BluetoothDevice device = mDbManager.getMostRecentlyConnectedDevicesInList(connectedDevices);
-        if (device != null) {
-            if (mAudioManager.getMode() == AudioManager.MODE_NORMAL) {
-                if (Objects.equals(a2dpFallbackDevice, device)) {
-                    Log.d(TAG, "Found an A2DP fallback device: " + device);
-                    setA2dpActiveDevice(device);
-                    if (Objects.equals(headsetFallbackDevice, device)) {
-                        setHfpActiveDevice(device);
-                    } else {
-                        setHfpActiveDevice(null);
-                    }
-                    /* If dual mode is enabled, LEA will be made active once all supported
-                    classic audio profiles are made active for the device. */
-                    if (!Utils.isDualModeAudioEnabled()) {
-                        setLeAudioActiveDevice(null, true);
-                    }
-                    setHearingAidActiveDevice(null, true);
-                } else {
-                    Log.d(TAG, "Found a LE audio fallback device: " + device);
-                    if (!setLeAudioActiveDevice(device)) {
-                        return false;
-                    }
-
-                    if (!Utils.isDualModeAudioEnabled()) {
-                        setA2dpActiveDevice(null, true);
-                        setHfpActiveDevice(null);
-                    }
-                    setHearingAidActiveDevice(null, true);
-                }
-            } else {
-                if (Objects.equals(headsetFallbackDevice, device)) {
-                    Log.d(TAG, "Found a HFP fallback device: " + device);
-                    setHfpActiveDevice(device);
-                    if (Objects.equals(a2dpFallbackDevice, device)) {
-                        setA2dpActiveDevice(a2dpFallbackDevice);
-                    } else {
-                        setA2dpActiveDevice(null, true);
-                    }
-                    if (!Utils.isDualModeAudioEnabled()) {
-                        setLeAudioActiveDevice(null, true);
-                    }
-                    setHearingAidActiveDevice(null, true);
-                } else {
-                    Log.d(TAG, "Found a LE audio fallback device: " + device);
-                    setLeAudioActiveDevice(device);
-                    if (!Utils.isDualModeAudioEnabled()) {
-                        setA2dpActiveDevice(null, true);
-                        setHfpActiveDevice(null);
-                    }
-                    setHearingAidActiveDevice(null, true);
-                }
-            }
-            return true;
+        if (device == null) {
+            Log.d(TAG, "No fallback devices are found");
+            return false;
         }
+        if (mAudioManager.getMode() == AudioManager.MODE_NORMAL) {
+            if (Objects.equals(a2dpFallbackDevice, device)) {
+                Log.d(TAG, "Found an A2DP fallback device: " + device);
+                setA2dpActiveDevice(device);
+                if (Objects.equals(headsetFallbackDevice, device)) {
+                    setHfpActiveDevice(device);
+                } else {
+                    setHfpActiveDevice(null);
+                }
+                /* If dual mode is enabled, LEA will be made active once all supported
+                classic audio profiles are made active for the device. */
+                if (!Utils.isDualModeAudioEnabled()) {
+                    setLeAudioActiveDevice(null, true);
+                }
+                setHearingAidActiveDevice(null, true);
+            } else {
+                Log.d(TAG, "Found a LE audio fallback device: " + device);
+                if (!setLeAudioActiveDevice(device)) {
+                    return false;
+                }
 
-        Log.d(TAG, "No fallback devices are found");
-        return false;
+                if (!Utils.isDualModeAudioEnabled()) {
+                    setA2dpActiveDevice(null, true);
+                    setHfpActiveDevice(null);
+                }
+                setHearingAidActiveDevice(null, true);
+            }
+        } else {
+            if (Objects.equals(headsetFallbackDevice, device)) {
+                Log.d(TAG, "Found a HFP fallback device: " + device);
+                setHfpActiveDevice(device);
+                if (Objects.equals(a2dpFallbackDevice, device)) {
+                    setA2dpActiveDevice(a2dpFallbackDevice);
+                } else {
+                    setA2dpActiveDevice(null, true);
+                }
+                if (!Utils.isDualModeAudioEnabled()) {
+                    setLeAudioActiveDevice(null, true);
+                }
+                setHearingAidActiveDevice(null, true);
+            } else {
+                Log.d(TAG, "Found a LE audio fallback device: " + device);
+                setLeAudioActiveDevice(device);
+                if (!Utils.isDualModeAudioEnabled()) {
+                    setA2dpActiveDevice(null, true);
+                    setHfpActiveDevice(null);
+                }
+                setHearingAidActiveDevice(null, true);
+            }
+        }
+        return true;
     }
 
     private void resetState() {

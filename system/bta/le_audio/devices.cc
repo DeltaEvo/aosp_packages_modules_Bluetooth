@@ -719,6 +719,18 @@ bool LeAudioDevice::HaveActiveAse(void) {
   return iter != ases_.end();
 }
 
+bool LeAudioDevice::HaveAnyReleasingAse(void) {
+  /* In configuring state when active in Idle or Configured and reconfigure */
+  auto iter = std::find_if(ases_.begin(), ases_.end(), [](const auto& ase) {
+    if (!ase.active) {
+      return false;
+    }
+    return ase.state == AseState::BTA_LE_AUDIO_ASE_STATE_RELEASING;
+  });
+
+  return iter != ases_.end();
+}
+
 bool LeAudioDevice::HaveAnyStreamingAses(void) {
   /* In configuring state when active in Idle or Configured and reconfigure */
   auto iter = std::find_if(ases_.begin(), ases_.end(), [](const auto& ase) {

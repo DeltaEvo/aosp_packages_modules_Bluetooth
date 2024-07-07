@@ -106,7 +106,7 @@ tL2C_LCB* l2cu_allocate_lcb(const RawAddress& p_bd_addr, bool is_bonding,
   return (NULL);
 }
 
-void l2cu_set_lcb_handle(struct t_l2c_linkcb& p_lcb, uint16_t handle) {
+void l2cu_set_lcb_handle(tL2C_LCB& p_lcb, uint16_t handle) {
   if (p_lcb.Handle() != HCI_INVALID_HANDLE) {
     log::warn("Should not replace active handle:{} with new handle:{}",
               p_lcb.Handle(), handle);

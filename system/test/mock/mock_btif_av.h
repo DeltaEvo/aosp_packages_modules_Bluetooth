@@ -342,15 +342,6 @@ struct btif_av_report_source_codec_state {
 extern struct btif_av_report_source_codec_state
     btif_av_report_source_codec_state;
 
-// Name: btif_av_reset_audio_delay
-// Params: void
-// Return: void
-struct btif_av_reset_audio_delay {
-  std::function<void(void)> body{[](void) {}};
-  void operator()(void) { body(); };
-};
-extern struct btif_av_reset_audio_delay btif_av_reset_audio_delay;
-
 // Name: btif_av_set_audio_delay
 // Params: const RawAddress& peer_address, uint16_t delay, const A2dpType
 // local_a2dp_type Return: void

@@ -225,5 +225,6 @@ int get_default_hf_client_features() {
    BTA_HF_CLIENT_FEAT_CLI | BTA_HF_CLIENT_FEAT_VREC | BTA_HF_CLIENT_FEAT_VOL | \
    BTA_HF_CLIENT_FEAT_ECS | BTA_HF_CLIENT_FEAT_ECC | BTA_HF_CLIENT_FEAT_CODEC)
 
-  return GET_SYSPROP(Hfp, hf_client_features, DEFAULT_BTIF_HF_CLIENT_FEATURES);
+  return android::sysprop::bluetooth::Hfp::hf_client_features().value_or(
+          DEFAULT_BTIF_HF_CLIENT_FEATURES);
 }

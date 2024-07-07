@@ -32,8 +32,9 @@
 #include "btif/include/btif_av.h"
 #include "btif/include/btif_av_co.h"
 #include "btif/include/btif_avrcp_audio_track.h"
-#include "btif/include/btif_util.h"  // CASE_RETURN_STR
+#include "btif/include/btif_util.h" // CASE_RETURN_STR
 #include "common/message_loop_thread.h"
+#include "hardware/bt_av.h"
 #include "os/log.h"
 #include "osi/include/alarm.h"
 #include "osi/include/allocator.h"
@@ -117,9 +118,9 @@ class BtifA2dpSinkControlBlock {
   fixed_queue_t* rx_audio_queue;
   bool rx_flush; /* discards any incoming data when true */
   alarm_t* decode_alarm;
-  tA2DP_SAMPLE_RATE sample_rate;
-  tA2DP_BITS_PER_SAMPLE bits_per_sample;
-  tA2DP_CHANNEL_COUNT channel_count;
+  int sample_rate;                             // 32000, 44100, 48000, 96000
+  int bits_per_sample;                         // 16, 24, 32
+  int channel_count;                           // 1, 2
   btif_a2dp_sink_focus_state_t rx_focus_state; /* audio focus state */
   void* audio_track;
   const tA2DP_DECODER_INTERFACE* decoder_interface;
@@ -342,21 +343,6 @@ static void btif_a2dp_sink_cleanup_delayed() {
   fixed_queue_free(btif_a2dp_sink_cb.rx_audio_queue, nullptr);
   btif_a2dp_sink_cb.rx_audio_queue = nullptr;
   btif_a2dp_sink_state = BTIF_A2DP_SINK_STATE_OFF;
-}
-
-tA2DP_SAMPLE_RATE btif_a2dp_sink_get_sample_rate() {
-  LockGuard lock(g_mutex);
-  return btif_a2dp_sink_cb.sample_rate;
-}
-
-tA2DP_BITS_PER_SAMPLE btif_a2dp_sink_get_bits_per_sample() {
-  LockGuard lock(g_mutex);
-  return btif_a2dp_sink_cb.bits_per_sample;
-}
-
-tA2DP_CHANNEL_COUNT btif_a2dp_sink_get_channel_count() {
-  LockGuard lock(g_mutex);
-  return btif_a2dp_sink_cb.channel_count;
 }
 
 static void btif_a2dp_sink_command_ready(BT_HDR_RIGID* p_msg) {

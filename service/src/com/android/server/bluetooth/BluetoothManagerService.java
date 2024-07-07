@@ -463,7 +463,6 @@ class BluetoothManagerService {
             try {
                 if (mAdapter != null) {
                     mEnable = false;
-                    mEnableExternal = false;
                     addActiveLog(reason, false);
                     mAdapter.disable(mContext.getAttributionSource());
                 }

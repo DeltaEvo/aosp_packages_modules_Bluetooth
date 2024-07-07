@@ -102,7 +102,6 @@ cc_library_shared {
         "lib-bt-packets-base",
         "libFraunhoferAAC",
         "libaconfig_storage_read_api_cc",
-        "libaudio-a2dp-hw-utils",
         "libbase",
         "libbluetooth",
         "libbluetooth-dumpsys",
@@ -167,7 +166,6 @@ cc_library_shared {
         "com.android.btservices",
     ],
     min_sdk_version: "Tiramisu",
-    ldflags: ["-Wl,--allow-multiple-definition"],
 
     // TODO(b/346919576) Workaround LTO build breakage.
     lto_O0: true,

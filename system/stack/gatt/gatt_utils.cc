@@ -1569,7 +1569,10 @@ bool gatt_cancel_open(tGATT_IF gatt_if, const RawAddress& bda) {
   } else {
     if (!connection_manager::direct_connect_remove(gatt_if, bda)) {
       if (!connection_manager::is_background_connection(bda)) {
-        BTM_AcceptlistRemove(bda);
+        if (!com::android::bluetooth::flags::gatt_fix_multiple_direct_connect() ||
+            p_tcb->app_hold_link.empty()) {
+          BTM_AcceptlistRemove(bda);
+        }
         log::info(
             "Gatt connection manager has no background record but  removed "
             "filter acceptlist gatt_if:{} peer:{}",

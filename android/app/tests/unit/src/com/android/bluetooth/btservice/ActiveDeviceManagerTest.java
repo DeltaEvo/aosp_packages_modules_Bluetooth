@@ -900,7 +900,6 @@ public class ActiveDeviceManagerTest {
 
     @Test
     public void leAudioSetConnectedGroupThenDisconnected_noFallback() {
-        mSetFlagsRule.enableFlags(Flags.FLAG_LEAUDIO_ACTIVE_DEVICE_MANAGER_GROUP_HANDLING_FIX);
         when(mAudioManager.getMode()).thenReturn(AudioManager.MODE_NORMAL);
 
         leAudioConnected(mLeAudioDevice);

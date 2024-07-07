@@ -1057,9 +1057,9 @@ static void btif_dm_ssp_cfm_req_evt(tBTA_DM_SP_CFM_REQ* p_ssp_cfm_req) {
   bool is_incoming = !(pairing_cb.state == BT_BOND_STATE_BONDING);
   int dev_type;
 
-  log::verbose("addr:{}, just_works:{}, loc_auth_req={}, rmt_auth_req={}",
-               p_ssp_cfm_req->bd_addr, p_ssp_cfm_req->just_works,
-               p_ssp_cfm_req->loc_auth_req, p_ssp_cfm_req->rmt_auth_req);
+  log::info("addr:{}, CoD: {}, just_works:{}, loc_auth_req={}, rmt_auth_req={}",
+            p_ssp_cfm_req->bd_addr, dev_class_text(p_ssp_cfm_req->dev_class),
+            p_ssp_cfm_req->just_works, p_ssp_cfm_req->loc_auth_req, p_ssp_cfm_req->rmt_auth_req);
   /* Remote properties update */
   if (get_btm_client_interface().peer.BTM_GetPeerDeviceTypeFromFeatures(
           p_ssp_cfm_req->bd_addr) == BT_DEVICE_TYPE_DUMO) {

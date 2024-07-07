@@ -1014,11 +1014,8 @@ public class VolumeControlService extends ProfileService {
             case AudioManager.MODE_IN_CALL:
                 return AudioManager.STREAM_VOICE_CALL;
             case AudioManager.MODE_RINGTONE:
-                if (Flags.leaudioVolumeChangeOnRingtoneFix()) {
-                    Log.d(TAG, " Update during ringtone applied to voice call");
-                    return AudioManager.STREAM_VOICE_CALL;
-                }
-                // fall through
+                Log.d(TAG, " Update during ringtone applied to voice call");
+                return AudioManager.STREAM_VOICE_CALL;
             case AudioManager.MODE_NORMAL:
             default:
                 // other conditions will influence the stream type choice, read on...
@@ -1409,19 +1406,6 @@ public class VolumeControlService extends ProfileService {
         @VisibleForTesting boolean mIsTesting = false;
         private VolumeControlService mService;
 
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-        private VolumeControlService getService(AttributionSource source) {
-            if (mIsTesting) {
-                return mService;
-            }
-            if (!Utils.checkServiceAvailable(mService, TAG)
-                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
-                    || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
-                return null;
-            }
-            return mService;
-        }
-
         BluetoothVolumeControlBinder(VolumeControlService svc) {
             mService = svc;
         }
@@ -1429,6 +1413,24 @@ public class VolumeControlService extends ProfileService {
         @Override
         public void cleanup() {
             mService = null;
+        }
+
+        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+        private VolumeControlService getService(AttributionSource source) {
+            // Cache mService because it can change while getService is called
+            VolumeControlService service = mService;
+
+            if (Utils.isInstrumentationTestMode()) {
+                return service;
+            }
+
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG)
+                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
+                return null;
+            }
+
+            return service;
         }
 
         @Override

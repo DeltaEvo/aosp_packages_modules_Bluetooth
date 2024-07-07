@@ -21,13 +21,23 @@
 #include <vector>
 
 #include "a2dp_error_codes.h"
-#include "audio_a2dp_hw/include/audio_a2dp_hw.h"
 #include "avdt_api.h"
 #include "common/message_loop_thread.h"
+#include "hardware/bt_av.h"
 
 namespace bluetooth {
 namespace audio {
 namespace a2dp {
+
+/// Loosely copied after the definition from the Bluetooth Audio interface:
+/// hardware/interfaces/bluetooth/audio/aidl/android/hardware/bluetooth/audio/BluetoothAudioStatus.aidl
+enum class BluetoothAudioStatus {
+  SUCCESS = 0,
+  UNKNOWN,
+  UNSUPPORTED_CODEC_CONFIGURATION,
+  FAILURE,
+  PENDING,
+};
 
 bool update_codec_offloading_capabilities(
     const std::vector<btav_a2dp_codec_config_t>& framework_preference,
@@ -55,8 +65,8 @@ void set_audio_low_latency_mode_allowed(bool allowed);
 // StreamStarted, StreamSuspended
 void start_session();
 void end_session();
-void ack_stream_started(const tA2DP_CTRL_ACK& status);
-void ack_stream_suspended(const tA2DP_CTRL_ACK& status);
+void ack_stream_started(BluetoothAudioStatus status);
+void ack_stream_suspended(BluetoothAudioStatus status);
 
 // Read from the FMQ of BluetoothAudio HAL
 size_t read(uint8_t* p_buf, uint32_t len);
@@ -162,3 +172,9 @@ tA2DP_STATUS parse_a2dp_configuration(
 }  // namespace a2dp
 }  // namespace audio
 }  // namespace bluetooth
+
+namespace fmt {
+template <>
+struct formatter<::bluetooth::audio::a2dp::BluetoothAudioStatus>
+    : enum_formatter<::bluetooth::audio::a2dp::BluetoothAudioStatus> {};
+} // namespace fmt

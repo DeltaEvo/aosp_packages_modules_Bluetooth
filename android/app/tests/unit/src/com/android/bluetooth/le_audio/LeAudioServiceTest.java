@@ -885,7 +885,6 @@ public class LeAudioServiceTest {
     @Test
     public void testAuthorizationInfoRemovedFromTbsMcsOnUnbondEvents() {
         mSetFlagsRule.enableFlags(Flags.FLAG_AUDIO_ROUTING_CENTRALIZATION);
-        mSetFlagsRule.enableFlags(Flags.FLAG_LEAUDIO_MCS_TBS_AUTHORIZATION_REBOND_FIX);
 
         // Update the device priority so okToConnect() returns true
         when(mDatabaseManager.getProfileConnectionPolicy(mLeftDevice, BluetoothProfile.LE_AUDIO))
@@ -1011,13 +1010,6 @@ public class LeAudioServiceTest {
 
         verify(mTbsService, times(1)).removeDeviceAuthorizationInfo(mLeftDevice);
         verify(mMcpService, times(1)).removeDeviceAuthorizationInfo(mLeftDevice);
-    }
-
-    @Test
-    public void testAuthorizationInfoRemovedFromTbsMcsOnUnbondEventsWithSynchBlockFixFlag() {
-        mSetFlagsRule.enableFlags(Flags.FLAG_LEAUDIO_API_SYNCHRONIZED_BLOCK_FIX);
-
-        testAuthorizationInfoRemovedFromTbsMcsOnUnbondEvents();
     }
 
     /**
@@ -1943,7 +1935,6 @@ public class LeAudioServiceTest {
 
     @Test
     public void testMediaContextUnavailableForAWhile() {
-        mSetFlagsRule.enableFlags(Flags.FLAG_LEAUDIO_UNICAST_INACTIVATE_DEVICE_BASED_ON_CONTEXT);
         mSetFlagsRule.enableFlags(Flags.FLAG_AUDIO_ROUTING_CENTRALIZATION);
 
         doReturn(true).when(mNativeInterface).connectLeAudio(any(BluetoothDevice.class));
@@ -1979,7 +1970,6 @@ public class LeAudioServiceTest {
 
     @Test
     public void testMediaContextUnavailableWhileReceivingBroadcast() {
-        mSetFlagsRule.enableFlags(Flags.FLAG_LEAUDIO_UNICAST_INACTIVATE_DEVICE_BASED_ON_CONTEXT);
         mSetFlagsRule.enableFlags(Flags.FLAG_AUDIO_ROUTING_CENTRALIZATION);
         mSetFlagsRule.enableFlags(Flags.FLAG_LEAUDIO_BROADCAST_AUDIO_HANDOVER_POLICIES);
 

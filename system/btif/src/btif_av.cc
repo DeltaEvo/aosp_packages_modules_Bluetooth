@@ -37,7 +37,6 @@
 #include "audio_hal_interface/a2dp_encoding.h"
 #include "btif/avrcp/avrcp_service.h"
 #include "btif/include/btif_a2dp.h"
-#include "btif/include/btif_a2dp_control.h"
 #include "btif/include/btif_a2dp_sink.h"
 #include "btif/include/btif_a2dp_source.h"
 #include "btif/include/btif_av_co.h"
@@ -54,6 +53,7 @@
 #include "include/hardware/bt_rc.h"
 #include "osi/include/alarm.h"
 #include "osi/include/allocator.h"
+#include "osi/include/properties.h"
 #include "stack/include/avrc_api.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_uuid16.h"
@@ -78,6 +78,10 @@ static constexpr tBTA_AV_HNDL kBtaHandleUnknown = 0;
 
 namespace {
 constexpr char kBtmLogHistoryTag[] = "A2DP";
+}
+
+static bool delay_reporting_enabled() {
+  return !osi_property_get_bool("persist.bluetooth.disabledelayreports", false);
 }
 
 /*****************************************************************************
@@ -2570,7 +2574,8 @@ bool BtifAvStateMachine::StateOpened::ProcessEvent(uint32_t event,
           log::error("Peer {} : cannot proceed to do AvStart",
                      peer_.PeerAddress());
           peer_.ClearFlags(BtifAvPeer::kFlagPendingStart);
-          btif_a2dp_command_ack(A2DP_CTRL_ACK_FAILURE);
+          bluetooth::audio::a2dp::ack_stream_started(
+                  bluetooth::audio::a2dp::BluetoothAudioStatus::FAILURE);
         }
         if (peer_.IsSink()) {
           btif_av_source_disconnect(peer_.PeerAddress());
@@ -3494,7 +3499,7 @@ bool btif_av_src_sink_coexist_enabled(void) {
   if (com::android::bluetooth::flags::a2dp_concurrent_source_sink()) {
     return is_a2dp_sink_property_enabled() && is_a2dp_source_property_enabled();
   }
-  return GET_SYSPROP(A2dp, src_sink_coexist, false);
+  return android::sysprop::bluetooth::A2dp::src_sink_coexist().value_or(false);
 }
 
 static void bta_av_source_callback(tBTA_AV_EVT event, tBTA_AV* p_data) {
@@ -4244,8 +4249,6 @@ void btif_av_set_audio_delay(const RawAddress& peer_address, uint16_t delay,
                              const A2dpType local_a2dp_type) {
   log::info("peer={} delay={}", peer_address, delay);
 
-  btif_a2dp_control_set_audio_delay(delay);
-
   BtifAvPeer* peer = btif_av_find_peer(peer_address, local_a2dp_type);
   if (peer != nullptr && peer->IsSink()) {
     peer->SetDelayReport(delay);
@@ -4262,8 +4265,6 @@ uint16_t btif_av_get_audio_delay(const A2dpType local_a2dp_type) {
   }
   return 0;
 }
-
-void btif_av_reset_audio_delay(void) { btif_a2dp_control_reset_audio_delay(); }
 
 bool btif_av_is_a2dp_offload_enabled() {
   return btif_av_source.A2dpOffloadEnabled();

@@ -1485,11 +1485,14 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
                 group->dsa_.active = true;
 
-                /* Todo: Replace literal values */
-                param.sdu_itv_stom = 20000;
-                param.max_trans_lat_stom = 20;
-                it->max_sdu_size_stom = 15;
-                it->rtn_stom = 2;
+                param.sdu_itv_stom = bluetooth::le_audio::types::kLeAudioHeadtrackerSduItv;
+                param.max_trans_lat_stom =
+                        bluetooth::le_audio::types::kLeAudioHeadtrackerMaxTransLat;
+                it->max_sdu_size_stom = bluetooth::le_audio::types::kLeAudioHeadtrackerMaxSduSize;
+                if (!com::android::bluetooth::flags::headtracker_sdu_size()) {
+                  it->max_sdu_size_stom = 15;
+                }
+                it->rtn_stom = bluetooth::le_audio::types::kLeAudioHeadtrackerRtn;
 
                 it++;
               }
@@ -1803,7 +1806,9 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
   LeAudioDevice* getDeviceTryingToAttachTheStream(LeAudioDeviceGroup* group) {
     /* Device which is attaching the stream is just an active device not in
-     * STREAMING state. the precondition is, that TargetState is Streaming  */
+     * STREAMING state and NOT in  the RELEASING state.
+     * The precondition is, that TargetState is Streaming
+     */
 
     log::debug("group_id: {}, targetState: {}", group->group_id_,
                ToString(group->GetTargetState()));
@@ -1814,8 +1819,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
     for (auto dev = group->GetFirstActiveDevice(); dev != nullptr;
          dev = group->GetNextActiveDevice(dev)) {
-      if (!dev->HaveAllActiveAsesSameState(
-              AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING)) {
+      if (!dev->HaveAllActiveAsesSameState(AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) &&
+          !dev->HaveAnyReleasingAse()) {
         log::debug("Attaching device {} to group_id: {}", dev->address_,
                    group->group_id_);
         return dev;
@@ -2082,10 +2087,10 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
           log::debug(
               "Autonomus change for device {}, ase id {}. Just store it.",
               leAudioDevice->address_, ase->id);
-
-          /* Since at least one ASE is in configured state, we should admit
-           * group is configured state */
-          group->SetState(AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED);
+          if (group->HaveAllActiveDevicesAsesTheSameState(
+                  AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED)) {
+            group->SetState(AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED);
+          }
           return;
         }
 
@@ -2358,6 +2363,14 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       case AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED: {
         SetAseState(leAudioDevice, ase,
                     AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED);
+
+        if (group->GetTargetState() !=
+            AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
+          log::warn("{}, ase_id: {}, target state: {}", leAudioDevice->address_,
+                    ase->id, ToString(group->GetTargetState()));
+          group->PrintDebugState();
+          return;
+        }
 
         if (!leAudioDevice->HaveAllActiveAsesSameState(
                 AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED)) {
@@ -2854,6 +2867,14 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         SetAseState(leAudioDevice, ase,
                     AseState::BTA_LE_AUDIO_ASE_STATE_ENABLING);
 
+        if (group->GetTargetState() !=
+            AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
+          log::warn("{}, ase_id: {}, target state: {}", leAudioDevice->address_,
+                    ase->id, ToString(group->GetTargetState()));
+          group->PrintDebugState();
+          return;
+        }
+
         if (group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
           if (ase->cis_state < CisState::CONNECTING) {
             /* We are here because of the reconnection of the single device. */
@@ -3173,6 +3194,18 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
           log::debug("Nothing to do ase data path state: {}",
                      static_cast<int>(ase->data_path_state));
         }
+
+        if (group->HaveAllActiveDevicesAsesTheSameState(
+                    AseState::BTA_LE_AUDIO_ASE_STATE_RELEASING)) {
+          group->SetState(AseState::BTA_LE_AUDIO_ASE_STATE_RELEASING);
+          if (group->GetTargetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
+            log::info("Group {} is doing autonomous release", group->group_id_);
+            SetTargetState(group, AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
+            state_machine_callbacks_->StatusReportCb(group->group_id_,
+                                                     GroupStreamStatus::RELEASING);
+          }
+        }
+
         break;
       }
       default:

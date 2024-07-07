@@ -1836,16 +1836,36 @@ impl BtifBluetoothCallbacks for Bluetooth {
                         Instant::now(),
                         vec![],
                     ));
+                    let acl_reported_transport = device.acl_reported_transport.clone();
+                    let acl_state = device.ble_acl_state.clone();
                     let device_info = device.info.clone();
 
                     // Since this is a newly bonded device, we also need to trigger SDP on it.
                     device.services_resolved = false;
-                    self.fetch_remote_uuids(device_info);
+                    self.fetch_remote_uuids(device_info.clone());
                     if self.get_wake_allowed_device_bonded() {
                         self.create_uhid_for_suspend_wakesource();
                     }
                     // Update the connectable mode since bonded list is changed.
                     self.trigger_update_connectable_mode();
+
+                    let transport = match self.get_remote_type(device_info.clone()) {
+                        BtDeviceType::Bredr => BtTransport::Bredr,
+                        BtDeviceType::Ble => BtTransport::Le,
+                        _ => acl_reported_transport,
+                    };
+
+                    let tx = self.tx.clone();
+                    tokio::spawn(async move {
+                        let _ = tx
+                            .send(Message::OnDeviceConnectionStateChanged(
+                                device_info.clone(),
+                                acl_state,
+                                BtBondState::Bonded,
+                                transport,
+                            ))
+                            .await;
+                    });
                 }
                 BtBondState::Bonding => {}
             }
@@ -1998,6 +2018,7 @@ impl BtifBluetoothCallbacks for Bluetooth {
 
         let info = device.info.clone();
         device.acl_reported_transport = link_type;
+        let bond_state = device.bond_state.clone();
 
         metrics::acl_connection_state_changed(
             addr,
@@ -2021,7 +2042,14 @@ impl BtifBluetoothCallbacks for Bluetooth {
                     _ => acl_reported_transport,
                 };
                 tokio::spawn(async move {
-                    let _ = txl.send(Message::OnAclConnected(info, transport)).await;
+                    let _ = txl
+                        .send(Message::OnDeviceConnectionStateChanged(
+                            info,
+                            BtAclState::Connected,
+                            bond_state,
+                            transport,
+                        ))
+                        .await;
                 });
             }
             BtAclState::Disconnected => {
@@ -2031,7 +2059,7 @@ impl BtifBluetoothCallbacks for Bluetooth {
                     });
                 }
                 tokio::spawn(async move {
-                    let _ = txl.send(Message::OnAclDisconnected(info)).await;
+                    let _ = txl.send(Message::OnDeviceDisconnected(info)).await;
                 });
             }
         };
@@ -2746,21 +2774,27 @@ impl IBluetooth for Bluetooth {
                             Profile::Bas => {
                                 has_supported_profile = true;
                                 let tx = self.tx.clone();
-                                let transport = match self.remote_devices.get(&addr) {
-                                    Some(context) => context.acl_reported_transport,
+                                let device_context = match self.remote_devices.get(&addr) {
+                                    Some(context) => context,
                                     None => return BtStatus::RemoteDeviceDown,
                                 };
+
+                                let acl_state = device_context.ble_acl_state.clone();
+                                let bond_state = device_context.bond_state.clone();
                                 let device_to_send = device.clone();
+
                                 let transport = match self.get_remote_type(device.clone()) {
                                     BtDeviceType::Bredr => BtTransport::Bredr,
                                     BtDeviceType::Ble => BtTransport::Le,
-                                    _ => transport,
+                                    _ => device_context.acl_reported_transport.clone(),
                                 };
                                 topstack::get_runtime().spawn(async move {
                                     let _ = tx
                                         .send(Message::BatteryService(
                                             BatteryServiceActions::Connect(
                                                 device_to_send,
+                                                acl_state,
+                                                bond_state,
                                                 transport,
                                             ),
                                         ))

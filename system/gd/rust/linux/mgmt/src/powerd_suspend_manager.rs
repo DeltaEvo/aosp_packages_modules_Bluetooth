@@ -296,7 +296,9 @@ impl PowerdSuspendManager {
         let mr = MatchRule::new_signal(POWERD_INTERFACE, SUSPEND_IMMINENT_SIGNAL)
             .with_sender(POWERD_SERVICE)
             .with_path(POWERD_PATH);
-        self.conn.add_match_no_cb(&mr.match_str()).await.unwrap();
+        self.conn.add_match_no_cb(&mr.match_str()).await.expect(
+            "Unable to add match to D-Bus for monitoring SuspendImminent signal from powerd",
+        );
 
         let tx = self.tx.clone();
         self.conn.start_receive(
@@ -330,7 +332,10 @@ impl PowerdSuspendManager {
         let mr = MatchRule::new_signal(POWERD_INTERFACE, SUSPEND_DONE_SIGNAL)
             .with_sender(POWERD_SERVICE)
             .with_path(POWERD_PATH);
-        self.conn.add_match_no_cb(&mr.match_str()).await.unwrap();
+        self.conn
+            .add_match_no_cb(&mr.match_str())
+            .await
+            .expect("Unable to add match to D-Bus for monitoring SuspendDone signal from powerd");
         let tx = self.tx.clone();
         self.conn.start_receive(
             mr,

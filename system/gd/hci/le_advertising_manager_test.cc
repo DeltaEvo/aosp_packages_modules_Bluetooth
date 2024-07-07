@@ -25,7 +25,6 @@
 #include <algorithm>
 #include <chrono>
 #include <future>
-#include <map>
 
 #include "common/bind.h"
 #include "hardware/ble_advertiser.h"
@@ -240,13 +239,18 @@ class LeAdvertisingManagerTest : public ::testing::Test {
    public:
     MOCK_METHOD4(
         OnAdvertisingSetStarted, void(int reg_id, uint8_t advertiser_id, int8_t tx_power, AdvertisingStatus status));
-    MOCK_METHOD3(OnAdvertisingEnabled, void(uint8_t advertiser_id, bool enable, uint8_t status));
-    MOCK_METHOD2(OnAdvertisingDataSet, void(uint8_t advertiser_id, uint8_t status));
-    MOCK_METHOD2(OnScanResponseDataSet, void(uint8_t advertiser_id, uint8_t status));
-    MOCK_METHOD3(OnAdvertisingParametersUpdated, void(uint8_t advertiser_id, int8_t tx_power, uint8_t status));
-    MOCK_METHOD2(OnPeriodicAdvertisingParametersUpdated, void(uint8_t advertiser_id, uint8_t status));
-    MOCK_METHOD2(OnPeriodicAdvertisingDataSet, void(uint8_t advertiser_id, uint8_t status));
-    MOCK_METHOD3(OnPeriodicAdvertisingEnabled, void(uint8_t advertiser_id, bool enable, uint8_t status));
+    MOCK_METHOD3(OnAdvertisingEnabled,
+                 void(uint8_t advertiser_id, bool enable, AdvertisingStatus status));
+    MOCK_METHOD2(OnAdvertisingDataSet, void(uint8_t advertiser_id, AdvertisingStatus status));
+    MOCK_METHOD2(OnScanResponseDataSet, void(uint8_t advertiser_id, AdvertisingStatus status));
+    MOCK_METHOD3(OnAdvertisingParametersUpdated,
+                 void(uint8_t advertiser_id, int8_t tx_power, AdvertisingStatus status));
+    MOCK_METHOD2(OnPeriodicAdvertisingParametersUpdated,
+                 void(uint8_t advertiser_id, AdvertisingStatus status));
+    MOCK_METHOD2(OnPeriodicAdvertisingDataSet,
+                 void(uint8_t advertiser_id, AdvertisingStatus status));
+    MOCK_METHOD3(OnPeriodicAdvertisingEnabled,
+                 void(uint8_t advertiser_id, bool enable, AdvertisingStatus status));
     MOCK_METHOD3(OnOwnAddressRead, void(uint8_t advertiser_id, uint8_t address_type, Address address));
   } mock_advertising_callback_;
 };

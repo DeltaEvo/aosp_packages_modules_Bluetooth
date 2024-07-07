@@ -128,7 +128,6 @@ public class HapClientTest {
         mService.mFactory = mServiceFactory;
         doReturn(mCsipService).when(mServiceFactory).getCsipSetCoordinatorService();
         mServiceBinder = (HapClientService.BluetoothHapClientBinder) mService.initBinder();
-        mServiceBinder.mIsTesting = true;
 
         when(mCallback.asBinder()).thenReturn(mBinder);
         mService.mCallbacks.register(mCallback);

@@ -47,14 +47,15 @@
 #include "stack/include/bt_dev_class.h"
 #include "stack/include/bt_name.h"
 #include "stack/include/bt_uuid16.h"
+#include "stack/include/btm_ble_api.h"
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_inq.h"
 #include "stack/include/btm_log_history.h"
-#include "stack/include/btm_sec_api.h"  // BTM_IsRemoteNameKnown
 #include "stack/include/gap_api.h"      // GAP_BleReadPeerPrefConnParams
 #include "stack/include/hidh_api.h"
 #include "stack/include/main_thread.h"
 #include "stack/include/sdp_status.h"
+#include "stack/rnr/remote_name_request.h"
 #include "stack/sdp/sdpint.h"  // is_sdp_pbap_pce_disabled
 #include "storage/config_keys.h"
 #include "types/raw_address.h"
@@ -843,11 +844,7 @@ static void bta_dm_search_cmpl() {
 
   std::vector<Uuid> gatt_services;
 
-  bool send_gatt_results =
-      bluetooth::common::init_flags::
-              always_send_services_if_gatt_disc_done_is_enabled()
-          ? bta_dm_search_cb.gatt_disc_active
-          : false;
+  bool send_gatt_results = bta_dm_search_cb.gatt_disc_active;
 
   /* no BLE connection, i.e. Classic service discovery end */
   if (conn_id == GATT_INVALID_CONN_ID) {
@@ -1039,13 +1036,7 @@ bool bta_dm_is_search_request_queued() {
  * Returns          void
  *
  ******************************************************************************/
-static void bta_dm_search_clear_queue() {
-  bta_dm_search_cb.p_pending_search.reset();
-  if (bluetooth::common::InitFlags::
-          IsBtmDmFlushDiscoveryQueueOnSearchCancel()) {
-    bta_dm_search_cb.pending_discovery_queue = {};
-  }
-}
+static void bta_dm_search_clear_queue() { bta_dm_search_cb.p_pending_search.reset(); }
 
 /*******************************************************************************
  *

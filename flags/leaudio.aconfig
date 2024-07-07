@@ -25,13 +25,6 @@ flag {
 }
 
 flag {
-    name: "leaudio_unicast_inactivate_device_based_on_context"
-    namespace: "bluetooth"
-    description: "Inactivate audio device when stream cannot be created due to unavailable context type"
-    bug: "313054788"
-}
-
-flag {
     name: "leaudio_multicodec_aidl_support"
     namespace: "bluetooth"
     description: "Enables support for the multicodec AIDL"
@@ -91,16 +84,6 @@ flag {
 }
 
 flag {
-    name: "leaudio_mcs_tbs_authorization_rebond_fix"
-    namespace: "bluetooth"
-    description: "Removes authorization data for unbonded devices in MCS and TBS service"
-    bug: "323339440"
-    metadata {
-        purpose: PURPOSE_BUGFIX
-    }
-}
-
-flag {
     name: "leaudio_multiple_vocs_instances_api"
     is_exported: true
     namespace: "bluetooth"
@@ -109,40 +92,10 @@ flag {
 }
 
 flag {
-    name: "leaudio_volume_change_on_ringtone_fix"
-    namespace: "bluetooth"
-    description: "Apply the volume update to call volume during ringtone"
-    bug: "324041939"
-    metadata {
-        purpose: PURPOSE_BUGFIX
-    }
-}
-
-flag {
-    name: "leaudio_active_device_manager_group_handling_fix"
-    namespace: "bluetooth"
-    description: "Make sure Active Device Manager understands LeAudio groups"
-    bug: "324364321"
-    metadata {
-        purpose: PURPOSE_BUGFIX
-    }
-}
-
-flag {
     name: "leaudio_start_stream_race_fix"
     namespace: "bluetooth"
     description: "Fix possible race on start stream request"
     bug: "325181889"
-    metadata {
-        purpose: PURPOSE_BUGFIX
-    }
-}
-
-flag {
-    name: "leaudio_api_synchronized_block_fix"
-    namespace: "bluetooth"
-    description: "Fix possible deadlocks when synchronizing LeAudioService states"
-    bug: "326295400"
     metadata {
         purpose: PURPOSE_BUGFIX
     }
@@ -377,6 +330,16 @@ flag {
     namespace: "bluetooth"
     description: "Notify upper layer with callback when medadata is updated"
     bug: "347710374"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "headtracker_sdu_size"
+    namespace: "bluetooth"
+    description: "Use updated headtracker SDU size"
+    bug: "350090733"
     metadata {
         purpose: PURPOSE_BUGFIX
     }
