@@ -20,8 +20,6 @@ package com.android.bluetooth.vc;
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 
-import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
-
 import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
@@ -1423,7 +1421,7 @@ public class VolumeControlService extends ProfileService {
                 return Collections.emptyList();
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.getConnectedDevices();
         }
@@ -1467,7 +1465,7 @@ public class VolumeControlService extends ProfileService {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.setConnectionPolicy(device, connectionPolicy);
         }
 
@@ -1481,7 +1479,7 @@ public class VolumeControlService extends ProfileService {
                 return BluetoothProfile.CONNECTION_POLICY_UNKNOWN;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.getConnectionPolicy(device);
         }
 
@@ -1495,7 +1493,7 @@ public class VolumeControlService extends ProfileService {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.isVolumeOffsetAvailable(device);
         }
 
@@ -1510,7 +1508,7 @@ public class VolumeControlService extends ProfileService {
                 return 0;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.getNumberOfVolumeOffsetInstances(device);
         }
 
@@ -1528,7 +1526,7 @@ public class VolumeControlService extends ProfileService {
                 return;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             service.setVolumeOffset(device, instanceId, volumeOffset);
         }
 
@@ -1543,7 +1541,7 @@ public class VolumeControlService extends ProfileService {
                 return;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             service.setDeviceVolume(device, volume, isGroupOp);
         }
 
@@ -1657,7 +1655,7 @@ public class VolumeControlService extends ProfileService {
                 return;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             postAndWait(service.mHandler, () -> service.registerCallback(callback));
         }
 
@@ -1672,7 +1670,7 @@ public class VolumeControlService extends ProfileService {
                 return;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             postAndWait(service.mHandler, () -> service.notifyNewRegisteredCallback(callback));
         }
 
@@ -1687,7 +1685,7 @@ public class VolumeControlService extends ProfileService {
                 return;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             postAndWait(service.mHandler, () -> service.unregisterCallback(callback));
         }
     }

@@ -16,8 +16,9 @@
 
 package com.android.bluetooth.le_scan;
 
+import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
+
 import static com.android.bluetooth.Utils.checkCallerTargetSdk;
-import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
 
 import android.annotation.RequiresPermission;
 import android.annotation.SuppressLint;
@@ -1540,7 +1541,7 @@ public class TransitionalScanHelper {
                             && filter.getIrk() == null) {
                         // Do not enforce
                     } else {
-                        enforceBluetoothPrivilegedPermission(mContext);
+                        mContext.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
                     }
                 }
             }
@@ -1550,7 +1551,7 @@ public class TransitionalScanHelper {
     @SuppressLint("AndroidFrameworkRequiresPermission")
     private void enforcePrivilegedPermissionIfNeeded(ScanSettings settings) {
         if (needsPrivilegedPermissionForScan(settings)) {
-            enforceBluetoothPrivilegedPermission(mContext);
+            mContext.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
         }
     }
 

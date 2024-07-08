@@ -562,27 +562,6 @@ public final class Utils {
         return true;
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
-    public static void enforceBluetoothPrivilegedPermission(Context context) {
-        context.enforceCallingOrSelfPermission(
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-                "Need BLUETOOTH PRIVILEGED permission");
-    }
-
-    @RequiresPermission(android.Manifest.permission.LOCAL_MAC_ADDRESS)
-    public static void enforceLocalMacAddressPermission(Context context) {
-        context.enforceCallingOrSelfPermission(
-                android.Manifest.permission.LOCAL_MAC_ADDRESS,
-                "Need LOCAL_MAC_ADDRESS permission");
-    }
-
-    @RequiresPermission(android.Manifest.permission.DUMP)
-    public static void enforceDumpPermission(Context context) {
-        context.enforceCallingOrSelfPermission(
-                android.Manifest.permission.DUMP,
-                "Need DUMP permission");
-    }
-
     public static AttributionSource getCallingAttributionSource(Context context) {
         int callingUid = Binder.getCallingUid();
         if (callingUid == android.os.Process.ROOT_UID) {

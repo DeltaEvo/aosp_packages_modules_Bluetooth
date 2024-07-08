@@ -159,16 +159,6 @@ public class UtilsTest {
     }
 
     @Test
-    public void enforceDumpPermission_doesNotCrash() {
-        Context context = InstrumentationRegistry.getTargetContext();
-        try {
-            Utils.enforceDumpPermission(context);
-        } catch (SecurityException e) {
-            // SecurityException could happen.
-        }
-    }
-
-    @Test
     public void getLoggableAddress() {
         assertThat(Utils.getLoggableAddress(null)).isEqualTo("00:00:00:00:00:00");
 

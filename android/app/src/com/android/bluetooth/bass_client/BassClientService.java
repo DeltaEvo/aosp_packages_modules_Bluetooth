@@ -21,7 +21,6 @@ import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 import static android.Manifest.permission.BLUETOOTH_SCAN;
 import static android.bluetooth.IBluetoothLeAudio.LE_AUDIO_GROUP_ID_INVALID;
 
-import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
 import static com.android.bluetooth.flags.Flags.leaudioAllowedContextMask;
 import static com.android.bluetooth.flags.Flags.leaudioBigDependsOnAudioState;
 import static com.android.bluetooth.flags.Flags.leaudioBroadcastAssistantPeripheralEntrustment;
@@ -3755,7 +3754,7 @@ public class BassClientService extends ProfileService {
                 return null;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service;
         }
@@ -3775,7 +3774,7 @@ public class BassClientService extends ProfileService {
                 return null;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service;
         }

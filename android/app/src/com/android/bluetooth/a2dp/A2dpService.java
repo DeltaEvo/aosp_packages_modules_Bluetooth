@@ -20,7 +20,6 @@ import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 
 import static com.android.bluetooth.Utils.checkCallerTargetSdk;
-import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
 
 import static java.util.Objects.requireNonNull;
 
@@ -1498,7 +1497,7 @@ public class A2dpService extends ProfileService {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.setConnectionPolicy(device, connectionPolicy);
         }
@@ -1510,7 +1509,7 @@ public class A2dpService extends ProfileService {
                 return BluetoothProfile.CONNECTION_POLICY_UNKNOWN;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.getConnectionPolicy(device);
         }
@@ -1522,7 +1521,7 @@ public class A2dpService extends ProfileService {
                 return;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             service.setAvrcpAbsoluteVolume(volume);
         }
@@ -1544,7 +1543,7 @@ public class A2dpService extends ProfileService {
                 return Collections.emptyList();
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.getSupportedCodecTypes();
         }
@@ -1587,7 +1586,7 @@ public class A2dpService extends ProfileService {
 
             if (checkCallerTargetSdk(
                     mService, source.getPackageName(), Build.VERSION_CODES.TIRAMISU)) {
-                enforceBluetoothPrivilegedPermission(service);
+                service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             }
             service.enableOptionalCodecs(device);
         }
@@ -1601,7 +1600,7 @@ public class A2dpService extends ProfileService {
 
             if (checkCallerTargetSdk(
                     mService, source.getPackageName(), Build.VERSION_CODES.TIRAMISU)) {
-                enforceBluetoothPrivilegedPermission(service);
+                service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             }
             service.disableOptionalCodecs(device);
         }
@@ -1615,7 +1614,7 @@ public class A2dpService extends ProfileService {
 
             if (checkCallerTargetSdk(
                     mService, source.getPackageName(), Build.VERSION_CODES.TIRAMISU)) {
-                enforceBluetoothPrivilegedPermission(service);
+                service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             }
             return service.getSupportsOptionalCodecs(device);
         }
@@ -1629,7 +1628,7 @@ public class A2dpService extends ProfileService {
 
             if (checkCallerTargetSdk(
                     mService, source.getPackageName(), Build.VERSION_CODES.TIRAMISU)) {
-                enforceBluetoothPrivilegedPermission(service);
+                service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             }
             return service.getOptionalCodecsEnabled(device);
         }
@@ -1644,7 +1643,7 @@ public class A2dpService extends ProfileService {
 
             if (checkCallerTargetSdk(
                     mService, source.getPackageName(), Build.VERSION_CODES.TIRAMISU)) {
-                enforceBluetoothPrivilegedPermission(service);
+                service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             }
             service.setOptionalCodecsEnabled(device, value);
         }

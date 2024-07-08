@@ -20,6 +20,7 @@ package com.android.bluetooth.btservice;
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 import static android.Manifest.permission.BLUETOOTH_SCAN;
+import static android.Manifest.permission.LOCAL_MAC_ADDRESS;
 import static android.Manifest.permission.MODIFY_PHONE_STATE;
 import static android.bluetooth.BluetoothAdapter.SCAN_MODE_CONNECTABLE;
 import static android.bluetooth.BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE;
@@ -33,9 +34,6 @@ import static android.text.format.DateUtils.SECOND_IN_MILLIS;
 import static com.android.bluetooth.ChangeIds.ENFORCE_CONNECT;
 import static com.android.bluetooth.Utils.callerIsSystem;
 import static com.android.bluetooth.Utils.callerIsSystemOrActiveOrManagedUser;
-import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
-import static com.android.bluetooth.Utils.enforceDumpPermission;
-import static com.android.bluetooth.Utils.enforceLocalMacAddressPermission;
 import static com.android.bluetooth.Utils.getBytesFromAddress;
 import static com.android.bluetooth.Utils.isDualModeAudioEnabled;
 import static com.android.bluetooth.Utils.isPackageNameAccurate;
@@ -2372,7 +2370,7 @@ public class AdapterService extends Service {
                 return null;
             }
 
-            enforceLocalMacAddressPermission(service);
+            service.enforceCallingOrSelfPermission(LOCAL_MAC_ADDRESS, null);
 
             return Utils.getAddressStringFromByte(service.mAdapterProperties.getAddress());
         }
@@ -2414,7 +2412,7 @@ public class AdapterService extends Service {
                             "AdapterService getIdentityAddress")) {
                 return null;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.getIdentityAddress(address);
         }
 
@@ -2480,7 +2478,7 @@ public class AdapterService extends Service {
                             service, source, "AdapterService setScanMode")) {
                 return BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_SCAN_PERMISSION;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             String logCaller = Utils.getUidPidString() + " packageName=" + source.getPackageName();
             CompletableFuture<Boolean> future = new CompletableFuture<>();
@@ -2516,7 +2514,7 @@ public class AdapterService extends Service {
                             service, source, "AdapterService setDiscoverableTimeout")) {
                 return BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_SCAN_PERMISSION;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.mAdapterProperties.setDiscoverableTimeout((int) timeout)
                     ? BluetoothStatusCodes.SUCCESS
@@ -2575,7 +2573,7 @@ public class AdapterService extends Service {
                 return -1;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.mAdapterProperties.discoveryEndMillis();
         }
@@ -2590,7 +2588,7 @@ public class AdapterService extends Service {
                 return Collections.emptyList();
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.mDatabaseManager.getMostRecentlyConnectedDevices();
         }
@@ -2686,7 +2684,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             Log.i(TAG, "cancelBondProcess: device=" + device + ", from " + Utils.getUidPidString());
 
@@ -2766,7 +2764,7 @@ public class AdapterService extends Service {
                     || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             service.generateLocalOobData(transport, callback);
         }
 
@@ -2777,7 +2775,7 @@ public class AdapterService extends Service {
                     || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return 0;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return Config.getSupportedProfilesBitMask();
         }
@@ -2804,7 +2802,7 @@ public class AdapterService extends Service {
                 return BluetoothDevice.ERROR;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.getConnectionHandle(device, transport);
         }
@@ -2817,7 +2815,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.canBondWithoutDialog(device);
         }
@@ -2832,7 +2830,7 @@ public class AdapterService extends Service {
                 return null;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.getPackageNameOfBondingApplication(device);
         }
@@ -2869,7 +2867,7 @@ public class AdapterService extends Service {
             }
 
             service.enforceCallingOrSelfPermission(MODIFY_PHONE_STATE, null);
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             Log.i(
                     TAG,
@@ -2893,7 +2891,7 @@ public class AdapterService extends Service {
                 return Collections.emptyList();
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.getActiveDevices(profile);
         }
@@ -2918,7 +2916,7 @@ public class AdapterService extends Service {
             }
 
             service.enforceCallingOrSelfPermission(MODIFY_PHONE_STATE, null);
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             Log.i(
                     TAG,
@@ -2956,7 +2954,7 @@ public class AdapterService extends Service {
                 return BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             Log.i(
                     TAG,
@@ -3084,7 +3082,7 @@ public class AdapterService extends Service {
                 return false;
             }
             if (transport != TRANSPORT_AUTO) {
-                enforceBluetoothPrivilegedPermission(service);
+                service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             }
 
             Log.i(
@@ -3195,7 +3193,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             DeviceProperties deviceProp = service.mRemoteDevices.getDeviceProperties(device);
             if (deviceProp == null || !deviceProp.isBonding()) {
@@ -3229,7 +3227,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.mSilenceDeviceManager.getSilenceMode(device);
         }
@@ -3244,7 +3242,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             service.mSilenceDeviceManager.setSilenceMode(device, silence);
             return true;
@@ -3275,7 +3273,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             service.setPhonebookAccessPermission(device, value);
             return true;
@@ -3306,7 +3304,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             service.setMessageAccessPermission(device, value);
             return true;
@@ -3335,7 +3333,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             service.setSimAccessPermission(device, value);
             return true;
@@ -3472,7 +3470,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.factoryReset();
         }
 
@@ -3486,7 +3484,7 @@ public class AdapterService extends Service {
                     || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             service.mBluetoothConnectionCallbacks.add(callback);
         }
 
@@ -3500,7 +3498,7 @@ public class AdapterService extends Service {
                     || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             service.mBluetoothConnectionCallbacks.remove(callback);
         }
 
@@ -3513,7 +3511,7 @@ public class AdapterService extends Service {
                 return;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             service.registerRemoteCallback(callback);
         }
@@ -3527,7 +3525,7 @@ public class AdapterService extends Service {
                 return;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             service.unregisterRemoteCallback(callback);
         }
@@ -3675,7 +3673,7 @@ public class AdapterService extends Service {
             } else if (!Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return BluetoothStatusCodes.FEATURE_SUPPORTED;
         }
 
@@ -3707,7 +3705,7 @@ public class AdapterService extends Service {
                 return null;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.reportActivityInfo();
         }
@@ -3725,7 +3723,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             List<IBluetoothMetadataListener> list = service.mMetadataListeners.get(device);
             if (list == null) {
@@ -3750,7 +3748,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             service.mMetadataListeners.remove(device);
             return true;
@@ -3766,7 +3764,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.setMetadata(device, key, value);
         }
 
@@ -3779,7 +3777,7 @@ public class AdapterService extends Service {
                 return null;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.mDatabaseManager.getCustomMeta(device, key);
         }
@@ -3794,7 +3792,7 @@ public class AdapterService extends Service {
                     || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return BluetoothStatusCodes.FEATURE_NOT_CONFIGURED;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.isRequestAudioPolicyAsSinkSupported(device);
         }
 
@@ -3812,7 +3810,7 @@ public class AdapterService extends Service {
             } else if (!Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.requestAudioPolicyAsSink(device, policies);
         }
 
@@ -3826,7 +3824,7 @@ public class AdapterService extends Service {
                     || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return null;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.getRequestedAudioPolicyAsSink(device);
         }
 
@@ -3850,7 +3848,7 @@ public class AdapterService extends Service {
                 return;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             service.startBrEdr();
         }
@@ -3864,7 +3862,7 @@ public class AdapterService extends Service {
                 return;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             service.stopBle();
         }
@@ -3877,7 +3875,7 @@ public class AdapterService extends Service {
                 return;
             }
 
-            enforceDumpPermission(service);
+            service.enforceCallingOrSelfPermission(android.Manifest.permission.DUMP, null);
 
             service.dump(fd, writer, args);
             writer.close();
@@ -3894,7 +3892,7 @@ public class AdapterService extends Service {
                             "AdapterService allowLowLatencyAudio")) {
                 return false;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.allowLowLatencyAudio(allowed, device);
         }
 
@@ -3911,7 +3909,7 @@ public class AdapterService extends Service {
                             service, source, "AdapterService startRfcommListener")) {
                 return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ALLOWED;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.startRfcommListener(name, uuid, pendingIntent, source);
         }
 
@@ -3924,7 +3922,7 @@ public class AdapterService extends Service {
                             service, source, "AdapterService stopRfcommListener")) {
                 return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ALLOWED;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.stopRfcommListener(uuid, source);
         }
 
@@ -3941,7 +3939,7 @@ public class AdapterService extends Service {
                             "AdapterService retrievePendingSocketForServiceRecord")) {
                 return null;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.retrievePendingSocketForServiceRecord(uuid, source);
         }
 
@@ -3955,7 +3953,7 @@ public class AdapterService extends Service {
                             "AdapterService setForegroundUserId")) {
                 return;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             Utils.setForegroundUserId(userId);
         }
 
@@ -3980,7 +3978,7 @@ public class AdapterService extends Service {
             if (!Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.setPreferredAudioProfiles(device, modeToProfileBundle);
         }
@@ -4004,7 +4002,7 @@ public class AdapterService extends Service {
             if (!Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return Bundle.EMPTY;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.getPreferredAudioProfiles(device);
         }
@@ -4029,7 +4027,7 @@ public class AdapterService extends Service {
             if (!Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.notifyActiveDeviceChangeApplied(device);
         }
@@ -4049,7 +4047,7 @@ public class AdapterService extends Service {
             if (!Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             // If LE only mode is enabled, the dual mode audio feature is disabled
             if (!isDualModeAudioEnabled()) {
@@ -4075,7 +4073,7 @@ public class AdapterService extends Service {
             if (!Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             if (!service.mPreferredAudioProfilesCallbacks.unregister(callback)) {
                 Log.e(
@@ -4102,7 +4100,7 @@ public class AdapterService extends Service {
             if (!Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             service.mBluetoothQualityReportReadyCallbacks.register(callback);
             return BluetoothStatusCodes.SUCCESS;
@@ -4123,7 +4121,7 @@ public class AdapterService extends Service {
             if (!Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             if (!service.mBluetoothQualityReportReadyCallbacks.unregister(callback)) {
                 Log.e(
@@ -4145,7 +4143,7 @@ public class AdapterService extends Service {
                             service, source, "getOffloadedTransportDiscoveryDataScanSupported")) {
                 return BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_SCAN_PERMISSION;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.getOffloadedTransportDiscoveryDataScanSupported();
         }
@@ -4158,7 +4156,7 @@ public class AdapterService extends Service {
                             service, source, "AdapterService.isMediaProfileConnected")) {
                 return false;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.isMediaProfileConnected();
         }
@@ -4181,7 +4179,7 @@ public class AdapterService extends Service {
             if (service == null) {
                 return;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             service.unregAllGattClient(source);
         }
 
@@ -4212,7 +4210,7 @@ public class AdapterService extends Service {
                 return BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.mDatabaseManager.setActiveAudioDevicePolicy(
                     device, activeAudioDevicePolicy);
         }
@@ -4234,7 +4232,7 @@ public class AdapterService extends Service {
                 return BluetoothDevice.ACTIVE_AUDIO_DEVICE_POLICY_DEFAULT;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.mDatabaseManager.getActiveAudioDevicePolicy(device);
         }
     }
@@ -6365,7 +6363,7 @@ public class AdapterService extends Service {
     private void enforceBluetoothPrivilegedPermissionIfNeeded(
             OobData remoteP192Data, OobData remoteP256Data) {
         if (remoteP192Data != null || remoteP256Data != null) {
-            enforceBluetoothPrivilegedPermission(this);
+            this.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
         }
     }
 
