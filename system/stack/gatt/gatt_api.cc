@@ -41,6 +41,7 @@
 #include "stack/btm/btm_dev.h"
 #include "stack/gatt/connection_manager.h"
 #include "stack/gatt/gatt_int.h"
+#include "stack/include/ais_api.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/l2cap_acl_interface.h"
@@ -323,8 +324,10 @@ tGATT_STATUS GATTS_AddService(tGATT_IF gatt_if, btgatt_db_element_t* service, in
     Uuid* p_uuid = gatts_get_service_uuid(elem.p_db);
     if (*p_uuid != Uuid::From16Bit(UUID_SERVCLASS_GMCS_SERVER) &&
         *p_uuid != Uuid::From16Bit(UUID_SERVCLASS_GTBS_SERVER)) {
-      if (com::android::bluetooth::flags::channel_sounding_in_stack() &&
-          *p_uuid == Uuid::From16Bit(UUID_SERVCLASS_RAS)) {
+      if ((com::android::bluetooth::flags::channel_sounding_in_stack() &&
+           *p_uuid == Uuid::From16Bit(UUID_SERVCLASS_RAS)) ||
+          (com::android::bluetooth::flags::android_os_identifier() &&
+           *p_uuid == ANDROID_INFORMATION_SERVICE_UUID)) {
         elem.sdp_handle = 0;
       } else {
         elem.sdp_handle = gatt_add_sdp_record(*p_uuid, elem.s_hdl, elem.e_hdl);
