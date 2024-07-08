@@ -16,6 +16,8 @@
 
 package com.android.bluetooth.mapclient;
 
+import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
+
 import android.Manifest;
 import android.annotation.RequiresPermission;
 import android.app.PendingIntent;

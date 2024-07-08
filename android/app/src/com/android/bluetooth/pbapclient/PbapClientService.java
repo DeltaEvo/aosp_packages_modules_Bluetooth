@@ -16,6 +16,8 @@
 
 package com.android.bluetooth.pbapclient;
 
+import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
+
 import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.annotation.RequiresPermission;

@@ -29,10 +29,6 @@ import com.android.bluetooth.BluetoothMetricsProto;
 /** Base class for a background service that runs a Bluetooth profile */
 public abstract class ProfileService extends ContextWrapper {
 
-    public static final String BLUETOOTH_PERM = android.Manifest.permission.BLUETOOTH;
-    public static final String BLUETOOTH_PRIVILEGED =
-            android.Manifest.permission.BLUETOOTH_PRIVILEGED;
-
     public interface IProfileServiceBinder extends IBinder {
         void cleanup();
     }
