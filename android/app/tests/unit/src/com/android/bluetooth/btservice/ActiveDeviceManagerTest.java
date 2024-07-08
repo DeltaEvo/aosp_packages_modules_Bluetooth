@@ -510,6 +510,78 @@ public class ActiveDeviceManagerTest {
     }
 
     @Test
+    @EnableFlags(Flags.FLAG_ALWAYS_FALLBACK_TO_AVAILABLE_DEVICE)
+    public void a2dpHeadsetActivated_checkFallbackMeachanismOneA2dpOneHeadset() {
+        // Active call
+        when(mAudioManager.getMode()).thenReturn(AudioManager.MODE_IN_CALL);
+
+        // Connect 1st device
+        a2dpConnected(mA2dpHeadsetDevice, true);
+        headsetConnected(mA2dpHeadsetDevice, true);
+
+        a2dpActiveDeviceChanged(mA2dpHeadsetDevice);
+        headsetActiveDeviceChanged(mA2dpHeadsetDevice);
+
+        verify(mA2dpService, timeout(TIMEOUT_MS)).setActiveDevice(mA2dpHeadsetDevice);
+        verify(mHeadsetService, timeout(TIMEOUT_MS)).setActiveDevice(mA2dpHeadsetDevice);
+
+        TestUtils.waitForLooperToFinishScheduledTask(mActiveDeviceManager.getHandlerLooper());
+        assertThat(mActiveDeviceManager.getA2dpActiveDevice()).isEqualTo(mA2dpHeadsetDevice);
+        assertThat(mActiveDeviceManager.getHfpActiveDevice()).isEqualTo(mA2dpHeadsetDevice);
+
+        // Disable audio for the first device
+        when(mA2dpService.getFallbackDevice()).thenReturn(null);
+        when(mA2dpService.removeActiveDevice(anyBoolean())).thenReturn(true);
+        when(mHeadsetService.getFallbackDevice()).thenReturn(mA2dpHeadsetDevice);
+
+        mDatabaseManager.setProfileConnectionPolicy(
+                mA2dpHeadsetDevice,
+                BluetoothProfile.A2DP,
+                BluetoothProfile.CONNECTION_POLICY_FORBIDDEN);
+        a2dpDisconnected(mA2dpHeadsetDevice);
+
+        verify(mHeadsetService, timeout(TIMEOUT_MS).times(2)).setActiveDevice(mA2dpHeadsetDevice);
+        verify(mA2dpService, timeout(TIMEOUT_MS)).removeActiveDevice(anyBoolean());
+
+        a2dpActiveDeviceChanged(null);
+
+        TestUtils.waitForLooperToFinishScheduledTask(mActiveDeviceManager.getHandlerLooper());
+        assertThat(mActiveDeviceManager.getA2dpActiveDevice()).isEqualTo(null);
+        assertThat(mActiveDeviceManager.getHfpActiveDevice()).isEqualTo(mA2dpHeadsetDevice);
+
+        // Connect 2nd device
+        a2dpConnected(mSecondaryAudioDevice, true);
+        headsetConnected(mSecondaryAudioDevice, true);
+
+        verify(mA2dpService, timeout(TIMEOUT_MS)).setActiveDevice(mSecondaryAudioDevice);
+        verify(mHeadsetService, timeout(TIMEOUT_MS)).setActiveDevice(mSecondaryAudioDevice);
+
+        a2dpActiveDeviceChanged(mSecondaryAudioDevice);
+        headsetActiveDeviceChanged(mSecondaryAudioDevice);
+
+        TestUtils.waitForLooperToFinishScheduledTask(mActiveDeviceManager.getHandlerLooper());
+        assertThat(mActiveDeviceManager.getA2dpActiveDevice()).isEqualTo(mSecondaryAudioDevice);
+        assertThat(mActiveDeviceManager.getHfpActiveDevice()).isEqualTo(mSecondaryAudioDevice);
+
+        // Disable phone calls for the second device
+        when(mA2dpService.getFallbackDevice()).thenReturn(mSecondaryAudioDevice);
+        when(mHeadsetService.getFallbackDevice()).thenReturn(mA2dpHeadsetDevice);
+
+        mDatabaseManager.setProfileConnectionPolicy(
+                mSecondaryAudioDevice,
+                BluetoothProfile.HEADSET,
+                BluetoothProfile.CONNECTION_POLICY_FORBIDDEN);
+        headsetDisconnected(mSecondaryAudioDevice);
+
+        verify(mHeadsetService, timeout(TIMEOUT_MS).times(3)).setActiveDevice(mA2dpHeadsetDevice);
+        verify(mA2dpService, timeout(TIMEOUT_MS).times(2)).setActiveDevice(mSecondaryAudioDevice);
+
+        TestUtils.waitForLooperToFinishScheduledTask(mActiveDeviceManager.getHandlerLooper());
+        assertThat(mActiveDeviceManager.getA2dpActiveDevice()).isEqualTo(mSecondaryAudioDevice);
+        assertThat(mActiveDeviceManager.getHfpActiveDevice()).isEqualTo(mA2dpHeadsetDevice);
+    }
+
+    @Test
     public void hfpActivated_whileActivatingA2dpHeadset() {
         headsetConnected(mHeadsetDevice, false);
         a2dpConnected(mA2dpHeadsetDevice, true);
