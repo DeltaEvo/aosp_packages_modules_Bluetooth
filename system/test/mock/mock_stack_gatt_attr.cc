@@ -37,6 +37,10 @@ bool gatt_profile_get_eatt_support(const RawAddress& /* remote_bda */,
   inc_func_call_count(__func__);
   return false;
 }
+bool gatt_profile_get_eatt_support_by_conn_id(uint16_t /* conn_id */) {
+  inc_func_call_count(__func__);
+  return true;
+}
 bool gatt_sr_is_cl_change_aware(tGATT_TCB& /* tcb */) {
   inc_func_call_count(__func__);
   return false;
