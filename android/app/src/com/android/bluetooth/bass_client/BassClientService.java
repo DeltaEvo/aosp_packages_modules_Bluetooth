@@ -1657,7 +1657,8 @@ public class BassClientService extends ProfileService {
             }
             if (mSearchScanCallback != null) {
                 Log.e(TAG, "LE Scan has already started");
-                mCallbacks.notifySearchStartFailed(BluetoothStatusCodes.ERROR_UNKNOWN);
+                mCallbacks.notifySearchStartFailed(
+                        BluetoothStatusCodes.ERROR_ALREADY_IN_TARGET_STATE);
                 return;
             }
             mSearchScanCallback =
@@ -1795,7 +1796,8 @@ public class BassClientService extends ProfileService {
             synchronized (mSearchScanCallbackLock) {
                 if (mSearchScanCallback == null) {
                     Log.e(TAG, "Scan not started yet");
-                    mCallbacks.notifySearchStopFailed(BluetoothStatusCodes.ERROR_UNKNOWN);
+                    mCallbacks.notifySearchStopFailed(
+                            BluetoothStatusCodes.ERROR_ALREADY_IN_TARGET_STATE);
                     return;
                 }
                 informConnectedDeviceAboutScanOffloadStop();
@@ -1808,7 +1810,8 @@ public class BassClientService extends ProfileService {
             synchronized (mSearchScanCallbackLock) {
                 if (mBluetoothLeScannerWrapper == null || mSearchScanCallback == null) {
                     Log.e(TAG, "Scan not started yet");
-                    mCallbacks.notifySearchStopFailed(BluetoothStatusCodes.ERROR_UNKNOWN);
+                    mCallbacks.notifySearchStopFailed(
+                            BluetoothStatusCodes.ERROR_ALREADY_IN_TARGET_STATE);
                     return;
                 }
                 mBluetoothLeScannerWrapper.stopScan(mSearchScanCallback);
@@ -2506,7 +2509,7 @@ public class BassClientService extends ProfileService {
                 } else {
                     log("AddSource: broadcast not cached or invalid, broadcastId: " + broadcastId);
                     mCallbacks.notifySourceAddFailed(
-                            sink, sourceMetadata, BluetoothStatusCodes.ERROR_UNKNOWN);
+                            sink, sourceMetadata, BluetoothStatusCodes.ERROR_BAD_PARAMETERS);
                 }
                 return;
             }
