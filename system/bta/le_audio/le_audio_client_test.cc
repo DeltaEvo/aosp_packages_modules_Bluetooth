@@ -721,20 +721,94 @@ protected:
                                     return;
                                   }
 
+                                  GattStatus status;
+                                  std::vector<uint8_t> value;
                                   // Dispatch to mockable handler functions
                                   if (svc->handle == device->csis->start) {
-                                    device->csis->OnReadCharacteristic(handle, cb, cb_data);
+                                    std::tie(status, value) =
+                                            device->csis->OnGetCharacteristicValue(handle);
                                   } else if (svc->handle == device->cas->start) {
-                                    device->cas->OnReadCharacteristic(handle, cb, cb_data);
+                                    std::tie(status, value) =
+                                            device->cas->OnGetCharacteristicValue(handle);
                                   } else if (svc->handle == device->ascs->start) {
-                                    device->ascs->OnReadCharacteristic(handle, cb, cb_data);
+                                    std::tie(status, value) =
+                                            device->ascs->OnGetCharacteristicValue(handle);
                                   } else if (svc->handle == device->pacs->start) {
-                                    device->pacs->OnReadCharacteristic(handle, cb, cb_data);
+                                    std::tie(status, value) =
+                                            device->pacs->OnGetCharacteristicValue(handle);
+                                  } else {
+                                    return;
                                   }
+
+                                  cb(conn_id, status, handle, value.size(), value.data(), cb_data);
                                 }
                               },
                               &peer_devices, conn_id, handle, cb, cb_data));
                     }));
+
+    // default multiple Characteristic read handler dispatches requests to service mocks
+    ON_CALL(mock_gatt_queue_, ReadMultiCharacteristic(_, _, _, _))
+            .WillByDefault(Invoke([&](uint16_t conn_id, tBTA_GATTC_MULTI& handles,
+                                      GATT_READ_MULTI_OP_CB cb, void* cb_data) {
+              do_in_main_thread(base::BindOnce(
+                      [](std::map<uint16_t, std::unique_ptr<NiceMock<MockDeviceWrapper>>>*
+                                 peer_devices,
+                         uint16_t conn_id, tBTA_GATTC_MULTI handles, GATT_READ_MULTI_OP_CB cb,
+                         void* cb_data) -> void {
+                        if (!peer_devices->count(conn_id)) {
+                          return;
+                        }
+                        auto& device = peer_devices->at(conn_id);
+
+                        auto get_char_value_helper = [&](NiceMock<MockDeviceWrapper>& device,
+                                                         uint16_t handle) {
+                          auto svc = std::find_if(device.services.begin(), device.services.end(),
+                                                  [handle](const gatt::Service& svc) {
+                                                    return (handle >= svc.handle) &&
+                                                           (handle <= svc.end_handle);
+                                                  });
+                          if (svc == device.services.end()) {
+                            return std::make_pair(GATT_ERROR, std::vector<uint8_t>());
+                          }
+
+                          // Dispatch to mockable handler functions
+                          if (svc->handle == device.csis->start) {
+                            return device.csis->OnGetCharacteristicValue(handle);
+                          } else if (svc->handle == device.cas->start) {
+                            return device.cas->OnGetCharacteristicValue(handle);
+                          } else if (svc->handle == device.ascs->start) {
+                            return device.ascs->OnGetCharacteristicValue(handle);
+                          } else if (svc->handle == device.pacs->start) {
+                            return device.pacs->OnGetCharacteristicValue(handle);
+                          } else {
+                            return std::make_pair(GATT_ERROR, std::vector<uint8_t>());
+                          };
+                        };
+                        std::array<uint8_t, GATT_MAX_ATTR_LEN> value;
+                        uint16_t value_end = 0;
+                        for (int i = 0; i < handles.num_attr; i++) {
+                          GattStatus status;
+                          std::vector<uint8_t> curr_val;
+                          std::tie(status, curr_val) =
+                                  get_char_value_helper(*device, handles.handles[i]);
+
+                          if (status != GATT_SUCCESS) {
+                            cb(conn_id, status, handles, 0, value.data(), cb_data);
+                            return;
+                          }
+
+                          value[value_end] = (curr_val.size() & 0x00ff);
+                          value[value_end + 1] = (curr_val.size() & 0xff00) >> 8;
+                          value_end += 2;
+
+                          // concatenate all read values together
+                          std::copy(curr_val.begin(), curr_val.end(), value.data() + value_end);
+                          value_end += curr_val.size();
+                        }
+                        cb(conn_id, GATT_SUCCESS, handles, value_end, value.data(), cb_data);
+                      },
+                      &peer_devices, conn_id, handles, cb, cb_data));
+            }));
   }
 
   void SetUpMockGroups() {
@@ -1473,7 +1547,8 @@ protected:
     public:
       // IGattHandlers() = default;
       virtual ~IGattHandlers() = default;
-      virtual void OnReadCharacteristic(uint16_t handle, GATT_READ_OP_CB cb, void* cb_data) = 0;
+      virtual std::pair<GattStatus, std::vector<uint8_t>> OnGetCharacteristicValue(
+              uint16_t handle) = 0;
       virtual void OnWriteCharacteristic(uint16_t handle, std::vector<uint8_t> value,
                                          tGATT_WRITE_TYPE write_type, GATT_WRITE_OP_CB cb,
                                          void* cb_data) = 0;
@@ -1494,8 +1569,8 @@ protected:
       int rank = 0;
       int size = 0;
 
-      MOCK_METHOD((void), OnReadCharacteristic,
-                  (uint16_t handle, GATT_READ_OP_CB cb, void* cb_data), (override));
+      MOCK_METHOD((std::pair<GattStatus, std::vector<uint8_t>>), OnGetCharacteristicValue,
+                  (uint16_t handle), (override));
       MOCK_METHOD((void), OnWriteCharacteristic,
                   (uint16_t handle, std::vector<uint8_t> value, tGATT_WRITE_TYPE write_type,
                    GATT_WRITE_OP_CB cb, void* cb_data),
@@ -1507,8 +1582,8 @@ protected:
       uint16_t end = 0;
       uint16_t csis_include = 0;
 
-      MOCK_METHOD((void), OnReadCharacteristic,
-                  (uint16_t handle, GATT_READ_OP_CB cb, void* cb_data), (override));
+      MOCK_METHOD((std::pair<GattStatus, std::vector<uint8_t>>), OnGetCharacteristicValue,
+                  (uint16_t handle), (override));
       MOCK_METHOD((void), OnWriteCharacteristic,
                   (uint16_t handle, std::vector<uint8_t> value, tGATT_WRITE_TYPE write_type,
                    GATT_WRITE_OP_CB cb, void* cb_data),
@@ -1531,8 +1606,8 @@ protected:
       uint16_t supp_contexts_ccc = 0;
       uint16_t end = 0;
 
-      MOCK_METHOD((void), OnReadCharacteristic,
-                  (uint16_t handle, GATT_READ_OP_CB cb, void* cb_data), (override));
+      MOCK_METHOD((std::pair<GattStatus, std::vector<uint8_t>>), OnGetCharacteristicValue,
+                  (uint16_t handle), (override));
       MOCK_METHOD((void), OnWriteCharacteristic,
                   (uint16_t handle, std::vector<uint8_t> value, tGATT_WRITE_TYPE write_type,
                    GATT_WRITE_OP_CB cb, void* cb_data),
@@ -1552,8 +1627,8 @@ protected:
       uint16_t ctp_ccc_val = 0;
       uint16_t end = 0;
 
-      MOCK_METHOD((void), OnReadCharacteristic,
-                  (uint16_t handle, GATT_READ_OP_CB cb, void* cb_data), (override));
+      MOCK_METHOD((std::pair<GattStatus, std::vector<uint8_t>>), OnGetCharacteristicValue,
+                  (uint16_t handle), (override));
       MOCK_METHOD((void), OnWriteCharacteristic,
                   (uint16_t handle, std::vector<uint8_t> value, tGATT_WRITE_TYPE write_type,
                    GATT_WRITE_OP_CB cb, void* cb_data),
@@ -2240,8 +2315,8 @@ protected:
       sample_freq[1] = (uint8_t)(sample_freq_mask >> 8);
 
       // Set pacs default read values
-      ON_CALL(*peer_devices.at(conn_id)->pacs, OnReadCharacteristic(_, _, _))
-              .WillByDefault([=, this](uint16_t handle, GATT_READ_OP_CB cb, void* cb_data) {
+      ON_CALL(*peer_devices.at(conn_id)->pacs, OnGetCharacteristicValue(_))
+              .WillByDefault([=, this](uint16_t handle) {
                 auto& pacs = peer_devices.at(conn_id)->pacs;
                 std::vector<uint8_t> value;
                 if (gatt_status == GATT_SUCCESS) {
@@ -2406,15 +2481,14 @@ protected:
                     };
                   }
                 }
-                cb(conn_id, gatt_status, handle, value.size(), value.data(), cb_data);
+                return std::make_pair(gatt_status, value);
               });
     }
 
     if (add_ascs_cnt > 0) {
       // Set ascs default read values
-      ON_CALL(*peer_devices.at(conn_id)->ascs, OnReadCharacteristic(_, _, _))
-              .WillByDefault([this, conn_id, gatt_status](uint16_t handle, GATT_READ_OP_CB cb,
-                                                          void* cb_data) {
+      ON_CALL(*peer_devices.at(conn_id)->ascs, OnGetCharacteristicValue(_))
+              .WillByDefault([this, conn_id, gatt_status](uint16_t handle) {
                 auto& ascs = peer_devices.at(conn_id)->ascs;
                 std::vector<uint8_t> value;
                 bool is_ase_sink_request = false;
@@ -2423,9 +2497,7 @@ protected:
 
                 if (handle == ascs->ctp_ccc && ccc_stored_byte_val_.has_value()) {
                   value = {*ccc_stored_byte_val_, 00};
-                  cb(conn_id, gatt_read_ctp_ccc_status_, handle, value.size(), value.data(),
-                     cb_data);
-                  return;
+                  return std::make_pair(gatt_read_ctp_ccc_status_, value);
                 }
 
                 if (gatt_status == GATT_SUCCESS) {
@@ -2475,7 +2547,7 @@ protected:
                     };
                   }
                 }
-                cb(conn_id, gatt_status, handle, value.size(), value.data(), cb_data);
+                return std::make_pair(gatt_status, value);
               });
     }
   }
