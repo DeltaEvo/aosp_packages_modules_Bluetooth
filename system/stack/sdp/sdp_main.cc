@@ -95,10 +95,8 @@ static void sdp_on_l2cap_error(uint16_t l2cap_cid, uint16_t /* result */) {
  *
  ******************************************************************************/
 static void sdp_connect_cfm(uint16_t l2cap_cid, uint16_t result) {
-  tCONN_CB* p_ccb;
-
   /* Find CCB based on CID */
-  p_ccb = sdpu_find_ccb_by_cid(l2cap_cid);
+  tCONN_CB* p_ccb = sdpu_find_ccb_by_cid(l2cap_cid);
   if (p_ccb == NULL) {
     log::warn("SDP - Rcvd conn cnf for unknown CID 0x{:x}", l2cap_cid);
     sdpu_dump_all_ccb();
@@ -125,10 +123,8 @@ static void sdp_connect_cfm(uint16_t l2cap_cid, uint16_t result) {
  *
  ******************************************************************************/
 static void sdp_config_ind(uint16_t l2cap_cid, tL2CAP_CFG_INFO* p_cfg) {
-  tCONN_CB* p_ccb;
-
   /* Find CCB based on CID */
-  p_ccb = sdpu_find_ccb_by_cid(l2cap_cid);
+  tCONN_CB* p_ccb = sdpu_find_ccb_by_cid(l2cap_cid);
   if (p_ccb == NULL) {
     log::warn("SDP - Rcvd L2CAP cfg ind, unknown CID: 0x{:x}", l2cap_cid);
     sdpu_dump_all_ccb();
@@ -163,12 +159,10 @@ static void sdp_config_ind(uint16_t l2cap_cid, tL2CAP_CFG_INFO* p_cfg) {
 static void sdp_config_cfm(uint16_t l2cap_cid, uint16_t /* initiator */, tL2CAP_CFG_INFO* p_cfg) {
   sdp_config_ind(l2cap_cid, p_cfg);
 
-  tCONN_CB* p_ccb;
-
   log::verbose("SDP - Rcvd cfg cfm, CID: 0x{:x}", l2cap_cid);
 
   /* Find CCB based on CID */
-  p_ccb = sdpu_find_ccb_by_cid(l2cap_cid);
+  tCONN_CB* p_ccb = sdpu_find_ccb_by_cid(l2cap_cid);
   if (p_ccb == NULL) {
     log::warn("SDP - Rcvd L2CAP cfg ind, unknown CID: 0x{:x}", l2cap_cid);
     sdpu_dump_all_ccb();
@@ -197,10 +191,8 @@ static void sdp_config_cfm(uint16_t l2cap_cid, uint16_t /* initiator */, tL2CAP_
  *
  ******************************************************************************/
 static void sdp_disconnect_ind(uint16_t l2cap_cid, bool ack_needed) {
-  tCONN_CB* p_ccb;
-
   /* Find CCB based on CID */
-  p_ccb = sdpu_find_ccb_by_cid(l2cap_cid);
+  tCONN_CB* p_ccb = sdpu_find_ccb_by_cid(l2cap_cid);
   if (p_ccb == NULL) {
     log::warn("SDP - Rcvd L2CAP disc, unknown CID: 0x{:x}", l2cap_cid);
     sdpu_dump_all_ccb();
@@ -239,10 +231,8 @@ static void sdp_disconnect_ind(uint16_t l2cap_cid, bool ack_needed) {
  *
  ******************************************************************************/
 static void sdp_data_ind(uint16_t l2cap_cid, BT_HDR* p_msg) {
-  tCONN_CB* p_ccb;
-
   /* Find CCB based on CID */
-  p_ccb = sdpu_find_ccb_by_cid(l2cap_cid);
+  tCONN_CB* p_ccb = sdpu_find_ccb_by_cid(l2cap_cid);
   if (p_ccb != NULL) {
     if (p_ccb->con_state == tSDP_STATE::CONNECTED) {
       if (p_ccb->con_flags & SDP_FLAGS_IS_ORIG) {
@@ -273,11 +263,10 @@ static void sdp_data_ind(uint16_t l2cap_cid, BT_HDR* p_msg) {
  *
  ******************************************************************************/
 tCONN_CB* sdp_conn_originate(const RawAddress& bd_addr) {
-  tCONN_CB* p_ccb;
   uint16_t cid;
 
   /* Allocate a new CCB. Return if none available. */
-  p_ccb = sdpu_allocate_ccb();
+  tCONN_CB* p_ccb = sdpu_allocate_ccb();
   if (p_ccb == NULL) {
     log::warn("no spare CCB for peer {}", bd_addr);
     return NULL;
@@ -360,10 +349,8 @@ void sdp_disconnect(tCONN_CB* p_ccb, tSDP_REASON reason) {
  *
  ******************************************************************************/
 static void sdp_disconnect_cfm(uint16_t l2cap_cid, uint16_t /* result */) {
-  tCONN_CB* p_ccb;
-
   /* Find CCB based on CID */
-  p_ccb = sdpu_find_ccb_by_cid(l2cap_cid);
+  tCONN_CB* p_ccb = sdpu_find_ccb_by_cid(l2cap_cid);
   if (p_ccb == NULL) {
     log::warn("SDP - Rcvd L2CAP disc cfm, unknown CID: 0x{:x}", l2cap_cid);
     sdpu_dump_all_ccb();

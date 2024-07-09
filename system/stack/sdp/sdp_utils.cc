@@ -311,7 +311,7 @@ void sdpu_log_attribute_metrics(const RawAddress& bda, tSDP_DISCOVERY_DB* p_db) 
  ******************************************************************************/
 tCONN_CB* sdpu_find_ccb_by_cid(uint16_t cid) {
   uint16_t xx;
-  tCONN_CB* p_ccb;
+  tCONN_CB* p_ccb{};
 
   /* Look through each connection control block */
   for (xx = 0, p_ccb = sdp_cb.ccb; xx < SDP_MAX_CONNECTIONS; xx++, p_ccb++) {
@@ -337,7 +337,7 @@ tCONN_CB* sdpu_find_ccb_by_cid(uint16_t cid) {
  ******************************************************************************/
 tCONN_CB* sdpu_find_ccb_by_db(const tSDP_DISCOVERY_DB* p_db) {
   uint16_t xx;
-  tCONN_CB* p_ccb;
+  tCONN_CB* p_ccb{};
 
   if (p_db) {
     /* Look through each connection control block */
@@ -362,7 +362,7 @@ tCONN_CB* sdpu_find_ccb_by_db(const tSDP_DISCOVERY_DB* p_db) {
  ******************************************************************************/
 tCONN_CB* sdpu_allocate_ccb(void) {
   uint16_t xx;
-  tCONN_CB* p_ccb;
+  tCONN_CB* p_ccb{};
 
   /* Look through each connection control block for a free one */
   for (xx = 0, p_ccb = sdp_cb.ccb; xx < SDP_MAX_CONNECTIONS; xx++, p_ccb++) {
@@ -452,7 +452,7 @@ void sdpu_dump_all_ccb() {
  ******************************************************************************/
 uint16_t sdpu_get_active_ccb_cid(const RawAddress& bd_addr) {
   uint16_t xx;
-  tCONN_CB* p_ccb;
+  tCONN_CB* p_ccb{};
 
   // Look through each connection control block for active sdp on given remote
   for (xx = 0, p_ccb = sdp_cb.ccb; xx < SDP_MAX_CONNECTIONS; xx++, p_ccb++) {
@@ -483,7 +483,7 @@ uint16_t sdpu_get_active_ccb_cid(const RawAddress& bd_addr) {
  ******************************************************************************/
 bool sdpu_process_pend_ccb_same_cid(tCONN_CB& ccb) {
   uint16_t xx;
-  tCONN_CB* p_ccb;
+  tCONN_CB* p_ccb{};
 
   // Look through each connection control block for active sdp on given remote
   for (xx = 0, p_ccb = sdp_cb.ccb; xx < SDP_MAX_CONNECTIONS; xx++, p_ccb++) {
@@ -512,7 +512,7 @@ bool sdpu_process_pend_ccb_same_cid(tCONN_CB& ccb) {
  ******************************************************************************/
 bool sdpu_process_pend_ccb_new_cid(tCONN_CB& ccb) {
   uint16_t xx;
-  tCONN_CB* p_ccb;
+  tCONN_CB* p_ccb{};
   uint16_t new_cid = 0;
   bool new_conn = false;
 
@@ -552,7 +552,7 @@ bool sdpu_process_pend_ccb_new_cid(tCONN_CB& ccb) {
  ******************************************************************************/
 void sdpu_clear_pend_ccb(tCONN_CB& ccb) {
   uint16_t xx;
-  tCONN_CB* p_ccb;
+  tCONN_CB* p_ccb{};
 
   // Look through each connection control block for active sdp on given remote
   for (xx = 0, p_ccb = sdp_cb.ccb; xx < SDP_MAX_CONNECTIONS; xx++, p_ccb++) {
