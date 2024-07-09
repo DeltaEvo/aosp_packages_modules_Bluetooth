@@ -219,3 +219,15 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "pan_use_identity_address"
+    namespace: "bluetooth"
+    description: "Use identity address when communicate with native interface"
+    bug: "351961492"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+
