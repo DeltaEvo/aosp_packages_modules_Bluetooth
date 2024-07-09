@@ -89,9 +89,8 @@ union tGAP_CB_DATA {
  ****************************************************************************/
 /*
  * Callback function for connection services
-*/
-typedef void(tGAP_CONN_CALLBACK)(uint16_t gap_handle, uint16_t event,
-                                 tGAP_CB_DATA* data);
+ */
+typedef void(tGAP_CONN_CALLBACK)(uint16_t gap_handle, uint16_t event, tGAP_CB_DATA* data);
 
 typedef struct {
   uint16_t int_min;
@@ -109,8 +108,8 @@ typedef union {
 
 } tGAP_BLE_ATTR_VALUE;
 
-typedef void(tGAP_BLE_CMPL_CBACK)(bool status, const RawAddress& addr,
-                                  uint16_t length, char* p_name);
+typedef void(tGAP_BLE_CMPL_CBACK)(bool status, const RawAddress& addr, uint16_t length,
+                                  char* p_name);
 
 /*****************************************************************************
  *  External Function Declarations
@@ -128,10 +127,9 @@ typedef void(tGAP_BLE_CMPL_CBACK)(bool status, const RawAddress& addr,
  *                  GAP_INVALID_HANDLE
  *
  ******************************************************************************/
-uint16_t GAP_ConnOpen(const char* p_serv_name, uint8_t service_id,
-                      bool is_server, const RawAddress* p_rem_bda, uint16_t psm,
-                      uint16_t le_mps, tL2CAP_CFG_INFO* p_cfg,
-                      tL2CAP_ERTM_INFO* ertm_info, uint16_t security,
+uint16_t GAP_ConnOpen(const char* p_serv_name, uint8_t service_id, bool is_server,
+                      const RawAddress* p_rem_bda, uint16_t psm, uint16_t le_mps,
+                      tL2CAP_CFG_INFO* p_cfg, tL2CAP_ERTM_INFO* ertm_info, uint16_t security,
                       tGAP_CONN_CALLBACK* p_cb, tBT_TRANSPORT transport);
 
 /*******************************************************************************
@@ -159,8 +157,7 @@ uint16_t GAP_ConnClose(uint16_t gap_handle);
  *                  GAP_NO_DATA_AVAIL   - no data available
  *
  ******************************************************************************/
-uint16_t GAP_ConnReadData(uint16_t gap_handle, uint8_t* p_data,
-                          uint16_t max_len, uint16_t* p_len);
+uint16_t GAP_ConnReadData(uint16_t gap_handle, uint8_t* p_data, uint16_t max_len, uint16_t* p_len);
 
 /*******************************************************************************
  *
@@ -276,8 +273,7 @@ bool GAP_BleReadPeerPrefConnParams(const RawAddress& peer_bda);
  * Returns          true if request accepted
  *
  ******************************************************************************/
-bool GAP_BleReadPeerDevName(const RawAddress& peer_bda,
-                            tGAP_BLE_CMPL_CBACK* p_cback);
+bool GAP_BleReadPeerDevName(const RawAddress& peer_bda, tGAP_BLE_CMPL_CBACK* p_cback);
 
 /*******************************************************************************
  *

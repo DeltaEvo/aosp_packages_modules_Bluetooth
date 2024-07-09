@@ -37,17 +37,17 @@ namespace bluetooth {
 namespace hci {
 
 class HciInterface : public CommandInterface<CommandBuilder> {
- public:
+public:
   HciInterface() = default;
   virtual ~HciInterface() = default;
 
   virtual void EnqueueCommand(
-      std::unique_ptr<CommandBuilder> command,
-      common::ContextualOnceCallback<void(CommandCompleteView)> on_complete) override = 0;
+          std::unique_ptr<CommandBuilder> command,
+          common::ContextualOnceCallback<void(CommandCompleteView)> on_complete) override = 0;
 
   virtual void EnqueueCommand(
-      std::unique_ptr<CommandBuilder> command,
-      common::ContextualOnceCallback<void(CommandStatusView)> on_status) override = 0;
+          std::unique_ptr<CommandBuilder> command,
+          common::ContextualOnceCallback<void(CommandStatusView)> on_status) override = 0;
 
   virtual common::BidiQueueEnd<AclBuilder, AclView>* GetAclQueueEnd() = 0;
 
@@ -55,79 +55,79 @@ class HciInterface : public CommandInterface<CommandBuilder> {
 
   virtual common::BidiQueueEnd<IsoBuilder, IsoView>* GetIsoQueueEnd() = 0;
 
-  virtual void RegisterEventHandler(
-      EventCode event_code, common::ContextualCallback<void(EventView)> event_handler) = 0;
+  virtual void RegisterEventHandler(EventCode event_code,
+                                    common::ContextualCallback<void(EventView)> event_handler) = 0;
 
   virtual void UnregisterEventHandler(EventCode event_code) = 0;
 
   virtual void RegisterLeEventHandler(
-      SubeventCode subevent_code,
-      common::ContextualCallback<void(LeMetaEventView)> event_handler) = 0;
+          SubeventCode subevent_code,
+          common::ContextualCallback<void(LeMetaEventView)> event_handler) = 0;
 
   virtual void UnregisterLeEventHandler(SubeventCode subevent_code) = 0;
 
   virtual void RegisterVendorSpecificEventHandler(
-      VseSubeventCode subevent_code,
-      common::ContextualCallback<void(VendorSpecificEventView)> event_handler) = 0;
+          VseSubeventCode subevent_code,
+          common::ContextualCallback<void(VendorSpecificEventView)> event_handler) = 0;
 
   virtual void UnregisterVendorSpecificEventHandler(VseSubeventCode subevent_code) = 0;
 
   virtual void RegisterForDisconnects(
-      common::ContextualCallback<void(uint16_t, hci::ErrorCode)> on_disconnect) = 0;
+          common::ContextualCallback<void(uint16_t, hci::ErrorCode)> on_disconnect) = 0;
 
   virtual SecurityInterface* GetSecurityInterface(
-      common::ContextualCallback<void(EventView)> event_handler) = 0;
+          common::ContextualCallback<void(EventView)> event_handler) = 0;
 
   virtual LeSecurityInterface* GetLeSecurityInterface(
-      common::ContextualCallback<void(LeMetaEventView)> event_handler) = 0;
+          common::ContextualCallback<void(LeMetaEventView)> event_handler) = 0;
 
   virtual AclConnectionInterface* GetAclConnectionInterface(
-      common::ContextualCallback<void(EventView)> event_handler,
-      common::ContextualCallback<void(uint16_t, hci::ErrorCode)> on_disconnect,
-      common::ContextualCallback<void(Address, ClassOfDevice)> on_connection_request,
-      common::ContextualCallback<void(hci::ErrorCode, uint16_t, uint8_t, uint16_t, uint16_t)>
-          on_read_remote_version_complete) = 0;
+          common::ContextualCallback<void(EventView)> event_handler,
+          common::ContextualCallback<void(uint16_t, hci::ErrorCode)> on_disconnect,
+          common::ContextualCallback<void(Address, ClassOfDevice)> on_connection_request,
+          common::ContextualCallback<void(hci::ErrorCode, uint16_t, uint8_t, uint16_t, uint16_t)>
+                  on_read_remote_version_complete) = 0;
   virtual void PutAclConnectionInterface() = 0;
 
   virtual LeAclConnectionInterface* GetLeAclConnectionInterface(
-      common::ContextualCallback<void(LeMetaEventView)> event_handler,
-      common::ContextualCallback<void(uint16_t, hci::ErrorCode)> on_disconnect,
-      common::ContextualCallback<void(hci::ErrorCode, uint16_t, uint8_t, uint16_t, uint16_t)>
-          on_read_remote_version_complete) = 0;
+          common::ContextualCallback<void(LeMetaEventView)> event_handler,
+          common::ContextualCallback<void(uint16_t, hci::ErrorCode)> on_disconnect,
+          common::ContextualCallback<void(hci::ErrorCode, uint16_t, uint8_t, uint16_t, uint16_t)>
+                  on_read_remote_version_complete) = 0;
   virtual void PutLeAclConnectionInterface() = 0;
 
   virtual LeAdvertisingInterface* GetLeAdvertisingInterface(
-      common::ContextualCallback<void(LeMetaEventView)> event_handler) = 0;
+          common::ContextualCallback<void(LeMetaEventView)> event_handler) = 0;
 
   virtual LeScanningInterface* GetLeScanningInterface(
-      common::ContextualCallback<void(LeMetaEventView)> event_handler) = 0;
+          common::ContextualCallback<void(LeMetaEventView)> event_handler) = 0;
 
   virtual void RegisterForScoConnectionRequests(
-      common::ContextualCallback<void(Address, ClassOfDevice, ConnectionRequestLinkType)>
-          on_sco_connection_request) = 0;
+          common::ContextualCallback<void(Address, ClassOfDevice, ConnectionRequestLinkType)>
+                  on_sco_connection_request) = 0;
 
   virtual LeIsoInterface* GetLeIsoInterface(
-      common::ContextualCallback<void(LeMetaEventView)> event_handler) = 0;
+          common::ContextualCallback<void(LeMetaEventView)> event_handler) = 0;
 
   virtual DistanceMeasurementInterface* GetDistanceMeasurementInterface(
-      common::ContextualCallback<void(LeMetaEventView)> event_handler) = 0;
+          common::ContextualCallback<void(LeMetaEventView)> event_handler) = 0;
 
- protected:
+protected:
   template <typename T>
   class CommandInterfaceImpl : public CommandInterface<T> {
-   public:
+  public:
     explicit CommandInterfaceImpl(HciInterface& hci) : hci_(hci) {}
     virtual ~CommandInterfaceImpl() = default;
 
     void EnqueueCommand(
-        std::unique_ptr<T> command,
-        common::ContextualOnceCallback<void(CommandCompleteView)> on_complete) override {
+            std::unique_ptr<T> command,
+            common::ContextualOnceCallback<void(CommandCompleteView)> on_complete) override {
       hci_.EnqueueCommand(std::move(command), std::move(on_complete));
     }
 
     void EnqueueCommand(
-        std::unique_ptr<T> command,
-        common::ContextualOnceCallback<void(CommandStatusView)> on_status) override {
+            std::unique_ptr<T> command,
+            common::ContextualOnceCallback<void(CommandStatusView)> on_status) override {
       hci_.EnqueueCommand(std::move(command), std::move(on_status));
     }
     HciInterface& hci_;

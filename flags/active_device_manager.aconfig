@@ -7,3 +7,10 @@ flag {
     description: "Fallback to other connected device when wired audio device disconnects"
     bug: "348124361"
 }
+
+flag {
+    name: "always_fallback_to_available_device"
+    namespace: "bluetooth"
+    description: "Fix audio path and always fallback to available device"
+    bug: "351820274"
+}

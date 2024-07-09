@@ -29,14 +29,14 @@ namespace le {
  * This is the listener interface for link property callbacks.
  */
 class LinkPropertyListener {
- public:
+public:
   virtual ~LinkPropertyListener() = default;
 
   /**
    * Invoked when an ACL link is connected.
    */
-  virtual void OnLinkConnected(
-      hci::AddressWithType /* remote */, uint16_t /* handle */, hci::Role /* my_role */) {}
+  virtual void OnLinkConnected(hci::AddressWithType /* remote */, uint16_t /* handle */,
+                               hci::Role /* my_role */) {}
 
   /**
    * Invoked when an ACL link is disconnected.
@@ -46,37 +46,32 @@ class LinkPropertyListener {
   /**
    * Invoked when received remote version information for a given link
    */
-  virtual void OnReadRemoteVersionInformation(
-      hci::ErrorCode /* hci_status */,
-      hci::AddressWithType /* remote */,
-      uint8_t /* lmp_version */,
-      uint16_t /* manufacturer_name */,
-      uint16_t /* sub_version */) {}
+  virtual void OnReadRemoteVersionInformation(hci::ErrorCode /* hci_status */,
+                                              hci::AddressWithType /* remote */,
+                                              uint8_t /* lmp_version */,
+                                              uint16_t /* manufacturer_name */,
+                                              uint16_t /* sub_version */) {}
 
   /**
    * Invoked when received connection update for a given link
    */
-  virtual void OnConnectionUpdate(
-      hci::AddressWithType /* remote */,
-      uint16_t /* connection_interval */,
-      uint16_t /* connection_latency */,
-      uint16_t /* supervision_timeout */) {}
+  virtual void OnConnectionUpdate(hci::AddressWithType /* remote */,
+                                  uint16_t /* connection_interval */,
+                                  uint16_t /* connection_latency */,
+                                  uint16_t /* supervision_timeout */) {}
 
   /**
    * Invoked when received PHY update for a given link
    */
-  virtual void OnPhyUpdate(
-      hci::AddressWithType /* remote */, uint8_t /* tx_phy */, uint8_t /* rx_phy */) {}
+  virtual void OnPhyUpdate(hci::AddressWithType /* remote */, uint8_t /* tx_phy */,
+                           uint8_t /* rx_phy */) {}
 
   /**
    * Invoked when received data length exchange for a given link
    */
-  virtual void OnDataLengthChange(
-      hci::AddressWithType /* remote */,
-      uint16_t /* tx_octets */,
-      uint16_t /* tx_time */,
-      uint16_t /* rx_octets */,
-      uint16_t /* rx_time */) {}
+  virtual void OnDataLengthChange(hci::AddressWithType /* remote */, uint16_t /* tx_octets */,
+                                  uint16_t /* tx_time */, uint16_t /* rx_octets */,
+                                  uint16_t /* rx_time */) {}
 };
 
 }  // namespace le

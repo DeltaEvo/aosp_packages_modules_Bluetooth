@@ -39,19 +39,15 @@ namespace security {
 const ModuleFactory SecurityModule::Factory = ModuleFactory([]() { return new SecurityModule(); });
 
 struct SecurityModule::impl {
-  impl(
-      os::Handler* security_handler,
-      l2cap::le::L2capLeModule* l2cap_le_module,
-      l2cap::classic::L2capClassicModule* l2cap_classic_module,
-      hci::HciLayer* hci_layer,
-      hci::AclManager* acl_manager,
-      hci::Controller* controller,
-      storage::StorageModule* storage_module,
-      neighbor::NameDbModule* name_db_module)
+  impl(os::Handler* security_handler, l2cap::le::L2capLeModule* l2cap_le_module,
+       l2cap::classic::L2capClassicModule* l2cap_classic_module, hci::HciLayer* hci_layer,
+       hci::AclManager* acl_manager, hci::Controller* controller,
+       storage::StorageModule* storage_module, neighbor::NameDbModule* name_db_module)
       : security_handler_(security_handler),
         l2cap_classic_module_(l2cap_classic_module),
         l2cap_le_module_(l2cap_le_module),
-        security_manager_channel_(new channel::SecurityManagerChannel(security_handler_, hci_layer)),
+        security_manager_channel_(
+                new channel::SecurityManagerChannel(security_handler_, hci_layer)),
         hci_layer_(hci_layer),
         acl_manager_(acl_manager),
         controller_(controller),
@@ -60,8 +56,8 @@ struct SecurityModule::impl {
         name_db_module_(name_db_module) {
     l2cap_classic_module->InjectSecurityEnforcementInterface(&l2cap_security_interface_);
     l2cap_le_module->InjectSecurityEnforcementInterface(&l2cap_security_interface_);
-    security_manager_channel_->SetSecurityInterface(
-        l2cap_classic_module->GetSecurityInterface(security_handler_, security_manager_channel_));
+    security_manager_channel_->SetSecurityInterface(l2cap_classic_module->GetSecurityInterface(
+            security_handler_, security_manager_channel_));
   }
 
   os::Handler* security_handler_;
@@ -75,14 +71,9 @@ struct SecurityModule::impl {
   L2capSecurityModuleInterface l2cap_security_interface_;
   neighbor::NameDbModule* name_db_module_;
 
-  internal::SecurityManagerImpl security_manager_impl{security_handler_,
-                                                      l2cap_le_module_,
-                                                      security_manager_channel_,
-                                                      hci_layer_,
-                                                      acl_manager_,
-                                                      controller_,
-                                                      storage_module_,
-                                                      name_db_module_};
+  internal::SecurityManagerImpl security_manager_impl{
+          security_handler_, l2cap_le_module_, security_manager_channel_, hci_layer_,
+          acl_manager_,      controller_,      storage_module_,           name_db_module_};
 
   ~impl() {
     delete security_manager_channel_;
@@ -103,32 +94,24 @@ void SecurityModule::ListDependencies(ModuleList* list) const {
 
 void SecurityModule::Start() {
   pimpl_ = std::make_unique<impl>(
-      GetHandler(),
-      GetDependency<l2cap::le::L2capLeModule>(),
-      GetDependency<l2cap::classic::L2capClassicModule>(),
-      GetDependency<hci::HciLayer>(),
-      GetDependency<hci::AclManager>(),
-      GetDependency<hci::Controller>(),
-      GetDependency<storage::StorageModule>(),
-      GetDependency<neighbor::NameDbModule>());
+          GetHandler(), GetDependency<l2cap::le::L2capLeModule>(),
+          GetDependency<l2cap::classic::L2capClassicModule>(), GetDependency<hci::HciLayer>(),
+          GetDependency<hci::AclManager>(), GetDependency<hci::Controller>(),
+          GetDependency<storage::StorageModule>(), GetDependency<neighbor::NameDbModule>());
 }
 
-void SecurityModule::Stop() {
-  pimpl_.reset();
-}
+void SecurityModule::Stop() { pimpl_.reset(); }
 
-std::string SecurityModule::ToString() const {
-  return "Security Module";
-}
+std::string SecurityModule::ToString() const { return "Security Module"; }
 
 std::unique_ptr<SecurityManager> SecurityModule::GetSecurityManager() {
   return std::unique_ptr<SecurityManager>(
-      new SecurityManager(pimpl_->security_handler_, &pimpl_->security_manager_impl));
+          new SecurityManager(pimpl_->security_handler_, &pimpl_->security_manager_impl));
 }
 
 std::unique_ptr<FacadeConfigurationApi> SecurityModule::GetFacadeConfigurationApi() {
   return std::unique_ptr<FacadeConfigurationApi>(
-      new FacadeConfigurationApi(pimpl_->security_handler_, &pimpl_->security_manager_impl));
+          new FacadeConfigurationApi(pimpl_->security_handler_, &pimpl_->security_manager_impl));
 }
 
 }  // namespace security

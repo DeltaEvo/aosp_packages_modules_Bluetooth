@@ -16,6 +16,9 @@
 
 #include "l2cap/classic/internal/link_manager.h"
 
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
 #include <future>
 #include <thread>
 
@@ -32,9 +35,6 @@
 #include "l2cap/internal/parameter_provider_mock.h"
 #include "os/handler.h"
 #include "os/thread.h"
-
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 namespace bluetooth {
 namespace l2cap {
@@ -59,7 +59,7 @@ constexpr static auto kTestIdleDisconnectTimeoutLong = std::chrono::milliseconds
 constexpr static auto kTestIdleDisconnectTimeoutShort = std::chrono::milliseconds(1000);
 
 class L2capClassicLinkManagerTest : public ::testing::Test {
- public:
+public:
   static void SyncHandler(os::Handler* handler) {
     std::promise<void> promise;
     auto future = promise.get_future();
@@ -67,13 +67,13 @@ class L2capClassicLinkManagerTest : public ::testing::Test {
     future.wait_for(std::chrono::milliseconds(3));
   }
 
- protected:
+protected:
   void SetUp() override {
     thread_ = new os::Thread("test_thread", os::Thread::Priority::NORMAL);
     l2cap_handler_ = new os::Handler(thread_);
     mock_parameter_provider_ = new MockParameterProvider;
     EXPECT_CALL(*mock_parameter_provider_, GetClassicLinkIdleDisconnectTimeout)
-        .WillRepeatedly(Return(kTestIdleDisconnectTimeoutLong));
+            .WillRepeatedly(Return(kTestIdleDisconnectTimeoutLong));
   }
 
   void TearDown() override {
@@ -94,10 +94,11 @@ TEST_F(L2capClassicLinkManagerTest, connect_fixed_channel_service_without_acl) {
   SecurityEnforcementRejectAllImpl security_module_impl;
   MockDynamicChannelServiceImpl service;
   ON_CALL(service, GetSecurityPolicy())
-      .WillByDefault(Return(SecurityPolicy::_SDP_ONLY_NO_SECURITY_WHATSOEVER_PLAINTEXT_TRANSPORT_OK));
+          .WillByDefault(
+                  Return(SecurityPolicy::_SDP_ONLY_NO_SECURITY_WHATSOEVER_PLAINTEXT_TRANSPORT_OK));
 
   ON_CALL(mock_classic_dynamic_channel_service_manager, GetSecurityEnforcementInterface())
-      .WillByDefault(Return(&security_module_impl));
+          .WillByDefault(Return(&security_module_impl));
   MockAclManager mock_acl_manager;
   hci::Address device{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}};
   auto user_handler = std::make_unique<os::Handler>(thread_);
@@ -106,10 +107,13 @@ TEST_F(L2capClassicLinkManagerTest, connect_fixed_channel_service_without_acl) {
   hci::acl_manager::ConnectionCallbacks* hci_connection_callbacks = nullptr;
   os::Handler* hci_callback_handler = nullptr;
   EXPECT_CALL(mock_acl_manager, RegisterCallbacks(_, _))
-      .WillOnce(DoAll(SaveArg<0>(&hci_connection_callbacks), SaveArg<1>(&hci_callback_handler)));
-  ON_CALL(mock_classic_dynamic_channel_service_manager, GetService(_)).WillByDefault(Return(&service));
-  LinkManager classic_link_manager(l2cap_handler_, &mock_acl_manager, &mock_classic_fixed_channel_service_manager,
-                                   &mock_classic_dynamic_channel_service_manager, mock_parameter_provider_);
+          .WillOnce(
+                  DoAll(SaveArg<0>(&hci_connection_callbacks), SaveArg<1>(&hci_callback_handler)));
+  ON_CALL(mock_classic_dynamic_channel_service_manager, GetService(_))
+          .WillByDefault(Return(&service));
+  LinkManager classic_link_manager(
+          l2cap_handler_, &mock_acl_manager, &mock_classic_fixed_channel_service_manager,
+          &mock_classic_dynamic_channel_service_manager, mock_parameter_provider_);
   EXPECT_EQ(hci_connection_callbacks, &classic_link_manager);
   EXPECT_EQ(hci_callback_handler, l2cap_handler_);
 
@@ -118,18 +122,23 @@ TEST_F(L2capClassicLinkManagerTest, connect_fixed_channel_service_without_acl) {
   std::vector<std::pair<Cid, FixedChannelServiceImpl*>> results;
   results.emplace_back(kSmpBrCid, &mock_service_1);
   results.emplace_back(kConnectionlessCid, &mock_service_2);
-  EXPECT_CALL(mock_classic_fixed_channel_service_manager, GetRegisteredServices()).WillRepeatedly(Return(results));
+  EXPECT_CALL(mock_classic_fixed_channel_service_manager, GetRegisteredServices())
+          .WillRepeatedly(Return(results));
 
   // Step 2: Connect to fixed channel without ACL connection should trigger ACL connection process
   EXPECT_CALL(mock_acl_manager, CreateConnection(device)).Times(1);
   LinkManager::PendingFixedChannelConnection pending_fixed_channel_connection{
-      .handler_ = user_handler.get(),
-      .on_fail_callback_ = common::BindOnce([](FixedChannelManager::ConnectionResult result) { FAIL(); })};
-  classic_link_manager.ConnectFixedChannelServices(device, std::move(pending_fixed_channel_connection));
+          .handler_ = user_handler.get(),
+          .on_fail_callback_ =
+                  common::BindOnce([](FixedChannelManager::ConnectionResult result) { FAIL(); })};
+  classic_link_manager.ConnectFixedChannelServices(device,
+                                                   std::move(pending_fixed_channel_connection));
 
-  // Step 3: ACL connection success event should trigger channel creation for all registered services
+  // Step 3: ACL connection success event should trigger channel creation for all registered
+  // services
 
-  std::unique_ptr<MockClassicAclConnection> acl_connection = std::make_unique<MockClassicAclConnection>();
+  std::unique_ptr<MockClassicAclConnection> acl_connection =
+          std::make_unique<MockClassicAclConnection>();
   EXPECT_CALL(*acl_connection, GetAddress()).WillRepeatedly(Return(device));
   EXPECT_CALL(*acl_connection, RegisterCallbacks(_, l2cap_handler_)).Times(1);
   std::unique_ptr<FixedChannel> channel_1, channel_2;
@@ -137,17 +146,18 @@ TEST_F(L2capClassicLinkManagerTest, connect_fixed_channel_service_without_acl) {
   auto future_1 = promise_1.get_future();
   auto future_2 = promise_2.get_future();
   EXPECT_CALL(mock_service_1, NotifyChannelCreation(_))
-      .WillOnce([&channel_1, &promise_1](std::unique_ptr<FixedChannel> channel) {
-        channel_1 = std::move(channel);
-        promise_1.set_value();
-      });
+          .WillOnce([&channel_1, &promise_1](std::unique_ptr<FixedChannel> channel) {
+            channel_1 = std::move(channel);
+            promise_1.set_value();
+          });
   EXPECT_CALL(mock_service_2, NotifyChannelCreation(_))
-      .WillOnce([&channel_2, &promise_2](std::unique_ptr<FixedChannel> channel) {
-        channel_2 = std::move(channel);
-        promise_2.set_value();
-      });
-  hci_callback_handler->Post(common::BindOnce(&hci::acl_manager::ConnectionCallbacks::OnConnectSuccess,
-                                              common::Unretained(hci_connection_callbacks), std::move(acl_connection)));
+          .WillOnce([&channel_2, &promise_2](std::unique_ptr<FixedChannel> channel) {
+            channel_2 = std::move(channel);
+            promise_2.set_value();
+          });
+  hci_callback_handler->Post(common::BindOnce(
+          &hci::acl_manager::ConnectionCallbacks::OnConnectSuccess,
+          common::Unretained(hci_connection_callbacks), std::move(acl_connection)));
   SyncHandler(hci_callback_handler);
   auto future_1_status = future_1.wait_for(kTestIdleDisconnectTimeoutShort);
   EXPECT_EQ(future_1_status, std::future_status::ready);
@@ -159,10 +169,13 @@ TEST_F(L2capClassicLinkManagerTest, connect_fixed_channel_service_without_acl) {
   // Step 4: Calling ConnectServices() to the same device will no trigger another connection attempt
   FixedChannelManager::ConnectionResult my_result;
   LinkManager::PendingFixedChannelConnection pending_fixed_channel_connection_2{
-      .handler_ = user_handler.get(),
-      .on_fail_callback_ = common::testing::BindLambdaForTesting(
-          [&my_result](FixedChannelManager::ConnectionResult result) { my_result = result; })};
-  classic_link_manager.ConnectFixedChannelServices(device, std::move(pending_fixed_channel_connection_2));
+          .handler_ = user_handler.get(),
+          .on_fail_callback_ = common::testing::BindLambdaForTesting(
+                  [&my_result](FixedChannelManager::ConnectionResult result) {
+                    my_result = result;
+                  })};
+  classic_link_manager.ConnectFixedChannelServices(device,
+                                                   std::move(pending_fixed_channel_connection_2));
   SyncHandler(user_handler.get());
   EXPECT_EQ(my_result.connection_result_code,
             FixedChannelManager::ConnectionResultCode::FAIL_ALL_SERVICES_HAVE_CHANNEL);
@@ -170,15 +183,19 @@ TEST_F(L2capClassicLinkManagerTest, connect_fixed_channel_service_without_acl) {
   // Step 5: Register new service will cause new channels to be created during ConnectServices()
   MockFixedChannelServiceImpl mock_service_3;
   results.emplace_back(kSmpBrCid + 1, &mock_service_3);
-  EXPECT_CALL(mock_classic_fixed_channel_service_manager, GetRegisteredServices()).WillRepeatedly(Return(results));
+  EXPECT_CALL(mock_classic_fixed_channel_service_manager, GetRegisteredServices())
+          .WillRepeatedly(Return(results));
   LinkManager::PendingFixedChannelConnection pending_fixed_channel_connection_3{
-      .handler_ = user_handler.get(),
-      .on_fail_callback_ = common::BindOnce([](FixedChannelManager::ConnectionResult result) { FAIL(); })};
+          .handler_ = user_handler.get(),
+          .on_fail_callback_ =
+                  common::BindOnce([](FixedChannelManager::ConnectionResult result) { FAIL(); })};
   std::unique_ptr<FixedChannel> channel_3;
-  EXPECT_CALL(mock_service_3, NotifyChannelCreation(_)).WillOnce([&channel_3](std::unique_ptr<FixedChannel> channel) {
-    channel_3 = std::move(channel);
-  });
-  classic_link_manager.ConnectFixedChannelServices(device, std::move(pending_fixed_channel_connection_3));
+  EXPECT_CALL(mock_service_3, NotifyChannelCreation(_))
+          .WillOnce([&channel_3](std::unique_ptr<FixedChannel> channel) {
+            channel_3 = std::move(channel);
+          });
+  classic_link_manager.ConnectFixedChannelServices(device,
+                                                   std::move(pending_fixed_channel_connection_3));
   EXPECT_NE(channel_3, nullptr);
 
   user_handler->Clear();
@@ -196,26 +213,33 @@ TEST_F(L2capClassicLinkManagerTest, connect_fixed_channel_service_without_acl_wi
   hci::acl_manager::ConnectionCallbacks* hci_connection_callbacks = nullptr;
   os::Handler* hci_callback_handler = nullptr;
   EXPECT_CALL(mock_acl_manager, RegisterCallbacks(_, _))
-      .WillOnce(DoAll(SaveArg<0>(&hci_connection_callbacks), SaveArg<1>(&hci_callback_handler)));
-  LinkManager classic_link_manager(l2cap_handler_, &mock_acl_manager, &mock_classic_fixed_channel_service_manager,
-                                   nullptr, mock_parameter_provider_);
+          .WillOnce(
+                  DoAll(SaveArg<0>(&hci_connection_callbacks), SaveArg<1>(&hci_callback_handler)));
+  LinkManager classic_link_manager(l2cap_handler_, &mock_acl_manager,
+                                   &mock_classic_fixed_channel_service_manager, nullptr,
+                                   mock_parameter_provider_);
   EXPECT_EQ(hci_connection_callbacks, &classic_link_manager);
   EXPECT_EQ(hci_callback_handler, l2cap_handler_);
 
   // Make sure no service is registered
   std::vector<std::pair<Cid, FixedChannelServiceImpl*>> results;
-  EXPECT_CALL(mock_classic_fixed_channel_service_manager, GetRegisteredServices()).WillRepeatedly(Return(results));
+  EXPECT_CALL(mock_classic_fixed_channel_service_manager, GetRegisteredServices())
+          .WillRepeatedly(Return(results));
 
   // Step 2: Connect to fixed channel without any service registered will result in failure
   EXPECT_CALL(mock_acl_manager, CreateConnection(device)).Times(0);
   FixedChannelManager::ConnectionResult my_result;
   LinkManager::PendingFixedChannelConnection pending_fixed_channel_connection{
-      .handler_ = user_handler.get(),
-      .on_fail_callback_ = common::testing::BindLambdaForTesting(
-          [&my_result](FixedChannelManager::ConnectionResult result) { my_result = result; })};
-  classic_link_manager.ConnectFixedChannelServices(device, std::move(pending_fixed_channel_connection));
+          .handler_ = user_handler.get(),
+          .on_fail_callback_ = common::testing::BindLambdaForTesting(
+                  [&my_result](FixedChannelManager::ConnectionResult result) {
+                    my_result = result;
+                  })};
+  classic_link_manager.ConnectFixedChannelServices(device,
+                                                   std::move(pending_fixed_channel_connection));
   SyncHandler(user_handler.get());
-  EXPECT_EQ(my_result.connection_result_code, FixedChannelManager::ConnectionResultCode::FAIL_NO_SERVICE_REGISTERED);
+  EXPECT_EQ(my_result.connection_result_code,
+            FixedChannelManager::ConnectionResultCode::FAIL_NO_SERVICE_REGISTERED);
 
   user_handler->Clear();
 }
@@ -230,9 +254,11 @@ TEST_F(L2capClassicLinkManagerTest, connect_fixed_channel_service_without_acl_wi
   hci::acl_manager::ConnectionCallbacks* hci_connection_callbacks = nullptr;
   os::Handler* hci_callback_handler = nullptr;
   EXPECT_CALL(mock_acl_manager, RegisterCallbacks(_, _))
-      .WillOnce(DoAll(SaveArg<0>(&hci_connection_callbacks), SaveArg<1>(&hci_callback_handler)));
-  LinkManager classic_link_manager(l2cap_handler_, &mock_acl_manager, &mock_classic_fixed_channel_service_manager,
-                                   nullptr, mock_parameter_provider_);
+          .WillOnce(
+                  DoAll(SaveArg<0>(&hci_connection_callbacks), SaveArg<1>(&hci_callback_handler)));
+  LinkManager classic_link_manager(l2cap_handler_, &mock_acl_manager,
+                                   &mock_classic_fixed_channel_service_manager, nullptr,
+                                   mock_parameter_provider_);
   EXPECT_EQ(hci_connection_callbacks, &classic_link_manager);
   EXPECT_EQ(hci_callback_handler, l2cap_handler_);
 
@@ -240,28 +266,31 @@ TEST_F(L2capClassicLinkManagerTest, connect_fixed_channel_service_without_acl_wi
   MockFixedChannelServiceImpl mock_service_1;
   std::vector<std::pair<Cid, FixedChannelServiceImpl*>> results;
   results.emplace_back(kSmpBrCid, &mock_service_1);
-  EXPECT_CALL(mock_classic_fixed_channel_service_manager, GetRegisteredServices()).WillRepeatedly(Return(results));
+  EXPECT_CALL(mock_classic_fixed_channel_service_manager, GetRegisteredServices())
+          .WillRepeatedly(Return(results));
 
   // Step 2: Connect to fixed channel without ACL connection should trigger ACL connection process
   EXPECT_CALL(mock_acl_manager, CreateConnection(device)).Times(1);
   FixedChannelManager::ConnectionResult my_result;
   LinkManager::PendingFixedChannelConnection pending_fixed_channel_connection{
-      .handler_ = user_handler.get(),
-      .on_fail_callback_ = common::testing::BindLambdaForTesting(
-          [&my_result](FixedChannelManager::ConnectionResult result) { my_result = result; })};
-  classic_link_manager.ConnectFixedChannelServices(device, std::move(pending_fixed_channel_connection));
+          .handler_ = user_handler.get(),
+          .on_fail_callback_ = common::testing::BindLambdaForTesting(
+                  [&my_result](FixedChannelManager::ConnectionResult result) {
+                    my_result = result;
+                  })};
+  classic_link_manager.ConnectFixedChannelServices(device,
+                                                   std::move(pending_fixed_channel_connection));
 
   // Step 3: ACL connection failure event should trigger connection failure callback
   EXPECT_CALL(mock_service_1, NotifyChannelCreation(_)).Times(0);
-  hci_callback_handler->Post(common::BindOnce(
-      &hci::acl_manager::ConnectionCallbacks::OnConnectFail,
-      common::Unretained(hci_connection_callbacks),
-      device,
-      hci::ErrorCode::PAGE_TIMEOUT,
-      true /* locally_initiated */));
+  hci_callback_handler->Post(common::BindOnce(&hci::acl_manager::ConnectionCallbacks::OnConnectFail,
+                                              common::Unretained(hci_connection_callbacks), device,
+                                              hci::ErrorCode::PAGE_TIMEOUT,
+                                              true /* locally_initiated */));
   SyncHandler(hci_callback_handler);
   SyncHandler(user_handler.get());
-  EXPECT_EQ(my_result.connection_result_code, FixedChannelManager::ConnectionResultCode::FAIL_HCI_ERROR);
+  EXPECT_EQ(my_result.connection_result_code,
+            FixedChannelManager::ConnectionResultCode::FAIL_HCI_ERROR);
   EXPECT_EQ(my_result.hci_error, hci::ErrorCode::PAGE_TIMEOUT);
 
   user_handler->Clear();
@@ -269,7 +298,7 @@ TEST_F(L2capClassicLinkManagerTest, connect_fixed_channel_service_without_acl_wi
 
 TEST_F(L2capClassicLinkManagerTest, not_acquiring_channels_should_disconnect_acl_after_timeout) {
   EXPECT_CALL(*mock_parameter_provider_, GetClassicLinkIdleDisconnectTimeout)
-      .WillRepeatedly(Return(kTestIdleDisconnectTimeoutShort));
+          .WillRepeatedly(Return(kTestIdleDisconnectTimeoutShort));
   MockFixedChannelServiceManagerImpl mock_classic_fixed_channel_service_manager;
   MockAclManager mock_acl_manager;
   hci::Address device{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}};
@@ -279,9 +308,11 @@ TEST_F(L2capClassicLinkManagerTest, not_acquiring_channels_should_disconnect_acl
   hci::acl_manager::ConnectionCallbacks* hci_connection_callbacks = nullptr;
   os::Handler* hci_callback_handler = nullptr;
   EXPECT_CALL(mock_acl_manager, RegisterCallbacks(_, _))
-      .WillOnce(DoAll(SaveArg<0>(&hci_connection_callbacks), SaveArg<1>(&hci_callback_handler)));
-  LinkManager classic_link_manager(l2cap_handler_, &mock_acl_manager, &mock_classic_fixed_channel_service_manager,
-                                   nullptr, mock_parameter_provider_);
+          .WillOnce(
+                  DoAll(SaveArg<0>(&hci_connection_callbacks), SaveArg<1>(&hci_callback_handler)));
+  LinkManager classic_link_manager(l2cap_handler_, &mock_acl_manager,
+                                   &mock_classic_fixed_channel_service_manager, nullptr,
+                                   mock_parameter_provider_);
   EXPECT_EQ(hci_connection_callbacks, &classic_link_manager);
   EXPECT_EQ(hci_callback_handler, l2cap_handler_);
 
@@ -290,16 +321,20 @@ TEST_F(L2capClassicLinkManagerTest, not_acquiring_channels_should_disconnect_acl
   std::vector<std::pair<Cid, FixedChannelServiceImpl*>> results;
   results.emplace_back(kSmpBrCid, &mock_service_1);
   results.emplace_back(kConnectionlessCid, &mock_service_2);
-  EXPECT_CALL(mock_classic_fixed_channel_service_manager, GetRegisteredServices()).WillRepeatedly(Return(results));
+  EXPECT_CALL(mock_classic_fixed_channel_service_manager, GetRegisteredServices())
+          .WillRepeatedly(Return(results));
 
   // Step 2: Connect to fixed channel without ACL connection should trigger ACL connection process
   EXPECT_CALL(mock_acl_manager, CreateConnection(device)).Times(1);
   LinkManager::PendingFixedChannelConnection pending_fixed_channel_connection{
-      .handler_ = user_handler.get(),
-      .on_fail_callback_ = common::BindOnce([](FixedChannelManager::ConnectionResult result) { FAIL(); })};
-  classic_link_manager.ConnectFixedChannelServices(device, std::move(pending_fixed_channel_connection));
+          .handler_ = user_handler.get(),
+          .on_fail_callback_ =
+                  common::BindOnce([](FixedChannelManager::ConnectionResult result) { FAIL(); })};
+  classic_link_manager.ConnectFixedChannelServices(device,
+                                                   std::move(pending_fixed_channel_connection));
 
-  // Step 3: ACL connection success event should trigger channel creation for all registered services
+  // Step 3: ACL connection success event should trigger channel creation for all registered
+  // services
   auto* raw_acl_connection = new MockClassicAclConnection();
   std::unique_ptr<MockClassicAclConnection> acl_connection(raw_acl_connection);
   EXPECT_CALL(*acl_connection, GetAddress()).WillRepeatedly(Return(device));
@@ -309,17 +344,18 @@ TEST_F(L2capClassicLinkManagerTest, not_acquiring_channels_should_disconnect_acl
   auto future_1 = promise_1.get_future();
   auto future_2 = promise_2.get_future();
   EXPECT_CALL(mock_service_1, NotifyChannelCreation(_))
-      .WillOnce([&channel_1, &promise_1](std::unique_ptr<FixedChannel> channel) {
-        channel_1 = std::move(channel);
-        promise_1.set_value();
-      });
+          .WillOnce([&channel_1, &promise_1](std::unique_ptr<FixedChannel> channel) {
+            channel_1 = std::move(channel);
+            promise_1.set_value();
+          });
   EXPECT_CALL(mock_service_2, NotifyChannelCreation(_))
-      .WillOnce([&channel_2, &promise_2](std::unique_ptr<FixedChannel> channel) {
-        channel_2 = std::move(channel);
-        promise_2.set_value();
-      });
-  hci_callback_handler->Post(common::BindOnce(&hci::acl_manager::ConnectionCallbacks::OnConnectSuccess,
-                                              common::Unretained(hci_connection_callbacks), std::move(acl_connection)));
+          .WillOnce([&channel_2, &promise_2](std::unique_ptr<FixedChannel> channel) {
+            channel_2 = std::move(channel);
+            promise_2.set_value();
+          });
+  hci_callback_handler->Post(common::BindOnce(
+          &hci::acl_manager::ConnectionCallbacks::OnConnectSuccess,
+          common::Unretained(hci_connection_callbacks), std::move(acl_connection)));
   SyncHandler(hci_callback_handler);
   auto future_1_status = future_1.wait_for(kTestIdleDisconnectTimeoutShort);
   EXPECT_EQ(future_1_status, std::future_status::ready);
@@ -329,13 +365,17 @@ TEST_F(L2capClassicLinkManagerTest, not_acquiring_channels_should_disconnect_acl
   EXPECT_NE(channel_2, nullptr);
   hci::ErrorCode status_1 = hci::ErrorCode::SUCCESS;
   channel_1->RegisterOnCloseCallback(
-      user_handler.get(), common::testing::BindLambdaForTesting([&](hci::ErrorCode status) { status_1 = status; }));
+          user_handler.get(),
+          common::testing::BindLambdaForTesting([&](hci::ErrorCode status) { status_1 = status; }));
   hci::ErrorCode status_2 = hci::ErrorCode::SUCCESS;
   channel_2->RegisterOnCloseCallback(
-      user_handler.get(), common::testing::BindLambdaForTesting([&](hci::ErrorCode status) { status_2 = status; }));
+          user_handler.get(),
+          common::testing::BindLambdaForTesting([&](hci::ErrorCode status) { status_2 = status; }));
 
   // Step 4: Leave channel IDLE long enough, they will disconnect
-  EXPECT_CALL(*raw_acl_connection, Disconnect(hci::DisconnectReason::REMOTE_USER_TERMINATED_CONNECTION)).Times(1);
+  EXPECT_CALL(*raw_acl_connection,
+              Disconnect(hci::DisconnectReason::REMOTE_USER_TERMINATED_CONNECTION))
+          .Times(1);
   std::this_thread::sleep_for(kTestIdleDisconnectTimeoutShort * 1.2);
 
   user_handler->Clear();
@@ -343,7 +383,7 @@ TEST_F(L2capClassicLinkManagerTest, not_acquiring_channels_should_disconnect_acl
 
 TEST_F(L2capClassicLinkManagerTest, acquiring_channels_should_not_disconnect_acl_after_timeout) {
   EXPECT_CALL(*mock_parameter_provider_, GetClassicLinkIdleDisconnectTimeout)
-      .WillRepeatedly(Return(kTestIdleDisconnectTimeoutShort));
+          .WillRepeatedly(Return(kTestIdleDisconnectTimeoutShort));
   MockFixedChannelServiceManagerImpl mock_classic_fixed_channel_service_manager;
   MockAclManager mock_acl_manager;
   hci::Address device{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}};
@@ -353,9 +393,11 @@ TEST_F(L2capClassicLinkManagerTest, acquiring_channels_should_not_disconnect_acl
   hci::acl_manager::ConnectionCallbacks* hci_connection_callbacks = nullptr;
   os::Handler* hci_callback_handler = nullptr;
   EXPECT_CALL(mock_acl_manager, RegisterCallbacks(_, _))
-      .WillOnce(DoAll(SaveArg<0>(&hci_connection_callbacks), SaveArg<1>(&hci_callback_handler)));
-  LinkManager classic_link_manager(l2cap_handler_, &mock_acl_manager, &mock_classic_fixed_channel_service_manager,
-                                   nullptr, mock_parameter_provider_);
+          .WillOnce(
+                  DoAll(SaveArg<0>(&hci_connection_callbacks), SaveArg<1>(&hci_callback_handler)));
+  LinkManager classic_link_manager(l2cap_handler_, &mock_acl_manager,
+                                   &mock_classic_fixed_channel_service_manager, nullptr,
+                                   mock_parameter_provider_);
   EXPECT_EQ(hci_connection_callbacks, &classic_link_manager);
   EXPECT_EQ(hci_callback_handler, l2cap_handler_);
 
@@ -364,16 +406,20 @@ TEST_F(L2capClassicLinkManagerTest, acquiring_channels_should_not_disconnect_acl
   std::vector<std::pair<Cid, FixedChannelServiceImpl*>> results;
   results.emplace_back(kSmpBrCid, &mock_service_1);
   results.emplace_back(kConnectionlessCid, &mock_service_2);
-  EXPECT_CALL(mock_classic_fixed_channel_service_manager, GetRegisteredServices()).WillRepeatedly(Return(results));
+  EXPECT_CALL(mock_classic_fixed_channel_service_manager, GetRegisteredServices())
+          .WillRepeatedly(Return(results));
 
   // Step 2: Connect to fixed channel without ACL connection should trigger ACL connection process
   EXPECT_CALL(mock_acl_manager, CreateConnection(device)).Times(1);
   LinkManager::PendingFixedChannelConnection pending_fixed_channel_connection{
-      .handler_ = user_handler.get(),
-      .on_fail_callback_ = common::BindOnce([](FixedChannelManager::ConnectionResult result) { FAIL(); })};
-  classic_link_manager.ConnectFixedChannelServices(device, std::move(pending_fixed_channel_connection));
+          .handler_ = user_handler.get(),
+          .on_fail_callback_ =
+                  common::BindOnce([](FixedChannelManager::ConnectionResult result) { FAIL(); })};
+  classic_link_manager.ConnectFixedChannelServices(device,
+                                                   std::move(pending_fixed_channel_connection));
 
-  // Step 3: ACL connection success event should trigger channel creation for all registered services
+  // Step 3: ACL connection success event should trigger channel creation for all registered
+  // services
   auto* raw_acl_connection = new MockClassicAclConnection();
   std::unique_ptr<MockClassicAclConnection> acl_connection(raw_acl_connection);
   EXPECT_CALL(*acl_connection, GetAddress()).WillRepeatedly(Return(device));
@@ -383,17 +429,18 @@ TEST_F(L2capClassicLinkManagerTest, acquiring_channels_should_not_disconnect_acl
   auto future_1 = promise_1.get_future();
   auto future_2 = promise_2.get_future();
   EXPECT_CALL(mock_service_1, NotifyChannelCreation(_))
-      .WillOnce([&channel_1, &promise_1](std::unique_ptr<FixedChannel> channel) {
-        channel_1 = std::move(channel);
-        promise_1.set_value();
-      });
+          .WillOnce([&channel_1, &promise_1](std::unique_ptr<FixedChannel> channel) {
+            channel_1 = std::move(channel);
+            promise_1.set_value();
+          });
   EXPECT_CALL(mock_service_2, NotifyChannelCreation(_))
-      .WillOnce([&channel_2, &promise_2](std::unique_ptr<FixedChannel> channel) {
-        channel_2 = std::move(channel);
-        promise_2.set_value();
-      });
-  hci_callback_handler->Post(common::BindOnce(&hci::acl_manager::ConnectionCallbacks::OnConnectSuccess,
-                                              common::Unretained(hci_connection_callbacks), std::move(acl_connection)));
+          .WillOnce([&channel_2, &promise_2](std::unique_ptr<FixedChannel> channel) {
+            channel_2 = std::move(channel);
+            promise_2.set_value();
+          });
+  hci_callback_handler->Post(common::BindOnce(
+          &hci::acl_manager::ConnectionCallbacks::OnConnectSuccess,
+          common::Unretained(hci_connection_callbacks), std::move(acl_connection)));
   SyncHandler(hci_callback_handler);
   auto future_1_status = future_1.wait_for(kTestIdleDisconnectTimeoutShort);
   EXPECT_EQ(future_1_status, std::future_status::ready);
@@ -403,23 +450,28 @@ TEST_F(L2capClassicLinkManagerTest, acquiring_channels_should_not_disconnect_acl
   EXPECT_NE(channel_2, nullptr);
   hci::ErrorCode status_1 = hci::ErrorCode::SUCCESS;
   channel_1->RegisterOnCloseCallback(
-      user_handler.get(), common::testing::BindLambdaForTesting([&](hci::ErrorCode status) { status_1 = status; }));
+          user_handler.get(),
+          common::testing::BindLambdaForTesting([&](hci::ErrorCode status) { status_1 = status; }));
   hci::ErrorCode status_2 = hci::ErrorCode::SUCCESS;
   channel_2->RegisterOnCloseCallback(
-      user_handler.get(), common::testing::BindLambdaForTesting([&](hci::ErrorCode status) { status_2 = status; }));
+          user_handler.get(),
+          common::testing::BindLambdaForTesting([&](hci::ErrorCode status) { status_2 = status; }));
 
   channel_1->Acquire();
 
   // Step 4: Leave channel IDLE, it won't disconnect to due acquired channel 1
-  EXPECT_CALL(*raw_acl_connection, Disconnect(hci::DisconnectReason::REMOTE_USER_TERMINATED_CONNECTION)).Times(0);
+  EXPECT_CALL(*raw_acl_connection,
+              Disconnect(hci::DisconnectReason::REMOTE_USER_TERMINATED_CONNECTION))
+          .Times(0);
   std::this_thread::sleep_for(kTestIdleDisconnectTimeoutShort * 2);
 
   user_handler->Clear();
 }
 
-TEST_F(L2capClassicLinkManagerTest, acquiring_and_releasing_channels_should_eventually_disconnect_acl) {
+TEST_F(L2capClassicLinkManagerTest,
+       acquiring_and_releasing_channels_should_eventually_disconnect_acl) {
   EXPECT_CALL(*mock_parameter_provider_, GetClassicLinkIdleDisconnectTimeout)
-      .WillRepeatedly(Return(kTestIdleDisconnectTimeoutShort));
+          .WillRepeatedly(Return(kTestIdleDisconnectTimeoutShort));
   MockFixedChannelServiceManagerImpl mock_classic_fixed_channel_service_manager;
   MockAclManager mock_acl_manager;
   hci::Address device{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}};
@@ -429,9 +481,11 @@ TEST_F(L2capClassicLinkManagerTest, acquiring_and_releasing_channels_should_even
   hci::acl_manager::ConnectionCallbacks* hci_connection_callbacks = nullptr;
   os::Handler* hci_callback_handler = nullptr;
   EXPECT_CALL(mock_acl_manager, RegisterCallbacks(_, _))
-      .WillOnce(DoAll(SaveArg<0>(&hci_connection_callbacks), SaveArg<1>(&hci_callback_handler)));
-  LinkManager classic_link_manager(l2cap_handler_, &mock_acl_manager, &mock_classic_fixed_channel_service_manager,
-                                   nullptr, mock_parameter_provider_);
+          .WillOnce(
+                  DoAll(SaveArg<0>(&hci_connection_callbacks), SaveArg<1>(&hci_callback_handler)));
+  LinkManager classic_link_manager(l2cap_handler_, &mock_acl_manager,
+                                   &mock_classic_fixed_channel_service_manager, nullptr,
+                                   mock_parameter_provider_);
   EXPECT_EQ(hci_connection_callbacks, &classic_link_manager);
   EXPECT_EQ(hci_callback_handler, l2cap_handler_);
 
@@ -440,16 +494,20 @@ TEST_F(L2capClassicLinkManagerTest, acquiring_and_releasing_channels_should_even
   std::vector<std::pair<Cid, FixedChannelServiceImpl*>> results;
   results.emplace_back(kSmpBrCid, &mock_service_1);
   results.emplace_back(kConnectionlessCid, &mock_service_2);
-  EXPECT_CALL(mock_classic_fixed_channel_service_manager, GetRegisteredServices()).WillRepeatedly(Return(results));
+  EXPECT_CALL(mock_classic_fixed_channel_service_manager, GetRegisteredServices())
+          .WillRepeatedly(Return(results));
 
   // Step 2: Connect to fixed channel without ACL connection should trigger ACL connection process
   EXPECT_CALL(mock_acl_manager, CreateConnection(device)).Times(1);
   LinkManager::PendingFixedChannelConnection pending_fixed_channel_connection{
-      .handler_ = user_handler.get(),
-      .on_fail_callback_ = common::BindOnce([](FixedChannelManager::ConnectionResult result) { FAIL(); })};
-  classic_link_manager.ConnectFixedChannelServices(device, std::move(pending_fixed_channel_connection));
+          .handler_ = user_handler.get(),
+          .on_fail_callback_ =
+                  common::BindOnce([](FixedChannelManager::ConnectionResult result) { FAIL(); })};
+  classic_link_manager.ConnectFixedChannelServices(device,
+                                                   std::move(pending_fixed_channel_connection));
 
-  // Step 3: ACL connection success event should trigger channel creation for all registered services
+  // Step 3: ACL connection success event should trigger channel creation for all registered
+  // services
   auto* raw_acl_connection = new MockClassicAclConnection();
   std::unique_ptr<MockClassicAclConnection> acl_connection(raw_acl_connection);
   EXPECT_CALL(*acl_connection, GetAddress()).WillRepeatedly(Return(device));
@@ -459,17 +517,18 @@ TEST_F(L2capClassicLinkManagerTest, acquiring_and_releasing_channels_should_even
   auto future_1 = promise_1.get_future();
   auto future_2 = promise_2.get_future();
   EXPECT_CALL(mock_service_1, NotifyChannelCreation(_))
-      .WillOnce([&channel_1, &promise_1](std::unique_ptr<FixedChannel> channel) {
-        channel_1 = std::move(channel);
-        promise_1.set_value();
-      });
+          .WillOnce([&channel_1, &promise_1](std::unique_ptr<FixedChannel> channel) {
+            channel_1 = std::move(channel);
+            promise_1.set_value();
+          });
   EXPECT_CALL(mock_service_2, NotifyChannelCreation(_))
-      .WillOnce([&channel_2, &promise_2](std::unique_ptr<FixedChannel> channel) {
-        channel_2 = std::move(channel);
-        promise_2.set_value();
-      });
-  hci_callback_handler->Post(common::BindOnce(&hci::acl_manager::ConnectionCallbacks::OnConnectSuccess,
-                                              common::Unretained(hci_connection_callbacks), std::move(acl_connection)));
+          .WillOnce([&channel_2, &promise_2](std::unique_ptr<FixedChannel> channel) {
+            channel_2 = std::move(channel);
+            promise_2.set_value();
+          });
+  hci_callback_handler->Post(common::BindOnce(
+          &hci::acl_manager::ConnectionCallbacks::OnConnectSuccess,
+          common::Unretained(hci_connection_callbacks), std::move(acl_connection)));
   SyncHandler(hci_callback_handler);
   auto future_1_status = future_1.wait_for(kTestIdleDisconnectTimeoutShort);
   EXPECT_EQ(future_1_status, std::future_status::ready);
@@ -479,20 +538,26 @@ TEST_F(L2capClassicLinkManagerTest, acquiring_and_releasing_channels_should_even
   EXPECT_NE(channel_2, nullptr);
   hci::ErrorCode status_1 = hci::ErrorCode::SUCCESS;
   channel_1->RegisterOnCloseCallback(
-      user_handler.get(), common::testing::BindLambdaForTesting([&](hci::ErrorCode status) { status_1 = status; }));
+          user_handler.get(),
+          common::testing::BindLambdaForTesting([&](hci::ErrorCode status) { status_1 = status; }));
   hci::ErrorCode status_2 = hci::ErrorCode::SUCCESS;
   channel_2->RegisterOnCloseCallback(
-      user_handler.get(), common::testing::BindLambdaForTesting([&](hci::ErrorCode status) { status_2 = status; }));
+          user_handler.get(),
+          common::testing::BindLambdaForTesting([&](hci::ErrorCode status) { status_2 = status; }));
 
   channel_1->Acquire();
 
   // Step 4: Leave channel IDLE, it won't disconnect to due acquired channel 1
-  EXPECT_CALL(*raw_acl_connection, Disconnect(hci::DisconnectReason::REMOTE_USER_TERMINATED_CONNECTION)).Times(0);
+  EXPECT_CALL(*raw_acl_connection,
+              Disconnect(hci::DisconnectReason::REMOTE_USER_TERMINATED_CONNECTION))
+          .Times(0);
   std::this_thread::sleep_for(kTestIdleDisconnectTimeoutShort * 2);
 
   // Step 5: Leave channel IDLE long enough, they will disconnect
   channel_1->Release();
-  EXPECT_CALL(*raw_acl_connection, Disconnect(hci::DisconnectReason::REMOTE_USER_TERMINATED_CONNECTION)).Times(1);
+  EXPECT_CALL(*raw_acl_connection,
+              Disconnect(hci::DisconnectReason::REMOTE_USER_TERMINATED_CONNECTION))
+          .Times(1);
   std::this_thread::sleep_for(kTestIdleDisconnectTimeoutShort * 1.2);
 
   user_handler->Clear();

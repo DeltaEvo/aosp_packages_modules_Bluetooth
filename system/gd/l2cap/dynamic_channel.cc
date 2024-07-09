@@ -15,19 +15,18 @@
  */
 
 #include "l2cap/dynamic_channel.h"
+
 #include "common/bind.h"
 #include "l2cap/internal/dynamic_channel_impl.h"
 
 namespace bluetooth {
 namespace l2cap {
 
-hci::AddressWithType DynamicChannel::GetDevice() const {
-  return impl_->GetDevice();
-}
+hci::AddressWithType DynamicChannel::GetDevice() const { return impl_->GetDevice(); }
 
 void DynamicChannel::RegisterOnCloseCallback(DynamicChannel::OnCloseCallback on_close_callback) {
-  l2cap_handler_->CallOn(
-      impl_.get(), &l2cap::internal::DynamicChannelImpl::RegisterOnCloseCallback, std::move(on_close_callback));
+  l2cap_handler_->CallOn(impl_.get(), &l2cap::internal::DynamicChannelImpl::RegisterOnCloseCallback,
+                         std::move(on_close_callback));
 }
 
 void DynamicChannel::Close() {
@@ -39,9 +38,7 @@ DynamicChannel::GetQueueUpEnd() const {
   return impl_->GetQueueUpEnd();
 }
 
-Cid DynamicChannel::HACK_GetRemoteCid() {
-  return impl_->GetRemoteCid();
-}
+Cid DynamicChannel::HACK_GetRemoteCid() { return impl_->GetRemoteCid(); }
 
 void DynamicChannel::HACK_SetChannelTxPriority(bool high_priority) {
   return impl_->SetChannelTxPriority(high_priority);

@@ -282,8 +282,7 @@ typedef enum : uint16_t {
 
 } tGATT_DISCONN_REASON;
 
-inline std::string gatt_disconnection_reason_text(
-    const tGATT_DISCONN_REASON& reason) {
+inline std::string gatt_disconnection_reason_text(const tGATT_DISCONN_REASON& reason) {
   switch (reason) {
     CASE_RETURN_TEXT(GATT_CONN_OK);
     CASE_RETURN_TEXT(GATT_CONN_L2C_FAILURE);
@@ -300,21 +299,21 @@ inline std::string gatt_disconnection_reason_text(
 }
 
 /* MAX GATT MTU size
-*/
+ */
 #ifndef GATT_MAX_MTU_SIZE
 #define GATT_MAX_MTU_SIZE 517
 #endif
 
 /* default GATT MTU size over LE link
-*/
+ */
 #define GATT_DEF_BLE_MTU_SIZE 23
 
 /* invalid connection ID
-*/
+ */
 #define GATT_INVALID_CONN_ID 0xFFFF
 
 /* GATT notification caching timer, default to be three seconds
-*/
+ */
 #ifndef GATTC_NOTIF_TIMEOUT
 #define GATTC_NOTIF_TIMEOUT 3
 #endif
@@ -324,15 +323,15 @@ inline std::string gatt_disconnection_reason_text(
  ****************************************************************************/
 
 /* Attribute permissions
-*/
-#define GATT_PERM_READ (1 << 0)              /* bit 0 */
-#define GATT_PERM_READ_ENCRYPTED (1 << 1)    /* bit 1 */
-#define GATT_PERM_READ_ENC_MITM (1 << 2)     /* bit 2 */
-#define GATT_PERM_WRITE (1 << 4)             /* bit 4 */
-#define GATT_PERM_WRITE_ENCRYPTED (1 << 5)   /* bit 5 */
-#define GATT_PERM_WRITE_ENC_MITM (1 << 6)    /* bit 6 */
-#define GATT_PERM_WRITE_SIGNED (1 << 7)      /* bit 7 */
-#define GATT_PERM_WRITE_SIGNED_MITM (1 << 8) /* bit 8 */
+ */
+#define GATT_PERM_READ (1 << 0)                              /* bit 0 */
+#define GATT_PERM_READ_ENCRYPTED (1 << 1)                    /* bit 1 */
+#define GATT_PERM_READ_ENC_MITM (1 << 2)                     /* bit 2 */
+#define GATT_PERM_WRITE (1 << 4)                             /* bit 4 */
+#define GATT_PERM_WRITE_ENCRYPTED (1 << 5)                   /* bit 5 */
+#define GATT_PERM_WRITE_ENC_MITM (1 << 6)                    /* bit 6 */
+#define GATT_PERM_WRITE_SIGNED (1 << 7)                      /* bit 7 */
+#define GATT_PERM_WRITE_SIGNED_MITM (1 << 8)                 /* bit 8 */
 #define GATT_PERM_READ_IF_ENCRYPTED_OR_DISCOVERABLE (1 << 9) /* bit 9 */
 typedef uint16_t tGATT_PERM;
 
@@ -344,27 +343,22 @@ typedef uint16_t tGATT_PERM;
    GATT_PERM_READ_IF_ENCRYPTED_OR_DISCOVERABLE)
 #define GATT_READ_AUTH_REQUIRED (GATT_PERM_READ_ENCRYPTED)
 #define GATT_READ_MITM_REQUIRED (GATT_PERM_READ_ENC_MITM)
-#define GATT_READ_ENCRYPTED_REQUIRED \
-  (GATT_PERM_READ_ENCRYPTED | GATT_PERM_READ_ENC_MITM)
+#define GATT_READ_ENCRYPTED_REQUIRED (GATT_PERM_READ_ENCRYPTED | GATT_PERM_READ_ENC_MITM)
 
 #define GATT_WRITE_ALLOWED                                                  \
   (GATT_PERM_WRITE | GATT_PERM_WRITE_ENCRYPTED | GATT_PERM_WRITE_ENC_MITM | \
    GATT_PERM_WRITE_SIGNED | GATT_PERM_WRITE_SIGNED_MITM)
 
-#define GATT_WRITE_AUTH_REQUIRED \
-  (GATT_PERM_WRITE_ENCRYPTED | GATT_PERM_WRITE_SIGNED)
+#define GATT_WRITE_AUTH_REQUIRED (GATT_PERM_WRITE_ENCRYPTED | GATT_PERM_WRITE_SIGNED)
 
-#define GATT_WRITE_MITM_REQUIRED \
-  (GATT_PERM_WRITE_ENC_MITM | GATT_PERM_WRITE_SIGNED_MITM)
+#define GATT_WRITE_MITM_REQUIRED (GATT_PERM_WRITE_ENC_MITM | GATT_PERM_WRITE_SIGNED_MITM)
 
-#define GATT_WRITE_ENCRYPTED_PERM \
-  (GATT_PERM_WRITE_ENCRYPTED | GATT_PERM_WRITE_ENC_MITM)
+#define GATT_WRITE_ENCRYPTED_PERM (GATT_PERM_WRITE_ENCRYPTED | GATT_PERM_WRITE_ENC_MITM)
 
-#define GATT_WRITE_SIGNED_PERM \
-  (GATT_PERM_WRITE_SIGNED | GATT_PERM_WRITE_SIGNED_MITM)
+#define GATT_WRITE_SIGNED_PERM (GATT_PERM_WRITE_SIGNED | GATT_PERM_WRITE_SIGNED_MITM)
 
 /* Characteristic properties
-*/
+ */
 #define GATT_CHAR_PROP_BIT_BROADCAST (1 << 0)
 #define GATT_CHAR_PROP_BIT_READ (1 << 1)
 #define GATT_CHAR_PROP_BIT_WRITE_NR (1 << 2)
@@ -376,7 +370,7 @@ typedef uint16_t tGATT_PERM;
 typedef uint8_t tGATT_CHAR_PROP;
 
 /* Format of the value of a characteristic. enumeration type
-*/
+ */
 enum {
   GATT_FORMAT_RES,     /* rfu */
   GATT_FORMAT_BOOL,    /* 0x01 boolean */
@@ -411,7 +405,7 @@ enum {
 typedef uint8_t tGATT_FORMAT;
 
 /* Characteristic Presentation Format Descriptor value
-*/
+ */
 typedef struct {
   uint16_t unit;  /* as UUIUD defined by SIG */
   uint16_t descr; /* as UUID as defined by SIG */
@@ -421,7 +415,7 @@ typedef struct {
 } tGATT_CHAR_PRES;
 
 /* Characteristic Report reference Descriptor format
-*/
+ */
 typedef struct {
   uint8_t rpt_id;   /* report ID */
   uint8_t rpt_type; /* report type */
@@ -436,7 +430,7 @@ typedef struct {
 } tGATT_VALID_RANGE;
 
 /* Characteristic Aggregate Format attribute value
-*/
+ */
 #define GATT_AGGR_HANDLE_NUM_MAX 10
 typedef struct {
   uint8_t num_handle;
@@ -444,33 +438,33 @@ typedef struct {
 } tGATT_CHAR_AGGRE;
 
 /* Characteristic descriptor: Extended Properties value
-*/
+ */
 /* permits reliable writes of the Characteristic Value */
 #define GATT_CHAR_BIT_REL_WRITE 0x0001
 /* permits writes to the characteristic descriptor */
 #define GATT_CHAR_BIT_WRITE_AUX 0x0002
 
 /* characteristic descriptor: client configuration value
-*/
+ */
 #define GATT_CLT_CONFIG_NONE 0x0000
 #define GATT_CLT_CONFIG_NOTIFICATION 0x0001
 #define GATT_CLT_CONFIG_INDICATION 0x0002
 
 /* characteristic descriptor: server configuration value
-*/
+ */
 #define GATT_SVR_CONFIG_NONE 0x0000
 #define GATT_SVR_CONFIG_BROADCAST 0x0001
 typedef uint16_t tGATT_SVR_CHAR_CONFIG;
 
 /* Characteristic descriptor: Extended Properties value
-*/
+ */
 /* permits reliable writes of the Characteristic Value */
 #define GATT_CHAR_BIT_REL_WRITE 0x0001
 /* permits writes to the characteristic descriptor */
 #define GATT_CHAR_BIT_WRITE_AUX 0x0002
 
 /* authentication requirement
-*/
+ */
 #define GATT_AUTH_REQ_NONE 0
 #define GATT_AUTH_REQ_NO_MITM 1 /* unauthenticated encryption */
 #define GATT_AUTH_REQ_MITM 2    /* authenticated encryption */
@@ -479,20 +473,20 @@ typedef uint16_t tGATT_SVR_CHAR_CONFIG;
 typedef uint8_t tGATT_AUTH_REQ;
 
 /* Attribute Value structure
-*/
+ */
 typedef struct {
   uint16_t conn_id;
-  uint16_t handle; /* attribute handle */
-  uint16_t offset; /* attribute value offset, if no offset is needed for the
-                      command, ignore it */
-  uint16_t len;    /* length of attribute value */
+  uint16_t handle;                  /* attribute handle */
+  uint16_t offset;                  /* attribute value offset, if no offset is needed for the
+                                       command, ignore it */
+  uint16_t len;                     /* length of attribute value */
   tGATT_AUTH_REQ auth_req;          /*  authentication request */
   uint8_t value[GATT_MAX_ATTR_LEN]; /* the actual attribute value */
 } tGATT_VALUE;
 
 /* Union of the event data which is used in the server respond API to carry the
  * server response information
-*/
+ */
 typedef union {
   /* data type            member          event   */
   tGATT_VALUE attr_value; /* READ, HANDLE_VALUE_IND, PREPARE_WRITE */
@@ -510,21 +504,19 @@ typedef struct {
   uint16_t handle;
   uint16_t offset;
   bool is_long;
-  bt_gatt_db_attribute_type_t
-      gatt_type; /* are we writing characteristic or descriptor */
+  bt_gatt_db_attribute_type_t gatt_type; /* are we writing characteristic or descriptor */
 } tGATT_READ_REQ;
 
 /* write request data */
 typedef struct {
-  uint16_t handle; /* attribute handle */
-  uint16_t offset; /* attribute value offset, if no offset is needed for the
-                      command, ignore it */
-  uint16_t len;    /* length of attribute value */
-  uint8_t value[GATT_MAX_ATTR_LEN]; /* the actual attribute value */
-  bool need_rsp;                    /* need write response */
-  bool is_prep;                     /* is prepare write */
-  bt_gatt_db_attribute_type_t
-      gatt_type; /* are we writing characteristic or descriptor */
+  uint16_t handle;                       /* attribute handle */
+  uint16_t offset;                       /* attribute value offset, if no offset is needed for the
+                                            command, ignore it */
+  uint16_t len;                          /* length of attribute value */
+  uint8_t value[GATT_MAX_ATTR_LEN];      /* the actual attribute value */
+  bool need_rsp;                         /* need write response */
+  bool is_prep;                          /* is prepare write */
+  bt_gatt_db_attribute_type_t gatt_type; /* are we writing characteristic or descriptor */
 } tGATT_WRITE_REQ;
 
 /* callback data for server access request from client */
@@ -553,20 +545,20 @@ enum {
 typedef uint8_t tGATTS_REQ_TYPE;
 
 /* Client Used Data Structure
-*/
+ */
 /* definition of different discovery types */
 typedef enum : uint8_t {
   GATT_DISC_SRVC_ALL = 1, /* discover all services */
   GATT_DISC_SRVC_BY_UUID, /* discover service of a special type */
   GATT_DISC_INC_SRVC,     /* discover the included service within a service */
-  GATT_DISC_CHAR, /* discover characteristics of a service with/without type
-                     requirement */
-  GATT_DISC_CHAR_DSCPT, /* discover characteristic descriptors of a character */
-  GATT_DISC_MAX         /* maximum discover type */
+  GATT_DISC_CHAR,         /* discover characteristics of a service with/without type
+                             requirement */
+  GATT_DISC_CHAR_DSCPT,   /* discover characteristic descriptors of a character */
+  GATT_DISC_MAX           /* maximum discover type */
 } tGATT_DISC_TYPE;
 
 /* GATT read type enumeration
-*/
+ */
 enum {
   GATT_READ_BY_TYPE = 1,
   GATT_READ_BY_HANDLE,
@@ -579,7 +571,7 @@ enum {
 typedef uint8_t tGATT_READ_TYPE;
 
 /* Read By Type Request (GATT_READ_BY_TYPE) Data
-*/
+ */
 typedef struct {
   tGATT_AUTH_REQ auth_req;
   uint16_t s_handle;
@@ -588,9 +580,8 @@ typedef struct {
 } tGATT_READ_BY_TYPE;
 
 /*   GATT_READ_MULTIPLE request data
-*/
-#define GATT_MAX_READ_MULTI_HANDLES \
-  10 /* Max attributes to read in one request */
+ */
+#define GATT_MAX_READ_MULTI_HANDLES 10 /* Max attributes to read in one request */
 typedef struct {
   tGATT_AUTH_REQ auth_req;
   uint16_t num_handles;                          /* number of handles to read */
@@ -612,7 +603,7 @@ typedef struct {
 } tGATT_READ_PARTIAL;
 
 /* Read Request Data
-*/
+ */
 typedef union {
   tGATT_READ_BY_TYPE service;
   tGATT_READ_BY_TYPE char_type; /* characteristic type */
@@ -626,7 +617,7 @@ enum { GATT_WRITE_NO_RSP = 1, GATT_WRITE, GATT_WRITE_PREPARE };
 typedef uint8_t tGATT_WRITE_TYPE;
 
 /* Client Operation Complete Callback Data
-*/
+ */
 typedef union {
   tGATT_VALUE att_value;
   uint16_t mtu;
@@ -635,7 +626,7 @@ typedef union {
 } tGATT_CL_COMPLETE;
 
 /* GATT client operation type, used in client callback function
-*/
+ */
 typedef enum : uint8_t {
   GATTC_OPTYPE_NONE = 0,
   GATTC_OPTYPE_DISCOVERY = 1,
@@ -648,7 +639,7 @@ typedef enum : uint8_t {
 } tGATTC_OPTYPE;
 
 /* characteristic declaration
-*/
+ */
 typedef struct {
   tGATT_CHAR_PROP char_prop; /* characteristic properties */
   uint16_t val_handle;       /* characteristic value attribute handle */
@@ -656,18 +647,18 @@ typedef struct {
 } tGATT_CHAR_DCLR_VAL;
 
 /* primary service group data
-*/
+ */
 typedef struct {
-  uint16_t e_handle;     /* ending handle of the group */
+  uint16_t e_handle;            /* ending handle of the group */
   bluetooth::Uuid service_type; /* group type */
 } tGATT_GROUP_VALUE;
 
 /* included service attribute value
-*/
+ */
 typedef struct {
   bluetooth::Uuid service_type; /* included service UUID */
-  uint16_t s_handle;     /* starting handle */
-  uint16_t e_handle;     /* ending handle */
+  uint16_t s_handle;            /* starting handle */
+  uint16_t e_handle;            /* ending handle */
 } tGATT_INCL_SRVC;
 
 typedef union {
@@ -680,13 +671,12 @@ typedef union {
   uint16_t handle; /* When used with GATT_DISC_INC_SRVC type discovery result,
                       it is the included service starting handle.*/
 
-  tGATT_CHAR_DCLR_VAL
-      dclr_value; /* Characteristic declaration value.
-                     This field is used with GATT_DISC_CHAR type discovery.*/
+  tGATT_CHAR_DCLR_VAL dclr_value; /* Characteristic declaration value.
+                                     This field is used with GATT_DISC_CHAR type discovery.*/
 } tGATT_DISC_VALUE;
 
 /* discover result record
-*/
+ */
 typedef struct {
   bluetooth::Uuid type;
   uint16_t handle;
@@ -705,23 +695,21 @@ typedef void(tGATT_DISC_RES_CB)(uint16_t conn_id, tGATT_DISC_TYPE disc_type,
                                 tGATT_DISC_RES* p_data);
 
 /* discover complete callback function */
-typedef void(tGATT_DISC_CMPL_CB)(uint16_t conn_id, tGATT_DISC_TYPE disc_type,
-                                 tGATT_STATUS status);
+typedef void(tGATT_DISC_CMPL_CB)(uint16_t conn_id, tGATT_DISC_TYPE disc_type, tGATT_STATUS status);
 
 /* Define a callback function for when read/write/disc/config operation is
  * completed. */
-typedef void(tGATT_CMPL_CBACK)(uint16_t conn_id, tGATTC_OPTYPE op,
-                               tGATT_STATUS status, tGATT_CL_COMPLETE* p_data);
+typedef void(tGATT_CMPL_CBACK)(uint16_t conn_id, tGATTC_OPTYPE op, tGATT_STATUS status,
+                               tGATT_CL_COMPLETE* p_data);
 
 /* Define a callback function when an initialized connection is established. */
-typedef void(tGATT_CONN_CBACK)(tGATT_IF gatt_if, const RawAddress& bda,
-                               uint16_t conn_id, bool connected,
-                               tGATT_DISCONN_REASON reason,
+typedef void(tGATT_CONN_CBACK)(tGATT_IF gatt_if, const RawAddress& bda, uint16_t conn_id,
+                               bool connected, tGATT_DISCONN_REASON reason,
                                tBT_TRANSPORT transport);
 
 /* attribute request callback for ATT server */
-typedef void(tGATT_REQ_CBACK)(uint16_t conn_id, uint32_t trans_id,
-                              tGATTS_REQ_TYPE type, tGATTS_DATA* p_data);
+typedef void(tGATT_REQ_CBACK)(uint16_t conn_id, uint32_t trans_id, tGATTS_REQ_TYPE type,
+                              tGATTS_DATA* p_data);
 
 /* channel congestion/uncongestion callback */
 typedef void(tGATT_CONGESTION_CBACK)(uint16_t conn_id, bool congested);
@@ -730,25 +718,22 @@ typedef void(tGATT_CONGESTION_CBACK)(uint16_t conn_id, bool congested);
 typedef void(tGATT_ENC_CMPL_CB)(tGATT_IF gatt_if, const RawAddress& bda);
 
 /* Define a callback function when phy is updated. */
-typedef void(tGATT_PHY_UPDATE_CB)(tGATT_IF gatt_if, uint16_t conn_id,
-                                  uint8_t tx_phy, uint8_t rx_phy,
-                                  tGATT_STATUS status);
+typedef void(tGATT_PHY_UPDATE_CB)(tGATT_IF gatt_if, uint16_t conn_id, uint8_t tx_phy,
+                                  uint8_t rx_phy, tGATT_STATUS status);
 
 /* Define a callback function when connection parameters are updated */
-typedef void(tGATT_CONN_UPDATE_CB)(tGATT_IF gatt_if, uint16_t conn_id,
-                                   uint16_t interval, uint16_t latency,
-                                   uint16_t timeout, tGATT_STATUS status);
+typedef void(tGATT_CONN_UPDATE_CB)(tGATT_IF gatt_if, uint16_t conn_id, uint16_t interval,
+                                   uint16_t latency, uint16_t timeout, tGATT_STATUS status);
 
 /* Define a callback function when subrate change event is received */
-typedef void(tGATT_SUBRATE_CHG_CB)(tGATT_IF gatt_if, uint16_t conn_id,
-                                   uint16_t subrate_factor, uint16_t latency,
-                                   uint16_t cont_num, uint16_t timeout,
+typedef void(tGATT_SUBRATE_CHG_CB)(tGATT_IF gatt_if, uint16_t conn_id, uint16_t subrate_factor,
+                                   uint16_t latency, uint16_t cont_num, uint16_t timeout,
                                    tGATT_STATUS status);
 
 /* Define the structure that applications use to register with
  * GATT. This structure includes callback functions. All functions
  * MUST be provided.
-*/
+ */
 typedef struct {
   tGATT_CONN_CBACK* p_conn_cb{nullptr};
   tGATT_CMPL_CBACK* p_cmpl_cb{nullptr};
@@ -797,10 +782,8 @@ typedef union {
 
 /* Attribute server handle ranges NV storage callback functions
  */
-typedef void(tGATTS_NV_SAVE_CBACK)(bool is_saved,
-                                   tGATTS_HNDL_RANGE* p_hndl_range);
-typedef bool(tGATTS_NV_SRV_CHG_CBACK)(tGATTS_SRV_CHG_CMD cmd,
-                                      tGATTS_SRV_CHG_REQ* p_req,
+typedef void(tGATTS_NV_SAVE_CBACK)(bool is_saved, tGATTS_HNDL_RANGE* p_hndl_range);
+typedef bool(tGATTS_NV_SRV_CHG_CBACK)(tGATTS_SRV_CHG_CMD cmd, tGATTS_SRV_CHG_REQ* p_req,
                                       tGATTS_SRV_CHG_RSP* p_rsp);
 
 typedef struct {
@@ -852,8 +835,7 @@ typedef struct {
  *                  on error error status is returned.
  *
  ******************************************************************************/
-[[nodiscard]] tGATT_STATUS GATTS_AddService(tGATT_IF gatt_if,
-                                            btgatt_db_element_t* service,
+[[nodiscard]] tGATT_STATUS GATTS_AddService(tGATT_IF gatt_if, btgatt_db_element_t* service,
                                             int count);
 
 /*******************************************************************************
@@ -870,8 +852,7 @@ typedef struct {
  * Returns          true if operation succeed, else false
  *
  ******************************************************************************/
-[[nodiscard]] bool GATTS_DeleteService(tGATT_IF gatt_if,
-                                       bluetooth::Uuid* p_svc_uuid,
+[[nodiscard]] bool GATTS_DeleteService(tGATT_IF gatt_if, bluetooth::Uuid* p_svc_uuid,
                                        uint16_t svc_inst);
 
 /*******************************************************************************
@@ -903,10 +884,8 @@ void GATTS_StopService(uint16_t service_handle);
  *                               code.
  *
  ******************************************************************************/
-[[nodiscard]] tGATT_STATUS GATTS_HandleValueIndication(uint16_t conn_id,
-                                                       uint16_t attr_handle,
-                                                       uint16_t val_len,
-                                                       uint8_t* p_val);
+[[nodiscard]] tGATT_STATUS GATTS_HandleValueIndication(uint16_t conn_id, uint16_t attr_handle,
+                                                       uint16_t val_len, uint8_t* p_val);
 
 /*******************************************************************************
  *
@@ -923,10 +902,8 @@ void GATTS_StopService(uint16_t service_handle);
  * Returns          GATT_SUCCESS if successfully sent; otherwise error code.
  *
  ******************************************************************************/
-[[nodiscard]] tGATT_STATUS GATTS_HandleValueNotification(uint16_t conn_id,
-                                                         uint16_t attr_handle,
-                                                         uint16_t val_len,
-                                                         uint8_t* p_val);
+[[nodiscard]] tGATT_STATUS GATTS_HandleValueNotification(uint16_t conn_id, uint16_t attr_handle,
+                                                         uint16_t val_len, uint8_t* p_val);
 
 /*******************************************************************************
  *
@@ -942,8 +919,7 @@ void GATTS_StopService(uint16_t service_handle);
  * Returns          GATT_SUCCESS if successfully sent; otherwise error code.
  *
  ******************************************************************************/
-[[nodiscard]] tGATT_STATUS GATTS_SendRsp(uint16_t conn_id, uint32_t trans_id,
-                                         tGATT_STATUS status,
+[[nodiscard]] tGATT_STATUS GATTS_SendRsp(uint16_t conn_id, uint32_t trans_id, tGATT_STATUS status,
                                          tGATTS_RSP* p_msg);
 
 /******************************************************************************/
@@ -978,8 +954,8 @@ void GATTS_StopService(uint16_t service_handle);
  *                   user_mtu: user request mtu
  *
  ******************************************************************************/
-void GATTC_UpdateUserAttMtuIfNeeded(const RawAddress& remote_bda,
-                                    tBT_TRANSPORT transport, uint16_t user_mtu);
+void GATTC_UpdateUserAttMtuIfNeeded(const RawAddress& remote_bda, tBT_TRANSPORT transport,
+                                    uint16_t user_mtu);
 
 /******************************************************************************
  *
@@ -1007,13 +983,13 @@ void GATTC_UpdateUserAttMtuIfNeeded(const RawAddress& remote_bda,
  *                      Exchange. Conn_id is stored for result.
  *
  ******************************************************************************/
-[[nodiscard]] tGATTC_TryMtuRequestResult GATTC_TryMtuRequest(
-    const RawAddress& remote_bda, tBT_TRANSPORT transport, uint16_t conn_id,
-    uint16_t* current_mtu);
+[[nodiscard]] tGATTC_TryMtuRequestResult GATTC_TryMtuRequest(const RawAddress& remote_bda,
+                                                             tBT_TRANSPORT transport,
+                                                             uint16_t conn_id,
+                                                             uint16_t* current_mtu);
 
-[[nodiscard]] std::list<uint16_t>
-GATTC_GetAndRemoveListOfConnIdsWaitingForMtuRequest(
-    const RawAddress& remote_bda);
+[[nodiscard]] std::list<uint16_t> GATTC_GetAndRemoveListOfConnIdsWaitingForMtuRequest(
+        const RawAddress& remote_bda);
 /*******************************************************************************
  *
  * Function         GATTC_Discover
@@ -1030,15 +1006,11 @@ GATTC_GetAndRemoveListOfConnIdsWaitingForMtuRequest(
  * Returns          GATT_SUCCESS if command received/sent successfully.
  *
  ******************************************************************************/
-[[nodiscard]] tGATT_STATUS GATTC_Discover(uint16_t conn_id,
-                                          tGATT_DISC_TYPE disc_type,
-                                          uint16_t start_handle,
-                                          uint16_t end_handle,
+[[nodiscard]] tGATT_STATUS GATTC_Discover(uint16_t conn_id, tGATT_DISC_TYPE disc_type,
+                                          uint16_t start_handle, uint16_t end_handle,
                                           const bluetooth::Uuid& uuid);
-[[nodiscard]] tGATT_STATUS GATTC_Discover(uint16_t conn_id,
-                                          tGATT_DISC_TYPE disc_type,
-                                          uint16_t start_handle,
-                                          uint16_t end_handle);
+[[nodiscard]] tGATT_STATUS GATTC_Discover(uint16_t conn_id, tGATT_DISC_TYPE disc_type,
+                                          uint16_t start_handle, uint16_t end_handle);
 
 /*******************************************************************************
  *
@@ -1088,8 +1060,7 @@ GATTC_GetAndRemoveListOfConnIdsWaitingForMtuRequest(
  * Returns          GATT_SUCCESS if command started successfully.
  *
  ******************************************************************************/
-[[nodiscard]] tGATT_STATUS GATTC_ExecuteWrite(uint16_t conn_id,
-                                              bool is_execute);
+[[nodiscard]] tGATT_STATUS GATTC_ExecuteWrite(uint16_t conn_id, bool is_execute);
 
 /*******************************************************************************
  *
@@ -1104,8 +1075,7 @@ GATTC_GetAndRemoveListOfConnIdsWaitingForMtuRequest(
  * Returns          GATT_SUCCESS if command started successfully.
  *
  ******************************************************************************/
-[[nodiscard]] tGATT_STATUS GATTC_SendHandleValueConfirm(uint16_t conn_id,
-                                                        uint16_t handle);
+[[nodiscard]] tGATT_STATUS GATTC_SendHandleValueConfirm(uint16_t conn_id, uint16_t handle);
 
 /*******************************************************************************
  *
@@ -1126,8 +1096,8 @@ GATTC_GetAndRemoveListOfConnIdsWaitingForMtuRequest(
  * Returns          void
  *
  ******************************************************************************/
-void GATT_SetIdleTimeout(const RawAddress& bd_addr, uint16_t idle_tout,
-                         tBT_TRANSPORT transport, bool is_active);
+void GATT_SetIdleTimeout(const RawAddress& bd_addr, uint16_t idle_tout, tBT_TRANSPORT transport,
+                         bool is_active);
 
 /*******************************************************************************
  *
@@ -1144,8 +1114,7 @@ void GATT_SetIdleTimeout(const RawAddress& bd_addr, uint16_t idle_tout,
  *                  with GATT
  *
  ******************************************************************************/
-[[nodiscard]] tGATT_IF GATT_Register(const bluetooth::Uuid& p_app_uuid128,
-                                     const std::string& name,
+[[nodiscard]] tGATT_IF GATT_Register(const bluetooth::Uuid& p_app_uuid128, const std::string& name,
                                      tGATT_CBACK* p_cb_info, bool eatt_support);
 
 /*******************************************************************************
@@ -1197,19 +1166,16 @@ void GATT_StartIf(tGATT_IF gatt_if);
  *
  ******************************************************************************/
 [[nodiscard]] bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
-                                tBTM_BLE_CONN_TYPE connection_type,
+                                tBTM_BLE_CONN_TYPE connection_type, tBT_TRANSPORT transport,
+                                bool opportunistic);
+[[nodiscard]] bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
+                                tBTM_BLE_CONN_TYPE connection_type, tBT_TRANSPORT transport,
+                                bool opportunistic, uint8_t initiating_phys);
+[[nodiscard]] bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
+                                tBLE_ADDR_TYPE addr_type, tBTM_BLE_CONN_TYPE connection_type,
                                 tBT_TRANSPORT transport, bool opportunistic);
 [[nodiscard]] bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
-                                tBTM_BLE_CONN_TYPE connection_type,
-                                tBT_TRANSPORT transport, bool opportunistic,
-                                uint8_t initiating_phys);
-[[nodiscard]] bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
-                                tBLE_ADDR_TYPE addr_type,
-                                tBTM_BLE_CONN_TYPE connection_type,
-                                tBT_TRANSPORT transport, bool opportunistic);
-[[nodiscard]] bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
-                                tBLE_ADDR_TYPE addr_type,
-                                tBTM_BLE_CONN_TYPE connection_type,
+                                tBLE_ADDR_TYPE addr_type, tBTM_BLE_CONN_TYPE connection_type,
                                 tBT_TRANSPORT transport, bool opportunistic,
                                 uint8_t initiating_phys);
 
@@ -1230,9 +1196,7 @@ void GATT_StartIf(tGATT_IF gatt_if);
  * Returns          true if connection started; else false
  *
  ******************************************************************************/
-[[nodiscard]] bool GATT_CancelConnect(tGATT_IF gatt_if,
-                                      const RawAddress& bd_addr,
-                                      bool is_direct);
+[[nodiscard]] bool GATT_CancelConnect(tGATT_IF gatt_if, const RawAddress& bd_addr, bool is_direct);
 
 /*******************************************************************************
  *
@@ -1263,10 +1227,8 @@ void GATT_StartIf(tGATT_IF gatt_if);
  * Returns          true the logical link information is found for conn_id
  *
  ******************************************************************************/
-[[nodiscard]] bool GATT_GetConnectionInfor(uint16_t conn_id,
-                                           tGATT_IF* p_gatt_if,
-                                           RawAddress& bd_addr,
-                                           tBT_TRANSPORT* p_transport);
+[[nodiscard]] bool GATT_GetConnectionInfor(uint16_t conn_id, tGATT_IF* p_gatt_if,
+                                           RawAddress& bd_addr, tBT_TRANSPORT* p_transport);
 
 /*******************************************************************************
  *
@@ -1284,10 +1246,8 @@ void GATT_StartIf(tGATT_IF gatt_if);
  * Returns          true the logical link is connected
  *
  ******************************************************************************/
-[[nodiscard]] bool GATT_GetConnIdIfConnected(tGATT_IF gatt_if,
-                                             const RawAddress& bd_addr,
-                                             uint16_t* p_conn_id,
-                                             tBT_TRANSPORT transport);
+[[nodiscard]] bool GATT_GetConnIdIfConnected(tGATT_IF gatt_if, const RawAddress& bd_addr,
+                                             uint16_t* p_conn_id, tBT_TRANSPORT transport);
 
 /*******************************************************************************
  *
@@ -1323,8 +1283,7 @@ namespace fmt {
 template <>
 struct formatter<GattStatus> : enum_formatter<GattStatus> {};
 template <>
-struct formatter<tGATT_DISCONN_REASON> : enum_formatter<tGATT_DISCONN_REASON> {
-};
+struct formatter<tGATT_DISCONN_REASON> : enum_formatter<tGATT_DISCONN_REASON> {};
 template <>
 struct formatter<tGATTC_OPTYPE> : enum_formatter<tGATTC_OPTYPE> {};
 template <>

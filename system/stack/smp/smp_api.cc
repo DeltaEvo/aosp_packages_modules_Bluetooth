@@ -67,7 +67,7 @@ bool SMP_Register(tSMP_CALLBACK* p_cback) {
   }
   smp_cb.p_callback = p_cback;
 
-  return (true);
+  return true;
 }
 
 /*******************************************************************************
@@ -85,11 +85,11 @@ bool SMP_Register(tSMP_CALLBACK* p_cback) {
 tSMP_STATUS SMP_Pair(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type) {
   tSMP_CB* p_cb = &smp_cb;
 
-  log::verbose("state={} br_state={} flag=0x{:x}, bd_addr={}", p_cb->state,
-               p_cb->br_state, p_cb->flags, bd_addr);
+  log::verbose("state={} br_state={} flag=0x{:x}, bd_addr={}", p_cb->state, p_cb->br_state,
+               p_cb->flags, bd_addr);
 
-  if (p_cb->state != SMP_STATE_IDLE ||
-      p_cb->flags & SMP_PAIR_FLAGS_WE_STARTED_DD || p_cb->smp_over_br) {
+  if (p_cb->state != SMP_STATE_IDLE || p_cb->flags & SMP_PAIR_FLAGS_WE_STARTED_DD ||
+      p_cb->smp_over_br) {
     /* pending security on going, reject this one */
     return SMP_BUSY;
   } else {
@@ -97,8 +97,8 @@ tSMP_STATUS SMP_Pair(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type) {
     p_cb->pairing_bda = bd_addr;
 
     p_cb->pairing_ble_bd_addr = {
-        .type = addr_type,
-        .bda = bd_addr,
+            .type = addr_type,
+            .bda = bd_addr,
     };
     if (!L2CA_ConnectFixedChnl(L2CAP_SMP_CID, bd_addr)) {
       tSMP_INT_DATA smp_int_data;
@@ -113,9 +113,7 @@ tSMP_STATUS SMP_Pair(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type) {
   }
 }
 
-tSMP_STATUS SMP_Pair(const RawAddress& bd_addr) {
-  return SMP_Pair(bd_addr, BLE_ADDR_PUBLIC);
-}
+tSMP_STATUS SMP_Pair(const RawAddress& bd_addr) { return SMP_Pair(bd_addr, BLE_ADDR_PUBLIC); }
 
 /*******************************************************************************
  *
@@ -133,8 +131,8 @@ tSMP_STATUS SMP_Pair(const RawAddress& bd_addr) {
 tSMP_STATUS SMP_BR_PairWith(const RawAddress& bd_addr) {
   tSMP_CB* p_cb = &smp_cb;
 
-  log::verbose("state={} br_state={} flag=0x{:x}, bd_addr={}", p_cb->state,
-               p_cb->br_state, p_cb->flags, bd_addr);
+  log::verbose("state={} br_state={} flag=0x{:x}, bd_addr={}", p_cb->state, p_cb->br_state,
+               p_cb->flags, bd_addr);
 
   if (p_cb->state != SMP_STATE_IDLE || p_cb->smp_over_br ||
       p_cb->flags & SMP_PAIR_FLAGS_WE_STARTED_DD) {
@@ -239,8 +237,8 @@ void SMP_SecurityGrant(const RawAddress& bd_addr, tSMP_STATUS res) {
   }
 
   if (smp_cb.smp_over_br) {
-    if (smp_cb.br_state != SMP_BR_STATE_WAIT_APP_RSP ||
-        smp_cb.cb_evt != SMP_SEC_REQUEST_EVT || smp_cb.pairing_bda != bd_addr) {
+    if (smp_cb.br_state != SMP_BR_STATE_WAIT_APP_RSP || smp_cb.cb_evt != SMP_SEC_REQUEST_EVT ||
+        smp_cb.pairing_bda != bd_addr) {
       return;
     }
 
@@ -249,14 +247,14 @@ void SMP_SecurityGrant(const RawAddress& bd_addr, tSMP_STATUS res) {
     smp_cb.cb_evt = SMP_EVT_NONE;
     tSMP_INT_DATA smp_int_data;
     smp_int_data.status = res;
-    smp_br_state_machine_event(&smp_cb, SMP_BR_API_SEC_GRANT_EVT,
-                               &smp_int_data);
+    smp_br_state_machine_event(&smp_cb, SMP_BR_API_SEC_GRANT_EVT, &smp_int_data);
     return;
   }
 
-  if (smp_cb.state != SMP_STATE_WAIT_APP_RSP ||
-      smp_cb.cb_evt != SMP_SEC_REQUEST_EVT || smp_cb.pairing_bda != bd_addr)
+  if (smp_cb.state != SMP_STATE_WAIT_APP_RSP || smp_cb.cb_evt != SMP_SEC_REQUEST_EVT ||
+      smp_cb.pairing_bda != bd_addr) {
     return;
+  }
   /* clear the SMP_SEC_REQUEST_EVT event after get grant */
   /* avoid generate duplicate pair request */
   smp_cb.cb_evt = SMP_EVT_NONE;
@@ -280,8 +278,7 @@ void SMP_SecurityGrant(const RawAddress& bd_addr, tSMP_STATUS res) {
  *                            BTM_MAX_PASSKEY_VAL(999999(0xF423F)).
  *
  ******************************************************************************/
-void SMP_PasskeyReply(const RawAddress& bd_addr, uint8_t res,
-                      uint32_t passkey) {
+void SMP_PasskeyReply(const RawAddress& bd_addr, uint8_t res, uint32_t passkey) {
   tSMP_CB* p_cb = &smp_cb;
 
   log::verbose("Key:{}  Result:{}", passkey, res);
@@ -303,8 +300,7 @@ void SMP_PasskeyReply(const RawAddress& bd_addr, uint8_t res,
     tSMP_INT_DATA smp_int_data;
     smp_int_data.status = SMP_PASSKEY_ENTRY_FAIL;
     smp_sm_event(p_cb, SMP_AUTH_CMPL_EVT, &smp_int_data);
-  } else if (p_cb->selected_association_model ==
-             SMP_MODEL_SEC_CONN_PASSKEY_ENT) {
+  } else if (p_cb->selected_association_model == SMP_MODEL_SEC_CONN_PASSKEY_ENT) {
     tSMP_INT_DATA smp_int_data;
     smp_int_data.passkey = passkey;
     smp_sm_event(&smp_cb, SMP_SC_KEY_READY_EVT, &smp_int_data);
@@ -364,23 +360,26 @@ void SMP_ConfirmReply(const RawAddress& bd_addr, uint8_t res) {
  *                  p_data      - simple pairing Randomizer  C.
  *
  ******************************************************************************/
-void SMP_OobDataReply(const RawAddress& /* bd_addr */, tSMP_STATUS res,
-                      uint8_t len, uint8_t* p_data) {
+void SMP_OobDataReply(const RawAddress& /* bd_addr */, tSMP_STATUS res, uint8_t len,
+                      uint8_t* p_data) {
   tSMP_CB* p_cb = &smp_cb;
   tSMP_KEY key;
 
   log::verbose("State:{}  res:{}", smp_cb.state, res);
 
   /* If timeout already expired or has been canceled, ignore the reply */
-  if (p_cb->state != SMP_STATE_WAIT_APP_RSP || p_cb->cb_evt != SMP_OOB_REQ_EVT)
+  if (p_cb->state != SMP_STATE_WAIT_APP_RSP || p_cb->cb_evt != SMP_OOB_REQ_EVT) {
     return;
+  }
 
   if (res != SMP_SUCCESS || len == 0 || !p_data) {
     tSMP_INT_DATA smp_int_data;
     smp_int_data.status = SMP_OOB_FAIL;
     smp_sm_event(p_cb, SMP_AUTH_CMPL_EVT, &smp_int_data);
   } else {
-    if (len > OCTET16_LEN) len = OCTET16_LEN;
+    if (len > OCTET16_LEN) {
+      len = OCTET16_LEN;
+    }
 
     memcpy(p_cb->tk.data(), p_data, len);
 
@@ -415,22 +414,24 @@ void SMP_SecureConnectionOobDataReply(uint8_t* p_data) {
     return;
   }
 
-  log::verbose(
-      "req_oob_type:{}, loc_oob_data.present:{}, peer_oob_data.present:{}",
-      p_cb->req_oob_type, p_oob->loc_oob_data.present,
-      p_oob->peer_oob_data.present);
+  log::verbose("req_oob_type:{}, loc_oob_data.present:{}, peer_oob_data.present:{}",
+               p_cb->req_oob_type, p_oob->loc_oob_data.present, p_oob->peer_oob_data.present);
 
-  if (p_cb->state != SMP_STATE_WAIT_APP_RSP ||
-      p_cb->cb_evt != SMP_SC_OOB_REQ_EVT)
+  if (p_cb->state != SMP_STATE_WAIT_APP_RSP || p_cb->cb_evt != SMP_SC_OOB_REQ_EVT) {
     return;
+  }
 
   bool data_missing = false;
   switch (p_cb->req_oob_type) {
     case SMP_OOB_PEER:
-      if (!p_oob->peer_oob_data.present) data_missing = true;
+      if (!p_oob->peer_oob_data.present) {
+        data_missing = true;
+      }
       break;
     case SMP_OOB_LOCAL:
-      if (!p_oob->loc_oob_data.present) data_missing = true;
+      if (!p_oob->loc_oob_data.present) {
+        data_missing = true;
+      }
       break;
     case SMP_OOB_BOTH:
       // Check for previous local OOB data in cache
@@ -439,8 +440,9 @@ void SMP_SecureConnectionOobDataReply(uint8_t* p_data) {
       // [NOTICE]: Overridding data present here if the data exists so state
       // machine asks for it later
       p_oob->loc_oob_data.present = smp_has_local_oob_data();
-      if (!p_oob->loc_oob_data.present || !p_oob->peer_oob_data.present)
+      if (!p_oob->loc_oob_data.present || !p_oob->peer_oob_data.present) {
         data_missing = true;
+      }
       break;
     default:
       log::verbose("Unexpected OOB data type requested. Fail OOB");
@@ -510,8 +512,7 @@ void SMP_SirkConfirmDeviceReply(const RawAddress& bd_addr, uint8_t res) {
   }
 
   if (bd_addr != p_cb->pairing_bda) {
-    log::warn("Wrong confirmation BD Addr: {} vs expected {}", bd_addr,
-              p_cb->pairing_bda);
+    log::warn("Wrong confirmation BD Addr: {} vs expected {}", bd_addr, p_cb->pairing_bda);
     return;
   }
 

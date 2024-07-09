@@ -98,11 +98,9 @@ void avdt_scb_transport_channel_timer_timeout(void* data) {
  ******************************************************************************/
 void AVDT_Register(AvdtpRcb* p_reg, tAVDT_CTRL_CBACK* p_cback) {
   /* register PSM with L2CAP */
-  if (!L2CA_RegisterWithSecurity(AVDT_PSM, avdt_l2c_appl,
-                                 true /* enable_snoop */, nullptr, kAvdtpMtu, 0,
-                                 BTA_SEC_AUTHENTICATE)) {
-    log::error(
-        "Unable to register with L2CAP profile AVDT psm:AVDT_PSM[0x0019]");
+  if (!L2CA_RegisterWithSecurity(AVDT_PSM, avdt_l2c_appl, true /* enable_snoop */, nullptr,
+                                 kAvdtpMtu, 0, BTA_SEC_AUTHENTICATE)) {
+    log::error("Unable to register with L2CAP profile AVDT psm:AVDT_PSM[0x0019]");
   }
 
   /* initialize AVDTP data structures */
@@ -168,23 +166,20 @@ uint16_t AVDT_CreateStream(uint8_t peer_id, uint8_t* p_handle,
   if (((avdtp_stream_config.cfg.psc_mask & (~AVDT_PSC)) != 0) ||
       (avdtp_stream_config.p_avdt_ctrl_cback == NULL)) {
     result = AVDT_BAD_PARAMS;
-    log::error(
-        "Invalid AVDT stream endpoint parameters peer_id={} scb_index={}",
-        peer_id, avdtp_stream_config.scb_index);
+    log::error("Invalid AVDT stream endpoint parameters peer_id={} scb_index={}", peer_id,
+               avdtp_stream_config.scb_index);
   }
 
   /* Allocate scb; if no scbs, return failure */
   else {
     p_scb = avdt_scb_alloc(peer_id, avdtp_stream_config);
     if (p_scb == NULL) {
-      log::error(
-          "Unable to create AVDT stream endpoint peer_id={} scb_index={}",
-          peer_id, avdtp_stream_config.scb_index);
+      log::error("Unable to create AVDT stream endpoint peer_id={} scb_index={}", peer_id,
+                 avdtp_stream_config.scb_index);
       result = AVDT_NO_RESOURCES;
     } else {
       *p_handle = avdt_scb_to_hdl(p_scb);
-      log::debug("Created stream endpoint peer_id={} handle={}", peer_id,
-                 *p_handle);
+      log::debug("Created stream endpoint peer_id={} handle={}", peer_id, *p_handle);
     }
   }
   return static_cast<uint16_t>(result);
@@ -253,8 +248,7 @@ uint16_t AVDT_RemoveStream(uint8_t handle) {
  *
  ******************************************************************************/
 uint16_t AVDT_DiscoverReq(const RawAddress& bd_addr, uint8_t channel_index,
-                          tAVDT_SEP_INFO* p_sep_info, uint8_t max_seps,
-                          tAVDT_CTRL_CBACK* p_cback) {
+                          tAVDT_SEP_INFO* p_sep_info, uint8_t max_seps, tAVDT_CTRL_CBACK* p_cback) {
   AvdtpCcb* p_ccb;
   uint16_t result = AVDT_SUCCESS;
   tAVDT_CCB_EVT evt;
@@ -300,15 +294,13 @@ uint16_t AVDT_DiscoverReq(const RawAddress& bd_addr, uint8_t channel_index,
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-static uint16_t avdt_get_cap_req(const RawAddress& bd_addr,
-                                 uint8_t channel_index,
+static uint16_t avdt_get_cap_req(const RawAddress& bd_addr, uint8_t channel_index,
                                  tAVDT_CCB_API_GETCAP* p_evt) {
   AvdtpCcb* p_ccb = NULL;
   uint16_t result = AVDT_SUCCESS;
 
   /* verify SEID */
-  if ((p_evt->single.seid < AVDT_SEID_MIN) ||
-      (p_evt->single.seid > AVDT_SEID_MAX)) {
+  if ((p_evt->single.seid < AVDT_SEID_MIN) || (p_evt->single.seid > AVDT_SEID_MAX)) {
     log::error("seid: {}", p_evt->single.seid);
     result = AVDT_BAD_PARAMS;
   }
@@ -365,14 +357,13 @@ static uint16_t avdt_get_cap_req(const RawAddress& bd_addr,
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-uint16_t AVDT_GetCapReq(const RawAddress& bd_addr, uint8_t channel_index,
-                        uint8_t seid, AvdtpSepConfig* p_cfg,
-                        tAVDT_CTRL_CBACK* p_cback, bool get_all_cap) {
+uint16_t AVDT_GetCapReq(const RawAddress& bd_addr, uint8_t channel_index, uint8_t seid,
+                        AvdtpSepConfig* p_cfg, tAVDT_CTRL_CBACK* p_cback, bool get_all_cap) {
   tAVDT_CCB_API_GETCAP getcap;
   uint16_t result = AVDT_SUCCESS;
 
-  log::info("bd_addr={} channel_index={} seid=0x{:x} get_all_capabilities={}",
-            bd_addr, channel_index, seid, get_all_cap);
+  log::info("bd_addr={} channel_index={} seid=0x{:x} get_all_capabilities={}", bd_addr,
+            channel_index, seid, get_all_cap);
 
   getcap.single.seid = seid;
   if (get_all_cap) {
@@ -440,9 +431,8 @@ uint16_t AVDT_DelayReport(uint8_t handle, uint8_t seid, uint16_t delay) {
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-uint16_t AVDT_OpenReq(uint8_t handle, const RawAddress& bd_addr,
-                      uint8_t channel_index, uint8_t seid,
-                      AvdtpSepConfig* p_cfg) {
+uint16_t AVDT_OpenReq(uint8_t handle, const RawAddress& bd_addr, uint8_t channel_index,
+                      uint8_t seid, AvdtpSepConfig* p_cfg) {
   AvdtpCcb* p_ccb = NULL;
   AvdtpScb* p_scb = NULL;
   uint16_t result = AVDT_SUCCESS;
@@ -501,15 +491,14 @@ uint16_t AVDT_OpenReq(uint8_t handle, const RawAddress& bd_addr,
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-uint16_t AVDT_ConfigRsp(uint8_t handle, uint8_t label, uint8_t error_code,
-                        uint8_t category) {
+uint16_t AVDT_ConfigRsp(uint8_t handle, uint8_t label, uint8_t error_code, uint8_t category) {
   AvdtpScb* p_scb;
   tAVDT_SCB_EVT evt;
   uint16_t result = AVDT_SUCCESS;
   uint8_t event_code;
 
-  log::info("avdt_handle={} label={} error_code=0x{:x} category={}", handle,
-            label, error_code, category);
+  log::info("avdt_handle={} label={} error_code=0x{:x} category={}", handle, label, error_code,
+            category);
 
   /* map handle to scb */
   p_scb = avdt_scb_by_hdl(handle);
@@ -789,14 +778,13 @@ uint16_t AVDT_SecurityReq(uint8_t handle, uint8_t* p_data, uint16_t len) {
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-uint16_t AVDT_SecurityRsp(uint8_t handle, uint8_t label, uint8_t error_code,
-                          uint8_t* p_data, uint16_t len) {
+uint16_t AVDT_SecurityRsp(uint8_t handle, uint8_t label, uint8_t error_code, uint8_t* p_data,
+                          uint16_t len) {
   AvdtpScb* p_scb;
   uint16_t result = AVDT_SUCCESS;
   tAVDT_SCB_EVT evt;
 
-  log::info("avdt_handle={} label={} error_code=0x{:x} len={}", handle,
-            label, error_code, len);
+  log::info("avdt_handle={} label={} error_code=0x{:x} len={}", handle, label, error_code, len);
 
   /* map handle to scb */
   p_scb = avdt_scb_by_hdl(handle);
@@ -855,14 +843,13 @@ uint16_t AVDT_SecurityRsp(uint8_t handle, uint8_t label, uint8_t error_code,
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-uint16_t AVDT_WriteReqOpt(uint8_t handle, BT_HDR* p_pkt, uint32_t time_stamp,
-                          uint8_t m_pt, tAVDT_DATA_OPT_MASK opt) {
+uint16_t AVDT_WriteReqOpt(uint8_t handle, BT_HDR* p_pkt, uint32_t time_stamp, uint8_t m_pt,
+                          tAVDT_DATA_OPT_MASK opt) {
   AvdtpScb* p_scb;
   tAVDT_SCB_EVT evt;
   uint16_t result = AVDT_SUCCESS;
 
-  log::verbose("avdt_handle={} timestamp={} m_pt=0x{:x} opt=0x{:x}", handle,
-               time_stamp, m_pt, opt);
+  log::verbose("avdt_handle={} timestamp={} m_pt=0x{:x} opt=0x{:x}", handle, time_stamp, m_pt, opt);
 
   /* map handle to scb */
   p_scb = avdt_scb_by_hdl(handle);
@@ -941,8 +928,7 @@ uint16_t AVDT_ConnectReq(const RawAddress& bd_addr, uint8_t channel_index,
  * Returns          AVDT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-uint16_t AVDT_DisconnectReq(const RawAddress& bd_addr,
-                            tAVDT_CTRL_CBACK* p_cback) {
+uint16_t AVDT_DisconnectReq(const RawAddress& bd_addr, tAVDT_CTRL_CBACK* p_cback) {
   AvdtpCcb* p_ccb = NULL;
   tAVDT_RESULT result = AVDT_SUCCESS;
   tAVDT_CCB_EVT evt;
@@ -978,21 +964,19 @@ uint16_t AVDT_GetL2CapChannel(uint8_t handle) {
   uint16_t lcid = 0;
 
   /* map handle to scb */
-  if (((p_scb = avdt_scb_by_hdl(handle)) != NULL) &&
-      ((p_ccb = p_scb->p_ccb) != NULL)) {
+  if (((p_scb = avdt_scb_by_hdl(handle)) != NULL) && ((p_ccb = p_scb->p_ccb) != NULL)) {
     /* get tcid from type, scb */
     tcid = avdt_ad_type_to_tcid(AVDT_CHAN_MEDIA, p_scb);
 
     lcid = avdtp_cb.ad.rt_tbl[avdt_ccb_to_idx(p_ccb)][tcid].lcid;
   }
 
-  return (lcid);
+  return lcid;
 }
 
 void stack_debug_avdtp_api_dump(int fd) {
   dprintf(fd, "\nAVDTP Stack State:\n");
-  dprintf(fd, "  AVDTP signalling L2CAP channel MTU: %d\n",
-          avdtp_cb.rcb.ctrl_mtu);
+  dprintf(fd, "  AVDTP signalling L2CAP channel MTU: %d\n", avdtp_cb.rcb.ctrl_mtu);
 
   for (size_t i = 0; i < AVDT_NUM_LINKS; i++) {
     const AvdtpCcb& ccb = avdtp_cb.ccb[i];
@@ -1003,13 +987,10 @@ void stack_debug_avdtp_api_dump(int fd) {
             ADDRESS_TO_LOGGABLE_CSTR(ccb.peer_addr));
     dprintf(fd, "    Allocated: %s\n", ccb.allocated ? "true" : "false");
     dprintf(fd, "    State: %d\n", ccb.state);
-    dprintf(fd, "    Link-layer opened: %s\n",
-            ccb.ll_opened ? "true" : "false");
-    dprintf(fd, "    Discover in progress: %s\n",
-            ccb.proc_busy ? "true" : "false");
+    dprintf(fd, "    Link-layer opened: %s\n", ccb.ll_opened ? "true" : "false");
+    dprintf(fd, "    Discover in progress: %s\n", ccb.proc_busy ? "true" : "false");
     dprintf(fd, "    Congested: %s\n", ccb.cong ? "true" : "false");
-    dprintf(fd, "    Reinitiate connection on idle: %s\n",
-            ccb.reconn ? "true" : "false");
+    dprintf(fd, "    Reinitiate connection on idle: %s\n", ccb.reconn ? "true" : "false");
     dprintf(fd, "    Command retransmission count: %d\n", ccb.ret_count);
     dprintf(fd, "    BTA AV SCB index: %d\n", ccb.BtaAvScbIndex());
 
@@ -1019,8 +1000,7 @@ void stack_debug_avdtp_api_dump(int fd) {
         continue;
       }
       dprintf(fd, "\n    Stream control block: %zu\n", i);
-      dprintf(fd, "      SEP codec: %s\n",
-              A2DP_CodecName(scb.stream_config.cfg.codec_info));
+      dprintf(fd, "      SEP codec: %s\n", A2DP_CodecName(scb.stream_config.cfg.codec_info));
       dprintf(fd, "      SEP protocol service capabilities: 0x%x\n",
               scb.stream_config.cfg.psc_mask);
       dprintf(fd, "      SEP type: 0x%x\n", scb.stream_config.tsep);
@@ -1028,18 +1008,12 @@ void stack_debug_avdtp_api_dump(int fd) {
       dprintf(fd, "      MTU: %d\n", scb.stream_config.mtu);
       dprintf(fd, "      AVDT SCB handle: %d\n", scb.ScbHandle());
       dprintf(fd, "      SCB index: %d\n", scb.stream_config.scb_index);
-      dprintf(fd, "      Configured codec: %s\n",
-              A2DP_CodecName(scb.curr_cfg.codec_info));
-      dprintf(fd, "      Requested codec: %s\n",
-              A2DP_CodecName(scb.req_cfg.codec_info));
+      dprintf(fd, "      Configured codec: %s\n", A2DP_CodecName(scb.curr_cfg.codec_info));
+      dprintf(fd, "      Requested codec: %s\n", A2DP_CodecName(scb.req_cfg.codec_info));
       dprintf(fd, "      Transport channel connect timer: %s\n",
-              alarm_is_scheduled(scb.transport_channel_timer)
-                  ? "Scheduled"
-                  : "Not scheduled");
+              alarm_is_scheduled(scb.transport_channel_timer) ? "Scheduled" : "Not scheduled");
       dprintf(fd, "      Channel control block peer: %s\n",
-              (scb.p_ccb != nullptr)
-                  ? ADDRESS_TO_LOGGABLE_CSTR(scb.p_ccb->peer_addr)
-                  : "null");
+              (scb.p_ccb != nullptr) ? ADDRESS_TO_LOGGABLE_CSTR(scb.p_ccb->peer_addr) : "null");
       dprintf(fd, "      Allocated: %s\n", scb.allocated ? "true" : "false");
       dprintf(fd, "      In use: %s\n", scb.in_use ? "true" : "false");
       dprintf(fd, "      Role: 0x%x\n", scb.role);

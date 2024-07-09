@@ -34,7 +34,7 @@ namespace security {
  * encryption/decryption of communications.
  */
 class SecurityManager : public UICallbacks {
- public:
+public:
   SecurityManager(const SecurityManager&) = delete;
   SecurityManager& operator=(const SecurityManager&) = delete;
 
@@ -63,8 +63,8 @@ class SecurityManager : public UICallbacks {
    * @param remote_p192_oob_data comparison and random for p192
    * @param remote_p256_oob_data comparison and random for p256
    */
-  void CreateBondOutOfBand(
-      hci::AddressWithType address, pairing::OobData remote_p192_oob_data, pairing::OobData remote_p256_oob_data);
+  void CreateBondOutOfBand(hci::AddressWithType address, pairing::OobData remote_p192_oob_data,
+                           pairing::OobData remote_p256_oob_data);
 
   /**
    * Get the out of band data from the controller to send to another device
@@ -102,12 +102,11 @@ class SecurityManager : public UICallbacks {
   /**
    * Specify the initiator address policy used for LE transport. Can only be called once.
    */
-  void SetLeInitiatorAddressPolicyForTest(
-      hci::LeAddressManager::AddressPolicy address_policy,
-      hci::AddressWithType fixed_address,
-      hci::Octet16 rotation_irk,
-      std::chrono::milliseconds minimum_rotation_time,
-      std::chrono::milliseconds maximum_rotation_time);
+  void SetLeInitiatorAddressPolicyForTest(hci::LeAddressManager::AddressPolicy address_policy,
+                                          hci::AddressWithType fixed_address,
+                                          hci::Octet16 rotation_irk,
+                                          std::chrono::milliseconds minimum_rotation_time,
+                                          std::chrono::milliseconds maximum_rotation_time);
 
   /**
    * Register to listen for callback events from SecurityManager
@@ -123,16 +122,19 @@ class SecurityManager : public UICallbacks {
    */
   void UnregisterCallbackListener(ISecurityManagerListener* listener);
 
-  void OnPairingPromptAccepted(const bluetooth::hci::AddressWithType& address, bool confirmed) override;
+  void OnPairingPromptAccepted(const bluetooth::hci::AddressWithType& address,
+                               bool confirmed) override;
   void OnConfirmYesNo(const bluetooth::hci::AddressWithType& address, bool confirmed) override;
   void OnPasskeyEntry(const bluetooth::hci::AddressWithType& address, uint32_t passkey) override;
-  void OnPinEntry(const bluetooth::hci::AddressWithType& address, std::vector<uint8_t> pin) override;
+  void OnPinEntry(const bluetooth::hci::AddressWithType& address,
+                  std::vector<uint8_t> pin) override;
 
- protected:
-  SecurityManager(os::Handler* security_handler, internal::SecurityManagerImpl* security_manager_impl)
+protected:
+  SecurityManager(os::Handler* security_handler,
+                  internal::SecurityManagerImpl* security_manager_impl)
       : security_handler_(security_handler), security_manager_impl_(security_manager_impl) {}
 
- private:
+private:
   os::Handler* security_handler_ = nullptr;
   internal::SecurityManagerImpl* security_manager_impl_;
 };

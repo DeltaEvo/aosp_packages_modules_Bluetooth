@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
+#include <gmock/gmock.h>
+
 #include "l2cap/classic/internal/link_mock.h"
 #include "l2cap/internal/dynamic_channel_allocator.h"
 #include "l2cap/internal/parameter_provider_mock.h"
-
-#include <gmock/gmock.h>
 
 namespace bluetooth {
 namespace l2cap {
@@ -31,23 +31,25 @@ using l2cap::internal::testing::MockScheduler;
 using ::testing::NiceMock;
 using ::testing::Return;
 
-const hci::AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}}, hci::AddressType::PUBLIC_IDENTITY_ADDRESS};
+const hci::AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}},
+                                  hci::AddressType::PUBLIC_IDENTITY_ADDRESS};
 
 class L2capClassicDynamicChannelAllocatorFuzzTest {
- public:
+public:
   void RunTests(const uint8_t* data, size_t size) {
     SetUp();
     TestPrecondition(data, size);
     TearDown();
   }
 
- private:
+private:
   void SetUp() {
     thread_ = new os::Thread("test_thread", os::Thread::Priority::NORMAL);
     handler_ = new os::Handler(thread_);
     mock_parameter_provider_ = new NiceMock<MockParameterProvider>();
-    mock_classic_link_ = new NiceMock<MockLink>(handler_, mock_parameter_provider_,
-                                                std::make_unique<NiceMock<MockClassicAclConnection>>(), nullptr);
+    mock_classic_link_ =
+            new NiceMock<MockLink>(handler_, mock_parameter_provider_,
+                                   std::make_unique<NiceMock<MockClassicAclConnection>>(), nullptr);
     EXPECT_CALL(*mock_classic_link_, GetDevice()).WillRepeatedly(Return(device));
     channel_allocator_ = std::make_unique<DynamicChannelAllocator>(mock_classic_link_, handler_);
   }

@@ -43,8 +43,8 @@
  * Returns          void
  *
  ******************************************************************************/
-void BTM_SecAddDevice(const RawAddress& bd_addr, const DEV_CLASS dev_class,
-                      LinkKey link_key, uint8_t key_type, uint8_t pin_length);
+void BTM_SecAddDevice(const RawAddress& bd_addr, const DEV_CLASS dev_class, LinkKey link_key,
+                      uint8_t key_type, uint8_t pin_length);
 
 /** Free resources associated with the device associated with |bd_addr| address.
  *
@@ -92,8 +92,7 @@ bool btm_sec_is_a_bonded_dev(const RawAddress& bda);
  *                                 the results
  *
  ******************************************************************************/
-tBTM_STATUS BTM_DeleteStoredLinkKey(const RawAddress* bd_addr,
-                                    tBTM_CMPL_CB* p_cb);
+tBTM_STATUS BTM_DeleteStoredLinkKey(const RawAddress* bd_addr, tBTM_CMPL_CB* p_cb);
 
 /*******************************************************************************
  *

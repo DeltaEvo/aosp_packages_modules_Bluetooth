@@ -26,9 +26,7 @@ using ::bluetooth::audio::a2dp::BluetoothAudioStatus;
 using ::bluetooth::audio::a2dp::update_codec_offloading_capabilities;
 
 extern "C" {
-struct android_namespace_t* android_get_exported_namespace(const char*) {
-  return nullptr;
-}
+struct android_namespace_t* android_get_exported_namespace(const char*) { return nullptr; }
 }
 
 constexpr BluetoothAudioStatus kBluetoothAudioStatus[] = {
@@ -44,32 +42,29 @@ constexpr int32_t kRandomStringLength = 256;
 static void source_init_delayed(void) {}
 
 constexpr btav_a2dp_codec_index_t kCodecIndices[] = {
-    BTAV_A2DP_CODEC_INDEX_SOURCE_SBC,  BTAV_A2DP_CODEC_INDEX_SOURCE_AAC,
-    BTAV_A2DP_CODEC_INDEX_SOURCE_APTX, BTAV_A2DP_CODEC_INDEX_SOURCE_APTX_HD,
-    BTAV_A2DP_CODEC_INDEX_SOURCE_LDAC, BTAV_A2DP_CODEC_INDEX_SINK_SBC,
-    BTAV_A2DP_CODEC_INDEX_SINK_AAC,    BTAV_A2DP_CODEC_INDEX_SINK_LDAC};
+        BTAV_A2DP_CODEC_INDEX_SOURCE_SBC,  BTAV_A2DP_CODEC_INDEX_SOURCE_AAC,
+        BTAV_A2DP_CODEC_INDEX_SOURCE_APTX, BTAV_A2DP_CODEC_INDEX_SOURCE_APTX_HD,
+        BTAV_A2DP_CODEC_INDEX_SOURCE_LDAC, BTAV_A2DP_CODEC_INDEX_SINK_SBC,
+        BTAV_A2DP_CODEC_INDEX_SINK_AAC,    BTAV_A2DP_CODEC_INDEX_SINK_LDAC};
 
-std::vector<std::vector<btav_a2dp_codec_config_t>>
-CodecOffloadingPreferenceGenerator() {
+std::vector<std::vector<btav_a2dp_codec_config_t>> CodecOffloadingPreferenceGenerator() {
   std::vector<std::vector<btav_a2dp_codec_config_t>> offloadingPreferences = {
-      std::vector<btav_a2dp_codec_config_t>(0)};
+          std::vector<btav_a2dp_codec_config_t>(0)};
   btav_a2dp_codec_config_t btavCodecConfig = {};
   for (btav_a2dp_codec_index_t i : kCodecIndices) {
     btavCodecConfig.codec_type = i;
     auto duplicated_preferences = offloadingPreferences;
-    for (auto iter = duplicated_preferences.begin();
-         iter != duplicated_preferences.end(); ++iter) {
+    for (auto iter = duplicated_preferences.begin(); iter != duplicated_preferences.end(); ++iter) {
       iter->push_back(btavCodecConfig);
     }
-    offloadingPreferences.insert(offloadingPreferences.end(),
-                                 duplicated_preferences.begin(),
+    offloadingPreferences.insert(offloadingPreferences.end(), duplicated_preferences.begin(),
                                  duplicated_preferences.end());
   }
   return offloadingPreferences;
 }
 
 class A2dpEncodingFuzzer {
- public:
+public:
   ~A2dpEncodingFuzzer() {
     delete (mCodec);
     mCodec = nullptr;

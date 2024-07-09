@@ -17,7 +17,6 @@
 #pragma once
 
 #include "common/bind.h"
-
 #include "l2cap/le/dynamic_channel.h"
 #include "l2cap/le/dynamic_channel_configuration_option.h"
 #include "l2cap/le/dynamic_channel_manager.h"
@@ -29,7 +28,7 @@ namespace l2cap {
 namespace le {
 namespace internal {
 class DynamicChannelServiceImpl {
- public:
+public:
   virtual ~DynamicChannelServiceImpl() = default;
 
   struct PendingRegistration {
@@ -44,25 +43,24 @@ class DynamicChannelServiceImpl {
     user_handler_->Post(common::BindOnce(on_connection_open_callback_, std::move(channel)));
   }
 
-  DynamicChannelConfigurationOption GetConfigOption() const {
-    return config_option_;
-  }
+  DynamicChannelConfigurationOption GetConfigOption() const { return config_option_; }
 
-  SecurityPolicy GetSecurityPolicy() {
-    return security_policy_;
-  }
+  SecurityPolicy GetSecurityPolicy() { return security_policy_; }
 
   friend class DynamicChannelServiceManagerImpl;
 
- protected:
+protected:
   // protected access for mocking
-  DynamicChannelServiceImpl(os::Handler* user_handler,
-                            DynamicChannelManager::OnConnectionOpenCallback on_connection_open_callback,
-                            DynamicChannelConfigurationOption config_option, SecurityPolicy security_policy)
-      : user_handler_(user_handler), on_connection_open_callback_(std::move(on_connection_open_callback)),
-        config_option_(config_option), security_policy_(security_policy) {}
+  DynamicChannelServiceImpl(
+          os::Handler* user_handler,
+          DynamicChannelManager::OnConnectionOpenCallback on_connection_open_callback,
+          DynamicChannelConfigurationOption config_option, SecurityPolicy security_policy)
+      : user_handler_(user_handler),
+        on_connection_open_callback_(std::move(on_connection_open_callback)),
+        config_option_(config_option),
+        security_policy_(security_policy) {}
 
- private:
+private:
   os::Handler* user_handler_ = nullptr;
   DynamicChannelManager::OnConnectionOpenCallback on_connection_open_callback_;
   DynamicChannelConfigurationOption config_option_;

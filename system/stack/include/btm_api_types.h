@@ -178,13 +178,13 @@ inline uint16_t sco_codec_type_to_id(tBTM_SCO_CODEC_TYPE codec_type) {
   switch (codec_type) {
     case BTM_SCO_CODEC_CVSD:
       return static_cast<std::underlying_type_t<tBTA_AG_UUID_CODEC>>(
-          tBTA_AG_UUID_CODEC::UUID_CODEC_CVSD);
+              tBTA_AG_UUID_CODEC::UUID_CODEC_CVSD);
     case BTM_SCO_CODEC_MSBC:
       return static_cast<std::underlying_type_t<tBTA_AG_UUID_CODEC>>(
-          tBTA_AG_UUID_CODEC::UUID_CODEC_MSBC);
+              tBTA_AG_UUID_CODEC::UUID_CODEC_MSBC);
     case BTM_SCO_CODEC_LC3:
       return static_cast<std::underlying_type_t<tBTA_AG_UUID_CODEC>>(
-          tBTA_AG_UUID_CODEC::UUID_CODEC_LC3);
+              tBTA_AG_UUID_CODEC::UUID_CODEC_LC3);
     default:
       return 0;
   }
@@ -197,9 +197,8 @@ inline std::string bta_ag_uuid_codec_text(const tBTA_AG_UUID_CODEC result) {
     CASE_RETURN_TEXT(tBTA_AG_UUID_CODEC::UUID_CODEC_MSBC);
     CASE_RETURN_TEXT(tBTA_AG_UUID_CODEC::UUID_CODEC_LC3);
     default:
-      return fmt::format(
-          "UNKNOWN Codec with id {}",
-          static_cast<std::underlying_type_t<tBTA_AG_UUID_CODEC>>(result));
+      return fmt::format("UNKNOWN Codec with id {}",
+                         static_cast<std::underlying_type_t<tBTA_AG_UUID_CODEC>>(result));
   }
 }
 #endif  // BTM_API_TYPES_H

@@ -66,19 +66,16 @@ uint8_t bta_hh_find_cb(const tAclLinkSpec& link_spec) {
   /* See how many active devices there are. */
   for (xx = 0; xx < BTA_HH_MAX_DEVICE; xx++) {
     /* check if any active/known devices is a match */
-    if ((link_spec == bta_hh_cb.kdev[xx].link_spec &&
-         !link_spec.addrt.bda.IsEmpty())) {
+    if (link_spec == bta_hh_cb.kdev[xx].link_spec && !link_spec.addrt.bda.IsEmpty()) {
 #if (BTA_HH_DEBUG == TRUE)
-      log::verbose("found kdev_cb[{}] hid_handle={}", xx,
-                   bta_hh_cb.kdev[xx].hid_handle);
+      log::verbose("found kdev_cb[{}] hid_handle={}", xx, bta_hh_cb.kdev[xx].hid_handle);
 #endif
       return xx;
     }
 #if (BTA_HH_DEBUG == TRUE)
     else
-      log::verbose("in_use ? [{}] kdev[{}].hid_handle={} state=[{}]",
-                   bta_hh_cb.kdev[xx].in_use, xx, bta_hh_cb.kdev[xx].hid_handle,
-                   bta_hh_cb.kdev[xx].state);
+      log::verbose("in_use ? [{}] kdev[{}].hid_handle={} state=[{}]", bta_hh_cb.kdev[xx].in_use, xx,
+                   bta_hh_cb.kdev[xx].hid_handle, bta_hh_cb.kdev[xx].state);
 #endif
   }
 
@@ -94,7 +91,9 @@ uint8_t bta_hh_find_cb(const tAclLinkSpec& link_spec) {
   log::verbose("index={} while max={}", xx, BTA_HH_MAX_DEVICE);
 #endif
 
-  if (xx == BTA_HH_MAX_DEVICE) xx = BTA_HH_IDX_INVALID;
+  if (xx == BTA_HH_MAX_DEVICE) {
+    xx = BTA_HH_IDX_INVALID;
+  }
 
   return xx;
 }
@@ -156,12 +155,11 @@ void bta_hh_clean_up_kdev(tBTA_HH_DEV_CB* p_cb) {
  * Returns          void
  *
  ******************************************************************************/
-void bta_hh_update_di_info(tBTA_HH_DEV_CB* p_cb, uint16_t vendor_id,
-                           uint16_t product_id, uint16_t version, uint8_t flag,
-                           uint8_t ctry_code) {
+void bta_hh_update_di_info(tBTA_HH_DEV_CB* p_cb, uint16_t vendor_id, uint16_t product_id,
+                           uint16_t version, uint8_t flag, uint8_t ctry_code) {
 #if (BTA_HH_DEBUG == TRUE)
-  log::verbose("vendor_id=0x{:2x} product_id=0x{:2x} version=0x{:2x}",
-               vendor_id, product_id, version);
+  log::verbose("vendor_id=0x{:2x} product_id=0x{:2x} version=0x{:2x}", vendor_id, product_id,
+               version);
 #endif
   p_cb->dscp_info.vendor_id = vendor_id;
   p_cb->dscp_info.product_id = product_id;
@@ -178,11 +176,9 @@ void bta_hh_update_di_info(tBTA_HH_DEV_CB* p_cb, uint16_t vendor_id,
  * Returns          void
  *
  ******************************************************************************/
-void bta_hh_add_device_to_list(tBTA_HH_DEV_CB* p_cb, uint8_t handle,
-                               uint16_t attr_mask,
-                               const tHID_DEV_DSCP_INFO* p_dscp_info,
-                               uint8_t sub_class, uint16_t ssr_max_latency,
-                               uint16_t ssr_min_tout, uint8_t app_id) {
+void bta_hh_add_device_to_list(tBTA_HH_DEV_CB* p_cb, uint8_t handle, uint16_t attr_mask,
+                               const tHID_DEV_DSCP_INFO* p_dscp_info, uint8_t sub_class,
+                               uint16_t ssr_max_latency, uint16_t ssr_min_tout, uint8_t app_id) {
 #if (BTA_HH_DEBUG == TRUE)
   log::verbose("subclass=0x{:2x}", sub_class);
 #endif
@@ -202,11 +198,9 @@ void bta_hh_add_device_to_list(tBTA_HH_DEV_CB* p_cb, uint8_t handle,
     osi_free_and_reset((void**)&p_cb->dscp_info.descriptor.dsc_list);
 
     if (p_dscp_info->dl_len) {
-      p_cb->dscp_info.descriptor.dsc_list =
-          (uint8_t*)osi_malloc(p_dscp_info->dl_len);
+      p_cb->dscp_info.descriptor.dsc_list = (uint8_t*)osi_malloc(p_dscp_info->dl_len);
       p_cb->dscp_info.descriptor.dl_len = p_dscp_info->dl_len;
-      memcpy(p_cb->dscp_info.descriptor.dsc_list, p_dscp_info->dsc_list,
-             p_dscp_info->dl_len);
+      memcpy(p_cb->dscp_info.descriptor.dsc_list, p_dscp_info->dsc_list, p_dscp_info->dl_len);
     }
   }
 }
@@ -239,7 +233,6 @@ bool bta_hh_tod_spt(tBTA_HH_DEV_CB* p_cb, uint8_t sub_class) {
   return false;
 }
 
-
 /*******************************************************************************
  *
  * Function         bta_hh_read_ssr_param
@@ -249,8 +242,7 @@ bool bta_hh_tod_spt(tBTA_HH_DEV_CB* p_cb, uint8_t sub_class) {
  * Returns          tBTA_HH_STATUS  operation status
  *
  ******************************************************************************/
-tBTA_HH_STATUS bta_hh_read_ssr_param(const tAclLinkSpec& link_spec,
-                                     uint16_t* p_max_ssr_lat,
+tBTA_HH_STATUS bta_hh_read_ssr_param(const tAclLinkSpec& link_spec, uint16_t* p_max_ssr_lat,
                                      uint16_t* p_min_ssr_tout) {
   tBTA_HH_DEV_CB* p_cb = bta_hh_get_cb(link_spec);
   if (p_cb == nullptr) {
@@ -265,9 +257,8 @@ tBTA_HH_STATUS bta_hh_read_ssr_param(const tAclLinkSpec& link_spec,
 
     uint16_t ssr_max_latency;
     if (get_btm_client_interface().link_controller.BTM_GetLinkSuperTout(
-            p_cb->link_spec.addrt.bda, &ssr_max_latency) != BTM_SUCCESS) {
-      log::warn("Unable to get supervision timeout for peer:{}",
-                p_cb->link_spec);
+                p_cb->link_spec.addrt.bda, &ssr_max_latency) != BTM_SUCCESS) {
+      log::warn("Unable to get supervision timeout for peer:{}", p_cb->link_spec);
       return BTA_HH_ERR;
     }
     ssr_max_latency = BTA_HH_GET_DEF_SSR_MAX_LAT(ssr_max_latency);
@@ -275,13 +266,13 @@ tBTA_HH_STATUS bta_hh_read_ssr_param(const tAclLinkSpec& link_spec,
     /* per 1.1 spec, if the newly calculated max latency is greater than
        BTA_HH_SSR_MAX_LATENCY_DEF which is 500ms, use
        BTA_HH_SSR_MAX_LATENCY_DEF */
-    if (ssr_max_latency > BTA_HH_SSR_MAX_LATENCY_DEF)
+    if (ssr_max_latency > BTA_HH_SSR_MAX_LATENCY_DEF) {
       ssr_max_latency = BTA_HH_SSR_MAX_LATENCY_DEF;
+    }
 
     char remote_name[BD_NAME_LEN] = "";
     if (btif_storage_get_stored_remote_name(link_spec.addrt.bda, remote_name)) {
-      if (interop_match_name(INTEROP_HID_HOST_LIMIT_SNIFF_INTERVAL,
-                             remote_name)) {
+      if (interop_match_name(INTEROP_HID_HOST_LIMIT_SNIFF_INTERVAL, remote_name)) {
         if (ssr_max_latency > kSsrMaxLatency /* slots * 0.625ms */) {
           ssr_max_latency = kSsrMaxLatency;
         }
@@ -289,13 +280,15 @@ tBTA_HH_STATUS bta_hh_read_ssr_param(const tAclLinkSpec& link_spec,
     }
 
     *p_max_ssr_lat = ssr_max_latency;
-  } else
+  } else {
     *p_max_ssr_lat = p_cb->dscp_info.ssr_max_latency;
+  }
 
-  if (p_cb->dscp_info.ssr_min_tout == HID_SSR_PARAM_INVALID)
+  if (p_cb->dscp_info.ssr_min_tout == HID_SSR_PARAM_INVALID) {
     *p_min_ssr_tout = BTA_HH_SSR_MIN_TOUT_DEF;
-  else
+  } else {
     *p_min_ssr_tout = p_cb->dscp_info.ssr_min_tout;
+  }
 
   return BTA_HH_OK;
 }
@@ -315,14 +308,12 @@ void bta_hh_cleanup_disable(tBTA_HH_STATUS status) {
   uint8_t xx;
   /* free buffer in CB holding report descriptors */
   for (xx = 0; xx < BTA_HH_MAX_DEVICE; xx++) {
-    osi_free_and_reset(
-        (void**)&bta_hh_cb.kdev[xx].dscp_info.descriptor.dsc_list);
+    osi_free_and_reset((void**)&bta_hh_cb.kdev[xx].dscp_info.descriptor.dsc_list);
   }
 
   if (bta_hh_cb.p_disc_db) {
     /* Cancel SDP if it had been started. */
-    (void)get_legacy_stack_sdp_api()->service.SDP_CancelServiceSearch(
-        bta_hh_cb.p_disc_db);
+    (void)get_legacy_stack_sdp_api()->service.SDP_CancelServiceSearch(bta_hh_cb.p_disc_db);
     osi_free_and_reset((void**)&bta_hh_cb.p_disc_db);
   }
 
@@ -350,15 +341,17 @@ uint8_t bta_hh_dev_handle_to_cb_idx(uint8_t dev_handle) {
   uint8_t index = BTA_HH_IDX_INVALID;
 
   if (BTA_HH_IS_LE_DEV_HDL(dev_handle)) {
-    if (BTA_HH_IS_LE_DEV_HDL_VALID(dev_handle))
+    if (BTA_HH_IS_LE_DEV_HDL_VALID(dev_handle)) {
       index = bta_hh_cb.le_cb_index[BTA_HH_GET_LE_CB_IDX(dev_handle)];
+    }
 #if (BTA_HH_DEBUG == TRUE)
     log::verbose("dev_handle={} index={}", dev_handle, index);
 #endif
   } else
-      /* regular HID device checking */
-      if (dev_handle < BTA_HH_MAX_KNOWN)
-    index = bta_hh_cb.cb_index[dev_handle];
+    /* regular HID device checking */
+    if (dev_handle < BTA_HH_MAX_KNOWN) {
+      index = bta_hh_cb.cb_index[dev_handle];
+    }
 
   return index;
 }
@@ -378,13 +371,12 @@ void bta_hh_trace_dev_db(void) {
   log::verbose("bta_hh_trace_dev_db:: Device DB list********************");
 
   for (xx = 0; xx < BTA_HH_MAX_DEVICE; xx++) {
-    log::verbose("kdev[{}] in_use[{}]  handle[{}]", xx,
-                 bta_hh_cb.kdev[xx].in_use, bta_hh_cb.kdev[xx].hid_handle);
+    log::verbose("kdev[{}] in_use[{}]  handle[{}]", xx, bta_hh_cb.kdev[xx].in_use,
+                 bta_hh_cb.kdev[xx].hid_handle);
 
-    log::verbose(
-        "\t\t\t attr_mask[{:04x}] state [{}] sub_class[{:02x}] index = {}",
-        bta_hh_cb.kdev[xx].attr_mask, bta_hh_cb.kdev[xx].state,
-        bta_hh_cb.kdev[xx].sub_class, bta_hh_cb.kdev[xx].index);
+    log::verbose("\t\t\t attr_mask[{:04x}] state [{}] sub_class[{:02x}] index = {}",
+                 bta_hh_cb.kdev[xx].attr_mask, bta_hh_cb.kdev[xx].state,
+                 bta_hh_cb.kdev[xx].sub_class, bta_hh_cb.kdev[xx].index);
   }
   log::verbose("*********************************************************");
 }

@@ -27,8 +27,7 @@ namespace aidl {
 namespace le_audio {
 
 using ::aidl::android::hardware::bluetooth::audio::BroadcastCapability;
-using ::aidl::android::hardware::bluetooth::audio::
-    LeAudioBroadcastConfiguration;
+using ::aidl::android::hardware::bluetooth::audio::LeAudioBroadcastConfiguration;
 using ::aidl::android::hardware::bluetooth::audio::LeAudioConfiguration;
 using ::aidl::android::hardware::bluetooth::audio::PcmConfiguration;
 using ::aidl::android::hardware::bluetooth::audio::SessionType;
@@ -57,18 +56,16 @@ constexpr uint8_t kBitsPerSample32 = 32;
 using ::bluetooth::audio::le_audio::StreamCallbacks;
 
 void flush_source();
-bool hal_ucast_capability_to_stack_format(
-    const UnicastCapability& ucast_capability,
-    CodecConfigSetting& stack_capability);
+bool hal_ucast_capability_to_stack_format(const UnicastCapability& ucast_capability,
+                                          CodecConfigSetting& stack_capability);
 AudioConfiguration offload_config_to_hal_audio_config(
-    const ::bluetooth::le_audio::offload_config& offload_config);
+        const ::bluetooth::le_audio::offload_config& offload_config);
 
 bluetooth::audio::le_audio::OffloadCapabilities get_offload_capabilities();
 
 class LeAudioTransport {
- public:
-  LeAudioTransport(void (*flush)(void), StreamCallbacks stream_cb,
-                   PcmConfiguration pcm_config);
+public:
+  LeAudioTransport(void (*flush)(void), StreamCallbacks stream_cb, PcmConfiguration pcm_config);
   ~LeAudioTransport();
 
   BluetoothAudioCtrlAck StartRequest(bool is_low_latency);
@@ -80,8 +77,7 @@ class LeAudioTransport {
 
   void SetLatencyMode(LatencyMode latency_mode);
 
-  bool GetPresentationPosition(uint64_t* remote_delay_report_ns,
-                               uint64_t* total_bytes_processed,
+  bool GetPresentationPosition(uint64_t* remote_delay_report_ns, uint64_t* total_bytes_processed,
                                timespec* data_position);
 
   void SourceMetadataChanged(const source_metadata_v7_t& source_metadata);
@@ -97,22 +93,20 @@ class LeAudioTransport {
   const PcmConfiguration& LeAudioGetSelectedHalPcmConfig();
 
   void LeAudioSetSelectedHalPcmConfig(uint32_t sample_rate_hz, uint8_t bit_rate,
-                                      uint8_t channels_count,
-                                      uint32_t data_interval);
+                                      uint8_t channels_count, uint32_t data_interval);
 
   void LeAudioSetBroadcastConfig(
-      const ::bluetooth::le_audio::broadcast_offload_config& offload_config);
+          const ::bluetooth::le_audio::broadcast_offload_config& offload_config);
 
   const LeAudioBroadcastConfiguration& LeAudioGetBroadcastConfig();
 
   bool IsRequestCompletedAfterUpdate(
-      const std::function<
-          std::pair<StartRequestState, bool>(StartRequestState)>& lambda);
+          const std::function<std::pair<StartRequestState, bool>(StartRequestState)>& lambda);
   StartRequestState GetStartRequestState(void);
   void ClearStartRequestState(void);
   void SetStartRequestState(StartRequestState state);
 
- private:
+private:
   void (*flush_)(void);
   StreamCallbacks stream_cb_;
   uint16_t remote_delay_report_ms_;
@@ -127,9 +121,8 @@ class LeAudioTransport {
 };
 
 // Sink transport implementation for Le Audio
-class LeAudioSinkTransport
-    : public ::bluetooth::audio::aidl::IBluetoothSinkTransportInstance {
- public:
+class LeAudioSinkTransport : public ::bluetooth::audio::aidl::IBluetoothSinkTransportInstance {
+public:
   LeAudioSinkTransport(SessionType session_type, StreamCallbacks stream_cb);
 
   ~LeAudioSinkTransport();
@@ -143,12 +136,10 @@ class LeAudioSinkTransport
 
   void SetLatencyMode(LatencyMode latency_mode) override;
 
-  bool GetPresentationPosition(uint64_t* remote_delay_report_ns,
-                               uint64_t* total_bytes_read,
+  bool GetPresentationPosition(uint64_t* remote_delay_report_ns, uint64_t* total_bytes_read,
                                timespec* data_position) override;
 
-  void SourceMetadataChanged(
-      const source_metadata_v7_t& source_metadata) override;
+  void SourceMetadataChanged(const source_metadata_v7_t& source_metadata) override;
 
   void SinkMetadataChanged(const sink_metadata_v7_t& sink_metadata) override;
 
@@ -161,17 +152,15 @@ class LeAudioSinkTransport
   const PcmConfiguration& LeAudioGetSelectedHalPcmConfig();
 
   void LeAudioSetSelectedHalPcmConfig(uint32_t sample_rate_hz, uint8_t bit_rate,
-                                      uint8_t channels_count,
-                                      uint32_t data_interval);
+                                      uint8_t channels_count, uint32_t data_interval);
 
   void LeAudioSetBroadcastConfig(
-      const ::bluetooth::le_audio::broadcast_offload_config& offload_config);
+          const ::bluetooth::le_audio::broadcast_offload_config& offload_config);
 
   const LeAudioBroadcastConfiguration& LeAudioGetBroadcastConfig();
 
   bool IsRequestCompletedAfterUpdate(
-      const std::function<
-          std::pair<StartRequestState, bool>(StartRequestState)>& lambda);
+          const std::function<std::pair<StartRequestState, bool>(StartRequestState)>& lambda);
   StartRequestState GetStartRequestState(void);
   void ClearStartRequestState(void);
   void SetStartRequestState(StartRequestState state);
@@ -180,16 +169,14 @@ class LeAudioSinkTransport
   static inline LeAudioSinkTransport* instance_broadcast_ = nullptr;
 
   static inline BluetoothAudioSinkClientInterface* interface_unicast_ = nullptr;
-  static inline BluetoothAudioSinkClientInterface* interface_broadcast_ =
-      nullptr;
+  static inline BluetoothAudioSinkClientInterface* interface_broadcast_ = nullptr;
 
- private:
+private:
   LeAudioTransport* transport_;
 };
 
-class LeAudioSourceTransport
-    : public ::bluetooth::audio::aidl::IBluetoothSourceTransportInstance {
- public:
+class LeAudioSourceTransport : public ::bluetooth::audio::aidl::IBluetoothSourceTransportInstance {
+public:
   LeAudioSourceTransport(SessionType session_type, StreamCallbacks stream_cb);
 
   ~LeAudioSourceTransport();
@@ -203,12 +190,10 @@ class LeAudioSourceTransport
 
   void SetLatencyMode(LatencyMode latency_mode) override;
 
-  bool GetPresentationPosition(uint64_t* remote_delay_report_ns,
-                               uint64_t* total_bytes_written,
+  bool GetPresentationPosition(uint64_t* remote_delay_report_ns, uint64_t* total_bytes_written,
                                timespec* data_position) override;
 
-  void SourceMetadataChanged(
-      const source_metadata_v7_t& source_metadata) override;
+  void SourceMetadataChanged(const source_metadata_v7_t& source_metadata) override;
 
   void SinkMetadataChanged(const sink_metadata_v7_t& sink_metadata) override;
 
@@ -221,12 +206,10 @@ class LeAudioSourceTransport
   const PcmConfiguration& LeAudioGetSelectedHalPcmConfig();
 
   void LeAudioSetSelectedHalPcmConfig(uint32_t sample_rate_hz, uint8_t bit_rate,
-                                      uint8_t channels_count,
-                                      uint32_t data_interval);
+                                      uint8_t channels_count, uint32_t data_interval);
 
   bool IsRequestCompletedAfterUpdate(
-      const std::function<
-          std::pair<StartRequestState, bool>(StartRequestState)>& lambda);
+          const std::function<std::pair<StartRequestState, bool>(StartRequestState)>& lambda);
 
   StartRequestState GetStartRequestState(void);
   void ClearStartRequestState(void);
@@ -235,7 +218,7 @@ class LeAudioSourceTransport
   static inline LeAudioSourceTransport* instance = nullptr;
   static inline BluetoothAudioSourceClientInterface* interface = nullptr;
 
- private:
+private:
   LeAudioTransport* transport_;
 };
 

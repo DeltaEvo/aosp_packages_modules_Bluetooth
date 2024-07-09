@@ -23,13 +23,13 @@ namespace l2cap {
 namespace le {
 
 /**
- * Configuration Option specified by L2CAP Channel user on a dynamic channel. L2CAP module will configure the channel
- * based on user provided option.
+ * Configuration Option specified by L2CAP Channel user on a dynamic channel. L2CAP module will
+ * configure the channel based on user provided option.
  */
 struct DynamicChannelConfigurationOption {
   /**
-   * Maximum SDU size that the L2CAP Channel user is able to receive or send. When the channel is created, the actual
-   * MTU is the minimum of the suggested MTU between two devices.
+   * Maximum SDU size that the L2CAP Channel user is able to receive or send. When the channel is
+   * created, the actual MTU is the minimum of the suggested MTU between two devices.
    */
   Mtu mtu = kDefaultClassicMtu;
 };

@@ -29,12 +29,13 @@ namespace classic {
  * This is a proxy for Security Module to unregister itself, or to initiate link connection.
  */
 class SecurityInterface {
- public:
+public:
   virtual ~SecurityInterface() = default;
 
   /**
-   * Page a remote device for ACL connection, when Security Module needs it for pairing. When the remote device is
-   * connected, Security Module will receive a callback through LinkSecurityInterfaceListener.
+   * Page a remote device for ACL connection, when Security Module needs it for pairing. When the
+   * remote device is connected, Security Module will receive a callback through
+   * LinkSecurityInterfaceListener.
    */
   virtual void InitiateConnectionForSecurity(hci::Address remote) = 0;
 
@@ -45,11 +46,11 @@ class SecurityInterface {
 };
 
 /**
- * This is a proxy for Security Module to access some link function. This object is passed to Security Module when a
- * link is established.
+ * This is a proxy for Security Module to access some link function. This object is passed to
+ * Security Module when a link is established.
  */
 class LinkSecurityInterface {
- public:
+public:
   virtual ~LinkSecurityInterface() = default;
 
   virtual hci::Address GetRemoteAddress() = 0;
@@ -60,8 +61,8 @@ class LinkSecurityInterface {
   virtual void Hold() = 0;
 
   /**
-   * Release the ACL link connection. This doesn't guarantee link disconnection, if other L2cap services are using the
-   * link.
+   * Release the ACL link connection. This doesn't guarantee link disconnection, if other L2cap
+   * services are using the link.
    */
   virtual void Release() = 0;
 
@@ -82,24 +83,22 @@ class LinkSecurityInterface {
 
   virtual uint16_t GetAclHandle() = 0;
 
-  virtual hci::Role GetRole() {
-    return hci::Role::CENTRAL;
-  }
+  virtual hci::Role GetRole() { return hci::Role::CENTRAL; }
 };
 
 class LinkSecurityInterfaceListener {
- public:
+public:
   virtual ~LinkSecurityInterfaceListener() = default;
 
   /**
-   * Each time when an ACL link is connected, security manager receives this callback to use LinkSecurityInterface
-   * functions.
+   * Each time when an ACL link is connected, security manager receives this callback to use
+   * LinkSecurityInterface functions.
    */
   virtual void OnLinkConnected(std::unique_ptr<LinkSecurityInterface>) {}
 
   /**
-   * When an ACL link is disconnected, security manager receives this callback. The corresponding LinkSecurityInterface
-   * is invalidated then.
+   * When an ACL link is disconnected, security manager receives this callback. The corresponding
+   * LinkSecurityInterface is invalidated then.
    * @param remote
    */
   virtual void OnLinkDisconnected(hci::Address /* remote */) {}
@@ -107,8 +106,8 @@ class LinkSecurityInterfaceListener {
   /**
    * Invoked when AuthenticationComplete event is received for a given link
    */
-  virtual void OnAuthenticationComplete(
-      hci::ErrorCode /* hci_status */, hci::Address /* remote */) {}
+  virtual void OnAuthenticationComplete(hci::ErrorCode /* hci_status */,
+                                        hci::Address /* remote */) {}
 
   /**
    * Invoked when EncryptionChange event is received for a given link

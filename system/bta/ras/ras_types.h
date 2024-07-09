@@ -33,22 +33,21 @@ static const uint16_t kRasRangingDataReadyCharacteristic16bit = 0x7F78;
 static const uint16_t kRasRangingDataOverWrittenCharacteristic16bit = 0x7F77;
 static const uint16_t kClientCharacteristicConfiguration16bit = 0x2902;
 
-static const bluetooth::Uuid kRangingService =
-    bluetooth::Uuid::From16Bit(kRangingService16Bit);
+static const bluetooth::Uuid kRangingService = bluetooth::Uuid::From16Bit(kRangingService16Bit);
 static const bluetooth::Uuid kRasFeaturesCharacteristic =
-    bluetooth::Uuid::From16Bit(kRasFeaturesCharacteristic16bit);
+        bluetooth::Uuid::From16Bit(kRasFeaturesCharacteristic16bit);
 static const bluetooth::Uuid kRasRealTimeRangingDataCharacteristic =
-    bluetooth::Uuid::From16Bit(kRasRealTimeRangingDataCharacteristic16bit);
+        bluetooth::Uuid::From16Bit(kRasRealTimeRangingDataCharacteristic16bit);
 static const bluetooth::Uuid kRasOnDemandDataCharacteristic =
-    bluetooth::Uuid::From16Bit(kRasOnDemandDataCharacteristic16bit);
+        bluetooth::Uuid::From16Bit(kRasOnDemandDataCharacteristic16bit);
 static const bluetooth::Uuid kRasControlPointCharacteristic =
-    bluetooth::Uuid::From16Bit(kRasControlPointCharacteristic16bit);
+        bluetooth::Uuid::From16Bit(kRasControlPointCharacteristic16bit);
 static const bluetooth::Uuid kRasRangingDataReadyCharacteristic =
-    bluetooth::Uuid::From16Bit(kRasRangingDataReadyCharacteristic16bit);
+        bluetooth::Uuid::From16Bit(kRasRangingDataReadyCharacteristic16bit);
 static const bluetooth::Uuid kRasRangingDataOverWrittenCharacteristic =
-    bluetooth::Uuid::From16Bit(kRasRangingDataOverWrittenCharacteristic16bit);
+        bluetooth::Uuid::From16Bit(kRasRangingDataOverWrittenCharacteristic16bit);
 static const bluetooth::Uuid kClientCharacteristicConfiguration =
-    bluetooth::Uuid::From16Bit(kClientCharacteristicConfiguration16bit);
+        bluetooth::Uuid::From16Bit(kClientCharacteristicConfiguration16bit);
 
 std::string getUuidName(const bluetooth::Uuid& uuid);
 
@@ -106,8 +105,7 @@ struct ControlPointResponse {
   uint8_t parameter_[4];
 };
 
-bool ParseControlPointCommand(ControlPointCommand* command,
-                              const uint8_t* value, uint16_t len);
+bool ParseControlPointCommand(ControlPointCommand* command, const uint8_t* value, uint16_t len);
 
 bool IsRangingServiceCharacteristic(const bluetooth::Uuid& uuid);
 

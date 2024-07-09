@@ -864,8 +864,8 @@ public class SapMessage {
                     throw new IOException("Wrong msg header received: Type: " + msg.getType());
             }
         } catch (InvalidProtocolBufferMicroException e) {
-            Log.w(TAG, "Error occured parsing a RIL message", e);
-            throw new IOException("Error occured parsing a RIL message");
+            Log.w(TAG, "Error occurred parsing a RIL message", e);
+            throw new IOException("Error occurred parsing a RIL message");
         }
     }
 

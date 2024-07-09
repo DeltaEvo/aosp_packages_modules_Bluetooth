@@ -20,17 +20,16 @@
 
 #include <fuzzer/FuzzedDataProvider.h>
 
-#include "l2cap/classic/dynamic_channel_manager.h"
-#include "l2cap/classic/l2cap_classic_module.h"
-
 #include "fuzz_dynamic_channel_manager.h"
 #include "fuzz_dynamic_channel_manager_impl.h"
+#include "l2cap/classic/dynamic_channel_manager.h"
+#include "l2cap/classic/l2cap_classic_module.h"
 
 namespace bluetooth {
 namespace shim {
 namespace {
 class FuzzL2capClassicModule : public l2cap::classic::L2capClassicModule {
- public:
+public:
   std::unique_ptr<l2cap::classic::DynamicChannelManager> GetDynamicChannelManager() override {
     return std::make_unique<FuzzDynamicChannelManager>(*impl_);
   }
@@ -42,13 +41,9 @@ class FuzzL2capClassicModule : public l2cap::classic::L2capClassicModule {
   std::unique_ptr<FuzzDynamicChannelManagerImpl> impl_;
 };
 
-void FuzzL2capClassicModule::Start() {
-  impl_ = std::make_unique<FuzzDynamicChannelManagerImpl>();
-}
+void FuzzL2capClassicModule::Start() { impl_ = std::make_unique<FuzzDynamicChannelManagerImpl>(); }
 
-void FuzzL2capClassicModule::Stop() {
-  impl_.reset();
-}
+void FuzzL2capClassicModule::Stop() { impl_.reset(); }
 }  // namespace
 }  // namespace shim
 }  // namespace bluetooth

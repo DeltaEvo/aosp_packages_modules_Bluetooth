@@ -28,12 +28,12 @@ namespace test {
 namespace headless {
 
 class GetOpt {
- public:
+public:
   GetOpt(int argc, char** arv);
   virtual ~GetOpt();
 
   virtual void Usage() const;
-  virtual bool IsValid() const { return valid_; };
+  virtual bool IsValid() const { return valid_; }
 
   std::string GetNextSubTest() const {
     std::string test = non_options_.front();
@@ -56,7 +56,7 @@ class GetOpt {
 
   static std::vector<std::string> Split(std::string);
 
- private:
+private:
   void ParseValue(char* optarg, std::list<std::string>& my_list);
   void ProcessOption(int option_index, char* optarg);
   void ParseStackInitFlags();

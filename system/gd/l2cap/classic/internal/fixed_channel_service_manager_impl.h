@@ -29,7 +29,7 @@ namespace classic {
 namespace internal {
 
 class FixedChannelServiceManagerImpl {
- public:
+public:
   explicit FixedChannelServiceManagerImpl(os::Handler* l2cap_layer_handler)
       : l2cap_layer_handler_(l2cap_layer_handler) {}
   virtual ~FixedChannelServiceManagerImpl() = default;
@@ -37,13 +37,14 @@ class FixedChannelServiceManagerImpl {
   // All APIs must be invoked in L2CAP layer handler
 
   virtual void Register(Cid cid, FixedChannelServiceImpl::PendingRegistration pending_registration);
-  virtual void Unregister(Cid cid, FixedChannelService::OnUnregisteredCallback callback, os::Handler* handler);
+  virtual void Unregister(Cid cid, FixedChannelService::OnUnregisteredCallback callback,
+                          os::Handler* handler);
   virtual bool IsServiceRegistered(Cid cid) const;
   virtual FixedChannelServiceImpl* GetService(Cid cid);
   virtual std::vector<std::pair<Cid, FixedChannelServiceImpl*>> GetRegisteredServices();
   virtual uint64_t GetSupportedFixedChannelMask();
 
- private:
+private:
   os::Handler* l2cap_layer_handler_ = nullptr;
   std::unordered_map<Cid, FixedChannelServiceImpl> service_map_;
 };

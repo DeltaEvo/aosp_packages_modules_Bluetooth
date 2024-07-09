@@ -16,9 +16,9 @@
 
 #pragma once
 
-#include "l2cap/internal/data_controller.h"
-
 #include <gmock/gmock.h>
+
+#include "l2cap/internal/data_controller.h"
 
 // Unit test interfaces
 namespace bluetooth {
@@ -27,13 +27,13 @@ namespace internal {
 namespace testing {
 
 class MockDataController : public DataController {
- public:
+public:
   MOCK_METHOD(void, OnSdu, (std::unique_ptr<packet::BasePacketBuilder>), (override));
   MOCK_METHOD(void, OnPdu, (packet::PacketView<true>), (override));
   MOCK_METHOD(std::unique_ptr<packet::BasePacketBuilder>, GetNextPacket, (), (override));
   MOCK_METHOD(void, EnableFcs, (bool), (override));
-  MOCK_METHOD(void, SetRetransmissionAndFlowControlOptions, (const RetransmissionAndFlowControlConfigurationOption&),
-              (override));
+  MOCK_METHOD(void, SetRetransmissionAndFlowControlOptions,
+              (const RetransmissionAndFlowControlConfigurationOption&), (override));
 };
 
 }  // namespace testing

@@ -58,9 +58,8 @@ static void l2cble_start_subrate_change(tL2C_LCB* p_lcb);
  *  Return value:   true if update started
  *
  ******************************************************************************/
-bool L2CA_UpdateBleConnParams(const RawAddress& rem_bda, uint16_t min_int,
-                              uint16_t max_int, uint16_t latency,
-                              uint16_t timeout, uint16_t min_ce_len,
+bool L2CA_UpdateBleConnParams(const RawAddress& rem_bda, uint16_t min_int, uint16_t max_int,
+                              uint16_t latency, uint16_t timeout, uint16_t min_ce_len,
                               uint16_t max_ce_len) {
   tL2C_LCB* p_lcb;
 
@@ -70,17 +69,16 @@ bool L2CA_UpdateBleConnParams(const RawAddress& rem_bda, uint16_t min_int,
   /* If we do not have one, create one and accept the connection. */
   if (!p_lcb || !BTM_IsAclConnectionUp(rem_bda, BT_TRANSPORT_LE)) {
     log::warn("- unknown BD_ADDR {}", rem_bda);
-    return (false);
+    return false;
   }
 
   if (p_lcb->transport != BT_TRANSPORT_LE) {
     log::warn("- BD_ADDR {} not LE", rem_bda);
-    return (false);
+    return false;
   }
 
-  log::verbose(
-      "BD_ADDR={}, min_int={}, max_int={}, min_ce_len={}, max_ce_len={}",
-      rem_bda, min_int, max_int, min_ce_len, max_ce_len);
+  log::verbose("BD_ADDR={}, min_int={}, max_int={}, min_ce_len={}, max_ce_len={}", rem_bda, min_int,
+               max_int, min_ce_len, max_ce_len);
 
   p_lcb->min_interval = min_int;
   p_lcb->max_interval = max_int;
@@ -92,7 +90,7 @@ bool L2CA_UpdateBleConnParams(const RawAddress& rem_bda, uint16_t min_int,
 
   l2cble_start_conn_update(p_lcb);
 
-  return (true);
+  return true;
 }
 
 static bool l2c_enable_update_ble_conn_params(tL2C_LCB* p_lcb, bool enable);
@@ -101,9 +99,10 @@ static bool l2c_enable_update_ble_conn_params(tL2C_LCB* p_lcb, bool enable);
  * fastest value, and we won't accept request to change it from remote. When
  * called with lock=false, parameters are relaxed.
  */
-void L2CA_LockBleConnParamsForServiceDiscovery(const RawAddress& rem_bda,
-                                               bool lock) {
-  if (stack_config_get_interface()->get_pts_conn_updates_disabled()) return;
+void L2CA_LockBleConnParamsForServiceDiscovery(const RawAddress& rem_bda, bool lock) {
+  if (stack_config_get_interface()->get_pts_conn_updates_disabled()) {
+    return;
+  }
 
   tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(rem_bda, BT_TRANSPORT_LE);
   if (!p_lcb) {
@@ -117,8 +116,7 @@ void L2CA_LockBleConnParamsForServiceDiscovery(const RawAddress& rem_bda,
   }
 
   if (lock == p_lcb->conn_update_blocked_by_service_discovery) {
-    log::warn("{} service discovery already locked/unlocked conn params: {}",
-              rem_bda, lock);
+    log::warn("{} service discovery already locked/unlocked conn params: {}", rem_bda, lock);
     return;
   }
 
@@ -129,8 +127,7 @@ void L2CA_LockBleConnParamsForServiceDiscovery(const RawAddress& rem_bda,
     return;
   }
 
-  log::info("{} Locking/unlocking conn params for service discovery: {}",
-            rem_bda, lock);
+  log::info("{} Locking/unlocking conn params for service discovery: {}", rem_bda, lock);
   l2c_enable_update_ble_conn_params(p_lcb, !lock);
 }
 
@@ -138,9 +135,10 @@ void L2CA_LockBleConnParamsForServiceDiscovery(const RawAddress& rem_bda,
  * fastest value, and we won't accept request to change it from remote. When
  * called with lock=false, parameters are relaxed.
  */
-void L2CA_LockBleConnParamsForProfileConnection(const RawAddress& rem_bda,
-                                                bool lock) {
-  if (stack_config_get_interface()->get_pts_conn_updates_disabled()) return;
+void L2CA_LockBleConnParamsForProfileConnection(const RawAddress& rem_bda, bool lock) {
+  if (stack_config_get_interface()->get_pts_conn_updates_disabled()) {
+    return;
+  }
 
   tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(rem_bda, BT_TRANSPORT_LE);
   if (!p_lcb) {
@@ -154,27 +152,24 @@ void L2CA_LockBleConnParamsForProfileConnection(const RawAddress& rem_bda,
   }
 
   if (lock == p_lcb->conn_update_blocked_by_profile_connection) {
-    log::info("{} audio setup already locked/unlocked conn params: {}", rem_bda,
-              lock);
+    log::info("{} audio setup already locked/unlocked conn params: {}", rem_bda, lock);
     return;
   }
 
   p_lcb->conn_update_blocked_by_profile_connection = lock;
 
   if (p_lcb->conn_update_blocked_by_service_discovery) {
-    log::info("{} conn params stay locked because of service discovery",
-              rem_bda);
+    log::info("{} conn params stay locked because of service discovery", rem_bda);
     return;
   }
 
-  log::info("{} Locking/unlocking conn params for audio setup: {}", rem_bda,
-            lock);
+  log::info("{} Locking/unlocking conn params for audio setup: {}", rem_bda, lock);
   l2c_enable_update_ble_conn_params(p_lcb, !lock);
 }
 
 static bool l2c_enable_update_ble_conn_params(tL2C_LCB* p_lcb, bool enable) {
-  log::debug("{} enable {} current upd state 0x{:02x}", p_lcb->remote_bd_addr,
-             enable, p_lcb->conn_update_mask);
+  log::debug("{} enable {} current upd state 0x{:02x}", p_lcb->remote_bd_addr, enable,
+             p_lcb->conn_update_mask);
 
   if (enable) {
     p_lcb->conn_update_mask &= ~L2C_BLE_CONN_UPDATE_DISABLE;
@@ -186,7 +181,7 @@ static bool l2c_enable_update_ble_conn_params(tL2C_LCB* p_lcb, bool enable) {
 
   l2cble_start_conn_update(p_lcb);
 
-  return (true);
+  return true;
 }
 
 /*******************************************************************************
@@ -228,25 +223,21 @@ void l2cble_start_conn_update(tL2C_LCB* p_lcb) {
       /* use 7.5 ms as fast connection parameter, 0 peripheral latency */
       min_conn_int = max_conn_int = BTM_BLE_CONN_INT_MIN;
 
-      L2CA_AdjustConnectionIntervals(&min_conn_int, &max_conn_int,
-                                     BTM_BLE_CONN_INT_MIN);
+      L2CA_AdjustConnectionIntervals(&min_conn_int, &max_conn_int, BTM_BLE_CONN_INT_MIN);
 
       peripheral_latency = BTM_BLE_CONN_PERIPHERAL_LATENCY_DEF;
       supervision_tout = BTM_BLE_CONN_TIMEOUT_DEF;
 
       /* if both side 4.1, or we are central device, send HCI command */
       if (p_lcb->IsLinkRoleCentral() ||
-          (bluetooth::shim::GetController()
-               ->SupportsBleConnectionParametersRequest() &&
-           acl_peer_supports_ble_connection_parameters_request(
-               p_lcb->remote_bd_addr))) {
-        acl_ble_connection_parameters_request(p_lcb->Handle(), min_conn_int,
-                                              max_conn_int, peripheral_latency,
-                                              supervision_tout, 0, 0);
+          (bluetooth::shim::GetController()->SupportsBleConnectionParametersRequest() &&
+           acl_peer_supports_ble_connection_parameters_request(p_lcb->remote_bd_addr))) {
+        acl_ble_connection_parameters_request(p_lcb->Handle(), min_conn_int, max_conn_int,
+                                              peripheral_latency, supervision_tout, 0, 0);
         p_lcb->conn_update_mask |= L2C_BLE_UPDATE_PENDING;
       } else {
-        l2cu_send_peer_ble_par_req(p_lcb, min_conn_int, max_conn_int,
-                                   peripheral_latency, supervision_tout);
+        l2cu_send_peer_ble_par_req(p_lcb, min_conn_int, max_conn_int, peripheral_latency,
+                                   supervision_tout);
       }
       p_lcb->conn_update_mask &= ~L2C_BLE_NOT_DEFAULT_PARAM;
       p_lcb->conn_update_mask |= L2C_BLE_NEW_CONN_PARAM;
@@ -256,18 +247,14 @@ void l2cble_start_conn_update(tL2C_LCB* p_lcb) {
     if (p_lcb->conn_update_mask & L2C_BLE_NEW_CONN_PARAM) {
       /* if both side 4.1, or we are central device, send HCI command */
       if (p_lcb->IsLinkRoleCentral() ||
-          (bluetooth::shim::GetController()
-               ->SupportsBleConnectionParametersRequest() &&
-           acl_peer_supports_ble_connection_parameters_request(
-               p_lcb->remote_bd_addr))) {
-        acl_ble_connection_parameters_request(
-            p_lcb->Handle(), p_lcb->min_interval, p_lcb->max_interval,
-            p_lcb->latency, p_lcb->timeout, p_lcb->min_ce_len,
-            p_lcb->max_ce_len);
+          (bluetooth::shim::GetController()->SupportsBleConnectionParametersRequest() &&
+           acl_peer_supports_ble_connection_parameters_request(p_lcb->remote_bd_addr))) {
+        acl_ble_connection_parameters_request(p_lcb->Handle(), p_lcb->min_interval,
+                                              p_lcb->max_interval, p_lcb->latency, p_lcb->timeout,
+                                              p_lcb->min_ce_len, p_lcb->max_ce_len);
         p_lcb->conn_update_mask |= L2C_BLE_UPDATE_PENDING;
       } else {
-        l2cu_send_peer_ble_par_req(p_lcb, p_lcb->min_interval,
-                                   p_lcb->max_interval, p_lcb->latency,
+        l2cu_send_peer_ble_par_req(p_lcb, p_lcb->min_interval, p_lcb->max_interval, p_lcb->latency,
                                    p_lcb->timeout);
       }
       p_lcb->conn_update_mask &= ~L2C_BLE_NEW_CONN_PARAM;
@@ -287,10 +274,8 @@ void l2cble_start_conn_update(tL2C_LCB* p_lcb) {
  * Returns          void
  *
  ******************************************************************************/
-void l2cble_process_conn_update_evt(uint16_t handle, uint8_t status,
-                                    uint16_t /* interval */,
-                                    uint16_t /* latency */,
-                                    uint16_t /* timeout */) {
+void l2cble_process_conn_update_evt(uint16_t handle, uint8_t status, uint16_t /* interval */,
+                                    uint16_t /* latency */, uint16_t /* timeout */) {
   log::verbose("");
 
   /* See if we have a link control block for the remote device */
@@ -310,8 +295,8 @@ void l2cble_process_conn_update_evt(uint16_t handle, uint8_t status,
 
   l2cble_start_subrate_change(p_lcb);
 
-  log::verbose("conn_update_mask={} , subrate_req_mask={}",
-               p_lcb->conn_update_mask, p_lcb->subrate_req_mask);
+  log::verbose("conn_update_mask={} , subrate_req_mask={}", p_lcb->conn_update_mask,
+               p_lcb->subrate_req_mask);
 }
 
 /*******************************************************************************
@@ -323,9 +308,8 @@ void l2cble_process_conn_update_evt(uint16_t handle, uint8_t status,
  * Returns          void
  *
  ******************************************************************************/
-void l2cble_process_rc_param_request_evt(uint16_t handle, uint16_t int_min,
-                                         uint16_t int_max, uint16_t latency,
-                                         uint16_t timeout) {
+void l2cble_process_rc_param_request_evt(uint16_t handle, uint16_t int_min, uint16_t int_max,
+                                         uint16_t latency, uint16_t timeout) {
   tL2C_LCB* p_lcb = l2cu_find_lcb_by_handle(handle);
   if (!p_lcb) {
     log::warn("No link to update connection parameter");
@@ -340,21 +324,19 @@ void l2cble_process_rc_param_request_evt(uint16_t handle, uint16_t int_min,
   /* if update is enabled, always accept connection parameter update */
   if ((p_lcb->conn_update_mask & L2C_BLE_CONN_UPDATE_DISABLE) == 0) {
     shim::GetHciLayer()->EnqueueCommand(
-        hci::LeRemoteConnectionParameterRequestReplyBuilder::Create(
-            handle, int_min, int_max, latency, timeout, 0, 0),
-        get_main()->BindOnce(
-            hci::check_complete<
-                hci::LeRemoteConnectionParameterRequestReplyCompleteView>));
+            hci::LeRemoteConnectionParameterRequestReplyBuilder::Create(handle, int_min, int_max,
+                                                                        latency, timeout, 0, 0),
+            get_main()->BindOnce(
+                    hci::check_complete<hci::LeRemoteConnectionParameterRequestReplyCompleteView>));
   } else {
     log::verbose("L2CAP - LE - update currently disabled");
     p_lcb->conn_update_mask |= L2C_BLE_NEW_CONN_PARAM;
     shim::GetHciLayer()->EnqueueCommand(
-        hci::LeRemoteConnectionParameterRequestNegativeReplyBuilder::Create(
-            handle, hci::ErrorCode::UNACCEPTABLE_CONNECTION_PARAMETERS),
-        get_main()->BindOnce(
-            hci::check_complete<
-                hci::
-                    LeRemoteConnectionParameterRequestNegativeReplyCompleteView>));
+            hci::LeRemoteConnectionParameterRequestNegativeReplyBuilder::Create(
+                    handle, hci::ErrorCode::UNACCEPTABLE_CONNECTION_PARAMETERS),
+            get_main()->BindOnce(
+                    hci::check_complete<
+                            hci::LeRemoteConnectionParameterRequestNegativeReplyCompleteView>));
   }
 }
 
@@ -377,23 +359,21 @@ void l2cble_use_preferred_conn_params(const RawAddress& bda) {
        (p_lcb->latency > p_dev_rec->conn_params.peripheral_latency) ||
        (p_lcb->timeout > p_dev_rec->conn_params.supervision_tout))) {
     log::verbose(
-        "HANDLE={} min_conn_int={} max_conn_int={} peripheral_latency={} "
-        "supervision_tout={}",
-        p_lcb->Handle(), p_dev_rec->conn_params.min_conn_int,
-        p_dev_rec->conn_params.max_conn_int,
-        p_dev_rec->conn_params.peripheral_latency,
-        p_dev_rec->conn_params.supervision_tout);
+            "HANDLE={} min_conn_int={} max_conn_int={} peripheral_latency={} "
+            "supervision_tout={}",
+            p_lcb->Handle(), p_dev_rec->conn_params.min_conn_int,
+            p_dev_rec->conn_params.max_conn_int, p_dev_rec->conn_params.peripheral_latency,
+            p_dev_rec->conn_params.supervision_tout);
 
     p_lcb->min_interval = p_dev_rec->conn_params.min_conn_int;
     p_lcb->max_interval = p_dev_rec->conn_params.max_conn_int;
     p_lcb->timeout = p_dev_rec->conn_params.supervision_tout;
     p_lcb->latency = p_dev_rec->conn_params.peripheral_latency;
 
-    acl_ble_connection_parameters_request(
-        p_lcb->Handle(), p_dev_rec->conn_params.min_conn_int,
-        p_dev_rec->conn_params.max_conn_int,
-        p_dev_rec->conn_params.peripheral_latency,
-        p_dev_rec->conn_params.supervision_tout, 0, 0);
+    acl_ble_connection_parameters_request(p_lcb->Handle(), p_dev_rec->conn_params.min_conn_int,
+                                          p_dev_rec->conn_params.max_conn_int,
+                                          p_dev_rec->conn_params.peripheral_latency,
+                                          p_dev_rec->conn_params.supervision_tout, 0, 0);
   }
 }
 
@@ -417,8 +397,8 @@ static void l2cble_start_subrate_change(tL2C_LCB* p_lcb) {
 
   btm_find_or_alloc_dev(p_lcb->remote_bd_addr);
 
-  log::verbose("subrate_req_mask={} conn_update_mask={}",
-               p_lcb->subrate_req_mask, p_lcb->conn_update_mask);
+  log::verbose("subrate_req_mask={} conn_update_mask={}", p_lcb->subrate_req_mask,
+               p_lcb->conn_update_mask);
 
   if (p_lcb->subrate_req_mask & L2C_BLE_SUBRATE_REQ_PENDING) {
     log::verbose("returning L2C_BLE_SUBRATE_REQ_PENDING");
@@ -442,19 +422,19 @@ static void l2cble_start_subrate_change(tL2C_LCB* p_lcb) {
       !acl_peer_supports_ble_connection_subrating(p_lcb->remote_bd_addr) ||
       !acl_peer_supports_ble_connection_subrating_host(p_lcb->remote_bd_addr)) {
     log::verbose(
-        "returning L2C_BLE_NEW_SUBRATE_PARAM local_host_sup={}, "
-        "local_conn_subrarte_sup={}, peer_subrate_sup={}, peer_host_sup={}",
-        bluetooth::shim::GetController()->SupportsBleConnectionSubratingHost(),
-        bluetooth::shim::GetController()->SupportsBleConnectionSubrating(),
-        acl_peer_supports_ble_connection_subrating(p_lcb->remote_bd_addr),
-        acl_peer_supports_ble_connection_subrating_host(p_lcb->remote_bd_addr));
+            "returning L2C_BLE_NEW_SUBRATE_PARAM local_host_sup={}, "
+            "local_conn_subrarte_sup={}, peer_subrate_sup={}, peer_host_sup={}",
+            bluetooth::shim::GetController()->SupportsBleConnectionSubratingHost(),
+            bluetooth::shim::GetController()->SupportsBleConnectionSubrating(),
+            acl_peer_supports_ble_connection_subrating(p_lcb->remote_bd_addr),
+            acl_peer_supports_ble_connection_subrating_host(p_lcb->remote_bd_addr));
     return;
   }
 
   log::verbose("Sending HCI cmd for subrate req");
-  bluetooth::shim::ACL_LeSubrateRequest(
-      p_lcb->Handle(), p_lcb->subrate_min, p_lcb->subrate_max,
-      p_lcb->max_latency, p_lcb->cont_num, p_lcb->supervision_tout);
+  bluetooth::shim::ACL_LeSubrateRequest(p_lcb->Handle(), p_lcb->subrate_min, p_lcb->subrate_max,
+                                        p_lcb->max_latency, p_lcb->cont_num,
+                                        p_lcb->supervision_tout);
 
   p_lcb->subrate_req_mask |= L2C_BLE_SUBRATE_REQ_PENDING;
   p_lcb->subrate_req_mask &= ~L2C_BLE_NEW_SUBRATE_PARAM;
@@ -472,15 +452,13 @@ static void l2cble_start_subrate_change(tL2C_LCB* p_lcb) {
  *  Return value:   void
  *
  ******************************************************************************/
-void L2CA_SetDefaultSubrate(uint16_t subrate_min, uint16_t subrate_max,
-                            uint16_t max_latency, uint16_t cont_num,
-                            uint16_t timeout) {
-  log::verbose(
-      "subrate_min={}, subrate_max={}, max_latency={}, cont_num={}, timeout={}",
-      subrate_min, subrate_max, max_latency, cont_num, timeout);
+void L2CA_SetDefaultSubrate(uint16_t subrate_min, uint16_t subrate_max, uint16_t max_latency,
+                            uint16_t cont_num, uint16_t timeout) {
+  log::verbose("subrate_min={}, subrate_max={}, max_latency={}, cont_num={}, timeout={}",
+               subrate_min, subrate_max, max_latency, cont_num, timeout);
 
-  bluetooth::shim::ACL_LeSetDefaultSubrate(subrate_min, subrate_max,
-                                           max_latency, cont_num, timeout);
+  bluetooth::shim::ACL_LeSetDefaultSubrate(subrate_min, subrate_max, max_latency, cont_num,
+                                           timeout);
 }
 
 /*******************************************************************************
@@ -494,9 +472,8 @@ void L2CA_SetDefaultSubrate(uint16_t subrate_min, uint16_t subrate_max,
  *  Return value:   true if update started
  *
  ******************************************************************************/
-bool L2CA_SubrateRequest(const RawAddress& rem_bda, uint16_t subrate_min,
-                         uint16_t subrate_max, uint16_t max_latency,
-                         uint16_t cont_num, uint16_t timeout) {
+bool L2CA_SubrateRequest(const RawAddress& rem_bda, uint16_t subrate_min, uint16_t subrate_max,
+                         uint16_t max_latency, uint16_t cont_num, uint16_t timeout) {
   tL2C_LCB* p_lcb;
 
   /* See if we have a link control block for the remote device */
@@ -505,18 +482,18 @@ bool L2CA_SubrateRequest(const RawAddress& rem_bda, uint16_t subrate_min,
   /* If we don't have one, create one and accept the connection. */
   if (!p_lcb || !BTM_IsAclConnectionUp(rem_bda, BT_TRANSPORT_LE)) {
     log::warn("unknown BD_ADDR {}", rem_bda);
-    return (false);
+    return false;
   }
 
   if (p_lcb->transport != BT_TRANSPORT_LE) {
     log::warn("BD_ADDR {} not LE", rem_bda);
-    return (false);
+    return false;
   }
 
   log::verbose(
-      "BD_ADDR={}, subrate_min={}, subrate_max={}, max_latency={}, "
-      "cont_num={}, timeout={}",
-      rem_bda, subrate_min, subrate_max, max_latency, cont_num, timeout);
+          "BD_ADDR={}, subrate_min={}, subrate_max={}, max_latency={}, "
+          "cont_num={}, timeout={}",
+          rem_bda, subrate_min, subrate_max, max_latency, cont_num, timeout);
 
   p_lcb->subrate_min = subrate_min;
   p_lcb->subrate_max = subrate_max;
@@ -527,7 +504,7 @@ bool L2CA_SubrateRequest(const RawAddress& rem_bda, uint16_t subrate_min,
 
   l2cble_start_subrate_change(p_lcb);
 
-  return (true);
+  return true;
 }
 
 /*******************************************************************************
@@ -550,8 +527,7 @@ bool L2CA_SubrateRequest(const RawAddress& rem_bda, uint16_t subrate_min,
  ******************************************************************************/
 void l2cble_process_subrate_change_evt(uint16_t handle, uint8_t status,
                                        uint16_t /* subrate_factor */,
-                                       uint16_t /* peripheral_latency */,
-                                       uint16_t /* cont_num */,
+                                       uint16_t /* peripheral_latency */, uint16_t /* cont_num */,
                                        uint16_t /* timeout */) {
   log::verbose("");
 
@@ -572,6 +548,6 @@ void l2cble_process_subrate_change_evt(uint16_t handle, uint8_t status,
 
   l2cble_start_subrate_change(p_lcb);
 
-  log::verbose("conn_update_mask={} , subrate_req_mask={}",
-               p_lcb->conn_update_mask, p_lcb->subrate_req_mask);
+  log::verbose("conn_update_mask={} , subrate_req_mask={}", p_lcb->conn_update_mask,
+               p_lcb->subrate_req_mask);
 }

@@ -25,9 +25,7 @@ namespace os {
 
 using bluetooth::common::init_flags::redact_log_is_enabled;
 
-bool should_log_be_redacted() {
-  return redact_log_is_enabled();
-}
+bool should_log_be_redacted() { return redact_log_is_enabled(); }
 
 }  // namespace os
 }  // namespace bluetooth

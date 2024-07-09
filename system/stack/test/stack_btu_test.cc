@@ -24,11 +24,10 @@
 #include "test/common/mock_functions.h"
 
 /* Function for test provided by btu_hcif.cc */
-void btu_hcif_hdl_command_status(uint16_t opcode, uint8_t status,
-                                 const uint8_t* p_cmd);
+void btu_hcif_hdl_command_status(uint16_t opcode, uint8_t status, const uint8_t* p_cmd);
 
 class StackBtuTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override { reset_mock_function_count_map(); }
 };
 
@@ -36,7 +35,7 @@ TEST_F(StackBtuTest, post_on_main) {}
 
 TEST_F(StackBtuTest, btm_sco_connection_failed_called) {
   uint8_t p_cmd[10];  // garbage data for testing
-  bluetooth::legacy::testing::btu_hcif_hdl_command_status(
-      HCI_SETUP_ESCO_CONNECTION, HCI_ERR_UNSPECIFIED, p_cmd);
+  bluetooth::legacy::testing::btu_hcif_hdl_command_status(HCI_SETUP_ESCO_CONNECTION,
+                                                          HCI_ERR_UNSPECIFIED, p_cmd);
   ASSERT_EQ(1, get_func_call_count("btm_sco_connection_failed"));
 }

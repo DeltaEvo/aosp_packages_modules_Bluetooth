@@ -20,7 +20,7 @@
 
 #include <future>
 
-#include "os/log.h"        // android log only
+#include "os/log.h"  // android log only
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_api_types.h"
 #include "stack/include/hci_error_code.h"

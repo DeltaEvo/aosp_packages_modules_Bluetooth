@@ -74,3 +74,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "remove_dup_pairing_response_in_oob_pairing"
+    namespace: "bluetooth"
+    description: "Avoid sending duplicate pairing response when device is in peripheral role & OOB pairing mode chosen"
+    bug: "351948689"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}

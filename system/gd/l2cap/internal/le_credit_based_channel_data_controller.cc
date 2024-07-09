@@ -28,9 +28,13 @@ namespace l2cap {
 namespace internal {
 
 LeCreditBasedDataController::LeCreditBasedDataController(ILink* link, Cid cid, Cid remote_cid,
-                                                         UpperQueueDownEnd* channel_queue_end, os::Handler* handler,
-                                                         Scheduler* scheduler)
-    : cid_(cid), remote_cid_(remote_cid), enqueue_buffer_(channel_queue_end), handler_(handler), scheduler_(scheduler),
+                                                         UpperQueueDownEnd* channel_queue_end,
+                                                         os::Handler* handler, Scheduler* scheduler)
+    : cid_(cid),
+      remote_cid_(remote_cid),
+      enqueue_buffer_(channel_queue_end),
+      handler_(handler),
+      scheduler_(scheduler),
       link_(link) {}
 
 void LeCreditBasedDataController::OnSdu(std::unique_ptr<packet::BasePacketBuilder> sdu) {
@@ -73,10 +77,8 @@ void LeCreditBasedDataController::OnPdu(packet::PacketView<true> pdu) {
     return;
   }
   if (basic_frame_view.size() > mps_) {
-    log::warn(
-        "Received frame size {} > mps {}, dropping the packet",
-        static_cast<int>(basic_frame_view.size()),
-        mps_);
+    log::warn("Received frame size {} > mps {}, dropping the packet",
+              static_cast<int>(basic_frame_view.size()), mps_);
     return;
   }
   if (remaining_sdu_continuation_packet_size_ == 0) {
@@ -95,10 +97,12 @@ void LeCreditBasedDataController::OnPdu(packet::PacketView<true> pdu) {
     reassembly_stage_.AppendPacketView(payload);
   }
   if (remaining_sdu_continuation_packet_size_ == 0) {
-    enqueue_buffer_.Enqueue(std::make_unique<PacketView<kLittleEndian>>(reassembly_stage_), handler_);
+    enqueue_buffer_.Enqueue(std::make_unique<PacketView<kLittleEndian>>(reassembly_stage_),
+                            handler_);
   } else if (remaining_sdu_continuation_packet_size_ < 0 || reassembly_stage_.size() > mtu_) {
     log::warn("Received larger SDU size than expected");
-    reassembly_stage_ = PacketViewForReassembly(PacketView<kLittleEndian>(std::make_shared<std::vector<uint8_t>>()));
+    reassembly_stage_ = PacketViewForReassembly(
+            PacketView<kLittleEndian>(std::make_shared<std::vector<uint8_t>>()));
     remaining_sdu_continuation_packet_size_ = 0;
     link_->SendDisconnectionRequest(cid_, remote_cid_);
   }
@@ -113,13 +117,9 @@ std::unique_ptr<packet::BasePacketBuilder> LeCreditBasedDataController::GetNextP
   return next;
 }
 
-void LeCreditBasedDataController::SetMtu(Mtu mtu) {
-  mtu_ = mtu;
-}
+void LeCreditBasedDataController::SetMtu(Mtu mtu) { mtu_ = mtu; }
 
-void LeCreditBasedDataController::SetMps(uint16_t mps) {
-  mps_ = mps;
-}
+void LeCreditBasedDataController::SetMps(uint16_t mps) { mps_ = mps; }
 
 void LeCreditBasedDataController::OnCredit(uint16_t credits) {
   int total_credits = credits_ + credits;

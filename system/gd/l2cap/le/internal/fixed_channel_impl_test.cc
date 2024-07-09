@@ -38,7 +38,7 @@ using testing::MockLink;
 using ::testing::Return;
 
 class L2capLeFixedChannelImplTest : public ::testing::Test {
- public:
+public:
   static void SyncHandler(os::Handler* handler) {
     std::promise<void> promise;
     auto future = promise.get_future();
@@ -46,7 +46,7 @@ class L2capLeFixedChannelImplTest : public ::testing::Test {
     future.wait_for(std::chrono::milliseconds(3));
   }
 
- protected:
+protected:
   void SetUp() override {
     thread_ = new os::Thread("test_thread", os::Thread::Priority::NORMAL);
     l2cap_handler_ = new os::Handler(thread_);
@@ -68,8 +68,10 @@ TEST_F(L2capLeFixedChannelImplTest, get_device) {
   testing::MockLeAclConnection* mock_acl_connection = new testing::MockLeAclConnection();
   EXPECT_CALL(*mock_acl_connection, GetRemoteAddress()).Times(1);
   MockLink mock_le_link(l2cap_handler_, &mock_parameter_provider,
-                        std::unique_ptr<testing::MockLeAclConnection>(mock_acl_connection), nullptr /* LinkManager* */);
-  AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}}, hci::AddressType::PUBLIC_DEVICE_ADDRESS};
+                        std::unique_ptr<testing::MockLeAclConnection>(mock_acl_connection),
+                        nullptr /* LinkManager* */);
+  AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}},
+                         hci::AddressType::PUBLIC_DEVICE_ADDRESS};
   EXPECT_CALL(mock_le_link, GetDevice()).WillRepeatedly(Return(device));
   log::info("------------------");
   FixedChannelImpl fixed_channel_impl(kSmpBrCid, &mock_le_link, l2cap_handler_);
@@ -82,8 +84,10 @@ TEST_F(L2capLeFixedChannelImplTest, close_triggers_callback) {
   testing::MockLeAclConnection* mock_acl_connection = new testing::MockLeAclConnection();
   EXPECT_CALL(*mock_acl_connection, GetRemoteAddress()).Times(1);
   MockLink mock_le_link(l2cap_handler_, &mock_parameter_provider,
-                        std::unique_ptr<testing::MockLeAclConnection>(mock_acl_connection), nullptr /* LinkManager* */);
-  AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}}, hci::AddressType::PUBLIC_DEVICE_ADDRESS};
+                        std::unique_ptr<testing::MockLeAclConnection>(mock_acl_connection),
+                        nullptr /* LinkManager* */);
+  AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}},
+                         hci::AddressType::PUBLIC_DEVICE_ADDRESS};
   EXPECT_CALL(mock_le_link, GetDevice()).WillRepeatedly(Return(device));
   FixedChannelImpl fixed_channel_impl(kSmpBrCid, &mock_le_link, l2cap_handler_);
 
@@ -91,7 +95,8 @@ TEST_F(L2capLeFixedChannelImplTest, close_triggers_callback) {
   auto user_handler = std::make_unique<os::Handler>(thread_);
   hci::ErrorCode my_status = hci::ErrorCode::SUCCESS;
   fixed_channel_impl.RegisterOnCloseCallback(
-      user_handler.get(), common::testing::BindLambdaForTesting([&](hci::ErrorCode status) { my_status = status; }));
+          user_handler.get(), common::testing::BindLambdaForTesting(
+                                      [&](hci::ErrorCode status) { my_status = status; }));
 
   // Channel closure should trigger such callback
   fixed_channel_impl.OnClosed(hci::ErrorCode::REMOTE_USER_TERMINATED_CONNECTION);
@@ -107,8 +112,10 @@ TEST_F(L2capLeFixedChannelImplTest, register_callback_after_close_should_call_im
   testing::MockLeAclConnection* mock_acl_connection = new testing::MockLeAclConnection();
   EXPECT_CALL(*mock_acl_connection, GetRemoteAddress()).Times(1);
   MockLink mock_le_link(l2cap_handler_, &mock_parameter_provider,
-                        std::unique_ptr<testing::MockLeAclConnection>(mock_acl_connection), nullptr /* LinkManager* */);
-  AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}}, hci::AddressType::PUBLIC_DEVICE_ADDRESS};
+                        std::unique_ptr<testing::MockLeAclConnection>(mock_acl_connection),
+                        nullptr /* LinkManager* */);
+  AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}},
+                         hci::AddressType::PUBLIC_DEVICE_ADDRESS};
   EXPECT_CALL(mock_le_link, GetDevice()).WillRepeatedly(Return(device));
   FixedChannelImpl fixed_channel_impl(kSmpBrCid, &mock_le_link, l2cap_handler_);
 
@@ -119,7 +126,8 @@ TEST_F(L2capLeFixedChannelImplTest, register_callback_after_close_should_call_im
   auto user_handler = std::make_unique<os::Handler>(thread_);
   hci::ErrorCode my_status = hci::ErrorCode::SUCCESS;
   fixed_channel_impl.RegisterOnCloseCallback(
-      user_handler.get(), common::testing::BindLambdaForTesting([&](hci::ErrorCode status) { my_status = status; }));
+          user_handler.get(), common::testing::BindLambdaForTesting(
+                                      [&](hci::ErrorCode status) { my_status = status; }));
   SyncHandler(user_handler.get());
   EXPECT_EQ(hci::ErrorCode::REMOTE_USER_TERMINATED_CONNECTION, my_status);
 
@@ -132,8 +140,10 @@ TEST_F(L2capLeFixedChannelImplTest, close_twice_should_fail) {
   testing::MockLeAclConnection* mock_acl_connection = new testing::MockLeAclConnection();
   EXPECT_CALL(*mock_acl_connection, GetRemoteAddress()).Times(1);
   MockLink mock_le_link(l2cap_handler_, &mock_parameter_provider,
-                        std::unique_ptr<testing::MockLeAclConnection>(mock_acl_connection), nullptr /* LinkManager* */);
-  AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}}, hci::AddressType::PUBLIC_DEVICE_ADDRESS};
+                        std::unique_ptr<testing::MockLeAclConnection>(mock_acl_connection),
+                        nullptr /* LinkManager* */);
+  AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}},
+                         hci::AddressType::PUBLIC_DEVICE_ADDRESS};
   EXPECT_CALL(mock_le_link, GetDevice()).WillRepeatedly(Return(device));
   FixedChannelImpl fixed_channel_impl(kSmpBrCid, &mock_le_link, l2cap_handler_);
 
@@ -141,7 +151,8 @@ TEST_F(L2capLeFixedChannelImplTest, close_twice_should_fail) {
   auto user_handler = std::make_unique<os::Handler>(thread_);
   hci::ErrorCode my_status = hci::ErrorCode::SUCCESS;
   fixed_channel_impl.RegisterOnCloseCallback(
-      user_handler.get(), common::testing::BindLambdaForTesting([&](hci::ErrorCode status) { my_status = status; }));
+          user_handler.get(), common::testing::BindLambdaForTesting(
+                                      [&](hci::ErrorCode status) { my_status = status; }));
 
   // Channel closure should trigger such callback
   fixed_channel_impl.OnClosed(hci::ErrorCode::REMOTE_USER_TERMINATED_CONNECTION);
@@ -160,8 +171,10 @@ TEST_F(L2capLeFixedChannelImplTest, multiple_registeration_should_fail) {
   testing::MockLeAclConnection* mock_acl_connection = new testing::MockLeAclConnection();
   EXPECT_CALL(*mock_acl_connection, GetRemoteAddress()).Times(1);
   MockLink mock_le_link(l2cap_handler_, &mock_parameter_provider,
-                        std::unique_ptr<testing::MockLeAclConnection>(mock_acl_connection), nullptr /* LinkManager* */);
-  AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}}, hci::AddressType::PUBLIC_DEVICE_ADDRESS};
+                        std::unique_ptr<testing::MockLeAclConnection>(mock_acl_connection),
+                        nullptr /* LinkManager* */);
+  AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}},
+                         hci::AddressType::PUBLIC_DEVICE_ADDRESS};
   EXPECT_CALL(mock_le_link, GetDevice()).WillRepeatedly(Return(device));
   FixedChannelImpl fixed_channel_impl(kSmpBrCid, &mock_le_link, l2cap_handler_);
 
@@ -169,10 +182,11 @@ TEST_F(L2capLeFixedChannelImplTest, multiple_registeration_should_fail) {
   auto user_handler = std::make_unique<os::Handler>(thread_);
   hci::ErrorCode my_status = hci::ErrorCode::SUCCESS;
   fixed_channel_impl.RegisterOnCloseCallback(
-      user_handler.get(), common::testing::BindLambdaForTesting([&](hci::ErrorCode status) { my_status = status; }));
+          user_handler.get(), common::testing::BindLambdaForTesting(
+                                      [&](hci::ErrorCode status) { my_status = status; }));
 
-  EXPECT_DEATH(fixed_channel_impl.RegisterOnCloseCallback(user_handler.get(),
-                                                          common::BindOnce([](hci::ErrorCode status) { FAIL(); })),
+  EXPECT_DEATH(fixed_channel_impl.RegisterOnCloseCallback(
+                       user_handler.get(), common::BindOnce([](hci::ErrorCode status) { FAIL(); })),
                ".*RegisterOnCloseCallback.*");
 
   user_handler->Clear();
@@ -184,8 +198,10 @@ TEST_F(L2capLeFixedChannelImplTest, call_acquire_before_registeration_should_fai
   testing::MockLeAclConnection* mock_acl_connection = new testing::MockLeAclConnection();
   EXPECT_CALL(*mock_acl_connection, GetRemoteAddress()).Times(1);
   MockLink mock_le_link(l2cap_handler_, &mock_parameter_provider,
-                        std::unique_ptr<testing::MockLeAclConnection>(mock_acl_connection), nullptr /* LinkManager* */);
-  AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}}, hci::AddressType::PUBLIC_DEVICE_ADDRESS};
+                        std::unique_ptr<testing::MockLeAclConnection>(mock_acl_connection),
+                        nullptr /* LinkManager* */);
+  AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}},
+                         hci::AddressType::PUBLIC_DEVICE_ADDRESS};
   EXPECT_CALL(mock_le_link, GetDevice()).WillRepeatedly(Return(device));
   FixedChannelImpl fixed_channel_impl(kSmpBrCid, &mock_le_link, l2cap_handler_);
   EXPECT_DEATH(fixed_channel_impl.Acquire(), ".*Acquire.*");
@@ -197,8 +213,10 @@ TEST_F(L2capLeFixedChannelImplTest, call_release_before_registeration_should_fai
   testing::MockLeAclConnection* mock_acl_connection = new testing::MockLeAclConnection();
   EXPECT_CALL(*mock_acl_connection, GetRemoteAddress()).Times(1);
   MockLink mock_le_link(l2cap_handler_, &mock_parameter_provider,
-                        std::unique_ptr<testing::MockLeAclConnection>(mock_acl_connection), nullptr /* LinkManager* */);
-  AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}}, hci::AddressType::PUBLIC_DEVICE_ADDRESS};
+                        std::unique_ptr<testing::MockLeAclConnection>(mock_acl_connection),
+                        nullptr /* LinkManager* */);
+  AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}},
+                         hci::AddressType::PUBLIC_DEVICE_ADDRESS};
   EXPECT_CALL(mock_le_link, GetDevice()).WillRepeatedly(Return(device));
   FixedChannelImpl fixed_channel_impl(kSmpBrCid, &mock_le_link, l2cap_handler_);
   EXPECT_DEATH(fixed_channel_impl.Release(), ".*Release.*");
@@ -210,8 +228,10 @@ TEST_F(L2capLeFixedChannelImplTest, test_acquire_release_channel) {
   testing::MockLeAclConnection* mock_acl_connection = new testing::MockLeAclConnection();
   EXPECT_CALL(*mock_acl_connection, GetRemoteAddress()).Times(1);
   MockLink mock_le_link(l2cap_handler_, &mock_parameter_provider,
-                        std::unique_ptr<testing::MockLeAclConnection>(mock_acl_connection), nullptr /* LinkManager* */);
-  AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}}, hci::AddressType::PUBLIC_DEVICE_ADDRESS};
+                        std::unique_ptr<testing::MockLeAclConnection>(mock_acl_connection),
+                        nullptr /* LinkManager* */);
+  AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}},
+                         hci::AddressType::PUBLIC_DEVICE_ADDRESS};
   EXPECT_CALL(mock_le_link, GetDevice()).WillRepeatedly(Return(device));
   FixedChannelImpl fixed_channel_impl(kSmpBrCid, &mock_le_link, l2cap_handler_);
 
@@ -219,7 +239,8 @@ TEST_F(L2capLeFixedChannelImplTest, test_acquire_release_channel) {
   auto user_handler = std::make_unique<os::Handler>(thread_);
   hci::ErrorCode my_status = hci::ErrorCode::SUCCESS;
   fixed_channel_impl.RegisterOnCloseCallback(
-      user_handler.get(), common::testing::BindLambdaForTesting([&](hci::ErrorCode status) { my_status = status; }));
+          user_handler.get(), common::testing::BindLambdaForTesting(
+                                      [&](hci::ErrorCode status) { my_status = status; }));
 
   // Default should be false
   EXPECT_FALSE(fixed_channel_impl.IsAcquired());
@@ -242,8 +263,10 @@ TEST_F(L2capLeFixedChannelImplTest, test_acquire_after_close) {
   testing::MockLeAclConnection* mock_acl_connection = new testing::MockLeAclConnection();
   EXPECT_CALL(*mock_acl_connection, GetRemoteAddress()).Times(1);
   MockLink mock_le_link(l2cap_handler_, &mock_parameter_provider,
-                        std::unique_ptr<testing::MockLeAclConnection>(mock_acl_connection), nullptr /* LinkManager* */);
-  AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}}, hci::AddressType::PUBLIC_DEVICE_ADDRESS};
+                        std::unique_ptr<testing::MockLeAclConnection>(mock_acl_connection),
+                        nullptr /* LinkManager* */);
+  AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}},
+                         hci::AddressType::PUBLIC_DEVICE_ADDRESS};
   EXPECT_CALL(mock_le_link, GetDevice()).WillRepeatedly(Return(device));
   FixedChannelImpl fixed_channel_impl(kSmpBrCid, &mock_le_link, l2cap_handler_);
 
@@ -251,7 +274,8 @@ TEST_F(L2capLeFixedChannelImplTest, test_acquire_after_close) {
   auto user_handler = std::make_unique<os::Handler>(thread_);
   hci::ErrorCode my_status = hci::ErrorCode::SUCCESS;
   fixed_channel_impl.RegisterOnCloseCallback(
-      user_handler.get(), common::testing::BindLambdaForTesting([&](hci::ErrorCode status) { my_status = status; }));
+          user_handler.get(), common::testing::BindLambdaForTesting(
+                                      [&](hci::ErrorCode status) { my_status = status; }));
 
   // Channel closure should trigger such callback
   fixed_channel_impl.OnClosed(hci::ErrorCode::REMOTE_USER_TERMINATED_CONNECTION);

@@ -35,67 +35,53 @@ class DumpsysHelper;
 
 namespace internal {
 
-// Helper class for keeping channels in a Link. It allocates and frees Channel object, and supports querying whether a
-// channel is in use
+// Helper class for keeping channels in a Link. It allocates and frees Channel object, and supports
+// querying whether a channel is in use
 template <typename FixedChannelImplType, typename LinkType>
 class FixedChannelAllocator {
- public:
-  FixedChannelAllocator(LinkType* link, os::Handler* l2cap_handler) : link_(link), l2cap_handler_(l2cap_handler) {
+public:
+  FixedChannelAllocator(LinkType* link, os::Handler* l2cap_handler)
+      : link_(link), l2cap_handler_(l2cap_handler) {
     log::assert_that(link_ != nullptr, "assert failed: link_ != nullptr");
     log::assert_that(l2cap_handler_ != nullptr, "assert failed: l2cap_handler_ != nullptr");
   }
 
   virtual ~FixedChannelAllocator() = default;
 
-  // Allocates a channel. If cid is used, return nullptr. NOTE: The returned BaseFixedChannelImpl object is still
-  // owned by the channel allocator, NOT the client.
+  // Allocates a channel. If cid is used, return nullptr. NOTE: The returned BaseFixedChannelImpl
+  // object is still owned by the channel allocator, NOT the client.
   virtual std::shared_ptr<FixedChannelImplType> AllocateChannel(Cid cid) {
-    log::assert_that(
-        !IsChannelAllocated(cid),
-        "Cid 0x{:x} for link {} is already in use",
-        cid,
-        ToLoggableStr(*link_));
+    log::assert_that(!IsChannelAllocated(cid), "Cid 0x{:x} for link {} is already in use", cid,
+                     ToLoggableStr(*link_));
 
-    log::assert_that(
-        cid >= kFirstFixedChannel && cid <= kLastFixedChannel, "Cid {} out of bound", cid);
-    auto elem = channels_.try_emplace(cid, std::make_shared<FixedChannelImplType>(cid, link_, l2cap_handler_));
-    log::assert_that(
-        elem.second,
-        "Failed to create channel for cid 0x{:x} link {}",
-        cid,
-        ToLoggableStr(*link_));  // TODO RENAME ADDRESS_TO_LOGGABLE_CSTR
+    log::assert_that(cid >= kFirstFixedChannel && cid <= kLastFixedChannel, "Cid {} out of bound",
+                     cid);
+    auto elem = channels_.try_emplace(
+            cid, std::make_shared<FixedChannelImplType>(cid, link_, l2cap_handler_));
+    log::assert_that(elem.second, "Failed to create channel for cid 0x{:x} link {}", cid,
+                     ToLoggableStr(*link_));  // TODO RENAME ADDRESS_TO_LOGGABLE_CSTR
     log::assert_that(elem.first->second != nullptr, "assert failed: elem.first->second != nullptr");
     return elem.first->second;
   }
 
   // Frees a channel. If cid doesn't exist, it will crash
   virtual void FreeChannel(Cid cid) {
-    log::assert_that(
-        IsChannelAllocated(cid),
-        "Channel is not in use: cid {}, link {}",
-        cid,
-        ToLoggableStr(*link_));
+    log::assert_that(IsChannelAllocated(cid), "Channel is not in use: cid {}, link {}", cid,
+                     ToLoggableStr(*link_));
 
     channels_.erase(cid);
   }
 
-  virtual bool IsChannelAllocated(Cid cid) const {
-    return channels_.find(cid) != channels_.end();
-  }
+  virtual bool IsChannelAllocated(Cid cid) const { return channels_.find(cid) != channels_.end(); }
 
   virtual std::shared_ptr<FixedChannelImplType> FindChannel(Cid cid) {
-    log::assert_that(
-        IsChannelAllocated(cid),
-        "Channel is not in use: cid {}, link {}",
-        cid,
-        ToLoggableStr(*link_));
+    log::assert_that(IsChannelAllocated(cid), "Channel is not in use: cid {}, link {}", cid,
+                     ToLoggableStr(*link_));
 
     return channels_.find(cid)->second;
   }
 
-  virtual size_t NumberOfChannels() const {
-    return channels_.size();
-  }
+  virtual size_t NumberOfChannels() const { return channels_.size(); }
 
   virtual void OnAclDisconnected(hci::ErrorCode hci_status) {
     for (auto& elem : channels_) {
@@ -113,7 +99,7 @@ class FixedChannelAllocator {
     return ref_count;
   }
 
- private:
+private:
   friend class bluetooth::l2cap::classic::internal::DumpsysHelper;
   LinkType* link_;
   os::Handler* l2cap_handler_;

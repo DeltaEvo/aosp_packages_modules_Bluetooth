@@ -40,21 +40,19 @@ struct btm_find_dev btm_find_dev;
 struct BTM_Sec_AddressKnown BTM_Sec_AddressKnown;
 
 struct maybe_resolve_address maybe_resolve_address;
-}
+}  // namespace stack_btm_dev
 }  // namespace mock
 }  // namespace test
 
-void BTM_SecAddDevice(const RawAddress& /* bd_addr */,
-                      const DEV_CLASS /* dev_class */, LinkKey /* link_key */,
-                      uint8_t /* key_type */, uint8_t /* pin_length */) {
+void BTM_SecAddDevice(const RawAddress& /* bd_addr */, const DEV_CLASS /* dev_class */,
+                      LinkKey /* link_key */, uint8_t /* key_type */, uint8_t /* pin_length */) {
   inc_func_call_count(__func__);
 }
 bool BTM_SecDeleteDevice(const RawAddress& /* bd_addr */) {
   inc_func_call_count(__func__);
   return false;
 }
-bool btm_set_bond_type_dev(const RawAddress& /* bd_addr */,
-                           tBTM_BOND_TYPE /* bond_type */) {
+bool btm_set_bond_type_dev(const RawAddress& /* bd_addr */, tBTM_BOND_TYPE /* bond_type */) {
   inc_func_call_count(__func__);
   return false;
 }
@@ -86,29 +84,19 @@ tBTM_BOND_TYPE btm_get_bond_type_dev(const RawAddress& /* bd_addr */) {
   inc_func_call_count(__func__);
   return BOND_TYPE_UNKNOWN;
 }
-void BTM_SecClearSecurityFlags(const RawAddress& /* bd_addr */) {
-  inc_func_call_count(__func__);
-}
-void btm_consolidate_dev(tBTM_SEC_DEV_REC* /* p_target_rec */) {
-  inc_func_call_count(__func__);
-}
+void BTM_SecClearSecurityFlags(const RawAddress& /* bd_addr */) { inc_func_call_count(__func__); }
+void btm_consolidate_dev(tBTM_SEC_DEV_REC* /* p_target_rec */) { inc_func_call_count(__func__); }
 void btm_dev_consolidate_existing_connections(const RawAddress& /* bd_addr */) {
   inc_func_call_count(__func__);
 }
-void BTM_SecDump(const std::string& /* label */) {
-  inc_func_call_count(__func__);
-}
-void BTM_SecDumpDev(const RawAddress& /* bd_addr */) {
-  inc_func_call_count(__func__);
-}
+void BTM_SecDump(const std::string& /* label */) { inc_func_call_count(__func__); }
+void BTM_SecDumpDev(const RawAddress& /* bd_addr */) { inc_func_call_count(__func__); }
 std::vector<tBTM_SEC_DEV_REC*> btm_get_sec_dev_rec() {
   inc_func_call_count(__func__);
   return {};
 }
 
-void BTM_SetConsolidationCallback(BTM_CONSOLIDATION_CB* /* cb */) {
-  inc_func_call_count(__func__);
-}
+void BTM_SetConsolidationCallback(BTM_CONSOLIDATION_CB* /* cb */) { inc_func_call_count(__func__); }
 
 bool BTM_Sec_AddressKnown(const RawAddress& address) {
   inc_func_call_count(__func__);
@@ -119,6 +107,4 @@ bool maybe_resolve_address(RawAddress* bda, tBLE_ADDR_TYPE* bda_type) {
   inc_func_call_count(__func__);
   return test::mock::stack_btm_dev::maybe_resolve_address(bda, bda_type);
 }
-const tBLE_BD_ADDR BTM_Sec_GetAddressWithType(const RawAddress& /* bd_addr */) {
-  return {};
-}
+const tBLE_BD_ADDR BTM_Sec_GetAddressWithType(const RawAddress& /* bd_addr */) { return {}; }

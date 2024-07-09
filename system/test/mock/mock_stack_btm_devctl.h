@@ -22,7 +22,7 @@ namespace stack_btm_devctl {
 // Function state capture and return values, if needed
 struct BTM_IsDeviceUp {
   std::function<bool()> body{[]() { return false; }};
-  bool operator()() { return body(); };
+  bool operator()() { return body(); }
 };
 extern struct BTM_IsDeviceUp BTM_IsDeviceUp;
 

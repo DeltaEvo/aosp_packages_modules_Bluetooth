@@ -15,12 +15,13 @@
  */
 
 #include "l2cap/internal/fixed_channel_allocator.h"
-#include "l2cap/classic/internal/fixed_channel_impl_mock.h"
-#include "l2cap/classic/internal/link_mock.h"
-#include "l2cap/internal/parameter_provider_mock.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include "l2cap/classic/internal/fixed_channel_impl_mock.h"
+#include "l2cap/classic/internal/link_mock.h"
+#include "l2cap/internal/parameter_provider_mock.h"
 
 namespace bluetooth {
 namespace l2cap {
@@ -31,10 +32,11 @@ using l2cap::classic::internal::testing::MockLink;
 using testing::MockParameterProvider;
 using ::testing::Return;
 
-const hci::AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}}, hci::AddressType::PUBLIC_IDENTITY_ADDRESS};
+const hci::AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}},
+                                  hci::AddressType::PUBLIC_IDENTITY_ADDRESS};
 
 class L2capFixedChannelAllocatorTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
     thread_ = new os::Thread("test_thread", os::Thread::Priority::NORMAL);
     handler_ = new os::Handler(thread_);
@@ -42,8 +44,8 @@ class L2capFixedChannelAllocatorTest : public ::testing::Test {
     mock_classic_link_ = new MockLink(handler_, mock_parameter_provider_);
     EXPECT_CALL(*mock_classic_link_, GetDevice()).WillRepeatedly(Return(device));
     // Use classic as a place holder
-    channel_allocator_ =
-        std::make_unique<FixedChannelAllocator<MockFixedChannelImpl, MockLink>>(mock_classic_link_, handler_);
+    channel_allocator_ = std::make_unique<FixedChannelAllocator<MockFixedChannelImpl, MockLink>>(
+            mock_classic_link_, handler_);
   }
 
   void TearDown() override {

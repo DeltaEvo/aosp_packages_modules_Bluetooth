@@ -35,12 +35,9 @@ using namespace bluetooth;
 static MessageLoopThread main_thread("bt_main_thread");
 
 bluetooth::common::MessageLoopThread* get_main_thread() { return &main_thread; }
-bluetooth::common::PostableContext* get_main() {
-  return main_thread.Postable();
-}
+bluetooth::common::PostableContext* get_main() { return main_thread.Postable(); }
 
-bt_status_t do_in_main_thread(const base::Location& from_here,
-                              base::OnceClosure task) {
+bt_status_t do_in_main_thread(const base::Location& from_here, base::OnceClosure task) {
   if (!main_thread.DoInThread(from_here, std::move(task))) {
     log::error("failed from {}", from_here.ToString());
     return BT_STATUS_JNI_THREAD_ATTACH_ERROR;
@@ -48,8 +45,7 @@ bt_status_t do_in_main_thread(const base::Location& from_here,
   return BT_STATUS_SUCCESS;
 }
 
-bt_status_t do_in_main_thread_delayed(const base::Location& from_here,
-                                      base::OnceClosure task,
+bt_status_t do_in_main_thread_delayed(const base::Location& from_here, base::OnceClosure task,
                                       std::chrono::microseconds delay) {
   if (!main_thread.DoInThreadDelayed(from_here, std::move(task), delay)) {
     log::error("failed from {}", from_here.ToString());
@@ -62,12 +58,11 @@ static void do_post_on_bt_main(BtMainClosure closure) { closure(); }
 
 void post_on_bt_main(BtMainClosure closure) {
   log::assert_that(
-      do_in_main_thread(
-          FROM_HERE, base::BindOnce(do_post_on_bt_main, std::move(closure))) ==
-          BT_STATUS_SUCCESS,
-      "assert failed: do_in_main_thread(FROM_HERE, "
-      "base::BindOnce(do_post_on_bt_main, std::move(closure))) == "
-      "BT_STATUS_SUCCESS");
+          do_in_main_thread(FROM_HERE, base::BindOnce(do_post_on_bt_main, std::move(closure))) ==
+                  BT_STATUS_SUCCESS,
+          "assert failed: do_in_main_thread(FROM_HERE, "
+          "base::BindOnce(do_post_on_bt_main, std::move(closure))) == "
+          "BT_STATUS_SUCCESS");
 }
 
 void main_thread_start_up() {

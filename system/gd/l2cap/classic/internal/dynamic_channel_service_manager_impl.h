@@ -31,7 +31,7 @@ namespace classic {
 namespace internal {
 
 class DynamicChannelServiceManagerImpl {
- public:
+public:
   explicit DynamicChannelServiceManagerImpl(os::Handler* l2cap_layer_handler)
       : l2cap_layer_handler_(l2cap_layer_handler) {}
 
@@ -39,7 +39,8 @@ class DynamicChannelServiceManagerImpl {
   //
   // All APIs must be invoked in L2CAP layer handler
   //
-  virtual void Register(Psm psm, DynamicChannelServiceImpl::PendingRegistration pending_registration);
+  virtual void Register(Psm psm,
+                        DynamicChannelServiceImpl::PendingRegistration pending_registration);
   virtual void Unregister(Psm psm, DynamicChannelService::OnUnregisteredCallback callback);
   virtual bool IsServiceRegistered(Psm psm) const;
   virtual DynamicChannelServiceImpl* GetService(Psm psm);
@@ -55,7 +56,7 @@ class DynamicChannelServiceManagerImpl {
     return security_enforcement_interface_;
   }
 
- private:
+private:
   os::Handler* l2cap_layer_handler_ = nullptr;
   std::unordered_map<Psm, DynamicChannelServiceImpl> service_map_;
   SecurityEnforcementInterface* security_enforcement_interface_ = nullptr;

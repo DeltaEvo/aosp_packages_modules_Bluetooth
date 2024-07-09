@@ -54,13 +54,11 @@ struct btif_av_peer_is_connected_sink btif_av_peer_is_connected_sink;
 struct btif_av_peer_is_connected_source btif_av_peer_is_connected_source;
 struct btif_av_peer_is_sink btif_av_peer_is_sink;
 struct btif_av_peer_is_source btif_av_peer_is_source;
-struct btif_av_peer_prefers_mandatory_codec
-    btif_av_peer_prefers_mandatory_codec;
+struct btif_av_peer_prefers_mandatory_codec btif_av_peer_prefers_mandatory_codec;
 struct btif_av_peer_supports_3mbps btif_av_peer_supports_3mbps;
 struct btif_av_report_source_codec_state btif_av_report_source_codec_state;
 struct btif_av_set_audio_delay btif_av_set_audio_delay;
-struct btif_av_set_dynamic_audio_buffer_size
-    btif_av_set_dynamic_audio_buffer_size;
+struct btif_av_set_dynamic_audio_buffer_size btif_av_set_dynamic_audio_buffer_size;
 struct btif_av_set_low_latency btif_av_set_low_latency;
 struct btif_av_sink_active_peer btif_av_sink_active_peer;
 struct btif_av_sink_execute_service btif_av_sink_execute_service;
@@ -117,8 +115,7 @@ const char* dump_av_sm_event_name::return_value = nullptr;
 }  // namespace test
 
 // Mocked functions, if any
-void btif_av_acl_disconnected(const RawAddress& peer_address,
-                              const A2dpType local_a2dp_type) {
+void btif_av_acl_disconnected(const RawAddress& peer_address, const A2dpType local_a2dp_type) {
   inc_func_call_count(__func__);
   test::mock::btif_av::btif_av_acl_disconnected(peer_address, local_a2dp_type);
 }
@@ -150,17 +147,13 @@ bool btif_av_is_connected(const A2dpType local_a2dp_type) {
   inc_func_call_count(__func__);
   return test::mock::btif_av::btif_av_is_connected(local_a2dp_type);
 }
-bool btif_av_is_connected_addr(const RawAddress& peer_address,
-                               const A2dpType local_a2dp_type) {
+bool btif_av_is_connected_addr(const RawAddress& peer_address, const A2dpType local_a2dp_type) {
   inc_func_call_count(__func__);
-  return test::mock::btif_av::btif_av_is_connected_addr(peer_address,
-                                                        local_a2dp_type);
+  return test::mock::btif_av::btif_av_is_connected_addr(peer_address, local_a2dp_type);
 }
-bool btif_av_is_peer_edr(const RawAddress& peer_address,
-                         const A2dpType local_a2dp_type) {
+bool btif_av_is_peer_edr(const RawAddress& peer_address, const A2dpType local_a2dp_type) {
   inc_func_call_count(__func__);
-  return test::mock::btif_av::btif_av_is_peer_edr(peer_address,
-                                                  local_a2dp_type);
+  return test::mock::btif_av::btif_av_is_peer_edr(peer_address, local_a2dp_type);
 }
 bool btif_av_is_peer_silenced(const RawAddress& peer_address) {
   inc_func_call_count(__func__);
@@ -193,36 +186,28 @@ bool btif_av_peer_is_source(const RawAddress& peer_address) {
 bool btif_av_peer_prefers_mandatory_codec(const RawAddress& peer_address,
                                           const A2dpType local_a2dp_type) {
   inc_func_call_count(__func__);
-  return test::mock::btif_av::btif_av_peer_prefers_mandatory_codec(
-      peer_address, local_a2dp_type);
+  return test::mock::btif_av::btif_av_peer_prefers_mandatory_codec(peer_address, local_a2dp_type);
 }
-bool btif_av_peer_supports_3mbps(const RawAddress& peer_address,
-                                 const A2dpType local_a2dp_type) {
+bool btif_av_peer_supports_3mbps(const RawAddress& peer_address, const A2dpType local_a2dp_type) {
   inc_func_call_count(__func__);
-  return test::mock::btif_av::btif_av_peer_supports_3mbps(peer_address,
-                                                          local_a2dp_type);
+  return test::mock::btif_av::btif_av_peer_supports_3mbps(peer_address, local_a2dp_type);
 }
 void btif_av_report_source_codec_state(
-    const RawAddress& peer_address,
-    const btav_a2dp_codec_config_t& codec_config,
-    const std::vector<btav_a2dp_codec_config_t>& codecs_local_capabilities,
-    const std::vector<btav_a2dp_codec_config_t>&
-        codecs_selectable_capabilities) {
+        const RawAddress& peer_address, const btav_a2dp_codec_config_t& codec_config,
+        const std::vector<btav_a2dp_codec_config_t>& codecs_local_capabilities,
+        const std::vector<btav_a2dp_codec_config_t>& codecs_selectable_capabilities) {
   inc_func_call_count(__func__);
   test::mock::btif_av::btif_av_report_source_codec_state(
-      peer_address, codec_config, codecs_local_capabilities,
-      codecs_selectable_capabilities);
+          peer_address, codec_config, codecs_local_capabilities, codecs_selectable_capabilities);
 }
 void btif_av_set_audio_delay(const RawAddress& peer_address, uint16_t delay,
                              const A2dpType local_a2dp_type) {
   inc_func_call_count(__func__);
-  test::mock::btif_av::btif_av_set_audio_delay(peer_address, delay,
-                                               local_a2dp_type);
+  test::mock::btif_av::btif_av_set_audio_delay(peer_address, delay, local_a2dp_type);
 }
 void btif_av_set_dynamic_audio_buffer_size(uint8_t dynamic_audio_buffer_size) {
   inc_func_call_count(__func__);
-  test::mock::btif_av::btif_av_set_dynamic_audio_buffer_size(
-      dynamic_audio_buffer_size);
+  test::mock::btif_av::btif_av_set_dynamic_audio_buffer_size(dynamic_audio_buffer_size);
 }
 void btif_av_set_low_latency(bool is_low_latency) {
   inc_func_call_count(__func__);

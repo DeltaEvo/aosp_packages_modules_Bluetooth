@@ -15,18 +15,15 @@
  */
 
 #include "l2cap/le/dynamic_channel.h"
+
 #include "l2cap/le/internal/link.h"
 
 namespace bluetooth {
 namespace l2cap {
 namespace le {
-LinkOptions* DynamicChannel::GetLinkOptions() {
-  return link_->GetLinkOptions();
-}
+LinkOptions* DynamicChannel::GetLinkOptions() { return link_->GetLinkOptions(); }
 
-Mtu DynamicChannel::GetMtu() const {
-  return mtu_;
-}
+Mtu DynamicChannel::GetMtu() const { return mtu_; }
 
 }  // namespace le
 }  // namespace l2cap

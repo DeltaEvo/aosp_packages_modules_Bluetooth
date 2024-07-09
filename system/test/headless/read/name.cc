@@ -29,9 +29,7 @@
 
 std::promise<tBTM_REMOTE_DEV_NAME> promise_;
 
-void RemoteNameCallback(const tBTM_REMOTE_DEV_NAME* data) {
-  promise_.set_value(*data);
-}
+void RemoteNameCallback(const tBTM_REMOTE_DEV_NAME* data) { promise_.set_value(*data); }
 
 int bluetooth::test::headless::Name::Run() {
   if (options_.loop_ < 1) {
@@ -52,8 +50,7 @@ int bluetooth::test::headless::Name::Run() {
 
     auto future = promise_.get_future();
 
-    tBTM_STATUS status =
-        get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
+    tBTM_STATUS status = get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
             raw_address, &RemoteNameCallback, BT_TRANSPORT_BR_EDR);
     if (status != BTM_CMD_STARTED) {
       fprintf(stdout, "Failure to start read remote device\n");
@@ -66,15 +63,14 @@ int bluetooth::test::headless::Name::Run() {
         char buf[BD_NAME_LEN];
         memcpy(buf, name_packet.remote_bd_name, BD_NAME_LEN);
         std::string name(buf);
-        fprintf(stdout, "Name result mac:%s name:%s\n",
-                raw_address.ToString().c_str(), name.c_str());
+        fprintf(stdout, "Name result mac:%s name:%s\n", raw_address.ToString().c_str(),
+                name.c_str());
       } break;
       case BTM_BAD_VALUE_RET:
         fprintf(stdout, "Name Timeout or other failure");
         return -2;
       default:
-        fprintf(stdout, "Unexpected remote name request failure status:%hd",
-                name_packet.status);
+        fprintf(stdout, "Unexpected remote name request failure status:%hd", name_packet.status);
         return -2;
     }
     return 0;

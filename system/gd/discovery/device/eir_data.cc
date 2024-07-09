@@ -165,11 +165,13 @@ bool EirData::GetSecurityManagerOobFlags(std::vector<std::vector<uint8_t>>& flag
 bool EirData::GetServiceUuuids16(std::vector<service_uuid16_t>& uuids) const {
   for (const auto& gap_data : gap_data_) {
     if (gap_data.data_type_ == hci::GapDataType::SERVICE_DATA_16_BIT_UUIDS) {
-      if (gap_data.data_.size() < Uuid::kNumBytes16) continue;
+      if (gap_data.data_.size() < Uuid::kNumBytes16) {
+        continue;
+      }
       auto it = gap_data.data_.begin();
       uuids.push_back({
-          .uuid = (uint16_t)(*it | *(it + 1) << 8),
-          .data = std::vector<uint8_t>(it + Uuid::kNumBytes16, gap_data.data_.end()),
+              .uuid = (uint16_t)(*it | *(it + 1) << 8),
+              .data = std::vector<uint8_t>(it + Uuid::kNumBytes16, gap_data.data_.end()),
       });
     }
   }
@@ -179,11 +181,13 @@ bool EirData::GetServiceUuuids16(std::vector<service_uuid16_t>& uuids) const {
 bool EirData::GetServiceUuuids32(std::vector<service_uuid32_t>& uuids) const {
   for (const auto& gap_data : gap_data_) {
     if (gap_data.data_type_ == hci::GapDataType::SERVICE_DATA_32_BIT_UUIDS) {
-      if (gap_data.data_.size() < Uuid::kNumBytes32) continue;
+      if (gap_data.data_.size() < Uuid::kNumBytes32) {
+        continue;
+      }
       auto it = gap_data.data_.begin();
       uuids.push_back({
-          .uuid = (uint32_t)(*it | *(it + 1) << 8 | *(it + 2) << 16 | *(it + 3) << 24),
-          .data = std::vector<uint8_t>(it + Uuid::kNumBytes32, gap_data.data_.end()),
+              .uuid = (uint32_t)(*it | *(it + 1) << 8 | *(it + 2) << 16 | *(it + 3) << 24),
+              .data = std::vector<uint8_t>(it + Uuid::kNumBytes32, gap_data.data_.end()),
       });
     }
   }
@@ -193,8 +197,9 @@ bool EirData::GetServiceUuuids32(std::vector<service_uuid32_t>& uuids) const {
 bool EirData::GetTxPowerLevel(std::vector<int8_t>& tx_power_level) const {
   for (const auto& gap_data : gap_data_) {
     if (gap_data.data_type_ == hci::GapDataType::TX_POWER_LEVEL) {
-      if (gap_data.data_.size() == 1U)
+      if (gap_data.data_.size() == 1U) {
         tx_power_level.push_back(static_cast<int8_t>(gap_data.data_[0]));
+      }
     }
   }
   return !tx_power_level.empty();

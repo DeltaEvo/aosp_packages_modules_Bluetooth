@@ -32,8 +32,8 @@ namespace internal {
 
 FixedChannelImpl::FixedChannelImpl(Cid cid, Link* link, os::Handler* l2cap_handler)
     : cid_(cid), device_(link->GetDevice()), link_(link), l2cap_handler_(l2cap_handler) {
-  log::assert_that(
-      cid_ >= kFirstFixedChannel && cid_ <= kLastFixedChannel, "Invalid cid: {}", cid_);
+  log::assert_that(cid_ >= kFirstFixedChannel && cid_ <= kLastFixedChannel, "Invalid cid: {}",
+                   cid_);
   log::assert_that(link_ != nullptr, "assert failed: link_ != nullptr");
   log::assert_that(l2cap_handler_ != nullptr, "assert failed: l2cap_handler_ != nullptr");
 }
@@ -51,13 +51,10 @@ void FixedChannelImpl::RegisterOnCloseCallback(os::Handler* user_handler,
 }
 
 void FixedChannelImpl::OnClosed(hci::ErrorCode status) {
-  log::assert_that(
-      !closed_,
-      "Device {} Cid 0x{:x} closed twice, old status 0x{:x}, new status 0x{:x}",
-      ADDRESS_TO_LOGGABLE_CSTR(device_),
-      cid_,
-      static_cast<int>(close_reason_),
-      static_cast<int>(status));
+  log::assert_that(!closed_,
+                   "Device {} Cid 0x{:x} closed twice, old status 0x{:x}, new status 0x{:x}",
+                   ADDRESS_TO_LOGGABLE_CSTR(device_), cid_, static_cast<int>(close_reason_),
+                   static_cast<int>(status));
   closed_ = true;
   close_reason_ = status;
   acquired_ = false;
@@ -73,8 +70,8 @@ void FixedChannelImpl::OnClosed(hci::ErrorCode status) {
 }
 
 void FixedChannelImpl::Acquire() {
-  log::assert_that(
-      user_handler_ != nullptr, "Must register OnCloseCallback before calling any methods");
+  log::assert_that(user_handler_ != nullptr,
+                   "Must register OnCloseCallback before calling any methods");
   if (closed_) {
     log::warn("{} is already closed", ToLoggableStr(*this));
     log::assert_that(!acquired_, "assert failed: !acquired_");
@@ -89,8 +86,8 @@ void FixedChannelImpl::Acquire() {
 }
 
 void FixedChannelImpl::Release() {
-  log::assert_that(
-      user_handler_ != nullptr, "Must register OnCloseCallback before calling any methods");
+  log::assert_that(user_handler_ != nullptr,
+                   "Must register OnCloseCallback before calling any methods");
   if (closed_) {
     log::warn("{} is already closed", ToLoggableStr(*this));
     log::assert_that(!acquired_, "assert failed: !acquired_");

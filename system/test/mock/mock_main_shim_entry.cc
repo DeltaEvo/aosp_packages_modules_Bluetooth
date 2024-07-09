@@ -46,16 +46,10 @@ namespace shim {
 
 Dumpsys* GetDumpsys() { return hci::testing::shim_dumpsys_; }
 hci::AclManager* GetAclManager() { return hci::testing::mock_acl_manager_; }
-hci::ControllerInterface* GetController() {
-  return hci::testing::mock_controller_;
-}
+hci::ControllerInterface* GetController() { return hci::testing::mock_controller_; }
 hci::HciInterface* GetHciLayer() { return hci::testing::mock_hci_layer_; }
-hci::LeAdvertisingManager* GetAdvertising() {
-  return hci::testing::mock_le_advertising_manager_;
-}
-hci::LeScanningManager* GetScanning() {
-  return hci::testing::mock_le_scanning_manager_;
-}
+hci::LeAdvertisingManager* GetAdvertising() { return hci::testing::mock_le_advertising_manager_; }
+hci::LeScanningManager* GetScanning() { return hci::testing::mock_le_scanning_manager_; }
 hci::DistanceMeasurementManager* GetDistanceMeasurementManager() {
   return hci::testing::mock_distance_measurement_manager_;
 }

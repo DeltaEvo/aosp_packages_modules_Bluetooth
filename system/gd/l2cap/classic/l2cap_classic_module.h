@@ -34,7 +34,7 @@ namespace l2cap {
 namespace classic {
 
 class L2capClassicModule : public bluetooth::Module {
- public:
+public:
   L2capClassicModule();
   L2capClassicModule(const L2capClassicModule&) = delete;
   L2capClassicModule& operator=(const L2capClassicModule&) = delete;
@@ -53,19 +53,21 @@ class L2capClassicModule : public bluetooth::Module {
 
   static const ModuleFactory Factory;
   /**
-   * Only for the classic security module to inject functionality to enforce security level for a connection. When
-   * classic security module is stopping, inject nullptr. Note: We expect this only to be called during stack startup.
-   * This is not synchronized.
+   * Only for the classic security module to inject functionality to enforce security level for a
+   * connection. When classic security module is stopping, inject nullptr. Note: We expect this only
+   * to be called during stack startup. This is not synchronized.
    */
-  virtual void InjectSecurityEnforcementInterface(SecurityEnforcementInterface* security_enforcement_interface);
+  virtual void InjectSecurityEnforcementInterface(
+          SecurityEnforcementInterface* security_enforcement_interface);
 
   /**
    * Get the interface for Security Module to access link function.
-   * Security Module needs to register the callback for ACL link connected and disconnected. When connected, either by
-   * incoming or by outgoing connection request, Security Module receives a LinkSecurityInterface proxy, which can be
-   * used to access some link functionlities.
+   * Security Module needs to register the callback for ACL link connected and disconnected. When
+   * connected, either by incoming or by outgoing connection request, Security Module receives a
+   * LinkSecurityInterface proxy, which can be used to access some link functionlities.
    */
-  virtual SecurityInterface* GetSecurityInterface(os::Handler* handler, LinkSecurityInterfaceListener* listener);
+  virtual SecurityInterface* GetSecurityInterface(os::Handler* handler,
+                                                  LinkSecurityInterfaceListener* listener);
 
   friend security::SecurityModule;
 
@@ -75,7 +77,7 @@ class L2capClassicModule : public bluetooth::Module {
    */
   virtual void SetLinkPropertyListener(os::Handler* handler, LinkPropertyListener* listener);
 
- protected:
+protected:
   void ListDependencies(ModuleList* list) const override;
 
   void Start() override;
@@ -84,9 +86,10 @@ class L2capClassicModule : public bluetooth::Module {
 
   std::string ToString() const override;
 
-  DumpsysDataFinisher GetDumpsysData(flatbuffers::FlatBufferBuilder* builder) const override;  // Module
+  DumpsysDataFinisher GetDumpsysData(
+          flatbuffers::FlatBufferBuilder* builder) const override;  // Module
 
- private:
+private:
   struct impl;
   std::unique_ptr<impl> pimpl_;
 };

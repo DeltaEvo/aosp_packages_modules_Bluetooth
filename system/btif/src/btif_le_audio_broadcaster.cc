@@ -41,71 +41,59 @@ class LeAudioBroadcasterInterfaceImpl : public LeAudioBroadcasterInterface,
 
   void Initialize(LeAudioBroadcasterCallbacks* callbacks) override {
     this->callbacks_ = callbacks;
-    do_in_main_thread(
-        FROM_HERE,
-        Bind(&LeAudioBroadcaster::Initialize, this, base::Bind([]() -> bool {
-          return LeAudioHalVerifier::SupportsLeAudioBroadcast();
-        })));
+    do_in_main_thread(FROM_HERE,
+                      Bind(&LeAudioBroadcaster::Initialize, this, base::Bind([]() -> bool {
+                        return LeAudioHalVerifier::SupportsLeAudioBroadcast();
+                      })));
   }
 
-  void CreateBroadcast(
-      bool is_public, std::string broadcast_name,
-      std::optional<bluetooth::le_audio::BroadcastCode> broadcast_code,
-      std::vector<uint8_t> public_metadata,
-      std::vector<uint8_t> subgroup_quality,
-      std::vector<std::vector<uint8_t>> subgroup_metadata) override {
+  void CreateBroadcast(bool is_public, std::string broadcast_name,
+                       std::optional<bluetooth::le_audio::BroadcastCode> broadcast_code,
+                       std::vector<uint8_t> public_metadata, std::vector<uint8_t> subgroup_quality,
+                       std::vector<std::vector<uint8_t>> subgroup_metadata) override {
     do_in_main_thread(FROM_HERE, Bind(&LeAudioBroadcaster::CreateAudioBroadcast,
-                                      Unretained(LeAudioBroadcaster::Get()),
-                                      is_public, broadcast_name, broadcast_code,
-                                      std::move(public_metadata),
-                                      std::move(subgroup_quality),
-                                      std::move(subgroup_metadata)));
+                                      Unretained(LeAudioBroadcaster::Get()), is_public,
+                                      broadcast_name, broadcast_code, std::move(public_metadata),
+                                      std::move(subgroup_quality), std::move(subgroup_metadata)));
   }
 
-  void UpdateMetadata(
-      uint32_t broadcast_id, std::string broadcast_name,
-      std::vector<uint8_t> public_metadata,
-      std::vector<std::vector<uint8_t>> subgroup_metadata) override {
+  void UpdateMetadata(uint32_t broadcast_id, std::string broadcast_name,
+                      std::vector<uint8_t> public_metadata,
+                      std::vector<std::vector<uint8_t>> subgroup_metadata) override {
     do_in_main_thread(FROM_HERE,
                       Bind(&LeAudioBroadcaster::UpdateMetadata,
-                           Unretained(LeAudioBroadcaster::Get()), broadcast_id,
-                           broadcast_name, std::move(public_metadata),
-                           std::move(subgroup_metadata)));
+                           Unretained(LeAudioBroadcaster::Get()), broadcast_id, broadcast_name,
+                           std::move(public_metadata), std::move(subgroup_metadata)));
   }
 
   void StartBroadcast(uint32_t broadcast_id) override {
-    do_in_main_thread(
-        FROM_HERE, Bind(&LeAudioBroadcaster::StartAudioBroadcast,
-                        Unretained(LeAudioBroadcaster::Get()), broadcast_id));
+    do_in_main_thread(FROM_HERE, Bind(&LeAudioBroadcaster::StartAudioBroadcast,
+                                      Unretained(LeAudioBroadcaster::Get()), broadcast_id));
   }
 
   void StopBroadcast(uint32_t broadcast_id) override {
-    do_in_main_thread(
-        FROM_HERE, Bind(&LeAudioBroadcaster::StopAudioBroadcast,
-                        Unretained(LeAudioBroadcaster::Get()), broadcast_id));
+    do_in_main_thread(FROM_HERE, Bind(&LeAudioBroadcaster::StopAudioBroadcast,
+                                      Unretained(LeAudioBroadcaster::Get()), broadcast_id));
   }
 
   void PauseBroadcast(uint32_t broadcast_id) override {
-    do_in_main_thread(
-        FROM_HERE, Bind(&LeAudioBroadcaster::SuspendAudioBroadcast,
-                        Unretained(LeAudioBroadcaster::Get()), broadcast_id));
+    do_in_main_thread(FROM_HERE, Bind(&LeAudioBroadcaster::SuspendAudioBroadcast,
+                                      Unretained(LeAudioBroadcaster::Get()), broadcast_id));
   }
 
   void DestroyBroadcast(uint32_t broadcast_id) override {
-    do_in_main_thread(
-        FROM_HERE, Bind(&LeAudioBroadcaster::DestroyAudioBroadcast,
-                        Unretained(LeAudioBroadcaster::Get()), broadcast_id));
+    do_in_main_thread(FROM_HERE, Bind(&LeAudioBroadcaster::DestroyAudioBroadcast,
+                                      Unretained(LeAudioBroadcaster::Get()), broadcast_id));
   }
 
   void GetBroadcastMetadata(uint32_t broadcast_id) override {
-    do_in_main_thread(
-        FROM_HERE, Bind(&LeAudioBroadcaster::GetBroadcastMetadata,
-                        Unretained(LeAudioBroadcaster::Get()), broadcast_id));
+    do_in_main_thread(FROM_HERE, Bind(&LeAudioBroadcaster::GetBroadcastMetadata,
+                                      Unretained(LeAudioBroadcaster::Get()), broadcast_id));
   }
 
   void OnBroadcastCreated(uint32_t broadcast_id, bool success) override {
-    do_in_jni_thread(Bind(&LeAudioBroadcasterCallbacks::OnBroadcastCreated,
-                          Unretained(callbacks_), broadcast_id, success));
+    do_in_jni_thread(Bind(&LeAudioBroadcasterCallbacks::OnBroadcastCreated, Unretained(callbacks_),
+                          broadcast_id, success));
   }
 
   void OnBroadcastDestroyed(uint32_t broadcast_id) override {
@@ -113,29 +101,23 @@ class LeAudioBroadcasterInterfaceImpl : public LeAudioBroadcasterInterface,
                           Unretained(callbacks_), broadcast_id));
   }
 
-  void OnBroadcastStateChanged(uint32_t broadcast_id,
-                               BroadcastState state) override {
+  void OnBroadcastStateChanged(uint32_t broadcast_id, BroadcastState state) override {
     do_in_jni_thread(Bind(&LeAudioBroadcasterCallbacks::OnBroadcastStateChanged,
                           Unretained(callbacks_), broadcast_id, state));
   }
 
-  void OnBroadcastMetadataChanged(uint32_t broadcast_id,
-                                  const bluetooth::le_audio::BroadcastMetadata&
-                                      broadcast_metadata) override {
-    do_in_jni_thread(
-        Bind(&LeAudioBroadcasterCallbacks::OnBroadcastMetadataChanged,
-             Unretained(callbacks_), broadcast_id, broadcast_metadata));
+  void OnBroadcastMetadataChanged(
+          uint32_t broadcast_id,
+          const bluetooth::le_audio::BroadcastMetadata& broadcast_metadata) override {
+    do_in_jni_thread(Bind(&LeAudioBroadcasterCallbacks::OnBroadcastMetadataChanged,
+                          Unretained(callbacks_), broadcast_id, broadcast_metadata));
   }
 
-  void Stop(void) override {
-    do_in_main_thread(FROM_HERE, Bind(&LeAudioBroadcaster::Stop));
-  }
+  void Stop(void) override { do_in_main_thread(FROM_HERE, Bind(&LeAudioBroadcaster::Stop)); }
 
-  void Cleanup(void) override {
-    do_in_main_thread(FROM_HERE, Bind(&LeAudioBroadcaster::Cleanup));
-  }
+  void Cleanup(void) override { do_in_main_thread(FROM_HERE, Bind(&LeAudioBroadcaster::Cleanup)); }
 
- private:
+private:
   LeAudioBroadcasterCallbacks* callbacks_;
 };
 

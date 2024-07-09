@@ -15,9 +15,9 @@
  */
 #pragma once
 
-#include "l2cap/classic/l2cap_classic_module.h"
-
 #include <gmock/gmock.h>
+
+#include "l2cap/classic/l2cap_classic_module.h"
 
 // Unit test interfaces
 namespace bluetooth {
@@ -26,7 +26,7 @@ namespace classic {
 namespace testing {
 
 class MockL2capClassicModule : public L2capClassicModule {
- public:
+public:
   MOCK_METHOD(std::unique_ptr<FixedChannelManager>, GetFixedChannelManager, (), (override));
   MOCK_METHOD(std::unique_ptr<DynamicChannelManager>, GetDynamicChannelManager, (), (override));
 };

@@ -50,21 +50,21 @@ inline int64_t get_timedelta_nanos(const ClockTimePoint& t1, const ClockTimePoin
 }
 
 class BaseMetricsLoggerModule {
- public:
+public:
   BaseMetricsLoggerModule() {}
   virtual void LogMetricBluetoothLESession(os::LEConnectionSessionOptions session_options) = 0;
   virtual ~BaseMetricsLoggerModule() {}
 };
 
 class MetricsLoggerModule : public BaseMetricsLoggerModule {
- public:
+public:
   MetricsLoggerModule() {}
   void LogMetricBluetoothLESession(os::LEConnectionSessionOptions session_options);
   virtual ~MetricsLoggerModule() {}
 };
 
 class LEConnectionMetricState {
- public:
+public:
   hci::Address address;
   LEConnectionMetricState(const hci::Address address) : address(address) {}
   LeConnectionState state;
@@ -80,30 +80,24 @@ class LEConnectionMetricState {
   bool IsEnded();
   bool IsCancelled();
 
-  void AddStateChangedEvent(
-      LeConnectionOriginType origin_type,
-      LeConnectionType connection_type,
-      LeConnectionState transaction_state,
-      std::vector<std::pair<os::ArgumentType, int>> argument_list);
-
+  void AddStateChangedEvent(LeConnectionOriginType origin_type, LeConnectionType connection_type,
+                            LeConnectionState transaction_state,
+                            std::vector<std::pair<os::ArgumentType, int>> argument_list);
 };
 
 class LEConnectionMetricsRemoteDevice {
- public:
+public:
   LEConnectionMetricsRemoteDevice();
 
   LEConnectionMetricsRemoteDevice(BaseMetricsLoggerModule* baseMetricsLoggerModule);
 
-  void AddStateChangedEvent(
-      const hci::Address& address,
-      LeConnectionOriginType origin_type,
-      LeConnectionType connection_type,
-      LeConnectionState transaction_state,
-      std::vector<std::pair<os::ArgumentType, int>> argument_list);
+  void AddStateChangedEvent(const hci::Address& address, LeConnectionOriginType origin_type,
+                            LeConnectionType connection_type, LeConnectionState transaction_state,
+                            std::vector<std::pair<os::ArgumentType, int>> argument_list);
 
   void UploadLEConnectionSession(const hci::Address& address);
 
- private:
+private:
   mutable std::mutex le_connection_metrics_remote_device_guard;
   std::vector<std::unique_ptr<LEConnectionMetricState>> device_metrics;
   std::unordered_map<hci::Address, LEConnectionMetricState*> opened_devices;
@@ -111,11 +105,11 @@ class LEConnectionMetricsRemoteDevice {
 };
 
 class MetricsCollector {
- public:
+public:
   // getting the LE Connection Metrics Collector
   static LEConnectionMetricsRemoteDevice* GetLEConnectionMetricsCollector();
 
- private:
+private:
   static LEConnectionMetricsRemoteDevice* le_connection_metrics_remote_device;
 };
 
