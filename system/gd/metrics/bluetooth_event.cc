@@ -111,11 +111,11 @@ void LogAclAfterRemoteNameRequest(const RawAddress& raw_address, tBTM_STATUS sta
   hci::Address address = bluetooth::ToGdAddress(raw_address);
 
   switch (status) {
-    case BTM_SUCCESS:
+    case tBTM_STATUS::BTM_SUCCESS:
       bluetooth::os::LogMetricBluetoothEvent(address, EventType::ACL_CONNECTION_INITIATOR,
                                              State::ALREADY_CONNECTED);
       break;
-    case BTM_NO_RESOURCES:
+    case tBTM_STATUS::BTM_NO_RESOURCES:
       bluetooth::os::LogMetricBluetoothEvent(
               address, EventType::ACL_CONNECTION_INITIATOR,
               MapErrorCodeToState(ErrorCode::CONNECTION_REJECTED_LIMITED_RESOURCES));

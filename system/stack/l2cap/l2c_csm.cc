@@ -537,7 +537,8 @@ static void l2c_csm_term_w4_sec_comp(tL2C_CCB* p_ccb, tL2CEVT event, void* p_dat
       break;
 
     case L2CEVT_SEC_COMP_NEG:
-      if (((tL2C_CONN_INFO*)p_data)->hci_status == static_cast<tHCI_STATUS>(BTM_DELAY_CHECK)) {
+      if (((tL2C_CONN_INFO*)p_data)->hci_status ==
+          static_cast<tHCI_STATUS>(tBTM_STATUS::BTM_DELAY_CHECK)) {
         /* start a timer - encryption change not received before L2CAP connect
          * req */
         alarm_set_on_mloop(p_ccb->l2c_ccb_timer, L2CAP_DELAY_CHECK_SM4_TIMEOUT_MS,

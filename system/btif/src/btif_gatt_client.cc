@@ -260,7 +260,7 @@ void btm_read_rssi_cb(void* p_void) {
   }
 
   CLI_CBACK_IN_JNI(read_remote_rssi_cb, rssi_request_client_if, p_result->rem_bda, p_result->rssi,
-                   p_result->status);
+                   static_cast<uint8_t>(p_result->status));
 }
 
 /*******************************************************************************
@@ -590,7 +590,7 @@ static bt_status_t btif_gattc_read_remote_rssi(int client_if, const RawAddress& 
   return do_in_jni_thread(base::Bind(
           [](int client_if, const RawAddress& bd_addr) {
             if (get_btm_client_interface().link_controller.BTM_ReadRSSI(
-                        bd_addr, btm_read_rssi_cb) != BTM_CMD_STARTED) {
+                        bd_addr, btm_read_rssi_cb) != tBTM_STATUS::BTM_CMD_STARTED) {
               log::warn("Unable to read RSSI peer:{} client_if:{}", bd_addr, client_if);
             }
           },

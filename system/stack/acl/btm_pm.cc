@@ -361,7 +361,8 @@ void btm_pm_reset(void) {
 
   if (cb != NULL && pm_pend_link != 0) {
     const RawAddress raw_address = pm_mode_db[pm_pend_link].bda_;
-    (*cb)(raw_address, BTM_PM_STS_ERROR, BTM_DEV_RESET, HCI_SUCCESS);
+    (*cb)(raw_address, BTM_PM_STS_ERROR, static_cast<uint16_t>(tBTM_STATUS::BTM_DEV_RESET),
+          HCI_SUCCESS);
   }
   /* no command pending */
   pm_pend_link = 0;

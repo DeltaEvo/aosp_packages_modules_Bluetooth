@@ -2266,7 +2266,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr, const uint8_
       log::warn("wrong BDA, retry with pairing BDA");
       tBTM_STATUS btm_status = get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
               btm_sec_cb.pairing_bda, NULL, BT_TRANSPORT_BR_EDR);
-      if (btm_status != BTM_CMD_STARTED) {
+      if (btm_status != tBTM_STATUS::BTM_CMD_STARTED) {
         log::warn("failed ({}) to restart remote name request for pairing, must be already queued",
                   btm_status_text(btm_status));
         if (!com::android::bluetooth::flags::pairing_name_discovery_addresss_mismatch()) {
@@ -3124,7 +3124,7 @@ void btm_sec_auth_complete(uint16_t handle, tHCI_STATUS status) {
                 "auth completed in role=peripheral, try to switch role and "
                 "encrypt");
         if (get_btm_client_interface().link_policy.BTM_SwitchRoleToCentral(
-                    p_dev_rec->RemoteAddress()) != BTM_CMD_STARTED) {
+                    p_dev_rec->RemoteAddress()) != tBTM_STATUS::BTM_CMD_STARTED) {
           log::warn("Unable to switch role to central peer:{}", p_dev_rec->RemoteAddress());
         }
       }
@@ -3343,7 +3343,8 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status, uint8_t encr_en
   tBTM_STATUS btm_status = btm_sec_execute_procedure(p_dev_rec);
   /* If there is no next procedure, or procedure failed to start, notify the
    * caller */
-  if (static_cast<std::underlying_type_t<tHCI_STATUS>>(status) != tBTM_STATUS::BTM_CMD_STARTED) {
+  if (static_cast<std::underlying_type_t<tBTM_STATUS>>(status) !=
+      static_cast<uint8_t>(tBTM_STATUS::BTM_CMD_STARTED)) {
     btm_sec_dev_rec_cback_event(p_dev_rec, btm_status, false);
   }
 }
