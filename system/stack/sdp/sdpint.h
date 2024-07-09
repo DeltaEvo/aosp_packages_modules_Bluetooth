@@ -69,53 +69,53 @@
 #endif
 
 /* Internal UUID sequence representation */
-typedef struct {
+struct tUID_ENT {
   uint16_t len;
   uint8_t value[bluetooth::Uuid::kNumBytes128];
-} tUID_ENT;
+};
 
-typedef struct {
+struct tSDP_UUID_SEQ {
   uint16_t num_uids;
   tUID_ENT uuid_entry[MAX_UUIDS_PER_SEQ];
-} tSDP_UUID_SEQ;
+};
 
 /* Internal attribute sequence definitions */
-typedef struct {
+struct tATT_ENT {
   uint16_t start;
   uint16_t end;
-} tATT_ENT;
+};
 
-typedef struct {
+struct tSDP_ATTR_SEQ {
   uint16_t num_attr;
   tATT_ENT attr_entry[MAX_ATTR_PER_SEQ];
-} tSDP_ATTR_SEQ;
+};
 
 /* Define the attribute element of the SDP database record */
-typedef struct {
+struct tSDP_ATTRIBUTE {
   uint32_t len;       /* Number of bytes in the entry */
   uint8_t* value_ptr; /* Points to attr_pad */
   uint16_t id;
   uint8_t type;
-} tSDP_ATTRIBUTE;
+};
 
 /* An SDP record consists of a handle, and 1 or more attributes */
-typedef struct {
+struct tSDP_RECORD {
   uint32_t record_handle;
   uint32_t free_pad_ptr;
   uint16_t num_attributes;
   tSDP_ATTRIBUTE attribute[SDP_MAX_REC_ATTR];
   uint8_t attr_pad[SDP_MAX_PAD_LEN];
-} tSDP_RECORD;
+};
 
 /* Define the SDP database */
-typedef struct {
+struct tSDP_DB {
   uint32_t di_primary_handle; /* Device ID Primary record or NULL if nonexistent */
   uint16_t num_records;
   tSDP_RECORD record[SDP_MAX_RECORDS];
-} tSDP_DB;
+};
 
 /* Continuation information for the SDP server response */
-typedef struct {
+struct tSDP_CONT_INFO {
   uint16_t next_attr_index;        /* attr index for next continuation response */
   uint16_t next_attr_start_id;     /* attr id to start with for the attr index in
                                       next cont. response */
@@ -125,7 +125,7 @@ typedef struct {
                                       previously */
   uint16_t attr_offset;            /* offset within the attr to keep trak of partial
                                       attributes in the responses */
-} tSDP_CONT_INFO;
+};
 
 enum class tSDP_STATE : uint8_t {
   IDLE = 0,
@@ -224,14 +224,14 @@ inline std::string sdp_disc_wait_text(const tSDP_DISC_WAIT& state) {
 }
 
 /*  The main SDP control block */
-typedef struct {
+struct tSDP_CB {
   tL2CAP_CFG_INFO l2cap_my_cfg; /* My L2CAP config     */
   tCONN_CB ccb[SDP_MAX_CONNECTIONS];
   tSDP_DB server_db;
   tL2CAP_APPL_INFO reg_info;    /* L2CAP Registration info */
   uint16_t max_attr_list_size;  /* Max attribute list size to use   */
   uint16_t max_recs_per_search; /* Max records we want per seaarch  */
-} tSDP_CB;
+};
 
 /* Global SDP data */
 extern tSDP_CB sdp_cb;

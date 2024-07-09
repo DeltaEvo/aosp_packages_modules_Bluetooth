@@ -68,13 +68,13 @@
 using namespace bluetooth;
 
 /* Used to set PBAP local SDP device record for PBAP 1.2 upgrade */
-typedef struct {
+struct tSDP_PSE_LOCAL_RECORD {
   int32_t rfcomm_channel_number;
   int32_t l2cap_psm;
   int32_t profile_version;
   uint32_t supported_features;
   uint32_t supported_repositories;
-} tSDP_PSE_LOCAL_RECORD;
+};
 
 static tSDP_PSE_LOCAL_RECORD sdpPseLocalRecord;
 
