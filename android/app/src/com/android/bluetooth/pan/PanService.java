@@ -98,7 +98,11 @@ public class PanService extends ProfileService {
                         Log.e(TAG, "Error setting up tether interface: " + error);
                         for (Map.Entry device : mPanDevices.entrySet()) {
                             mNativeInterface.disconnect(
-                                    Utils.getByteAddress((BluetoothDevice) device.getKey()));
+                                    Flags.panUseIdentityAddress()
+                                            ? Utils.getByteBrEdrAddress(
+                                                    (BluetoothDevice) device.getKey())
+                                            : Utils.getByteAddress(
+                                                    (BluetoothDevice) device.getKey()));
                         }
                         mPanDevices.clear();
                         mIsTethering = false;
@@ -662,7 +666,10 @@ public class PanService extends ProfileService {
                             "handlePanDeviceStateChange BT tethering is off/Local role"
                                     + " is PANU drop the connection");
                     mPanDevices.remove(device);
-                    mNativeInterface.disconnect(Utils.getByteAddress(device));
+                    mNativeInterface.disconnect(
+                            Flags.panUseIdentityAddress()
+                                    ? Utils.getByteBrEdrAddress(device)
+                                    : Utils.getByteAddress(device));
                     return;
                 }
                 Log.d(TAG, "handlePanDeviceStateChange LOCAL_NAP_ROLE:REMOTE_PANU_ROLE");
