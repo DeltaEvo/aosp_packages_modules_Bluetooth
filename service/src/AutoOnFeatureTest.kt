@@ -316,6 +316,13 @@ class AutoOnFeatureTest {
     }
 
     @Test
+    fun apiSetUserEnableToTrue_whenAlreadyEnabled_doNothing() {
+        setUserEnabled(true)
+
+        assertThat(shadowOf(context as Application).getBroadcastIntents().size).isEqualTo(0)
+    }
+
+    @Test
     fun pause_whenIdle_noTimeSave() {
         pause()
 
