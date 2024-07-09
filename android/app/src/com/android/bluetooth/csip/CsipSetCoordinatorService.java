@@ -73,8 +73,6 @@ public class CsipSetCoordinatorService extends ProfileService {
     // Timeout for state machine thread join, to prevent potential ANR.
     private static final int SM_THREAD_JOIN_TIMEOUT_MS = 1000;
 
-    // Upper limit of all CSIP devices: Bonded or Connected
-    private static final int MAX_CSIS_STATE_MACHINES = 10;
     private static CsipSetCoordinatorService sCsipSetCoordinatorService;
 
     private Handler mHandler = null;
@@ -904,14 +902,7 @@ public class CsipSetCoordinatorService extends ProfileService {
             if (sm != null) {
                 return sm;
             }
-            // Limit the maximum number of state machines to avoid DoS attack
-            if (mStateMachines.size() >= MAX_CSIS_STATE_MACHINES) {
-                Log.e(
-                        TAG,
-                        "Maximum number of CSIS state machines reached: "
-                                + MAX_CSIS_STATE_MACHINES);
-                return null;
-            }
+
             Log.d(TAG, "Creating a new state machine for " + device);
             sm =
                     CsipSetCoordinatorStateMachine.make(

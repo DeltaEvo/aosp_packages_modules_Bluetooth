@@ -99,7 +99,6 @@ import java.util.concurrent.ConcurrentHashMap;
 /** Broacast Assistant Scan Service */
 public class BassClientService extends ProfileService {
     private static final String TAG = BassClientService.class.getSimpleName();
-    private static final int MAX_BASS_CLIENT_STATE_MACHINES = 10;
     private static final int MAX_ACTIVE_SYNCED_SOURCES_NUM = 4;
     private static final int MAX_BIS_DISCOVERY_TRIES_NUM = 5;
 
@@ -1160,14 +1159,7 @@ public class BassClientService extends ProfileService {
             if (stateMachine != null) {
                 return stateMachine;
             }
-            // Limit the maximum number of state machines to avoid DoS attack
-            if (mStateMachines.size() >= MAX_BASS_CLIENT_STATE_MACHINES) {
-                Log.e(
-                        TAG,
-                        "Maximum number of Bassclient state machines reached: "
-                                + MAX_BASS_CLIENT_STATE_MACHINES);
-                return null;
-            }
+
             log("Creating a new state machine for " + device);
             stateMachine =
                     BassObjectsFactory.getInstance()
