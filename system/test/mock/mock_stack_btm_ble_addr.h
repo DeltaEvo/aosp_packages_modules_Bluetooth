@@ -35,20 +35,6 @@ namespace test {
 namespace mock {
 namespace stack_btm_ble_addr {
 
-// Shared state between mocked functions and tests
-// Name: btm_ble_init_pseudo_addr
-// Params: tBTM_SEC_DEV_REC* p_dev_rec, const RawAddress& new_pseudo_addr
-// Returns: bool
-struct btm_ble_init_pseudo_addr {
-  std::function<bool(tBTM_SEC_DEV_REC* p_dev_rec, const RawAddress& new_pseudo_addr)> body{
-          [](tBTM_SEC_DEV_REC* /* p_dev_rec */, const RawAddress& /* new_pseudo_addr */) {
-            return false;
-          }};
-  bool operator()(tBTM_SEC_DEV_REC* p_dev_rec, const RawAddress& new_pseudo_addr) {
-    return body(p_dev_rec, new_pseudo_addr);
-  }
-};
-extern struct btm_ble_init_pseudo_addr btm_ble_init_pseudo_addr;
 // Name: btm_ble_addr_resolvable
 // Params: const RawAddress& rpa, tBTM_SEC_DEV_REC* p_dev_rec
 // Returns: bool
