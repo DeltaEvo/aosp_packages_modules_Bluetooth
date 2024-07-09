@@ -237,7 +237,7 @@ const Octet16& BTM_GetDeviceDHK() { return btm_sec_cb.devcb.id_keys.dhk; }
  * Returns          None
  *
  ******************************************************************************/
-void BTM_SecurityGrant(const RawAddress& bd_addr, uint8_t res) {
+void BTM_SecurityGrant(const RawAddress& bd_addr, tBTM_STATUS res) {
   const tSMP_STATUS res_smp = (res == BTM_SUCCESS) ? SMP_SUCCESS : SMP_REPEATED_ATTEMPTS;
   log::verbose("bd_addr:{}, res:{}", bd_addr, smp_status_text(res_smp));
   BTM_LogHistory(kBtmLogTag, bd_addr, "Granted",
@@ -260,7 +260,7 @@ void BTM_SecurityGrant(const RawAddress& bd_addr, uint8_t res) {
  *                  p_passkey    - pointer to array with the passkey
  *
  ******************************************************************************/
-void BTM_BlePasskeyReply(const RawAddress& bd_addr, uint8_t res, uint32_t passkey) {
+void BTM_BlePasskeyReply(const RawAddress& bd_addr, tBTM_STATUS res, uint32_t passkey) {
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
   log::verbose("bd_addr:{}, res:{}", bd_addr, res);
   if (p_dev_rec == NULL) {
@@ -290,7 +290,7 @@ void BTM_BlePasskeyReply(const RawAddress& bd_addr, uint8_t res, uint32_t passke
  *                  res          - comparison result BTM_SUCCESS if success
  *
  ******************************************************************************/
-void BTM_BleConfirmReply(const RawAddress& bd_addr, uint8_t res) {
+void BTM_BleConfirmReply(const RawAddress& bd_addr, tBTM_STATUS res) {
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
   log::verbose("bd_addr:{}, res:{}", bd_addr, res);
   if (p_dev_rec == NULL) {
@@ -323,7 +323,7 @@ void BTM_BleConfirmReply(const RawAddress& bd_addr, uint8_t res) {
  *                                "Security Manager TK Value".
  *
  ******************************************************************************/
-void BTM_BleOobDataReply(const RawAddress& bd_addr, uint8_t res, uint8_t len, uint8_t* p_data) {
+void BTM_BleOobDataReply(const RawAddress& bd_addr, tBTM_STATUS res, uint8_t len, uint8_t* p_data) {
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
   if (p_dev_rec == NULL) {
     log::error("Unknown device:{}", bd_addr);
@@ -1390,8 +1390,9 @@ void btm_ble_ltk_request_reply(const RawAddress& bda, bool use_stk, const Octet1
  * Returns          void
  *
  ******************************************************************************/
-static uint8_t btm_ble_io_capabilities_req(tBTM_SEC_DEV_REC* p_dev_rec, tBTM_LE_IO_REQ* p_data) {
-  uint8_t callback_rc = BTM_SUCCESS;
+static tBTM_STATUS btm_ble_io_capabilities_req(tBTM_SEC_DEV_REC* p_dev_rec,
+                                               tBTM_LE_IO_REQ* p_data) {
+  tBTM_STATUS callback_rc = BTM_SUCCESS;
   log::verbose("p_dev_rec->bd_addr:{}", p_dev_rec->bd_addr);
   if (btm_sec_cb.api.p_le_callback) {
     /* the callback function implementation may change the IO capability... */
@@ -1453,8 +1454,8 @@ static uint8_t btm_ble_io_capabilities_req(tBTM_SEC_DEV_REC* p_dev_rec, tBTM_LE_
  * Returns          void
  *
  ******************************************************************************/
-static uint8_t btm_ble_br_keys_req(tBTM_SEC_DEV_REC* p_dev_rec, tBTM_LE_IO_REQ* p_data) {
-  uint8_t callback_rc = BTM_SUCCESS;
+static tBTM_STATUS btm_ble_br_keys_req(tBTM_SEC_DEV_REC* p_dev_rec, tBTM_LE_IO_REQ* p_data) {
+  tBTM_STATUS callback_rc = BTM_SUCCESS;
   log::verbose("p_dev_rec->bd_addr:{}", p_dev_rec->bd_addr);
   *p_data = tBTM_LE_IO_REQ{
           .io_cap = BTM_IO_CAP_UNKNOWN,
@@ -1768,7 +1769,7 @@ bool BTM_BleVerifySignature(const RawAddress& bd_addr, uint8_t* p_orig, uint16_t
  * Returns          void
  *
  ******************************************************************************/
-void BTM_BleSirkConfirmDeviceReply(const RawAddress& bd_addr, uint8_t res) {
+void BTM_BleSirkConfirmDeviceReply(const RawAddress& bd_addr, tBTM_STATUS res) {
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
   tSMP_STATUS res_smp = (res == BTM_SUCCESS) ? SMP_SUCCESS : SMP_FAIL;
 

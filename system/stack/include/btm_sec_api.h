@@ -106,6 +106,6 @@ tBTM_STATUS BTM_DeleteStoredLinkKey(const RawAddress* bd_addr, tBTM_CMPL_CB* p_c
  * Returns          void
  *
  ******************************************************************************/
-void BTM_BleSirkConfirmDeviceReply(const RawAddress& bd_addr, uint8_t res);
+void BTM_BleSirkConfirmDeviceReply(const RawAddress& bd_addr, tBTM_STATUS res);
 
 uint8_t btm_ble_read_sec_key_size(const RawAddress& bd_addr);
