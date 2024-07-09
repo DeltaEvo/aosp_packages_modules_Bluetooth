@@ -523,6 +523,12 @@ impl CommandHandler {
 
         let command = get_arg(args, 0)?;
 
+        if matches!(&command[..], "show" | "discoverable" | "connectable" | "set-name") {
+            if !self.lock_context().adapter_ready {
+                return Err(self.adapter_not_ready());
+            }
+        }
+
         match &command[..] {
             "enable" => {
                 if self.lock_context().is_restricted {
@@ -537,10 +543,6 @@ impl CommandHandler {
                 self.lock_context().manager_dbus.stop(default_adapter);
             }
             "show" => {
-                if !self.lock_context().adapter_ready {
-                    return Err(self.adapter_not_ready());
-                }
-
                 let enabled = self.lock_context().enabled;
                 let address = self.lock_context().adapter_address.unwrap_or_default();
                 let context = self.lock_context();
