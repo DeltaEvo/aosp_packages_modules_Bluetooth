@@ -1489,8 +1489,8 @@ void btm_send_hci_set_scan_params(uint8_t scan_type, uint16_t scan_int, uint16_t
 static void btm_ble_scan_filt_param_cfg_evt(uint8_t /* avbl_space */,
                                             tBTM_BLE_SCAN_COND_OP /* action_type */,
                                             tBTM_STATUS btm_status) {
-  if (btm_status != btm_status_value(BTM_SUCCESS)) {
-    log::error("{}", btm_status);
+  if (btm_status != BTM_SUCCESS) {
+    log::error("{}", btm_status_text(btm_status));
   } else {
     log::verbose("");
   }
