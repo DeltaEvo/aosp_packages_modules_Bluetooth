@@ -108,7 +108,13 @@ const bt_interface_t* getBluetoothInterface() { return sBluetoothInterface; }
 JNIEnv* getCallbackEnv() { return callbackEnv; }
 
 bool isCallbackThread() {
-  return sHaveCallbackThread && pthread_equal(sCallbackThread, pthread_self());
+  pthread_t curThread = pthread_self();
+  bool isValid = sHaveCallbackThread && pthread_equal(sCallbackThread, curThread);
+  if (!isValid) {
+    log::error("Failed! sHaveCallbackThread={}, pthread_self()={}, sCallbackThread={}",
+               sHaveCallbackThread, curThread, sCallbackThread);
+  }
+  return isValid;
 }
 
 static void adapter_state_change_callback(bt_state_t status) {
