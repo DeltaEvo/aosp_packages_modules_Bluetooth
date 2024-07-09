@@ -151,21 +151,6 @@ struct BTM_BleSecureConnectionOobDataReply {
 };
 extern struct BTM_BleSecureConnectionOobDataReply BTM_BleSecureConnectionOobDataReply;
 
-// Name: BTM_BleSetPhy
-// Params: const RawAddress& bd_addr, uint8_t tx_phys, uint8_t rx_phys, uint16_t
-// phy_options Return: void
-struct BTM_BleSetPhy {
-  std::function<void(const RawAddress& bd_addr, uint8_t tx_phys, uint8_t rx_phys,
-                     uint16_t phy_options)>
-          body{[](const RawAddress& /* bd_addr */, uint8_t /* tx_phys */, uint8_t /* rx_phys */,
-                  uint16_t /* phy_options */) {}};
-  void operator()(const RawAddress& bd_addr, uint8_t tx_phys, uint8_t rx_phys,
-                  uint16_t phy_options) {
-    body(bd_addr, tx_phys, rx_phys, phy_options);
-  }
-};
-extern struct BTM_BleSetPhy BTM_BleSetPhy;
-
 // Name: BTM_BleSetPrefConnParams
 // Params: const RawAddress& bd_addr, uint16_t min_conn_int, uint16_t
 // max_conn_int, uint16_t peripheral_latency, uint16_t supervision_tout Return:
