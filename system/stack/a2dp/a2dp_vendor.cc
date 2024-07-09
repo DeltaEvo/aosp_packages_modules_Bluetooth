@@ -34,23 +34,25 @@ bool A2DP_IsVendorSourceCodecValid(const uint8_t* p_codec_info) {
   uint16_t codec_id = A2DP_VendorCodecGetCodecId(p_codec_info);
 
   // Check for aptX
-  if (vendor_id == A2DP_APTX_VENDOR_ID && codec_id == A2DP_APTX_CODEC_ID_BLUETOOTH) {
-    return A2DP_IsVendorSourceCodecValidAptx(p_codec_info);
+  if (vendor_id == A2DP_APTX_VENDOR_ID &&
+      codec_id == A2DP_APTX_CODEC_ID_BLUETOOTH) {
+    return A2DP_IsCodecValidAptx(p_codec_info);
   }
 
   // Check for aptX-HD
-  if (vendor_id == A2DP_APTX_HD_VENDOR_ID && codec_id == A2DP_APTX_HD_CODEC_ID_BLUETOOTH) {
-    return A2DP_IsVendorSourceCodecValidAptxHd(p_codec_info);
+  if (vendor_id == A2DP_APTX_HD_VENDOR_ID &&
+      codec_id == A2DP_APTX_HD_CODEC_ID_BLUETOOTH) {
+    return A2DP_IsCodecValidAptxHd(p_codec_info);
   }
 
   // Check for LDAC
   if (vendor_id == A2DP_LDAC_VENDOR_ID && codec_id == A2DP_LDAC_CODEC_ID) {
-    return A2DP_IsVendorSourceCodecValidLdac(p_codec_info);
+    return A2DP_IsCodecValidLdac(p_codec_info);
   }
 
   // Check for Opus
   if (vendor_id == A2DP_OPUS_VENDOR_ID && codec_id == A2DP_OPUS_CODEC_ID) {
-    return A2DP_IsVendorSourceCodecValidOpus(p_codec_info);
+    return A2DP_IsCodecValidOpus(p_codec_info);
   }
 
   // Add checks based on <vendor_id, codec_id>
@@ -67,12 +69,12 @@ bool A2DP_IsVendorSinkCodecValid(const uint8_t* p_codec_info) {
 
   // Check for LDAC
   if (vendor_id == A2DP_LDAC_VENDOR_ID && codec_id == A2DP_LDAC_CODEC_ID) {
-    return A2DP_IsVendorSinkCodecValidLdac(p_codec_info);
+    return A2DP_IsCodecValidLdac(p_codec_info);
   }
 
   // Check for Opus
   if (vendor_id == A2DP_OPUS_VENDOR_ID && codec_id == A2DP_OPUS_CODEC_ID) {
-    return A2DP_IsVendorSinkCodecValidOpus(p_codec_info);
+    return A2DP_IsCodecValidOpus(p_codec_info);
   }
 
   return false;
@@ -87,12 +89,12 @@ bool A2DP_IsVendorPeerSourceCodecValid(const uint8_t* p_codec_info) {
 
   // Check for LDAC
   if (vendor_id == A2DP_LDAC_VENDOR_ID && codec_id == A2DP_LDAC_CODEC_ID) {
-    return A2DP_IsVendorPeerSourceCodecValidLdac(p_codec_info);
+    return A2DP_IsCodecValidLdac(p_codec_info);
   }
 
   // Check for Opus
   if (vendor_id == A2DP_OPUS_VENDOR_ID && codec_id == A2DP_OPUS_CODEC_ID) {
-    return A2DP_IsVendorPeerSourceCodecValidOpus(p_codec_info);
+    return A2DP_IsCodecValidOpus(p_codec_info);
   }
 
   return false;
@@ -103,23 +105,25 @@ bool A2DP_IsVendorPeerSinkCodecValid(const uint8_t* p_codec_info) {
   uint16_t codec_id = A2DP_VendorCodecGetCodecId(p_codec_info);
 
   // Check for aptX
-  if (vendor_id == A2DP_APTX_VENDOR_ID && codec_id == A2DP_APTX_CODEC_ID_BLUETOOTH) {
-    return A2DP_IsVendorPeerSinkCodecValidAptx(p_codec_info);
+  if (vendor_id == A2DP_APTX_VENDOR_ID &&
+      codec_id == A2DP_APTX_CODEC_ID_BLUETOOTH) {
+    return A2DP_IsCodecValidAptx(p_codec_info);
   }
 
   // Check for aptX-HD
-  if (vendor_id == A2DP_APTX_HD_VENDOR_ID && codec_id == A2DP_APTX_HD_CODEC_ID_BLUETOOTH) {
-    return A2DP_IsVendorPeerSinkCodecValidAptxHd(p_codec_info);
+  if (vendor_id == A2DP_APTX_HD_VENDOR_ID &&
+      codec_id == A2DP_APTX_HD_CODEC_ID_BLUETOOTH) {
+    return A2DP_IsCodecValidAptxHd(p_codec_info);
   }
 
   // Check for LDAC
   if (vendor_id == A2DP_LDAC_VENDOR_ID && codec_id == A2DP_LDAC_CODEC_ID) {
-    return A2DP_IsVendorPeerSinkCodecValidLdac(p_codec_info);
+    return A2DP_IsCodecValidLdac(p_codec_info);
   }
 
   // Check for Opus
   if (vendor_id == A2DP_OPUS_VENDOR_ID && codec_id == A2DP_OPUS_CODEC_ID) {
-    return A2DP_IsVendorPeerSinkCodecValidOpus(p_codec_info);
+    return A2DP_IsCodecValidOpus(p_codec_info);
   }
 
   // Add checks based on <vendor_id, codec_id>

@@ -72,28 +72,7 @@ private:
 // NOTE: only codecs that are implemented are considered valid.
 // Returns true if |p_codec_info| contains information about a valid LDAC
 // codec, otherwise false.
-bool A2DP_IsVendorSourceCodecValidLdac(const uint8_t* p_codec_info);
-
-// Checks whether the codec capabilities contain a valid A2DP LDAC Sink
-// codec.
-// NOTE: only codecs that are implemented are considered valid.
-// Returns true if |p_codec_info| contains information about a valid LDAC
-// codec, otherwise false.
-bool A2DP_IsVendorSinkCodecValidLdac(const uint8_t* p_codec_info);
-
-// Checks whether the codec capabilities contain a valid peer A2DP LDAC Sink
-// codec.
-// NOTE: only codecs that are implemented are considered valid.
-// Returns true if |p_codec_info| contains information about a valid LDAC
-// codec, otherwise false.
-bool A2DP_IsVendorPeerSinkCodecValidLdac(const uint8_t* p_codec_info);
-
-// Checks whether the codec capabilities contain a valid peer A2DP LDAC Source
-// codec.
-// NOTE: only codecs that are implemented are considered valid.
-// Returns true if |p_codec_info| contains information about a valid LDAC
-// codec, otherwise false.
-bool A2DP_IsVendorPeerSourceCodecValidLdac(const uint8_t* p_codec_info);
+bool A2DP_IsCodecValidLdac(const uint8_t* p_codec_info);
 
 // Checks whether A2DP LDAC Sink codec is supported.
 // |p_codec_info| contains information about the codec capabilities.

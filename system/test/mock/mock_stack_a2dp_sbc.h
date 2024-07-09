@@ -338,17 +338,6 @@ struct A2DP_InitDefaultCodecSbc {
 };
 extern struct A2DP_InitDefaultCodecSbc A2DP_InitDefaultCodecSbc;
 
-// Name: A2DP_IsPeerSinkCodecValidSbc
-// Params: const uint8_t* p_codec_info
-// Return: bool
-struct A2DP_IsPeerSinkCodecValidSbc {
-  static bool return_value;
-  std::function<bool(const uint8_t* p_codec_info)> body{
-          [](const uint8_t* /* p_codec_info */) { return return_value; }};
-  bool operator()(const uint8_t* p_codec_info) { return body(p_codec_info); }
-};
-extern struct A2DP_IsPeerSinkCodecValidSbc A2DP_IsPeerSinkCodecValidSbc;
-
 // Name: A2DP_IsPeerSourceCodecSupportedSbc
 // Params: const uint8_t* p_codec_info
 // Return: bool
@@ -360,17 +349,6 @@ struct A2DP_IsPeerSourceCodecSupportedSbc {
 };
 extern struct A2DP_IsPeerSourceCodecSupportedSbc A2DP_IsPeerSourceCodecSupportedSbc;
 
-// Name: A2DP_IsPeerSourceCodecValidSbc
-// Params: const uint8_t* p_codec_info
-// Return: bool
-struct A2DP_IsPeerSourceCodecValidSbc {
-  static bool return_value;
-  std::function<bool(const uint8_t* p_codec_info)> body{
-          [](const uint8_t* /* p_codec_info */) { return return_value; }};
-  bool operator()(const uint8_t* p_codec_info) { return body(p_codec_info); }
-};
-extern struct A2DP_IsPeerSourceCodecValidSbc A2DP_IsPeerSourceCodecValidSbc;
-
 // Name: A2DP_IsSinkCodecSupportedSbc
 // Params: const uint8_t* p_codec_info
 // Return: bool
@@ -381,28 +359,6 @@ struct A2DP_IsSinkCodecSupportedSbc {
   bool operator()(const uint8_t* p_codec_info) { return body(p_codec_info); }
 };
 extern struct A2DP_IsSinkCodecSupportedSbc A2DP_IsSinkCodecSupportedSbc;
-
-// Name: A2DP_IsSinkCodecValidSbc
-// Params: const uint8_t* p_codec_info
-// Return: bool
-struct A2DP_IsSinkCodecValidSbc {
-  static bool return_value;
-  std::function<bool(const uint8_t* p_codec_info)> body{
-          [](const uint8_t* /* p_codec_info */) { return return_value; }};
-  bool operator()(const uint8_t* p_codec_info) { return body(p_codec_info); }
-};
-extern struct A2DP_IsSinkCodecValidSbc A2DP_IsSinkCodecValidSbc;
-
-// Name: A2DP_IsSourceCodecValidSbc
-// Params: const uint8_t* p_codec_info
-// Return: bool
-struct A2DP_IsSourceCodecValidSbc {
-  static bool return_value;
-  std::function<bool(const uint8_t* p_codec_info)> body{
-          [](const uint8_t* /* p_codec_info */) { return return_value; }};
-  bool operator()(const uint8_t* p_codec_info) { return body(p_codec_info); }
-};
-extern struct A2DP_IsSourceCodecValidSbc A2DP_IsSourceCodecValidSbc;
 
 // Name: A2DP_SinkCodecIndexSbc
 // Params:  const uint8_t* p_codec_info

@@ -50,14 +50,7 @@ private:
 // NOTE: only codecs that are implemented are considered valid.
 // Returns true if |p_codec_info| contains information about a valid aptX
 // codec, otherwise false.
-bool A2DP_IsVendorSourceCodecValidAptx(const uint8_t* p_codec_info);
-
-// Checks whether the codec capabilities contain a valid peer A2DP aptX Sink
-// codec.
-// NOTE: only codecs that are implemented are considered valid.
-// Returns true if |p_codec_info| contains information about a valid aptX
-// codec, otherwise false.
-bool A2DP_IsVendorPeerSinkCodecValidAptx(const uint8_t* p_codec_info);
+bool A2DP_IsCodecValidAptx(const uint8_t* p_codec_info);
 
 // Checks whether the A2DP data packets should contain RTP header.
 // |content_protection_enabled| is true if Content Protection is

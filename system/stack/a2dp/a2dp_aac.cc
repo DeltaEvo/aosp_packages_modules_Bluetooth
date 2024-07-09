@@ -253,31 +253,7 @@ static tA2DP_STATUS A2DP_ParseInfoAac(tA2DP_AAC_CIE* p_ie, const uint8_t* p_code
   return A2DP_SUCCESS;
 }
 
-bool A2DP_IsSourceCodecValidAac(const uint8_t* p_codec_info) {
-  tA2DP_AAC_CIE cfg_cie;
-
-  /* Use a liberal check when parsing the codec info */
-  return (A2DP_ParseInfoAac(&cfg_cie, p_codec_info, false) == A2DP_SUCCESS) ||
-         (A2DP_ParseInfoAac(&cfg_cie, p_codec_info, true) == A2DP_SUCCESS);
-}
-
-bool A2DP_IsSinkCodecValidAac(const uint8_t* p_codec_info) {
-  tA2DP_AAC_CIE cfg_cie;
-
-  /* Use a liberal check when parsing the codec info */
-  return (A2DP_ParseInfoAac(&cfg_cie, p_codec_info, false) == A2DP_SUCCESS) ||
-         (A2DP_ParseInfoAac(&cfg_cie, p_codec_info, true) == A2DP_SUCCESS);
-}
-
-bool A2DP_IsPeerSourceCodecValidAac(const uint8_t* p_codec_info) {
-  tA2DP_AAC_CIE cfg_cie;
-
-  /* Use a liberal check when parsing the codec info */
-  return (A2DP_ParseInfoAac(&cfg_cie, p_codec_info, false) == A2DP_SUCCESS) ||
-         (A2DP_ParseInfoAac(&cfg_cie, p_codec_info, true) == A2DP_SUCCESS);
-}
-
-bool A2DP_IsPeerSinkCodecValidAac(const uint8_t* p_codec_info) {
+bool A2DP_IsCodecValidAac(const uint8_t* p_codec_info) {
   tA2DP_AAC_CIE cfg_cie;
 
   /* Use a liberal check when parsing the codec info */
@@ -671,16 +647,18 @@ std::string A2DP_CodecInfoStringAac(const uint8_t* p_codec_info) {
   return res.str();
 }
 
-const tA2DP_ENCODER_INTERFACE* A2DP_GetEncoderInterfaceAac(const uint8_t* p_codec_info) {
-  if (!A2DP_IsSourceCodecValidAac(p_codec_info)) {
+const tA2DP_ENCODER_INTERFACE* A2DP_GetEncoderInterfaceAac(
+    const uint8_t* p_codec_info) {
+  if (!A2DP_IsCodecValidAac(p_codec_info)) {
     return NULL;
   }
 
   return &a2dp_encoder_interface_aac;
 }
 
-const tA2DP_DECODER_INTERFACE* A2DP_GetDecoderInterfaceAac(const uint8_t* p_codec_info) {
-  if (!A2DP_IsSinkCodecValidAac(p_codec_info)) {
+const tA2DP_DECODER_INTERFACE* A2DP_GetDecoderInterfaceAac(
+    const uint8_t* p_codec_info) {
+  if (!A2DP_IsCodecValidAac(p_codec_info)) {
     return NULL;
   }
 

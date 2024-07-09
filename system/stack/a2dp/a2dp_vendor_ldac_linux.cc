@@ -18,28 +18,32 @@
 
 #include "a2dp_vendor_ldac.h"
 
-bool A2DP_IsVendorSourceCodecValidLdac(const uint8_t* p_codec_info) { return false; }
+bool A2DP_IsCodecValidLdac(const uint8_t* p_codec_info) { return false; }
 
-bool A2DP_IsVendorSinkCodecValidLdac(const uint8_t* p_codec_info) { return false; }
-
-bool A2DP_IsVendorPeerSourceCodecValidLdac(const uint8_t* p_codec_info) { return false; }
-
-bool A2DP_IsVendorPeerSinkCodecValidLdac(const uint8_t* p_codec_info) { return false; }
-
-bool A2DP_IsVendorSinkCodecSupportedLdac(const uint8_t* p_codec_info) { return false; }
-bool A2DP_IsPeerSourceCodecSupportedLdac(const uint8_t* p_codec_info) { return false; }
-
-bool A2DP_VendorUsesRtpHeaderLdac(bool content_protection_enabled, const uint8_t* p_codec_info) {
+bool A2DP_IsVendorSinkCodecSupportedLdac(const uint8_t* p_codec_info) {
   return false;
 }
 
-const char* A2DP_VendorCodecNameLdac(const uint8_t* p_codec_info) { return "Ldac"; }
-
-bool A2DP_VendorCodecTypeEqualsLdac(const uint8_t* p_codec_info_a, const uint8_t* p_codec_info_b) {
+bool A2DP_IsPeerSourceCodecSupportedLdac(const uint8_t* p_codec_info) {
   return false;
 }
 
-bool A2DP_VendorCodecEqualsLdac(const uint8_t* p_codec_info_a, const uint8_t* p_codec_info_b) {
+bool A2DP_VendorUsesRtpHeaderLdac(bool content_protection_enabled,
+                                  const uint8_t* p_codec_info) {
+  return false;
+}
+
+const char* A2DP_VendorCodecNameLdac(const uint8_t* p_codec_info) {
+  return "Ldac";
+}
+
+bool A2DP_VendorCodecTypeEqualsLdac(const uint8_t* p_codec_info_a,
+                                    const uint8_t* p_codec_info_b) {
+  return false;
+}
+
+bool A2DP_VendorCodecEqualsLdac(const uint8_t* p_codec_info_a,
+                                const uint8_t* p_codec_info_b) {
   return false;
 }
 
