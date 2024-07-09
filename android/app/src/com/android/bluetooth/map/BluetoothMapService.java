@@ -588,7 +588,7 @@ public class BluetoothMapService extends ProfileService {
         }
         synchronized (this) {
             for (BluetoothDevice device : bondedDevices) {
-                ParcelUuid[] featureUuids = device.getUuids();
+                final ParcelUuid[] featureUuids = mAdapterService.getRemoteUuids(device);
                 if (!BluetoothUuid.containsAnyUuid(featureUuids, MAP_UUIDS)) {
                     continue;
                 }
@@ -932,7 +932,7 @@ public class BluetoothMapService extends ProfileService {
                     sRemoteDeviceName = getString(R.string.defaultname);
                 }
 
-                mPermission = sRemoteDevice.getMessageAccessPermission();
+                mPermission = mAdapterService.getMessageAccessPermission(sRemoteDevice);
                 if (mPermission == BluetoothDevice.ACCESS_UNKNOWN) {
                     sendIntent = true;
                     mIsWaitingAuthorization = true;
@@ -940,7 +940,8 @@ public class BluetoothMapService extends ProfileService {
                 } else if (mPermission == BluetoothDevice.ACCESS_REJECTED) {
                     cancelConnection = true;
                 } else if (mPermission == BluetoothDevice.ACCESS_ALLOWED) {
-                    sRemoteDevice.sdpSearch(BluetoothMnsObexClient.BLUETOOTH_UUID_OBEX_MNS);
+                    mAdapterService.sdpSearch(
+                            sRemoteDevice, BluetoothMnsObexClient.BLUETOOTH_UUID_OBEX_MNS);
                     mSdpSearchInitiated = true;
                 }
             } else if (!sRemoteDevice.equals(remoteDevice)) {
@@ -1152,7 +1153,8 @@ public class BluetoothMapService extends ProfileService {
                         Log.d(TAG, "setMessageAccessPermission(ACCESS_ALLOWED) result=" + result);
                     }
 
-                    sRemoteDevice.sdpSearch(BluetoothMnsObexClient.BLUETOOTH_UUID_OBEX_MNS);
+                    mAdapterService.sdpSearch(
+                            sRemoteDevice, BluetoothMnsObexClient.BLUETOOTH_UUID_OBEX_MNS);
                     mSdpSearchInitiated = true;
                 } else {
                     // Auth. declined by user, serverSession should not be running, but

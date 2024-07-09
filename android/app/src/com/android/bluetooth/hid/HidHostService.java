@@ -198,7 +198,7 @@ public class HidHostService extends ProfileService {
     }
 
     private byte[] getByteAddress(BluetoothDevice device, int transport) {
-        ParcelUuid[] uuids = mAdapterService.getRemoteUuids(device);
+        final ParcelUuid[] uuids = mAdapterService.getRemoteUuids(device);
 
         if (!Flags.allowSwitchingHidAndHogp()) {
             boolean hogpSupported = Utils.arrayContains(uuids, BluetoothUuid.HOGP);
@@ -1114,7 +1114,7 @@ public class HidHostService extends ProfileService {
             return false;
         }
 
-        ParcelUuid[] uuids = mAdapterService.getRemoteUuids(device);
+        final ParcelUuid[] uuids = mAdapterService.getRemoteUuids(device);
         boolean hidSupported = Utils.arrayContains(uuids, BluetoothUuid.HID);
         boolean hogpSupported = Utils.arrayContains(uuids, BluetoothUuid.HOGP);
         boolean headtrackerSupported =

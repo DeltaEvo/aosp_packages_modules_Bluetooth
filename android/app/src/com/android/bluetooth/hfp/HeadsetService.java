@@ -866,7 +866,7 @@ public class HeadsetService extends ProfileService {
                             + Utils.getUidPidString());
             return false;
         }
-        ParcelUuid[] featureUuids = mAdapterService.getRemoteUuids(device);
+        final ParcelUuid[] featureUuids = mAdapterService.getRemoteUuids(device);
         if (!BluetoothUuid.containsAnyUuid(featureUuids, HEADSET_UUIDS)) {
             Log.e(
                     TAG,
@@ -2558,7 +2558,9 @@ public class HeadsetService extends ProfileService {
         for (BluetoothDevice device : fallbackCandidates) {
             byte[] deviceType =
                     dbManager.getCustomMeta(device, BluetoothDevice.METADATA_DEVICE_TYPE);
-            BluetoothClass deviceClass = device.getBluetoothClass();
+            BluetoothClass deviceClass =
+                    new BluetoothClass(
+                            mAdapterService.getRemoteDevices().getBluetoothClass(device));
             if ((deviceClass != null
                             && deviceClass.getMajorDeviceClass()
                                     == BluetoothClass.Device.WEARABLE_WRIST_WATCH)

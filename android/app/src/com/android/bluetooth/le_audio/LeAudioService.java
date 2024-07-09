@@ -105,7 +105,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -130,7 +129,7 @@ public class LeAudioService extends ProfileService {
     /** Indicates group is not active */
     private static final int ACTIVE_STATE_INACTIVE = 0x00;
 
-    /** Indicates group is going to be activeted */
+    /** Indicates group is going to be active */
     private static final int ACTIVE_STATE_GETTING_ACTIVE = 0x01;
 
     /** Indicates group is active */
@@ -725,7 +724,7 @@ public class LeAudioService extends ProfileService {
             Log.e(TAG, "Cannot connect to " + device + " : CONNECTION_POLICY_FORBIDDEN");
             return false;
         }
-        ParcelUuid[] featureUuids = mAdapterService.getRemoteUuids(device);
+        final ParcelUuid[] featureUuids = mAdapterService.getRemoteUuids(device);
         if (!Utils.arrayContains(featureUuids, BluetoothUuid.LE_AUDIO)) {
             Log.e(TAG, "Cannot connect to " + device + " : Remote does not have LE_AUDIO UUID");
             return false;
@@ -828,7 +827,7 @@ public class LeAudioService extends ProfileService {
         mGroupReadLock.lock();
         try {
             for (BluetoothDevice device : bondedDevices) {
-                final ParcelUuid[] featureUuids = device.getUuids();
+                final ParcelUuid[] featureUuids = mAdapterService.getRemoteUuids(device);
                 if (!Utils.arrayContains(featureUuids, BluetoothUuid.LE_AUDIO)) {
                     continue;
                 }
@@ -1546,11 +1545,11 @@ public class LeAudioService extends ProfileService {
             }
 
             if (deviceDescriptor.mGroupId.equals(groupId)) {
-                /* This is thes same group as aleady notified to the system.
+                /* This is the same group as already notified to the system.
                  * Therefore do not change the device we have connected to the group,
                  * unless, previous one is disconnected now
                  */
-                if (mActiveAudioInDevice.isConnected()) {
+                if (mAdapterService.isConnected(mActiveAudioInDevice)) {
                     device = mActiveAudioInDevice;
                 }
             } else if (deviceDescriptor.mGroupId != LE_AUDIO_GROUP_ID_INVALID) {
@@ -1617,7 +1616,8 @@ public class LeAudioService extends ProfileService {
                  * Therefore do not change the device we have connected to the group,
                  * unless, previous one is disconnected now
                  */
-                if (mActiveAudioOutDevice.isConnected()) {
+                if (mAdapterService.getConnectionState(mActiveAudioOutDevice)
+                        != BluetoothDevice.CONNECTION_STATE_DISCONNECTED) {
                     device = mActiveAudioOutDevice;
                 }
             } else if (deviceDescriptor.mGroupId != LE_AUDIO_GROUP_ID_INVALID) {

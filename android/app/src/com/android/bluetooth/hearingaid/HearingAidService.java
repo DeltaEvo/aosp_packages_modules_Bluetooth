@@ -245,7 +245,7 @@ public class HearingAidService extends ProfileService {
         if (getConnectionPolicy(device) == BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
             return false;
         }
-        ParcelUuid[] featureUuids = mAdapterService.getRemoteUuids(device);
+        final ParcelUuid[] featureUuids = mAdapterService.getRemoteUuids(device);
         if (!Utils.arrayContains(featureUuids, BluetoothUuid.HEARING_AID)) {
             Log.e(TAG, "Cannot connect to " + device + " : Remote does not have Hearing Aid UUID");
             return false;
@@ -404,7 +404,7 @@ public class HearingAidService extends ProfileService {
         }
         synchronized (mStateMachines) {
             for (BluetoothDevice device : bondedDevices) {
-                final ParcelUuid[] featureUuids = device.getUuids();
+                final ParcelUuid[] featureUuids = mAdapterService.getRemoteUuids(device);
                 if (!Utils.arrayContains(featureUuids, BluetoothUuid.HEARING_AID)) {
                     continue;
                 }

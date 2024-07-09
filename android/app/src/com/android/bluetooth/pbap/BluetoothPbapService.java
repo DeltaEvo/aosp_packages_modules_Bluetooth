@@ -17,6 +17,8 @@
 package com.android.bluetooth.pbap;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
+import static android.bluetooth.BluetoothDevice.ACCESS_ALLOWED;
+import static android.bluetooth.BluetoothDevice.ACCESS_REJECTED;
 
 import android.annotation.RequiresPermission;
 import android.app.Activity;
@@ -241,15 +243,16 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
                 boolean savePreference =
                         intent.getBooleanExtra(BluetoothDevice.EXTRA_ALWAYS_ALLOWED, false);
 
+                AdapterService adapterService = AdapterService.getAdapterService();
                 if (access == BluetoothDevice.CONNECTION_ACCESS_YES) {
                     if (savePreference) {
-                        device.setPhonebookAccessPermission(BluetoothDevice.ACCESS_ALLOWED);
+                        adapterService.setPhonebookAccessPermission(device, ACCESS_ALLOWED);
                         Log.v(TAG, "setPhonebookAccessPermission(ACCESS_ALLOWED)");
                     }
                     sm.sendMessage(PbapStateMachine.AUTHORIZED);
                 } else {
                     if (savePreference) {
-                        device.setPhonebookAccessPermission(BluetoothDevice.ACCESS_REJECTED);
+                        adapterService.setPhonebookAccessPermission(device, ACCESS_REJECTED);
                         Log.v(TAG, "setPhonebookAccessPermission(ACCESS_REJECTED)");
                     }
                     sm.sendMessage(PbapStateMachine.REJECTED);

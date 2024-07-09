@@ -170,7 +170,7 @@ public class BatteryService extends ProfileService {
             Log.w(TAG, "Cannot connect to " + device + " : policy forbidden");
             return false;
         }
-        ParcelUuid[] featureUuids = mAdapterService.getRemoteUuids(device);
+        final ParcelUuid[] featureUuids = mAdapterService.getRemoteUuids(device);
         if (!Utils.arrayContains(featureUuids, BluetoothUuid.BATTERY)) {
             Log.e(TAG, "Cannot connect to " + device + " : Remote does not have Battery UUID");
             return false;

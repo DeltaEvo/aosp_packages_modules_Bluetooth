@@ -694,9 +694,8 @@ public class AudioRoutingManager extends ActiveDeviceManager {
                     }
                 }
             }
-            BluetoothClass deviceClass = device.getBluetoothClass();
-            if (deviceClass != null
-                    && deviceClass.getDeviceClass() == BluetoothClass.Device.WEARABLE_WRIST_WATCH) {
+            BluetoothClass deviceClass = new BluetoothClass(mAdapterService.getRemoteClass(device));
+            if (deviceClass.getDeviceClass() == BluetoothClass.Device.WEARABLE_WRIST_WATCH) {
                 Log.i(TAG, "Do not set profile active for watch device when connected: " + device);
                 return false;
             }

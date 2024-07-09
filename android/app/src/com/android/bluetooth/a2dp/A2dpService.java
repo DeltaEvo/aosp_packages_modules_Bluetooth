@@ -750,7 +750,7 @@ public class A2dpService extends ProfileService {
     /**
      * Sets the codec configuration preference.
      *
-     * @param device the remote Bluetooth device. If null, use the currect active A2DP Bluetooth
+     * @param device the remote Bluetooth device. If null, use the current active A2DP Bluetooth
      *     device.
      * @param codecConfig the codec configuration preference
      */
@@ -778,7 +778,7 @@ public class A2dpService extends ProfileService {
     /**
      * Enables the optional codecs.
      *
-     * @param device the remote Bluetooth device. If null, use the currect active A2DP Bluetooth
+     * @param device the remote Bluetooth device. If null, use the current active A2DP Bluetooth
      *     device.
      */
     public void enableOptionalCodecs(BluetoothDevice device) {
@@ -806,7 +806,7 @@ public class A2dpService extends ProfileService {
     /**
      * Disables the optional codecs.
      *
-     * @param device the remote Bluetooth device. If null, use the currect active A2DP Bluetooth
+     * @param device the remote Bluetooth device. If null, use the current active A2DP Bluetooth
      *     device.
      */
     public void disableOptionalCodecs(BluetoothDevice device) {

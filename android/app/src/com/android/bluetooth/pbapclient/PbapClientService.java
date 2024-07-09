@@ -399,7 +399,7 @@ public class PbapClientService extends ProfileService {
 
         @Override
         public boolean connect(BluetoothDevice device, AttributionSource source) {
-            Log.d(TAG, "PbapClient Binder connect ");
+            Log.d(TAG, "PbapClient Binder connect");
 
             PbapClientService service = getService(source);
             if (service == null) {

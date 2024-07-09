@@ -23,7 +23,6 @@ import android.bluetooth.BluetoothGattServer;
 import android.bluetooth.BluetoothGattServerCallback;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
-import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUuid;
 import android.content.Context;
 import android.util.Log;
@@ -31,7 +30,6 @@ import android.util.Log;
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.Arrays;
-import java.util.List;
 import java.util.UUID;
 
 /** A GATT server for Telephony and Media Audio Profile (TMAP) */
@@ -193,15 +191,6 @@ public class LeAudioTmapGattServer {
         public boolean sendResponse(
                 BluetoothDevice device, int requestId, int status, int offset, byte[] value) {
             return mBluetoothGattServer.sendResponse(device, requestId, status, offset, value);
-        }
-
-        /**
-         * Gatt a list of devices connected to this GATT server
-         *
-         * @return list of connected devices at this moment
-         */
-        public List<BluetoothDevice> getConnectedDevices() {
-            return mBluetoothManager.getConnectedDevices(BluetoothProfile.GATT_SERVER);
         }
     }
 }
