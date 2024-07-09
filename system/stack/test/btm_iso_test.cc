@@ -2335,6 +2335,52 @@ TEST_F(IsoManagerDeathTestNoCleanup, HandleLateArivingEventHandleHciEvent) {
   IsoManager::GetInstance()->HandleHciEvent(HCI_BLE_TERM_BIG_CPL_EVT, buf.data(), buf.size());
 }
 
+/* This test makes sure we do not crash when calling into a non-started Iso Manager
+ */
+TEST_F(IsoManagerDeathTestNoCleanup, HandleApiCallsWhenStopped) {
+  IsoManager::GetInstance()->Stop();
+  IsoManager::GetInstance()->RegisterCigCallbacks(cig_callbacks_.get());
+  IsoManager::GetInstance()->RegisterBigCallbacks(big_callbacks_.get());
+  IsoManager::GetInstance()->RegisterOnIsoTrafficActiveCallback(iso_active_callback);
+
+  IsoManager::GetInstance()->CreateCig(volatile_test_cig_create_cmpl_evt_.cig_id,
+                                       kDefaultCigParams);
+  IsoManager::GetInstance()->ReconfigureCig(volatile_test_cig_create_cmpl_evt_.cig_id,
+                                            kDefaultCigParams);
+
+  bluetooth::hci::iso_manager::cis_establish_params params;
+  for (auto& handle : volatile_test_cig_create_cmpl_evt_.conn_handles) {
+    params.conn_pairs.push_back({handle, 1});
+  }
+  IsoManager::GetInstance()->EstablishCis(params);
+
+  bluetooth::hci::iso_manager::iso_data_path_params path_params = kDefaultIsoDataPathParams;
+  for (auto& handle : volatile_test_cig_create_cmpl_evt_.conn_handles) {
+    path_params.data_path_dir = bluetooth::hci::iso_manager::kIsoDataPathDirectionIn;
+    IsoManager::GetInstance()->SetupIsoDataPath(handle, path_params);
+
+    path_params.data_path_dir = bluetooth::hci::iso_manager::kRemoveIsoDataPathDirectionInput;
+    IsoManager::GetInstance()->RemoveIsoDataPath(handle, path_params.data_path_dir);
+  }
+
+  auto handle = volatile_test_cig_create_cmpl_evt_.conn_handles[0];
+  IsoManager::GetInstance()->ReadIsoLinkQuality(handle);
+
+  std::vector<uint8_t> data_vec(108, 0);
+  IsoManager::GetInstance()->SendIsoData(handle, data_vec.data(), data_vec.size());
+  IsoManager::GetInstance()->SendIsoData(handle, data_vec.data(), data_vec.size());
+
+  for (auto& handle : volatile_test_cig_create_cmpl_evt_.conn_handles) {
+    IsoManager::GetInstance()->IsoManager::GetInstance()->DisconnectCis(handle, 0x16);
+  }
+
+  IsoManager::GetInstance()->RemoveCig(volatile_test_cig_create_cmpl_evt_.cig_id);
+  (void)IsoManager::GetInstance()->GetNumberOfActiveIso();
+
+  IsoManager::GetInstance()->CreateBig(volatile_test_big_params_evt_.big_id, kDefaultBigParams);
+  IsoManager::GetInstance()->TerminateBig(volatile_test_big_params_evt_.big_id, 0x16);
+}
+
 TEST_F(IsoManagerTest, HandleIsoDataSameSeqNb) {
   IsoManager::GetInstance()->CreateCig(volatile_test_cig_create_cmpl_evt_.cig_id,
                                        kDefaultCigParams);
