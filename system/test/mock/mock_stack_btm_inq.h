@@ -48,17 +48,6 @@ namespace test {
 namespace mock {
 namespace stack_btm_inq {
 
-// Shared state between mocked functions and tests
-// Name: BTM_AddEirService
-// Params: uint32_t* p_eir_uuid, uint16_t uuid16
-// Return: void
-struct BTM_AddEirService {
-  std::function<void(uint32_t* p_eir_uuid, uint16_t uuid16)> body{
-          [](uint32_t* /* p_eir_uuid */, uint16_t /* uuid16 */) {}};
-  void operator()(uint32_t* p_eir_uuid, uint16_t uuid16) { body(p_eir_uuid, uuid16); }
-};
-extern struct BTM_AddEirService BTM_AddEirService;
-
 // Name: BTM_CancelInquiry
 // Params: void
 // Return: void
