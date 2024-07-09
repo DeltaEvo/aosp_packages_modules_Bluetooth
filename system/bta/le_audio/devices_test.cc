@@ -2000,7 +2000,8 @@ TEST_P(LeAudioAseConfigurationTest, test_reconnection_media) {
   left->DeactivateAllAses();
 
   /* Unassign from the group*/
-  group_->cig.UnassignCis(left);
+  group_->cig.UnassignCis(left, 0x0012);
+  group_->cig.UnassignCis(left, 0x0013);
 
   TestAsesInactivated(left);
 
@@ -2137,7 +2138,8 @@ TEST_P(LeAudioAseConfigurationTest, test_reactivation_conversational) {
   TestActiveAses();
 
   /* Simulate stopping stream with caching codec configuration in ASEs */
-  group_->cig.UnassignCis(tws_headset);
+  group_->cig.UnassignCis(tws_headset, 0x0012);
+  group_->cig.UnassignCis(tws_headset, 0x0013);
   SetAsesToCachedConfiguration(tws_headset, LeAudioContextType::CONVERSATIONAL,
                                kLeAudioDirectionSink | kLeAudioDirectionSource);
 

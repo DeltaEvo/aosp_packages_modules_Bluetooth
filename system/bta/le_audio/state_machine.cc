@@ -716,6 +716,26 @@ public:
     group->ClearAllCises();
   }
 
+  void SendStreamingStatusCbIfNeeded(LeAudioDeviceGroup* group) {
+    /* This function should be called when some of the set members got disconnected but there are
+     * still other CISes connected. When state machine is in STREAMING state, status will be sent up
+     * to the user, so it can update encoder or offloader.
+     */
+    log::info("group_id: {}", group->group_id_);
+    if (group->HaveAllCisesDisconnected()) {
+      log::info("All cises disconnected;");
+      return;
+    }
+
+    if ((group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) &&
+        (group->GetTargetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING)) {
+      state_machine_callbacks_->StatusReportCb(group->group_id_, GroupStreamStatus::STREAMING);
+    } else {
+      log::warn("group_id {} not in streaming, CISes are still there", group->group_id_);
+      group->PrintDebugState();
+    }
+  }
+
   void RemoveCigForGroup(LeAudioDeviceGroup* group) {
     log::debug("Group: {}, id: {} cig state: {}", fmt::ptr(group), group->group_id_,
                ToString(group->cig.GetState()));
@@ -792,18 +812,7 @@ public:
        */
       if (!group->HaveAllCisesDisconnected()) {
         /* some CISes are connected */
-
-        if ((group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) &&
-            (group->GetTargetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING)) {
-          /* We keep streaming but want others to let know user that it might
-           * be need to update CodecManager with new CIS configuration
-           */
-          state_machine_callbacks_->StatusReportCb(group->group_id_, GroupStreamStatus::STREAMING);
-        } else {
-          log::warn("group_id {} not in streaming, CISes are still there", group->group_id_);
-          group->PrintDebugState();
-        }
-
+        SendStreamingStatusCbIfNeeded(group);
         return;
       }
     }
@@ -1101,6 +1110,7 @@ public:
          */
         if (!group->HaveAllCisesDisconnected()) {
           /* There is ASE streaming for some device. Continue streaming. */
+          SendStreamingStatusCbIfNeeded(group);
           log::warn("Group member disconnected during streaming. Cis handle 0x{:04x}",
                     event->cis_conn_hdl);
           return;
