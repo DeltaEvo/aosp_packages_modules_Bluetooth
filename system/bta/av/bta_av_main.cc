@@ -40,7 +40,6 @@
 #include "internal_include/bt_target.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/properties.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_uuid16.h"
@@ -72,30 +71,6 @@ using namespace bluetooth;
 /* the delay time in milliseconds to retry role switch */
 #ifndef BTA_AV_RS_TIME_VAL
 #define BTA_AV_RS_TIME_VAL 1000
-#endif
-
-#ifndef AVRCP_VERSION_PROPERTY
-#define AVRCP_VERSION_PROPERTY "persist.bluetooth.avrcpversion"
-#endif
-
-#ifndef AVRCP_1_6_STRING
-#define AVRCP_1_6_STRING "avrcp16"
-#endif
-
-#ifndef AVRCP_1_5_STRING
-#define AVRCP_1_5_STRING "avrcp15"
-#endif
-
-#ifndef AVRCP_1_4_STRING
-#define AVRCP_1_4_STRING "avrcp14"
-#endif
-
-#ifndef AVRCP_1_3_STRING
-#define AVRCP_1_3_STRING "avrcp13"
-#endif
-
-#ifndef AVRCP_DEFAULT_VERSION
-#define AVRCP_DEFAULT_VERSION AVRCP_1_5_STRING
 #endif
 
 /* state machine states */
@@ -465,17 +440,15 @@ static void bta_av_api_register(tBTA_AV_DATA* p_data) {
   reg_data.app_id = p_data->api_reg.app_id;
   reg_data.chnl = (tBTA_AV_CHNL)p_data->hdr.layer_specific;
 
-  char avrcp_version[PROPERTY_VALUE_MAX] = {0};
-  osi_property_get(AVRCP_VERSION_PROPERTY, avrcp_version, AVRCP_DEFAULT_VERSION);
-  log::info("AVRCP version used for sdp: \"{}\"", avrcp_version);
-
+  const uint16_t avrcp_version = AVRC_GetProfileVersion();
+  log::info("AVRCP version used for sdp: 0x{:x}", avrcp_version);
   uint16_t profile_initialized = p_data->api_reg.service_uuid;
   if (profile_initialized == UUID_SERVCLASS_AUDIO_SINK) {
     p_bta_av_cfg = get_bta_avk_cfg();
   } else if (profile_initialized == UUID_SERVCLASS_AUDIO_SOURCE) {
     p_bta_av_cfg = &bta_av_cfg;
 
-    if (!strncmp(AVRCP_1_3_STRING, avrcp_version, sizeof(AVRCP_1_3_STRING))) {
+    if (avrcp_version == AVRC_REV_1_3) {
       log::info("AVRCP 1.3 capabilites used");
       p_bta_av_cfg = &bta_av_cfg_compatibility;
     }
@@ -533,25 +506,15 @@ static void bta_av_api_register(tBTA_AV_DATA* p_data) {
         } else {
           log::verbose("newavrcp is not enabled. Create SDP record");
 
-          uint16_t profile_version = AVRC_REV_1_0;
-          if (!strncmp(AVRCP_1_6_STRING, avrcp_version, sizeof(AVRCP_1_6_STRING))) {
-            profile_version = AVRC_REV_1_6;
-          } else if (!strncmp(AVRCP_1_5_STRING, avrcp_version, sizeof(AVRCP_1_5_STRING))) {
-            profile_version = AVRC_REV_1_5;
-          } else if (!strncmp(AVRCP_1_3_STRING, avrcp_version, sizeof(AVRCP_1_3_STRING))) {
-            profile_version = AVRC_REV_1_3;
-          } else {
-            profile_version = AVRC_REV_1_4;
-          }
           if (btif_av_src_sink_coexist_enabled()) {
             bta_ar_reg_avrc_for_src_sink_coexist(
                     UUID_SERVCLASS_AV_REM_CTRL_TARGET, "AV Remote Control Target", NULL,
                     p_bta_av_cfg->avrc_tg_cat, static_cast<tBTA_SYS_ID>(BTA_ID_AV + local_role),
-                    (bta_av_cb.features & BTA_AV_FEAT_BROWSE), profile_version);
+                    (bta_av_cb.features & BTA_AV_FEAT_BROWSE), avrcp_version);
           } else {
             bta_ar_reg_avrc(UUID_SERVCLASS_AV_REM_CTRL_TARGET, "AV Remote Control Target", NULL,
                             p_bta_av_cfg->avrc_tg_cat, (bta_av_cb.features & BTA_AV_FEAT_BROWSE),
-                            profile_version);
+                            avrcp_version);
           }
         }
       }
@@ -724,8 +687,7 @@ static void bta_av_api_register(tBTA_AV_DATA* p_data) {
         (bta_av_cb.reg_role & (1 << AVDT_TSEP_SRC))) {
       p_bta_av_cfg = &bta_av_cfg;
 
-      if (!strncmp(AVRCP_1_3_STRING, avrcp_version,
-                   sizeof(AVRCP_1_3_STRING))) {  // ver if need
+      if (avrcp_version == AVRC_REV_1_3) {  // ver if need
         log::verbose("AVRCP 1.3 capabilites used");
         p_bta_av_cfg = &bta_av_cfg_compatibility;
       }
