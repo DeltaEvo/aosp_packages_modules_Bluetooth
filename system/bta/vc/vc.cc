@@ -663,9 +663,14 @@ public:
     }
 
     // Remove operations with no devices
-    ongoing_operations_.erase(std::remove_if(ongoing_operations_.begin(), ongoing_operations_.end(),
-                                             [](auto& op) { return op.devices_.empty(); }),
-                              ongoing_operations_.end());
+    auto it = ongoing_operations_.begin();
+    while (it != ongoing_operations_.end()) {
+      if (it->devices_.empty()) {
+        it = ongoing_operations_.erase(it);
+      } else {
+        ++it;
+      }
+    }
   }
 
   void RemoveDeviceFromOperationList(const RawAddress& addr, int operation_id) {
