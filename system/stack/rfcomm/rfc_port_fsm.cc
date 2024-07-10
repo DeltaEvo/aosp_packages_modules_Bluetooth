@@ -31,7 +31,6 @@
 
 #include "hal/snoop_logger.h"
 #include "main/shim/entry.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/bt_hdr.h"
@@ -39,6 +38,7 @@
 #include "stack/l2cap/l2c_int.h"
 #include "stack/rfcomm/port_int.h"
 #include "stack/rfcomm/rfc_int.h"
+#include "stack/rfcomm/rfc_state.h"
 
 using namespace bluetooth;
 
@@ -289,7 +289,10 @@ void rfc_port_sm_sabme_wait_ua(tPORT* p_port, tRFC_PORT_EVENT event, void* p_dat
 void rfc_port_sm_term_wait_sec_check(tPORT* p_port, tRFC_PORT_EVENT event, void* p_data) {
   switch (event) {
     case RFC_PORT_EVENT_SEC_COMPLETE:
-      if (*((uint8_t*)p_data) != BTM_SUCCESS) {
+      if (*((tBTM_STATUS*)p_data) != BTM_SUCCESS) {
+        log::error("Security check failed result:{} state:{} port_handle:{}",
+                   btm_status_text(*((tBTM_STATUS*)p_data)),
+                   rfcomm_port_state_text(p_port->rfc.state), p_port->handle);
         /* Authentication/authorization failed.  If link is still  */
         /* up send DM and check if we need to start inactive timer */
         if (p_port->rfc.p_mcb) {
@@ -298,6 +301,8 @@ void rfc_port_sm_term_wait_sec_check(tPORT* p_port, tRFC_PORT_EVENT event, void*
           port_rfc_closed(p_port, PORT_SEC_FAILED);
         }
       } else {
+        log::debug("Security check succeeded state:{} port_handle:{}",
+                   rfcomm_port_state_text(p_port->rfc.state), p_port->handle);
         PORT_DlcEstablishInd(p_port->rfc.p_mcb, p_port->dlci, p_port->rfc.p_mcb->peer_l2cap_mtu);
       }
       return;
@@ -386,17 +391,20 @@ void rfc_port_sm_term_wait_sec_check(tPORT* p_port, tRFC_PORT_EVENT event, void*
 void rfc_port_sm_orig_wait_sec_check(tPORT* p_port, tRFC_PORT_EVENT event, void* p_data) {
   switch (event) {
     case RFC_PORT_EVENT_SEC_COMPLETE:
-      if (*((uint8_t*)p_data) != BTM_SUCCESS) {
-        log::error("RFC_PORT_EVENT_SEC_COMPLETE, index={}, result={}", p_port->handle,
-                   *((uint8_t*)p_data));
+      if (*((tBTM_STATUS*)p_data) != BTM_SUCCESS) {
+        log::error("Security check failed result:{} state:{} port_handle:{}",
+                   btm_status_text(*((tBTM_STATUS*)p_data)),
+                   rfcomm_port_state_text(p_port->rfc.state), p_port->handle);
         p_port->rfc.p_mcb->is_disc_initiator = true;
         PORT_DlcEstablishCnf(p_port->rfc.p_mcb, p_port->dlci, 0, RFCOMM_SECURITY_ERR);
         rfc_port_closed(p_port);
-        return;
+      } else {
+        log::debug("Security check succeeded state:{} port_handle:{}",
+                   rfcomm_port_state_text(p_port->rfc.state), p_port->handle);
+        rfc_send_sabme(p_port->rfc.p_mcb, p_port->dlci);
+        rfc_port_timer_start(p_port, RFC_PORT_T1_TIMEOUT);
+        p_port->rfc.state = RFC_STATE_SABME_WAIT_UA;
       }
-      rfc_send_sabme(p_port->rfc.p_mcb, p_port->dlci);
-      rfc_port_timer_start(p_port, RFC_PORT_T1_TIMEOUT);
-      p_port->rfc.state = RFC_STATE_SABME_WAIT_UA;
       return;
 
     case RFC_PORT_EVENT_OPEN:
