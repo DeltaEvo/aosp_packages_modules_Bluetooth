@@ -38,7 +38,6 @@ namespace stack_btm_inq {
 struct BTM_CancelInquiry BTM_CancelInquiry;
 struct BTM_EnableInterlacedInquiryScan BTM_EnableInterlacedInquiryScan;
 struct BTM_EnableInterlacedPageScan BTM_EnableInterlacedPageScan;
-struct BTM_GetEirUuidList BTM_GetEirUuidList;
 struct BTM_HasEirService BTM_HasEirService;
 struct BTM_InqDbFirst BTM_InqDbFirst;
 struct BTM_InqDbNext BTM_InqDbNext;
@@ -74,7 +73,6 @@ namespace test {
 namespace mock {
 namespace stack_btm_inq {
 
-uint8_t BTM_GetEirUuidList::return_value = 0;
 bool BTM_HasEirService::return_value = false;
 tBTM_INQ_INFO* BTM_InqDbFirst::return_value = nullptr;
 tBTM_INQ_INFO* BTM_InqDbNext::return_value = nullptr;
@@ -106,12 +104,6 @@ void BTM_EnableInterlacedInquiryScan() {
 void BTM_EnableInterlacedPageScan() {
   inc_func_call_count(__func__);
   test::mock::stack_btm_inq::BTM_EnableInterlacedPageScan();
-}
-uint8_t BTM_GetEirUuidList(const uint8_t* p_eir, size_t eir_len, uint8_t uuid_size,
-                           uint8_t* p_num_uuid, uint8_t* p_uuid_list, uint8_t max_num_uuid) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_btm_inq::BTM_GetEirUuidList(p_eir, eir_len, uuid_size, p_num_uuid,
-                                                       p_uuid_list, max_num_uuid);
 }
 bool BTM_HasEirService(const uint32_t* p_eir_uuid, uint16_t uuid16) {
   inc_func_call_count(__func__);
