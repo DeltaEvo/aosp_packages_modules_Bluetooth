@@ -430,19 +430,6 @@ struct btm_is_acl_locally_initiated {
   bool operator()(void) { return body(); }
 };
 extern struct btm_is_acl_locally_initiated btm_is_acl_locally_initiated;
-// Name: BTM_GetHCIConnHandle
-// Params: const RawAddress& remote_bda, tBT_TRANSPORT transport
-// Returns: uint16_t
-struct BTM_GetHCIConnHandle {
-  std::function<uint16_t(const RawAddress& remote_bda, tBT_TRANSPORT transport)> body{
-          [](const RawAddress& /* remote_bda */, tBT_TRANSPORT /* transport */) {
-            return BT_TRANSPORT_BR_EDR;
-          }};
-  uint16_t operator()(const RawAddress& remote_bda, tBT_TRANSPORT transport) {
-    return body(remote_bda, transport);
-  }
-};
-extern struct BTM_GetHCIConnHandle BTM_GetHCIConnHandle;
 // Name: BTM_GetMaxPacketSize
 // Params: const RawAddress& addr
 // Returns: uint16_t
