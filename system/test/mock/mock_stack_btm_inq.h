@@ -86,17 +86,6 @@ struct BTM_HasEirService {
 };
 extern struct BTM_HasEirService BTM_HasEirService;
 
-// Name: BTM_InqDbNext
-// Params: tBTM_INQ_INFO* p_cur
-// Return: tBTM_INQ_INFO*
-struct BTM_InqDbNext {
-  static tBTM_INQ_INFO* return_value;
-  std::function<tBTM_INQ_INFO*(tBTM_INQ_INFO* p_cur)> body{
-          [](tBTM_INQ_INFO* /* p_cur */) { return return_value; }};
-  tBTM_INQ_INFO* operator()(tBTM_INQ_INFO* p_cur) { return body(p_cur); }
-};
-extern struct BTM_InqDbNext BTM_InqDbNext;
-
 // Name: BTM_InqDbRead
 // Params: const RawAddress& p_bda
 // Return: tBTM_INQ_INFO*
