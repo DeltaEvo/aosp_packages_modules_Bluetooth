@@ -78,7 +78,6 @@ struct BTM_SwitchRoleToCentral BTM_SwitchRoleToCentral;
 struct btm_remove_acl btm_remove_acl;
 struct btm_get_acl_disc_reason_code btm_get_acl_disc_reason_code;
 struct btm_is_acl_locally_initiated btm_is_acl_locally_initiated;
-struct BTM_GetMaxPacketSize BTM_GetMaxPacketSize;
 struct BTM_GetNumAclLinks BTM_GetNumAclLinks;
 struct acl_get_supported_packet_types acl_get_supported_packet_types;
 struct BTM_GetPeerSCA BTM_GetPeerSCA;
@@ -297,10 +296,6 @@ tHCI_REASON btm_get_acl_disc_reason_code(void) {
 bool btm_is_acl_locally_initiated(void) {
   inc_func_call_count(__func__);
   return test::mock::stack_acl::btm_is_acl_locally_initiated();
-}
-uint16_t BTM_GetMaxPacketSize(const RawAddress& addr) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_acl::BTM_GetMaxPacketSize(addr);
 }
 uint16_t BTM_GetNumAclLinks(void) {
   inc_func_call_count(__func__);

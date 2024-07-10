@@ -417,15 +417,6 @@ struct btm_is_acl_locally_initiated {
   bool operator()(void) { return body(); }
 };
 extern struct btm_is_acl_locally_initiated btm_is_acl_locally_initiated;
-// Name: BTM_GetMaxPacketSize
-// Params: const RawAddress& addr
-// Returns: uint16_t
-struct BTM_GetMaxPacketSize {
-  std::function<uint16_t(const RawAddress& addr)> body{
-          [](const RawAddress& /* addr */) { return 0; }};
-  uint16_t operator()(const RawAddress& addr) { return body(addr); }
-};
-extern struct BTM_GetMaxPacketSize BTM_GetMaxPacketSize;
 // Name: BTM_GetNumAclLinks
 // Params: void
 // Returns: uint16_t
