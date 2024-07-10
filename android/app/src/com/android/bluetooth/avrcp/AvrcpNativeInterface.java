@@ -192,6 +192,11 @@ public class AvrcpNativeInterface {
         setBrowsedPlayerResponseNative(playerId, success, rootId, numItems);
     }
 
+    int setAddressedPlayer(int playerId) {
+        d("setAddressedPlayer: playerId=" + playerId);
+        return mAvrcpService.setAddressedPlayer(playerId);
+    }
+
     void getFolderItemsRequest(int playerId, String mediaId) {
         d("getFolderItemsRequest: playerId=" + playerId + " mediaId=" + mediaId);
         mAvrcpService.getFolderItems(playerId, mediaId, (a, b) -> getFolderItemsResponse(a, b));

@@ -207,8 +207,7 @@ public:
   virtual void HandleAddressedPlayerUpdate();
   virtual void RejectNotification();
   virtual void AddressedPlayerNotificationResponse(uint8_t label, bool interim,
-                                                   uint16_t curr_player,
-                                                   std::vector<MediaPlayerInfo> /* unused */);
+                                                   uint16_t curr_player);
 
   // GET FOLDER ITEMS
   virtual void HandleGetFolderItems(uint8_t label, std::shared_ptr<GetFolderItemsRequest> request);
@@ -257,7 +256,7 @@ public:
   // SET ADDRESSED PLAYER
   virtual void HandleSetAddressedPlayer(uint8_t label,
                                         std::shared_ptr<SetAddressedPlayerRequest> request,
-                                        uint16_t curr_player, std::vector<MediaPlayerInfo> players);
+                                        uint16_t curr_player);
 
   // LIST PLAYER APPLICATION SETTING ATTRIBUTES
   virtual void ListPlayerApplicationSettingAttributesResponse(
