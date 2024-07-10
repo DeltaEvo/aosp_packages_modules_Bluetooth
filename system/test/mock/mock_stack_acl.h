@@ -433,19 +433,6 @@ struct acl_get_supported_packet_types {
   uint16_t operator()() { return body(); }
 };
 extern struct acl_get_supported_packet_types acl_get_supported_packet_types;
-// Name: BTM_GetPeerSCA
-// Params: const RawAddress& remote_bda, tBT_TRANSPORT transport
-// Returns: uint8_t
-struct BTM_GetPeerSCA {
-  std::function<uint8_t(const RawAddress& remote_bda, tBT_TRANSPORT transport)> body{
-          [](const RawAddress& /* remote_bda */, tBT_TRANSPORT /* transport */) {
-            return BT_TRANSPORT_BR_EDR;
-          }};
-  uint8_t operator()(const RawAddress& remote_bda, tBT_TRANSPORT transport) {
-    return body(remote_bda, transport);
-  }
-};
-extern struct BTM_GetPeerSCA BTM_GetPeerSCA;
 // Name: acl_link_role_from_handle
 // Params: uint16_t handle
 // Returns: uint8_t
