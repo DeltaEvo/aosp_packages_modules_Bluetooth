@@ -997,8 +997,11 @@ public class PhonePolicy implements AdapterService.BluetoothStateCallback {
             })
     private void processConnectOtherProfiles(BluetoothDevice device) {
         debugLog("processConnectOtherProfiles, device=" + device);
-        if (mAdapterService.getState() != BluetoothAdapter.STATE_ON) {
-            warnLog("processConnectOtherProfiles, adapter is not ON " + mAdapterService.getState());
+        int currentState = mAdapterService.getState();
+        if (currentState != BluetoothAdapter.STATE_ON) {
+            warnLog(
+                    "processConnectOtherProfiles: Bluetooth is "
+                            + BluetoothAdapter.nameForState(currentState));
             return;
         }
 
