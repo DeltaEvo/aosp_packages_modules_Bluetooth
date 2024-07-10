@@ -75,22 +75,6 @@ struct BTM_EnableInterlacedPageScan {
 };
 extern struct BTM_EnableInterlacedPageScan BTM_EnableInterlacedPageScan;
 
-// Name: BTM_GetEirSupportedServices
-// Params: uint32_t* p_eir_uuid, uint8_t** p, uint8_t max_num_uuid16, uint8_t*
-// p_num_uuid16 Return: uint8_t
-struct BTM_GetEirSupportedServices {
-  static uint8_t return_value;
-  std::function<uint8_t(uint32_t* p_eir_uuid, uint8_t** p, uint8_t max_num_uuid16,
-                        uint8_t* p_num_uuid16)>
-          body{[](uint32_t* /* p_eir_uuid */, uint8_t** /* p */, uint8_t /* max_num_uuid16 */,
-                  uint8_t* /* p_num_uuid16 */) { return return_value; }};
-  uint8_t operator()(uint32_t* p_eir_uuid, uint8_t** p, uint8_t max_num_uuid16,
-                     uint8_t* p_num_uuid16) {
-    return body(p_eir_uuid, p, max_num_uuid16, p_num_uuid16);
-  }
-};
-extern struct BTM_GetEirSupportedServices BTM_GetEirSupportedServices;
-
 // Name: BTM_GetEirUuidList
 // Params: const uint8_t* p_eir, size_t eir_len, uint8_t uuid_size, uint8_t*
 // p_num_uuid, uint8_t* p_uuid_list, uint8_t max_num_uuid Return: uint8_t
