@@ -39,6 +39,7 @@ import android.content.AttributionSource;
 import android.content.Context;
 import android.content.res.Resources;
 import android.location.LocationManager;
+import android.platform.test.annotations.DisableFlags;
 import android.platform.test.flag.junit.SetFlagsRule;
 
 import androidx.test.InstrumentationRegistry;
@@ -640,6 +641,7 @@ public class GattServiceTest {
     }
 
     @Test
+    @DisableFlags(Flags.FLAG_SCAN_MANAGER_REFACTOR)
     public void numHwTrackFiltersAvailable() {
         mService.getTransitionalScanHelper().numHwTrackFiltersAvailable(mAttributionSource);
         verify(mScanManager).getCurrentUsedTrackingAdvertisement();
@@ -680,6 +682,7 @@ public class GattServiceTest {
     }
 
     @Test
+    @DisableFlags(Flags.FLAG_SCAN_MANAGER_REFACTOR)
     public void profileConnectionStateChanged_notifyScanManager() {
         mService.notifyProfileConnectionStateChange(
                 BluetoothProfile.A2DP,
