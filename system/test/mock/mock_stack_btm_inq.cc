@@ -39,7 +39,6 @@ struct BTM_CancelInquiry BTM_CancelInquiry;
 struct BTM_EnableInterlacedInquiryScan BTM_EnableInterlacedInquiryScan;
 struct BTM_EnableInterlacedPageScan BTM_EnableInterlacedPageScan;
 struct BTM_HasEirService BTM_HasEirService;
-struct BTM_InqDbFirst BTM_InqDbFirst;
 struct BTM_InqDbNext BTM_InqDbNext;
 struct BTM_InqDbRead BTM_InqDbRead;
 struct BTM_IsInquiryActive BTM_IsInquiryActive;
@@ -74,7 +73,6 @@ namespace mock {
 namespace stack_btm_inq {
 
 bool BTM_HasEirService::return_value = false;
-tBTM_INQ_INFO* BTM_InqDbFirst::return_value = nullptr;
 tBTM_INQ_INFO* BTM_InqDbNext::return_value = nullptr;
 tBTM_INQ_INFO* BTM_InqDbRead::return_value = nullptr;
 uint16_t BTM_IsInquiryActive::return_value = 0;
@@ -108,10 +106,6 @@ void BTM_EnableInterlacedPageScan() {
 bool BTM_HasEirService(const uint32_t* p_eir_uuid, uint16_t uuid16) {
   inc_func_call_count(__func__);
   return test::mock::stack_btm_inq::BTM_HasEirService(p_eir_uuid, uuid16);
-}
-tBTM_INQ_INFO* BTM_InqDbFirst(void) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_btm_inq::BTM_InqDbFirst();
 }
 tBTM_INQ_INFO* BTM_InqDbNext(tBTM_INQ_INFO* p_cur) {
   inc_func_call_count(__func__);
