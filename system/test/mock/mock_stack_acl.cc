@@ -78,7 +78,6 @@ struct BTM_GetNumAclLinks BTM_GetNumAclLinks;
 struct acl_get_supported_packet_types acl_get_supported_packet_types;
 struct acl_link_role_from_handle acl_link_role_from_handle;
 struct btm_handle_to_acl_index btm_handle_to_acl_index;
-struct BTM_ReadRemoteFeatures BTM_ReadRemoteFeatures;
 struct BTM_ReadConnectionAddr BTM_ReadConnectionAddr;
 struct BTM_RequestPeerSCA BTM_RequestPeerSCA;
 struct BTM_acl_after_controller_started BTM_acl_after_controller_started;
@@ -291,10 +290,6 @@ uint8_t acl_link_role_from_handle(uint16_t handle) {
 uint8_t btm_handle_to_acl_index(uint16_t hci_handle) {
   inc_func_call_count(__func__);
   return test::mock::stack_acl::btm_handle_to_acl_index(hci_handle);
-}
-uint8_t* BTM_ReadRemoteFeatures(const RawAddress& addr) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_acl::BTM_ReadRemoteFeatures(addr);
 }
 void BTM_ReadConnectionAddr(const RawAddress& remote_bda, RawAddress& local_conn_addr,
                             tBLE_ADDR_TYPE* p_addr_type, bool ota_address) {

@@ -405,15 +405,6 @@ struct btm_handle_to_acl_index {
   uint8_t operator()(uint16_t hci_handle) { return body(hci_handle); }
 };
 extern struct btm_handle_to_acl_index btm_handle_to_acl_index;
-// Name: BTM_ReadRemoteFeatures
-// Params: const RawAddress& addr
-// Returns: uint8_t*
-struct BTM_ReadRemoteFeatures {
-  std::function<uint8_t*(const RawAddress& addr)> body{
-          [](const RawAddress& /* addr */) { return nullptr; }};
-  uint8_t* operator()(const RawAddress& addr) { return body(addr); }
-};
-extern struct BTM_ReadRemoteFeatures BTM_ReadRemoteFeatures;
 // Name: BTM_ReadConnectionAddr
 // Params: const RawAddress& remote_bda, RawAddress& local_conn_addr, bool
 // ota_address tBLE_ADDR_TYPE* p_addr_type Returns: void
