@@ -79,21 +79,6 @@ struct BTM_ReadRemoteConnectionAddr {
   }
 };
 extern struct BTM_ReadRemoteConnectionAddr BTM_ReadRemoteConnectionAddr;
-// Name: BTM_ReadRemoteVersion
-// Params: const RawAddress& addr, uint8_t* lmp_version, uint16_t*
-// manufacturer, uint16_t* lmp_sub_version
-// Returns: bool
-struct BTM_ReadRemoteVersion {
-  std::function<bool(const RawAddress& addr, uint8_t* lmp_version, uint16_t* manufacturer,
-                     uint16_t* lmp_sub_version)>
-          body{[](const RawAddress& /* addr */, uint8_t* /* lmp_version */,
-                  uint16_t* /* manufacturer */, uint16_t* /* lmp_sub_version */) { return false; }};
-  bool operator()(const RawAddress& addr, uint8_t* lmp_version, uint16_t* manufacturer,
-                  uint16_t* lmp_sub_version) {
-    return body(addr, lmp_version, manufacturer, lmp_sub_version);
-  }
-};
-extern struct BTM_ReadRemoteVersion BTM_ReadRemoteVersion;
 // Name: BTM_is_sniff_allowed_for
 // Params: const RawAddress& peer_addr
 // Returns: bool
