@@ -65,17 +65,6 @@ struct BTM_IsBleConnection {
   bool operator()(uint16_t hci_handle) { return body(hci_handle); }
 };
 extern struct BTM_IsBleConnection BTM_IsBleConnection;
-// Name: BTM_IsPhy2mSupported
-// Params: const RawAddress& remote_bda, tBT_TRANSPORT transport
-// Returns: bool
-struct BTM_IsPhy2mSupported {
-  std::function<bool(const RawAddress& remote_bda, tBT_TRANSPORT transport)> body{
-          [](const RawAddress& /* remote_bda */, tBT_TRANSPORT /* transport */) { return false; }};
-  bool operator()(const RawAddress& remote_bda, tBT_TRANSPORT transport) {
-    return body(remote_bda, transport);
-  }
-};
-extern struct BTM_IsPhy2mSupported BTM_IsPhy2mSupported;
 // Name: BTM_ReadRemoteConnectionAddr
 // Params: const RawAddress& pseudo_addr, RawAddress& conn_addr, bool
 // ota_address tBLE_ADDR_TYPE* p_addr_type Returns: bool
