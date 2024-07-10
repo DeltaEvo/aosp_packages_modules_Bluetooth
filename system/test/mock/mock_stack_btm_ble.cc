@@ -52,7 +52,6 @@ struct BTM_BleVerifySignature BTM_BleVerifySignature;
 struct BTM_GetDeviceDHK BTM_GetDeviceDHK;
 struct BTM_GetDeviceEncRoot BTM_GetDeviceEncRoot;
 struct BTM_GetDeviceIDRoot BTM_GetDeviceIDRoot;
-struct BTM_ReadDevInfo BTM_ReadDevInfo;
 struct BTM_GetRemoteDeviceName BTM_GetRemoteDeviceName;
 struct BTM_SecAddBleDevice BTM_SecAddBleDevice;
 struct BTM_SecAddBleKey BTM_SecAddBleKey;
@@ -177,11 +176,6 @@ const Octet16& BTM_GetDeviceEncRoot() {
 const Octet16& BTM_GetDeviceIDRoot() {
   inc_func_call_count(__func__);
   return test::mock::stack_btm_ble::BTM_GetDeviceIDRoot();
-}
-void BTM_ReadDevInfo(const RawAddress& remote_bda, tBT_DEVICE_TYPE* p_dev_type,
-                     tBLE_ADDR_TYPE* p_addr_type) {
-  inc_func_call_count(__func__);
-  test::mock::stack_btm_ble::BTM_ReadDevInfo(remote_bda, p_dev_type, p_addr_type);
 }
 bool BTM_GetRemoteDeviceName(const RawAddress& bd_addr, BD_NAME bd_name) {
   inc_func_call_count(__func__);

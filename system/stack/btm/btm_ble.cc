@@ -129,7 +129,7 @@ bool BTM_UseLeLink(const RawAddress& bd_addr) {
 
   tBT_DEVICE_TYPE dev_type;
   tBLE_ADDR_TYPE addr_type;
-  BTM_ReadDevInfo(bd_addr, &dev_type, &addr_type);
+  get_btm_client_interface().peer.BTM_ReadDevInfo(bd_addr, &dev_type, &addr_type);
   return dev_type == BT_DEVICE_TYPE_BLE;
 }
 
