@@ -5091,6 +5091,10 @@ public class AdapterService extends Service {
                 android.Manifest.permission.MODIFY_PHONE_STATE,
             })
     public boolean setActiveDevice(BluetoothDevice device, @ActiveDeviceUse int profiles) {
+        if (getState() != BluetoothAdapter.STATE_ON) {
+            Log.e(TAG, "setActiveDevice: Bluetooth is not enabled");
+            return false;
+        }
         boolean setA2dp = false;
         boolean setHeadset = false;
 
