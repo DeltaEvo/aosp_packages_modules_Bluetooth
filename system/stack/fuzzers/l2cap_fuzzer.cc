@@ -97,7 +97,6 @@ namespace {
 class FakeBtStack {
 public:
   FakeBtStack() {
-    test::mock::stack_btm_devctl::BTM_IsDeviceUp.body = []() { return true; };
     test::mock::stack_acl::acl_create_le_connection.body = [](const RawAddress& bd_addr) {
       return true;
     };
@@ -129,7 +128,6 @@ public:
   }
 
   ~FakeBtStack() {
-    test::mock::stack_btm_devctl::BTM_IsDeviceUp = {};
     test::mock::stack_acl::acl_create_le_connection = {};
     test::mock::stack_acl::acl_send_data_packet_br_edr = {};
     test::mock::stack_acl::acl_send_data_packet_ble = {};
