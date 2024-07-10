@@ -66,17 +66,6 @@ struct BTM_ConfirmReqReply {
 };
 extern struct BTM_ConfirmReqReply BTM_ConfirmReqReply;
 
-// Name: BTM_GetPeerDeviceTypeFromFeatures
-// Params: const RawAddress& bd_addr
-// Return: tBT_DEVICE_TYPE
-struct BTM_GetPeerDeviceTypeFromFeatures {
-  static tBT_DEVICE_TYPE return_value;
-  std::function<tBT_DEVICE_TYPE(const RawAddress& bd_addr)> body{
-          [](const RawAddress& /* bd_addr */) { return return_value; }};
-  tBT_DEVICE_TYPE operator()(const RawAddress& bd_addr) { return body(bd_addr); }
-};
-extern struct BTM_GetPeerDeviceTypeFromFeatures BTM_GetPeerDeviceTypeFromFeatures;
-
 // Name: BTM_IsAuthenticated
 // Params: const RawAddress& bd_addr, tBT_TRANSPORT transport
 // Return: bool
