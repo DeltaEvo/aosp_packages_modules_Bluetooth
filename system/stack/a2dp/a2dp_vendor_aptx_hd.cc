@@ -144,7 +144,7 @@ static tA2DP_STATUS A2DP_ParseInfoAptxHd(tA2DP_APTX_HD_CIE* p_ie, const uint8_t*
   }
 
   media_type = (*p_codec_info++) >> 4;
-  codec_type = *p_codec_info++;
+  codec_type = static_cast<tA2DP_CODEC_TYPE>(*p_codec_info++);
   /* Check the Media Type and Media Codec Type */
   if (media_type != AVDT_MEDIA_TYPE_AUDIO || codec_type != A2DP_MEDIA_CT_NON_A2DP) {
     return A2DP_WRONG_CODEC;

@@ -25,11 +25,11 @@
 
 using namespace bluetooth;
 
-static uint64_t codec_id(btav_a2dp_codec_index_t codec_index) {
+static tA2DP_CODEC_ID codec_id(btav_a2dp_codec_index_t codec_index) {
   uint64_t id = 0;
   auto result = ::bluetooth::audio::a2dp::provider::codec_info(codec_index, &id, nullptr, nullptr);
   log::assert_that(result, "provider::codec_info unexpectdly failed");
-  return id;
+  return static_cast<tA2DP_CODEC_ID>(id);
 }
 
 A2dpCodecConfigExt::A2dpCodecConfigExt(btav_a2dp_codec_index_t codec_index, bool is_source)

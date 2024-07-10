@@ -60,7 +60,7 @@ static void init_btav_a2dp_codec_config(btav_a2dp_codec_config_t* codec_config,
   codec_config->codec_priority = codec_priority;
 }
 
-A2dpCodecConfig::A2dpCodecConfig(btav_a2dp_codec_index_t codec_index, uint64_t codec_id,
+A2dpCodecConfig::A2dpCodecConfig(btav_a2dp_codec_index_t codec_index, tA2DP_CODEC_ID codec_id,
                                  const std::string& name, btav_a2dp_codec_priority_t codec_priority)
     : codec_index_(codec_index),
       codec_id_(codec_id),
@@ -1582,7 +1582,7 @@ std::string A2DP_CodecInfoString(const uint8_t* p_codec_info) {
       break;
   }
 
-  return "Unsupported codec type: " + loghex(codec_type);
+  return fmt::format("Unsupported codec type: {:x}", codec_type);
 }
 
 int A2DP_GetEecoderEffectiveFrameSize(const uint8_t* p_codec_info) {

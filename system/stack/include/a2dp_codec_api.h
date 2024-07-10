@@ -77,7 +77,7 @@ public:
   //      set to 0, if octet 0 is not 0xFF.
   //  - Bits 24-39: Vendor-defined codec ID,
   //      set to 0, if octet 0 is not 0xFF.
-  uint64_t codecId() const { return codec_id_; }
+  tA2DP_CODEC_ID codecId() const { return codec_id_; }
 
   // Gets the codec name.
   const std::string& name() const { return name_; }
@@ -200,8 +200,8 @@ protected:
   // The default codec priority is |codec_priority|. If the value is
   // |BTAV_A2DP_CODEC_PRIORITY_DEFAULT|, the codec priority is computed
   // internally.
-  A2dpCodecConfig(btav_a2dp_codec_index_t codec_index, uint64_t codec_id, const std::string& name,
-                  btav_a2dp_codec_priority_t codec_priority);
+  A2dpCodecConfig(btav_a2dp_codec_index_t codec_index, tA2DP_CODEC_ID codec_id,
+                  const std::string& name, btav_a2dp_codec_priority_t codec_priority);
 
   // Initializes the codec entry.
   // Returns true on success, otherwise false.
@@ -246,7 +246,7 @@ protected:
 
   std::recursive_mutex codec_mutex_;
   const btav_a2dp_codec_index_t codec_index_;  // The unique codec index
-  const uint64_t codec_id_;                    // The standardized codec id
+  const tA2DP_CODEC_ID codec_id_;              // The standardized codec id
   const std::string name_;                     // The codec name
   btav_a2dp_codec_priority_t codec_priority_;  // Codec priority: must be unique
   btav_a2dp_codec_priority_t default_codec_priority_;
