@@ -228,19 +228,6 @@ struct BTM_GetDeviceIDRoot {
 };
 extern struct BTM_GetDeviceIDRoot BTM_GetDeviceIDRoot;
 
-// Name: BTM_ReadConnectedTransportAddress
-// Params: RawAddress* remote_bda, tBT_TRANSPORT transport
-// Return: bool
-struct BTM_ReadConnectedTransportAddress {
-  static bool return_value;
-  std::function<bool(RawAddress* remote_bda, tBT_TRANSPORT transport)> body{
-          [](RawAddress* /* remote_bda */, tBT_TRANSPORT /* transport */) { return return_value; }};
-  bool operator()(RawAddress* remote_bda, tBT_TRANSPORT transport) {
-    return body(remote_bda, transport);
-  }
-};
-extern struct BTM_ReadConnectedTransportAddress BTM_ReadConnectedTransportAddress;
-
 // Name: BTM_ReadDevInfo
 // Params: const RawAddress& remote_bda, tBT_DEVICE_TYPE* p_dev_type,
 // tBLE_ADDR_TYPE* p_addr_type Return: void
