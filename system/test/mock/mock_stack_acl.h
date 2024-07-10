@@ -538,15 +538,6 @@ struct BTM_acl_after_controller_started {
   void operator()() { body(); }
 };
 extern struct BTM_acl_after_controller_started BTM_acl_after_controller_started;
-// Name: BTM_block_role_switch_for
-// Params: const RawAddress& peer_addr
-// Returns: void
-struct BTM_block_role_switch_for {
-  std::function<void(const RawAddress& peer_addr)> body{
-          [](const RawAddress& /* peer_addr */) { ; }};
-  void operator()(const RawAddress& peer_addr) { body(peer_addr); }
-};
-extern struct BTM_block_role_switch_for BTM_block_role_switch_for;
 // Name: BTM_block_sniff_mode_for
 // Params: const RawAddress& peer_addr
 // Returns: void
