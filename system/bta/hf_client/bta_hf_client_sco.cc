@@ -134,7 +134,7 @@ static void bta_hf_client_sco_conn_rsp(tBTA_HF_CLIENT_CB* client_cb,
     hci_status = HCI_ERR_HOST_REJECT_DEVICE;
   }
 
-  BTM_EScoConnRsp(p_data->sco_inx, hci_status, &resp);
+  get_btm_client_interface().sco.BTM_EScoConnRsp(p_data->sco_inx, hci_status, &resp);
 }
 
 /*******************************************************************************

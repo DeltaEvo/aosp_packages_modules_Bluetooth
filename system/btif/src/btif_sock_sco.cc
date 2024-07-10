@@ -274,7 +274,7 @@ static void connection_request_cb(tBTM_ESCO_EVT event, tBTM_ESCO_EVT_DATA* data)
                                                         connection_request_cb) != BTM_SUCCESS) {
     log::warn("Unable to register for ESCO events handle:{}", listen_sco_socket->sco_handle);
   }
-  BTM_EScoConnRsp(conn_data->sco_inx, HCI_SUCCESS, NULL);
+  get_btm_client_interface().sco.BTM_EScoConnRsp(conn_data->sco_inx, HCI_SUCCESS, NULL);
 
   return;
 
@@ -282,7 +282,8 @@ error:;
   if (client_fd != INVALID_FD) {
     close(client_fd);
   }
-  BTM_EScoConnRsp(conn_data->sco_inx, HCI_ERR_HOST_REJECT_RESOURCES, NULL);
+  get_btm_client_interface().sco.BTM_EScoConnRsp(conn_data->sco_inx, HCI_ERR_HOST_REJECT_RESOURCES,
+                                                 NULL);
 }
 
 static void connect_completed_cb(uint16_t sco_handle) {
