@@ -628,7 +628,8 @@ public:
         max_connected_peers_(kDefaultMaxConnectedAudioDevices) {}
   ~BtifAvSink();
 
-  bt_status_t Init(btav_sink_callbacks_t* callbacks, int max_connected_audio_devices);
+  void Init(btav_sink_callbacks_t* callbacks, int max_connected_audio_devices,
+            std::promise<bt_status_t> complete_promise);
   void Cleanup();
 
   btav_sink_callbacks_t* Callbacks() { return callbacks_; }
@@ -1483,12 +1484,10 @@ void BtifAvSource::AddPeer(BtifAvPeer* peer) {
 }
 BtifAvSink::~BtifAvSink() { CleanupAllPeers(); }
 
-bt_status_t BtifAvSink::Init(btav_sink_callbacks_t* callbacks, int max_connected_audio_devices) {
+void BtifAvSink::Init(btav_sink_callbacks_t* callbacks, int max_connected_audio_devices,
+                      std::promise<bt_status_t> complete_promise) {
   log::info("(max_connected_audio_devices={})", max_connected_audio_devices);
-  if (enabled_) {
-    return BT_STATUS_SUCCESS;
-  }
-
+  Cleanup();
   CleanupAllPeers();
   max_connected_peers_ = max_connected_audio_devices;
   callbacks_ = callbacks;
@@ -1502,11 +1501,12 @@ bt_status_t BtifAvSink::Init(btav_sink_callbacks_t* callbacks, int max_connected
   }
 
   if (!btif_a2dp_sink_init()) {
-    return BT_STATUS_FAIL;
+    complete_promise.set_value(BT_STATUS_FAIL);
+    return;
   }
   enabled_ = true;
   btif_enable_service(BTA_A2DP_SINK_SERVICE_ID);
-  return BT_STATUS_SUCCESS;
+  complete_promise.set_value(BT_STATUS_SUCCESS);
 }
 
 void BtifAvSink::Cleanup() {
@@ -1519,10 +1519,8 @@ void BtifAvSink::Cleanup() {
   btif_queue_cleanup(UUID_SERVCLASS_AUDIO_SINK);
 
   std::promise<void> peer_ready_promise;
-  do_in_main_thread(base::BindOnce(base::IgnoreResult(&BtifAvSink::SetActivePeer),
-                                   base::Unretained(&btif_av_sink), RawAddress::kEmpty,
-                                   std::move(peer_ready_promise)));
-  do_in_main_thread(base::BindOnce(&btif_a2dp_sink_cleanup));
+  btif_av_sink.SetActivePeer(RawAddress::kEmpty, std::move(peer_ready_promise));
+  btif_a2dp_sink_cleanup();
 
   btif_disable_service(BTA_A2DP_SINK_SERVICE_ID);
   CleanupAllPeers();
@@ -3455,7 +3453,18 @@ bt_status_t btif_av_source_init(btav_source_callbacks_t* callbacks, int max_conn
 // Initializes the AV interface for sink mode
 bt_status_t btif_av_sink_init(btav_sink_callbacks_t* callbacks, int max_connected_audio_devices) {
   log::info("");
-  return btif_av_sink.Init(callbacks, max_connected_audio_devices);
+  std::promise<bt_status_t> init_complete_promise;
+  std::future<bt_status_t> init_complete_promise_future = init_complete_promise.get_future();
+  const auto status = do_in_main_thread(
+          base::BindOnce(&BtifAvSink::Init, base::Unretained(&btif_av_sink), callbacks,
+                         max_connected_audio_devices, std::move(init_complete_promise)));
+  if (status == BT_STATUS_SUCCESS) {
+    init_complete_promise_future.wait();
+    return init_complete_promise_future.get();
+  } else {
+    log::warn("Failed to init sink");
+    return status;
+  }
 }
 
 // Updates the final focus state reported by components calling this module
