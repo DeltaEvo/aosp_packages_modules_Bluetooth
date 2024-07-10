@@ -69,7 +69,6 @@ struct acl_set_peer_le_features_from_handle acl_set_peer_le_features_from_handle
 struct acl_get_connection_from_address acl_get_connection_from_address;
 struct btm_acl_for_bda btm_acl_for_bda;
 struct acl_get_connection_from_handle acl_get_connection_from_handle;
-struct BTM_GetLinkSuperTout BTM_GetLinkSuperTout;
 struct BTM_GetRole BTM_GetRole;
 struct BTM_ReadFailedContactCounter BTM_ReadFailedContactCounter;
 struct BTM_ReadRSSI BTM_ReadRSSI;
@@ -261,10 +260,6 @@ tACL_CONN* btm_acl_for_bda(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
 tACL_CONN* acl_get_connection_from_handle(uint16_t handle) {
   inc_func_call_count(__func__);
   return test::mock::stack_acl::acl_get_connection_from_handle(handle);
-}
-tBTM_STATUS BTM_GetLinkSuperTout(const RawAddress& remote_bda, uint16_t* p_timeout) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_acl::BTM_GetLinkSuperTout(remote_bda, p_timeout);
 }
 tBTM_STATUS BTM_GetRole(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role) {
   inc_func_call_count(__func__);

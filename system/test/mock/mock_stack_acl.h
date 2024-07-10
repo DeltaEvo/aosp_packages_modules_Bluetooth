@@ -319,19 +319,6 @@ struct acl_get_connection_from_handle {
   tACL_CONN* operator()(uint16_t handle) { return body(handle); }
 };
 extern struct acl_get_connection_from_handle acl_get_connection_from_handle;
-// Name: BTM_GetLinkSuperTout
-// Params: const RawAddress& remote_bda, uint16_t* p_timeout
-// Returns: tBTM_STATUS
-struct BTM_GetLinkSuperTout {
-  std::function<tBTM_STATUS(const RawAddress& remote_bda, uint16_t* p_timeout)> body{
-          [](const RawAddress& /* remote_bda */, uint16_t* /* p_timeout */) {
-            return BTM_SUCCESS;
-          }};
-  tBTM_STATUS operator()(const RawAddress& remote_bda, uint16_t* p_timeout) {
-    return body(remote_bda, p_timeout);
-  }
-};
-extern struct BTM_GetLinkSuperTout BTM_GetLinkSuperTout;
 // Name: BTM_GetRole
 // Params: const RawAddress& remote_bd_addr, tHCI_ROLE* p_role
 // Returns: tBTM_STATUS
