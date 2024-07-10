@@ -370,10 +370,9 @@ static std::string getImageHandleFromJavaObj(JNIEnv* env, jobject image) {
 }
 
 static SongInfo getSongInfoFromJavaObj(JNIEnv* env, jobject metadata) {
-  SongInfo info;
-
   if (metadata == nullptr) {
-    return info;
+    log::error("Got a null metadata");
+    return SongInfo();
   }
 
   jclass class_metadata = env->GetObjectClass(metadata);
@@ -387,6 +386,8 @@ static SongInfo getSongInfoFromJavaObj(JNIEnv* env, jobject metadata) {
   jfieldID field_playingTime = env->GetFieldID(class_metadata, "duration", "Ljava/lang/String;");
   jfieldID field_image =
           env->GetFieldID(class_metadata, "image", "Lcom/android/bluetooth/audio_util/Image;");
+
+  SongInfo info;
 
   jstring jstr = (jstring)env->GetObjectField(metadata, field_mediaId);
   if (jstr != nullptr) {
@@ -515,12 +516,11 @@ static PlayStatus getCurrentPlayStatus() {
     return PlayStatus();
   }
 
-  PlayStatus status;
   jobject playStatus = sCallbackEnv->CallObjectMethod(mJavaInterface, method_getPlaybackStatus);
 
   if (playStatus == nullptr) {
     log::error("Got a null play status");
-    return status;
+    return PlayStatus();
   }
 
   jclass class_playStatus = sCallbackEnv->GetObjectClass(playStatus);
@@ -528,9 +528,11 @@ static PlayStatus getCurrentPlayStatus() {
   jfieldID field_duration = sCallbackEnv->GetFieldID(class_playStatus, "duration", "J");
   jfieldID field_state = sCallbackEnv->GetFieldID(class_playStatus, "state", "B");
 
-  status.position = sCallbackEnv->GetLongField(playStatus, field_position);
-  status.duration = sCallbackEnv->GetLongField(playStatus, field_duration);
-  status.state = (PlayState)sCallbackEnv->GetByteField(playStatus, field_state);
+  PlayStatus status = {
+          .position = static_cast<uint32_t>(sCallbackEnv->GetLongField(playStatus, field_position)),
+          .duration = static_cast<uint32_t>(sCallbackEnv->GetLongField(playStatus, field_duration)),
+          .state = (PlayState)sCallbackEnv->GetByteField(playStatus, field_state),
+  };
 
   sCallbackEnv->DeleteLocalRef(playStatus);
 
@@ -859,6 +861,7 @@ static void sendVolumeChangedNative(JNIEnv* env, jobject /* object */, jstring a
   }
 
   log::debug("");
+  std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   if (volumeCallbackMap.find(bdaddr) != volumeCallbackMap.end()) {
     volumeCallbackMap.find(bdaddr)->second.Run(volume & 0x7F);
   }
