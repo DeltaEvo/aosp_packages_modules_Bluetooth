@@ -555,8 +555,9 @@ void bta_ag_create_sco(tBTA_AG_SCB* p_scb, bool is_orig) {
       }
     }
 
-    if (BTM_CreateSco(&p_scb->peer_addr, true, params.packet_types, &p_scb->sco_idx,
-                      bta_ag_sco_conn_cback, bta_ag_sco_disc_cback) == BTM_CMD_STARTED) {
+    if (get_btm_client_interface().sco.BTM_CreateSco(&p_scb->peer_addr, true, params.packet_types,
+                                                     &p_scb->sco_idx, bta_ag_sco_conn_cback,
+                                                     bta_ag_sco_disc_cback) == BTM_CMD_STARTED) {
       /* Initiating the connection, set the current sco handle */
       bta_ag_cb.sco.cur_idx = p_scb->sco_idx;
       /* Configure input/output data. */
@@ -568,9 +569,9 @@ void bta_ag_create_sco(tBTA_AG_SCB* p_scb, bool is_orig) {
                params.packet_types);
   } else {
     /* Not initiating, go to listen mode */
-    tBTM_STATUS btm_status =
-            BTM_CreateSco(&p_scb->peer_addr, false, params.packet_types, &p_scb->sco_idx,
-                          bta_ag_sco_conn_cback, bta_ag_sco_disc_cback);
+    tBTM_STATUS btm_status = get_btm_client_interface().sco.BTM_CreateSco(
+            &p_scb->peer_addr, false, params.packet_types, &p_scb->sco_idx, bta_ag_sco_conn_cback,
+            bta_ag_sco_disc_cback);
     if (btm_status == BTM_CMD_STARTED) {
       if (get_btm_client_interface().sco.BTM_RegForEScoEvts(
                   p_scb->sco_idx, bta_ag_esco_connreq_cback) != BTM_SUCCESS) {

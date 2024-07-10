@@ -151,8 +151,9 @@ static sco_socket_t* sco_socket_establish_locked(bool is_listening, const RawAdd
   }
 
   params = esco_parameters_for_codec(SCO_CODEC_CVSD_D1, true);
-  status = BTM_CreateSco(bd_addr, !is_listening, params.packet_types, &sco_socket->sco_handle,
-                         connect_completed_cb, disconnect_completed_cb);
+  status = get_btm_client_interface().sco.BTM_CreateSco(
+          bd_addr, !is_listening, params.packet_types, &sco_socket->sco_handle,
+          connect_completed_cb, disconnect_completed_cb);
   if (status != BTM_CMD_STARTED) {
     log::error("unable to create SCO socket: {}", status);
     goto error;
