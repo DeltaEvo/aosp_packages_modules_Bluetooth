@@ -1844,7 +1844,7 @@ void bta_av_do_start(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
       (cur_role == HCI_ROLE_CENTRAL)) {
     BTM_block_role_switch_and_sniff_mode_for(p_scb->PeerAddress());
   } else {
-    BTM_block_sniff_mode_for(p_scb->PeerAddress());
+    get_btm_client_interface().link_policy.BTM_block_sniff_mode_for(p_scb->PeerAddress());
   }
 
   uint16_t result = AVDT_StartReq(&p_scb->avdt_handle, 1);
@@ -2315,7 +2315,7 @@ void bta_av_start_ok(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
           (cur_role == HCI_ROLE_CENTRAL)) {
         BTM_block_role_switch_and_sniff_mode_for(p_scb->PeerAddress());
       } else {
-        BTM_block_sniff_mode_for(p_scb->PeerAddress());
+        get_btm_client_interface().link_policy.BTM_block_sniff_mode_for(p_scb->PeerAddress());
       }
     }
 
