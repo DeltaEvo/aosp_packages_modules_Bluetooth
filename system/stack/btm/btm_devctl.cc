@@ -163,7 +163,8 @@ void BTM_db_reset(void) {
 
 static bool set_sec_state_idle(void* data, void* /* context */) {
   tBTM_SEC_DEV_REC* p_dev_rec = static_cast<tBTM_SEC_DEV_REC*>(data);
-  p_dev_rec->sec_rec.sec_state = tSECURITY_STATE::IDLE;
+  p_dev_rec->sec_rec.le_link = tSECURITY_STATE::IDLE;
+  p_dev_rec->sec_rec.classic_link = tSECURITY_STATE::IDLE;
   return true;
 }
 

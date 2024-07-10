@@ -1042,7 +1042,7 @@ void btm_ble_link_sec_check(const RawAddress& bd_addr, tBTM_LE_AUTH_REQ auth_req
   }
 
   if (p_dev_rec->sec_rec.is_security_state_encrypting() ||
-      p_dev_rec->sec_rec.sec_state == tSECURITY_STATE::AUTHENTICATING) {
+      p_dev_rec->sec_rec.le_link == tSECURITY_STATE::AUTHENTICATING) {
     /* race condition: discard the security request while central is encrypting
      * the link */
     *p_sec_req_act = BTM_BLE_SEC_REQ_ACT_DISCARD;
@@ -1145,7 +1145,7 @@ tBTM_STATUS btm_ble_set_encryption(const RawAddress& bd_addr, tBTM_BLE_SEC_ACT s
 
       if (SMP_Pair(bd_addr) == SMP_STARTED) {
         cmd = BTM_CMD_STARTED;
-        p_rec->sec_rec.sec_state = tSECURITY_STATE::AUTHENTICATING;
+        p_rec->sec_rec.le_link = tSECURITY_STATE::AUTHENTICATING;
       }
       break;
 
@@ -1224,8 +1224,8 @@ tBTM_STATUS btm_ble_start_encrypt(const RawAddress& bda, bool use_stk, Octet16* 
     return BTM_ERR_KEY_MISSING;
   }
 
-  if (p_rec->sec_rec.sec_state == tSECURITY_STATE::IDLE) {
-    p_rec->sec_rec.sec_state = tSECURITY_STATE::LE_ENCRYPTING;
+  if (p_rec->sec_rec.le_link == tSECURITY_STATE::IDLE) {
+    p_rec->sec_rec.le_link = tSECURITY_STATE::ENCRYPTING;
   }
 
   return BTM_CMD_STARTED;
@@ -1294,7 +1294,7 @@ void btm_ble_link_encrypted(const RawAddress& bd_addr, uint8_t encr_enable) {
     p_dev_rec->sec_rec.enc_key_size = p_dev_rec->sec_rec.ble_keys.key_size;
   }
 
-  p_dev_rec->sec_rec.sec_state = tSECURITY_STATE::IDLE;
+  p_dev_rec->sec_rec.le_link = tSECURITY_STATE::IDLE;
   if (p_dev_rec->sec_rec.p_callback && enc_cback) {
     if (encr_enable) {
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_SUCCESS, true);
@@ -1556,7 +1556,7 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
         }
         btm_sec_cb.pairing_bda = bd_addr;
         if (event != SMP_CONSENT_REQ_EVT) {
-          p_dev_rec->sec_rec.sec_state = tSECURITY_STATE::AUTHENTICATING;
+          p_dev_rec->sec_rec.le_link = tSECURITY_STATE::AUTHENTICATING;
         }
         btm_sec_cb.pairing_flags |= BTM_PAIR_FLAGS_LE_ACTIVE;
         FALLTHROUGH_INTENDED; /* FALLTHROUGH */
@@ -1608,7 +1608,7 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
           }
 
           if (res == BTM_SUCCESS) {
-            p_dev_rec->sec_rec.sec_state = tSECURITY_STATE::IDLE;
+            p_dev_rec->sec_rec.le_link = tSECURITY_STATE::IDLE;
 
             if (p_dev_rec->sec_rec.bond_type != BOND_TYPE_TEMPORARY) {
               // Add all bonded device into resolving list if IRK is available.

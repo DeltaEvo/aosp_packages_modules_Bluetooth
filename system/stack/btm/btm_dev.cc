@@ -211,7 +211,8 @@ void BTM_SecClearSecurityFlags(const RawAddress& bd_addr) {
   }
 
   p_dev_rec->sec_rec.sec_flags = 0;
-  p_dev_rec->sec_rec.sec_state = tSECURITY_STATE::IDLE;
+  p_dev_rec->sec_rec.le_link = tSECURITY_STATE::IDLE;
+  p_dev_rec->sec_rec.classic_link = tSECURITY_STATE::IDLE;
   p_dev_rec->sm4 = BTM_SM4_UNKNOWN;
 }
 
