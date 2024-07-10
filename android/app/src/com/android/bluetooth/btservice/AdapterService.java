@@ -4850,6 +4850,11 @@ public class AdapterService extends Service {
             return deviceProp.getBondState() == BluetoothDevice.BOND_BONDING;
         }
 
+        if (!isEnabled()) {
+            Log.e(TAG, "Impossible to call createBond when Bluetooth is not enabled");
+            return false;
+        }
+
         if (!isPackageNameAccurate(this, callingPackage, Binder.getCallingUid())) {
             return false;
         }
