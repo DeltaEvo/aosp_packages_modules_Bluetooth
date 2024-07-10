@@ -187,22 +187,22 @@ void l2c_link_hci_conn_comp(tHCI_STATUS status, uint16_t handle, const RawAddres
  *
  ******************************************************************************/
 void l2c_link_sec_comp(RawAddress p_bda, tBT_TRANSPORT transport, void* p_ref_data,
-                       tBTM_STATUS status) {
+                       tBTM_STATUS btm_status) {
   tL2C_LCB* p_lcb;
   tL2C_CCB* p_ccb;
   tL2C_CCB* p_next_ccb;
 
-  log::debug("btm_status={}, BD_ADDR={}, transport={}", btm_status_text(status), p_bda,
+  log::debug("btm_status={}, BD_ADDR={}, transport={}", btm_status_text(btm_status), p_bda,
              bt_transport_text(transport));
 
-  if (status == BTM_SUCCESS_NO_SECURITY) {
-    status = BTM_SUCCESS;
+  if (btm_status == BTM_SUCCESS_NO_SECURITY) {
+    btm_status = BTM_SUCCESS;
   }
 
   /* Save the parameters */
   tL2C_CONN_INFO ci = {
           .bd_addr = p_bda,
-          .status = status,
+          .status = static_cast<tHCI_STATUS>(btm_status),
           .psm{},
           .l2cap_result{},
           .l2cap_status{},
@@ -233,7 +233,7 @@ void l2c_link_sec_comp(RawAddress p_bda, tBT_TRANSPORT transport, void* p_ref_da
       return;
     }
 
-    switch (status) {
+    switch (btm_status) {
       case BTM_SUCCESS:
         l2c_csm_execute(p_ccb, L2CEVT_SEC_COMP, &ci);
         break;
@@ -255,7 +255,7 @@ void l2c_link_sec_comp(RawAddress p_bda, tBT_TRANSPORT transport, void* p_ref_da
       p_next_ccb = p_ccb->p_next_ccb;
 
       if (p_ccb == p_ref_data) {
-        switch (status) {
+        switch (btm_status) {
           case BTM_SUCCESS:
             l2c_csm_execute(p_ccb, L2CEVT_SEC_COMP, &ci);
             break;
