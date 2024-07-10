@@ -36,7 +36,6 @@ namespace stack_btm_inq {
 
 // Function state capture and return values, if needed
 struct BTM_CancelInquiry BTM_CancelInquiry;
-struct BTM_CancelRemoteDeviceName BTM_CancelRemoteDeviceName;
 struct BTM_ClearInqDb BTM_ClearInqDb;
 struct BTM_EnableInterlacedInquiryScan BTM_EnableInterlacedInquiryScan;
 struct BTM_EnableInterlacedPageScan BTM_EnableInterlacedPageScan;
@@ -77,7 +76,6 @@ namespace test {
 namespace mock {
 namespace stack_btm_inq {
 
-tBTM_STATUS BTM_CancelRemoteDeviceName::return_value = BTM_SUCCESS;
 tBTM_STATUS BTM_ClearInqDb::return_value = BTM_SUCCESS;
 uint8_t BTM_GetEirSupportedServices::return_value = 0;
 uint8_t BTM_GetEirUuidList::return_value = 0;
@@ -104,10 +102,6 @@ bool btm_inq_find_bdaddr::return_value = false;
 void BTM_CancelInquiry(void) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_inq::BTM_CancelInquiry();
-}
-tBTM_STATUS BTM_CancelRemoteDeviceName(void) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_btm_inq::BTM_CancelRemoteDeviceName();
 }
 tBTM_STATUS BTM_ClearInqDb(const RawAddress* p_bda) {
   inc_func_call_count(__func__);
