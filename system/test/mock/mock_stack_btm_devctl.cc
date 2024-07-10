@@ -52,10 +52,6 @@ tBTM_STATUS BTM_EnableTestMode(void) {
   inc_func_call_count(__func__);
   return BTM_SUCCESS;
 }
-tBTM_STATUS BTM_ReadLocalDeviceName(const char** /* p_name */) {
-  inc_func_call_count(__func__);
-  return BTM_SUCCESS;
-}
 tBTM_STATUS BTM_ReadLocalDeviceNameFromController(tBTM_CMPL_CB* /* p_rln_cmpl_cback */) {
   inc_func_call_count(__func__);
   return BTM_SUCCESS;

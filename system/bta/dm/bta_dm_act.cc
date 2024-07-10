@@ -1243,7 +1243,8 @@ static void bta_dm_set_eir(char* local_name) {
 
   /* if local name is not provided, get it from controller */
   if (local_name == NULL) {
-    if (BTM_ReadLocalDeviceName((const char**)&local_name) != BTM_SUCCESS) {
+    if (get_btm_client_interface().local.BTM_ReadLocalDeviceName((const char**)&local_name) !=
+        BTM_SUCCESS) {
       log::error("Fail to read local device name for EIR");
     }
   }
