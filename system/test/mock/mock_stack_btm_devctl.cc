@@ -63,7 +63,6 @@ void BTM_VendorSpecificCommand(uint16_t /* opcode */, uint8_t /* param_len */,
 }
 void BTM_WritePageTimeout(uint16_t /* timeout */) { inc_func_call_count(__func__); }
 void BTM_db_reset(void) { inc_func_call_count(__func__); }
-void BTM_reset_complete() { inc_func_call_count(__func__); }
 void btm_delete_stored_link_key_complete(uint8_t* /* p */, uint16_t /* evt_len */) {
   inc_func_call_count(__func__);
 }
