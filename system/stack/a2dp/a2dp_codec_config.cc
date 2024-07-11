@@ -1072,25 +1072,6 @@ bool A2DP_IsSourceCodecValid(const uint8_t* p_codec_info) {
   return false;
 }
 
-bool A2DP_IsSinkCodecValid(const uint8_t* p_codec_info) {
-  tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
-
-  switch (codec_type) {
-    case A2DP_MEDIA_CT_SBC:
-      return A2DP_IsCodecValidSbc(p_codec_info);
-#if !defined(EXCLUDE_NONSTANDARD_CODECS)
-    case A2DP_MEDIA_CT_AAC:
-      return A2DP_IsCodecValidAac(p_codec_info);
-    case A2DP_MEDIA_CT_NON_A2DP:
-      return A2DP_IsVendorSinkCodecValid(p_codec_info);
-#endif
-    default:
-      break;
-  }
-
-  return false;
-}
-
 bool A2DP_IsPeerSourceCodecValid(const uint8_t* p_codec_info) {
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
 
