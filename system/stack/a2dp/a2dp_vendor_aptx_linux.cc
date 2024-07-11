@@ -22,6 +22,16 @@
 
 bool A2DP_IsCodecValidAptx(const uint8_t* p_codec_info) { return false; }
 
+bool A2DP_VendorUsesRtpHeaderAptx(bool content_protection_enabled, const uint8_t* p_codec_info) {
+  return false;
+}
+
+const char* A2DP_VendorCodecNameAptx(const uint8_t* p_codec_info) { return "Aptx"; }
+
+bool A2DP_VendorCodecTypeEqualsAptx(const uint8_t* p_codec_info_a, const uint8_t* p_codec_info_b) {
+  return false;
+}
+
 bool A2DP_VendorCodecEqualsAptx(const uint8_t* p_codec_info_a, const uint8_t* p_codec_info_b) {
   return false;
 }
