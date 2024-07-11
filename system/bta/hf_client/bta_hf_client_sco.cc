@@ -263,7 +263,8 @@ static void bta_hf_client_sco_create(tBTA_HF_CLIENT_CB* client_cb, bool is_orig)
           &client_cb->peer_addr, is_orig, params.packet_types, &client_cb->sco_idx,
           bta_hf_client_sco_conn_cback, bta_hf_client_sco_disc_cback);
   if (status == BTM_CMD_STARTED && !is_orig) {
-    if (!BTM_RegForEScoEvts(client_cb->sco_idx, bta_hf_client_esco_connreq_cback)) {
+    if (get_btm_client_interface().sco.BTM_RegForEScoEvts(
+                client_cb->sco_idx, bta_hf_client_esco_connreq_cback) == BTM_SUCCESS) {
       log::verbose("SCO registration success");
     }
   }
