@@ -33,13 +33,12 @@
 #include "test/mock/mock_stack_l2cap_ble.h"
 
 using bluetooth::Uuid;
-bt_status_t do_in_main_thread(base::Location const&, base::OnceCallback<void()>) {
+bt_status_t do_in_main_thread(base::OnceCallback<void()>) {
   // this is not properly mocked, so we use abort to catch if this is used in
   // any test cases
   abort();
 }
-bt_status_t do_in_main_thread_delayed(base::Location const&, base::OnceCallback<void()>,
-                                      std::chrono::microseconds) {
+bt_status_t do_in_main_thread_delayed(base::OnceCallback<void()>, std::chrono::microseconds) {
   // this is not properly mocked, so we use abort to catch if this is used in
   // any test cases
   abort();

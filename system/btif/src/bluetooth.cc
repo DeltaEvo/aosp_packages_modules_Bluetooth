@@ -514,7 +514,7 @@ static int get_adapter_properties(void) {
     return BT_STATUS_NOT_READY;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_get_adapter_properties));
+  do_in_main_thread(base::BindOnce(btif_get_adapter_properties));
   return BT_STATUS_SUCCESS;
 }
 
@@ -524,12 +524,12 @@ static int get_adapter_property(bt_property_type_t type) {
     return BT_STATUS_NOT_READY;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_get_adapter_property, type));
+  do_in_main_thread(base::BindOnce(btif_get_adapter_property, type));
   return BT_STATUS_SUCCESS;
 }
 
 static void set_scan_mode(bt_scan_mode_t mode) {
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_set_scan_mode, mode));
+  do_in_main_thread(base::BindOnce(btif_set_scan_mode, mode));
 }
 
 static int set_adapter_property(const bt_property_t* property) {
@@ -546,12 +546,12 @@ static int set_adapter_property(const bt_property_t* property) {
       return BT_STATUS_UNHANDLED;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(
-                                       [](bt_property_t* property) {
-                                         btif_set_adapter_property(property);
-                                         osi_free(property);
-                                       },
-                                       property_deep_copy(property)));
+  do_in_main_thread(base::BindOnce(
+          [](bt_property_t* property) {
+            btif_set_adapter_property(property);
+            osi_free(property);
+          },
+          property_deep_copy(property)));
   return BT_STATUS_SUCCESS;
 }
 
@@ -560,7 +560,7 @@ int get_remote_device_properties(RawAddress* remote_addr) {
     return BT_STATUS_NOT_READY;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_get_remote_device_properties, *remote_addr));
+  do_in_main_thread(base::BindOnce(btif_get_remote_device_properties, *remote_addr));
   return BT_STATUS_SUCCESS;
 }
 
@@ -569,7 +569,7 @@ int get_remote_device_property(RawAddress* remote_addr, bt_property_type_t type)
     return BT_STATUS_NOT_READY;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_get_remote_device_property, *remote_addr, type));
+  do_in_main_thread(base::BindOnce(btif_get_remote_device_property, *remote_addr, type));
   return BT_STATUS_SUCCESS;
 }
 
@@ -578,12 +578,12 @@ int set_remote_device_property(RawAddress* remote_addr, const bt_property_t* pro
     return BT_STATUS_NOT_READY;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(
-                                       [](RawAddress remote_addr, bt_property_t* property) {
-                                         btif_set_remote_device_property(&remote_addr, property);
-                                         osi_free(property);
-                                       },
-                                       *remote_addr, property_deep_copy(property)));
+  do_in_main_thread(base::BindOnce(
+          [](RawAddress remote_addr, bt_property_t* property) {
+            btif_set_remote_device_property(&remote_addr, property);
+            osi_free(property);
+          },
+          *remote_addr, property_deep_copy(property)));
   return BT_STATUS_SUCCESS;
 }
 
@@ -592,8 +592,7 @@ int get_remote_services(RawAddress* remote_addr, int transport) {
     return BT_STATUS_NOT_READY;
   }
 
-  do_in_main_thread(FROM_HERE,
-                    base::BindOnce(btif_dm_get_remote_services, *remote_addr, transport));
+  do_in_main_thread(base::BindOnce(btif_dm_get_remote_services, *remote_addr, transport));
   return BT_STATUS_SUCCESS;
 }
 
@@ -602,7 +601,7 @@ static int start_discovery(void) {
     return BT_STATUS_NOT_READY;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_start_discovery));
+  do_in_main_thread(base::BindOnce(btif_dm_start_discovery));
   return BT_STATUS_SUCCESS;
 }
 
@@ -611,7 +610,7 @@ static int cancel_discovery(void) {
     return BT_STATUS_NOT_READY;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_cancel_discovery));
+  do_in_main_thread(base::BindOnce(btif_dm_cancel_discovery));
   return BT_STATUS_SUCCESS;
 }
 
@@ -623,7 +622,7 @@ static int create_bond(const RawAddress* bd_addr, int transport) {
     return BT_STATUS_BUSY;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_create_bond, *bd_addr, transport));
+  do_in_main_thread(base::BindOnce(btif_dm_create_bond, *bd_addr, transport));
   return BT_STATUS_SUCCESS;
 }
 
@@ -635,7 +634,7 @@ static int create_bond_le(const RawAddress* bd_addr, uint8_t addr_type) {
     return BT_STATUS_BUSY;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_create_bond_le, *bd_addr, addr_type));
+  do_in_main_thread(base::BindOnce(btif_dm_create_bond_le, *bd_addr, addr_type));
   return BT_STATUS_SUCCESS;
 }
 
@@ -648,8 +647,8 @@ static int create_bond_out_of_band(const RawAddress* bd_addr, int transport,
     return BT_STATUS_BUSY;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_create_bond_out_of_band, *bd_addr, transport,
-                                              *p192_data, *p256_data));
+  do_in_main_thread(base::BindOnce(btif_dm_create_bond_out_of_band, *bd_addr, transport, *p192_data,
+                                   *p256_data));
   return BT_STATUS_SUCCESS;
 }
 
@@ -659,7 +658,7 @@ static int generate_local_oob_data(tBT_TRANSPORT transport) {
     return BT_STATUS_NOT_READY;
   }
 
-  return do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_generate_local_oob_data, transport));
+  return do_in_main_thread(base::BindOnce(btif_dm_generate_local_oob_data, transport));
 }
 
 static int cancel_bond(const RawAddress* bd_addr) {
@@ -667,7 +666,7 @@ static int cancel_bond(const RawAddress* bd_addr) {
     return BT_STATUS_NOT_READY;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_cancel_bond, *bd_addr));
+  do_in_main_thread(base::BindOnce(btif_dm_cancel_bond, *bd_addr));
   return BT_STATUS_SUCCESS;
 }
 
@@ -681,7 +680,7 @@ static int remove_bond(const RawAddress* bd_addr) {
     return BT_STATUS_NOT_READY;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_remove_bond, *bd_addr));
+  do_in_main_thread(base::BindOnce(btif_dm_remove_bond, *bd_addr));
   return BT_STATUS_SUCCESS;
 }
 
@@ -717,8 +716,7 @@ static int pin_reply(const RawAddress* bd_addr, uint8_t accept, uint8_t pin_len,
 
   memcpy(&tmp_pin_code, pin_code, pin_len);
 
-  do_in_main_thread(FROM_HERE,
-                    base::BindOnce(btif_dm_pin_reply, *bd_addr, accept, pin_len, tmp_pin_code));
+  do_in_main_thread(base::BindOnce(btif_dm_pin_reply, *bd_addr, accept, pin_len, tmp_pin_code));
   return BT_STATUS_SUCCESS;
 }
 
@@ -731,7 +729,7 @@ static int ssp_reply(const RawAddress* bd_addr, bt_ssp_variant_t variant, uint8_
     return BT_STATUS_PARM_INVALID;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_ssp_reply, *bd_addr, variant, accept));
+  do_in_main_thread(base::BindOnce(btif_dm_ssp_reply, *bd_addr, variant, accept));
   return BT_STATUS_SUCCESS;
 }
 
@@ -740,7 +738,7 @@ static int read_energy_info() {
     return BT_STATUS_NOT_READY;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_read_energy_info));
+  do_in_main_thread(base::BindOnce(btif_dm_read_energy_info));
   return BT_STATUS_SUCCESS;
 }
 
@@ -750,7 +748,7 @@ static int clear_event_filter() {
     return BT_STATUS_NOT_READY;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_clear_event_filter));
+  do_in_main_thread(base::BindOnce(btif_dm_clear_event_filter));
   return BT_STATUS_SUCCESS;
 }
 
@@ -760,7 +758,7 @@ static int clear_event_mask() {
     return BT_STATUS_NOT_READY;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_clear_event_mask));
+  do_in_main_thread(base::BindOnce(btif_dm_clear_event_mask));
   return BT_STATUS_SUCCESS;
 }
 
@@ -770,7 +768,7 @@ static int clear_filter_accept_list() {
     return BT_STATUS_NOT_READY;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_clear_filter_accept_list));
+  do_in_main_thread(base::BindOnce(btif_dm_clear_filter_accept_list));
   return BT_STATUS_SUCCESS;
 }
 
@@ -780,7 +778,7 @@ static int disconnect_all_acls() {
     return BT_STATUS_NOT_READY;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_disconnect_all_acls));
+  do_in_main_thread(base::BindOnce(btif_dm_disconnect_all_acls));
   return BT_STATUS_SUCCESS;
 }
 
@@ -796,8 +794,7 @@ static int le_rand() {
     return BT_STATUS_NOT_READY;
   }
 
-  do_in_main_thread(FROM_HERE,
-                    base::BindOnce(btif_dm_le_rand, get_main_thread()->BindOnce(&le_rand_btif_cb)));
+  do_in_main_thread(base::BindOnce(btif_dm_le_rand, get_main_thread()->BindOnce(&le_rand_btif_cb)));
   return BT_STATUS_SUCCESS;
 }
 
@@ -805,7 +802,7 @@ static int set_event_filter_inquiry_result_all_devices() {
   if (!interface_ready()) {
     return BT_STATUS_NOT_READY;
   }
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_set_event_filter_inquiry_result_all_devices));
+  do_in_main_thread(base::BindOnce(btif_dm_set_event_filter_inquiry_result_all_devices));
   return BT_STATUS_SUCCESS;
 }
 
@@ -813,8 +810,7 @@ static int set_default_event_mask_except(uint64_t mask, uint64_t le_mask) {
   if (!interface_ready()) {
     return BT_STATUS_NOT_READY;
   }
-  do_in_main_thread(FROM_HERE,
-                    base::BindOnce(btif_dm_set_default_event_mask_except, mask, le_mask));
+  do_in_main_thread(base::BindOnce(btif_dm_set_default_event_mask_except, mask, le_mask));
   return BT_STATUS_SUCCESS;
 }
 
@@ -828,8 +824,7 @@ static int restore_filter_accept_list() {
   // connections that have `is_direct=False`. Currently, we only restore LE hid
   // devices.
   auto le_hid_addrs = btif_storage_get_le_hid_devices();
-  do_in_main_thread(FROM_HERE,
-                    base::BindOnce(btif_dm_restore_filter_accept_list, std::move(le_hid_addrs)));
+  do_in_main_thread(base::BindOnce(btif_dm_restore_filter_accept_list, std::move(le_hid_addrs)));
   return BT_STATUS_SUCCESS;
 }
 
@@ -839,8 +834,7 @@ static int allow_wake_by_hid() {
   }
   auto le_hid_addrs = btif_storage_get_le_hid_devices();
   auto classic_hid_addrs = btif_storage_get_wake_capable_classic_hid_devices();
-  do_in_main_thread(FROM_HERE,
-                    base::BindOnce(btif_dm_allow_wake_by_hid, std::move(classic_hid_addrs),
+  do_in_main_thread(base::BindOnce(btif_dm_allow_wake_by_hid, std::move(classic_hid_addrs),
                                    std::move(le_hid_addrs)));
   return BT_STATUS_SUCCESS;
 }
@@ -849,8 +843,7 @@ static int set_event_filter_connection_setup_all_devices() {
   if (!interface_ready()) {
     return BT_STATUS_NOT_READY;
   }
-  do_in_main_thread(FROM_HERE,
-                    base::BindOnce(btif_dm_set_event_filter_connection_setup_all_devices));
+  do_in_main_thread(base::BindOnce(btif_dm_set_event_filter_connection_setup_all_devices));
   return BT_STATUS_SUCCESS;
 }
 
@@ -1003,7 +996,7 @@ int dut_mode_configure(uint8_t enable) {
     return BT_STATUS_NOT_READY;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dut_mode_configure, enable));
+  do_in_main_thread(base::BindOnce(btif_dut_mode_configure, enable));
   return BT_STATUS_SUCCESS;
 }
 
@@ -1018,12 +1011,12 @@ int dut_mode_send(uint16_t opcode, uint8_t* buf, uint8_t len) {
   uint8_t* copy = (uint8_t*)osi_calloc(len);
   memcpy(copy, buf, len);
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(
-                                       [](uint16_t opcode, uint8_t* buf, uint8_t len) {
-                                         btif_dut_mode_send(opcode, buf, len);
-                                         osi_free(buf);
-                                       },
-                                       opcode, copy, len));
+  do_in_main_thread(base::BindOnce(
+          [](uint16_t opcode, uint8_t* buf, uint8_t len) {
+            btif_dut_mode_send(opcode, buf, len);
+            osi_free(buf);
+          },
+          opcode, copy, len));
   return BT_STATUS_SUCCESS;
 }
 
@@ -1037,17 +1030,16 @@ int le_test_mode(uint16_t opcode, uint8_t* buf, uint8_t len) {
       if (len != 3) {
         return BT_STATUS_PARM_INVALID;
       }
-      do_in_main_thread(FROM_HERE,
-                        base::BindOnce(btif_ble_transmitter_test, buf[0], buf[1], buf[2]));
+      do_in_main_thread(base::BindOnce(btif_ble_transmitter_test, buf[0], buf[1], buf[2]));
       break;
     case HCI_BLE_RECEIVER_TEST:
       if (len != 1) {
         return BT_STATUS_PARM_INVALID;
       }
-      do_in_main_thread(FROM_HERE, base::BindOnce(btif_ble_receiver_test, buf[0]));
+      do_in_main_thread(base::BindOnce(btif_ble_receiver_test, buf[0]));
       break;
     case HCI_BLE_TEST_END:
-      do_in_main_thread(FROM_HERE, base::BindOnce(btif_ble_test_end));
+      do_in_main_thread(base::BindOnce(btif_ble_test_end));
       break;
     default:
       return BT_STATUS_UNSUPPORTED;
@@ -1115,7 +1107,6 @@ static bool allow_low_latency_audio(bool allowed, const RawAddress& /* address *
   log::info("{}", allowed);
   if (com::android::bluetooth::flags::a2dp_async_allow_low_latency()) {
     do_in_main_thread(
-            FROM_HERE,
             base::BindOnce(bluetooth::audio::a2dp::set_audio_low_latency_mode_allowed, allowed));
   } else {
     bluetooth::audio::a2dp::set_audio_low_latency_mode_allowed(allowed);
@@ -1130,8 +1121,8 @@ static void metadata_changed(const RawAddress& remote_bd_addr, int key,
     return;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_metadata_changed, remote_bd_addr, key,
-                                              std::move(value)));
+  do_in_main_thread(
+          base::BindOnce(btif_dm_metadata_changed, remote_bd_addr, key, std::move(value)));
 }
 
 static bool interop_match_addr(const char* feature_name, const RawAddress* addr) {

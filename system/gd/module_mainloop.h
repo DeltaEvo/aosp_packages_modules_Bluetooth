@@ -33,24 +33,20 @@ protected:
   // Threadsafe post onto mainloop a function with copyable arguments
   template <typename Functor, typename... Args>
   void PostFunctionOnMain(Functor&& functor, Args&&... args) const {
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(std::forward<Functor>(functor), std::forward<Args>(args)...));
+    do_in_main_thread(base::BindOnce(std::forward<Functor>(functor), std::forward<Args>(args)...));
   }
 
   // Threadsafe post onto mainloop a method and context with copyable arguments
   template <typename T, typename Functor, typename... Args>
   void PostMethodOnMain(std::shared_ptr<T> ref, Functor&& functor, Args... args) const {
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(
-                              [](std::weak_ptr<T> ref, Functor&& functor, Args&&... args) {
-                                if (std::shared_ptr<T> spt = ref.lock()) {
-                                  base::BindOnce(std::forward<Functor>(functor), spt,
-                                                 std::forward<Args>(args)...)
-                                          .Run();
-                                }
-                              },
-                              std::weak_ptr<T>(ref), std::forward<Functor>(functor),
-                              std::forward<Args>(args)...));
+    do_in_main_thread(base::BindOnce(
+            [](std::weak_ptr<T> ref, Functor&& functor, Args&&... args) {
+              if (std::shared_ptr<T> spt = ref.lock()) {
+                base::BindOnce(std::forward<Functor>(functor), spt, std::forward<Args>(args)...)
+                        .Run();
+              }
+            },
+            std::weak_ptr<T>(ref), std::forward<Functor>(functor), std::forward<Args>(args)...));
   }
 };
 

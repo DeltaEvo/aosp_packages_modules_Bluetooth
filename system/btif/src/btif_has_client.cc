@@ -53,62 +53,59 @@ class HearingAaccessClientServiceInterfaceImpl : public HasClientInterface,
     this->callbacks_ = callbacks;
 
     do_in_main_thread(
-            FROM_HERE,
             Bind(&HasClient::Initialize, this,
                  jni_thread_wrapper(Bind(&btif_storage_load_bonded_leaudio_has_devices))));
   }
 
   void Connect(const RawAddress& addr) override {
-    do_in_main_thread(FROM_HERE, Bind(&HasClient::Connect, Unretained(HasClient::Get()), addr));
+    do_in_main_thread(Bind(&HasClient::Connect, Unretained(HasClient::Get()), addr));
 
     do_in_jni_thread(Bind(&btif_storage_set_leaudio_has_acceptlist, addr, true));
   }
 
   void Disconnect(const RawAddress& addr) override {
-    do_in_main_thread(FROM_HERE, Bind(&HasClient::Disconnect, Unretained(HasClient::Get()), addr));
+    do_in_main_thread(Bind(&HasClient::Disconnect, Unretained(HasClient::Get()), addr));
 
     do_in_jni_thread(Bind(&btif_storage_set_leaudio_has_acceptlist, addr, false));
   }
 
   void SelectActivePreset(std::variant<RawAddress, int> addr_or_group_id,
                           uint8_t preset_index) override {
-    do_in_main_thread(FROM_HERE, Bind(&HasClient::SelectActivePreset, Unretained(HasClient::Get()),
-                                      std::move(addr_or_group_id), preset_index));
+    do_in_main_thread(Bind(&HasClient::SelectActivePreset, Unretained(HasClient::Get()),
+                           std::move(addr_or_group_id), preset_index));
   }
 
   void NextActivePreset(std::variant<RawAddress, int> addr_or_group_id) override {
-    do_in_main_thread(FROM_HERE, Bind(&HasClient::NextActivePreset, Unretained(HasClient::Get()),
-                                      std::move(addr_or_group_id)));
+    do_in_main_thread(Bind(&HasClient::NextActivePreset, Unretained(HasClient::Get()),
+                           std::move(addr_or_group_id)));
   }
 
   void PreviousActivePreset(std::variant<RawAddress, int> addr_or_group_id) override {
-    do_in_main_thread(FROM_HERE, Bind(&HasClient::PreviousActivePreset,
-                                      Unretained(HasClient::Get()), std::move(addr_or_group_id)));
+    do_in_main_thread(Bind(&HasClient::PreviousActivePreset, Unretained(HasClient::Get()),
+                           std::move(addr_or_group_id)));
   }
 
   void GetPresetInfo(const RawAddress& addr, uint8_t preset_index) override {
-    do_in_main_thread(FROM_HERE, Bind(&HasClient::GetPresetInfo, Unretained(HasClient::Get()), addr,
-                                      preset_index));
+    do_in_main_thread(
+            Bind(&HasClient::GetPresetInfo, Unretained(HasClient::Get()), addr, preset_index));
   }
 
   void SetPresetName(std::variant<RawAddress, int> addr_or_group_id, uint8_t preset_index,
                      std::string preset_name) override {
-    do_in_main_thread(FROM_HERE,
-                      Bind(&HasClient::SetPresetName, Unretained(HasClient::Get()),
+    do_in_main_thread(Bind(&HasClient::SetPresetName, Unretained(HasClient::Get()),
                            std::move(addr_or_group_id), preset_index, std::move(preset_name)));
   }
 
   void RemoveDevice(const RawAddress& addr) override {
     /* RemoveDevice can be called on devices that don't have BAS enabled */
     if (HasClient::IsHasClientRunning()) {
-      do_in_main_thread(FROM_HERE,
-                        Bind(&HasClient::Disconnect, Unretained(HasClient::Get()), addr));
+      do_in_main_thread(Bind(&HasClient::Disconnect, Unretained(HasClient::Get()), addr));
     }
 
     do_in_jni_thread(Bind(&btif_storage_remove_leaudio_has, addr));
   }
 
-  void Cleanup(void) override { do_in_main_thread(FROM_HERE, Bind(&HasClient::CleanUp)); }
+  void Cleanup(void) override { do_in_main_thread(Bind(&HasClient::CleanUp)); }
 
   void OnConnectionState(ConnectionState state, const RawAddress& addr) override {
     do_in_jni_thread(
