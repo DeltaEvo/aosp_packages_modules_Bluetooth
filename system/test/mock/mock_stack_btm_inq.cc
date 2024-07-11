@@ -40,7 +40,6 @@ struct BTM_EnableInterlacedInquiryScan BTM_EnableInterlacedInquiryScan;
 struct BTM_EnableInterlacedPageScan BTM_EnableInterlacedPageScan;
 struct BTM_HasEirService BTM_HasEirService;
 struct BTM_IsInquiryActive BTM_IsInquiryActive;
-struct BTM_RemoveEirService BTM_RemoveEirService;
 struct BTM_SetConnectability BTM_SetConnectability;
 struct BTM_SetDiscoverability BTM_SetDiscoverability;
 struct BTM_SetInquiryMode BTM_SetInquiryMode;
@@ -104,10 +103,6 @@ bool BTM_HasEirService(const uint32_t* p_eir_uuid, uint16_t uuid16) {
 uint16_t BTM_IsInquiryActive(void) {
   inc_func_call_count(__func__);
   return test::mock::stack_btm_inq::BTM_IsInquiryActive();
-}
-void BTM_RemoveEirService(uint32_t* p_eir_uuid, uint16_t uuid16) {
-  inc_func_call_count(__func__);
-  test::mock::stack_btm_inq::BTM_RemoveEirService(p_eir_uuid, uuid16);
 }
 tBTM_STATUS BTM_SetConnectability(uint16_t page_mode) {
   inc_func_call_count(__func__);
