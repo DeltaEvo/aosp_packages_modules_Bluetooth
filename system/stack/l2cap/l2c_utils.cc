@@ -161,7 +161,7 @@ void l2cu_release_lcb(tL2C_LCB* p_lcb) {
   p_lcb->info_resp_timer = NULL;
 
   if (p_lcb->transport == BT_TRANSPORT_BR_EDR) { /* Release all SCO links */
-    BTM_RemoveSco(p_lcb->remote_bd_addr);
+    get_btm_client_interface().sco.BTM_RemoveScoByBdaddr(p_lcb->remote_bd_addr);
   }
 
   if (p_lcb->sent_not_acked > 0) {

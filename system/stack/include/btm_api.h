@@ -342,7 +342,19 @@ void BTM_WriteVoiceSettings(uint16_t settings);
  *
  ******************************************************************************/
 [[nodiscard]] tBTM_STATUS BTM_RemoveSco(uint16_t sco_inx);
-void BTM_RemoveSco(const RawAddress& bda);
+
+/*******************************************************************************
+ *
+ * Function         BTM_RemoveScoByBdaddr
+ *
+ * Description      This function is called to remove a specific SCO connection.
+ *                  but using the bluetooth device addess typically used
+ *                  for ACL termination.
+ *
+ * Returns         void
+ *
+ ******************************************************************************/
+void BTM_RemoveScoByBdaddr(const RawAddress& bda);
 
 /*******************************************************************************
  *
