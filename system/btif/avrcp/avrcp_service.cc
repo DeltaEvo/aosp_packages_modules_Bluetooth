@@ -23,12 +23,15 @@
 
 #include <mutex>
 #include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "bta/sys/bta_sys.h"
-#include "btif_av.h"
-#include "btif_common.h"
-#include "device.h"
+#include "btif/include/btif_av.h"
+#include "btif/include/btif_common.h"
 #include "osi/include/osi.h"
+#include "profile/avrcp/device.h"
 #include "stack/include/a2dp_api.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_uuid16.h"
@@ -37,7 +40,7 @@
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
-using namespace bluetooth::legacy::stack::sdp;
+using bluetooth::legacy::stack::sdp::get_legacy_stack_sdp_api;
 
 namespace bluetooth {
 namespace avrcp {
@@ -69,7 +72,6 @@ class A2dpInterfaceImpl : public A2dpInterface {
 
     return A2DP_FindService(UUID_SERVCLASS_AUDIO_SINK, peer_address, &db_params, p_cback);
   }
-
 } a2dp_interface_;
 
 class AvrcpInterfaceImpl : public AvrcpInterface {
@@ -115,7 +117,6 @@ public:
   void SaveControllerVersion(const RawAddress& bdaddr, uint16_t version) override {
     AVRC_SaveControllerVersion(bdaddr, version);
   }
-
 } avrcp_interface_;
 
 class SdpInterfaceImpl : public SdpInterface {
@@ -147,7 +148,7 @@ public:
 // switching/synchronization so the devices don't have to worry about it.
 class MediaInterfaceWrapper : public MediaInterface {
 public:
-  MediaInterfaceWrapper(MediaInterface* cb) : wrapped_(cb) {}
+  explicit MediaInterfaceWrapper(MediaInterface* cb) : wrapped_(cb) {}
 
   void SendKeyEvent(uint8_t key, KeyState state) override {
     do_in_jni_thread(
@@ -250,7 +251,7 @@ private:
 // switching/synchronization so the devices don't have to worry about it.
 class VolumeInterfaceWrapper : public VolumeInterface {
 public:
-  VolumeInterfaceWrapper(VolumeInterface* interface) : wrapped_(interface) {}
+  explicit VolumeInterfaceWrapper(VolumeInterface* interface) : wrapped_(interface) {}
 
   void DeviceConnected(const RawAddress& bdaddr) override {
     do_in_jni_thread(base::Bind(static_cast<void (VolumeInterface::*)(const RawAddress&)>(
@@ -288,7 +289,8 @@ private:
 // switching/synchronization so the devices don't have to worry about it.
 class PlayerSettingsInterfaceWrapper : public PlayerSettingsInterface {
 public:
-  PlayerSettingsInterfaceWrapper(PlayerSettingsInterface* interface) : wrapped_(interface) {}
+  explicit PlayerSettingsInterfaceWrapper(PlayerSettingsInterface* interface)
+      : wrapped_(interface) {}
 
   void ListPlayerSettings(ListPlayerSettingsCallback cb) override {
     auto cb_lambda = [](const ListPlayerSettingsCallback& cb,
@@ -458,23 +460,34 @@ ServiceInterface* AvrcpService::GetServiceInterface() {
 
 void AvrcpService::ConnectDevice(const RawAddress& bdaddr) {
   log::info("address={}", bdaddr);
-
+  if (connection_handler_ == nullptr) {
+    return;
+  }
   connection_handler_->ConnectDevice(bdaddr);
 }
 
 void AvrcpService::DisconnectDevice(const RawAddress& bdaddr) {
   log::info("address={}", bdaddr);
+  if (connection_handler_ == nullptr) {
+    return;
+  }
   connection_handler_->DisconnectDevice(bdaddr);
 }
 
 void AvrcpService::SetBipClientStatus(const RawAddress& bdaddr, bool connected) {
   log::info("address={}, connected={}", bdaddr, connected);
+  if (connection_handler_ == nullptr) {
+    return;
+  }
   connection_handler_->SetBipClientStatus(bdaddr, connected);
 }
 
 void AvrcpService::SendMediaUpdate(bool track_changed, bool play_state, bool queue) {
   log::info("track_changed={} :  play_state={} :  queue={}", track_changed, play_state, queue);
 
+  if (instance_ == nullptr || instance_->connection_handler_ == nullptr) {
+    return;
+  }
   // This function may be called on any thread, we need to make sure that the
   // device update happens on the main thread.
   for (const auto& device : instance_->connection_handler_->GetListOfDevices()) {
@@ -487,6 +500,9 @@ void AvrcpService::SendFolderUpdate(bool available_players, bool addressed_playe
   log::info("available_players={} :  addressed_players={} :  uids={}", available_players,
             addressed_players, uids);
 
+  if (instance_ == nullptr || instance_->connection_handler_ == nullptr) {
+    return;
+  }
   // Ensure that the update is posted to the correct thread
   for (const auto& device : instance_->connection_handler_->GetListOfDevices()) {
     do_in_main_thread(base::BindOnce(&Device::SendFolderUpdate, device.get()->Get(),
@@ -532,7 +548,7 @@ void AvrcpService::DeviceCallback(std::shared_ptr<Device> new_device) {
     return;
   }
 
-  // TODO (apanicke): Pass the interfaces into the connection handler
+  // TODO(apanicke): Pass the interfaces into the connection handler
   // so that the devices can be created with any interfaces they need.
   new_device->RegisterInterfaces(media_interface_, &a2dp_interface_, volume_interface_,
                                  player_settings_interface_);
@@ -544,7 +560,7 @@ void AvrcpService::ServiceInterfaceImpl::Init(MediaInterface* media_interface,
                                               PlayerSettingsInterface* player_settings_interface) {
   std::lock_guard<std::mutex> lock(service_interface_lock_);
 
-  // TODO: This function should block until the service is completely up so
+  // TODO(apanicke): This function should block until the service is completely up so
   // that its possible to call Get() on the service immediately after calling
   // init without issues.
 
