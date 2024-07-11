@@ -55,7 +55,7 @@ constexpr size_t kBtHdrSize = sizeof(BT_HDR);
 constexpr size_t kCommandLengthSize = sizeof(uint8_t);
 constexpr size_t kCommandOpcodeSize = sizeof(uint16_t);
 
-static base::Callback<void(const base::Location&, BT_HDR*)> send_data_upwards;
+static base::Callback<void(BT_HDR*)> send_data_upwards;
 static const packet_fragmenter_t* packet_fragmenter;
 
 namespace {
@@ -142,14 +142,14 @@ static void event_callback(bluetooth::hci::EventView event_packet_view) {
   if (!send_data_upwards) {
     return;
   }
-  send_data_upwards.Run(FROM_HERE, WrapPacketAndCopy(MSG_HC_TO_STACK_HCI_EVT, &event_packet_view));
+  send_data_upwards.Run(WrapPacketAndCopy(MSG_HC_TO_STACK_HCI_EVT, &event_packet_view));
 }
 
 static void subevent_callback(bluetooth::hci::LeMetaEventView le_meta_event_view) {
   if (!send_data_upwards) {
     return;
   }
-  send_data_upwards.Run(FROM_HERE, WrapPacketAndCopy(MSG_HC_TO_STACK_HCI_EVT, &le_meta_event_view));
+  send_data_upwards.Run(WrapPacketAndCopy(MSG_HC_TO_STACK_HCI_EVT, &le_meta_event_view));
 }
 
 void OnTransmitPacketCommandComplete(command_complete_cb complete_callback, void* context,
@@ -289,7 +289,7 @@ using bluetooth::common::Bind;
 using bluetooth::common::BindOnce;
 using bluetooth::common::Unretained;
 
-static void set_data_cb(base::Callback<void(const base::Location&, BT_HDR*)> send_data_cb) {
+static void set_data_cb(base::Callback<void(BT_HDR*)> send_data_cb) {
   send_data_upwards = std::move(send_data_cb);
 }
 
@@ -321,7 +321,7 @@ static void dispatch_reassembled(BT_HDR* packet) {
                    "assert failed: (packet->event & MSG_EVT_MASK) == "
                    "MSG_HC_TO_STACK_HCI_ISO");
   log::assert_that(!send_data_upwards.is_null(), "assert failed: !send_data_upwards.is_null()");
-  send_data_upwards.Run(FROM_HERE, packet);
+  send_data_upwards.Run(packet);
 }
 
 static const packet_fragmenter_callbacks_t packet_fragmenter_callbacks = {transmit_fragment,
