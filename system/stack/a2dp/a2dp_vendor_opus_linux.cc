@@ -25,10 +25,6 @@ bool A2DP_IsVendorSinkCodecSupportedOpus(const uint8_t* p_codec_info) {
   return false;
 }
 
-bool A2DP_IsPeerSourceCodecSupportedOpus(const uint8_t* p_codec_info) {
-  return false;
-}
-
 bool A2DP_VendorUsesRtpHeaderOpus(bool content_protection_enabled,
                                   const uint8_t* p_codec_info) {
   return false;

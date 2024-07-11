@@ -281,10 +281,6 @@ bool A2DP_IsVendorSinkCodecSupportedOpus(const uint8_t* p_codec_info) {
   return A2DP_CodecInfoMatchesCapabilityOpus(&a2dp_opus_sink_caps, p_codec_info, false) ==
          A2DP_SUCCESS;
 }
-bool A2DP_IsPeerSourceCodecSupportedOpus(const uint8_t* p_codec_info) {
-  return A2DP_CodecInfoMatchesCapabilityOpus(&a2dp_opus_sink_caps, p_codec_info, true) ==
-         A2DP_SUCCESS;
-}
 
 // Checks whether A2DP Opus codec configuration matches with a device's codec
 // capabilities. |p_cap| is the Opus codec configuration. |p_codec_info| is

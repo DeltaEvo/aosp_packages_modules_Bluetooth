@@ -92,10 +92,6 @@ bool A2DP_IsPeerSinkCodecValid(const uint8_t* /* p_codec_info */) {
   inc_func_call_count(__func__);
   return false;
 }
-bool A2DP_IsPeerSourceCodecSupported(const uint8_t* /* p_codec_info */) {
-  inc_func_call_count(__func__);
-  return false;
-}
 bool A2DP_IsPeerSourceCodecValid(const uint8_t* /* p_codec_info */) {
   inc_func_call_count(__func__);
   return false;

@@ -1149,26 +1149,6 @@ bool A2DP_IsSinkCodecSupported(const uint8_t* p_codec_info) {
   return false;
 }
 
-bool A2DP_IsPeerSourceCodecSupported(const uint8_t* p_codec_info) {
-  tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
-
-  switch (codec_type) {
-    case A2DP_MEDIA_CT_SBC:
-      return A2DP_IsPeerSourceCodecSupportedSbc(p_codec_info);
-#if !defined(EXCLUDE_NONSTANDARD_CODECS)
-    case A2DP_MEDIA_CT_AAC:
-      return A2DP_IsPeerSourceCodecSupportedAac(p_codec_info);
-    case A2DP_MEDIA_CT_NON_A2DP:
-      return A2DP_IsVendorPeerSourceCodecSupported(p_codec_info);
-#endif
-    default:
-      break;
-  }
-
-  log::error("unsupported codec type 0x{:x}", codec_type);
-  return false;
-}
-
 void A2DP_InitDefaultCodec(uint8_t* p_codec_info) { A2DP_InitDefaultCodecSbc(p_codec_info); }
 
 bool A2DP_UsesRtpHeader(bool content_protection_enabled, const uint8_t* p_codec_info) {
