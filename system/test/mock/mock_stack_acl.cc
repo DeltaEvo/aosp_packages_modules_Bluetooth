@@ -66,7 +66,6 @@ struct acl_get_connection_from_address acl_get_connection_from_address;
 struct btm_acl_for_bda btm_acl_for_bda;
 struct acl_get_connection_from_handle acl_get_connection_from_handle;
 struct BTM_ReadFailedContactCounter BTM_ReadFailedContactCounter;
-struct BTM_ReadRSSI BTM_ReadRSSI;
 struct BTM_ReadTxPower BTM_ReadTxPower;
 struct BTM_SetLinkSuperTout BTM_SetLinkSuperTout;
 struct BTM_SwitchRoleToCentral BTM_SwitchRoleToCentral;
@@ -238,10 +237,6 @@ tACL_CONN* acl_get_connection_from_handle(uint16_t handle) {
 tBTM_STATUS BTM_ReadFailedContactCounter(const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb) {
   inc_func_call_count(__func__);
   return test::mock::stack_acl::BTM_ReadFailedContactCounter(remote_bda, p_cb);
-}
-tBTM_STATUS BTM_ReadRSSI(const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_acl::BTM_ReadRSSI(remote_bda, p_cb);
 }
 tBTM_STATUS BTM_ReadTxPower(const RawAddress& remote_bda, tBT_TRANSPORT transport,
                             tBTM_CMPL_CB* p_cb) {

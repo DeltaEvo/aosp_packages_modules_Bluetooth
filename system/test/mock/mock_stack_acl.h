@@ -284,17 +284,6 @@ struct BTM_ReadFailedContactCounter {
   }
 };
 extern struct BTM_ReadFailedContactCounter BTM_ReadFailedContactCounter;
-// Name: BTM_ReadRSSI
-// Params: const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb
-// Returns: tBTM_STATUS
-struct BTM_ReadRSSI {
-  std::function<tBTM_STATUS(const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb)> body{
-          [](const RawAddress& /* remote_bda */, tBTM_CMPL_CB* /* p_cb */) { return BTM_SUCCESS; }};
-  tBTM_STATUS operator()(const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb) {
-    return body(remote_bda, p_cb);
-  }
-};
-extern struct BTM_ReadRSSI BTM_ReadRSSI;
 // Name: BTM_ReadTxPower
 // Params: const RawAddress& remote_bda, tBT_TRANSPORT transport,
 // tBTM_CMPL_CB* p_cb Returns: tBTM_STATUS
