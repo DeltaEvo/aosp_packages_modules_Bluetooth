@@ -48,11 +48,12 @@ class DumpsysHelper;
 class Link : public l2cap::internal::ILink,
              public hci::acl_manager::ConnectionManagementCallbacks,
              public bluetooth::common::IRedactableLoggable {
- public:
-  Link(os::Handler* l2cap_handler, std::unique_ptr<hci::acl_manager::ClassicAclConnection> acl_connection,
+public:
+  Link(os::Handler* l2cap_handler,
+       std::unique_ptr<hci::acl_manager::ClassicAclConnection> acl_connection,
        l2cap::internal::ParameterProvider* parameter_provider,
-       DynamicChannelServiceManagerImpl* dynamic_service_manager, FixedChannelServiceManagerImpl* fixed_service_manager,
-       LinkManager* link_manager);
+       DynamicChannelServiceManagerImpl* dynamic_service_manager,
+       FixedChannelServiceManagerImpl* fixed_service_manager, LinkManager* link_manager);
 
   Link(const Link&) = delete;
   Link& operator=(const Link&) = delete;
@@ -94,7 +95,8 @@ class Link : public l2cap::internal::ILink,
 
   virtual void ReadClockOffset();
 
-  // Increase the link usage refcount to ensure the link won't be disconnected when SecurityModule needs it
+  // Increase the link usage refcount to ensure the link won't be disconnected when SecurityModule
+  // needs it
   virtual void AcquireSecurityHold();
 
   // Decrease the link usage refcount when SecurityModule no longer needs it
@@ -111,16 +113,19 @@ class Link : public l2cap::internal::ILink,
   virtual Cid ReserveDynamicChannel();
 
   virtual void SendConnectionRequest(Psm psm, Cid local_cid);
-  virtual void SendConnectionRequest(Psm psm, Cid local_cid,
-                                     PendingDynamicChannelConnection pending_dynamic_channel_connection);
+  virtual void SendConnectionRequest(
+          Psm psm, Cid local_cid,
+          PendingDynamicChannelConnection pending_dynamic_channel_connection);
   void SetChannelTxPriority(Cid local_cid, bool high_priority) override;
 
   // When a Link is established, LinkManager notifies pending dynamic channels to connect
-  virtual void SetPendingDynamicChannels(std::list<Psm> psm_list,
-                                         std::list<Link::PendingDynamicChannelConnection> callback_list);
+  virtual void SetPendingDynamicChannels(
+          std::list<Psm> psm_list, std::list<Link::PendingDynamicChannelConnection> callback_list);
 
-  // Invoked by signalling manager to indicate an outgoing connection request failed and link shall free resources
-  virtual void OnOutgoingConnectionRequestFail(Cid local_cid, DynamicChannelManager::ConnectionResult result);
+  // Invoked by signalling manager to indicate an outgoing connection request failed and link shall
+  // free resources
+  virtual void OnOutgoingConnectionRequestFail(Cid local_cid,
+                                               DynamicChannelManager::ConnectionResult result);
 
   virtual void SendInitialConfigRequestOrQueue(Cid local_cid);
 
@@ -128,16 +133,19 @@ class Link : public l2cap::internal::ILink,
 
   virtual void SendDisconnectionRequest(Cid local_cid, Cid remote_cid) override;
 
-  virtual std::shared_ptr<l2cap::internal::DynamicChannelImpl> AllocateDynamicChannel(Psm psm, Cid remote_cid);
+  virtual std::shared_ptr<l2cap::internal::DynamicChannelImpl> AllocateDynamicChannel(
+          Psm psm, Cid remote_cid);
 
-  virtual std::shared_ptr<l2cap::internal::DynamicChannelImpl> AllocateReservedDynamicChannel(Cid reserved_cid, Psm psm,
-                                                                                              Cid remote_cid);
+  virtual std::shared_ptr<l2cap::internal::DynamicChannelImpl> AllocateReservedDynamicChannel(
+          Cid reserved_cid, Psm psm, Cid remote_cid);
 
-  virtual classic::DynamicChannelConfigurationOption GetConfigurationForInitialConfiguration(Cid cid);
+  virtual classic::DynamicChannelConfigurationOption GetConfigurationForInitialConfiguration(
+          Cid cid);
 
   virtual void FreeDynamicChannel(Cid cid);
 
-  // Check how many channels are acquired or in use, if zero, start tear down timer, if non-zero, cancel tear down timer
+  // Check how many channels are acquired or in use, if zero, start tear down timer, if non-zero,
+  // cancel tear down timer
   virtual void RefreshRefCount();
 
   virtual void NotifyChannelCreation(Cid cid, std::unique_ptr<DynamicChannel> channel);
@@ -150,13 +158,9 @@ class Link : public l2cap::internal::ILink,
   virtual bool GetRemoteSupportsFcs() const;
   virtual void OnRemoteExtendedFeatureReceived(bool ertm_supported, bool fcs_supported);
 
-  virtual std::string ToString() const {
-    return GetDevice().ToString();
-  }
+  virtual std::string ToString() const { return GetDevice().ToString(); }
 
-  std::string ToStringForLogging() const override {
-    return GetDevice().ToStringForLogging();
-  }
+  std::string ToStringForLogging() const override { return GetDevice().ToStringForLogging(); }
 
   std::string ToRedactedStringForLogging() const override {
     return GetDevice().ToRedactedStringForLogging();
@@ -171,17 +175,15 @@ class Link : public l2cap::internal::ILink,
   void OnChangeConnectionLinkKeyComplete() override;
   void OnReadClockOffsetComplete(uint16_t clock_offset) override;
   void OnModeChange(hci::ErrorCode status, hci::Mode current_mode, uint16_t interval) override;
-  void OnSniffSubrating(
-      hci::ErrorCode hci_status,
-      uint16_t maximum_transmit_latency,
-      uint16_t maximum_receive_latency,
-      uint16_t minimum_remote_timeout,
-      uint16_t minimum_local_timeout) override;
-  void OnQosSetupComplete(hci::ServiceType service_type, uint32_t token_rate, uint32_t peak_bandwidth, uint32_t latency,
+  void OnSniffSubrating(hci::ErrorCode hci_status, uint16_t maximum_transmit_latency,
+                        uint16_t maximum_receive_latency, uint16_t minimum_remote_timeout,
+                        uint16_t minimum_local_timeout) override;
+  void OnQosSetupComplete(hci::ServiceType service_type, uint32_t token_rate,
+                          uint32_t peak_bandwidth, uint32_t latency,
                           uint32_t delay_variation) override;
   void OnFlowSpecificationComplete(hci::FlowDirection flow_direction, hci::ServiceType service_type,
-                                   uint32_t token_rate, uint32_t token_bucket_size, uint32_t peak_bandwidth,
-                                   uint32_t access_latency) override;
+                                   uint32_t token_rate, uint32_t token_bucket_size,
+                                   uint32_t peak_bandwidth, uint32_t access_latency) override;
   void OnFlushOccurred() override;
   void OnRoleDiscoveryComplete(hci::Role current_role) override;
   void OnReadLinkPolicySettingsComplete(uint16_t link_policy_settings) override;
@@ -190,16 +192,18 @@ class Link : public l2cap::internal::ILink,
   void OnReadLinkSupervisionTimeoutComplete(uint16_t link_supervision_timeout) override;
   void OnReadFailedContactCounterComplete(uint16_t failed_contact_counter) override;
   void OnReadLinkQualityComplete(uint8_t link_quality) override;
-  void OnReadAfhChannelMapComplete(hci::AfhMode afh_mode, std::array<uint8_t, 10> afh_channel_map) override;
+  void OnReadAfhChannelMapComplete(hci::AfhMode afh_mode,
+                                   std::array<uint8_t, 10> afh_channel_map) override;
   void OnReadRssiComplete(uint8_t rssi) override;
   void OnReadClockComplete(uint32_t clock, uint16_t accuracy) override;
   void OnCentralLinkKeyComplete(hci::KeyFlag key_flag) override;
   void OnRoleChange(hci::ErrorCode hci_status, hci::Role new_role) override;
   void OnDisconnection(hci::ErrorCode reason) override;
-  void OnReadRemoteVersionInformationComplete(
-      hci::ErrorCode hci_status, uint8_t lmp_version, uint16_t manufacturer_name, uint16_t sub_version);
+  void OnReadRemoteVersionInformationComplete(hci::ErrorCode hci_status, uint8_t lmp_version,
+                                              uint16_t manufacturer_name, uint16_t sub_version);
   void OnReadRemoteSupportedFeaturesComplete(uint64_t features);
-  void OnReadRemoteExtendedFeaturesComplete(uint8_t page_number, uint8_t max_page_number, uint64_t features);
+  void OnReadRemoteExtendedFeaturesComplete(uint8_t page_number, uint8_t max_page_number,
+                                            uint64_t features);
 
   struct EncryptionChangeListener {
     Cid cid;
@@ -207,23 +211,20 @@ class Link : public l2cap::internal::ILink,
   };
   void AddEncryptionChangeListener(EncryptionChangeListener);
 
-  uint16_t GetAclHandle() const {
-    return acl_handle_;
-  }
+  uint16_t GetAclHandle() const { return acl_handle_; }
 
-  hci::Role GetRole() const {
-    return role_;
-  }
+  hci::Role GetRole() const { return role_; }
 
   void OnPendingPacketChange(Cid local_cid, bool has_packet) override;
 
- private:
+private:
   friend class DumpsysHelper;
   void connect_to_pending_dynamic_channels();
   void send_pending_configuration_requests();
 
   os::Handler* l2cap_handler_;
-  l2cap::internal::FixedChannelAllocator<FixedChannelImpl, Link> fixed_channel_allocator_{this, l2cap_handler_};
+  l2cap::internal::FixedChannelAllocator<FixedChannelImpl, Link> fixed_channel_allocator_{
+          this, l2cap_handler_};
   l2cap::internal::DynamicChannelAllocator dynamic_channel_allocator_{this, l2cap_handler_};
   std::unique_ptr<hci::acl_manager::ClassicAclConnection> acl_connection_;
   l2cap::internal::DataPipelineManager data_pipeline_manager_;
@@ -231,7 +232,8 @@ class Link : public l2cap::internal::ILink,
   DynamicChannelServiceManagerImpl* dynamic_service_manager_;
   FixedChannelServiceManagerImpl* fixed_service_manager_;
   LinkManager* link_manager_;
-  std::unordered_map<Cid, PendingDynamicChannelConnection> local_cid_to_pending_dynamic_channel_connection_map_;
+  std::unordered_map<Cid, PendingDynamicChannelConnection>
+          local_cid_to_pending_dynamic_channel_connection_map_;
   os::Alarm link_idle_disconnect_alarm_{l2cap_handler_};
   ClassicSignallingManager signalling_manager_;
   uint16_t acl_handle_;

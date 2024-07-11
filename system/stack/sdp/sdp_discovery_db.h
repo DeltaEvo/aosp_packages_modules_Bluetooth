@@ -27,7 +27,7 @@
 /* Masks for attr_value field of tSDP_DISC_ATTR */
 #define SDP_DISC_ATTR_LEN_MASK 0x0FFF
 #define SDP_DISC_ATTR_TYPE(len_type) ((len_type) >> 12)
-#define SDP_DISC_ATTR_LEN(len_type) ((len_type)&SDP_DISC_ATTR_LEN_MASK)
+#define SDP_DISC_ATTR_LEN(len_type) ((len_type) & SDP_DISC_ATTR_LEN_MASK)
 
 #define SDP_MAX_LIST_ELEMS 3
 
@@ -61,16 +61,15 @@ typedef struct t_sdp_disc_rec {
 } tSDP_DISC_REC;
 
 typedef struct {
-  uint32_t mem_size;          /* Memory size of the DB        */
-  uint32_t mem_free;          /* Memory still available       */
-  tSDP_DISC_REC* p_first_rec; /* Addr of first record in DB   */
-  uint16_t num_uuid_filters;  /* Number of UUIds to filter    */
+  uint32_t mem_size;                                  /* Memory size of the DB        */
+  uint32_t mem_free;                                  /* Memory still available       */
+  tSDP_DISC_REC* p_first_rec;                         /* Addr of first record in DB   */
+  uint16_t num_uuid_filters;                          /* Number of UUIds to filter    */
   bluetooth::Uuid uuid_filters[SDP_MAX_UUID_FILTERS]; /* UUIDs to filter */
-  uint16_t num_attr_filters; /* Number of attribute filters  */
-  uint16_t attr_filters[SDP_MAX_ATTR_FILTERS]; /* Attributes to filter */
-  uint8_t* p_free_mem; /* Pointer to free memory       */
-  uint8_t*
-      raw_data; /* Received record from server. allocated/released by client  */
+  uint16_t num_attr_filters;                          /* Number of attribute filters  */
+  uint16_t attr_filters[SDP_MAX_ATTR_FILTERS];        /* Attributes to filter */
+  uint8_t* p_free_mem;                                /* Pointer to free memory       */
+  uint8_t* raw_data; /* Received record from server. allocated/released by client  */
   uint32_t raw_size; /* size of raw_data */
   uint32_t raw_used; /* length of raw_data used */
 } tSDP_DISCOVERY_DB;

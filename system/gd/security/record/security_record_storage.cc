@@ -28,8 +28,8 @@ namespace security {
 namespace record {
 
 namespace {
-void SetClassicData(
-    storage::Mutation& mutation, std::shared_ptr<record::SecurityRecord> record, storage::Device& device) {
+void SetClassicData(storage::Mutation& mutation, std::shared_ptr<record::SecurityRecord> record,
+                    storage::Device& device) {
   if (*device.GetDeviceType() == hci::DeviceType::LE) {
     return;
   }
@@ -40,7 +40,8 @@ void SetClassicData(
   }
 }
 
-void SetLeData(storage::Mutation& mutation, std::shared_ptr<record::SecurityRecord> record, storage::Device& device) {
+void SetLeData(storage::Mutation& mutation, std::shared_ptr<record::SecurityRecord> record,
+               storage::Device& device) {
   if (*device.GetDeviceType() == hci::DeviceType::BR_EDR) {
     return;
   }
@@ -87,7 +88,8 @@ void SetLeData(storage::Mutation& mutation, std::shared_ptr<record::SecurityReco
     *(psrk_keys.data() + 1) = 0;
     *(psrk_keys.data() + 2) = 0;
     *(psrk_keys.data() + 3) = 0;
-    std::copy_n(record->remote_signature_key->data(), record->remote_signature_key->size(), psrk_keys.data() + 4);
+    std::copy_n(record->remote_signature_key->data(), record->remote_signature_key->size(),
+                psrk_keys.data() + 4);
     *(psrk_keys.data() + 20) = record->security_level;
 
     common::ByteArray<21> byte_array(psrk_keys);
@@ -95,23 +97,27 @@ void SetLeData(storage::Mutation& mutation, std::shared_ptr<record::SecurityReco
   }
 }
 
-void SetAuthenticationData(
-    storage::Mutation& /* mutation */,
-    std::shared_ptr<record::SecurityRecord> record,
-    storage::Device& device) {
-  device.SetIsAuthenticated((record->IsAuthenticated() ? 1 : 0));
-  device.SetIsEncryptionRequired((record->IsEncryptionRequired() ? 1 : 0));
+void SetAuthenticationData(storage::Mutation& /* mutation */,
+                           std::shared_ptr<record::SecurityRecord> record,
+                           storage::Device& device) {
+  device.SetIsAuthenticated(record->IsAuthenticated() ? 1 : 0);
+  device.SetIsEncryptionRequired(record->IsEncryptionRequired() ? 1 : 0);
   device.SetRequiresMitmProtection(record->RequiresMitmProtection() ? 1 : 0);
 }
 }  // namespace
 
-SecurityRecordStorage::SecurityRecordStorage(storage::StorageModule* storage_module, os::Handler* handler)
+SecurityRecordStorage::SecurityRecordStorage(storage::StorageModule* storage_module,
+                                             os::Handler* handler)
     : storage_module_(storage_module), handler_(handler) {}
 
-void SecurityRecordStorage::SaveSecurityRecords(std::set<std::shared_ptr<record::SecurityRecord>>* records) {
+void SecurityRecordStorage::SaveSecurityRecords(
+        std::set<std::shared_ptr<record::SecurityRecord>>* records) {
   for (auto record : *records) {
-    if (record->IsTemporary()) continue;
-    storage::Device device = storage_module_->GetDeviceByClassicMacAddress(record->GetPseudoAddress()->GetAddress());
+    if (record->IsTemporary()) {
+      continue;
+    }
+    storage::Device device =
+            storage_module_->GetDeviceByClassicMacAddress(record->GetPseudoAddress()->GetAddress());
     auto mutation = storage_module_->Modify();
 
     if (record->IsClassicLinkKeyValid() && !record->identity_address_) {
@@ -122,9 +128,8 @@ void SecurityRecordStorage::SaveSecurityRecords(std::set<std::shared_ptr<record:
       mutation.Add(device.SetDeviceType(hci::DeviceType::LE));
     } else {
       mutation.Add(device.SetDeviceType(hci::DeviceType::LE));
-      log::warn(
-          "Cannot determine device type from security record for '{}'; defaulting to LE",
-          *record->GetPseudoAddress());
+      log::warn("Cannot determine device type from security record for '{}'; defaulting to LE",
+                *record->GetPseudoAddress());
     }
     mutation.Commit();
     SetClassicData(mutation, record, device);
@@ -134,10 +139,12 @@ void SecurityRecordStorage::SaveSecurityRecords(std::set<std::shared_ptr<record:
   }
 }
 
-void SecurityRecordStorage::LoadSecurityRecords(std::set<std::shared_ptr<record::SecurityRecord>>* records) {
+void SecurityRecordStorage::LoadSecurityRecords(
+        std::set<std::shared_ptr<record::SecurityRecord>>* records) {
   for (auto device : storage_module_->GetBondedDevices()) {
-    auto address_type = (device.GetDeviceType() == hci::DeviceType::BR_EDR) ? hci::AddressType::PUBLIC_DEVICE_ADDRESS
-                                                                            : device.Le().GetAddressType();
+    auto address_type = (device.GetDeviceType() == hci::DeviceType::BR_EDR)
+                                ? hci::AddressType::PUBLIC_DEVICE_ADDRESS
+                                : device.Le().GetAddressType();
     auto address_with_type = hci::AddressWithType(device.GetAddress(), *address_type);
 
     auto record = std::make_shared<record::SecurityRecord>(address_with_type);
@@ -146,7 +153,7 @@ void SecurityRecordStorage::LoadSecurityRecords(std::set<std::shared_ptr<record:
     }
     if (device.GetDeviceType() != hci::DeviceType::BR_EDR) {
       record->pseudo_address_ = std::make_optional<hci::AddressWithType>(
-          *device.Le().GetLegacyPseudoAddress(), *device.Le().GetAddressType());
+              *device.Le().GetLegacyPseudoAddress(), *device.Le().GetAddressType());
 
       if (device.Le().GetPeerId()) {
         auto peerid = common::ByteArray<23>::FromString(*device.Le().GetPeerId());
@@ -157,12 +164,13 @@ void SecurityRecordStorage::LoadSecurityRecords(std::set<std::shared_ptr<record:
         hci::Address idaddress;
         std::copy_n(peerid->data() + 16, 1, &idaddress_type);
         std::copy_n(peerid->data() + 17, 6, idaddress.data());
-        record->identity_address_ =
-            std::make_optional<hci::AddressWithType>(idaddress, static_cast<hci::AddressType>(idaddress_type));
+        record->identity_address_ = std::make_optional<hci::AddressWithType>(
+                idaddress, static_cast<hci::AddressType>(idaddress_type));
       }
 
       if (device.Le().GetPeerEncryptionKeys()) {
-        auto peer_encryption_keys = common::ByteArray<28>::FromString(*device.Le().GetPeerEncryptionKeys());
+        auto peer_encryption_keys =
+                common::ByteArray<28>::FromString(*device.Le().GetPeerEncryptionKeys());
         record->remote_ltk = std::make_optional<std::array<uint8_t, 16>>();
         record->remote_rand = std::make_optional<std::array<uint8_t, 8>>();
         record->remote_ediv = std::make_optional(0);
@@ -176,10 +184,11 @@ void SecurityRecordStorage::LoadSecurityRecords(std::set<std::shared_ptr<record:
 
       if (device.Le().GetPeerSignatureResolvingKeys()) {
         auto peer_signature_resolving_keys =
-            common::ByteArray<21>::FromString(*device.Le().GetPeerSignatureResolvingKeys());
+                common::ByteArray<21>::FromString(*device.Le().GetPeerSignatureResolvingKeys());
         record->remote_signature_key = std::make_optional<std::array<uint8_t, 16>>();
 
-        std::copy_n(peer_signature_resolving_keys->data() + 4, 16, record->remote_signature_key->data());
+        std::copy_n(peer_signature_resolving_keys->data() + 4, 16,
+                    record->remote_signature_key->data());
         record->security_level = peer_signature_resolving_keys->data()[20];
       }
     }

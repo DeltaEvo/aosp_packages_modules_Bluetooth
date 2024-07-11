@@ -36,9 +36,7 @@ DataParser::DataParser(const std::vector<uint8_t>& data) {
   }
 }
 
-size_t DataParser::GetNumGapData() const {
-  return gap_data_.size();
-}
+size_t DataParser::GetNumGapData() const { return gap_data_.size(); }
 
 std::vector<hci::GapData> DataParser::GetData() const {
   return std::vector<hci::GapData>(gap_data_);
@@ -46,7 +44,9 @@ std::vector<hci::GapData> DataParser::GetData() const {
 
 std::vector<hci::GapDataType> DataParser::GetDataTypes() const {
   std::vector<hci::GapDataType> types;
-  for (const auto& gap_data : gap_data_) types.push_back(gap_data.data_type_);
+  for (const auto& gap_data : gap_data_) {
+    types.push_back(gap_data.data_type_);
+  }
   return types;
 }
 

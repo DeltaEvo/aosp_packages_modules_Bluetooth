@@ -890,10 +890,10 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
      * @hide
      */
     @SystemApi
-    @RequiresBluetoothConnectPermission
+    @RequiresBluetoothScanPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
+                android.Manifest.permission.BLUETOOTH_SCAN,
                 android.Manifest.permission.BLUETOOTH_PRIVILEGED,
             })
     public void stopSearchingForSources() {
@@ -928,10 +928,10 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
      * @hide
      */
     @SystemApi
-    @RequiresBluetoothConnectPermission
+    @RequiresBluetoothScanPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
+                android.Manifest.permission.BLUETOOTH_SCAN,
                 android.Manifest.permission.BLUETOOTH_PRIVILEGED,
             })
     public boolean isSearchInProgress() {
@@ -1225,6 +1225,12 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
      * @hide
      */
     @SystemApi
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(
+            allOf = {
+                android.Manifest.permission.BLUETOOTH_CONNECT,
+                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+            })
     public int getMaximumSourceCapacity(@NonNull BluetoothDevice sink) {
         Objects.requireNonNull(sink, "sink cannot be null");
         final IBluetoothLeBroadcastAssistant service = getService();

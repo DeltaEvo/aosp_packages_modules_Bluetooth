@@ -26,8 +26,8 @@ namespace security {
 namespace pairing {
 
 void ClassicPairingHandler::NotifyUiDisplayYesNo(uint32_t numeric_value) {
-  log::assert_that(
-      user_interface_handler_ != nullptr, "assert failed: user_interface_handler_ != nullptr");
+  log::assert_that(user_interface_handler_ != nullptr,
+                   "assert failed: user_interface_handler_ != nullptr");
   ConfirmationData data(*GetRecord()->GetPseudoAddress(), device_name_, numeric_value);
   data.SetRemoteIoCaps(remote_io_capability_);
   data.SetRemoteAuthReqs(remote_authentication_requirements_);
@@ -36,8 +36,8 @@ void ClassicPairingHandler::NotifyUiDisplayYesNo(uint32_t numeric_value) {
 }
 
 void ClassicPairingHandler::NotifyUiDisplayYesNo() {
-  log::assert_that(
-      user_interface_handler_ != nullptr, "assert failed: user_interface_handler_ != nullptr");
+  log::assert_that(user_interface_handler_ != nullptr,
+                   "assert failed: user_interface_handler_ != nullptr");
   ConfirmationData data(*GetRecord()->GetPseudoAddress(), device_name_);
   data.SetRemoteIoCaps(remote_io_capability_);
   data.SetRemoteAuthReqs(remote_authentication_requirements_);
@@ -46,8 +46,8 @@ void ClassicPairingHandler::NotifyUiDisplayYesNo() {
 }
 
 void ClassicPairingHandler::NotifyUiDisplayPasskey(uint32_t passkey) {
-  log::assert_that(
-      user_interface_handler_ != nullptr, "assert failed: user_interface_handler_ != nullptr");
+  log::assert_that(user_interface_handler_ != nullptr,
+                   "assert failed: user_interface_handler_ != nullptr");
   ConfirmationData data(*GetRecord()->GetPseudoAddress(), device_name_, passkey);
   data.SetRemoteIoCaps(remote_io_capability_);
   data.SetRemoteAuthReqs(remote_authentication_requirements_);
@@ -56,8 +56,8 @@ void ClassicPairingHandler::NotifyUiDisplayPasskey(uint32_t passkey) {
 }
 
 void ClassicPairingHandler::NotifyUiDisplayPasskeyInput() {
-  log::assert_that(
-      user_interface_handler_ != nullptr, "assert failed: user_interface_handler_ != nullptr");
+  log::assert_that(user_interface_handler_ != nullptr,
+                   "assert failed: user_interface_handler_ != nullptr");
   ConfirmationData data(*GetRecord()->GetPseudoAddress(), device_name_);
   data.SetRemoteIoCaps(remote_io_capability_);
   data.SetRemoteAuthReqs(remote_authentication_requirements_);
@@ -66,8 +66,8 @@ void ClassicPairingHandler::NotifyUiDisplayPasskeyInput() {
 }
 
 void ClassicPairingHandler::NotifyUiDisplayPinCodeInput() {
-  log::assert_that(
-      user_interface_handler_ != nullptr, "assert failed: user_interface_handler_ != nullptr");
+  log::assert_that(user_interface_handler_ != nullptr,
+                   "assert failed: user_interface_handler_ != nullptr");
   ConfirmationData data(*GetRecord()->GetPseudoAddress(), device_name_);
   data.SetRemoteIoCaps(remote_io_capability_);
   data.SetRemoteAuthReqs(remote_authentication_requirements_);
@@ -76,47 +76,48 @@ void ClassicPairingHandler::NotifyUiDisplayPinCodeInput() {
 }
 
 void ClassicPairingHandler::NotifyUiDisplayCancel() {
-  log::assert_that(
-      user_interface_handler_ != nullptr, "assert failed: user_interface_handler_ != nullptr");
+  log::assert_that(user_interface_handler_ != nullptr,
+                   "assert failed: user_interface_handler_ != nullptr");
   user_interface_handler_->CallOn(user_interface_, &UI::Cancel, *GetRecord()->GetPseudoAddress());
 }
 
 void ClassicPairingHandler::OnPairingPromptAccepted(
-    const bluetooth::hci::AddressWithType& /* address */, bool /* confirmed */) {
+        const bluetooth::hci::AddressWithType& /* address */, bool /* confirmed */) {
   // NOTE: This is not used by Classic, only by LE
   log::fatal("This is not supported by Classic Pairing Handler, only LE");
 }
 
-void ClassicPairingHandler::OnConfirmYesNo(
-    const bluetooth::hci::AddressWithType& /* address */, bool confirmed) {
+void ClassicPairingHandler::OnConfirmYesNo(const bluetooth::hci::AddressWithType& /* address */,
+                                           bool confirmed) {
   if (confirmed) {
-    GetChannel()->SendCommand(
-        hci::UserConfirmationRequestReplyBuilder::Create(GetRecord()->GetPseudoAddress()->GetAddress()));
+    GetChannel()->SendCommand(hci::UserConfirmationRequestReplyBuilder::Create(
+            GetRecord()->GetPseudoAddress()->GetAddress()));
   } else {
-    GetChannel()->SendCommand(
-        hci::UserConfirmationRequestNegativeReplyBuilder::Create(GetRecord()->GetPseudoAddress()->GetAddress()));
+    GetChannel()->SendCommand(hci::UserConfirmationRequestNegativeReplyBuilder::Create(
+            GetRecord()->GetPseudoAddress()->GetAddress()));
   }
 }
 
-void ClassicPairingHandler::OnPasskeyEntry(const bluetooth::hci::AddressWithType& address, uint32_t passkey) {
-  GetChannel()->SendCommand(hci::UserPasskeyRequestReplyBuilder::Create(address.GetAddress(), passkey));
+void ClassicPairingHandler::OnPasskeyEntry(const bluetooth::hci::AddressWithType& address,
+                                           uint32_t passkey) {
+  GetChannel()->SendCommand(
+          hci::UserPasskeyRequestReplyBuilder::Create(address.GetAddress(), passkey));
 }
 
-void ClassicPairingHandler::OnPinEntry(const bluetooth::hci::AddressWithType& address, std::vector<uint8_t> pin) {
+void ClassicPairingHandler::OnPinEntry(const bluetooth::hci::AddressWithType& address,
+                                       std::vector<uint8_t> pin) {
   std::array<uint8_t, 16> padded_pin;
   for (size_t i = 0; i < 16 && i < pin.size(); i++) {
     padded_pin[i] = pin[i];
   }
   log::info("{}", address.GetAddress());
-  GetChannel()->SendCommand(hci::PinCodeRequestReplyBuilder::Create(address.GetAddress(), pin.size(), padded_pin));
+  GetChannel()->SendCommand(
+          hci::PinCodeRequestReplyBuilder::Create(address.GetAddress(), pin.size(), padded_pin));
 }
 
-void ClassicPairingHandler::Initiate(
-    bool locally_initiated,
-    hci::IoCapability io_capability,
-    hci::AuthenticationRequirements auth_requirements,
-    OobData remote_p192_oob_data,
-    OobData remote_p256_oob_data) {
+void ClassicPairingHandler::Initiate(bool locally_initiated, hci::IoCapability io_capability,
+                                     hci::AuthenticationRequirements auth_requirements,
+                                     OobData remote_p192_oob_data, OobData remote_p256_oob_data) {
   log::info("Initiate");
   locally_initiated_ = locally_initiated;
   local_io_capability_ = io_capability;
@@ -167,7 +168,9 @@ void ClassicPairingHandler::OnNameRequestComplete(hci::Address address, bool /* 
 }
 
 void ClassicPairingHandler::Cancel() {
-  if (is_cancelled_) return;
+  if (is_cancelled_) {
+    return;
+  }
   is_cancelled_ = true;
   PairingResultOrFailure result = PairingResult();
   if (last_status_ != hci::ErrorCode::SUCCESS) {
@@ -189,13 +192,13 @@ void ClassicPairingHandler::OnReceive(hci::CentralLinkKeyCompleteView packet) {
 void ClassicPairingHandler::OnReceive(hci::PinCodeRequestView packet) {
   log::assert_that(packet.IsValid(), "assert failed: packet.IsValid()");
   log::info("Received: {}", hci::EventCodeText(packet.GetEventCode()));
-  log::assert_that(
-      GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(), "Address mismatch");
+  log::assert_that(GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(),
+                   "Address mismatch");
   is_legacy_pin_code_ = true;
   GetNameDbModule()->ReadRemoteNameRequest(
-      GetRecord()->GetPseudoAddress()->GetAddress(),
-      common::BindOnce(&ClassicPairingHandler::OnNameRequestComplete, common::Unretained(this)),
-      security_handler_);
+          GetRecord()->GetPseudoAddress()->GetAddress(),
+          common::BindOnce(&ClassicPairingHandler::OnNameRequestComplete, common::Unretained(this)),
+          security_handler_);
 }
 
 void ClassicPairingHandler::OnReceive(hci::LinkKeyRequestView packet) {
@@ -206,26 +209,26 @@ void ClassicPairingHandler::OnReceive(hci::LinkKeyRequestView packet) {
   }
   already_link_key_replied_ = true;
   log::info("Received: {}", hci::EventCodeText(packet.GetEventCode()));
-  log::assert_that(
-      GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(), "Address mismatch");
+  log::assert_that(GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(),
+                   "Address mismatch");
   if (GetRecord()->IsPaired()) {
     log::info("Sending: LINK_KEY_REQUEST_REPLY");
     this->GetChannel()->SendCommand(hci::LinkKeyRequestReplyBuilder::Create(
-        GetRecord()->GetPseudoAddress()->GetAddress(), GetRecord()->GetLinkKey()));
+            GetRecord()->GetPseudoAddress()->GetAddress(), GetRecord()->GetLinkKey()));
     last_status_ = hci::ErrorCode::SUCCESS;
     Cancel();
   } else {
     log::info("Sending: LINK_KEY_REQUEST_NEGATIVE_REPLY");
-    this->GetChannel()->SendCommand(
-        hci::LinkKeyRequestNegativeReplyBuilder::Create(GetRecord()->GetPseudoAddress()->GetAddress()));
+    this->GetChannel()->SendCommand(hci::LinkKeyRequestNegativeReplyBuilder::Create(
+            GetRecord()->GetPseudoAddress()->GetAddress()));
   }
 }
 
 void ClassicPairingHandler::OnReceive(hci::LinkKeyNotificationView packet) {
   log::assert_that(packet.IsValid(), "assert failed: packet.IsValid()");
   log::info("Received: {}", hci::EventCodeText(packet.GetEventCode()));
-  log::assert_that(
-      GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(), "Address mismatch");
+  log::assert_that(GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(),
+                   "Address mismatch");
   GetRecord()->SetLinkKey(packet.GetLinkKey(), packet.GetKeyType());
   if (!has_gotten_name_response_) {
     link_key_notification_ = std::make_optional<hci::LinkKeyNotificationView>(packet);
@@ -240,25 +243,26 @@ void ClassicPairingHandler::OnReceive(hci::LinkKeyNotificationView packet) {
 void ClassicPairingHandler::OnReceive(hci::IoCapabilityRequestView packet) {
   log::assert_that(packet.IsValid(), "assert failed: packet.IsValid()");
   log::info("Received: {}", hci::EventCodeText(packet.GetEventCode()));
-  log::assert_that(
-      GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(), "Address mismatch");
+  log::assert_that(GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(),
+                   "Address mismatch");
   hci::IoCapability io_capability = local_io_capability_;
   hci::OobDataPresent oob_present = remote_oob_present_;
   hci::AuthenticationRequirements authentication_requirements = local_authentication_requirements_;
   auto reply_packet = hci::IoCapabilityRequestReplyBuilder::Create(
-      GetRecord()->GetPseudoAddress()->GetAddress(), io_capability, oob_present, authentication_requirements);
+          GetRecord()->GetPseudoAddress()->GetAddress(), io_capability, oob_present,
+          authentication_requirements);
   this->GetChannel()->SendCommand(std::move(reply_packet));
   GetNameDbModule()->ReadRemoteNameRequest(
-      GetRecord()->GetPseudoAddress()->GetAddress(),
-      common::BindOnce(&ClassicPairingHandler::OnNameRequestComplete, common::Unretained(this)),
-      security_handler_);
+          GetRecord()->GetPseudoAddress()->GetAddress(),
+          common::BindOnce(&ClassicPairingHandler::OnNameRequestComplete, common::Unretained(this)),
+          security_handler_);
 }
 
 void ClassicPairingHandler::OnReceive(hci::IoCapabilityResponseView packet) {
   log::assert_that(packet.IsValid(), "assert failed: packet.IsValid()");
   log::info("Received: {}", hci::EventCodeText(packet.GetEventCode()));
-  log::assert_that(
-      GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(), "Address mismatch");
+  log::assert_that(GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(),
+                   "Address mismatch");
 
   remote_io_capability_ = packet.GetIoCapability();
   remote_authentication_requirements_ = packet.GetAuthenticationRequirements();
@@ -266,32 +270,42 @@ void ClassicPairingHandler::OnReceive(hci::IoCapabilityResponseView packet) {
   switch (remote_authentication_requirements_) {
     case hci::AuthenticationRequirements::NO_BONDING:
       GetRecord()->SetIsEncryptionRequired(
-          local_authentication_requirements_ != hci::AuthenticationRequirements::NO_BONDING ||
-          local_authentication_requirements_ != hci::AuthenticationRequirements::NO_BONDING_MITM_PROTECTION);
+              local_authentication_requirements_ != hci::AuthenticationRequirements::NO_BONDING ||
+              local_authentication_requirements_ !=
+                      hci::AuthenticationRequirements::NO_BONDING_MITM_PROTECTION);
       GetRecord()->SetRequiresMitmProtection(
-          local_authentication_requirements_ == hci::AuthenticationRequirements::DEDICATED_BONDING_MITM_PROTECTION ||
-          local_authentication_requirements_ == hci::AuthenticationRequirements::GENERAL_BONDING_MITM_PROTECTION ||
-          local_authentication_requirements_ == hci::AuthenticationRequirements::NO_BONDING_MITM_PROTECTION);
+              local_authentication_requirements_ ==
+                      hci::AuthenticationRequirements::DEDICATED_BONDING_MITM_PROTECTION ||
+              local_authentication_requirements_ ==
+                      hci::AuthenticationRequirements::GENERAL_BONDING_MITM_PROTECTION ||
+              local_authentication_requirements_ ==
+                      hci::AuthenticationRequirements::NO_BONDING_MITM_PROTECTION);
       // TODO(optedoblivion): check for HID device (CoD) and if HID don't make temporary
       GetRecord()->SetIsTemporary(
-          local_authentication_requirements_ == hci::AuthenticationRequirements::NO_BONDING ||
-          local_authentication_requirements_ == hci::AuthenticationRequirements::NO_BONDING_MITM_PROTECTION);
+              local_authentication_requirements_ == hci::AuthenticationRequirements::NO_BONDING ||
+              local_authentication_requirements_ ==
+                      hci::AuthenticationRequirements::NO_BONDING_MITM_PROTECTION);
       break;
     case hci::AuthenticationRequirements::NO_BONDING_MITM_PROTECTION:
       GetRecord()->SetIsEncryptionRequired(
-          local_authentication_requirements_ != hci::AuthenticationRequirements::NO_BONDING ||
-          local_authentication_requirements_ != hci::AuthenticationRequirements::NO_BONDING_MITM_PROTECTION);
+              local_authentication_requirements_ != hci::AuthenticationRequirements::NO_BONDING ||
+              local_authentication_requirements_ !=
+                      hci::AuthenticationRequirements::NO_BONDING_MITM_PROTECTION);
       GetRecord()->SetRequiresMitmProtection(true);
       GetRecord()->SetIsTemporary(
-          local_authentication_requirements_ == hci::AuthenticationRequirements::NO_BONDING ||
-          local_authentication_requirements_ == hci::AuthenticationRequirements::NO_BONDING_MITM_PROTECTION);
+              local_authentication_requirements_ == hci::AuthenticationRequirements::NO_BONDING ||
+              local_authentication_requirements_ ==
+                      hci::AuthenticationRequirements::NO_BONDING_MITM_PROTECTION);
       break;
     case hci::AuthenticationRequirements::DEDICATED_BONDING:
       GetRecord()->SetIsEncryptionRequired(true);
       GetRecord()->SetRequiresMitmProtection(
-          local_authentication_requirements_ == hci::AuthenticationRequirements::DEDICATED_BONDING_MITM_PROTECTION ||
-          local_authentication_requirements_ == hci::AuthenticationRequirements::GENERAL_BONDING_MITM_PROTECTION ||
-          local_authentication_requirements_ == hci::AuthenticationRequirements::NO_BONDING_MITM_PROTECTION);
+              local_authentication_requirements_ ==
+                      hci::AuthenticationRequirements::DEDICATED_BONDING_MITM_PROTECTION ||
+              local_authentication_requirements_ ==
+                      hci::AuthenticationRequirements::GENERAL_BONDING_MITM_PROTECTION ||
+              local_authentication_requirements_ ==
+                      hci::AuthenticationRequirements::NO_BONDING_MITM_PROTECTION);
       break;
     case hci::AuthenticationRequirements::DEDICATED_BONDING_MITM_PROTECTION:
       GetRecord()->SetIsEncryptionRequired(true);
@@ -300,9 +314,12 @@ void ClassicPairingHandler::OnReceive(hci::IoCapabilityResponseView packet) {
     case hci::AuthenticationRequirements::GENERAL_BONDING:
       GetRecord()->SetIsEncryptionRequired(true);
       GetRecord()->SetRequiresMitmProtection(
-          local_authentication_requirements_ == hci::AuthenticationRequirements::DEDICATED_BONDING_MITM_PROTECTION ||
-          local_authentication_requirements_ == hci::AuthenticationRequirements::GENERAL_BONDING_MITM_PROTECTION ||
-          local_authentication_requirements_ == hci::AuthenticationRequirements::NO_BONDING_MITM_PROTECTION);
+              local_authentication_requirements_ ==
+                      hci::AuthenticationRequirements::DEDICATED_BONDING_MITM_PROTECTION ||
+              local_authentication_requirements_ ==
+                      hci::AuthenticationRequirements::GENERAL_BONDING_MITM_PROTECTION ||
+              local_authentication_requirements_ ==
+                      hci::AuthenticationRequirements::NO_BONDING_MITM_PROTECTION);
       break;
     case hci::AuthenticationRequirements::GENERAL_BONDING_MITM_PROTECTION:
       GetRecord()->SetIsEncryptionRequired(true);
@@ -323,8 +340,8 @@ void ClassicPairingHandler::OnReceive(hci::IoCapabilityResponseView packet) {
 void ClassicPairingHandler::OnReceive(hci::SimplePairingCompleteView packet) {
   log::assert_that(packet.IsValid(), "assert failed: packet.IsValid()");
   log::info("Received: {}", hci::EventCodeText(packet.GetEventCode()));
-  log::assert_that(
-      GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(), "Address mismatch");
+  log::assert_that(GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(),
+                   "Address mismatch");
   last_status_ = packet.GetStatus();
   if (last_status_ != hci::ErrorCode::SUCCESS) {
     log::info("Failed SimplePairingComplete: {}", hci::ErrorCodeText(last_status_));
@@ -351,15 +368,15 @@ void ClassicPairingHandler::OnReceive(hci::EncryptionKeyRefreshCompleteView pack
 void ClassicPairingHandler::OnReceive(hci::RemoteOobDataRequestView packet) {
   log::assert_that(packet.IsValid(), "assert failed: packet.IsValid()");
   log::info("Received: {}", hci::EventCodeText(packet.GetEventCode()));
-  log::assert_that(
-      GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(), "Address mismatch");
+  log::assert_that(GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(),
+                   "Address mismatch");
 
   // Corev5.2 V2PF
   switch (remote_oob_present_) {
     case hci::OobDataPresent::NOT_PRESENT:
       log::warn("Missing remote OOB data");
-      GetChannel()->SendCommand(
-          hci::RemoteOobDataRequestNegativeReplyBuilder::Create(GetRecord()->GetPseudoAddress()->GetAddress()));
+      GetChannel()->SendCommand(hci::RemoteOobDataRequestNegativeReplyBuilder::Create(
+              GetRecord()->GetPseudoAddress()->GetAddress()));
       break;
     case hci::OobDataPresent::P_192_PRESENT:
       log::info("P192 Present");
@@ -367,35 +384,28 @@ void ClassicPairingHandler::OnReceive(hci::RemoteOobDataRequestView packet) {
       secure_connections_enabled_ = false;
       if (secure_connections_enabled_) {
         GetChannel()->SendCommand(hci::RemoteOobExtendedDataRequestReplyBuilder::Create(
-            GetRecord()->GetPseudoAddress()->GetAddress(),
-            this->remote_p192_oob_data_.GetC(),
-            this->remote_p192_oob_data_.GetR(),
-            this->remote_p256_oob_data_.GetC(),
-            this->remote_p256_oob_data_.GetR()));
+                GetRecord()->GetPseudoAddress()->GetAddress(), this->remote_p192_oob_data_.GetC(),
+                this->remote_p192_oob_data_.GetR(), this->remote_p256_oob_data_.GetC(),
+                this->remote_p256_oob_data_.GetR()));
       } else {
         GetChannel()->SendCommand(hci::RemoteOobDataRequestReplyBuilder::Create(
-            GetRecord()->GetPseudoAddress()->GetAddress(),
-            this->remote_p192_oob_data_.GetC(),
-            this->remote_p192_oob_data_.GetR()));
+                GetRecord()->GetPseudoAddress()->GetAddress(), this->remote_p192_oob_data_.GetC(),
+                this->remote_p192_oob_data_.GetR()));
       }
       break;
     case hci::OobDataPresent::P_256_PRESENT:
       log::info("P256 Present");
       GetChannel()->SendCommand(hci::RemoteOobExtendedDataRequestReplyBuilder::Create(
-          GetRecord()->GetPseudoAddress()->GetAddress(),
-          this->remote_p192_oob_data_.GetC(),
-          this->remote_p192_oob_data_.GetR(),
-          this->remote_p256_oob_data_.GetC(),
-          this->remote_p256_oob_data_.GetR()));
+              GetRecord()->GetPseudoAddress()->GetAddress(), this->remote_p192_oob_data_.GetC(),
+              this->remote_p192_oob_data_.GetR(), this->remote_p256_oob_data_.GetC(),
+              this->remote_p256_oob_data_.GetR()));
       break;
     case hci::OobDataPresent::P_192_AND_256_PRESENT:
       log::info("P192 and P256 Present");
       GetChannel()->SendCommand(hci::RemoteOobExtendedDataRequestReplyBuilder::Create(
-          GetRecord()->GetPseudoAddress()->GetAddress(),
-          this->remote_p192_oob_data_.GetC(),
-          this->remote_p192_oob_data_.GetR(),
-          this->remote_p256_oob_data_.GetC(),
-          this->remote_p256_oob_data_.GetR()));
+              GetRecord()->GetPseudoAddress()->GetAddress(), this->remote_p192_oob_data_.GetC(),
+              this->remote_p192_oob_data_.GetR(), this->remote_p256_oob_data_.GetC(),
+              this->remote_p256_oob_data_.GetR()));
       break;
   }
 }
@@ -403,16 +413,16 @@ void ClassicPairingHandler::OnReceive(hci::RemoteOobDataRequestView packet) {
 void ClassicPairingHandler::OnReceive(hci::UserPasskeyNotificationView packet) {
   log::assert_that(packet.IsValid(), "assert failed: packet.IsValid()");
   log::info("Received: {}", hci::EventCodeText(packet.GetEventCode()));
-  log::assert_that(
-      GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(), "Address mismatch");
+  log::assert_that(GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(),
+                   "Address mismatch");
   NotifyUiDisplayPasskey(packet.GetPasskey());
 }
 
 void ClassicPairingHandler::OnReceive(hci::KeypressNotificationView packet) {
   log::assert_that(packet.IsValid(), "assert failed: packet.IsValid()");
   log::info("Received: {}", hci::EventCodeText(packet.GetEventCode()));
-  log::info(
-      "Notification Type: {}", hci::KeypressNotificationTypeText(packet.GetNotificationType()));
+  log::info("Notification Type: {}",
+            hci::KeypressNotificationTypeText(packet.GetNotificationType()));
   switch (packet.GetNotificationType()) {
     case hci::KeypressNotificationType::ENTRY_STARTED:
       // Tell the UI to highlight the first digit
@@ -447,11 +457,13 @@ void ClassicPairingHandler::OnReceive(hci::UserConfirmationRequestView packet) {
   }
   log::assert_that(packet.IsValid(), "assert failed: packet.IsValid()");
   log::info("Received: {}", hci::EventCodeText(packet.GetEventCode()));
-  log::assert_that(
-      GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(), "Address mismatch");
+  log::assert_that(GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(),
+                   "Address mismatch");
   // if locally_initialized, use default, otherwise us remote io caps
-  hci::IoCapability initiator_io_capability = (locally_initiated_) ? local_io_capability_ : remote_io_capability_;
-  hci::IoCapability responder_io_capability = (!locally_initiated_) ? local_io_capability_ : remote_io_capability_;
+  hci::IoCapability initiator_io_capability =
+          (locally_initiated_) ? local_io_capability_ : remote_io_capability_;
+  hci::IoCapability responder_io_capability =
+          (!locally_initiated_) ? local_io_capability_ : remote_io_capability_;
   switch (initiator_io_capability) {
     case hci::IoCapability::DISPLAY_ONLY:
       switch (responder_io_capability) {
@@ -459,8 +471,8 @@ void ClassicPairingHandler::OnReceive(hci::UserConfirmationRequestView packet) {
           // NumericComparison, Both auto confirm
           log::info("Numeric Comparison: A and B auto confirm");
           if (!GetRecord()->RequiresMitmProtection()) {
-            GetChannel()->SendCommand(
-                hci::UserConfirmationRequestReplyBuilder::Create(GetRecord()->GetPseudoAddress()->GetAddress()));
+            GetChannel()->SendCommand(hci::UserConfirmationRequestReplyBuilder::Create(
+                    GetRecord()->GetPseudoAddress()->GetAddress()));
             // NOTE(optedoblivion) BTA needs a callback for when auto accepting JustWorks
             // If we auto accept from the ClassicPairingHandler in GD then we won't
             // get a callback to this shim function.
@@ -469,7 +481,7 @@ void ClassicPairingHandler::OnReceive(hci::UserConfirmationRequestView packet) {
             NotifyUiDisplayYesNo();
           } else {
             GetChannel()->SendCommand(hci::UserConfirmationRequestNegativeReplyBuilder::Create(
-                GetRecord()->GetPseudoAddress()->GetAddress()));
+                    GetRecord()->GetPseudoAddress()->GetAddress()));
           }
           // Unauthenticated
           GetRecord()->SetAuthenticated(false);
@@ -477,13 +489,13 @@ void ClassicPairingHandler::OnReceive(hci::UserConfirmationRequestView packet) {
         case hci::IoCapability::DISPLAY_YES_NO:
           // NumericComparison, Initiator auto confirm, Responder display
           if (!GetRecord()->RequiresMitmProtection()) {
-            GetChannel()->SendCommand(
-                hci::UserConfirmationRequestReplyBuilder::Create(GetRecord()->GetPseudoAddress()->GetAddress()));
+            GetChannel()->SendCommand(hci::UserConfirmationRequestReplyBuilder::Create(
+                    GetRecord()->GetPseudoAddress()->GetAddress()));
             // TODO(optedoblivion): REMOVE WHEN SHIM LEAVES
             NotifyUiDisplayYesNo();
           } else {
             GetChannel()->SendCommand(hci::UserConfirmationRequestNegativeReplyBuilder::Create(
-                GetRecord()->GetPseudoAddress()->GetAddress()));
+                    GetRecord()->GetPseudoAddress()->GetAddress()));
           }
           log::info("Numeric Comparison: A auto confirm");
           // Unauthenticated
@@ -500,13 +512,13 @@ void ClassicPairingHandler::OnReceive(hci::UserConfirmationRequestView packet) {
           // NumericComparison, Both auto confirm
           log::info("Numeric Comparison: A and B auto confirm");
           if (!GetRecord()->RequiresMitmProtection()) {
-            GetChannel()->SendCommand(
-                hci::UserConfirmationRequestReplyBuilder::Create(GetRecord()->GetPseudoAddress()->GetAddress()));
+            GetChannel()->SendCommand(hci::UserConfirmationRequestReplyBuilder::Create(
+                    GetRecord()->GetPseudoAddress()->GetAddress()));
             // TODO(optedoblivion): REMOVE WHEN SHIM LEAVES
             NotifyUiDisplayYesNo();
           } else {
             GetChannel()->SendCommand(hci::UserConfirmationRequestNegativeReplyBuilder::Create(
-                GetRecord()->GetPseudoAddress()->GetAddress()));
+                    GetRecord()->GetPseudoAddress()->GetAddress()));
           }
           // Unauthenticated
           GetRecord()->SetAuthenticated(true);
@@ -537,7 +549,8 @@ void ClassicPairingHandler::OnReceive(hci::UserConfirmationRequestView packet) {
           GetRecord()->SetAuthenticated(true);
           break;
         case hci::IoCapability::NO_INPUT_NO_OUTPUT:
-          // NumericComparison, auto confirm Responder, Yes/No confirm Initiator. Don't show confirmation value
+          // NumericComparison, auto confirm Responder, Yes/No confirm Initiator. Don't show
+          // confirmation value
           log::info("Numeric Comparison: A DisplayYesNo, B auto confirm, no show value");
           NotifyUiDisplayYesNo();
           // Unauthenticated
@@ -572,13 +585,13 @@ void ClassicPairingHandler::OnReceive(hci::UserConfirmationRequestView packet) {
           // NumericComparison, both auto confirm
           log::info("Numeric Comparison: A and B auto confirm");
           if (!GetRecord()->RequiresMitmProtection()) {
-            GetChannel()->SendCommand(
-                hci::UserConfirmationRequestReplyBuilder::Create(GetRecord()->GetPseudoAddress()->GetAddress()));
+            GetChannel()->SendCommand(hci::UserConfirmationRequestReplyBuilder::Create(
+                    GetRecord()->GetPseudoAddress()->GetAddress()));
             // TODO(optedoblivion): REMOVE WHEN SHIM LEAVES
             NotifyUiDisplayYesNo();
           } else {
             GetChannel()->SendCommand(hci::UserConfirmationRequestNegativeReplyBuilder::Create(
-                GetRecord()->GetPseudoAddress()->GetAddress()));
+                    GetRecord()->GetPseudoAddress()->GetAddress()));
           }
           // Unauthenticated
           GetRecord()->SetAuthenticated(false);
@@ -591,13 +604,13 @@ void ClassicPairingHandler::OnReceive(hci::UserConfirmationRequestView packet) {
           // NumericComparison, both auto confirm
           log::info("Numeric Comparison: A and B auto confirm");
           if (!GetRecord()->RequiresMitmProtection()) {
-            GetChannel()->SendCommand(
-                hci::UserConfirmationRequestReplyBuilder::Create(GetRecord()->GetPseudoAddress()->GetAddress()));
+            GetChannel()->SendCommand(hci::UserConfirmationRequestReplyBuilder::Create(
+                    GetRecord()->GetPseudoAddress()->GetAddress()));
             // TODO(optedoblivion): REMOVE WHEN SHIM LEAVES
             NotifyUiDisplayYesNo();
           } else {
             GetChannel()->SendCommand(hci::UserConfirmationRequestNegativeReplyBuilder::Create(
-                GetRecord()->GetPseudoAddress()->GetAddress()));
+                    GetRecord()->GetPseudoAddress()->GetAddress()));
           }
           // Unauthenticated
           GetRecord()->SetAuthenticated(false);
@@ -606,13 +619,13 @@ void ClassicPairingHandler::OnReceive(hci::UserConfirmationRequestView packet) {
           // NumericComparison, Initiator auto confirm, Responder Yes/No confirm, no show conf val
           log::info("Numeric Comparison: A auto confirm");
           if (!GetRecord()->RequiresMitmProtection()) {
-            GetChannel()->SendCommand(
-                hci::UserConfirmationRequestReplyBuilder::Create(GetRecord()->GetPseudoAddress()->GetAddress()));
+            GetChannel()->SendCommand(hci::UserConfirmationRequestReplyBuilder::Create(
+                    GetRecord()->GetPseudoAddress()->GetAddress()));
             // TODO(optedoblivion): REMOVE WHEN SHIM LEAVES
             NotifyUiDisplayYesNo();
           } else {
             GetChannel()->SendCommand(hci::UserConfirmationRequestNegativeReplyBuilder::Create(
-                GetRecord()->GetPseudoAddress()->GetAddress()));
+                    GetRecord()->GetPseudoAddress()->GetAddress()));
           }
           // Unauthenticated
           GetRecord()->SetAuthenticated(false);
@@ -621,13 +634,13 @@ void ClassicPairingHandler::OnReceive(hci::UserConfirmationRequestView packet) {
           // NumericComparison, both auto confirm
           log::info("Numeric Comparison: A and B auto confirm");
           if (!GetRecord()->RequiresMitmProtection()) {
-            GetChannel()->SendCommand(
-                hci::UserConfirmationRequestReplyBuilder::Create(GetRecord()->GetPseudoAddress()->GetAddress()));
+            GetChannel()->SendCommand(hci::UserConfirmationRequestReplyBuilder::Create(
+                    GetRecord()->GetPseudoAddress()->GetAddress()));
             // TODO(optedoblivion): REMOVE WHEN SHIM LEAVES
             NotifyUiDisplayYesNo();
           } else {
             GetChannel()->SendCommand(hci::UserConfirmationRequestNegativeReplyBuilder::Create(
-                GetRecord()->GetPseudoAddress()->GetAddress()));
+                    GetRecord()->GetPseudoAddress()->GetAddress()));
           }
           // Unauthenticated
           GetRecord()->SetAuthenticated(false);
@@ -636,13 +649,13 @@ void ClassicPairingHandler::OnReceive(hci::UserConfirmationRequestView packet) {
           // NumericComparison, both auto confirm
           log::info("Numeric Comparison: A and B auto confirm");
           if (!GetRecord()->RequiresMitmProtection()) {
-            GetChannel()->SendCommand(
-                hci::UserConfirmationRequestReplyBuilder::Create(GetRecord()->GetPseudoAddress()->GetAddress()));
+            GetChannel()->SendCommand(hci::UserConfirmationRequestReplyBuilder::Create(
+                    GetRecord()->GetPseudoAddress()->GetAddress()));
             // TODO(optedoblivion): REMOVE WHEN SHIM LEAVES
             NotifyUiDisplayYesNo();
           } else {
             GetChannel()->SendCommand(hci::UserConfirmationRequestNegativeReplyBuilder::Create(
-                GetRecord()->GetPseudoAddress()->GetAddress()));
+                    GetRecord()->GetPseudoAddress()->GetAddress()));
           }
           // Unauthenticated
           GetRecord()->SetAuthenticated(false);
@@ -654,8 +667,8 @@ void ClassicPairingHandler::OnReceive(hci::UserConfirmationRequestView packet) {
 
 void ClassicPairingHandler::OnReceive(hci::UserPasskeyRequestView packet) {
   log::assert_that(packet.IsValid(), "assert failed: packet.IsValid()");
-  log::assert_that(
-      GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(), "Address mismatch");
+  log::assert_that(GetRecord()->GetPseudoAddress()->GetAddress() == packet.GetBdAddr(),
+                   "Address mismatch");
 }
 
 void ClassicPairingHandler::OnUserInput(bool user_input) {
@@ -667,18 +680,16 @@ void ClassicPairingHandler::OnUserInput(bool user_input) {
 }
 
 void ClassicPairingHandler::UserClickedYes() {
-  GetChannel()->SendCommand(
-      hci::UserConfirmationRequestReplyBuilder::Create(GetRecord()->GetPseudoAddress()->GetAddress()));
+  GetChannel()->SendCommand(hci::UserConfirmationRequestReplyBuilder::Create(
+          GetRecord()->GetPseudoAddress()->GetAddress()));
 }
 
 void ClassicPairingHandler::UserClickedNo() {
-  GetChannel()->SendCommand(
-      hci::UserConfirmationRequestNegativeReplyBuilder::Create(GetRecord()->GetPseudoAddress()->GetAddress()));
+  GetChannel()->SendCommand(hci::UserConfirmationRequestNegativeReplyBuilder::Create(
+          GetRecord()->GetPseudoAddress()->GetAddress()));
 }
 
-void ClassicPairingHandler::OnPasskeyInput(uint32_t passkey) {
-  passkey_ = passkey;
-}
+void ClassicPairingHandler::OnPasskeyInput(uint32_t passkey) { passkey_ = passkey; }
 
 }  // namespace pairing
 }  // namespace security

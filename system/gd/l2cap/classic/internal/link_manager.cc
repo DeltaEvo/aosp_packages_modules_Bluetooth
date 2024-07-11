@@ -32,23 +32,25 @@ namespace l2cap {
 namespace classic {
 namespace internal {
 
-void LinkManager::ConnectFixedChannelServices(hci::Address device,
-                                              PendingFixedChannelConnection pending_fixed_channel_connection) {
+void LinkManager::ConnectFixedChannelServices(
+        hci::Address device, PendingFixedChannelConnection pending_fixed_channel_connection) {
   // Check if there is any service registered
   auto fixed_channel_services = fixed_channel_service_manager_->GetRegisteredServices();
   if (fixed_channel_services.empty()) {
     // If so, return error
-    pending_fixed_channel_connection.handler_->Post(common::BindOnce(
-        std::move(pending_fixed_channel_connection.on_fail_callback_),
-        FixedChannelManager::ConnectionResult{
-            .connection_result_code = FixedChannelManager::ConnectionResultCode::FAIL_NO_SERVICE_REGISTERED}));
+    pending_fixed_channel_connection.handler_->Post(
+            common::BindOnce(std::move(pending_fixed_channel_connection.on_fail_callback_),
+                             FixedChannelManager::ConnectionResult{
+                                     .connection_result_code = FixedChannelManager::
+                                             ConnectionResultCode::FAIL_NO_SERVICE_REGISTERED}));
     return;
   }
   // Otherwise, check if device has an ACL connection
   auto* link = GetLink(device);
   if (link != nullptr) {
     // If device already have an ACL connection
-    // Check if all registered services have an allocated channel and allocate one if not already allocated
+    // Check if all registered services have an allocated channel and allocate one if not already
+    // allocated
     int num_new_channels = 0;
     for (auto& fixed_channel_service : fixed_channel_services) {
       if (link->IsFixedChannelAllocated(fixed_channel_service.first)) {
@@ -58,15 +60,16 @@ void LinkManager::ConnectFixedChannelServices(hci::Address device,
       // Allocate channel for newly registered fixed channels
       auto fixed_channel_impl = link->AllocateFixedChannel(fixed_channel_service.first);
       fixed_channel_service.second->NotifyChannelCreation(
-          std::make_unique<FixedChannel>(fixed_channel_impl, l2cap_handler_));
+              std::make_unique<FixedChannel>(fixed_channel_impl, l2cap_handler_));
       num_new_channels++;
     }
     // Declare connection failure if no new channels are created
     if (num_new_channels == 0) {
       pending_fixed_channel_connection.handler_->Post(common::BindOnce(
-          std::move(pending_fixed_channel_connection.on_fail_callback_),
-          FixedChannelManager::ConnectionResult{
-              .connection_result_code = FixedChannelManager::ConnectionResultCode::FAIL_ALL_SERVICES_HAVE_CHANNEL}));
+              std::move(pending_fixed_channel_connection.on_fail_callback_),
+              FixedChannelManager::ConnectionResult{
+                      .connection_result_code = FixedChannelManager::ConnectionResultCode::
+                              FAIL_ALL_SERVICES_HAVE_CHANNEL}));
     }
     // No need to create ACL connection, return without saving any pending connections
     return;
@@ -79,13 +82,15 @@ void LinkManager::ConnectFixedChannelServices(hci::Address device,
     pending_links_.try_emplace(device);
     pending_link = pending_links_.find(device);
   }
-  pending_link->second.pending_fixed_channel_connections_.push_back(std::move(pending_fixed_channel_connection));
+  pending_link->second.pending_fixed_channel_connections_.push_back(
+          std::move(pending_fixed_channel_connection));
   // Then create new ACL connection
   acl_manager_->CreateConnection(device);
 }
 
 void LinkManager::ConnectDynamicChannelServices(
-    hci::Address device, Link::PendingDynamicChannelConnection pending_dynamic_channel_connection, Psm psm) {
+        hci::Address device,
+        Link::PendingDynamicChannelConnection pending_dynamic_channel_connection, Psm psm) {
   if (!IsPsmValid(psm)) {
     return;
   }
@@ -94,14 +99,17 @@ void LinkManager::ConnectDynamicChannelServices(
     acl_manager_->CreateConnection(device);
     if (pending_dynamic_channels_.find(device) != pending_dynamic_channels_.end()) {
       pending_dynamic_channels_[device].push_back(psm);
-      pending_dynamic_channels_callbacks_[device].push_back(std::move(pending_dynamic_channel_connection));
+      pending_dynamic_channels_callbacks_[device].push_back(
+              std::move(pending_dynamic_channel_connection));
     } else {
       pending_dynamic_channels_[device] = {psm};
-      pending_dynamic_channels_callbacks_[device].push_back(std::move(pending_dynamic_channel_connection));
+      pending_dynamic_channels_callbacks_[device].push_back(
+              std::move(pending_dynamic_channel_connection));
     }
     return;
   }
-  link->SendConnectionRequest(psm, link->ReserveDynamicChannel(), std::move(pending_dynamic_channel_connection));
+  link->SendConnectionRequest(psm, link->ReserveDynamicChannel(),
+                              std::move(pending_dynamic_channel_connection));
 }
 
 void LinkManager::InitiateConnectionForSecurity(hci::Address remote) {
@@ -112,7 +120,8 @@ void LinkManager::InitiateConnectionForSecurity(hci::Address remote) {
   acl_manager_->CreateConnection(remote);
 }
 
-void LinkManager::RegisterLinkSecurityInterfaceListener(os::Handler* handler, LinkSecurityInterfaceListener* listener) {
+void LinkManager::RegisterLinkSecurityInterfaceListener(os::Handler* handler,
+                                                        LinkSecurityInterfaceListener* listener) {
   link_security_interface_listener_handler_ = handler;
   link_security_interface_listener_ = listener;
 }
@@ -121,7 +130,8 @@ LinkSecurityInterfaceListener* LinkManager::GetLinkSecurityInterfaceListener() {
   return link_security_interface_listener_;
 }
 
-void LinkManager::RegisterLinkPropertyListener(os::Handler* handler, LinkPropertyListener* listener) {
+void LinkManager::RegisterLinkPropertyListener(os::Handler* handler,
+                                               LinkPropertyListener* listener) {
   link_property_callback_handler_ = handler;
   link_property_listener_ = listener;
 }
@@ -190,20 +200,19 @@ void LinkManager::handle_link_security_ensure_encrypted(hci::Address remote) {
 }
 
 /**
- * The implementation for LinkSecurityInterface, which allows the SecurityModule to access some link functionalities.
- * Note: All public methods implementing this interface are invoked from external context.
+ * The implementation for LinkSecurityInterface, which allows the SecurityModule to access some link
+ * functionalities. Note: All public methods implementing this interface are invoked from external
+ * context.
  */
 class LinkSecurityInterfaceImpl : public LinkSecurityInterface {
- public:
+public:
   LinkSecurityInterfaceImpl(os::Handler* handler, LinkManager* link_manager, Link* link)
       : handler_(handler),
         link_manager_(link_manager),
         remote_(link->GetDevice().GetAddress()),
         acl_handle_(link->GetAclHandle()) {}
 
-  hci::Address GetRemoteAddress() override {
-    return remote_;
-  }
+  hci::Address GetRemoteAddress() override { return remote_; }
 
   void Hold() override {
     handler_->CallOn(link_manager_, &LinkManager::handle_link_security_hold, remote_);
@@ -218,20 +227,17 @@ class LinkSecurityInterfaceImpl : public LinkSecurityInterface {
   }
 
   void EnsureAuthenticated() override {
-    handler_->CallOn(link_manager_, &LinkManager::handle_link_security_ensure_authenticated, remote_);
+    handler_->CallOn(link_manager_, &LinkManager::handle_link_security_ensure_authenticated,
+                     remote_);
   }
 
   void EnsureEncrypted() override {
     handler_->CallOn(link_manager_, &LinkManager::handle_link_security_ensure_encrypted, remote_);
   }
 
-  uint16_t GetAclHandle() override {
-    return acl_handle_;
-  }
+  uint16_t GetAclHandle() override { return acl_handle_; }
 
-  hci::Role GetRole() override {
-    return link_manager_->GetLink(remote_)->GetRole();
-  }
+  hci::Role GetRole() override { return link_manager_->GetLink(remote_)->GetRole(); }
 
   os::Handler* handler_;
   LinkManager* link_manager_;
@@ -239,13 +245,12 @@ class LinkSecurityInterfaceImpl : public LinkSecurityInterface {
   uint16_t acl_handle_;
 };
 
-void LinkManager::OnConnectSuccess(std::unique_ptr<hci::acl_manager::ClassicAclConnection> acl_connection) {
+void LinkManager::OnConnectSuccess(
+        std::unique_ptr<hci::acl_manager::ClassicAclConnection> acl_connection) {
   // Same link should not be connected twice
   hci::Address device = acl_connection->GetAddress();
-  log::assert_that(
-      GetLink(device) == nullptr,
-      "{} is connected twice without disconnection",
-      ADDRESS_TO_LOGGABLE_CSTR(acl_connection->GetAddress()));
+  log::assert_that(GetLink(device) == nullptr, "{} is connected twice without disconnection",
+                   ADDRESS_TO_LOGGABLE_CSTR(acl_connection->GetAddress()));
   links_.try_emplace(device, l2cap_handler_, std::move(acl_connection), parameter_provider_,
                      dynamic_channel_service_manager_, fixed_channel_service_manager_, this);
   auto* link = GetLink(device);
@@ -261,7 +266,7 @@ void LinkManager::OnConnectSuccess(std::unique_ptr<hci::acl_manager::ClassicAclC
   for (auto& fixed_channel_service : fixed_channel_services) {
     auto fixed_channel_impl = link->AllocateFixedChannel(fixed_channel_service.first);
     fixed_channel_service.second->NotifyChannelCreation(
-        std::make_unique<FixedChannel>(fixed_channel_impl, l2cap_handler_));
+            std::make_unique<FixedChannel>(fixed_channel_impl, l2cap_handler_));
   }
   if (pending_dynamic_channels_.find(device) != pending_dynamic_channels_.end()) {
     auto psm_list = pending_dynamic_channels_[device];
@@ -272,16 +277,16 @@ void LinkManager::OnConnectSuccess(std::unique_ptr<hci::acl_manager::ClassicAclC
   }
   // Notify link property listener
   if (link_property_callback_handler_ != nullptr) {
-    link_property_callback_handler_->CallOn(
-        link_property_listener_, &LinkPropertyListener::OnLinkConnected, device, link->GetAclHandle());
+    link_property_callback_handler_->CallOn(link_property_listener_,
+                                            &LinkPropertyListener::OnLinkConnected, device,
+                                            link->GetAclHandle());
   }
 
   // Notify security manager
   if (link_security_interface_listener_handler_ != nullptr) {
     link_security_interface_listener_handler_->CallOn(
-        link_security_interface_listener_,
-        &LinkSecurityInterfaceListener::OnLinkConnected,
-        std::make_unique<LinkSecurityInterfaceImpl>(l2cap_handler_, this, link));
+            link_security_interface_listener_, &LinkSecurityInterfaceListener::OnLinkConnected,
+            std::make_unique<LinkSecurityInterfaceImpl>(l2cap_handler_, this, link));
   }
 
   // Remove device from pending links list, if any
@@ -297,14 +302,14 @@ void LinkManager::OnConnectFail(hci::Address device, hci::ErrorCode reason, bool
   auto pending_link = pending_links_.find(device);
   if (pending_link == pending_links_.end()) {
     // There is no pending link, exit
-    log::info(
-        "Connection to {} failed without a pending link; reason: {}",
-        device,
-        hci::ErrorCodeText(reason));
-    if (pending_dynamic_channels_callbacks_.find(device) != pending_dynamic_channels_callbacks_.end()) {
-      for (Link::PendingDynamicChannelConnection& callbacks : pending_dynamic_channels_callbacks_[device]) {
+    log::info("Connection to {} failed without a pending link; reason: {}", device,
+              hci::ErrorCodeText(reason));
+    if (pending_dynamic_channels_callbacks_.find(device) !=
+        pending_dynamic_channels_callbacks_.end()) {
+      for (Link::PendingDynamicChannelConnection& callbacks :
+           pending_dynamic_channels_callbacks_[device]) {
         callbacks.on_fail_callback_(DynamicChannelManager::ConnectionResult{
-            .hci_error = hci::ErrorCode::CONNECTION_TIMEOUT,
+                .hci_error = hci::ErrorCode::CONNECTION_TIMEOUT,
         });
       }
       pending_dynamic_channels_.erase(device);
@@ -312,11 +317,14 @@ void LinkManager::OnConnectFail(hci::Address device, hci::ErrorCode reason, bool
     }
     return;
   }
-  for (auto& pending_fixed_channel_connection : pending_link->second.pending_fixed_channel_connections_) {
+  for (auto& pending_fixed_channel_connection :
+       pending_link->second.pending_fixed_channel_connections_) {
     pending_fixed_channel_connection.handler_->Post(common::BindOnce(
-        std::move(pending_fixed_channel_connection.on_fail_callback_),
-        FixedChannelManager::ConnectionResult{
-            .connection_result_code = FixedChannelManager::ConnectionResultCode::FAIL_HCI_ERROR, .hci_error = reason}));
+            std::move(pending_fixed_channel_connection.on_fail_callback_),
+            FixedChannelManager::ConnectionResult{
+                    .connection_result_code =
+                            FixedChannelManager::ConnectionResultCode::FAIL_HCI_ERROR,
+                    .hci_error = reason}));
   }
   // Remove entry in pending link list
   pending_links_.erase(pending_link);
@@ -324,17 +332,17 @@ void LinkManager::OnConnectFail(hci::Address device, hci::ErrorCode reason, bool
 
 void LinkManager::OnDisconnect(hci::Address device, hci::ErrorCode status) {
   auto* link = GetLink(device);
-  log::assert_that(
-      link != nullptr,
-      "Device {} is disconnected with reason 0x{:x}, but not in local database",
-      ADDRESS_TO_LOGGABLE_CSTR(device),
-      static_cast<uint8_t>(status));
+  log::assert_that(link != nullptr,
+                   "Device {} is disconnected with reason 0x{:x}, but not in local database",
+                   ADDRESS_TO_LOGGABLE_CSTR(device), static_cast<uint8_t>(status));
   if (link_security_interface_listener_handler_ != nullptr) {
     link_security_interface_listener_handler_->CallOn(
-        link_security_interface_listener_, &LinkSecurityInterfaceListener::OnLinkDisconnected, device);
+            link_security_interface_listener_, &LinkSecurityInterfaceListener::OnLinkDisconnected,
+            device);
   }
   if (link_property_callback_handler_ != nullptr) {
-    link_property_callback_handler_->CallOn(link_property_listener_, &LinkPropertyListener::OnLinkDisconnected, device);
+    link_property_callback_handler_->CallOn(link_property_listener_,
+                                            &LinkPropertyListener::OnLinkDisconnected, device);
   }
 
   if (links_with_pending_packets_.count(device) != 0) {
@@ -347,99 +355,79 @@ void LinkManager::OnDisconnect(hci::Address device, hci::ErrorCode status) {
 void LinkManager::OnAuthenticationComplete(hci::ErrorCode hci_status, hci::Address device) {
   if (link_security_interface_listener_handler_ != nullptr) {
     link_security_interface_listener_handler_->CallOn(
-        link_security_interface_listener_,
-        &LinkSecurityInterfaceListener::OnAuthenticationComplete,
-        hci_status,
-        device);
+            link_security_interface_listener_,
+            &LinkSecurityInterfaceListener::OnAuthenticationComplete, hci_status, device);
   }
 }
 
 void LinkManager::OnEncryptionChange(hci::Address device, hci::EncryptionEnabled enabled) {
   if (link_security_interface_listener_handler_ != nullptr) {
     link_security_interface_listener_handler_->CallOn(
-        link_security_interface_listener_,
-        &LinkSecurityInterfaceListener::OnEncryptionChange,
-        device,
-        enabled == hci::EncryptionEnabled::ON || enabled == hci::EncryptionEnabled::BR_EDR_AES_CCM);
+            link_security_interface_listener_, &LinkSecurityInterfaceListener::OnEncryptionChange,
+            device,
+            enabled == hci::EncryptionEnabled::ON ||
+                    enabled == hci::EncryptionEnabled::BR_EDR_AES_CCM);
   }
 }
 
-void LinkManager::OnReadRemoteVersionInformation(
-    hci::ErrorCode hci_status,
-    hci::Address device,
-    uint8_t lmp_version,
-    uint16_t manufacturer_name,
-    uint16_t sub_version) {
+void LinkManager::OnReadRemoteVersionInformation(hci::ErrorCode hci_status, hci::Address device,
+                                                 uint8_t lmp_version, uint16_t manufacturer_name,
+                                                 uint16_t sub_version) {
   if (link_property_callback_handler_ != nullptr) {
     link_property_callback_handler_->CallOn(
-        link_property_listener_,
-        &LinkPropertyListener::OnReadRemoteVersionInformation,
-        hci_status,
-        device,
-        lmp_version,
-        manufacturer_name,
-        sub_version);
+            link_property_listener_, &LinkPropertyListener::OnReadRemoteVersionInformation,
+            hci_status, device, lmp_version, manufacturer_name, sub_version);
   }
 }
 
 void LinkManager::OnReadRemoteSupportedFeatures(hci::Address device, uint64_t features) {
   if (link_property_callback_handler_ != nullptr) {
-    link_property_callback_handler_->CallOn(
-        link_property_listener_, &LinkPropertyListener::OnReadRemoteSupportedFeatures, device, features);
+    link_property_callback_handler_->CallOn(link_property_listener_,
+                                            &LinkPropertyListener::OnReadRemoteSupportedFeatures,
+                                            device, features);
   }
 }
 
-void LinkManager::OnReadRemoteExtendedFeatures(
-    hci::Address device, uint8_t page_number, uint8_t max_page_number, uint64_t features) {
+void LinkManager::OnReadRemoteExtendedFeatures(hci::Address device, uint8_t page_number,
+                                               uint8_t max_page_number, uint64_t features) {
   if (link_property_callback_handler_ != nullptr) {
-    link_property_callback_handler_->CallOn(
-        link_property_listener_,
-        &LinkPropertyListener::OnReadRemoteExtendedFeatures,
-        device,
-        page_number,
-        max_page_number,
-        features);
+    link_property_callback_handler_->CallOn(link_property_listener_,
+                                            &LinkPropertyListener::OnReadRemoteExtendedFeatures,
+                                            device, page_number, max_page_number, features);
   }
 }
 
 void LinkManager::OnRoleChange(hci::ErrorCode hci_status, hci::Address remote, hci::Role role) {
   if (link_property_callback_handler_ != nullptr) {
     link_property_callback_handler_->CallOn(
-        link_property_listener_, &LinkPropertyListener::OnRoleChange, hci_status, remote, role);
+            link_property_listener_, &LinkPropertyListener::OnRoleChange, hci_status, remote, role);
   }
 }
 
 void LinkManager::OnReadClockOffset(hci::Address remote, uint16_t clock_offset) {
   if (link_property_callback_handler_ != nullptr) {
-    link_property_callback_handler_->CallOn(
-        link_property_listener_, &LinkPropertyListener::OnReadClockOffset, remote, clock_offset);
+    link_property_callback_handler_->CallOn(link_property_listener_,
+                                            &LinkPropertyListener::OnReadClockOffset, remote,
+                                            clock_offset);
   }
 }
 
-void LinkManager::OnModeChange(hci::ErrorCode hci_status, hci::Address remote, hci::Mode mode, uint16_t interval) {
+void LinkManager::OnModeChange(hci::ErrorCode hci_status, hci::Address remote, hci::Mode mode,
+                               uint16_t interval) {
   if (link_property_callback_handler_ != nullptr) {
-    link_property_callback_handler_->CallOn(
-        link_property_listener_, &LinkPropertyListener::OnModeChange, hci_status, remote, mode, interval);
+    link_property_callback_handler_->CallOn(link_property_listener_,
+                                            &LinkPropertyListener::OnModeChange, hci_status, remote,
+                                            mode, interval);
   }
 }
 
-void LinkManager::OnSniffSubrating(
-    hci::ErrorCode hci_status,
-    hci::Address remote,
-    uint16_t max_tx_lat,
-    uint16_t max_rx_lat,
-    uint16_t min_remote_timeout,
-    uint16_t min_local_timeout) {
+void LinkManager::OnSniffSubrating(hci::ErrorCode hci_status, hci::Address remote,
+                                   uint16_t max_tx_lat, uint16_t max_rx_lat,
+                                   uint16_t min_remote_timeout, uint16_t min_local_timeout) {
   if (link_property_callback_handler_ != nullptr) {
     link_property_callback_handler_->CallOn(
-        link_property_listener_,
-        &LinkPropertyListener::OnSniffSubrating,
-        hci_status,
-        remote,
-        max_tx_lat,
-        max_rx_lat,
-        min_remote_timeout,
-        min_local_timeout);
+            link_property_listener_, &LinkPropertyListener::OnSniffSubrating, hci_status, remote,
+            max_tx_lat, max_rx_lat, min_remote_timeout, min_local_timeout);
   }
 }
 

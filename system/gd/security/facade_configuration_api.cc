@@ -24,67 +24,64 @@
 namespace bluetooth {
 namespace security {
 
-void FacadeConfigurationApi::SetDisconnectCallback(internal::SecurityManagerImpl::FacadeDisconnectCallback callback) {
-  security_handler_->CallOn(security_manager_impl_, &internal::SecurityManagerImpl::SetDisconnectCallback, callback);
+void FacadeConfigurationApi::SetDisconnectCallback(
+        internal::SecurityManagerImpl::FacadeDisconnectCallback callback) {
+  security_handler_->CallOn(security_manager_impl_,
+                            &internal::SecurityManagerImpl::SetDisconnectCallback, callback);
 }
 
 void FacadeConfigurationApi::SetIoCapability(hci::IoCapability io_capability) {
-  security_handler_->CallOn(security_manager_impl_, &internal::SecurityManagerImpl::SetIoCapability, io_capability);
+  security_handler_->CallOn(security_manager_impl_, &internal::SecurityManagerImpl::SetIoCapability,
+                            io_capability);
 }
 
-void FacadeConfigurationApi::SetAuthenticationRequirements(hci::AuthenticationRequirements authentication_requirement) {
-  security_handler_->CallOn(
-      security_manager_impl_,
-      &internal::SecurityManagerImpl::SetAuthenticationRequirements,
-      authentication_requirement);
+void FacadeConfigurationApi::SetAuthenticationRequirements(
+        hci::AuthenticationRequirements authentication_requirement) {
+  security_handler_->CallOn(security_manager_impl_,
+                            &internal::SecurityManagerImpl::SetAuthenticationRequirements,
+                            authentication_requirement);
 }
 
 void FacadeConfigurationApi::SetLeIoCapability(security::IoCapability io_capability) {
-  security_handler_->CallOn(security_manager_impl_, &internal::SecurityManagerImpl::SetLeIoCapability, io_capability);
+  security_handler_->CallOn(security_manager_impl_,
+                            &internal::SecurityManagerImpl::SetLeIoCapability, io_capability);
 }
 
 void FacadeConfigurationApi::SetLeAuthRequirements(uint8_t auth_req) {
-  security_handler_->CallOn(security_manager_impl_, &internal::SecurityManagerImpl::SetLeAuthRequirements, auth_req);
+  security_handler_->CallOn(security_manager_impl_,
+                            &internal::SecurityManagerImpl::SetLeAuthRequirements, auth_req);
 }
 
 void FacadeConfigurationApi::SetLeMaximumEncryptionKeySize(uint8_t maximum_encryption_key_size) {
-  security_handler_->CallOn(
-      security_manager_impl_,
-      &internal::SecurityManagerImpl::SetLeMaximumEncryptionKeySize,
-      maximum_encryption_key_size);
+  security_handler_->CallOn(security_manager_impl_,
+                            &internal::SecurityManagerImpl::SetLeMaximumEncryptionKeySize,
+                            maximum_encryption_key_size);
 }
 
 void FacadeConfigurationApi::SetLeOobDataPresent(OobDataFlag oob_present) {
-  security_handler_->CallOn(security_manager_impl_, &internal::SecurityManagerImpl::SetLeOobDataPresent, oob_present);
+  security_handler_->CallOn(security_manager_impl_,
+                            &internal::SecurityManagerImpl::SetLeOobDataPresent, oob_present);
 }
 
-void FacadeConfigurationApi::GetLeOutOfBandData(
-    std::array<uint8_t, 16>* confirmation_value, std::array<uint8_t, 16>* random_value) {
+void FacadeConfigurationApi::GetLeOutOfBandData(std::array<uint8_t, 16>* confirmation_value,
+                                                std::array<uint8_t, 16>* random_value) {
   security_manager_impl_->GetLeOutOfBandData(confirmation_value, random_value);
 }
 
-void FacadeConfigurationApi::SetOutOfBandData(
-    hci::AddressWithType remote_address,
-    std::array<uint8_t, 16> confirmation_value,
-    std::array<uint8_t, 16> random_value) {
-  security_handler_->CallOn(
-      security_manager_impl_,
-      &internal::SecurityManagerImpl::SetOutOfBandData,
-      remote_address,
-      confirmation_value,
-      random_value);
+void FacadeConfigurationApi::SetOutOfBandData(hci::AddressWithType remote_address,
+                                              std::array<uint8_t, 16> confirmation_value,
+                                              std::array<uint8_t, 16> random_value) {
+  security_handler_->CallOn(security_manager_impl_,
+                            &internal::SecurityManagerImpl::SetOutOfBandData, remote_address,
+                            confirmation_value, random_value);
 }
 
 void FacadeConfigurationApi::EnforceSecurityPolicy(
-    hci::AddressWithType remote,
-    l2cap::classic::SecurityPolicy policy,
-    l2cap::classic::SecurityEnforcementInterface::ResultCallback callback) {
-  security_handler_->CallOn(
-      security_manager_impl_,
-      &internal::SecurityManagerImpl::EnforceSecurityPolicy,
-      remote,
-      policy,
-      std::move(callback));
+        hci::AddressWithType remote, l2cap::classic::SecurityPolicy policy,
+        l2cap::classic::SecurityEnforcementInterface::ResultCallback callback) {
+  security_handler_->CallOn(security_manager_impl_,
+                            &internal::SecurityManagerImpl::EnforceSecurityPolicy, remote, policy,
+                            std::move(callback));
 }
 
 }  // namespace security

@@ -34,16 +34,18 @@ typedef os::IQueueEnqueue<packet::PacketView<packet::kLittleEndian>> EnqueueType
 typedef os::fuzz::FuzzInjectQueue<packet::PacketView<packet::kLittleEndian>> ChannelFuzzQueueType;
 
 class ChannelFuzzController {
- public:
-  ChannelFuzzController(os::Handler* l2cap_handler, std::shared_ptr<l2cap::internal::DynamicChannelImpl> chan);
+public:
+  ChannelFuzzController(os::Handler* l2cap_handler,
+                        std::shared_ptr<l2cap::internal::DynamicChannelImpl> chan);
 
-  ChannelFuzzController(os::Handler* l2cap_handler, std::shared_ptr<l2cap::classic::internal::FixedChannelImpl> chan);
+  ChannelFuzzController(os::Handler* l2cap_handler,
+                        std::shared_ptr<l2cap::classic::internal::FixedChannelImpl> chan);
 
   void injectPacketData(std::vector<uint8_t> data);
 
   void injectFrame(std::vector<uint8_t> data);
 
- private:
+private:
   std::shared_ptr<ChannelFuzzQueueType> channelInject_;
 };
 }  // namespace bluetooth

@@ -29,9 +29,9 @@ using bluetooth::discovery::device::EirData;
 
 namespace {
 constexpr uint8_t kPartialUuid16Data[] = {
-    0x2, static_cast<uint8_t>(hci::GapDataType::COMPLETE_LIST_16_BIT_UUIDS), 0x34};
+        0x2, static_cast<uint8_t>(hci::GapDataType::COMPLETE_LIST_16_BIT_UUIDS), 0x34};
 constexpr uint8_t kOneUuid16Data[] = {
-    0x3, static_cast<uint8_t>(hci::GapDataType::COMPLETE_LIST_16_BIT_UUIDS), 0x34, 0x12};
+        0x3, static_cast<uint8_t>(hci::GapDataType::COMPLETE_LIST_16_BIT_UUIDS), 0x34, 0x12};
 constexpr char kAudiMmi9962[] = "Audi_MMI_9962";
 constexpr char kChromeBoxForMeetings[] = "Chromebox for Meetings";
 
@@ -52,8 +52,8 @@ void LogUuids128(const std::vector<hci::Uuid>& uuids128) {
 }  // namespace debug
 
 TEST(EirDataTest, partial_uuid16) {
-  const EirData eir_data(
-      std::vector<uint8_t>(kPartialUuid16Data, kPartialUuid16Data + sizeof(kPartialUuid16Data)));
+  const EirData eir_data(std::vector<uint8_t>(kPartialUuid16Data,
+                                              kPartialUuid16Data + sizeof(kPartialUuid16Data)));
 
   std::vector<uint16_t> uuids;
   ASSERT_FALSE(eir_data.GetUuids16(uuids));
@@ -61,7 +61,7 @@ TEST(EirDataTest, partial_uuid16) {
 
 TEST(EirDataTest, one_uuid16) {
   const EirData eir_data(
-      std::vector<uint8_t>(kOneUuid16Data, kOneUuid16Data + sizeof(kOneUuid16Data)));
+          std::vector<uint8_t>(kOneUuid16Data, kOneUuid16Data + sizeof(kOneUuid16Data)));
 
   std::vector<uint16_t> uuids;
   ASSERT_TRUE(eir_data.GetUuids16(uuids));
@@ -192,14 +192,14 @@ TEST(EirDataTest, test_select_packets__pktAsha) {
   ASSERT_EQ(10, tx_power_level[0]);
 
   const std::vector<uint8_t> v1 =
-      std::vector<uint8_t>({0x01, 0x00, 0xe0, 0x00, 0x05, 0xc4, 0x6c, 0x00});
+          std::vector<uint8_t>({0x01, 0x00, 0xe0, 0x00, 0x05, 0xc4, 0x6c, 0x00});
   std::vector<std::vector<uint8_t>> device_ids;
   ASSERT_TRUE(eir_data.GetDeviceId(device_ids));
   ASSERT_EQ(v1.size(), device_ids[0].size());
   ASSERT_THAT(v1, testing::ContainerEq(device_ids[0]));
 
   const std::vector<uint16_t> v2 =
-      std::vector<uint16_t>({0x1800, 0x1801, 0x180a, 0x110e, 0x110c, 0x111f, 0x110a});
+          std::vector<uint16_t>({0x1800, 0x1801, 0x180a, 0x110e, 0x110c, 0x111f, 0x110a});
   std::vector<uint16_t> uuids16;
   ASSERT_TRUE(eir_data.GetUuids16(uuids16));
   ASSERT_EQ(v2.size(), uuids16.size());

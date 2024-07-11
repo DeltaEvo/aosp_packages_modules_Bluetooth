@@ -37,25 +37,14 @@
 using namespace bluetooth;
 
 /** This function initiates a bonding procedure with a peer device */
-void BTA_DmBond(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
-                tBT_TRANSPORT transport, tBT_DEVICE_TYPE device_type) {
-  if (com::android::bluetooth::flags::synchronous_bta_sec()) {
-    bta_dm_bond(bd_addr, addr_type, transport, device_type);
-  } else {
-    do_in_main_thread(FROM_HERE, base::BindOnce(bta_dm_bond, bd_addr, addr_type,
-                                                transport, device_type));
-  }
+void BTA_DmBond(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type, tBT_TRANSPORT transport,
+                tBT_DEVICE_TYPE device_type) {
+  bta_dm_bond(bd_addr, addr_type, transport, device_type);
 }
 
 /** This function cancels the bonding procedure with a peer device
  */
-void BTA_DmBondCancel(const RawAddress& bd_addr) {
-  if (com::android::bluetooth::flags::synchronous_bta_sec()) {
-    bta_dm_bond_cancel(bd_addr);
-  } else {
-    do_in_main_thread(FROM_HERE, base::BindOnce(bta_dm_bond_cancel, bd_addr));
-  }
-}
+void BTA_DmBondCancel(const RawAddress& bd_addr) { bta_dm_bond_cancel(bd_addr); }
 
 /*******************************************************************************
  *
@@ -68,10 +57,8 @@ void BTA_DmBondCancel(const RawAddress& bd_addr) {
  * Returns          void
  *
  ******************************************************************************/
-void BTA_DmPinReply(const RawAddress& bd_addr, bool accept, uint8_t pin_len,
-                    uint8_t* p_pin) {
-  std::unique_ptr<tBTA_DM_API_PIN_REPLY> msg =
-      std::make_unique<tBTA_DM_API_PIN_REPLY>();
+void BTA_DmPinReply(const RawAddress& bd_addr, bool accept, uint8_t pin_len, uint8_t* p_pin) {
+  std::unique_ptr<tBTA_DM_API_PIN_REPLY> msg = std::make_unique<tBTA_DM_API_PIN_REPLY>();
 
   msg->bd_addr = bd_addr;
   msg->accept = accept;
@@ -80,12 +67,7 @@ void BTA_DmPinReply(const RawAddress& bd_addr, bool accept, uint8_t pin_len,
     memcpy(msg->p_pin, p_pin, pin_len);
   }
 
-  if (com::android::bluetooth::flags::synchronous_bta_sec()) {
-    bta_dm_pin_reply(std::move(msg));
-  } else {
-    do_in_main_thread(FROM_HERE,
-                      base::Bind(bta_dm_pin_reply, base::Passed(&msg)));
-  }
+  bta_dm_pin_reply(std::move(msg));
 }
 
 /*******************************************************************************
@@ -101,13 +83,7 @@ void BTA_DmPinReply(const RawAddress& bd_addr, bool accept, uint8_t pin_len,
  * Returns          void
  *
  ******************************************************************************/
-void BTA_DmLocalOob(void) {
-  if (com::android::bluetooth::flags::synchronous_bta_sec()) {
-    BTM_ReadLocalOobData();
-  } else {
-    do_in_main_thread(FROM_HERE, base::BindOnce(BTM_ReadLocalOobData));
-  }
-}
+void BTA_DmLocalOob(void) { BTM_ReadLocalOobData(); }
 
 /*******************************************************************************
  *
@@ -119,14 +95,7 @@ void BTA_DmLocalOob(void) {
  * Returns          void
  *
  ******************************************************************************/
-void BTA_DmConfirm(const RawAddress& bd_addr, bool accept) {
-  if (com::android::bluetooth::flags::synchronous_bta_sec()) {
-    bta_dm_confirm(bd_addr, accept);
-  } else {
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(bta_dm_confirm, bd_addr, accept));
-  }
-}
+void BTA_DmConfirm(const RawAddress& bd_addr, bool accept) { bta_dm_confirm(bd_addr, accept); }
 
 /*******************************************************************************
  *
@@ -138,27 +107,18 @@ void BTA_DmConfirm(const RawAddress& bd_addr, bool accept) {
  * Returns          void
  *
  ******************************************************************************/
-void BTA_DmAddDevice(RawAddress bd_addr, DEV_CLASS dev_class, LinkKey link_key,
-                     uint8_t key_type, uint8_t pin_length) {
-  auto closure =
-      base::Bind(get_btm_client_interface().security.BTM_SecAddDevice, bd_addr,
-                 dev_class, link_key, key_type, pin_length);
+void BTA_DmAddDevice(RawAddress bd_addr, DEV_CLASS dev_class, LinkKey link_key, uint8_t key_type,
+                     uint8_t pin_length) {
+  auto closure = base::Bind(get_btm_client_interface().security.BTM_SecAddDevice, bd_addr,
+                            dev_class, link_key, key_type, pin_length);
 
-  if (com::android::bluetooth::flags::synchronous_bta_sec()) {
-    closure.Run();
-  } else {
-    do_in_main_thread(FROM_HERE, closure);
-  }
+  closure.Run();
 }
 
-/** This function removes a device fromthe security database list of peer
+/** This function removes a device from the security database list of peer
  * device. It manages unpairing even while connected */
 tBTA_STATUS BTA_DmRemoveDevice(const RawAddress& bd_addr) {
-  if (com::android::bluetooth::flags::synchronous_bta_sec()) {
-    bta_dm_remove_device(bd_addr);
-  } else {
-    do_in_main_thread(FROM_HERE, base::BindOnce(bta_dm_remove_device, bd_addr));
-  }
+  bta_dm_remove_device(bd_addr);
   return BTA_SUCCESS;
 }
 
@@ -180,12 +140,7 @@ tBTA_STATUS BTA_DmRemoveDevice(const RawAddress& bd_addr) {
  ******************************************************************************/
 void BTA_DmAddBleKey(const RawAddress& bd_addr, tBTA_LE_KEY_VALUE* p_le_key,
                      tBTM_LE_KEY_TYPE key_type) {
-  if (com::android::bluetooth::flags::synchronous_bta_sec()) {
-    bta_dm_add_blekey(bd_addr, *p_le_key, key_type);
-  } else {
-    do_in_main_thread(FROM_HERE, base::BindOnce(bta_dm_add_blekey, bd_addr,
-                                                *p_le_key, key_type));
-  }
+  bta_dm_add_blekey(bd_addr, *p_le_key, key_type);
 }
 
 /*******************************************************************************
@@ -205,12 +160,7 @@ void BTA_DmAddBleKey(const RawAddress& bd_addr, tBTA_LE_KEY_VALUE* p_le_key,
  ******************************************************************************/
 void BTA_DmAddBleDevice(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
                         tBT_DEVICE_TYPE dev_type) {
-  if (com::android::bluetooth::flags::synchronous_bta_sec()) {
-    bta_dm_add_ble_device(bd_addr, addr_type, dev_type);
-  } else {
-    do_in_main_thread(FROM_HERE, base::BindOnce(bta_dm_add_ble_device, bd_addr,
-                                                addr_type, dev_type));
-  }
+  bta_dm_add_ble_device(bd_addr, addr_type, dev_type);
 }
 
 /*******************************************************************************
@@ -227,15 +177,8 @@ void BTA_DmAddBleDevice(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
  * Returns          void
  *
  ******************************************************************************/
-void BTA_DmBlePasskeyReply(const RawAddress& bd_addr, bool accept,
-                           uint32_t passkey) {
-  if (com::android::bluetooth::flags::synchronous_bta_sec()) {
-    bta_dm_ble_passkey_reply(bd_addr, accept, accept ? passkey : 0);
-  } else {
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(bta_dm_ble_passkey_reply, bd_addr, accept,
-                                     accept ? passkey : 0));
-  }
+void BTA_DmBlePasskeyReply(const RawAddress& bd_addr, bool accept, uint32_t passkey) {
+  bta_dm_ble_passkey_reply(bd_addr, accept, accept ? passkey : 0);
 }
 
 /*******************************************************************************
@@ -252,12 +195,7 @@ void BTA_DmBlePasskeyReply(const RawAddress& bd_addr, bool accept,
  *
  ******************************************************************************/
 void BTA_DmBleConfirmReply(const RawAddress& bd_addr, bool accept) {
-  if (com::android::bluetooth::flags::synchronous_bta_sec()) {
-    bta_dm_ble_confirm_reply(bd_addr, accept);
-  } else {
-    do_in_main_thread(
-        FROM_HERE, base::BindOnce(bta_dm_ble_confirm_reply, bd_addr, accept));
-  }
+  bta_dm_ble_confirm_reply(bd_addr, accept);
 }
 
 /*******************************************************************************
@@ -272,14 +210,8 @@ void BTA_DmBleConfirmReply(const RawAddress& bd_addr, bool accept) {
  * Returns          void
  *
  ******************************************************************************/
-void BTA_DmBleSecurityGrant(const RawAddress& bd_addr,
-                            tBTA_DM_BLE_SEC_GRANT res) {
-  if (com::android::bluetooth::flags::synchronous_bta_sec()) {
-    BTM_SecurityGrant(bd_addr, res);
-  } else {
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(BTM_SecurityGrant, bd_addr, res));
-  }
+void BTA_DmBleSecurityGrant(const RawAddress& bd_addr, tBTA_DM_BLE_SEC_GRANT res) {
+  BTM_SecurityGrant(bd_addr, res);
 }
 
 /*******************************************************************************
@@ -305,16 +237,9 @@ void BTA_DmBleSecurityGrant(const RawAddress& bd_addr,
  *
  ******************************************************************************/
 void BTA_DmSetEncryption(const RawAddress& bd_addr, tBT_TRANSPORT transport,
-                         tBTA_DM_ENCRYPT_CBACK* p_callback,
-                         tBTM_BLE_SEC_ACT sec_act) {
+                         tBTA_DM_ENCRYPT_CBACK* p_callback, tBTM_BLE_SEC_ACT sec_act) {
   log::verbose("");
-  if (com::android::bluetooth::flags::synchronous_bta_sec()) {
-    bta_dm_set_encryption(bd_addr, transport, p_callback, sec_act);
-  } else {
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(bta_dm_set_encryption, bd_addr, transport,
-                                     p_callback, sec_act));
-  }
+  bta_dm_set_encryption(bd_addr, transport, p_callback, sec_act);
 }
 
 /*******************************************************************************
@@ -331,12 +256,7 @@ void BTA_DmSetEncryption(const RawAddress& bd_addr, tBT_TRANSPORT transport,
  ******************************************************************************/
 void BTA_DmSirkSecCbRegister(tBTA_DM_SEC_CBACK* p_cback) {
   log::debug("");
-  if (com::android::bluetooth::flags::synchronous_bta_sec()) {
-    bta_dm_ble_sirk_sec_cb_register(p_cback);
-  } else {
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(bta_dm_ble_sirk_sec_cb_register, p_cback));
-  }
+  bta_dm_ble_sirk_sec_cb_register(p_cback);
 }
 
 /*******************************************************************************
@@ -354,12 +274,5 @@ void BTA_DmSirkSecCbRegister(tBTA_DM_SEC_CBACK* p_cback) {
  ******************************************************************************/
 void BTA_DmSirkConfirmDeviceReply(const RawAddress& bd_addr, bool accept) {
   log::debug("");
-  if (com::android::bluetooth::flags::synchronous_bta_sec()) {
-    bta_dm_ble_sirk_confirm_device_reply(bd_addr, accept);
-  } else {
-    do_in_main_thread(
-        FROM_HERE,
-        base::BindOnce(bta_dm_ble_sirk_confirm_device_reply, bd_addr, accept));
-  }
+  bta_dm_ble_sirk_confirm_device_reply(bd_addr, accept);
 }
-

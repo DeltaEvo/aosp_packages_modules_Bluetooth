@@ -58,9 +58,9 @@ static int btsocket_open_mgmt(uint16_t hci) {
   }
 
   struct sockaddr_hci addr = {
-      .hci_family = AF_BLUETOOTH,
-      .hci_dev = HCI_DEV_NONE,
-      .hci_channel = HCI_CHANNEL_CONTROL,
+          .hci_family = AF_BLUETOOTH,
+          .hci_dev = HCI_DEV_NONE,
+          .hci_channel = HCI_CHANNEL_CONTROL,
   };
 
   int ret = bind(fd, (struct sockaddr*)&addr, sizeof(addr));
@@ -121,8 +121,8 @@ uint16_t Mgmt::get_vs_opcode(uint16_t vendor_specification) {
   } while (ret > 0);
 
   if (ret <= 0) {
-    log::info(
-        "Skip because mgmt socket is not writable: ev.opcode 0x{:04x} ret {}", ev.opcode, ret);
+    log::info("Skip because mgmt socket is not writable: ev.opcode 0x{:04x} ret {}", ev.opcode,
+              ret);
     close(fd);
     return ret_opcode;
   }
@@ -144,9 +144,11 @@ uint16_t Mgmt::get_vs_opcode(uint16_t vendor_specification) {
         }
 
         if (cc_ev.opcode == MGMT_EV_COMMAND_COMPLETE) {
-          struct mgmt_ev_cmd_complete* cc = reinterpret_cast<struct mgmt_ev_cmd_complete*>(cc_ev.data);
+          struct mgmt_ev_cmd_complete* cc =
+                  reinterpret_cast<struct mgmt_ev_cmd_complete*>(cc_ev.data);
           if (cc->opcode == ev.opcode && cc->status == 0) {
-            struct mgmt_rp_get_vs_opcode* rp = reinterpret_cast<struct mgmt_rp_get_vs_opcode*>(cc->data);
+            struct mgmt_rp_get_vs_opcode* rp =
+                    reinterpret_cast<struct mgmt_rp_get_vs_opcode*>(cc->data);
             if (rp->hci_id == hci) {
               // If the controller supports the MSFT extension, the returned opcode
               // will not be HCI_OP_NOP.

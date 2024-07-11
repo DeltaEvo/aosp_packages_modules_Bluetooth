@@ -46,8 +46,7 @@ tBTM_BLE_ENERGY_INFO_CB ble_energy_info_cb;
 static void btm_ble_cont_energy_cmpl_cback(tBTM_VSC_CMPL* p_params) {
   uint8_t* p = p_params->p_param_buf;
   uint16_t len = p_params->param_len;
-  uint32_t total_tx_time = 0, total_rx_time = 0, total_idle_time = 0,
-           total_energy_used = 0;
+  uint32_t total_tx_time = 0, total_rx_time = 0, total_idle_time = 0, total_energy_used = 0;
 
   if (len < 17) {
     log::error("wrong length for btm_ble_cont_energy_cmpl_cback");
@@ -62,14 +61,13 @@ static void btm_ble_cont_energy_cmpl_cback(tBTM_VSC_CMPL* p_params) {
   STREAM_TO_UINT32(total_idle_time, p);
   STREAM_TO_UINT32(total_energy_used, p);
 
-  log::verbose(
-      "energy_info status={},tx_t={}, rx_t={}, ener_used={}, idle_t={}", status,
-      total_tx_time, total_rx_time, total_energy_used, total_idle_time);
+  log::verbose("energy_info status={},tx_t={}, rx_t={}, ener_used={}, idle_t={}", status,
+               total_tx_time, total_rx_time, total_energy_used, total_idle_time);
 
-  if (NULL != ble_energy_info_cb.p_ener_cback)
-    ble_energy_info_cb.p_ener_cback(total_tx_time, total_rx_time,
-                                    total_idle_time, total_energy_used,
-                                    static_cast<tHCI_STATUS>(status));
+  if (NULL != ble_energy_info_cb.p_ener_cback) {
+    ble_energy_info_cb.p_ener_cback(total_tx_time, total_rx_time, total_idle_time,
+                                    total_energy_used, static_cast<tHCI_STATUS>(status));
+  }
 
   return;
 }
@@ -98,7 +96,7 @@ tBTM_STATUS BTM_BleGetEnergyInfo(tBTM_BLE_ENERGY_INFO_CBACK* p_ener_cback) {
   }
 
   ble_energy_info_cb.p_ener_cback = p_ener_cback;
-  get_btm_client_interface().vendor.BTM_VendorSpecificCommand(
-      HCI_BLE_ENERGY_INFO, 0, NULL, btm_ble_cont_energy_cmpl_cback);
+  get_btm_client_interface().vendor.BTM_VendorSpecificCommand(HCI_BLE_ENERGY_INFO, 0, NULL,
+                                                              btm_ble_cont_energy_cmpl_cback);
   return BTM_CMD_STARTED;
 }

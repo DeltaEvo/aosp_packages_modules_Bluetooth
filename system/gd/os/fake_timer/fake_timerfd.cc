@@ -26,7 +26,7 @@ namespace os {
 namespace fake_timer {
 
 class FakeTimerFd {
- public:
+public:
   int fd;
   bool active;
   uint64_t trigger_ms;
@@ -53,11 +53,8 @@ int fake_timerfd_create(int /* clockid */, int /* flags */) {
   return fd;
 }
 
-int fake_timerfd_settime(
-    int fd,
-    int /* flags */,
-    const struct itimerspec* new_value,
-    struct itimerspec* /* old_value */) {
+int fake_timerfd_settime(int fd, int /* flags */, const struct itimerspec* new_value,
+                         struct itimerspec* /* old_value */) {
   if (fake_timers.find(fd) == fake_timers.end()) {
     return -1;
   }
@@ -134,13 +131,9 @@ void fake_timerfd_advance(uint64_t ms) {
   clock = new_clock;
 }
 
-void fake_timerfd_cap_at(uint64_t ms) {
-  max_clock = ms;
-}
+void fake_timerfd_cap_at(uint64_t ms) { max_clock = ms; }
 
-uint64_t fake_timerfd_get_clock() {
-  return clock;
-}
+uint64_t fake_timerfd_get_clock() { return clock; }
 
 }  // namespace fake_timer
 }  // namespace os

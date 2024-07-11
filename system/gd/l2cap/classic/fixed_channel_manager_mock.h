@@ -15,9 +15,9 @@
  */
 #pragma once
 
-#include "l2cap/classic/fixed_channel_manager.h"
-
 #include <gmock/gmock.h>
+
+#include "l2cap/classic/fixed_channel_manager.h"
 
 // Unit test interfaces
 namespace bluetooth {
@@ -26,10 +26,12 @@ namespace classic {
 namespace testing {
 
 class MockFixedChannelManager : public FixedChannelManager {
- public:
-  MockFixedChannelManager() : FixedChannelManager(nullptr, nullptr, nullptr){};
+public:
+  MockFixedChannelManager() : FixedChannelManager(nullptr, nullptr, nullptr) {}
   MOCK_METHOD(bool, ConnectServices,
-              (hci::Address device, OnConnectionFailureCallback on_fail_callback, os::Handler* handler), (override));
+              (hci::Address device, OnConnectionFailureCallback on_fail_callback,
+               os::Handler* handler),
+              (override));
   MOCK_METHOD(bool, RegisterService,
               (Cid cid, OnRegistrationCompleteCallback on_registration_complete,
                OnConnectionOpenCallback on_connection_open, os::Handler* handler),

@@ -32,7 +32,8 @@ AccessModifierOffset: -2 # vs -1 Should be -4 when updating IndentWidth to 4
 Standard: c++20 # vs Auto
 AllowShortIfStatementsOnASingleLine: Never # vs WithoutElse
 AllowShortLoopsOnASingleLine: false # vs true
-SpacesBeforeTrailingComments: 1 # vs 2
+# AOSP suggest 1, but ask to follow clang-format settings. CppLint ask for 2
+# SpacesBeforeTrailingComments: 1 # vs 2
 
 # Allow clang-format to automatically fix more things
 RemoveSemicolon: true

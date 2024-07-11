@@ -16,13 +16,13 @@
 
 #include "l2cap/classic/internal/signalling_manager.h"
 
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
 #include "l2cap/classic/internal/dynamic_channel_service_manager_impl_mock.h"
 #include "l2cap/classic/internal/fixed_channel_service_manager_impl_mock.h"
 #include "l2cap/classic/internal/link_mock.h"
 #include "l2cap/internal/parameter_provider_mock.h"
-
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 using ::testing::_;
 using ::testing::Return;
@@ -34,7 +34,7 @@ namespace internal {
 namespace {
 
 class L2capClassicSignallingManagerTest : public ::testing::Test {
- public:
+public:
   static void SyncHandler(os::Handler* handler) {
     std::promise<void> promise;
     auto future = promise.get_future();
@@ -42,7 +42,7 @@ class L2capClassicSignallingManagerTest : public ::testing::Test {
     future.wait_for(std::chrono::milliseconds(3));
   }
 
- protected:
+protected:
   void SetUp() override {
     thread_ = new os::Thread("test_thread", os::Thread::Priority::NORMAL);
     l2cap_handler_ = new os::Handler(thread_);

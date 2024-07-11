@@ -48,14 +48,20 @@ int16_t utl_str2int(const char* p_s) {
   for (; *p_s == ' ' && *p_s != 0; p_s++)
     ;
 
-  if (*p_s == 0) return -1;
+  if (*p_s == 0) {
+    return -1;
+  }
 
   for (;;) {
-    if ((*p_s < '0') || (*p_s > '9')) return -1;
+    if ((*p_s < '0') || (*p_s > '9')) {
+      return -1;
+    }
 
     val += (int32_t)(*p_s++ - '0');
 
-    if (val > 32767) return -1;
+    if (val > 32767) {
+      return -1;
+    }
 
     if (*p_s == 0) {
       return (int16_t)val;
@@ -206,7 +212,9 @@ bool utl_set_device_class(tBTA_UTL_COD* p_cod, uint8_t cmd) {
   DEV_CLASS dev_class;
   FIELDS_TO_COD(dev_class, minor, major, service);
 
-  if (BTM_SetDeviceClass(dev_class) == BTM_SUCCESS) return true;
+  if (BTM_SetDeviceClass(dev_class) == BTM_SUCCESS) {
+    return true;
+  }
 
   return false;
 }
@@ -226,7 +234,9 @@ bool utl_isintstr(const char* p_s) {
   uint16_t i = 0;
 
   for (i = 0; p_s[i] != 0; i++) {
-    if (((p_s[i] < '0') || (p_s[i] > '9')) && (p_s[i] != ';')) return false;
+    if (((p_s[i] < '0') || (p_s[i] > '9')) && (p_s[i] != ';')) {
+      return false;
+    }
   }
 
   return true;
@@ -243,10 +253,9 @@ bool utl_isintstr(const char* p_s) {
  *
  ******************************************************************************/
 bool utl_isdialchar(const char d) {
-  return (((d >= '0') && (d <= '9')) || (d == '*') || (d == '+') ||
-          (d == '#') || (d == ';') || (d == ',') ||
-          ((d >= 'A') && (d <= 'C')) ||
-          ((d == 'p') || (d == 'P') || (d == 'w') || (d == 'W')));
+  return ((d >= '0') && (d <= '9')) || (d == '*') || (d == '+') || (d == '#') || (d == ';') ||
+         (d == ',') || ((d >= 'A') && (d <= 'C')) ||
+         ((d == 'p') || (d == 'P') || (d == 'w') || (d == 'W'));
 }
 
 /*******************************************************************************
@@ -263,7 +272,9 @@ bool utl_isdialchar(const char d) {
 bool utl_isdialstr(const char* p_s) {
   for (uint16_t i = 0; p_s[i] != 0; i++) {
     // include chars not in spec that work sent by some headsets.
-    if (!(utl_isdialchar(p_s[i]) || (p_s[i] == '-'))) return false;
+    if (!(utl_isdialchar(p_s[i]) || (p_s[i] == '-'))) {
+      return false;
+    }
   }
   return true;
 }

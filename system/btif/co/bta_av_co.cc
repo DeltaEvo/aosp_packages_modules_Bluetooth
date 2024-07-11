@@ -72,18 +72,15 @@ void BtaAvCoState::setCodecConfig(const uint8_t* codec_config) {
   memcpy(codec_config_, codec_config, AVDT_CODEC_SIZE);
 }
 
-void BtaAvCoState::clearCodecConfig() {
-  memset(codec_config_, 0, AVDT_CODEC_SIZE);
-}
+void BtaAvCoState::clearCodecConfig() { memset(codec_config_, 0, AVDT_CODEC_SIZE); }
 
 void BtaAvCoState::Reset() {
   active_peer_ = nullptr;
   clearCodecConfig();
 }
 
-void BtaAvCo::Init(
-    const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
-    std::vector<btav_a2dp_codec_info_t>* supported_codecs) {
+void BtaAvCo::Init(const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
+                   std::vector<btav_a2dp_codec_info_t>* supported_codecs) {
   log::verbose("");
 
   std::lock_guard<std::recursive_mutex> lock(peer_cache_->codec_lock_);
@@ -95,8 +92,7 @@ void BtaAvCo::Init(
   // Gather the supported codecs from the first peer context;
   // all contexes should be identical.
   supported_codecs->clear();
-  for (auto* codec_config :
-       peer_cache_->peers_[0].GetCodecs()->orderedSourceCodecs()) {
+  for (auto* codec_config : peer_cache_->peers_[0].GetCodecs()->orderedSourceCodecs()) {
     auto& codec_info = supported_codecs->emplace_back();
     codec_info.codec_type = codec_config->codecIndex();
     codec_info.codec_id = codec_config->codecId();
@@ -156,20 +152,17 @@ A2dpCodecConfig* BtaAvCo::GetPeerCurrentCodec(const RawAddress& peer_address) {
   return peer->GetCodecs()->getCurrentCodecConfig();
 }
 
-void BtaAvCo::ProcessDiscoveryResult(tBTA_AV_HNDL bta_av_handle,
-                                     const RawAddress& peer_address,
-                                     uint8_t num_seps, uint8_t num_sinks,
-                                     uint8_t num_sources, uint16_t uuid_local) {
-  log::verbose(
-      "peer {} bta_av_handle:0x{:x} num_seps:{} num_sinks:{} num_sources:{}",
-      peer_address, bta_av_handle, num_seps, num_sinks, num_sources);
+void BtaAvCo::ProcessDiscoveryResult(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
+                                     uint8_t num_seps, uint8_t num_sinks, uint8_t num_sources,
+                                     uint16_t uuid_local) {
+  log::verbose("peer {} bta_av_handle:0x{:x} num_seps:{} num_sinks:{} num_sources:{}", peer_address,
+               bta_av_handle, num_seps, num_sinks, num_sources);
 
   // Find the peer
-  BtaAvCoPeer* p_peer =
-      peer_cache_->FindPeerAndUpdate(bta_av_handle, peer_address);
+  BtaAvCoPeer* p_peer = peer_cache_->FindPeerAndUpdate(bta_av_handle, peer_address);
   if (p_peer == nullptr) {
-    log::error("could not find peer entry for bta_av_handle 0x{:x} peer {}",
-               bta_av_handle, peer_address);
+    log::error("could not find peer entry for bta_av_handle 0x{:x} peer {}", bta_av_handle,
+               peer_address);
     return;
   }
 
@@ -196,32 +189,28 @@ void BtaAvCo::ProcessDiscoveryResult(tBTA_AV_HNDL bta_av_handle,
 
 static void bta_av_co_store_peer_codectype(const BtaAvCoPeer* p_peer);
 static bool bta_av_co_should_select_hardware_codec(
-    const A2dpCodecConfig& software_config,
-    const ::bluetooth::audio::a2dp::provider::a2dp_configuration&
-        hardware_config);
+        const A2dpCodecConfig& software_config,
+        const ::bluetooth::audio::a2dp::provider::a2dp_configuration& hardware_config);
 
-tA2DP_STATUS BtaAvCo::ProcessSourceGetConfig(
-    tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
-    uint8_t* p_codec_info, uint8_t* p_sep_info_idx, uint8_t seid,
-    uint8_t* p_num_protect, uint8_t* p_protect_info) {
-  log::verbose("peer {} bta_av_handle:0x{:x} codec:{} seid:{}", peer_address,
-               bta_av_handle, A2DP_CodecName(p_codec_info), seid);
-  log::verbose("num_protect:0x{:02x} protect_info:0x{:02x}{:02x}{:02x}",
-               *p_num_protect, p_protect_info[0], p_protect_info[1],
-               p_protect_info[2]);
+tA2DP_STATUS BtaAvCo::ProcessSourceGetConfig(tBTA_AV_HNDL bta_av_handle,
+                                             const RawAddress& peer_address, uint8_t* p_codec_info,
+                                             uint8_t* p_sep_info_idx, uint8_t seid,
+                                             uint8_t* p_num_protect, uint8_t* p_protect_info) {
+  log::verbose("peer {} bta_av_handle:0x{:x} codec:{} seid:{}", peer_address, bta_av_handle,
+               A2DP_CodecName(p_codec_info), seid);
+  log::verbose("num_protect:0x{:02x} protect_info:0x{:02x}{:02x}{:02x}", *p_num_protect,
+               p_protect_info[0], p_protect_info[1], p_protect_info[2]);
   log::verbose("codec: {}", A2DP_CodecInfoString(p_codec_info));
 
   // Find the peer
-  BtaAvCoPeer* p_peer =
-      peer_cache_->FindPeerAndUpdate(bta_av_handle, peer_address);
+  BtaAvCoPeer* p_peer = peer_cache_->FindPeerAndUpdate(bta_av_handle, peer_address);
   if (p_peer == nullptr) {
-    log::error("could not find peer entry for bta_av_handle 0x{:x} peer {}",
-               bta_av_handle, peer_address);
+    log::error("could not find peer entry for bta_av_handle 0x{:x} peer {}", bta_av_handle,
+               peer_address);
     return A2DP_FAIL;
   }
-  log::verbose("peer(o={}, n_sinks={}, n_rx_sinks={}, n_sup_sinks={})",
-               p_peer->opened, p_peer->num_sinks, p_peer->num_rx_sinks,
-               p_peer->num_sup_sinks);
+  log::verbose("peer(o={}, n_sinks={}, n_rx_sinks={}, n_sup_sinks={})", p_peer->opened,
+               p_peer->num_sinks, p_peer->num_rx_sinks, p_peer->num_sup_sinks);
 
   p_peer->num_rx_sinks++;
 
@@ -230,8 +219,7 @@ tA2DP_STATUS BtaAvCo::ProcessSourceGetConfig(
   // since the validation and selection will be performed by the
   // bluetooth audio HAL for offloaded codecs.
   auto codec_index = A2DP_SourceCodecIndex(p_codec_info);
-  bool is_offloaded_codec =
-      ::bluetooth::audio::a2dp::provider::supports_codec(codec_index);
+  bool is_offloaded_codec = ::bluetooth::audio::a2dp::provider::supports_codec(codec_index);
 
   // Check the peer's Sink codec
   if (is_offloaded_codec || A2DP_IsPeerSinkCodecValid(p_codec_info)) {
@@ -239,9 +227,8 @@ tA2DP_STATUS BtaAvCo::ProcessSourceGetConfig(
     if (p_peer->num_sup_sinks < BTA_AV_CO_NUM_ELEMENTS(p_peer->sinks)) {
       BtaAvCoSep* p_sink = &p_peer->sinks[p_peer->num_sup_sinks++];
 
-      log::verbose("saved caps[{:x}:{:x}:{:x}:{:x}:{:x}:{:x}]", p_codec_info[1],
-                   p_codec_info[2], p_codec_info[3], p_codec_info[4],
-                   p_codec_info[5], p_codec_info[6]);
+      log::verbose("saved caps[{:x}:{:x}:{:x}:{:x}:{:x}:{:x}]", p_codec_info[1], p_codec_info[2],
+                   p_codec_info[3], p_codec_info[4], p_codec_info[5], p_codec_info[6]);
 
       memcpy(p_sink->codec_caps, p_codec_info, AVDT_CODEC_SIZE);
       p_sink->sep_info_idx = *p_sep_info_idx;
@@ -271,8 +258,7 @@ tA2DP_STATUS BtaAvCo::ProcessSourceGetConfig(
     if (p_peer->p_sink == nullptr) {
       // Update the selected codec
       p_peer->p_sink = peer_cache_->FindPeerSink(
-          p_peer, A2DP_SourceCodecIndex(p_peer->codec_config),
-          ContentProtectFlag());
+              p_peer, A2DP_SourceCodecIndex(p_peer->codec_config), ContentProtectFlag());
     }
     p_sink = p_peer->p_sink;
     if (p_sink == nullptr) {
@@ -282,14 +268,14 @@ tA2DP_STATUS BtaAvCo::ProcessSourceGetConfig(
   } else {
     if (btif_av_peer_prefers_mandatory_codec(p_peer->addr, A2dpType::kSource)) {
       // Apply user preferred codec directly before first codec selected.
-      p_sink = peer_cache_->FindPeerSink(
-          p_peer, BTAV_A2DP_CODEC_INDEX_SOURCE_SBC, ContentProtectFlag());
+      p_sink = peer_cache_->FindPeerSink(p_peer, BTAV_A2DP_CODEC_INDEX_SOURCE_SBC,
+                                         ContentProtectFlag());
       if (p_sink != nullptr) {
         log::verbose("mandatory codec preferred for peer {}", p_peer->addr);
         btav_a2dp_codec_config_t high_priority_mandatory{
-            .codec_type = BTAV_A2DP_CODEC_INDEX_SOURCE_SBC,
-            .codec_priority = BTAV_A2DP_CODEC_PRIORITY_HIGHEST,
-            // Using default settings for those untouched fields
+                .codec_type = BTAV_A2DP_CODEC_INDEX_SOURCE_SBC,
+                .codec_priority = BTAV_A2DP_CODEC_PRIORITY_HIGHEST,
+                // Using default settings for those untouched fields
         };
         uint8_t result_codec_config[AVDT_CODEC_SIZE];
         bool restart_input = false;
@@ -297,10 +283,9 @@ tA2DP_STATUS BtaAvCo::ProcessSourceGetConfig(
         bool config_updated = false;
         tA2DP_ENCODER_INIT_PEER_PARAMS peer_params;
         GetPeerEncoderParameters(p_peer->addr, &peer_params);
-        p_peer->GetCodecs()->setCodecUserConfig(
-            high_priority_mandatory, &peer_params, p_sink->codec_caps,
-            result_codec_config, &restart_input, &restart_output,
-            &config_updated);
+        p_peer->GetCodecs()->setCodecUserConfig(high_priority_mandatory, &peer_params,
+                                                p_sink->codec_caps, result_codec_config,
+                                                &restart_input, &restart_output, &config_updated);
       } else {
         log::warn("mandatory codec not found for peer {}", p_peer->addr);
       }
@@ -321,54 +306,47 @@ tA2DP_STATUS BtaAvCo::ProcessSourceGetConfig(
 
   // If acceptor -> reconfig otherwise reply for configuration
   *p_sep_info_idx = p_sink->sep_info_idx;
-  log::verbose("peer {} acceptor:{} reconfig_needed:{}", p_peer->addr,
-               p_peer->acceptor, p_peer->reconfig_needed);
+  log::verbose("peer {} acceptor:{} reconfig_needed:{}", p_peer->addr, p_peer->acceptor,
+               p_peer->reconfig_needed);
   if (p_peer->acceptor) {
     if (p_peer->reconfig_needed) {
-      log::verbose("call BTA_AvReconfig(0x{:x}) for peer {}", bta_av_handle,
-                   p_peer->addr);
-      BTA_AvReconfig(bta_av_handle, true, p_sink->sep_info_idx,
-                     p_peer->codec_config, *p_num_protect, bta_av_co_cp_scmst);
+      log::verbose("call BTA_AvReconfig(0x{:x}) for peer {}", bta_av_handle, p_peer->addr);
+      BTA_AvReconfig(bta_av_handle, true, p_sink->sep_info_idx, p_peer->codec_config,
+                     *p_num_protect, bta_av_co_cp_scmst);
     }
   } else {
     memcpy(p_codec_info, p_peer->codec_config, AVDT_CODEC_SIZE);
   }
 
   // report this peer selectable codecs after retrieved all its capabilities.
-  log::info("retrieved {} capabilities from peer {}", p_peer->num_rx_sinks,
-            p_peer->addr);
+  log::info("retrieved {} capabilities from peer {}", p_peer->num_rx_sinks, p_peer->addr);
   ReportSourceCodecState(p_peer);
 
   return A2DP_SUCCESS;
 }
 
 tA2DP_STATUS BtaAvCo::ProcessSinkGetConfig(tBTA_AV_HNDL bta_av_handle,
-                                           const RawAddress& peer_address,
-                                           uint8_t* p_codec_info,
-                                           uint8_t* p_sep_info_idx,
-                                           uint8_t seid, uint8_t* p_num_protect,
-                                           uint8_t* p_protect_info) {
+                                           const RawAddress& peer_address, uint8_t* p_codec_info,
+                                           uint8_t* p_sep_info_idx, uint8_t seid,
+                                           uint8_t* p_num_protect, uint8_t* p_protect_info) {
   std::lock_guard<std::recursive_mutex> lock(peer_cache_->codec_lock_);
 
-  log::verbose("peer {} bta_av_handle:0x{:x} codec:{} seid:{}", peer_address,
-               bta_av_handle, A2DP_CodecName(p_codec_info), seid);
-  log::verbose("num_protect:0x{:02x} protect_info:0x{:02x}{:02x}{:02x}",
-               *p_num_protect, p_protect_info[0], p_protect_info[1],
-               p_protect_info[2]);
+  log::verbose("peer {} bta_av_handle:0x{:x} codec:{} seid:{}", peer_address, bta_av_handle,
+               A2DP_CodecName(p_codec_info), seid);
+  log::verbose("num_protect:0x{:02x} protect_info:0x{:02x}{:02x}{:02x}", *p_num_protect,
+               p_protect_info[0], p_protect_info[1], p_protect_info[2]);
   log::verbose("codec: {}", A2DP_CodecInfoString(p_codec_info));
 
   // Find the peer
-  BtaAvCoPeer* p_peer =
-      peer_cache_->FindPeerAndUpdate(bta_av_handle, peer_address);
+  BtaAvCoPeer* p_peer = peer_cache_->FindPeerAndUpdate(bta_av_handle, peer_address);
   if (p_peer == nullptr) {
-    log::error("could not find peer entry for bta_av_handle 0x{:x} peer {}",
-               bta_av_handle, peer_address);
+    log::error("could not find peer entry for bta_av_handle 0x{:x} peer {}", bta_av_handle,
+               peer_address);
     return A2DP_FAIL;
   }
-  log::verbose(
-      "peer {} found (o={}, n_sources={}, n_rx_sources={}, n_sup_sources={})",
-      p_peer->addr, p_peer->opened, p_peer->num_sources, p_peer->num_rx_sources,
-      p_peer->num_sup_sources);
+  log::verbose("peer {} found (o={}, n_sources={}, n_rx_sources={}, n_sup_sources={})",
+               p_peer->addr, p_peer->opened, p_peer->num_sources, p_peer->num_rx_sources,
+               p_peer->num_sup_sources);
 
   p_peer->num_rx_sources++;
 
@@ -378,9 +356,8 @@ tA2DP_STATUS BtaAvCo::ProcessSinkGetConfig(tBTA_AV_HNDL bta_av_handle,
     if (p_peer->num_sup_sources < BTA_AV_CO_NUM_ELEMENTS(p_peer->sources)) {
       BtaAvCoSep* p_source = &p_peer->sources[p_peer->num_sup_sources++];
 
-      log::verbose("saved caps[{:x}:{:x}:{:x}:{:x}:{:x}:{:x}]", p_codec_info[1],
-                   p_codec_info[2], p_codec_info[3], p_codec_info[4],
-                   p_codec_info[5], p_codec_info[6]);
+      log::verbose("saved caps[{:x}:{:x}:{:x}:{:x}:{:x}:{:x}]", p_codec_info[1], p_codec_info[2],
+                   p_codec_info[3], p_codec_info[4], p_codec_info[5], p_codec_info[6]);
 
       memcpy(p_source->codec_caps, p_codec_info, AVDT_CODEC_SIZE);
       p_source->sep_info_idx = *p_sep_info_idx;
@@ -407,8 +384,7 @@ tA2DP_STATUS BtaAvCo::ProcessSinkGetConfig(tBTA_AV_HNDL bta_av_handle,
     if (p_peer->p_source == nullptr) {
       // Update the selected codec
       p_peer->p_source = peer_cache_->FindPeerSource(
-          p_peer, A2DP_SinkCodecIndex(p_peer->codec_config),
-          ContentProtectFlag());
+              p_peer, A2DP_SinkCodecIndex(p_peer->codec_config), ContentProtectFlag());
     }
     p_source = p_peer->p_source;
     if (p_source == nullptr) {
@@ -432,14 +408,13 @@ tA2DP_STATUS BtaAvCo::ProcessSinkGetConfig(tBTA_AV_HNDL bta_av_handle,
 
   // If acceptor -> reconfig otherwise reply for configuration
   *p_sep_info_idx = p_source->sep_info_idx;
-  log::verbose("peer {} acceptor:{} reconfig_needed:{}", p_peer->addr,
-               p_peer->acceptor, p_peer->reconfig_needed);
+  log::verbose("peer {} acceptor:{} reconfig_needed:{}", p_peer->addr, p_peer->acceptor,
+               p_peer->reconfig_needed);
   if (p_peer->acceptor) {
     if (p_peer->reconfig_needed) {
-      log::verbose("call BTA_AvReconfig(0x{:x}) for peer {}", bta_av_handle,
-                   p_peer->addr);
-      BTA_AvReconfig(bta_av_handle, true, p_source->sep_info_idx,
-                     p_peer->codec_config, *p_num_protect, bta_av_co_cp_scmst);
+      log::verbose("call BTA_AvReconfig(0x{:x}) for peer {}", bta_av_handle, p_peer->addr);
+      BTA_AvReconfig(bta_av_handle, true, p_source->sep_info_idx, p_peer->codec_config,
+                     *p_num_protect, bta_av_co_cp_scmst);
     }
   } else {
     memcpy(p_codec_info, p_peer->codec_config, AVDT_CODEC_SIZE);
@@ -448,44 +423,36 @@ tA2DP_STATUS BtaAvCo::ProcessSinkGetConfig(tBTA_AV_HNDL bta_av_handle,
   return A2DP_SUCCESS;
 }
 
-void BtaAvCo::ProcessSetConfig(tBTA_AV_HNDL bta_av_handle,
-                               const RawAddress& peer_address,
-                               const uint8_t* p_codec_info, uint8_t seid,
-                               uint8_t num_protect,
-                               const uint8_t* p_protect_info,
-                               uint8_t t_local_sep, uint8_t avdt_handle) {
+void BtaAvCo::ProcessSetConfig(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
+                               const uint8_t* p_codec_info, uint8_t seid, uint8_t num_protect,
+                               const uint8_t* p_protect_info, uint8_t t_local_sep,
+                               uint8_t avdt_handle) {
   tA2DP_STATUS status = A2DP_SUCCESS;
   uint8_t category = A2DP_SUCCESS;
   bool reconfig_needed = false;
 
   log::verbose(
-      "bta_av_handle=0x{:x} peer_address={} seid={} num_protect={} "
-      "t_local_sep={} avdt_handle={}",
-      bta_av_handle, peer_address, seid, num_protect, t_local_sep, avdt_handle);
-  log::verbose("p_codec_info[{:x}:{:x}:{:x}:{:x}:{:x}:{:x}]", p_codec_info[1],
-               p_codec_info[2], p_codec_info[3], p_codec_info[4],
-               p_codec_info[5], p_codec_info[6]);
-  log::verbose("num_protect:0x{:02x} protect_info:0x{:02x}{:02x}{:02x}",
-               num_protect, p_protect_info[0], p_protect_info[1],
-               p_protect_info[2]);
+          "bta_av_handle=0x{:x} peer_address={} seid={} num_protect={} "
+          "t_local_sep={} avdt_handle={}",
+          bta_av_handle, peer_address, seid, num_protect, t_local_sep, avdt_handle);
+  log::verbose("p_codec_info[{:x}:{:x}:{:x}:{:x}:{:x}:{:x}]", p_codec_info[1], p_codec_info[2],
+               p_codec_info[3], p_codec_info[4], p_codec_info[5], p_codec_info[6]);
+  log::verbose("num_protect:0x{:02x} protect_info:0x{:02x}{:02x}{:02x}", num_protect,
+               p_protect_info[0], p_protect_info[1], p_protect_info[2]);
   log::verbose("codec: {}", A2DP_CodecInfoString(p_codec_info));
 
   // Find the peer
-  BtaAvCoPeer* p_peer =
-      peer_cache_->FindPeerAndUpdate(bta_av_handle, peer_address);
+  BtaAvCoPeer* p_peer = peer_cache_->FindPeerAndUpdate(bta_av_handle, peer_address);
   if (p_peer == nullptr) {
-    log::error("could not find peer entry for bta_av_handle 0x{:x} peer {}",
-               bta_av_handle, peer_address);
+    log::error("could not find peer entry for bta_av_handle 0x{:x} peer {}", bta_av_handle,
+               peer_address);
     // Call call-in rejecting the configuration
-    bta_av_ci_setconfig(bta_av_handle, A2DP_BUSY, AVDT_ASC_CODEC, 0, nullptr,
-                        false, avdt_handle);
+    bta_av_ci_setconfig(bta_av_handle, A2DP_BUSY, AVDT_ASC_CODEC, 0, nullptr, false, avdt_handle);
     return;
   }
 
-  log::verbose(
-      "peer {} found (o={}, n_sinks={}, n_rx_sinks={}, n_sup_sinks={})",
-      p_peer->addr, p_peer->opened, p_peer->num_sinks, p_peer->num_rx_sinks,
-      p_peer->num_sup_sinks);
+  log::verbose("peer {} found (o={}, n_sinks={}, n_rx_sinks={}, n_sup_sinks={})", p_peer->addr,
+               p_peer->opened, p_peer->num_sinks, p_peer->num_rx_sinks, p_peer->num_sup_sinks);
 
   // Sanity check: should not be opened at this point
   if (p_peer->opened) {
@@ -516,8 +483,7 @@ void BtaAvCo::ProcessSetConfig(tBTA_AV_HNDL bta_av_handle,
       if (codec_config_supported) {
         // If Peer is Source, and our config subset matches with what is
         // requested by peer, then just accept what peer wants.
-        SaveNewCodecConfig(p_peer, p_codec_info, num_protect, p_protect_info,
-                           t_local_sep);
+        SaveNewCodecConfig(p_peer, p_codec_info, num_protect, p_protect_info, t_local_sep);
       }
     }
     if (t_local_sep == AVDT_TSEP_SRC) {
@@ -528,12 +494,12 @@ void BtaAvCo::ProcessSetConfig(tBTA_AV_HNDL bta_av_handle,
       if ((p_peer->GetCodecs() == nullptr) ||
           !SetCodecOtaConfig(p_peer, p_codec_info, num_protect, p_protect_info,
                              &dummy_restart_output, t_local_sep)) {
-        log::error("cannot set source codec {} for peer {}",
-                   A2DP_CodecName(p_codec_info), p_peer->addr);
+        log::error("cannot set source codec {} for peer {}", A2DP_CodecName(p_codec_info),
+                   p_peer->addr);
       } else {
         codec_config_supported = true;
         // Check if reconfiguration is needed
-        if (((num_protect == 1) && !p_peer->ContentProtectActive())) {
+        if ((num_protect == 1) && !p_peer->ContentProtectActive()) {
           reconfig_needed = true;
         }
       }
@@ -549,8 +515,7 @@ void BtaAvCo::ProcessSetConfig(tBTA_AV_HNDL bta_av_handle,
   if (status != A2DP_SUCCESS) {
     log::verbose("peer {} reject s={} c={}", p_peer->addr, status, category);
     // Call call-in rejecting the configuration
-    bta_av_ci_setconfig(bta_av_handle, status, category, 0, nullptr, false,
-                        avdt_handle);
+    bta_av_ci_setconfig(bta_av_handle, status, category, 0, nullptr, false, avdt_handle);
     return;
   }
 
@@ -559,21 +524,19 @@ void BtaAvCo::ProcessSetConfig(tBTA_AV_HNDL bta_av_handle,
   p_peer->reconfig_needed = reconfig_needed;
   log::verbose("peer {} accept reconf={}", p_peer->addr, reconfig_needed);
   // Call call-in accepting the configuration
-  bta_av_ci_setconfig(bta_av_handle, A2DP_SUCCESS, A2DP_SUCCESS, 0, nullptr,
-                      reconfig_needed, avdt_handle);
+  bta_av_ci_setconfig(bta_av_handle, A2DP_SUCCESS, A2DP_SUCCESS, 0, nullptr, reconfig_needed,
+                      avdt_handle);
 }
 
-void BtaAvCo::ProcessOpen(tBTA_AV_HNDL bta_av_handle,
-                          const RawAddress& peer_address, uint16_t mtu) {
-  log::verbose("peer {} bta_av_handle: 0x{:x} mtu:{}", peer_address,
-               bta_av_handle, mtu);
+void BtaAvCo::ProcessOpen(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
+                          uint16_t mtu) {
+  log::verbose("peer {} bta_av_handle: 0x{:x} mtu:{}", peer_address, bta_av_handle, mtu);
 
   // Find the peer
-  BtaAvCoPeer* p_peer =
-      peer_cache_->FindPeerAndUpdate(bta_av_handle, peer_address);
+  BtaAvCoPeer* p_peer = peer_cache_->FindPeerAndUpdate(bta_av_handle, peer_address);
   if (p_peer == nullptr) {
-    log::error("could not find peer entry for bta_av_handle 0x{:x} peer {}",
-               bta_av_handle, peer_address);
+    log::error("could not find peer entry for bta_av_handle 0x{:x} peer {}", bta_av_handle,
+               peer_address);
     return;
   }
   p_peer->opened = true;
@@ -590,16 +553,14 @@ void BtaAvCo::ProcessOpen(tBTA_AV_HNDL bta_av_handle,
   }
 }
 
-void BtaAvCo::ProcessClose(tBTA_AV_HNDL bta_av_handle,
-                           const RawAddress& peer_address) {
+void BtaAvCo::ProcessClose(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address) {
   log::verbose("peer {} bta_av_handle: 0x{:x}", peer_address, bta_av_handle);
 
   // Find the peer
-  BtaAvCoPeer* p_peer =
-      peer_cache_->FindPeerAndUpdate(bta_av_handle, peer_address);
+  BtaAvCoPeer* p_peer = peer_cache_->FindPeerAndUpdate(bta_av_handle, peer_address);
   if (p_peer == nullptr) {
-    log::error("could not find peer entry for bta_av_handle 0x{:x} peer {}",
-               bta_av_handle, peer_address);
+    log::error("could not find peer entry for bta_av_handle 0x{:x} peer {}", bta_av_handle,
+               peer_address);
     return;
   }
   // Reset the active peer
@@ -618,42 +579,38 @@ void BtaAvCo::ProcessClose(tBTA_AV_HNDL bta_av_handle,
   p_peer->Init(peer_cache_->codec_priorities_);
 }
 
-void BtaAvCo::ProcessStart(tBTA_AV_HNDL bta_av_handle,
-                           const RawAddress& peer_address,
+void BtaAvCo::ProcessStart(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
                            const uint8_t* p_codec_info, bool* p_no_rtp_header) {
   log::verbose("peer {} bta_av_handle: 0x{:x}", peer_address, bta_av_handle);
 
   // Find the peer
-  BtaAvCoPeer* p_peer =
-      peer_cache_->FindPeerAndUpdate(bta_av_handle, peer_address);
+  BtaAvCoPeer* p_peer = peer_cache_->FindPeerAndUpdate(bta_av_handle, peer_address);
   if (p_peer == nullptr) {
-    log::error("could not find peer entry for bta_av_handle 0x{:x} peer {}",
-               bta_av_handle, peer_address);
+    log::error("could not find peer entry for bta_av_handle 0x{:x} peer {}", bta_av_handle,
+               peer_address);
     return;
   }
 
-  bool add_rtp_header =
-      A2DP_UsesRtpHeader(p_peer->ContentProtectActive(), p_codec_info);
+  bool add_rtp_header = A2DP_UsesRtpHeader(p_peer->ContentProtectActive(), p_codec_info);
 
-  log::verbose("bta_av_handle: 0x{:x} add_rtp_header: {}", bta_av_handle,
-               add_rtp_header);
+  log::verbose("bta_av_handle: 0x{:x} add_rtp_header: {}", bta_av_handle, add_rtp_header);
   *p_no_rtp_header = !add_rtp_header;
 }
 
-void BtaAvCo::ProcessStop(tBTA_AV_HNDL bta_av_handle,
-                          const RawAddress& peer_address) {
+void BtaAvCo::ProcessStop(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address) {
   log::verbose("peer {} bta_av_handle: 0x{:x}", peer_address, bta_av_handle);
   // Nothing to do
 }
 
-BT_HDR* BtaAvCo::GetNextSourceDataPacket(const uint8_t* p_codec_info,
-                                         uint32_t* p_timestamp) {
+BT_HDR* BtaAvCo::GetNextSourceDataPacket(const uint8_t* p_codec_info, uint32_t* p_timestamp) {
   BT_HDR* p_buf;
 
   log::verbose("codec: {}", A2DP_CodecName(p_codec_info));
 
   p_buf = btif_a2dp_source_audio_readbuf();
-  if (p_buf == nullptr) return nullptr;
+  if (p_buf == nullptr) {
+    return nullptr;
+  }
 
   if (p_buf->offset < 4) {
     osi_free(p_buf);
@@ -668,8 +625,7 @@ BT_HDR* BtaAvCo::GetNextSourceDataPacket(const uint8_t* p_codec_info,
    * p_buf->layer_specific : number of audio frames in the packet
    * p_buf->word[0] : timestamp
    */
-  if (!A2DP_GetPacketTimestamp(p_codec_info, (const uint8_t*)(p_buf + 1),
-                               p_timestamp) ||
+  if (!A2DP_GetPacketTimestamp(p_codec_info, (const uint8_t*)(p_buf + 1), p_timestamp) ||
       !A2DP_BuildCodecHeader(p_codec_info, p_buf, p_buf->layer_specific)) {
     log::error("unsupported codec type ({})", A2DP_GetCodecType(p_codec_info));
     osi_free(p_buf);
@@ -685,8 +641,8 @@ BT_HDR* BtaAvCo::GetNextSourceDataPacket(const uint8_t* p_codec_info,
   BtaAvCoPeer* active_peer = reference_state->getActivePeer();
   // if offset is 0, the decremental operation may result in
   // underflow and OOB access
-  if (ContentProtectEnabled() && (active_peer != nullptr) &&
-      active_peer->ContentProtectActive() && p_buf->offset > 0) {
+  if (ContentProtectEnabled() && (active_peer != nullptr) && active_peer->ContentProtectActive() &&
+      p_buf->offset > 0) {
     p_buf->len++;
     p_buf->offset--;
     uint8_t* p = (uint8_t*)(p_buf + 1) + p_buf->offset;
@@ -696,48 +652,39 @@ BT_HDR* BtaAvCo::GetNextSourceDataPacket(const uint8_t* p_codec_info,
   return p_buf;
 }
 
-void BtaAvCo::DataPacketWasDropped(tBTA_AV_HNDL bta_av_handle,
-                                   const RawAddress& peer_address) {
-  log::error("peer {} dropped audio packet on handle 0x{:x}", peer_address,
-             bta_av_handle);
+void BtaAvCo::DataPacketWasDropped(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address) {
+  log::error("peer {} dropped audio packet on handle 0x{:x}", peer_address, bta_av_handle);
 }
 
-void BtaAvCo::ProcessAudioDelay(tBTA_AV_HNDL bta_av_handle,
-                                const RawAddress& peer_address,
+void BtaAvCo::ProcessAudioDelay(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
                                 uint16_t delay) {
-  log::verbose("peer {} bta_av_handle: 0x{:x} delay:0x{:x}", peer_address,
-               bta_av_handle, delay);
+  log::verbose("peer {} bta_av_handle: 0x{:x} delay:0x{:x}", peer_address, bta_av_handle, delay);
 
   btif_av_set_audio_delay(peer_address, delay, A2dpType::kSource);
 }
 
-void BtaAvCo::UpdateMtu(tBTA_AV_HNDL bta_av_handle,
-                        const RawAddress& peer_address, uint16_t mtu) {
-  log::info("peer {} bta_av_handle: 0x{:x} mtu: {}", peer_address,
-            bta_av_handle, mtu);
+void BtaAvCo::UpdateMtu(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address, uint16_t mtu) {
+  log::info("peer {} bta_av_handle: 0x{:x} mtu: {}", peer_address, bta_av_handle, mtu);
 
   // Find the peer
-  BtaAvCoPeer* p_peer =
-      peer_cache_->FindPeerAndUpdate(bta_av_handle, peer_address);
+  BtaAvCoPeer* p_peer = peer_cache_->FindPeerAndUpdate(bta_av_handle, peer_address);
   if (p_peer == nullptr) {
-    log::error("could not find peer entry for bta_av_handle 0x{:x} peer {}",
-               bta_av_handle, peer_address);
+    log::error("could not find peer entry for bta_av_handle 0x{:x} peer {}", bta_av_handle,
+               peer_address);
     return;
   }
   p_peer->mtu = mtu;
 }
 
-bool BtaAvCo::SetActivePeer(const RawAddress& peer_address,
-                            const uint8_t t_local_sep) {
+bool BtaAvCo::SetActivePeer(const RawAddress& peer_address, const uint8_t t_local_sep) {
   log::info("peer_address={}", peer_address);
 
   std::lock_guard<std::recursive_mutex> lock(peer_cache_->codec_lock_);
 
   BtaAvCoState* reference_state = getStateFromLocalProfile(t_local_sep);
   if (reference_state == nullptr) {
-    log::warn(
-        "Invalid bta av state for peer_address : {} with local sep as :{}",
-        peer_address, t_local_sep);
+    log::warn("Invalid bta av state for peer_address : {} with local sep as :{}", peer_address,
+              t_local_sep);
     return false;
   }
   if (peer_address.IsEmpty()) {
@@ -755,8 +702,7 @@ bool BtaAvCo::SetActivePeer(const RawAddress& peer_address,
 
   reference_state->setActivePeer(p_peer);
   reference_state->setCodecConfig(p_peer->codec_config);
-  log::info("codec = {}",
-            A2DP_CodecInfoString(reference_state->getCodecConfig()));
+  log::info("codec = {}", A2DP_CodecInfoString(reference_state->getCodecConfig()));
   // report the selected codec configuration of this new active peer.
   ReportSourceCodecState(p_peer);
   return true;
@@ -785,9 +731,8 @@ void BtaAvCo::SaveCodec(const uint8_t* new_codec_config) {
   }
 }
 
-void BtaAvCo::GetPeerEncoderParameters(
-    const RawAddress& peer_address,
-    tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_params) {
+void BtaAvCo::GetPeerEncoderParameters(const RawAddress& peer_address,
+                                       tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_params) {
   uint16_t min_mtu = 0xFFFF;
   log::assert_that(p_peer_params != nullptr, "Peer address {}",
                    ADDRESS_TO_LOGGABLE_STR(peer_address));
@@ -797,19 +742,22 @@ void BtaAvCo::GetPeerEncoderParameters(
   // Compute the MTU
   for (size_t i = 0; i < BTA_AV_CO_NUM_ELEMENTS(peer_cache_->peers_); i++) {
     const BtaAvCoPeer* p_peer = &peer_cache_->peers_[i];
-    if (!p_peer->opened) continue;
-    if (p_peer->addr != peer_address) continue;
-    if (p_peer->mtu < min_mtu) min_mtu = p_peer->mtu;
+    if (!p_peer->opened) {
+      continue;
+    }
+    if (p_peer->addr != peer_address) {
+      continue;
+    }
+    if (p_peer->mtu < min_mtu) {
+      min_mtu = p_peer->mtu;
+    }
   }
   p_peer_params->peer_mtu = min_mtu;
-  p_peer_params->is_peer_edr =
-      btif_av_is_peer_edr(peer_address, A2dpType::kSource);
-  p_peer_params->peer_supports_3mbps =
-      btif_av_peer_supports_3mbps(peer_address, A2dpType::kSource);
-  log::verbose(
-      "peer_address={} peer_mtu={} is_peer_edr={} peer_supports_3mbps={}",
-      peer_address, p_peer_params->peer_mtu, p_peer_params->is_peer_edr,
-      p_peer_params->peer_supports_3mbps);
+  p_peer_params->is_peer_edr = btif_av_is_peer_edr(peer_address, A2dpType::kSource);
+  p_peer_params->peer_supports_3mbps = btif_av_peer_supports_3mbps(peer_address, A2dpType::kSource);
+  log::verbose("peer_address={} peer_mtu={} is_peer_edr={} peer_supports_3mbps={}", peer_address,
+               p_peer_params->peer_mtu, p_peer_params->is_peer_edr,
+               p_peer_params->peer_supports_3mbps);
 }
 
 const tA2DP_ENCODER_INTERFACE* BtaAvCo::GetSourceEncoderInterface() {
@@ -820,9 +768,9 @@ const tA2DP_ENCODER_INTERFACE* BtaAvCo::GetSourceEncoderInterface() {
   return A2DP_GetEncoderInterface(bta_av_legacy_state_.getCodecConfig());
 }
 
-bool BtaAvCo::SetCodecUserConfig(
-    const RawAddress& peer_address,
-    const btav_a2dp_codec_config_t& codec_user_config, bool* p_restart_output) {
+bool BtaAvCo::SetCodecUserConfig(const RawAddress& peer_address,
+                                 const btav_a2dp_codec_config_t& codec_user_config,
+                                 bool* p_restart_output) {
   uint8_t result_codec_config[AVDT_CODEC_SIZE];
   const BtaAvCoSep* p_sink = nullptr;
   bool restart_input = false;
@@ -845,33 +793,30 @@ bool BtaAvCo::SetCodecUserConfig(
   // Don't call BTA_AvReconfig() prior to retrieving all peer's capabilities
   if ((p_peer->num_rx_sinks != p_peer->num_sinks) &&
       (p_peer->num_sup_sinks != BTA_AV_CO_NUM_ELEMENTS(p_peer->sinks))) {
-    log::warn("peer {} : not all peer's capabilities have been retrieved",
-              p_peer->addr);
+    log::warn("peer {} : not all peer's capabilities have been retrieved", p_peer->addr);
     success = false;
     goto done;
   }
 
   // Find the peer SEP codec to use
   if (codec_user_config.codec_type < BTAV_A2DP_CODEC_INDEX_MAX) {
-    p_sink = peer_cache_->FindPeerSink(p_peer, codec_user_config.codec_type,
-                                       ContentProtectFlag());
+    p_sink = peer_cache_->FindPeerSink(p_peer, codec_user_config.codec_type, ContentProtectFlag());
   } else {
     // Use the current sink codec
     p_sink = p_peer->p_sink;
   }
   if (p_sink == nullptr) {
-    log::error("peer {} : cannot find peer SEP to configure for codec type {}",
-               p_peer->addr, codec_user_config.codec_type);
+    log::error("peer {} : cannot find peer SEP to configure for codec type {}", p_peer->addr,
+               codec_user_config.codec_type);
     success = false;
     goto done;
   }
 
   tA2DP_ENCODER_INIT_PEER_PARAMS peer_params;
   GetPeerEncoderParameters(p_peer->addr, &peer_params);
-  if (!p_peer->GetCodecs()->setCodecUserConfig(
-          codec_user_config, &peer_params, p_sink->codec_caps,
-          result_codec_config, &restart_input, &restart_output,
-          &config_updated)) {
+  if (!p_peer->GetCodecs()->setCodecUserConfig(codec_user_config, &peer_params, p_sink->codec_caps,
+                                               result_codec_config, &restart_input, &restart_output,
+                                               &config_updated)) {
     success = false;
     goto done;
   }
@@ -884,16 +829,15 @@ bool BtaAvCo::SetCodecUserConfig(
 
     p_sink = SelectSourceCodec(p_peer);
     if (p_sink == nullptr) {
-      log::error("peer {} : cannot set up codec for the peer SINK",
-                 p_peer->addr);
+      log::error("peer {} : cannot set up codec for the peer SINK", p_peer->addr);
       success = false;
       goto done;
     }
 
     p_peer->acceptor = false;
     log::verbose("call BTA_AvReconfig(0x{:x})", p_peer->BtaAvHandle());
-    BTA_AvReconfig(p_peer->BtaAvHandle(), true, p_sink->sep_info_idx,
-                   p_peer->codec_config, num_protect, bta_av_co_cp_scmst);
+    BTA_AvReconfig(p_peer->BtaAvHandle(), true, p_sink->sep_info_idx, p_peer->codec_config,
+                   num_protect, bta_av_co_cp_scmst);
     *p_restart_output = true;
   }
 
@@ -914,16 +858,14 @@ done:
   } else {
     active_peer = bta_av_legacy_state_.getActivePeer();
   }
-  if (p_peer != nullptr &&
-      (!restart_output || !success || p_peer != active_peer)) {
+  if (p_peer != nullptr && (!restart_output || !success || p_peer != active_peer)) {
     return ReportSourceCodecState(p_peer);
   }
 
   return success;
 }
 
-bool BtaAvCo::SetCodecAudioConfig(
-    const btav_a2dp_codec_config_t& codec_audio_config) {
+bool BtaAvCo::SetCodecAudioConfig(const btav_a2dp_codec_config_t& codec_audio_config) {
   uint8_t result_codec_config[AVDT_CODEC_SIZE];
   bool restart_output = false;
   bool config_updated = false;
@@ -945,8 +887,7 @@ bool BtaAvCo::SetCodecAudioConfig(
   // Don't call BTA_AvReconfig() prior to retrieving all peer's capabilities
   if ((p_peer->num_rx_sinks != p_peer->num_sinks) &&
       (p_peer->num_sup_sinks != BTA_AV_CO_NUM_ELEMENTS(p_peer->sinks))) {
-    log::warn("peer {} : not all peer's capabilities have been retrieved",
-              p_peer->addr);
+    log::warn("peer {} : not all peer's capabilities have been retrieved", p_peer->addr);
     return false;
   }
 
@@ -959,9 +900,9 @@ bool BtaAvCo::SetCodecAudioConfig(
 
   tA2DP_ENCODER_INIT_PEER_PARAMS peer_params;
   GetPeerEncoderParameters(p_peer->addr, &peer_params);
-  if (!p_peer->GetCodecs()->setCodecAudioConfig(
-          codec_audio_config, &peer_params, p_sink->codec_caps,
-          result_codec_config, &restart_output, &config_updated)) {
+  if (!p_peer->GetCodecs()->setCodecAudioConfig(codec_audio_config, &peer_params,
+                                                p_sink->codec_caps, result_codec_config,
+                                                &restart_output, &config_updated)) {
     return false;
   }
 
@@ -971,13 +912,13 @@ bool BtaAvCo::SetCodecAudioConfig(
       num_protect = AVDT_CP_INFO_LEN;
     }
 
-    SaveNewCodecConfig(p_peer, result_codec_config, p_sink->num_protect,
-                       p_sink->protect_info, AVDT_TSEP_SRC);
+    SaveNewCodecConfig(p_peer, result_codec_config, p_sink->num_protect, p_sink->protect_info,
+                       AVDT_TSEP_SRC);
 
     p_peer->acceptor = false;
     log::verbose("call BTA_AvReconfig(0x{:x})", p_peer->BtaAvHandle());
-    BTA_AvReconfig(p_peer->BtaAvHandle(), true, p_sink->sep_info_idx,
-                   p_peer->codec_config, num_protect, bta_av_co_cp_scmst);
+    BTA_AvReconfig(p_peer->BtaAvHandle(), true, p_sink->sep_info_idx, p_peer->codec_config,
+                   num_protect, bta_av_co_cp_scmst);
   }
 
   if (config_updated) {
@@ -993,11 +934,9 @@ int BtaAvCo::GetSourceEncoderEffectiveFrameSize() {
   std::lock_guard<std::recursive_mutex> lock(peer_cache_->codec_lock_);
 
   if (com::android::bluetooth::flags::a2dp_concurrent_source_sink()) {
-    return A2DP_GetEecoderEffectiveFrameSize(
-        bta_av_source_state_.getCodecConfig());
+    return A2DP_GetEecoderEffectiveFrameSize(bta_av_source_state_.getCodecConfig());
   }
-  return A2DP_GetEecoderEffectiveFrameSize(
-      bta_av_legacy_state_.getCodecConfig());
+  return A2DP_GetEecoderEffectiveFrameSize(bta_av_legacy_state_.getCodecConfig());
 }
 
 int BtaAvCo::GetSourceEncoderPreferredIntervalUs() {
@@ -1007,15 +946,15 @@ int BtaAvCo::GetSourceEncoderPreferredIntervalUs() {
 
 bool BtaAvCo::ReportSourceCodecState(BtaAvCoPeer* p_peer) {
   btav_a2dp_codec_config_t codec_config = {
-    .codec_type = BTAV_A2DP_CODEC_INDEX_SINK_MAX,
-    .codec_priority = BTAV_A2DP_CODEC_PRIORITY_DISABLED,
-    .sample_rate =    BTAV_A2DP_CODEC_SAMPLE_RATE_NONE,
-    .bits_per_sample = BTAV_A2DP_CODEC_BITS_PER_SAMPLE_NONE,
-    .channel_mode = BTAV_A2DP_CODEC_CHANNEL_MODE_NONE,
-    .codec_specific_1 = 0,
-    .codec_specific_2 = 0,
-    .codec_specific_3 = 0,
-    .codec_specific_4 = 0,
+          .codec_type = BTAV_A2DP_CODEC_INDEX_SINK_MAX,
+          .codec_priority = BTAV_A2DP_CODEC_PRIORITY_DISABLED,
+          .sample_rate = BTAV_A2DP_CODEC_SAMPLE_RATE_NONE,
+          .bits_per_sample = BTAV_A2DP_CODEC_BITS_PER_SAMPLE_NONE,
+          .channel_mode = BTAV_A2DP_CODEC_CHANNEL_MODE_NONE,
+          .codec_specific_1 = 0,
+          .codec_specific_2 = 0,
+          .codec_specific_3 = 0,
+          .codec_specific_4 = 0,
   };
   std::vector<btav_a2dp_codec_config_t> codecs_local_capabilities;
   std::vector<btav_a2dp_codec_config_t> codecs_selectable_capabilities;
@@ -1026,18 +965,16 @@ bool BtaAvCo::ReportSourceCodecState(BtaAvCoPeer* p_peer) {
     log::error("Peer codecs is set to null");
     return false;
   }
-  if (!codecs->getCodecConfigAndCapabilities(&codec_config,
-                                             &codecs_local_capabilities,
+  if (!codecs->getCodecConfigAndCapabilities(&codec_config, &codecs_local_capabilities,
                                              &codecs_selectable_capabilities)) {
     log::warn(
-        "Peer {} : error reporting audio source codec state: cannot get codec "
-        "config and capabilities",
-        p_peer->addr);
+            "Peer {} : error reporting audio source codec state: cannot get codec "
+            "config and capabilities",
+            p_peer->addr);
     return false;
   }
   log::info("peer {} codec_config={{}}", p_peer->addr, codec_config.ToString());
-  btif_av_report_source_codec_state(p_peer->addr, codec_config,
-                                    codecs_local_capabilities,
+  btif_av_report_source_codec_state(p_peer->addr, codec_config, codecs_local_capabilities,
                                     codecs_selectable_capabilities);
   return true;
 }
@@ -1074,21 +1011,18 @@ void BtaAvCo::DebugDump(int fd) {
   }
 
   dprintf(fd, "\nA2DP Peers State:\n");
-  dprintf(
-      fd, "  Active peer: %s\n",
-      (bta_av_legacy_state_.getActivePeer() != nullptr)
-          ? ADDRESS_TO_LOGGABLE_CSTR(bta_av_legacy_state_.getActivePeer()->addr)
-          : "null");
-  dprintf(
-      fd, "  Source: active peer: %s\n",
-      (bta_av_source_state_.getActivePeer() != nullptr)
-          ? ADDRESS_TO_LOGGABLE_CSTR(bta_av_source_state_.getActivePeer()->addr)
-          : "null");
-  dprintf(
-      fd, "  Sink: active peer: %s\n",
-      (bta_av_sink_state_.getActivePeer() != nullptr)
-          ? ADDRESS_TO_LOGGABLE_CSTR(bta_av_sink_state_.getActivePeer()->addr)
-          : "null");
+  dprintf(fd, "  Active peer: %s\n",
+          (bta_av_legacy_state_.getActivePeer() != nullptr)
+                  ? ADDRESS_TO_LOGGABLE_CSTR(bta_av_legacy_state_.getActivePeer()->addr)
+                  : "null");
+  dprintf(fd, "  Source: active peer: %s\n",
+          (bta_av_source_state_.getActivePeer() != nullptr)
+                  ? ADDRESS_TO_LOGGABLE_CSTR(bta_av_source_state_.getActivePeer()->addr)
+                  : "null");
+  dprintf(fd, "  Sink: active peer: %s\n",
+          (bta_av_sink_state_.getActivePeer() != nullptr)
+                  ? ADDRESS_TO_LOGGABLE_CSTR(bta_av_sink_state_.getActivePeer()->addr)
+                  : "null");
 
   for (size_t i = 0; i < BTA_AV_CO_NUM_ELEMENTS(peer_cache_->peers_); i++) {
     const BtaAvCoPeer& peer = peer_cache_->peers_[i];
@@ -1104,8 +1038,7 @@ void BtaAvCo::DebugDump(int fd) {
     dprintf(fd, "    Number of supported sinks: %u\n", peer.num_sup_sinks);
     dprintf(fd, "    Number of supported sources: %u\n", peer.num_sup_sources);
     dprintf(fd, "    Acceptor: %s\n", (peer.acceptor) ? "true" : "false");
-    dprintf(fd, "    Reconfig needed: %s\n",
-            (peer.reconfig_needed) ? "true" : "false");
+    dprintf(fd, "    Reconfig needed: %s\n", (peer.reconfig_needed) ? "true" : "false");
     dprintf(fd, "    Opened: %s\n", (peer.opened) ? "true" : "false");
     dprintf(fd, "    MTU: %u\n", peer.mtu);
     dprintf(fd, "    UUID to connect: 0x%x\n", peer.uuid_to_connect);
@@ -1116,8 +1049,7 @@ void BtaAvCo::DebugDump(int fd) {
 std::optional<::bluetooth::audio::a2dp::provider::a2dp_configuration>
 BtaAvCo::GetProviderCodecConfiguration(BtaAvCoPeer* p_peer) {
   // Gather peer codec capabilities.
-  std::vector<::bluetooth::audio::a2dp::provider::a2dp_remote_capabilities>
-      a2dp_remote_caps;
+  std::vector<::bluetooth::audio::a2dp::provider::a2dp_remote_capabilities> a2dp_remote_caps;
   for (size_t index = 0; index < p_peer->num_sup_sinks; index++) {
     const BtaAvCoSep* p_sink = &p_peer->sinks[index];
     auto& capabilities = a2dp_remote_caps.emplace_back();
@@ -1127,17 +1059,16 @@ BtaAvCo::GetProviderCodecConfiguration(BtaAvCoPeer* p_peer) {
 
   // Get the configuration of the preferred codec as codec hint.
   btav_a2dp_codec_config_t codec_config =
-      p_peer->GetCodecs()->orderedSourceCodecs().front()->getCodecUserConfig();
+          p_peer->GetCodecs()->orderedSourceCodecs().front()->getCodecUserConfig();
 
   // Pass all gathered codec capabilities to the provider
-  return ::bluetooth::audio::a2dp::provider::get_a2dp_configuration(
-      p_peer->addr, a2dp_remote_caps, codec_config);
+  return ::bluetooth::audio::a2dp::provider::get_a2dp_configuration(p_peer->addr, a2dp_remote_caps,
+                                                                    codec_config);
 }
 
 BtaAvCoSep* BtaAvCo::SelectProviderCodecConfiguration(
-    BtaAvCoPeer* p_peer,
-    const ::bluetooth::audio::a2dp::provider::a2dp_configuration&
-        provider_codec_config) {
+        BtaAvCoPeer* p_peer,
+        const ::bluetooth::audio::a2dp::provider::a2dp_configuration& provider_codec_config) {
   // Configure the selected offload codec for the active peer.
   // This function _must_ have the same external behaviour as
   // AttemptSourceCodecSelection, except the configuration
@@ -1147,29 +1078,25 @@ BtaAvCoSep* BtaAvCo::SelectProviderCodecConfiguration(
 
   // Identify the selected sink.
   auto* p_sink = peer_cache_->FindPeerSink(
-      p_peer, provider_codec_config.codec_parameters.codec_type,
-      ContentProtectFlag());
-  log::assert_that(p_sink != nullptr,
-                   "Unable to find the selected codec config");
+          p_peer, provider_codec_config.codec_parameters.codec_type, ContentProtectFlag());
+  log::assert_that(p_sink != nullptr, "Unable to find the selected codec config");
 
   // Identify the selected codec.
-  auto* codec_config = reinterpret_cast<A2dpCodecConfigExt*>(
-      p_peer->GetCodecs()->findSourceCodecConfig(
-          provider_codec_config.codec_parameters.codec_type));
-  log::assert_that(codec_config != nullptr,
-                   "Unable to find the selected codec config");
+  auto* codec_config =
+          reinterpret_cast<A2dpCodecConfigExt*>(p_peer->GetCodecs()->findSourceCodecConfig(
+                  provider_codec_config.codec_parameters.codec_type));
+  log::assert_that(codec_config != nullptr, "Unable to find the selected codec config");
 
   // Update the vendor codec parameters and codec configuration.
-  codec_config->setCodecConfig(
-      provider_codec_config.codec_parameters,
-      provider_codec_config.codec_config,
-      provider_codec_config.vendor_specific_parameters);
+  codec_config->setCodecConfig(provider_codec_config.codec_parameters,
+                               provider_codec_config.codec_config,
+                               provider_codec_config.vendor_specific_parameters);
 
   // Select the codec config.
   p_peer->GetCodecs()->setCurrentCodecConfig(codec_config);
   p_peer->p_sink = p_sink;
-  SaveNewCodecConfig(p_peer, provider_codec_config.codec_config,
-                     p_sink->num_protect, p_sink->protect_info, AVDT_TSEP_SRC);
+  SaveNewCodecConfig(p_peer, provider_codec_config.codec_config, p_sink->num_protect,
+                     p_sink->protect_info, AVDT_TSEP_SRC);
 
   return p_sink;
 }
@@ -1186,24 +1113,22 @@ const BtaAvCoSep* BtaAvCo::SelectSourceCodec(BtaAvCoPeer* p_peer) {
   // Query the preferred codec configuration for software codecs.
   A2dpCodecConfig* software_codec_config = nullptr;
   for (const auto& iter : p_peer->GetCodecs()->orderedSourceCodecs()) {
-    if (::bluetooth::audio::a2dp::provider::supports_codec(
-            iter->codecIndex())) {
+    if (::bluetooth::audio::a2dp::provider::supports_codec(iter->codecIndex())) {
       continue;
     }
 
     // Find the peer Sink for the codec
     uint8_t new_codec_config[AVDT_CODEC_SIZE];
-    const BtaAvCoSep* p_sink = peer_cache_->FindPeerSink(
-        p_peer, iter->codecIndex(), ContentProtectFlag());
+    const BtaAvCoSep* p_sink =
+            peer_cache_->FindPeerSink(p_peer, iter->codecIndex(), ContentProtectFlag());
 
     if (p_sink == nullptr) {
       log::verbose("peer Sink for codec {} not found", iter->name());
       continue;
     }
 
-    if (!p_peer->GetCodecs()->setCodecConfig(
-            p_sink->codec_caps, true /* is_capability */, new_codec_config,
-            false /* select_current_codec */)) {
+    if (!p_peer->GetCodecs()->setCodecConfig(p_sink->codec_caps, true /* is_capability */,
+                                             new_codec_config, false /* select_current_codec */)) {
       log::verbose("cannot set source codec {}", iter->name());
     } else {
       log::verbose("feasible to set source codec {}", iter->name());
@@ -1217,8 +1142,7 @@ const BtaAvCoSep* BtaAvCo::SelectSourceCodec(BtaAvCoPeer* p_peer) {
        bta_av_co_should_select_hardware_codec(*software_codec_config,
                                               provider_codec_config.value()))) {
     // Select hardware offload codec configuration
-    return SelectProviderCodecConfiguration(p_peer,
-                                            provider_codec_config.value());
+    return SelectProviderCodecConfiguration(p_peer, provider_codec_config.value());
   }
 
   if (software_codec_config != nullptr) {
@@ -1255,56 +1179,54 @@ const BtaAvCoSep* BtaAvCo::SelectSinkCodec(BtaAvCoPeer* p_peer) {
   return p_source;
 }
 
-const BtaAvCoSep* BtaAvCo::AttemptSourceCodecSelection(
-    const A2dpCodecConfig& codec_config, BtaAvCoPeer* p_peer) {
+const BtaAvCoSep* BtaAvCo::AttemptSourceCodecSelection(const A2dpCodecConfig& codec_config,
+                                                       BtaAvCoPeer* p_peer) {
   uint8_t new_codec_config[AVDT_CODEC_SIZE];
 
   log::verbose("");
 
   // Find the peer Sink for the codec
-  BtaAvCoSep* p_sink = peer_cache_->FindPeerSink(
-      p_peer, codec_config.codecIndex(), ContentProtectFlag());
+  BtaAvCoSep* p_sink =
+          peer_cache_->FindPeerSink(p_peer, codec_config.codecIndex(), ContentProtectFlag());
   if (p_sink == nullptr) {
     log::verbose("peer Sink for codec {} not found", codec_config.name());
     return nullptr;
   }
-  if (!p_peer->GetCodecs()->setCodecConfig(
-          p_sink->codec_caps, true /* is_capability */, new_codec_config,
-          true /* select_current_codec */)) {
+  if (!p_peer->GetCodecs()->setCodecConfig(p_sink->codec_caps, true /* is_capability */,
+                                           new_codec_config, true /* select_current_codec */)) {
     log::verbose("cannot set source codec {}", codec_config.name());
     return nullptr;
   }
   p_peer->p_sink = p_sink;
 
-  SaveNewCodecConfig(p_peer, new_codec_config, p_sink->num_protect,
-                     p_sink->protect_info, AVDT_TSEP_SRC);
+  SaveNewCodecConfig(p_peer, new_codec_config, p_sink->num_protect, p_sink->protect_info,
+                     AVDT_TSEP_SRC);
 
   return p_sink;
 }
 
-const BtaAvCoSep* BtaAvCo::AttemptSinkCodecSelection(
-    const A2dpCodecConfig& codec_config, BtaAvCoPeer* p_peer) {
+const BtaAvCoSep* BtaAvCo::AttemptSinkCodecSelection(const A2dpCodecConfig& codec_config,
+                                                     BtaAvCoPeer* p_peer) {
   uint8_t new_codec_config[AVDT_CODEC_SIZE];
 
   log::verbose("");
 
   // Find the peer Source for the codec
-  BtaAvCoSep* p_source = peer_cache_->FindPeerSource(
-      p_peer, codec_config.codecIndex(), ContentProtectFlag());
+  BtaAvCoSep* p_source =
+          peer_cache_->FindPeerSource(p_peer, codec_config.codecIndex(), ContentProtectFlag());
   if (p_source == nullptr) {
     log::verbose("peer Source for codec {} not found", codec_config.name());
     return nullptr;
   }
-  if (!p_peer->GetCodecs()->setSinkCodecConfig(
-          p_source->codec_caps, true /* is_capability */, new_codec_config,
-          true /* select_current_codec */)) {
+  if (!p_peer->GetCodecs()->setSinkCodecConfig(p_source->codec_caps, true /* is_capability */,
+                                               new_codec_config, true /* select_current_codec */)) {
     log::verbose("cannot set sink codec {}", codec_config.name());
     return nullptr;
   }
   p_peer->p_source = p_source;
 
-  SaveNewCodecConfig(p_peer, new_codec_config, p_source->num_protect,
-                     p_source->protect_info, AVDT_TSEP_SNK);
+  SaveNewCodecConfig(p_peer, new_codec_config, p_source->num_protect, p_source->protect_info,
+                     AVDT_TSEP_SNK);
 
   return p_source;
 }
@@ -1327,8 +1249,8 @@ bool BtaAvCo::UpdateSelectableSourceCodec(const A2dpCodecConfig& codec_config,
   log::verbose("peer {}", p_peer->addr);
 
   // Find the peer Sink for the codec
-  const BtaAvCoSep* p_sink = peer_cache_->FindPeerSink(
-      p_peer, codec_config.codecIndex(), ContentProtectFlag());
+  const BtaAvCoSep* p_sink =
+          peer_cache_->FindPeerSink(p_peer, codec_config.codecIndex(), ContentProtectFlag());
   if (p_sink == nullptr) {
     // The peer Sink device does not support this codec
     return false;
@@ -1354,19 +1276,17 @@ size_t BtaAvCo::UpdateAllSelectableSinkCodecs(BtaAvCoPeer* p_peer) {
   return updated_codecs;
 }
 
-bool BtaAvCo::UpdateSelectableSinkCodec(const A2dpCodecConfig& codec_config,
-                                        BtaAvCoPeer* p_peer) {
+bool BtaAvCo::UpdateSelectableSinkCodec(const A2dpCodecConfig& codec_config, BtaAvCoPeer* p_peer) {
   log::verbose("peer {}", p_peer->addr);
 
   // Find the peer Source for the codec
-  const BtaAvCoSep* p_source = peer_cache_->FindPeerSource(
-      p_peer, codec_config.codecIndex(), ContentProtectFlag());
+  const BtaAvCoSep* p_source =
+          peer_cache_->FindPeerSource(p_peer, codec_config.codecIndex(), ContentProtectFlag());
   if (p_source == nullptr) {
     // The peer Source device does not support this codec
     return false;
   }
-  if (!p_peer->GetCodecs()->setPeerSourceCodecCapabilities(
-          p_source->codec_caps)) {
+  if (!p_peer->GetCodecs()->setPeerSourceCodecCapabilities(p_source->codec_caps)) {
     log::warn("cannot update peer {} codec capabilities for {}", p_peer->addr,
               A2DP_CodecName(p_source->codec_caps));
     return false;
@@ -1374,10 +1294,8 @@ bool BtaAvCo::UpdateSelectableSinkCodec(const A2dpCodecConfig& codec_config,
   return true;
 }
 
-void BtaAvCo::SaveNewCodecConfig(BtaAvCoPeer* p_peer,
-                                 const uint8_t* new_codec_config,
-                                 uint8_t num_protect,
-                                 const uint8_t* p_protect_info,
+void BtaAvCo::SaveNewCodecConfig(BtaAvCoPeer* p_peer, const uint8_t* new_codec_config,
+                                 uint8_t num_protect, const uint8_t* p_protect_info,
                                  const uint8_t t_local_sep) {
   log::verbose("peer {}", p_peer->addr);
   log::verbose("codec: {}", A2DP_CodecInfoString(new_codec_config));
@@ -1385,9 +1303,8 @@ void BtaAvCo::SaveNewCodecConfig(BtaAvCoPeer* p_peer,
   std::lock_guard<std::recursive_mutex> lock(peer_cache_->codec_lock_);
   BtaAvCoState* reference_state = getStateFromLocalProfile(t_local_sep);
   if (reference_state == nullptr) {
-    log::warn(
-        "Invalid bta av state for peer_address : {} with local sep as :{}",
-        p_peer->addr, t_local_sep);
+    log::warn("Invalid bta av state for peer_address : {} with local sep as :{}", p_peer->addr,
+              t_local_sep);
     return;
   }
   reference_state->setCodecConfig(new_codec_config);
@@ -1407,8 +1324,8 @@ BtaAvCoState* BtaAvCo::getStateFromPeer(const BtaAvCoPeer* p_peer) {
     } else if (p_peer->uuid_to_connect == UUID_SERVCLASS_AUDIO_SOURCE) {
       return &bta_av_sink_state_;
     } else {
-      log::warn("Invalid bta av state for peer_address : {} with uuid as :{}",
-                p_peer->addr, p_peer->uuid_to_connect);
+      log::warn("Invalid bta av state for peer_address : {} with uuid as :{}", p_peer->addr,
+                p_peer->uuid_to_connect);
       return nullptr;
     }
   } else {
@@ -1416,25 +1333,21 @@ BtaAvCoState* BtaAvCo::getStateFromPeer(const BtaAvCoPeer* p_peer) {
   }
 }
 
-bool BtaAvCo::SetCodecOtaConfig(BtaAvCoPeer* p_peer,
-                                const uint8_t* p_ota_codec_config,
-                                uint8_t num_protect,
-                                const uint8_t* p_protect_info,
-                                bool* p_restart_output,
-                                const uint8_t t_local_sep) {
+bool BtaAvCo::SetCodecOtaConfig(BtaAvCoPeer* p_peer, const uint8_t* p_ota_codec_config,
+                                uint8_t num_protect, const uint8_t* p_protect_info,
+                                bool* p_restart_output, const uint8_t t_local_sep) {
   uint8_t result_codec_config[AVDT_CODEC_SIZE];
   bool restart_input = false;
   bool restart_output = false;
   bool config_updated = false;
 
-  log::info("peer_address={}, codec: {}", p_peer->addr,
-            A2DP_CodecInfoString(p_ota_codec_config));
+  log::info("peer_address={}, codec: {}", p_peer->addr, A2DP_CodecInfoString(p_ota_codec_config));
 
   *p_restart_output = false;
 
   // Find the peer SEP codec to use
   const BtaAvCoSep* p_sink = peer_cache_->FindPeerSink(
-      p_peer, A2DP_SourceCodecIndex(p_ota_codec_config), ContentProtectFlag());
+          p_peer, A2DP_SourceCodecIndex(p_ota_codec_config), ContentProtectFlag());
   if ((p_peer->num_sup_sinks > 0) && (p_sink == nullptr)) {
     // There are no peer SEPs if we didn't do the discovery procedure yet.
     // We have all the information we need from the peer, so we can
@@ -1445,21 +1358,18 @@ bool BtaAvCo::SetCodecOtaConfig(BtaAvCoPeer* p_peer,
 
   tA2DP_ENCODER_INIT_PEER_PARAMS peer_params;
   GetPeerEncoderParameters(p_peer->addr, &peer_params);
-  if (!p_peer->GetCodecs()->setCodecOtaConfig(
-          p_ota_codec_config, &peer_params, result_codec_config, &restart_input,
-          &restart_output, &config_updated)) {
+  if (!p_peer->GetCodecs()->setCodecOtaConfig(p_ota_codec_config, &peer_params, result_codec_config,
+                                              &restart_input, &restart_output, &config_updated)) {
     log::error("peer {} : cannot set OTA config", p_peer->addr);
     return false;
   }
 
   if (restart_output) {
-    log::verbose("restart output for codec: {}",
-                 A2DP_CodecInfoString(result_codec_config));
+    log::verbose("restart output for codec: {}", A2DP_CodecInfoString(result_codec_config));
 
     *p_restart_output = true;
     p_peer->p_sink = p_sink;
-    SaveNewCodecConfig(p_peer, result_codec_config, num_protect, p_protect_info,
-                       t_local_sep);
+    SaveNewCodecConfig(p_peer, result_codec_config, num_protect, p_protect_info, t_local_sep);
   }
 
   if (restart_input || config_updated) {
@@ -1471,9 +1381,8 @@ bool BtaAvCo::SetCodecOtaConfig(BtaAvCoPeer* p_peer,
   return true;
 }
 
-void bta_av_co_init(
-    const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
-    std::vector<btav_a2dp_codec_info_t>* supported_codecs) {
+void bta_av_co_init(const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
+                    std::vector<btav_a2dp_codec_info_t>* supported_codecs) {
   bta_av_co_cb.Init(codec_priorities, supported_codecs);
 }
 
@@ -1485,22 +1394,19 @@ A2dpCodecConfig* bta_av_get_a2dp_current_codec(void) {
   return bta_av_co_cb.GetActivePeerCurrentCodec();
 }
 
-A2dpCodecConfig* bta_av_get_a2dp_peer_current_codec(
-    const RawAddress& peer_address) {
+A2dpCodecConfig* bta_av_get_a2dp_peer_current_codec(const RawAddress& peer_address) {
   return bta_av_co_cb.GetPeerCurrentCodec(peer_address);
 }
 
-bool bta_av_co_audio_init(btav_a2dp_codec_index_t codec_index,
-                          AvdtpSepConfig* p_cfg) {
+bool bta_av_co_audio_init(btav_a2dp_codec_index_t codec_index, AvdtpSepConfig* p_cfg) {
   return A2DP_InitCodecConfig(codec_index, p_cfg);
 }
 
-void bta_av_co_audio_disc_res(tBTA_AV_HNDL bta_av_handle,
-                              const RawAddress& peer_address, uint8_t num_seps,
-                              uint8_t num_sinks, uint8_t num_sources,
+void bta_av_co_audio_disc_res(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
+                              uint8_t num_seps, uint8_t num_sinks, uint8_t num_sources,
                               uint16_t uuid_local) {
-  bta_av_co_cb.ProcessDiscoveryResult(bta_av_handle, peer_address, num_seps,
-                                      num_sinks, num_sources, uuid_local);
+  bta_av_co_cb.ProcessDiscoveryResult(bta_av_handle, peer_address, num_seps, num_sinks, num_sources,
+                                      uuid_local);
 }
 
 static void bta_av_co_store_peer_codectype(const BtaAvCoPeer* p_peer) {
@@ -1512,140 +1418,117 @@ static void bta_av_co_store_peer_codectype(const BtaAvCoPeer* p_peer) {
     peer_codec_type |= A2DP_IotGetPeerSinkCodecType(p_sink->codec_caps);
   }
 
-  DEVICE_IOT_CONFIG_ADDR_SET_HEX(p_peer->addr, IOT_CONF_KEY_A2DP_CODECTYPE,
-                                 peer_codec_type, IOT_CONF_BYTE_NUM_1);
+  DEVICE_IOT_CONFIG_ADDR_SET_HEX(p_peer->addr, IOT_CONF_KEY_A2DP_CODECTYPE, peer_codec_type,
+                                 IOT_CONF_BYTE_NUM_1);
 }
 
 static bool bta_av_co_should_select_hardware_codec(
-    const A2dpCodecConfig& software_config,
-    const ::bluetooth::audio::a2dp::provider::a2dp_configuration&
-        hardware_config) {
+        const A2dpCodecConfig& software_config,
+        const ::bluetooth::audio::a2dp::provider::a2dp_configuration& hardware_config) {
   btav_a2dp_codec_index_t software_codec_index = software_config.codecIndex();
-  btav_a2dp_codec_index_t hardware_offload_index =
-      hardware_config.codec_parameters.codec_type;
+  btav_a2dp_codec_index_t hardware_offload_index = hardware_config.codec_parameters.codec_type;
 
   // Prioritize any offload codec except SBC and AAC
-  if (A2DP_GetCodecType(hardware_config.codec_config) ==
-      A2DP_MEDIA_CT_NON_A2DP) {
-    log::verbose("select hardware codec: {}",
-                 A2DP_CodecIndexStr(hardware_offload_index));
+  if (A2DP_GetCodecType(hardware_config.codec_config) == A2DP_MEDIA_CT_NON_A2DP) {
+    log::verbose("select hardware codec: {}", A2DP_CodecIndexStr(hardware_offload_index));
     return true;
   }
   // Prioritize LDAC, AptX HD and AptX over AAC and SBC offload codecs
   if (software_codec_index == BTAV_A2DP_CODEC_INDEX_SOURCE_LDAC ||
       software_codec_index == BTAV_A2DP_CODEC_INDEX_SOURCE_APTX_HD ||
       software_codec_index == BTAV_A2DP_CODEC_INDEX_SOURCE_APTX) {
-    log::verbose("select software codec: {}",
-                 A2DP_CodecIndexStr(software_codec_index));
+    log::verbose("select software codec: {}", A2DP_CodecIndexStr(software_codec_index));
     return false;
   }
   // Prioritize AAC offload
   if (hardware_offload_index == BTAV_A2DP_CODEC_INDEX_SOURCE_AAC) {
-    log::verbose("select hardware codec: {}",
-                 A2DP_CodecIndexStr(hardware_offload_index));
+    log::verbose("select hardware codec: {}", A2DP_CodecIndexStr(hardware_offload_index));
     return true;
   }
   // Prioritize AAC software
   if (software_codec_index == BTAV_A2DP_CODEC_INDEX_SOURCE_AAC) {
-    log::verbose("select software codec: {}",
-                 A2DP_CodecIndexStr(software_codec_index));
+    log::verbose("select software codec: {}", A2DP_CodecIndexStr(software_codec_index));
     return false;
   }
   // Prioritize SBC offload
   if (hardware_offload_index == BTAV_A2DP_CODEC_INDEX_SOURCE_SBC) {
-    log::verbose("select hardware codec: {}",
-                 A2DP_CodecIndexStr(hardware_offload_index));
+    log::verbose("select hardware codec: {}", A2DP_CodecIndexStr(hardware_offload_index));
     return true;
   }
   // Prioritize SBC software
   if (software_codec_index == BTAV_A2DP_CODEC_INDEX_SOURCE_SBC) {
-    log::verbose("select software codec: {}",
-                 A2DP_CodecIndexStr(software_codec_index));
+    log::verbose("select software codec: {}", A2DP_CodecIndexStr(software_codec_index));
     return false;
   }
-  log::error("select unknown software codec: {}",
-             A2DP_CodecIndexStr(software_codec_index));
+  log::error("select unknown software codec: {}", A2DP_CodecIndexStr(software_codec_index));
   return false;
 }
 
-tA2DP_STATUS bta_av_co_audio_getconfig(tBTA_AV_HNDL bta_av_handle,
-                                       const RawAddress& peer_address,
-                                       uint8_t* p_codec_info,
-                                       uint8_t* p_sep_info_idx, uint8_t seid,
-                                       uint8_t* p_num_protect,
-                                       uint8_t* p_protect_info) {
+tA2DP_STATUS bta_av_co_audio_getconfig(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
+                                       uint8_t* p_codec_info, uint8_t* p_sep_info_idx, uint8_t seid,
+                                       uint8_t* p_num_protect, uint8_t* p_protect_info) {
   uint16_t peer_uuid = bta_av_co_cb.peer_cache_->FindPeerUuid(bta_av_handle);
 
-  log::verbose("peer {} bta_av_handle=0x{:x} peer_uuid=0x{:x}", peer_address,
-               bta_av_handle, peer_uuid);
+  log::verbose("peer {} bta_av_handle=0x{:x} peer_uuid=0x{:x}", peer_address, bta_av_handle,
+               peer_uuid);
 
   switch (peer_uuid) {
     case UUID_SERVCLASS_AUDIO_SOURCE:
-      return bta_av_co_cb.ProcessSinkGetConfig(
-          bta_av_handle, peer_address, p_codec_info, p_sep_info_idx, seid,
-          p_num_protect, p_protect_info);
+      return bta_av_co_cb.ProcessSinkGetConfig(bta_av_handle, peer_address, p_codec_info,
+                                               p_sep_info_idx, seid, p_num_protect, p_protect_info);
     case UUID_SERVCLASS_AUDIO_SINK:
-      return bta_av_co_cb.ProcessSourceGetConfig(
-          bta_av_handle, peer_address, p_codec_info, p_sep_info_idx, seid,
-          p_num_protect, p_protect_info);
+      return bta_av_co_cb.ProcessSourceGetConfig(bta_av_handle, peer_address, p_codec_info,
+                                                 p_sep_info_idx, seid, p_num_protect,
+                                                 p_protect_info);
     default:
       break;
   }
-  log::error("peer {} : Invalid peer UUID: 0x{:x} for bta_av_handle 0x{:x}",
-             peer_address, peer_uuid, bta_av_handle);
+  log::error("peer {} : Invalid peer UUID: 0x{:x} for bta_av_handle 0x{:x}", peer_address,
+             peer_uuid, bta_av_handle);
   return A2DP_FAIL;
 }
 
-void bta_av_co_audio_setconfig(tBTA_AV_HNDL bta_av_handle,
-                               const RawAddress& peer_address,
-                               const uint8_t* p_codec_info, uint8_t seid,
-                               uint8_t num_protect,
-                               const uint8_t* p_protect_info,
-                               uint8_t t_local_sep, uint8_t avdt_handle) {
-  bta_av_co_cb.ProcessSetConfig(bta_av_handle, peer_address, p_codec_info, seid,
-                                num_protect, p_protect_info, t_local_sep,
-                                avdt_handle);
+void bta_av_co_audio_setconfig(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
+                               const uint8_t* p_codec_info, uint8_t seid, uint8_t num_protect,
+                               const uint8_t* p_protect_info, uint8_t t_local_sep,
+                               uint8_t avdt_handle) {
+  bta_av_co_cb.ProcessSetConfig(bta_av_handle, peer_address, p_codec_info, seid, num_protect,
+                                p_protect_info, t_local_sep, avdt_handle);
 }
 
-void bta_av_co_audio_open(tBTA_AV_HNDL bta_av_handle,
-                          const RawAddress& peer_address, uint16_t mtu) {
+void bta_av_co_audio_open(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
+                          uint16_t mtu) {
   bta_av_co_cb.ProcessOpen(bta_av_handle, peer_address, mtu);
 }
 
-void bta_av_co_audio_close(tBTA_AV_HNDL bta_av_handle,
-                           const RawAddress& peer_address) {
+void bta_av_co_audio_close(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address) {
   bta_av_co_cb.ProcessClose(bta_av_handle, peer_address);
 }
 
-void bta_av_co_audio_start(tBTA_AV_HNDL bta_av_handle,
-                           const RawAddress& peer_address,
+void bta_av_co_audio_start(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
                            const uint8_t* p_codec_info, bool* p_no_rtp_header) {
-  bta_av_co_cb.ProcessStart(bta_av_handle, peer_address, p_codec_info,
-                            p_no_rtp_header);
+  bta_av_co_cb.ProcessStart(bta_av_handle, peer_address, p_codec_info, p_no_rtp_header);
 }
 
-void bta_av_co_audio_stop(tBTA_AV_HNDL bta_av_handle,
-                          const RawAddress& peer_address) {
+void bta_av_co_audio_stop(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address) {
   bta_av_co_cb.ProcessStop(bta_av_handle, peer_address);
 }
 
-BT_HDR* bta_av_co_audio_source_data_path(const uint8_t* p_codec_info,
-                                         uint32_t* p_timestamp) {
+BT_HDR* bta_av_co_audio_source_data_path(const uint8_t* p_codec_info, uint32_t* p_timestamp) {
   return bta_av_co_cb.GetNextSourceDataPacket(p_codec_info, p_timestamp);
 }
 
-void bta_av_co_audio_drop(tBTA_AV_HNDL bta_av_handle,
-                          const RawAddress& peer_address) {
+void bta_av_co_audio_drop(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address) {
   bta_av_co_cb.DataPacketWasDropped(bta_av_handle, peer_address);
 }
 
-void bta_av_co_audio_delay(tBTA_AV_HNDL bta_av_handle,
-                           const RawAddress& peer_address, uint16_t delay) {
+void bta_av_co_audio_delay(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
+                           uint16_t delay) {
   bta_av_co_cb.ProcessAudioDelay(bta_av_handle, peer_address, delay);
 }
 
-void bta_av_co_audio_update_mtu(tBTA_AV_HNDL bta_av_handle,
-                                const RawAddress& peer_address, uint16_t mtu) {
+void bta_av_co_audio_update_mtu(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
+                                uint16_t mtu) {
   bta_av_co_cb.UpdateMtu(bta_av_handle, peer_address, mtu);
 }
 
@@ -1674,15 +1557,13 @@ const tA2DP_ENCODER_INTERFACE* bta_av_co_get_encoder_interface(void) {
   return bta_av_co_cb.GetSourceEncoderInterface();
 }
 
-bool bta_av_co_set_codec_user_config(
-    const RawAddress& peer_address,
-    const btav_a2dp_codec_config_t& codec_user_config, bool* p_restart_output) {
-  return bta_av_co_cb.SetCodecUserConfig(peer_address, codec_user_config,
-                                         p_restart_output);
+bool bta_av_co_set_codec_user_config(const RawAddress& peer_address,
+                                     const btav_a2dp_codec_config_t& codec_user_config,
+                                     bool* p_restart_output) {
+  return bta_av_co_cb.SetCodecUserConfig(peer_address, codec_user_config, p_restart_output);
 }
 
-bool bta_av_co_set_codec_audio_config(
-    const btav_a2dp_codec_config_t& codec_audio_config) {
+bool bta_av_co_set_codec_audio_config(const btav_a2dp_codec_config_t& codec_audio_config) {
   return bta_av_co_cb.SetCodecAudioConfig(codec_audio_config);
 }
 
@@ -1694,8 +1575,7 @@ int bta_av_co_get_encoder_preferred_interval_us() {
   return bta_av_co_cb.GetSourceEncoderPreferredIntervalUs();
 }
 
-btav_a2dp_scmst_info_t bta_av_co_get_scmst_info(
-    const RawAddress& peer_address) {
+btav_a2dp_scmst_info_t bta_av_co_get_scmst_info(const RawAddress& peer_address) {
   BtaAvCoPeer* p_peer = bta_av_co_cb.peer_cache_->FindPeer(peer_address);
   log::assert_that(p_peer != nullptr, "assert failed: p_peer != nullptr");
   btav_a2dp_scmst_info_t scmst_info{};

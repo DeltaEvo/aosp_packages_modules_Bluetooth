@@ -16,14 +16,14 @@
 
 #include "l2cap/internal/dynamic_channel_impl.h"
 
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
 #include "common/testing/bind_test_util.h"
 #include "l2cap/cid.h"
 #include "l2cap/classic/internal/link_mock.h"
 #include "l2cap/internal/parameter_provider_mock.h"
 #include "os/handler.h"
-
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 namespace bluetooth {
 namespace l2cap {
@@ -34,7 +34,7 @@ using l2cap::internal::testing::MockParameterProvider;
 using ::testing::Return;
 
 class L2capClassicDynamicChannelImplTest : public ::testing::Test {
- public:
+public:
   static void SyncHandler(os::Handler* handler) {
     std::promise<void> promise;
     auto future = promise.get_future();
@@ -42,7 +42,7 @@ class L2capClassicDynamicChannelImplTest : public ::testing::Test {
     future.wait_for(std::chrono::milliseconds(3));
   }
 
- protected:
+protected:
   void SetUp() override {
     thread_ = new os::Thread("test_thread", os::Thread::Priority::NORMAL);
     l2cap_handler_ = new os::Handler(thread_);
@@ -59,35 +59,36 @@ class L2capClassicDynamicChannelImplTest : public ::testing::Test {
 };
 
 class StatusCapture {
- public:
+public:
   hci::ErrorCode value = hci::ErrorCode::SUCCESS;
-  void capture(hci::ErrorCode status) {
-    value = status;
-  }
+  void capture(hci::ErrorCode status) { value = status; }
 };
 
 TEST_F(L2capClassicDynamicChannelImplTest, get_device) {
   MockParameterProvider mock_parameter_provider;
   MockLink mock_classic_link(l2cap_handler_, &mock_parameter_provider);
-  const hci::AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}}, hci::AddressType::PUBLIC_IDENTITY_ADDRESS};
+  const hci::AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}},
+                                    hci::AddressType::PUBLIC_IDENTITY_ADDRESS};
   EXPECT_CALL(mock_classic_link, GetDevice()).WillRepeatedly(Return(device));
-  DynamicChannelImpl dynamic_channel_impl(0x01, kFirstDynamicChannel, kFirstDynamicChannel, &mock_classic_link,
-                                          l2cap_handler_);
+  DynamicChannelImpl dynamic_channel_impl(0x01, kFirstDynamicChannel, kFirstDynamicChannel,
+                                          &mock_classic_link, l2cap_handler_);
   EXPECT_EQ(device, dynamic_channel_impl.GetDevice());
 }
 
 TEST_F(L2capClassicDynamicChannelImplTest, close_triggers_callback) {
   MockParameterProvider mock_parameter_provider;
   MockLink mock_classic_link(l2cap_handler_, &mock_parameter_provider);
-  const hci::AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}}, hci::AddressType::PUBLIC_IDENTITY_ADDRESS};
+  const hci::AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}},
+                                    hci::AddressType::PUBLIC_IDENTITY_ADDRESS};
   EXPECT_CALL(mock_classic_link, GetDevice()).WillRepeatedly(Return(device));
-  DynamicChannelImpl dynamic_channel_impl(0x01, kFirstDynamicChannel, kFirstDynamicChannel, &mock_classic_link,
-                                          l2cap_handler_);
+  DynamicChannelImpl dynamic_channel_impl(0x01, kFirstDynamicChannel, kFirstDynamicChannel,
+                                          &mock_classic_link, l2cap_handler_);
 
   // Register on close callback
   auto user_handler = std::make_unique<os::Handler>(thread_);
   StatusCapture* my_status = new StatusCapture();
-  dynamic_channel_impl.RegisterOnCloseCallback(user_handler->BindOnceOn(my_status, &StatusCapture::capture));
+  dynamic_channel_impl.RegisterOnCloseCallback(
+          user_handler->BindOnceOn(my_status, &StatusCapture::capture));
 
   // Channel closure should trigger such callback
   dynamic_channel_impl.OnClosed(hci::ErrorCode::REMOTE_USER_TERMINATED_CONNECTION);
@@ -101,10 +102,11 @@ TEST_F(L2capClassicDynamicChannelImplTest, close_triggers_callback) {
 TEST_F(L2capClassicDynamicChannelImplTest, register_callback_after_close_should_call_immediately) {
   MockParameterProvider mock_parameter_provider;
   MockLink mock_classic_link(l2cap_handler_, &mock_parameter_provider);
-  const hci::AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}}, hci::AddressType::PUBLIC_IDENTITY_ADDRESS};
+  const hci::AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}},
+                                    hci::AddressType::PUBLIC_IDENTITY_ADDRESS};
   EXPECT_CALL(mock_classic_link, GetDevice()).WillRepeatedly(Return(device));
-  DynamicChannelImpl dynamic_channel_impl(0x01, kFirstDynamicChannel, kFirstDynamicChannel, &mock_classic_link,
-                                          l2cap_handler_);
+  DynamicChannelImpl dynamic_channel_impl(0x01, kFirstDynamicChannel, kFirstDynamicChannel,
+                                          &mock_classic_link, l2cap_handler_);
 
   // Channel closure should do nothing
   dynamic_channel_impl.OnClosed(hci::ErrorCode::REMOTE_USER_TERMINATED_CONNECTION);
@@ -112,7 +114,8 @@ TEST_F(L2capClassicDynamicChannelImplTest, register_callback_after_close_should_
   // Register on close callback should trigger callback immediately
   auto user_handler = std::make_unique<os::Handler>(thread_);
   StatusCapture* my_status = new StatusCapture();
-  dynamic_channel_impl.RegisterOnCloseCallback(user_handler->BindOnceOn(my_status, &StatusCapture::capture));
+  dynamic_channel_impl.RegisterOnCloseCallback(
+          user_handler->BindOnceOn(my_status, &StatusCapture::capture));
 
   SyncHandler(user_handler.get());
   EXPECT_EQ(hci::ErrorCode::REMOTE_USER_TERMINATED_CONNECTION, my_status->value);
@@ -124,15 +127,17 @@ TEST_F(L2capClassicDynamicChannelImplTest, register_callback_after_close_should_
 TEST_F(L2capClassicDynamicChannelImplTest, close_twice_should_fail) {
   MockParameterProvider mock_parameter_provider;
   MockLink mock_classic_link(l2cap_handler_, &mock_parameter_provider);
-  const hci::AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}}, hci::AddressType::PUBLIC_IDENTITY_ADDRESS};
+  const hci::AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}},
+                                    hci::AddressType::PUBLIC_IDENTITY_ADDRESS};
   EXPECT_CALL(mock_classic_link, GetDevice()).WillRepeatedly(Return(device));
-  DynamicChannelImpl dynamic_channel_impl(0x01, kFirstDynamicChannel, kFirstDynamicChannel, &mock_classic_link,
-                                          l2cap_handler_);
+  DynamicChannelImpl dynamic_channel_impl(0x01, kFirstDynamicChannel, kFirstDynamicChannel,
+                                          &mock_classic_link, l2cap_handler_);
 
   // Register on close callback
   auto user_handler = std::make_unique<os::Handler>(thread_);
   StatusCapture* my_status = new StatusCapture();
-  dynamic_channel_impl.RegisterOnCloseCallback(user_handler->BindOnceOn(my_status, &StatusCapture::capture));
+  dynamic_channel_impl.RegisterOnCloseCallback(
+          user_handler->BindOnceOn(my_status, &StatusCapture::capture));
 
   // Channel closure should trigger such callback
   dynamic_channel_impl.OnClosed(hci::ErrorCode::REMOTE_USER_TERMINATED_CONNECTION);
@@ -149,19 +154,21 @@ TEST_F(L2capClassicDynamicChannelImplTest, close_twice_should_fail) {
 TEST_F(L2capClassicDynamicChannelImplTest, multiple_registeration_should_fail) {
   MockParameterProvider mock_parameter_provider;
   MockLink mock_classic_link(l2cap_handler_, &mock_parameter_provider);
-  const hci::AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}}, hci::AddressType::PUBLIC_IDENTITY_ADDRESS};
+  const hci::AddressWithType device{{{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}},
+                                    hci::AddressType::PUBLIC_IDENTITY_ADDRESS};
   EXPECT_CALL(mock_classic_link, GetDevice()).WillRepeatedly(Return(device));
-  DynamicChannelImpl dynamic_channel_impl(0x01, kFirstDynamicChannel, kFirstDynamicChannel, &mock_classic_link,
-                                          l2cap_handler_);
+  DynamicChannelImpl dynamic_channel_impl(0x01, kFirstDynamicChannel, kFirstDynamicChannel,
+                                          &mock_classic_link, l2cap_handler_);
 
   // Register on close callback
   auto user_handler = std::make_unique<os::Handler>(thread_);
   StatusCapture* my_status = new StatusCapture();
-  dynamic_channel_impl.RegisterOnCloseCallback(user_handler->BindOnceOn(my_status, &StatusCapture::capture));
+  dynamic_channel_impl.RegisterOnCloseCallback(
+          user_handler->BindOnceOn(my_status, &StatusCapture::capture));
 
-  EXPECT_DEATH(
-      dynamic_channel_impl.RegisterOnCloseCallback(user_handler->BindOnce([](hci::ErrorCode status) { FAIL(); })),
-      ".*RegisterOnCloseCallback.*");
+  EXPECT_DEATH(dynamic_channel_impl.RegisterOnCloseCallback(
+                       user_handler->BindOnce([](hci::ErrorCode status) { FAIL(); })),
+               ".*RegisterOnCloseCallback.*");
 
   user_handler->Clear();
   delete my_status;

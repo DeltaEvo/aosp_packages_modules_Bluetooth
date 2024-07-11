@@ -104,8 +104,7 @@ uint16_t A2DP_VendorCodecGetCodecId(const uint8_t* p_codec_info);
 // enabled. |p_codec_info| contains information about the codec capabilities.
 // Returns true if the A2DP vendor-specific data packets should contain RTP
 // header, otherwise false.
-bool A2DP_VendorUsesRtpHeader(bool content_protection_enabled,
-                              const uint8_t* p_codec_info);
+bool A2DP_VendorUsesRtpHeader(bool content_protection_enabled, const uint8_t* p_codec_info);
 
 // Gets the A2DP vendor-specific codec name for a given |p_codec_info|.
 const char* A2DP_VendorCodecName(const uint8_t* p_codec_info);
@@ -114,15 +113,13 @@ const char* A2DP_VendorCodecName(const uint8_t* p_codec_info);
 // |p_codec_info_b| have the same type.
 // Returns true if the two codecs have the same type, otherwise false.
 // If the codec type is not recognized, the return value is false.
-bool A2DP_VendorCodecTypeEquals(const uint8_t* p_codec_info_a,
-                                const uint8_t* p_codec_info_b);
+bool A2DP_VendorCodecTypeEquals(const uint8_t* p_codec_info_a, const uint8_t* p_codec_info_b);
 
 // Checks whether two A2DP vendor-specific codecs |p_codec_info_a| and
 // |p_codec_info_b| are exactly the same.
 // Returns true if the two codecs are exactly the same, otherwise false.
 // If the codec type is not recognized, the return value is false.
-bool A2DP_VendorCodecEquals(const uint8_t* p_codec_info_a,
-                            const uint8_t* p_codec_info_b);
+bool A2DP_VendorCodecEquals(const uint8_t* p_codec_info_a, const uint8_t* p_codec_info_b);
 
 // Gets the track sample rate value for the A2DP vendor-specific codec.
 // |p_codec_info| is a pointer to the vendor-specific codec_info to decode.
@@ -160,8 +157,7 @@ int A2DP_VendorGetSinkTrackChannelType(const uint8_t* p_codec_info);
 // |p_data| contains the audio data.
 // The timestamp is stored in |p_timestamp|.
 // Returns true on success, otherwise false.
-bool A2DP_VendorGetPacketTimestamp(const uint8_t* p_codec_info,
-                                   const uint8_t* p_data,
+bool A2DP_VendorGetPacketTimestamp(const uint8_t* p_codec_info, const uint8_t* p_data,
                                    uint32_t* p_timestamp);
 
 // Builds A2DP vendor-specific codec header for audio data.
@@ -177,16 +173,14 @@ bool A2DP_VendorBuildCodecHeader(const uint8_t* p_codec_info, BT_HDR* p_buf,
 // |p_codec_info| contains the codec information.
 // Returns the A2DP vendor encoder interface if the |p_codec_info| is valid and
 // supported, otherwise NULL.
-const tA2DP_ENCODER_INTERFACE* A2DP_VendorGetEncoderInterface(
-    const uint8_t* p_codec_info);
+const tA2DP_ENCODER_INTERFACE* A2DP_VendorGetEncoderInterface(const uint8_t* p_codec_info);
 
 // Gets the current A2DP vendor decoder interface that can be used to decode
 // received A2DP packets - see |tA2DP_DECODER_INTERFACE|.
 // |p_codec_info| contains the codec information.
 // Returns the A2DP vendor decoder interface if the |p_codec_info| is valid and
 // supported, otherwise NULL.
-const tA2DP_DECODER_INTERFACE* A2DP_VendorGetDecoderInterface(
-    const uint8_t* p_codec_info);
+const tA2DP_DECODER_INTERFACE* A2DP_VendorGetDecoderInterface(const uint8_t* p_codec_info);
 
 // Adjusts the A2DP vendor-specific codec, based on local support and Bluetooth
 // specification.
@@ -197,8 +191,7 @@ bool A2DP_VendorAdjustCodec(uint8_t* p_codec_info);
 // Gets the A2DP vendor Source codec index for a given |p_codec_info|.
 // Returns the corresponding |btav_a2dp_codec_index_t| on success,
 // otherwise |BTAV_A2DP_CODEC_INDEX_MAX|.
-btav_a2dp_codec_index_t A2DP_VendorSourceCodecIndex(
-    const uint8_t* p_codec_info);
+btav_a2dp_codec_index_t A2DP_VendorSourceCodecIndex(const uint8_t* p_codec_info);
 
 // Gets the A2DP vendor Sink codec index for a given |p_codec_info|.
 // Returns the corresponding |btav_a2dp_codec_index_t| on success,
@@ -212,8 +205,7 @@ const char* A2DP_VendorCodecIndexStr(btav_a2dp_codec_index_t codec_index);
 // configuration entry pointed by |p_cfg|. The selected codec is defined by
 // |codec_index|.
 // Returns true on success, otherwise false.
-bool A2DP_VendorInitCodecConfig(btav_a2dp_codec_index_t codec_index,
-                                AvdtpSepConfig* p_cfg);
+bool A2DP_VendorInitCodecConfig(btav_a2dp_codec_index_t codec_index, AvdtpSepConfig* p_cfg);
 
 // Decodes A2DP vendor codec info into a human readable string.
 // |p_codec_info| is a pointer to the codec_info to decode.

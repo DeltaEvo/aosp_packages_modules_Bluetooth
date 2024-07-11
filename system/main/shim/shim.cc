@@ -31,12 +31,9 @@ static const hci_t* hci;
 
 void btu_hci_msg_process(BT_HDR* p_msg);
 
-static void post_to_main_message_loop(const base::Location& from_here,
-                                      BT_HDR* p_msg) {
-  if (do_in_main_thread(from_here, base::Bind(&btu_hci_msg_process, p_msg)) !=
-      BT_STATUS_SUCCESS) {
-    bluetooth::log::error(": do_in_main_thread failed from {}",
-                          from_here.ToString());
+static void post_to_main_message_loop(const base::Location& from_here, BT_HDR* p_msg) {
+  if (do_in_main_thread(from_here, base::Bind(&btu_hci_msg_process, p_msg)) != BT_STATUS_SUCCESS) {
+    bluetooth::log::error(": do_in_main_thread failed from {}", from_here.ToString());
   }
 }
 
@@ -55,13 +52,12 @@ static future_t* GeneralShutDown() {
   return kReturnImmediate;
 }
 
-EXPORT_SYMBOL extern const module_t gd_shim_module = {
-    .name = GD_SHIM_MODULE,
-    .init = kUnusedModuleApi,
-    .start_up = ShimModuleStartUp,
-    .shut_down = GeneralShutDown,
-    .clean_up = kUnusedModuleApi,
-    .dependencies = {kUnusedModuleDependencies}};
+EXPORT_SYMBOL extern const module_t gd_shim_module = {.name = GD_SHIM_MODULE,
+                                                      .init = kUnusedModuleApi,
+                                                      .start_up = ShimModuleStartUp,
+                                                      .shut_down = GeneralShutDown,
+                                                      .clean_up = kUnusedModuleApi,
+                                                      .dependencies = {kUnusedModuleDependencies}};
 
 bool bluetooth::shim::is_gd_stack_started_up() {
   return bluetooth::shim::Stack::GetInstance()->IsRunning();

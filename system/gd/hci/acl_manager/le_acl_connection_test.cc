@@ -62,10 +62,10 @@ namespace bluetooth::hci::acl_manager {
 
 namespace {
 class TestLeAclConnectionInterface : public hci::LeAclConnectionInterface {
- private:
+private:
   void EnqueueCommand(
-      std::unique_ptr<hci::AclCommandBuilder> command,
-      common::ContextualOnceCallback<void(hci::CommandStatusView)> on_status) override {
+          std::unique_ptr<hci::AclCommandBuilder> command,
+          common::ContextualOnceCallback<void(hci::CommandStatusView)> on_status) override {
     const std::lock_guard<std::mutex> lock(command_queue_mutex_);
     command_queue_.push(std::move(command));
     command_status_callbacks.push_back(std::move(on_status));
@@ -77,8 +77,8 @@ class TestLeAclConnectionInterface : public hci::LeAclConnectionInterface {
   }
 
   void EnqueueCommand(
-      std::unique_ptr<hci::AclCommandBuilder> command,
-      common::ContextualOnceCallback<void(hci::CommandCompleteView)> on_complete) override {
+          std::unique_ptr<hci::AclCommandBuilder> command,
+          common::ContextualOnceCallback<void(hci::CommandCompleteView)> on_complete) override {
     const std::lock_guard<std::mutex> lock(command_queue_mutex_);
     command_queue_.push(std::move(command));
     command_complete_callbacks.push_back(std::move(on_complete));
@@ -89,7 +89,7 @@ class TestLeAclConnectionInterface : public hci::LeAclConnectionInterface {
     }
   }
 
- public:
+public:
   virtual ~TestLeAclConnectionInterface() = default;
 
   std::unique_ptr<hci::CommandBuilder> DequeueCommand() {
@@ -123,8 +123,9 @@ class TestLeAclConnectionInterface : public hci::LeAclConnectionInterface {
     return command_queue_.size();
   }
 
- private:
-  std::list<common::ContextualOnceCallback<void(hci::CommandCompleteView)>> command_complete_callbacks;
+private:
+  std::list<common::ContextualOnceCallback<void(hci::CommandCompleteView)>>
+          command_complete_callbacks;
   std::list<common::ContextualOnceCallback<void(hci::CommandStatusView)>> command_status_callbacks;
   std::queue<std::unique_ptr<hci::CommandBuilder>> command_queue_;
   mutable std::mutex command_queue_mutex_;
@@ -133,18 +134,14 @@ class TestLeAclConnectionInterface : public hci::LeAclConnectionInterface {
 };
 
 class LeAclConnectionTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
     thread_ = new os::Thread("thread", os::Thread::Priority::NORMAL);
     handler_ = new os::Handler(thread_);
     queue_ = std::make_shared<LeAclConnection::Queue>(kQueueSize);
     sync_handler();
-    connection_ = new LeAclConnection(
-        queue_,
-        &le_acl_connection_interface_,
-        kConnectionHandle,
-        DataAsCentral{address_1},
-        address_2);
+    connection_ = new LeAclConnection(queue_, &le_acl_connection_interface_, kConnectionHandle,
+                                      DataAsCentral{address_1}, address_2);
     connection_->RegisterCallbacks(&callbacks_, handler_);
   }
 
@@ -157,15 +154,14 @@ class LeAclConnectionTest : public ::testing::Test {
 
   void sync_handler() {
     log::assert_that(thread_ != nullptr, "assert failed: thread_ != nullptr");
-    log::assert_that(
-        thread_->GetReactor()->WaitForIdle(2s),
-        "assert failed: thread_->GetReactor()->WaitForIdle(2s)");
+    log::assert_that(thread_->GetReactor()->WaitForIdle(2s),
+                     "assert failed: thread_->GetReactor()->WaitForIdle(2s)");
   }
 
-  AddressWithType address_1 =
-      AddressWithType(Address{{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}}, AddressType::RANDOM_DEVICE_ADDRESS);
-  AddressWithType address_2 =
-      AddressWithType(Address{{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}}, AddressType::PUBLIC_DEVICE_ADDRESS);
+  AddressWithType address_1 = AddressWithType(Address{{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}},
+                                              AddressType::RANDOM_DEVICE_ADDRESS);
+  AddressWithType address_2 = AddressWithType(Address{{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}},
+                                              AddressType::PUBLIC_DEVICE_ADDRESS);
   os::Handler* handler_{nullptr};
   os::Thread* thread_{nullptr};
   std::shared_ptr<LeAclConnection::Queue> queue_;
@@ -180,9 +176,11 @@ TEST_F(LeAclConnectionTest, simple) {
 }
 
 TEST_F(LeAclConnectionTest, LeSubrateRequest_success) {
-  connection_->LeSubrateRequest(kIntervalMin, kIntervalMax, kLatency, kContinuationNumber, kTimeout);
+  connection_->LeSubrateRequest(kIntervalMin, kIntervalMax, kLatency, kContinuationNumber,
+                                kTimeout);
 
-  auto command = CreateAclCommandView<LeSubrateRequestView>(le_acl_connection_interface_.DequeueCommandBytes());
+  auto command = CreateAclCommandView<LeSubrateRequestView>(
+          le_acl_connection_interface_.DequeueCommandBytes());
   ASSERT_TRUE(command.IsValid());
   ASSERT_EQ(kIntervalMin, command.GetSubrateMin());
   ASSERT_EQ(kIntervalMax, command.GetSubrateMax());
@@ -203,9 +201,11 @@ TEST_F(LeAclConnectionTest, LeSubrateRequest_success) {
 TEST_F(LeAclConnectionTest, LeSubrateRequest_error) {
   EXPECT_CALL(callbacks_, OnLeSubrateChange(ErrorCode::UNKNOWN_HCI_COMMAND, 0, 0, 0, 0));
 
-  connection_->LeSubrateRequest(kIntervalMin, kIntervalMax, kLatency, kContinuationNumber, kTimeout);
+  connection_->LeSubrateRequest(kIntervalMin, kIntervalMax, kLatency, kContinuationNumber,
+                                kTimeout);
 
-  auto command = CreateAclCommandView<LeSubrateRequestView>(le_acl_connection_interface_.DequeueCommandBytes());
+  auto command = CreateAclCommandView<LeSubrateRequestView>(
+          le_acl_connection_interface_.DequeueCommandBytes());
   ASSERT_TRUE(command.IsValid());
   ASSERT_EQ(kIntervalMin, command.GetSubrateMin());
   ASSERT_EQ(kIntervalMax, command.GetSubrateMax());

@@ -35,13 +35,9 @@ namespace ecc {
 
 const uint32_t* modp = curve_p256.p;
 
-static void p_256_init_point(Point* q) {
-  memset(q, 0, sizeof(Point));
-}
+static void p_256_init_point(Point* q) { memset(q, 0, sizeof(Point)); }
 
-static void p_256_copy_point(Point* q, const Point* p) {
-  memcpy(q, p, sizeof(Point));
-}
+static void p_256_copy_point(Point* q, const Point* p) { memcpy(q, p, sizeof(Point)); }
 
 // q=2q
 static void ECC_Double(Point* q, const Point* p) {
@@ -173,9 +169,9 @@ static void ECC_NAF(uint8_t* naf, uint32_t* NumNAF, uint32_t* k) {
       sign = (k[0] & 0x03);  // 1 or 3
 
       // k = k-naf[i]
-      if (sign == 1)
+      if (sign == 1) {
         k[0] = k[0] & 0xFFFFFFFE;
-      else {
+      } else {
         k[0] = k[0] + 1;
         if (k[0] == 0)  // overflow
         {
@@ -185,8 +181,9 @@ static void ECC_NAF(uint8_t* naf, uint32_t* NumNAF, uint32_t* k) {
           } while (k[j++] == 0);  // overflow
         }
       }
-    } else
+    } else {
       sign = 0;
+    }
 
     multiprecision_rshift(k, k);
     naf[i / 4] |= (sign) << ((i % 4) * 2);

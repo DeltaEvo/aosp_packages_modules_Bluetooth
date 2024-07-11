@@ -41,7 +41,7 @@ namespace internal {
  * for incoming packet is full, further incoming packets will be dropped.
  */
 class Scheduler {
- public:
+public:
   using UpperEnqueue = packet::PacketView<packet::kLittleEndian>;
   using UpperDequeue = packet::BasePacketBuilder;
   using UpperQueueDownEnd = common::BidiQueueEnd<UpperEnqueue, UpperDequeue>;

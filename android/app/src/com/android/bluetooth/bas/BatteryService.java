@@ -55,7 +55,6 @@ public class BatteryService extends ProfileService {
     // Timeout for state machine thread join, to prevent potential ANR.
     private static final int SM_THREAD_JOIN_TIMEOUT_MS = 1_000;
 
-    private static final int MAX_BATTERY_STATE_MACHINES = 10;
     private static BatteryService sBatteryService;
     private AdapterService mAdapterService;
     private DatabaseManager mDatabaseManager;
@@ -411,14 +410,7 @@ public class BatteryService extends ProfileService {
             if (sm != null) {
                 return sm;
             }
-            // Limit the maximum number of state machines to avoid DoS attack
-            if (mStateMachines.size() >= MAX_BATTERY_STATE_MACHINES) {
-                Log.e(
-                        TAG,
-                        "Maximum number of Battery state machines reached: "
-                                + MAX_BATTERY_STATE_MACHINES);
-                return null;
-            }
+
             Log.d(TAG, "Creating a new state machine for " + device);
             sm = BatteryStateMachine.make(device, this, mStateMachinesThread.getLooper());
             mStateMachines.put(device, sm);

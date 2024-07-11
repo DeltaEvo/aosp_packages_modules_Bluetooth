@@ -109,23 +109,22 @@ typedef struct {
 
 /* Define the SDP database */
 typedef struct {
-  uint32_t
-      di_primary_handle; /* Device ID Primary record or NULL if nonexistent */
+  uint32_t di_primary_handle; /* Device ID Primary record or NULL if nonexistent */
   uint16_t num_records;
   tSDP_RECORD record[SDP_MAX_RECORDS];
 } tSDP_DB;
 
 /* Continuation information for the SDP server response */
 typedef struct {
-  uint16_t next_attr_index;    /* attr index for next continuation response */
-  uint16_t next_attr_start_id; /* attr id to start with for the attr index in
-                                  next cont. response */
+  uint16_t next_attr_index;        /* attr index for next continuation response */
+  uint16_t next_attr_start_id;     /* attr id to start with for the attr index in
+                                      next cont. response */
   const tSDP_RECORD* prev_sdp_rec; /* last sdp record that was completely sent
                                 in the response */
-  bool last_attr_seq_desc_sent; /* whether attr seq length has been sent
-                                   previously */
-  uint16_t attr_offset; /* offset within the attr to keep trak of partial
-                           attributes in the responses */
+  bool last_attr_seq_desc_sent;    /* whether attr seq length has been sent
+                                      previously */
+  uint16_t attr_offset;            /* offset within the attr to keep trak of partial
+                                      attributes in the responses */
 } tSDP_CONT_INFO;
 
 enum class tSDP_STATE : uint8_t {
@@ -183,22 +182,20 @@ struct tCONN_CB {
   alarm_t* sdp_conn_timer;
   uint16_t rem_mtu_size;
   uint16_t connection_id;
-  uint16_t list_len; /* length of the response in the GKI buffer */
+  uint16_t list_len;                   /* length of the response in the GKI buffer */
   uint16_t pse_dynamic_attributes_len; /* length of the attributes need to be
                              added in final sdp response len */
-  uint8_t* rsp_list; /* pointer to GKI buffer holding response */
+  uint8_t* rsp_list;                   /* pointer to GKI buffer holding response */
 
   tSDP_DISCOVERY_DB* p_db; /* Database to save info into   */
   tSDP_DISC_CMPL_CB* p_cb; /* Callback for discovery done  */
   /* OnceCallback would be more appropriate, but it doesn't have copy
    * constructor, so won't compile with current memory management for control
    * blocks */
-  base::RepeatingCallback<tSDP_DISC_CMPL_CB>
-      complete_callback; /* Callback for discovery */
-  uint32_t
-      handles[SDP_MAX_DISC_SERVER_RECS]; /* Discovered server record handles */
-  uint16_t num_handles;                  /* Number of server handles     */
-  uint16_t cur_handle;                   /* Current handle being processed */
+  base::RepeatingCallback<tSDP_DISC_CMPL_CB> complete_callback; /* Callback for discovery */
+  uint32_t handles[SDP_MAX_DISC_SERVER_RECS]; /* Discovered server record handles */
+  uint16_t num_handles;                       /* Number of server handles     */
+  uint16_t cur_handle;                        /* Current handle being processed */
   uint16_t transaction_id;
   uint16_t disconnect_reason; /* Disconnect reason            */
 
@@ -210,7 +207,7 @@ struct tCONN_CB {
                                the server response */
   tCONN_CB() = default;
 
- private:
+private:
   tCONN_CB(const tCONN_CB&) = delete;
 };
 
@@ -256,47 +253,36 @@ tCONN_CB* sdpu_find_ccb_by_db(const tSDP_DISCOVERY_DB* p_db);
 tCONN_CB* sdpu_allocate_ccb(void);
 void sdpu_release_ccb(tCONN_CB& p_ccb);
 
-uint8_t* sdpu_build_attrib_seq(uint8_t* p_out, uint16_t* p_attr,
-                               uint16_t num_attrs);
+uint8_t* sdpu_build_attrib_seq(uint8_t* p_out, uint16_t* p_attr, uint16_t num_attrs);
 uint8_t* sdpu_build_attrib_entry(uint8_t* p_out, const tSDP_ATTRIBUTE* p_attr);
-void sdpu_build_n_send_error(tCONN_CB* p_ccb, uint16_t trans_num,
-                             uint16_t error_code, char* p_error_text);
+void sdpu_build_n_send_error(tCONN_CB* p_ccb, uint16_t trans_num, uint16_t error_code,
+                             char* p_error_text);
 
-uint8_t* sdpu_extract_attr_seq(uint8_t* p, uint16_t param_len,
-                               tSDP_ATTR_SEQ* p_seq);
-uint8_t* sdpu_extract_uid_seq(uint8_t* p, uint16_t param_len,
-                              tSDP_UUID_SEQ* p_seq);
+uint8_t* sdpu_extract_attr_seq(uint8_t* p, uint16_t param_len, tSDP_ATTR_SEQ* p_seq);
+uint8_t* sdpu_extract_uid_seq(uint8_t* p, uint16_t param_len, tSDP_UUID_SEQ* p_seq);
 
-uint8_t* sdpu_get_len_from_type(uint8_t* p, uint8_t* p_end, uint8_t type,
-                                uint32_t* p_len);
+uint8_t* sdpu_get_len_from_type(uint8_t* p, uint8_t* p_end, uint8_t type, uint32_t* p_len);
 bool sdpu_is_base_uuid(uint8_t* p_uuid);
-bool sdpu_compare_uuid_arrays(const uint8_t* p_uuid1, uint32_t len1,
-                              const uint8_t* p_uuid2, uint16_t len2);
-bool sdpu_compare_uuid_with_attr(const bluetooth::Uuid& uuid,
-                                 tSDP_DISC_ATTR* p_attr);
+bool sdpu_compare_uuid_arrays(const uint8_t* p_uuid1, uint32_t len1, const uint8_t* p_uuid2,
+                              uint16_t len2);
+bool sdpu_compare_uuid_with_attr(const bluetooth::Uuid& uuid, tSDP_DISC_ATTR* p_attr);
 
 void sdpu_sort_attr_list(uint16_t num_attr, tSDP_DISCOVERY_DB* p_db);
 uint16_t sdpu_get_list_len(tSDP_UUID_SEQ* uid_seq, tSDP_ATTR_SEQ* attr_seq);
-uint16_t sdpu_get_attrib_seq_len(const tSDP_RECORD* p_rec,
-                                 const tSDP_ATTR_SEQ* attr_seq);
+uint16_t sdpu_get_attrib_seq_len(const tSDP_RECORD* p_rec, const tSDP_ATTR_SEQ* attr_seq);
 uint16_t sdpu_get_attrib_entry_len(const tSDP_ATTRIBUTE* p_attr);
-uint8_t* sdpu_build_partial_attrib_entry(uint8_t* p_out,
-                                         const tSDP_ATTRIBUTE* p_attr,
-                                         uint16_t len, uint16_t* offset);
-bool SDP_AddAttributeToRecord(tSDP_RECORD* p_rec, uint16_t attr_id,
-                              uint8_t attr_type, uint32_t attr_len,
-                              uint8_t* p_val);
-bool SDP_AddProfileDescriptorListToRecord(tSDP_RECORD* p_rec,
-                                          uint16_t profile_uuid,
+uint8_t* sdpu_build_partial_attrib_entry(uint8_t* p_out, const tSDP_ATTRIBUTE* p_attr, uint16_t len,
+                                         uint16_t* offset);
+bool SDP_AddAttributeToRecord(tSDP_RECORD* p_rec, uint16_t attr_id, uint8_t attr_type,
+                              uint32_t attr_len, uint8_t* p_val);
+bool SDP_AddProfileDescriptorListToRecord(tSDP_RECORD* p_rec, uint16_t profile_uuid,
                                           uint16_t version);
 bool SDP_DeleteAttributeFromRecord(tSDP_RECORD* p_rec, uint16_t attr_id);
 uint16_t sdpu_is_avrcp_profile_description_list(const tSDP_ATTRIBUTE* p_attr);
 bool sdpu_is_service_id_avrc_target(const tSDP_ATTRIBUTE* p_attr);
 bool spdu_is_avrcp_version_valid(const uint16_t version);
-void sdpu_set_avrc_target_version(const tSDP_ATTRIBUTE* p_attr,
-                                  const RawAddress* bdaddr);
-void sdpu_set_avrc_target_features(const tSDP_ATTRIBUTE* p_attr,
-                                   const RawAddress* bdaddr,
+void sdpu_set_avrc_target_version(const tSDP_ATTRIBUTE* p_attr, const RawAddress* bdaddr);
+void sdpu_set_avrc_target_features(const tSDP_ATTRIBUTE* p_attr, const RawAddress* bdaddr,
                                    uint16_t profile_version);
 uint16_t sdpu_get_active_ccb_cid(const RawAddress& bd_addr);
 bool sdpu_process_pend_ccb_same_cid(tCONN_CB& ccb);
@@ -306,11 +292,9 @@ void sdpu_callback(tCONN_CB& ccb, tSDP_REASON reason);
 
 /* Functions provided by sdp_db.cc
  */
-const tSDP_RECORD* sdp_db_service_search(const tSDP_RECORD* p_rec,
-                                         const tSDP_UUID_SEQ* p_seq);
+const tSDP_RECORD* sdp_db_service_search(const tSDP_RECORD* p_rec, const tSDP_UUID_SEQ* p_seq);
 tSDP_RECORD* sdp_db_find_record(uint32_t handle);
-const tSDP_ATTRIBUTE* sdp_db_find_attr_in_rec(const tSDP_RECORD* p_rec,
-                                              uint16_t start_attr,
+const tSDP_ATTRIBUTE* sdp_db_find_attr_in_rec(const tSDP_RECORD* p_rec, uint16_t start_attr,
                                               uint16_t end_attr);
 
 /* Functions provided by sdp_server.cc
@@ -324,10 +308,8 @@ void sdp_disc_server_rsp(tCONN_CB* p_ccb, BT_HDR* p_msg);
 
 void update_pce_entry_to_interop_database(RawAddress remote_addr);
 bool is_sdp_pbap_pce_disabled(RawAddress remote_addr);
-void sdp_save_local_pse_record_attributes(int32_t rfcomm_channel_number,
-                                          int32_t l2cap_psm,
-                                          int32_t profile_version,
-                                          uint32_t supported_features,
+void sdp_save_local_pse_record_attributes(int32_t rfcomm_channel_number, int32_t l2cap_psm,
+                                          int32_t profile_version, uint32_t supported_features,
                                           uint32_t supported_repositories);
 
 size_t sdp_get_num_records(const tSDP_DISCOVERY_DB& db);

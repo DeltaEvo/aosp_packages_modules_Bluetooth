@@ -75,8 +75,7 @@ void BTM_BleReceiverTest(uint8_t rx_freq, tBTM_CMPL_CB* p_cmd_cmpl_cback) {
  *                       p_cmd_cmpl_cback - Command Complete callback
  *
  ******************************************************************************/
-void BTM_BleTransmitterTest(uint8_t tx_freq, uint8_t test_data_len,
-                            uint8_t packet_payload,
+void BTM_BleTransmitterTest(uint8_t tx_freq, uint8_t test_data_len, uint8_t packet_payload,
                             tBTM_CMPL_CB* p_cmd_cmpl_cback) {
   btm_cb.devcb.p_le_test_cmd_cmpl_cb = p_cmd_cmpl_cback;
   btsnd_hcic_ble_transmitter_test(tx_freq, test_data_len, packet_payload);
@@ -131,12 +130,11 @@ bool BTM_UseLeLink(const RawAddress& bd_addr) {
   tBT_DEVICE_TYPE dev_type;
   tBLE_ADDR_TYPE addr_type;
   BTM_ReadDevInfo(bd_addr, &dev_type, &addr_type);
-  return (dev_type == BT_DEVICE_TYPE_BLE);
+  return dev_type == BT_DEVICE_TYPE_BLE;
 }
 
-void read_phy_cb(
-    base::Callback<void(uint8_t tx_phy, uint8_t rx_phy, uint8_t status)> cb,
-    uint8_t* data, uint16_t len) {
+void read_phy_cb(base::Callback<void(uint8_t tx_phy, uint8_t rx_phy, uint8_t status)> cb,
+                 uint8_t* data, uint16_t len) {
   uint8_t status, tx_phy, rx_phy;
   uint16_t handle;
 
@@ -164,9 +162,8 @@ void read_phy_cb(
  *                  BTM_WRONG_MODE if Device in wrong mode for request.
  *
  ******************************************************************************/
-void BTM_BleReadPhy(
-    const RawAddress& bd_addr,
-    base::Callback<void(uint8_t tx_phy, uint8_t rx_phy, uint8_t status)> cb) {
+void BTM_BleReadPhy(const RawAddress& bd_addr,
+                    base::Callback<void(uint8_t tx_phy, uint8_t rx_phy, uint8_t status)> cb) {
   if (!BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
     log::error("Wrong mode: no LE link exist or LE not supported");
     cb.Run(0, 0, HCI_ERR_NO_CONNECTION);
@@ -197,32 +194,34 @@ void BTM_BleSetPhy(const RawAddress& bd_addr, uint8_t tx_phys, uint8_t rx_phys,
                    uint16_t phy_options) {
   if (!BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
     log::info(
-        "Unable to set phy preferences because no le acl is connected to "
-        "device");
+            "Unable to set phy preferences because no le acl is connected to "
+            "device");
     return;
   }
 
   uint8_t all_phys = 0;
-  if (tx_phys == 0) all_phys &= 0x01;
-  if (rx_phys == 0) all_phys &= 0x02;
+  if (tx_phys == 0) {
+    all_phys &= 0x01;
+  }
+  if (rx_phys == 0) {
+    all_phys &= 0x02;
+  }
 
   uint16_t handle = get_btm_client_interface().peer.BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
 
   // checking if local controller supports it!
   if (!bluetooth::shim::GetController()->SupportsBle2mPhy() &&
       !bluetooth::shim::GetController()->SupportsBleCodedPhy()) {
-    log::info(
-        "Local controller unable to support setting of le phy parameters");
-    gatt_notify_phy_updated(static_cast<tHCI_STATUS>(GATT_REQ_NOT_SUPPORTED),
-                            handle, tx_phys, rx_phys);
+    log::info("Local controller unable to support setting of le phy parameters");
+    gatt_notify_phy_updated(static_cast<tHCI_STATUS>(GATT_REQ_NOT_SUPPORTED), handle, tx_phys,
+                            rx_phys);
     return;
   }
 
-  if (!acl_peer_supports_ble_2m_phy(handle) &&
-      !acl_peer_supports_ble_coded_phy(handle)) {
+  if (!acl_peer_supports_ble_2m_phy(handle) && !acl_peer_supports_ble_coded_phy(handle)) {
     log::info("Remote device unable to support setting of le phy parameter");
-    gatt_notify_phy_updated(static_cast<tHCI_STATUS>(GATT_REQ_NOT_SUPPORTED),
-                            handle, tx_phys, rx_phys);
+    gatt_notify_phy_updated(static_cast<tHCI_STATUS>(GATT_REQ_NOT_SUPPORTED), handle, tx_phys,
+                            rx_phys);
     return;
   }
 
@@ -234,6 +233,5 @@ void BTM_BleSetPhy(const RawAddress& bd_addr, uint8_t tx_phys, uint8_t rx_phys,
   UINT8_TO_STREAM(pp, tx_phys);
   UINT8_TO_STREAM(pp, rx_phys);
   UINT16_TO_STREAM(pp, phy_options);
-  btu_hcif_send_cmd_with_cb(FROM_HERE, HCI_BLE_SET_PHY, data, len,
-                            base::Bind(doNothing));
+  btu_hcif_send_cmd_with_cb(FROM_HERE, HCI_BLE_SET_PHY, data, len, base::Bind(doNothing));
 }

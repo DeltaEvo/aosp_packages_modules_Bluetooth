@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-#include <gtest/gtest.h>
-#include <cstdint>
-
 #include "l2cap/signal_id.h"
+
+#include <gtest/gtest.h>
+
+#include <cstdint>
 
 namespace bluetooth {
 namespace l2cap {

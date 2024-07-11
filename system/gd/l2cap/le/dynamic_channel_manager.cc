@@ -15,6 +15,7 @@
  */
 
 #include "l2cap/le/dynamic_channel_manager.h"
+
 #include "l2cap/le/internal/dynamic_channel_service_impl.h"
 #include "l2cap/le/internal/dynamic_channel_service_manager_impl.h"
 #include "l2cap/le/internal/link.h"
@@ -25,14 +26,15 @@ namespace l2cap {
 namespace le {
 
 bool DynamicChannelManager::ConnectChannel(hci::AddressWithType device,
-                                           DynamicChannelConfigurationOption configuration_option, Psm psm,
-                                           OnConnectionOpenCallback on_connection_open,
-                                           OnConnectionFailureCallback on_fail_callback, os::Handler* handler) {
+                                           DynamicChannelConfigurationOption configuration_option,
+                                           Psm psm, OnConnectionOpenCallback on_connection_open,
+                                           OnConnectionFailureCallback on_fail_callback,
+                                           os::Handler* handler) {
   internal::Link::PendingDynamicChannelConnection pending_dynamic_channel_connection{
-      .handler_ = handler,
-      .on_open_callback_ = std::move(on_connection_open),
-      .on_fail_callback_ = std::move(on_fail_callback),
-      .configuration_ = configuration_option,
+          .handler_ = handler,
+          .on_open_callback_ = std::move(on_connection_open),
+          .on_fail_callback_ = std::move(on_fail_callback),
+          .configuration_ = configuration_option,
   };
   l2cap_layer_handler_->Post(common::BindOnce(&internal::LinkManager::ConnectDynamicChannelServices,
                                               common::Unretained(link_manager_), device,
@@ -41,16 +43,18 @@ bool DynamicChannelManager::ConnectChannel(hci::AddressWithType device,
   return true;
 }
 
-bool DynamicChannelManager::RegisterService(Psm psm, DynamicChannelConfigurationOption configuration_option,
+bool DynamicChannelManager::RegisterService(Psm psm,
+                                            DynamicChannelConfigurationOption configuration_option,
                                             const SecurityPolicy& security_policy,
                                             OnRegistrationCompleteCallback on_registration_complete,
-                                            OnConnectionOpenCallback on_connection_open, os::Handler* handler) {
+                                            OnConnectionOpenCallback on_connection_open,
+                                            os::Handler* handler) {
   internal::DynamicChannelServiceImpl::PendingRegistration pending_registration{
-      .user_handler_ = handler,
-      .security_policy_ = security_policy,
-      .on_registration_complete_callback_ = std::move(on_registration_complete),
-      .on_connection_open_callback_ = std::move(on_connection_open),
-      .configuration_ = configuration_option,
+          .user_handler_ = handler,
+          .security_policy_ = security_policy,
+          .on_registration_complete_callback_ = std::move(on_registration_complete),
+          .on_connection_open_callback_ = std::move(on_connection_open),
+          .configuration_ = configuration_option,
   };
   l2cap_layer_handler_->Post(common::BindOnce(&internal::DynamicChannelServiceManagerImpl::Register,
                                               common::Unretained(service_manager_), psm,

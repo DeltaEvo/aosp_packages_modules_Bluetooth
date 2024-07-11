@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "l2cap/le/l2cap_le_module.h"
+
 #include <memory>
 
 #include "hci/acl_manager.h"
@@ -24,8 +26,6 @@
 #include "l2cap/le/security_enforcement_interface.h"
 #include "module.h"
 #include "os/handler.h"
-
-#include "l2cap/le/l2cap_le_module.h"
 
 namespace bluetooth {
 namespace l2cap {
@@ -38,11 +38,9 @@ const ModuleFactory L2capLeModule::Factory = ModuleFactory([]() { return new L2c
  * NO_SECURITY_WHATSOEVER_PLAINTEXT_TRANSPORT_OK.
  */
 class SecurityEnforcementRejectAllImpl : public SecurityEnforcementInterface {
- public:
-  void Enforce(
-      hci::AddressWithType /* remote */,
-      SecurityPolicy policy,
-      ResultCallback result_callback) override {
+public:
+  void Enforce(hci::AddressWithType /* remote */, SecurityPolicy policy,
+               ResultCallback result_callback) override {
     if (policy == SecurityPolicy::NO_SECURITY_WHATSOEVER_PLAINTEXT_TRANSPORT_OK) {
       result_callback(true);
     } else {
@@ -55,54 +53,52 @@ static SecurityEnforcementRejectAllImpl default_security_module_impl_;
 struct L2capLeModule::impl {
   impl(os::Handler* l2cap_handler, hci::AclManager* acl_manager)
       : l2cap_handler_(l2cap_handler), acl_manager_(acl_manager) {
-    dynamic_channel_service_manager_impl_.SetSecurityEnforcementInterface(&default_security_module_impl_);
+    dynamic_channel_service_manager_impl_.SetSecurityEnforcementInterface(
+            &default_security_module_impl_);
   }
   os::Handler* l2cap_handler_;
   hci::AclManager* acl_manager_;
   l2cap::internal::ParameterProvider parameter_provider_;
   internal::FixedChannelServiceManagerImpl fixed_channel_service_manager_impl_{l2cap_handler_};
   internal::DynamicChannelServiceManagerImpl dynamic_channel_service_manager_impl_{l2cap_handler_};
-  internal::LinkManager link_manager_{l2cap_handler_,
-                                      acl_manager_,
+  internal::LinkManager link_manager_{l2cap_handler_, acl_manager_,
                                       &fixed_channel_service_manager_impl_,
-                                      &dynamic_channel_service_manager_impl_,
-                                      &parameter_provider_};
+                                      &dynamic_channel_service_manager_impl_, &parameter_provider_};
 };
 
 L2capLeModule::L2capLeModule() {}
 L2capLeModule::~L2capLeModule() {}
 
-void L2capLeModule::ListDependencies(ModuleList* list) const {
-  list->add<hci::AclManager>();
-}
+void L2capLeModule::ListDependencies(ModuleList* list) const { list->add<hci::AclManager>(); }
 
 void L2capLeModule::Start() {
   pimpl_ = std::make_unique<impl>(GetHandler(), GetDependency<hci::AclManager>());
 }
 
-void L2capLeModule::Stop() {
-  pimpl_.reset();
-}
+void L2capLeModule::Stop() { pimpl_.reset(); }
 
-std::string L2capLeModule::ToString() const {
-  return "L2cap Le Module";
-}
+std::string L2capLeModule::ToString() const { return "L2cap Le Module"; }
 
 std::unique_ptr<FixedChannelManager> L2capLeModule::GetFixedChannelManager() {
-  return std::unique_ptr<FixedChannelManager>(new FixedChannelManager(&pimpl_->fixed_channel_service_manager_impl_,
-                                                                      &pimpl_->link_manager_, pimpl_->l2cap_handler_));
+  return std::unique_ptr<FixedChannelManager>(
+          new FixedChannelManager(&pimpl_->fixed_channel_service_manager_impl_,
+                                  &pimpl_->link_manager_, pimpl_->l2cap_handler_));
 }
 
 std::unique_ptr<DynamicChannelManager> L2capLeModule::GetDynamicChannelManager() {
-  return std::unique_ptr<DynamicChannelManager>(new DynamicChannelManager(
-      &pimpl_->dynamic_channel_service_manager_impl_, &pimpl_->link_manager_, pimpl_->l2cap_handler_));
+  return std::unique_ptr<DynamicChannelManager>(
+          new DynamicChannelManager(&pimpl_->dynamic_channel_service_manager_impl_,
+                                    &pimpl_->link_manager_, pimpl_->l2cap_handler_));
 }
 
-void L2capLeModule::InjectSecurityEnforcementInterface(SecurityEnforcementInterface* security_enforcement_interface) {
+void L2capLeModule::InjectSecurityEnforcementInterface(
+        SecurityEnforcementInterface* security_enforcement_interface) {
   if (security_enforcement_interface != nullptr) {
-    pimpl_->dynamic_channel_service_manager_impl_.SetSecurityEnforcementInterface(security_enforcement_interface);
+    pimpl_->dynamic_channel_service_manager_impl_.SetSecurityEnforcementInterface(
+            security_enforcement_interface);
   } else {
-    pimpl_->dynamic_channel_service_manager_impl_.SetSecurityEnforcementInterface(&default_security_module_impl_);
+    pimpl_->dynamic_channel_service_manager_impl_.SetSecurityEnforcementInterface(
+            &default_security_module_impl_);
   }
 }
 

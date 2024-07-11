@@ -25,7 +25,7 @@ namespace bluetooth {
 namespace security {
 
 class SecurityModule : public bluetooth::Module {
- public:
+public:
   SecurityModule() = default;
   SecurityModule(const SecurityModule&) = delete;
   SecurityModule& operator=(const SecurityModule&) = delete;
@@ -40,13 +40,14 @@ class SecurityModule : public bluetooth::Module {
   /**
    * Facade configuration API.
    *
-   * <p> This allows you to set thins like IO Capabilities, Authentication Requirements, and OOB Data.
+   * <p> This allows you to set thins like IO Capabilities, Authentication Requirements, and OOB
+   * Data.
    */
   std::unique_ptr<FacadeConfigurationApi> GetFacadeConfigurationApi();
 
   static const ModuleFactory Factory;
 
- protected:
+protected:
   void ListDependencies(ModuleList* list) const override;
 
   void Start() override;
@@ -55,7 +56,7 @@ class SecurityModule : public bluetooth::Module {
 
   std::string ToString() const override;
 
- private:
+private:
   struct impl;
   std::unique_ptr<impl> pimpl_;
 };

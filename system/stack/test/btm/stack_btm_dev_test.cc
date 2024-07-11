@@ -24,7 +24,7 @@
 #include "test/mock/mock_main_shim_entry.h"
 
 class StackBtmDevTest : public BtmWithMocksTest {
- protected:
+protected:
   void SetUp() override { BtmWithMocksTest::SetUp(); }
   void TearDown() override { BtmWithMocksTest::TearDown(); }
 };

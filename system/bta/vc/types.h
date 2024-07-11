@@ -75,8 +75,7 @@ struct VolumeOperation {
   alarm_t* operation_timeout_;
 
   VolumeOperation(int operation_id, int group_id, bool is_autonomous, uint8_t opcode,
-                  std::vector<uint8_t> arguments,
-                  std::vector<RawAddress> devices)
+                  std::vector<uint8_t> arguments, std::vector<RawAddress> devices)
       : operation_id_(operation_id),
         group_id_(group_id),
         is_autonomous_(is_autonomous),
@@ -86,27 +85,31 @@ struct VolumeOperation {
     auto name = "operation_timeout_" + std::to_string(operation_id);
     operation_timeout_ = alarm_new(name.c_str());
     started_ = false;
-  };
+  }
+
+  // Disallow copying due to owning operation_timeout_t which is freed in the
+  // destructor - prevents double free.
+  VolumeOperation(const VolumeOperation&) = delete;
+  VolumeOperation& operator=(const VolumeOperation&) = delete;
 
   ~VolumeOperation() {
     if (operation_timeout_ == nullptr) {
-      log::warn("operation_timeout_ should not be null, id {}, device cnt {}",
-                operation_id_, devices_.size());
+      log::warn("operation_timeout_ should not be null, id {}, device cnt {}", operation_id_,
+                devices_.size());
       return;
     }
 
-    if (alarm_is_scheduled(operation_timeout_))
+    if (alarm_is_scheduled(operation_timeout_)) {
       alarm_cancel(operation_timeout_);
+    }
 
     alarm_free(operation_timeout_);
     operation_timeout_ = nullptr;
   }
 
-  bool IsGroupOperation(void) {
-    return (group_id_ != bluetooth::groups::kGroupUnknown);
-  }
+  bool IsGroupOperation(void) { return group_id_ != bluetooth::groups::kGroupUnknown; }
 
-  bool IsStarted(void) { return started_; };
+  bool IsStarted(void) { return started_; }
   void Start(void) { started_ = true; }
 };
 
@@ -144,17 +147,16 @@ struct VolumeOffset {
 };
 
 class VolumeOffsets {
- public:
+public:
   void Add(VolumeOffset& offset) {
     offset.id = (uint8_t)Size() + 1;
     volume_offsets.push_back(offset);
   }
 
   VolumeOffset* FindByLocation(uint8_t location) {
-    auto iter = std::find_if(volume_offsets.begin(), volume_offsets.end(),
-                             [&location](const VolumeOffset& item) {
-                               return item.location == location;
-                             });
+    auto iter = std::find_if(
+            volume_offsets.begin(), volume_offsets.end(),
+            [&location](const VolumeOffset& item) { return item.location == location; });
 
     return (iter == volume_offsets.end()) ? nullptr : &(*iter);
   }
@@ -169,9 +171,8 @@ class VolumeOffsets {
   }
 
   VolumeOffset* FindById(uint16_t id) {
-    auto iter =
-        std::find_if(volume_offsets.begin(), volume_offsets.end(),
-                     [&id](const VolumeOffset& item) { return item.id == id; });
+    auto iter = std::find_if(volume_offsets.begin(), volume_offsets.end(),
+                             [&id](const VolumeOffset& item) { return item.id == id; });
 
     return (iter == volume_offsets.end()) ? nullptr : &(*iter);
   }
@@ -192,8 +193,7 @@ class VolumeOffsets {
              << "    changeCnt: " << +v.change_counter << "\n"
              << "    location: " << +v.location << "\n"
              << "    service_handle: " << +v.service_handle << "\n"
-             << "    audio_location_writable " << v.audio_location_writable
-             << "\n"
+             << "    audio_location_writable " << v.audio_location_writable << "\n"
              << "    audio_descr_writable: " << v.audio_descr_writable << "\n";
     }
     dprintf(fd, "%s", stream.str().c_str());

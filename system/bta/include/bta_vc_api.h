@@ -22,7 +22,7 @@
 #include "types/raw_address.h"
 
 class VolumeControl {
- public:
+public:
   virtual ~VolumeControl() = default;
 
   static void Initialize(bluetooth::vc::VolumeControlCallbacks* callbacks,
@@ -39,27 +39,20 @@ class VolumeControl {
   virtual void Connect(const RawAddress& address) = 0;
   virtual void Disconnect(const RawAddress& address) = 0;
   virtual void Remove(const RawAddress& address) = 0;
-  virtual void SetVolume(std::variant<RawAddress, int> addr_or_group_id,
-                         uint8_t volume) = 0;
+  virtual void SetVolume(std::variant<RawAddress, int> addr_or_group_id, uint8_t volume) = 0;
   virtual void Mute(std::variant<RawAddress, int> addr_or_group_id) = 0;
   virtual void UnMute(std::variant<RawAddress, int> addr_or_group_id) = 0;
 
   /* Volume Offset Control Service (VOCS) */
-  virtual void SetExtAudioOutVolumeOffset(const RawAddress& address,
-                                          uint8_t ext_output_id,
+  virtual void SetExtAudioOutVolumeOffset(const RawAddress& address, uint8_t ext_output_id,
                                           int16_t offset) = 0;
-  virtual void GetExtAudioOutVolumeOffset(const RawAddress& address,
-                                          uint8_t ext_output_id) = 0;
+  virtual void GetExtAudioOutVolumeOffset(const RawAddress& address, uint8_t ext_output_id) = 0;
 
   /* Location as per Bluetooth Assigned Numbers.*/
-  virtual void SetExtAudioOutLocation(const RawAddress& address,
-                                      uint8_t ext_output_id,
+  virtual void SetExtAudioOutLocation(const RawAddress& address, uint8_t ext_output_id,
                                       uint32_t location) = 0;
-  virtual void GetExtAudioOutLocation(const RawAddress& address,
-                                      uint8_t ext_output_id) = 0;
-  virtual void GetExtAudioOutDescription(const RawAddress& address,
-                                         uint8_t ext_output_id) = 0;
-  virtual void SetExtAudioOutDescription(const RawAddress& address,
-                                         uint8_t ext_output_id,
+  virtual void GetExtAudioOutLocation(const RawAddress& address, uint8_t ext_output_id) = 0;
+  virtual void GetExtAudioOutDescription(const RawAddress& address, uint8_t ext_output_id) = 0;
+  virtual void SetExtAudioOutDescription(const RawAddress& address, uint8_t ext_output_id,
                                          std::string descr) = 0;
 };

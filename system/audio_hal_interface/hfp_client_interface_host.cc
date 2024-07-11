@@ -21,31 +21,25 @@ namespace audio {
 namespace hfp {
 
 HfpClientInterface::Decode* HfpClientInterface::GetDecode(
-    bluetooth::common::MessageLoopThread* message_loop) {
+        bluetooth::common::MessageLoopThread* message_loop) {
   return nullptr;
 }
 
-bool HfpClientInterface::ReleaseDecode(HfpClientInterface::Decode* decode) {
-  return false;
-}
+bool HfpClientInterface::ReleaseDecode(HfpClientInterface::Decode* decode) { return false; }
 
 HfpClientInterface::Encode* HfpClientInterface::GetEncode(
-    bluetooth::common::MessageLoopThread* message_loop) {
+        bluetooth::common::MessageLoopThread* message_loop) {
   return nullptr;
 }
 
-bool HfpClientInterface::ReleaseEncode(HfpClientInterface::Encode* encode) {
-  return false;
-}
+bool HfpClientInterface::ReleaseEncode(HfpClientInterface::Encode* encode) { return false; }
 
 HfpClientInterface::Offload* HfpClientInterface::GetOffload(
-    bluetooth::common::MessageLoopThread* message_loop) {
+        bluetooth::common::MessageLoopThread* message_loop) {
   return nullptr;
 }
 
-bool HfpClientInterface::ReleaseOffload(HfpClientInterface::Offload* offload) {
-  return false;
-}
+bool HfpClientInterface::ReleaseOffload(HfpClientInterface::Offload* offload) { return false; }
 
 HfpClientInterface* HfpClientInterface::Get() { return nullptr; }
 

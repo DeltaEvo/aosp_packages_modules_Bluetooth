@@ -42,7 +42,7 @@ namespace eatt {
 #define BLE_GATT_SVR_SUP_FEAT_EATT_BITMASK 0x01
 
 class eatt_device {
- public:
+public:
   RawAddress bda_;
   uint16_t rx_mtu_;
   uint16_t rx_mps_;
@@ -70,42 +70,45 @@ struct eatt_impl {
     default_mtu_ = EATT_DEFAULT_MTU;
     max_mps_ = EATT_MIN_MTU_MPS;
     psm_ = BT_PSM_EATT;
-  };
+  }
 
   ~eatt_impl() = default;
 
   eatt_device* find_device_by_cid(uint16_t lcid) {
     /* This works only because Android CIDs are unique across the ACL
      * connections */
-    auto iter = find_if(devices_.begin(), devices_.end(),
-                        [&lcid](const eatt_device& ed) {
-                          auto it = ed.eatt_channels.find(lcid);
-                          return it != ed.eatt_channels.end();
-                        });
+    auto iter = find_if(devices_.begin(), devices_.end(), [&lcid](const eatt_device& ed) {
+      auto it = ed.eatt_channels.find(lcid);
+      return it != ed.eatt_channels.end();
+    });
 
     return (iter == devices_.end()) ? nullptr : &(*iter);
   }
 
   EattChannel* find_channel_by_cid(uint16_t lcid) {
     eatt_device* eatt_dev = find_device_by_cid(lcid);
-    if (!eatt_dev) return nullptr;
+    if (!eatt_dev) {
+      return nullptr;
+    }
 
     auto it = eatt_dev->eatt_channels.find(lcid);
     return (it == eatt_dev->eatt_channels.end()) ? nullptr : it->second.get();
   }
 
   bool is_channel_connection_pending(eatt_device* eatt_dev) {
-    for (const std::pair<uint16_t, std::shared_ptr<EattChannel>>& el :
-         eatt_dev->eatt_channels) {
-      if (el.second->state_ == EattChannelState::EATT_CHANNEL_PENDING)
+    for (const std::pair<uint16_t, std::shared_ptr<EattChannel>>& el : eatt_dev->eatt_channels) {
+      if (el.second->state_ == EattChannelState::EATT_CHANNEL_PENDING) {
         return true;
+      }
     }
     return false;
   }
 
   EattChannel* find_channel_by_cid(const RawAddress& bdaddr, uint16_t lcid) {
     eatt_device* eatt_dev = find_device_by_address(bdaddr);
-    if (!eatt_dev) return nullptr;
+    if (!eatt_dev) {
+      return nullptr;
+    }
 
     auto it = eatt_dev->eatt_channels.find(lcid);
     return (it == eatt_dev->eatt_channels.end()) ? nullptr : it->second.get();
@@ -114,27 +117,28 @@ struct eatt_impl {
   void remove_channel_by_cid(eatt_device* eatt_dev, uint16_t lcid) {
     auto channel = eatt_dev->eatt_channels[lcid];
     if (!channel->cl_cmd_q_.empty()) {
-      log::warn("Channel {:c}, for device {} is not empty on disconnection.",
-                lcid, channel->bda_);
+      log::warn("Channel {:c}, for device {} is not empty on disconnection.", lcid, channel->bda_);
       channel->cl_cmd_q_.clear();
     }
 
     eatt_dev->eatt_channels.erase(lcid);
 
-    if (eatt_dev->eatt_channels.size() == 0) eatt_dev->eatt_tcb_ = NULL;
+    if (eatt_dev->eatt_channels.size() == 0) {
+      eatt_dev->eatt_tcb_ = NULL;
+    }
   }
 
   void remove_channel_by_cid(uint16_t lcid) {
     eatt_device* eatt_dev = find_device_by_cid(lcid);
-    if (!eatt_dev) return;
+    if (!eatt_dev) {
+      return;
+    }
 
     remove_channel_by_cid(eatt_dev, lcid);
   }
 
-  bool eatt_l2cap_connect_ind_common(const RawAddress& bda,
-                                     std::vector<uint16_t>& lcids,
-                                     uint16_t /* psm */, uint16_t peer_mtu,
-                                     uint8_t identifier) {
+  bool eatt_l2cap_connect_ind_common(const RawAddress& bda, std::vector<uint16_t>& lcids,
+                                     uint16_t /* psm */, uint16_t peer_mtu, uint8_t identifier) {
     /* The assumption is that L2CAP layer already check parameters etc.
      * Get our capabilities and accept all the channels.
      */
@@ -149,26 +153,22 @@ struct eatt_impl {
       eatt_dev = add_eatt_device(bda);
     }
 
-    uint16_t max_mps =
-        shim::GetController()->GetLeBufferSize().le_data_packet_length_;
+    uint16_t max_mps = shim::GetController()->GetLeBufferSize().le_data_packet_length_;
 
     tL2CAP_LE_CFG_INFO local_coc_cfg = {
-        .result = L2CAP_LE_RESULT_CONN_OK,
-        .mtu = eatt_dev->rx_mtu_,
-        .mps = eatt_dev->rx_mps_ < max_mps ? eatt_dev->rx_mps_ : max_mps,
-        .credits = L2CA_LeCreditDefault(),
+            .result = L2CAP_LE_RESULT_CONN_OK,
+            .mtu = eatt_dev->rx_mtu_,
+            .mps = eatt_dev->rx_mps_ < max_mps ? eatt_dev->rx_mps_ : max_mps,
+            .credits = L2CA_LeCreditDefault(),
     };
 
-    if (!L2CA_ConnectCreditBasedRsp(bda, identifier, lcids, L2CAP_CONN_OK,
-                                    &local_coc_cfg)) {
-      log::warn("Unable to respond L2CAP le_coc credit indication peer:{}",
-                bda);
+    if (!L2CA_ConnectCreditBasedRsp(bda, identifier, lcids, L2CAP_CONN_OK, &local_coc_cfg)) {
+      log::warn("Unable to respond L2CAP le_coc credit indication peer:{}", bda);
       return false;
     }
 
     if (!eatt_dev->eatt_tcb_) {
-      eatt_dev->eatt_tcb_ =
-          gatt_find_tcb_by_addr(eatt_dev->bda_, BT_TRANSPORT_LE);
+      eatt_dev->eatt_tcb_ = gatt_find_tcb_by_addr(eatt_dev->bda_, BT_TRANSPORT_LE);
       log::assert_that(eatt_dev->eatt_tcb_ != nullptr,
                        "assert failed: eatt_dev->eatt_tcb_ != nullptr");
     }
@@ -177,8 +177,7 @@ struct eatt_impl {
       EattChannel* channel = find_eatt_channel_by_cid(bda, cid);
       log::assert_that(channel == nullptr, "assert failed: channel == nullptr");
 
-      auto chan = std::make_shared<EattChannel>(eatt_dev->bda_, cid, peer_mtu,
-                                                eatt_dev->rx_mtu_);
+      auto chan = std::make_shared<EattChannel>(eatt_dev->bda_, cid, peer_mtu, eatt_dev->rx_mtu_);
       eatt_dev->eatt_channels.insert({cid, chan});
 
       chan->EattChannelSetState(EattChannelState::EATT_CHANNEL_OPENED);
@@ -191,11 +190,9 @@ struct eatt_impl {
   }
 
   /* This is for the L2CAP ECoC Testing. */
-  void upper_tester_send_data_if_needed(const RawAddress& bda,
-                                        uint16_t cid = 0) {
+  void upper_tester_send_data_if_needed(const RawAddress& bda, uint16_t cid = 0) {
     eatt_device* eatt_dev = find_device_by_address(bda);
-    auto num_of_sdu =
-        stack_config_get_interface()->get_pts_l2cap_ecoc_send_num_of_sdu();
+    auto num_of_sdu = stack_config_get_interface()->get_pts_l2cap_ecoc_send_num_of_sdu();
     log::info("device {}, num: {}", eatt_dev->bda_, num_of_sdu);
 
     if (num_of_sdu <= 0) {
@@ -207,8 +204,7 @@ struct eatt_impl {
       auto chan = find_channel_by_cid(cid);
       mtu = chan->tx_mtu_;
     } else {
-      for (const std::pair<uint16_t, std::shared_ptr<EattChannel>>& el :
-           eatt_dev->eatt_channels) {
+      for (const std::pair<uint16_t, std::shared_ptr<EattChannel>>& el : eatt_dev->eatt_channels) {
         if (el.second->state_ == EattChannelState::EATT_CHANNEL_OPENED) {
           cid = el.first;
           mtu = el.second->tx_mtu_;
@@ -228,8 +224,7 @@ struct eatt_impl {
       p_buf->len = mtu;
 
       auto status = L2CA_DataWrite(cid, p_buf);
-      log::info("Data num: {} sent with status {}", i,
-                static_cast<int>(status));
+      log::info("Data num: {} sent with status {}", i, static_cast<int>(status));
     }
   }
 
@@ -246,34 +241,27 @@ struct eatt_impl {
   }
 
   void upper_tester_delay_connect(const RawAddress& bda, int timeout_ms) {
-    bt_status_t status = do_in_main_thread_delayed(
-        FROM_HERE,
-        base::BindOnce(&eatt_impl::upper_tester_delay_connect_cb,
-                       weak_factory_.GetWeakPtr(), bda),
-        std::chrono::milliseconds(timeout_ms));
+    bt_status_t status =
+            do_in_main_thread_delayed(FROM_HERE,
+                                      base::BindOnce(&eatt_impl::upper_tester_delay_connect_cb,
+                                                     weak_factory_.GetWeakPtr(), bda),
+                                      std::chrono::milliseconds(timeout_ms));
 
-    log::info("Scheduled peripheral connect eatt for device with status: {}",
-              (int)status);
+    log::info("Scheduled peripheral connect eatt for device with status: {}", (int)status);
   }
 
-  void upper_tester_l2cap_connect_ind(const RawAddress& bda,
-                                      std::vector<uint16_t>& lcids,
-                                      uint16_t psm, uint16_t peer_mtu,
-                                      uint8_t identifier) {
+  void upper_tester_l2cap_connect_ind(const RawAddress& bda, std::vector<uint16_t>& lcids,
+                                      uint16_t psm, uint16_t peer_mtu, uint8_t identifier) {
     /* This is just for L2CAP PTS test cases*/
-    auto min_key_size =
-        stack_config_get_interface()->get_pts_l2cap_ecoc_min_key_size();
+    auto min_key_size = stack_config_get_interface()->get_pts_l2cap_ecoc_min_key_size();
     if (min_key_size > 0 && (min_key_size >= 7 && min_key_size <= 16)) {
       auto key_size = btm_ble_read_sec_key_size(bda);
       if (key_size < min_key_size) {
         std::vector<uint16_t> empty;
-        log::error("Insufficient key size ({}<{}) for device {}", key_size,
-                   min_key_size, bda);
-        if (!L2CA_ConnectCreditBasedRsp(
-                bda, identifier, empty,
-                L2CAP_LE_RESULT_INSUFFICIENT_ENCRYP_KEY_SIZE, nullptr)) {
-          log::warn("Unable to respond L2CAP le_coc credit indication peer:{}",
-                    bda);
+        log::error("Insufficient key size ({}<{}) for device {}", key_size, min_key_size, bda);
+        if (!L2CA_ConnectCreditBasedRsp(bda, identifier, empty,
+                                        L2CAP_LE_RESULT_INSUFFICIENT_ENCRYP_KEY_SIZE, nullptr)) {
+          log::warn("Unable to respond L2CAP le_coc credit indication peer:{}", bda);
         }
         return;
       }
@@ -287,8 +275,7 @@ struct eatt_impl {
     /* Android let Central to create EATT (PTS initiates EATT). Some PTS test
      * cases wants Android to do it anyway (Android initiates EATT).
      */
-    if (stack_config_get_interface()
-            ->get_pts_eatt_peripheral_collision_support()) {
+    if (stack_config_get_interface()->get_pts_eatt_peripheral_collision_support()) {
       upper_tester_delay_connect(bda, 500);
       return;
     }
@@ -297,22 +284,19 @@ struct eatt_impl {
 
     if (stack_config_get_interface()->get_pts_l2cap_ecoc_reconfigure()) {
       bt_status_t status = do_in_main_thread_delayed(
-          FROM_HERE,
-          base::BindOnce(&eatt_impl::reconfigure_all,
-                         weak_factory_.GetWeakPtr(), bda, 300),
-          std::chrono::seconds(4));
+              FROM_HERE,
+              base::BindOnce(&eatt_impl::reconfigure_all, weak_factory_.GetWeakPtr(), bda, 300),
+              std::chrono::seconds(4));
       log::info("Scheduled ECOC reconfiguration with status: {}", (int)status);
     }
   }
 
-  void eatt_l2cap_connect_ind(const RawAddress& bda,
-                              std::vector<uint16_t>& lcids, uint16_t psm,
+  void eatt_l2cap_connect_ind(const RawAddress& bda, std::vector<uint16_t>& lcids, uint16_t psm,
                               uint16_t peer_mtu, uint8_t identifier) {
     log::info("Device {}, num of cids: {}, psm 0x{:04x}, peer_mtu {}", bda,
               static_cast<int>(lcids.size()), psm, peer_mtu);
 
-    if (!stack_config_get_interface()
-             ->get_pts_connect_eatt_before_encryption() &&
+    if (!stack_config_get_interface()->get_pts_connect_eatt_before_encryption() &&
         !BTM_IsEncrypted(bda, BT_TRANSPORT_LE)) {
       /* If Link is not encrypted, we shall not accept EATT channel creation. */
       std::vector<uint16_t> empty;
@@ -321,18 +305,15 @@ struct eatt_impl {
         result = L2CAP_LE_RESULT_INSUFFICIENT_ENCRYP;
       }
       log::error("ACL to device {} is unencrypted.", bda);
-      if (!L2CA_ConnectCreditBasedRsp(bda, identifier, empty, result,
-                                      nullptr)) {
-        log::warn("Unable to respond L2CAP le_coc credit indication peer:{}",
-                  bda);
+      if (!L2CA_ConnectCreditBasedRsp(bda, identifier, empty, result, nullptr)) {
+        log::warn("Unable to respond L2CAP le_coc credit indication peer:{}", bda);
       }
       return;
     }
 
     if (stack_config_get_interface()->get_pts_l2cap_ecoc_upper_tester()) {
       log::info("Upper tester for the L2CAP ECoC enabled");
-      return upper_tester_l2cap_connect_ind(bda, lcids, psm, peer_mtu,
-                                            identifier);
+      return upper_tester_l2cap_connect_ind(bda, lcids, psm, peer_mtu, identifier);
     }
 
     eatt_l2cap_connect_ind_common(bda, lcids, psm, peer_mtu, identifier);
@@ -347,17 +328,14 @@ struct eatt_impl {
      * Android proceed its own EATT creation. How to handle it is described
      * here: BT Core 5.3, Volume 3, Part G, 5.4
      */
-    log::info(
-        "EATT collision detected. If we are Central we will retry right away");
+    log::info("EATT collision detected. If we are Central we will retry right away");
 
     eatt_dev->collision = false;
     uint8_t role = L2CA_GetBleConnRole(eatt_dev->bda_);
     if (role == HCI_ROLE_CENTRAL) {
-      log::info("Retrying EATT setup due to previous collision for device {}",
-                eatt_dev->bda_);
+      log::info("Retrying EATT setup due to previous collision for device {}", eatt_dev->bda_);
       connect_eatt_wrap(eatt_dev);
-    } else if (stack_config_get_interface()
-                   ->get_pts_eatt_peripheral_collision_support()) {
+    } else if (stack_config_get_interface()->get_pts_eatt_peripheral_collision_support()) {
       /* This is only for the PTS. Android does not setup EATT when is a
        * peripheral.
        */
@@ -374,21 +352,18 @@ struct eatt_impl {
     }
 
     if (stack_config_get_interface()->get_pts_l2cap_ecoc_connect_remaining() &&
-        (static_cast<int>(eatt_dev->eatt_channels.size()) <
-         L2CAP_CREDIT_BASED_MAX_CIDS)) {
+        (static_cast<int>(eatt_dev->eatt_channels.size()) < L2CAP_CREDIT_BASED_MAX_CIDS)) {
       log::info("Connecting remaining channels {}",
-                L2CAP_CREDIT_BASED_MAX_CIDS -
-                    static_cast<int>(eatt_dev->eatt_channels.size()));
+                L2CAP_CREDIT_BASED_MAX_CIDS - static_cast<int>(eatt_dev->eatt_channels.size()));
       upper_tester_delay_connect(eatt_dev->bda_, 1000);
       return;
     }
     upper_tester_send_data_if_needed(eatt_dev->bda_);
   }
 
-  void eatt_l2cap_connect_cfm(const RawAddress& bda, uint16_t lcid,
-                              uint16_t peer_mtu, uint16_t result) {
-    log::info("bda: {} cid: {}peer mtu: {} result {}", bda, lcid, peer_mtu,
-              result);
+  void eatt_l2cap_connect_cfm(const RawAddress& bda, uint16_t lcid, uint16_t peer_mtu,
+                              uint16_t result) {
+    log::info("bda: {} cid: {}peer mtu: {} result {}", bda, lcid, peer_mtu, result);
 
     eatt_device* eatt_dev = find_device_by_address(bda);
     if (!eatt_dev) {
@@ -429,37 +404,37 @@ struct eatt_impl {
     }
   }
 
-  void eatt_l2cap_reconfig_completed(const RawAddress& bda, uint16_t lcid,
-                                     bool is_local_cfg,
+  void eatt_l2cap_reconfig_completed(const RawAddress& bda, uint16_t lcid, bool is_local_cfg,
                                      tL2CAP_LE_CFG_INFO* p_cfg) {
     log::info("lcid: 0x{:x} local cfg?: {}", lcid, is_local_cfg);
 
     EattChannel* channel = find_channel_by_cid(bda, lcid);
-    if (!channel) return;
+    if (!channel) {
+      return;
+    }
 
     // regardless of success result, we have finished reconfiguration
     channel->EattChannelSetState(EattChannelState::EATT_CHANNEL_OPENED);
 
     if (p_cfg->result != L2CAP_CFG_OK) {
-      log::info("reconfig failed lcid: 0x{:x} result: 0x{:x}", lcid,
-                p_cfg->result);
+      log::info("reconfig failed lcid: 0x{:x} result: 0x{:x}", lcid, p_cfg->result);
       return;
     }
 
     /* On this layer we don't care about mps as this is handled in L2CAP layer
      */
-    if (is_local_cfg)
+    if (is_local_cfg) {
       channel->rx_mtu_ = p_cfg->mtu;
-    else
+    } else {
       channel->EattChannelSetTxMTU(p_cfg->mtu);
+    }
 
     if (stack_config_get_interface()->get_pts_l2cap_ecoc_reconfigure()) {
       /* Upper tester for L2CAP - schedule sending data */
-      do_in_main_thread_delayed(
-          FROM_HERE,
-          base::BindOnce(&eatt_impl::upper_tester_send_data_if_needed,
-                         weak_factory_.GetWeakPtr(), bda, lcid),
-          std::chrono::seconds(1));
+      do_in_main_thread_delayed(FROM_HERE,
+                                base::BindOnce(&eatt_impl::upper_tester_send_data_if_needed,
+                                               weak_factory_.GetWeakPtr(), bda, lcid),
+                                std::chrono::seconds(1));
     }
   }
 
@@ -484,19 +459,17 @@ struct eatt_impl {
     eatt_device* eatt_dev = find_device_by_address(channel->bda_);
     switch (channel->state_) {
       case EattChannelState::EATT_CHANNEL_PENDING:
-        log::warn("Channel for cid: 0x{:x} is not extablished, reason: 0x{:x}",
-                  lcid, reason);
+        log::warn("Channel for cid: 0x{:x} is not extablished, reason: 0x{:x}", lcid, reason);
         remove_channel_by_cid(eatt_dev, lcid);
         break;
       case EattChannelState::EATT_CHANNEL_RECONFIGURING:
         /* Just go back to open state */
-        log::error("Reconfig failed fo cid: 0x{:x}, reason: 0x{:x}", lcid,
-                   reason);
+        log::error("Reconfig failed fo cid: 0x{:x}, reason: 0x{:x}", lcid, reason);
         channel->EattChannelSetState(EattChannelState::EATT_CHANNEL_OPENED);
         break;
       default:
-        log::error("cid: 0x{:x}, reason: 0x{:x}, invalid state: {}", lcid,
-                   reason, static_cast<uint8_t>(channel->state_));
+        log::error("cid: 0x{:x}, reason: 0x{:x}, invalid state: {}", lcid, reason,
+                   static_cast<uint8_t>(channel->state_));
         break;
     }
 
@@ -540,9 +513,8 @@ struct eatt_impl {
   }
 
   eatt_device* find_device_by_address(const RawAddress& bd_addr) {
-    auto iter = find_if(
-        devices_.begin(), devices_.end(),
-        [&bd_addr](const eatt_device& ed) { return ed.bda_ == bd_addr; });
+    auto iter = find_if(devices_.begin(), devices_.end(),
+                        [&bd_addr](const eatt_device& ed) { return ed.bda_ == bd_addr; });
 
     return iter == devices_.end() ? nullptr : &(*iter);
   }
@@ -554,54 +526,47 @@ struct eatt_impl {
   }
 
   void connect_eatt_wrap(eatt_device* eatt_dev) {
-    if (stack_config_get_interface()
-            ->get_pts_eatt_peripheral_collision_support()) {
+    if (stack_config_get_interface()->get_pts_eatt_peripheral_collision_support()) {
       /* For PTS case, lets assume we support only 5 channels */
-      log::info("Number of existing channels {}",
-                (int)eatt_dev->eatt_channels.size());
-      connect_eatt(eatt_dev, L2CAP_CREDIT_BASED_MAX_CIDS -
-                                 (int)eatt_dev->eatt_channels.size());
+      log::info("Number of existing channels {}", (int)eatt_dev->eatt_channels.size());
+      connect_eatt(eatt_dev, L2CAP_CREDIT_BASED_MAX_CIDS - (int)eatt_dev->eatt_channels.size());
       return;
     }
 
     connect_eatt(eatt_dev);
   }
 
-  void connect_eatt(eatt_device* eatt_dev,
-                    uint8_t num_of_channels = L2CAP_CREDIT_BASED_MAX_CIDS) {
+  void connect_eatt(eatt_device* eatt_dev, uint8_t num_of_channels = L2CAP_CREDIT_BASED_MAX_CIDS) {
     /* Let us use maximum possible mps */
-    if (eatt_dev->rx_mps_ == EATT_MIN_MTU_MPS)
-      eatt_dev->rx_mps_ =
-          shim::GetController()->GetLeBufferSize().le_data_packet_length_;
+    if (eatt_dev->rx_mps_ == EATT_MIN_MTU_MPS) {
+      eatt_dev->rx_mps_ = shim::GetController()->GetLeBufferSize().le_data_packet_length_;
+    }
 
     tL2CAP_LE_CFG_INFO local_coc_cfg = {
-        .result = L2CAP_LE_RESULT_CONN_OK,
-        .mtu = eatt_dev->rx_mtu_,
-        .mps = eatt_dev->rx_mps_,
-        .credits = L2CA_LeCreditDefault(),
-        .number_of_channels = num_of_channels,
+            .result = L2CAP_LE_RESULT_CONN_OK,
+            .mtu = eatt_dev->rx_mtu_,
+            .mps = eatt_dev->rx_mps_,
+            .credits = L2CA_LeCreditDefault(),
+            .number_of_channels = num_of_channels,
     };
 
-    log::info("Connecting device {}, cnt count {}", eatt_dev->bda_,
-              num_of_channels);
+    log::info("Connecting device {}, cnt count {}", eatt_dev->bda_, num_of_channels);
 
     /* Warning! CIDs in Android are unique across the ACL connections */
     std::vector<uint16_t> connecting_cids =
-        L2CA_ConnectCreditBasedReq(psm_, eatt_dev->bda_, &local_coc_cfg);
+            L2CA_ConnectCreditBasedReq(psm_, eatt_dev->bda_, &local_coc_cfg);
 
     if (connecting_cids.size() == 0) {
       log::error("Unable to get cid");
       return;
     }
 
-    log::info("Successfully sent CoC request, number of channel: {}",
-              connecting_cids.size());
+    log::info("Successfully sent CoC request, number of channel: {}", connecting_cids.size());
 
     for (uint16_t cid : connecting_cids) {
       log::info("\t cid: 0x{:x}", cid);
 
-      auto chan = std::make_shared<EattChannel>(eatt_dev->bda_, cid, 0,
-                                                eatt_dev->rx_mtu_);
+      auto chan = std::make_shared<EattChannel>(eatt_dev->bda_, cid, 0, eatt_dev->rx_mtu_);
       eatt_dev->eatt_channels.insert({cid, chan});
     }
 
@@ -610,88 +575,85 @@ struct eatt_impl {
       return;
     }
 
-    eatt_dev->eatt_tcb_ =
-        gatt_find_tcb_by_addr(eatt_dev->bda_, BT_TRANSPORT_LE);
+    eatt_dev->eatt_tcb_ = gatt_find_tcb_by_addr(eatt_dev->bda_, BT_TRANSPORT_LE);
     log::assert_that(eatt_dev->eatt_tcb_ != nullptr,
                      "assert failed: eatt_dev->eatt_tcb_ != nullptr");
   }
 
-  EattChannel* find_eatt_channel_by_cid(const RawAddress& bd_addr,
-                                        uint16_t cid) {
+  EattChannel* find_eatt_channel_by_cid(const RawAddress& bd_addr, uint16_t cid) {
     eatt_device* eatt_dev = find_device_by_address(bd_addr);
-    if (!eatt_dev) return nullptr;
+    if (!eatt_dev) {
+      return nullptr;
+    }
 
-    auto iter = find_if(
-        eatt_dev->eatt_channels.begin(), eatt_dev->eatt_channels.end(),
-        [&cid](const std::pair<uint16_t, std::shared_ptr<EattChannel>>& el) {
-          return el.first == cid;
-        });
+    auto iter = find_if(eatt_dev->eatt_channels.begin(), eatt_dev->eatt_channels.end(),
+                        [&cid](const std::pair<uint16_t, std::shared_ptr<EattChannel>>& el) {
+                          return el.first == cid;
+                        });
 
     return iter == eatt_dev->eatt_channels.end() ? nullptr : iter->second.get();
   }
 
-  EattChannel* find_eatt_channel_by_transid(const RawAddress& bd_addr,
-                                            uint32_t trans_id) {
+  EattChannel* find_eatt_channel_by_transid(const RawAddress& bd_addr, uint32_t trans_id) {
     eatt_device* eatt_dev = find_device_by_address(bd_addr);
-    if (!eatt_dev) return nullptr;
+    if (!eatt_dev) {
+      return nullptr;
+    }
 
-    auto iter = find_if(
-        eatt_dev->eatt_channels.begin(), eatt_dev->eatt_channels.end(),
-        [&trans_id](
-            const std::pair<uint16_t, std::shared_ptr<EattChannel>>& el) {
-          return el.second->server_outstanding_cmd_.trans_id == trans_id;
-        });
+    auto iter = find_if(eatt_dev->eatt_channels.begin(), eatt_dev->eatt_channels.end(),
+                        [&trans_id](const std::pair<uint16_t, std::shared_ptr<EattChannel>>& el) {
+                          return el.second->server_outstanding_cmd_.trans_id == trans_id;
+                        });
 
     return iter == eatt_dev->eatt_channels.end() ? nullptr : iter->second.get();
   }
 
-  bool is_indication_pending(const RawAddress& bd_addr,
-                             uint16_t indication_handle) {
+  bool is_indication_pending(const RawAddress& bd_addr, uint16_t indication_handle) {
     eatt_device* eatt_dev = find_device_by_address(bd_addr);
-    if (!eatt_dev) return false;
+    if (!eatt_dev) {
+      return false;
+    }
 
     auto iter = find_if(
-        eatt_dev->eatt_channels.begin(), eatt_dev->eatt_channels.end(),
-        [&indication_handle](
-            const std::pair<uint16_t, std::shared_ptr<EattChannel>>& el) {
-          return el.second->indicate_handle_ == indication_handle;
-        });
+            eatt_dev->eatt_channels.begin(), eatt_dev->eatt_channels.end(),
+            [&indication_handle](const std::pair<uint16_t, std::shared_ptr<EattChannel>>& el) {
+              return el.second->indicate_handle_ == indication_handle;
+            });
 
-    return (iter != eatt_dev->eatt_channels.end());
-  };
+    return iter != eatt_dev->eatt_channels.end();
+  }
 
   EattChannel* get_channel_available_for_indication(const RawAddress& bd_addr) {
     eatt_device* eatt_dev = find_device_by_address(bd_addr);
-    auto iter = find_if(
-        eatt_dev->eatt_channels.begin(), eatt_dev->eatt_channels.end(),
-        [](const std::pair<uint16_t, std::shared_ptr<EattChannel>>& el) {
-          return el.second->state_ == EattChannelState::EATT_CHANNEL_OPENED &&
-                 !GATT_HANDLE_IS_VALID(el.second->indicate_handle_);
-        });
+    auto iter = find_if(eatt_dev->eatt_channels.begin(), eatt_dev->eatt_channels.end(),
+                        [](const std::pair<uint16_t, std::shared_ptr<EattChannel>>& el) {
+                          return el.second->state_ == EattChannelState::EATT_CHANNEL_OPENED &&
+                                 !GATT_HANDLE_IS_VALID(el.second->indicate_handle_);
+                        });
 
-    return (iter == eatt_dev->eatt_channels.end()) ? nullptr
-                                                   : iter->second.get();
-  };
+    return (iter == eatt_dev->eatt_channels.end()) ? nullptr : iter->second.get();
+  }
 
-  EattChannel* get_channel_available_for_client_request(
-      const RawAddress& bd_addr) {
+  EattChannel* get_channel_available_for_client_request(const RawAddress& bd_addr) {
     eatt_device* eatt_dev = find_device_by_address(bd_addr);
-    if (!eatt_dev) return nullptr;
+    if (!eatt_dev) {
+      return nullptr;
+    }
 
-    auto iter = find_if(
-        eatt_dev->eatt_channels.begin(), eatt_dev->eatt_channels.end(),
-        [](const std::pair<uint16_t, std::shared_ptr<EattChannel>>& el) {
-          return el.second->state_ == EattChannelState::EATT_CHANNEL_OPENED &&
-                 el.second->cl_cmd_q_.empty();
-        });
+    auto iter = find_if(eatt_dev->eatt_channels.begin(), eatt_dev->eatt_channels.end(),
+                        [](const std::pair<uint16_t, std::shared_ptr<EattChannel>>& el) {
+                          return el.second->state_ == EattChannelState::EATT_CHANNEL_OPENED &&
+                                 el.second->cl_cmd_q_.empty();
+                        });
 
-    return (iter == eatt_dev->eatt_channels.end()) ? nullptr
-                                                   : iter->second.get();
+    return (iter == eatt_dev->eatt_channels.end()) ? nullptr : iter->second.get();
   }
 
   void free_gatt_resources(const RawAddress& bd_addr) {
     eatt_device* eatt_dev = find_device_by_address(bd_addr);
-    if (!eatt_dev) return;
+    if (!eatt_dev) {
+      return;
+    }
 
     auto iter = eatt_dev->eatt_channels.begin();
     while (iter != eatt_dev->eatt_channels.end()) {
@@ -705,33 +667,38 @@ struct eatt_impl {
 
   bool is_outstanding_msg_in_send_queue(const RawAddress& bd_addr) {
     eatt_device* eatt_dev = find_device_by_address(bd_addr);
-    if (!eatt_dev) return false;
+    if (!eatt_dev) {
+      return false;
+    }
 
-    auto iter = find_if(
-        eatt_dev->eatt_channels.begin(), eatt_dev->eatt_channels.end(),
-        [](const std::pair<uint16_t, std::shared_ptr<EattChannel>>& el) {
-          if (el.second->cl_cmd_q_.empty()) return false;
+    auto iter = find_if(eatt_dev->eatt_channels.begin(), eatt_dev->eatt_channels.end(),
+                        [](const std::pair<uint16_t, std::shared_ptr<EattChannel>>& el) {
+                          if (el.second->cl_cmd_q_.empty()) {
+                            return false;
+                          }
 
-          tGATT_CMD_Q& cmd = el.second->cl_cmd_q_.front();
-          return cmd.to_send;
-        });
-    return (iter != eatt_dev->eatt_channels.end());
+                          tGATT_CMD_Q& cmd = el.second->cl_cmd_q_.front();
+                          return cmd.to_send;
+                        });
+    return iter != eatt_dev->eatt_channels.end();
   }
 
   EattChannel* get_channel_with_queued_data(const RawAddress& bd_addr) {
     eatt_device* eatt_dev = find_device_by_address(bd_addr);
-    if (!eatt_dev) return nullptr;
+    if (!eatt_dev) {
+      return nullptr;
+    }
 
-    auto iter = find_if(
-        eatt_dev->eatt_channels.begin(), eatt_dev->eatt_channels.end(),
-        [](const std::pair<uint16_t, std::shared_ptr<EattChannel>>& el) {
-          if (el.second->cl_cmd_q_.empty()) return false;
+    auto iter = find_if(eatt_dev->eatt_channels.begin(), eatt_dev->eatt_channels.end(),
+                        [](const std::pair<uint16_t, std::shared_ptr<EattChannel>>& el) {
+                          if (el.second->cl_cmd_q_.empty()) {
+                            return false;
+                          }
 
-          tGATT_CMD_Q& cmd = el.second->cl_cmd_q_.front();
-          return cmd.to_send;
-        });
-    return (iter == eatt_dev->eatt_channels.end()) ? nullptr
-                                                   : iter->second.get();
+                          tGATT_CMD_Q& cmd = el.second->cl_cmd_q_.front();
+                          return cmd.to_send;
+                        });
+    return (iter == eatt_dev->eatt_channels.end()) ? nullptr : iter->second.get();
   }
 
   static void eatt_ind_ack_timeout(void* data) {
@@ -757,8 +724,7 @@ struct eatt_impl {
       return;
     }
 
-    alarm_set_on_mloop(channel->ind_confirmation_timer_,
-                       GATT_WAIT_FOR_RSP_TIMEOUT_MS,
+    alarm_set_on_mloop(channel->ind_confirmation_timer_, GATT_WAIT_FOR_RSP_TIMEOUT_MS,
                        eatt_ind_confirmation_timeout, channel);
   }
 
@@ -779,8 +745,8 @@ struct eatt_impl {
       return;
     }
 
-    alarm_set_on_mloop(channel->ind_ack_timer_, GATT_WAIT_FOR_RSP_TIMEOUT_MS,
-                       eatt_ind_ack_timeout, channel);
+    alarm_set_on_mloop(channel->ind_ack_timer_, GATT_WAIT_FOR_RSP_TIMEOUT_MS, eatt_ind_ack_timeout,
+                       channel);
   }
 
   void stop_app_indication_timer(const RawAddress& bd_addr, uint16_t cid) {
@@ -814,13 +780,10 @@ struct eatt_impl {
     std::vector<uint16_t> cids = {cid};
 
     tL2CAP_LE_CFG_INFO cfg = {
-        .result = L2CAP_LE_RESULT_CONN_OK,
-        .mtu = new_mtu,
-        .mps = eatt_dev->rx_mps_};
+            .result = L2CAP_LE_RESULT_CONN_OK, .mtu = new_mtu, .mps = eatt_dev->rx_mps_};
 
     if (!L2CA_ReconfigCreditBasedConnsReq(eatt_dev->bda_, cids, &cfg)) {
-      log::error("Could not start reconfig cid: 0x{:x} or device {}", cid,
-                 bd_addr);
+      log::error("Could not start reconfig cid: 0x{:x} or device {}", cid, bd_addr);
       return;
     }
 
@@ -856,9 +819,7 @@ struct eatt_impl {
     }
 
     tL2CAP_LE_CFG_INFO cfg = {
-        .result = L2CAP_LE_RESULT_CONN_OK,
-        .mtu = new_mtu,
-        .mps = eatt_dev->rx_mps_};
+            .result = L2CAP_LE_RESULT_CONN_OK, .mtu = new_mtu, .mps = eatt_dev->rx_mps_};
 
     if (!L2CA_ReconfigCreditBasedConnsReq(eatt_dev->bda_, cids, &cfg)) {
       log::error("Could not start reconfig for device {}", bd_addr);
@@ -866,17 +827,17 @@ struct eatt_impl {
     }
 
     for (auto& channel : eatt_dev->eatt_channels) {
-      channel.second->EattChannelSetState(
-          EattChannelState::EATT_CHANNEL_RECONFIGURING);
+      channel.second->EattChannelSetState(EattChannelState::EATT_CHANNEL_RECONFIGURING);
     }
   }
 
-  void supported_features_cb(uint8_t role, const RawAddress& bd_addr,
-                             uint8_t features) {
+  void supported_features_cb(uint8_t role, const RawAddress& bd_addr, uint8_t features) {
     bool is_eatt_supported = features & BLE_GATT_SVR_SUP_FEAT_EATT_BITMASK;
 
     log::info("{} is_eatt_supported = {}", bd_addr, int(is_eatt_supported));
-    if (!is_eatt_supported) return;
+    if (!is_eatt_supported) {
+      return;
+    }
 
     eatt_device* eatt_dev = this->find_device_by_address(bd_addr);
     if (!eatt_dev) {
@@ -942,16 +903,11 @@ struct eatt_impl {
     eatt_dev->collision = false;
   }
 
-  void upper_tester_connect(const RawAddress& bd_addr, eatt_device* eatt_dev,
-                            uint8_t role) {
-    log::info(
-        "L2CAP Upper tester enabled, {} ({}), role: {}({})", bd_addr,
-        fmt::ptr(eatt_dev),
-        role == HCI_ROLE_CENTRAL ? "HCI_ROLE_CENTRAL" : "HCI_ROLE_PERIPHERAL",
-        role);
+  void upper_tester_connect(const RawAddress& bd_addr, eatt_device* eatt_dev, uint8_t role) {
+    log::info("L2CAP Upper tester enabled, {} ({}), role: {}({})", bd_addr, fmt::ptr(eatt_dev),
+              role == HCI_ROLE_CENTRAL ? "HCI_ROLE_CENTRAL" : "HCI_ROLE_PERIPHERAL", role);
 
-    auto num_of_chan =
-        stack_config_get_interface()->get_pts_l2cap_ecoc_initial_chan_cnt();
+    auto num_of_chan = stack_config_get_interface()->get_pts_l2cap_ecoc_initial_chan_cnt();
     if (num_of_chan <= 0) {
       num_of_chan = L2CAP_CREDIT_BASED_MAX_CIDS;
     }
@@ -960,7 +916,9 @@ struct eatt_impl {
     if (stack_config_get_interface()->get_pts_connect_eatt_unconditionally()) {
       /* Normally eatt_dev exist only if EATT is supported by remote device.
        * Here it is created unconditionally */
-      if (eatt_dev == nullptr) eatt_dev = add_eatt_device(bd_addr);
+      if (eatt_dev == nullptr) {
+        eatt_dev = add_eatt_device(bd_addr);
+      }
       /* For PTS just start connecting EATT right away */
       connect_eatt(eatt_dev, num_of_chan);
       return;
@@ -972,9 +930,8 @@ struct eatt_impl {
     }
 
     /* If we don't know yet, read GATT server supported features. */
-    if (gatt_cl_read_sr_supp_feat_req(
-            bd_addr, base::BindOnce(&eatt_impl::supported_features_cb,
-                                    weak_factory_.GetWeakPtr(), role)) ==
+    if (gatt_cl_read_sr_supp_feat_req(bd_addr, base::BindOnce(&eatt_impl::supported_features_cb,
+                                                              weak_factory_.GetWeakPtr(), role)) ==
         false) {
       log::info("Read server supported features failed for device {}", bd_addr);
     }
@@ -994,8 +951,7 @@ struct eatt_impl {
       return;
     }
 
-    log::info("Device {}, role {}", bd_addr,
-              role == HCI_ROLE_CENTRAL ? "central" : "peripheral");
+    log::info("Device {}, role {}", bd_addr, role == HCI_ROLE_CENTRAL ? "central" : "peripheral");
 
     if (eatt_dev) {
       /* We are reconnecting device we know that support EATT.
@@ -1004,8 +960,7 @@ struct eatt_impl {
       log::info("Known device, connect eCoC");
 
       if (role != HCI_ROLE_CENTRAL) {
-        log::info(
-            "EATT Should be connected by the central. Let's wait for it.");
+        log::info("EATT Should be connected by the central. Let's wait for it.");
         return;
       }
 
@@ -1013,7 +968,9 @@ struct eatt_impl {
       return;
     }
 
-    if (role != HCI_ROLE_CENTRAL) return;
+    if (role != HCI_ROLE_CENTRAL) {
+      return;
+    }
 
     if (gatt_profile_get_eatt_support(bd_addr)) {
       log::debug("Eatt is supported for device {}", bd_addr);
@@ -1022,9 +979,8 @@ struct eatt_impl {
     }
 
     /* If we don't know yet, read GATT server supported features. */
-    if (gatt_cl_read_sr_supp_feat_req(
-            bd_addr, base::BindOnce(&eatt_impl::supported_features_cb,
-                                    weak_factory_.GetWeakPtr(), role)) ==
+    if (gatt_cl_read_sr_supp_feat_req(bd_addr, base::BindOnce(&eatt_impl::supported_features_cb,
+                                                              weak_factory_.GetWeakPtr(), role)) ==
         false) {
       log::info("Read server supported features failed for device {}", bd_addr);
     }
@@ -1035,7 +991,9 @@ struct eatt_impl {
 
     log::info("restoring: {}", bd_addr);
 
-    if (!eatt_dev) add_eatt_device(bd_addr);
+    if (!eatt_dev) {
+      add_eatt_device(bd_addr);
+    }
   }
 };
 

@@ -29,15 +29,17 @@ namespace bluetooth {
 namespace security {
 using hci::Octet16;
 
-std::variant<PairingFailure, KeyExchangeResult> PairingHandlerLe::ExchangePublicKeys(const InitialInformations& i,
-                                                                                     OobDataFlag remote_have_oob_data) {
+std::variant<PairingFailure, KeyExchangeResult> PairingHandlerLe::ExchangePublicKeys(
+        const InitialInformations& i, OobDataFlag remote_have_oob_data) {
   // Generate ECDH, or use one that was used for OOB data
-  const auto [private_key, public_key] = (remote_have_oob_data == OobDataFlag::NOT_PRESENT || !i.my_oob_data)
-                                             ? GenerateECDHKeyPair()
-                                             : std::make_pair(i.my_oob_data->private_key, i.my_oob_data->public_key);
+  const auto [private_key, public_key] =
+          (remote_have_oob_data == OobDataFlag::NOT_PRESENT || !i.my_oob_data)
+                  ? GenerateECDHKeyPair()
+                  : std::make_pair(i.my_oob_data->private_key, i.my_oob_data->public_key);
 
   log::info("Public key exchange start");
-  std::unique_ptr<PairingPublicKeyBuilder> myPublicKey = PairingPublicKeyBuilder::Create(public_key.x, public_key.y);
+  std::unique_ptr<PairingPublicKeyBuilder> myPublicKey =
+          PairingPublicKeyBuilder::Create(public_key.x, public_key.y);
 
   if (!ValidateECDHPoint(public_key)) {
     log::error("Can't validate my own public key!!!");
@@ -94,10 +96,9 @@ std::variant<PairingFailure, KeyExchangeResult> PairingHandlerLe::ExchangePublic
   return KeyExchangeResult{PKa, PKb, dhkey};
 }
 
-Stage1ResultOrFailure PairingHandlerLe::DoSecureConnectionsStage1(const InitialInformations& i,
-                                                                  const EcdhPublicKey& PKa, const EcdhPublicKey& PKb,
-                                                                  const PairingRequestView& pairing_request,
-                                                                  const PairingResponseView& pairing_response) {
+Stage1ResultOrFailure PairingHandlerLe::DoSecureConnectionsStage1(
+        const InitialInformations& i, const EcdhPublicKey& PKa, const EcdhPublicKey& PKb,
+        const PairingRequestView& pairing_request, const PairingResponseView& pairing_response) {
   if (((pairing_request.GetAuthReq() & AuthReqMaskMitm) == 0) &&
       ((pairing_response.GetAuthReq() & AuthReqMaskMitm) == 0)) {
     // If both devices have not set MITM option, Just Works shall be used
@@ -106,8 +107,10 @@ Stage1ResultOrFailure PairingHandlerLe::DoSecureConnectionsStage1(const InitialI
 
   if (pairing_request.GetOobDataFlag() == OobDataFlag::PRESENT ||
       pairing_response.GetOobDataFlag() == OobDataFlag::PRESENT) {
-    OobDataFlag remote_oob_flag = IAmCentral(i) ? pairing_response.GetOobDataFlag() : pairing_request.GetOobDataFlag();
-    OobDataFlag my_oob_flag = IAmCentral(i) ? pairing_request.GetOobDataFlag() : pairing_response.GetOobDataFlag();
+    OobDataFlag remote_oob_flag =
+            IAmCentral(i) ? pairing_response.GetOobDataFlag() : pairing_request.GetOobDataFlag();
+    OobDataFlag my_oob_flag =
+            IAmCentral(i) ? pairing_request.GetOobDataFlag() : pairing_response.GetOobDataFlag();
     return SecureConnectionsOutOfBand(i, PKa, PKb, my_oob_flag, remote_oob_flag);
   }
 
@@ -134,13 +137,10 @@ Stage1ResultOrFailure PairingHandlerLe::DoSecureConnectionsStage1(const InitialI
 }
 
 Stage2ResultOrFailure PairingHandlerLe::DoSecureConnectionsStage2(
-    const InitialInformations& i,
-    const EcdhPublicKey& /* PKa */,
-    const EcdhPublicKey& /* PKb */,
-    const PairingRequestView& pairing_request,
-    const PairingResponseView& pairing_response,
-    const Stage1Result stage1result,
-    const std::array<uint8_t, 32>& dhkey) {
+        const InitialInformations& i, const EcdhPublicKey& /* PKa */,
+        const EcdhPublicKey& /* PKb */, const PairingRequestView& pairing_request,
+        const PairingResponseView& pairing_response, const Stage1Result stage1result,
+        const std::array<uint8_t, 32>& dhkey) {
   log::info("Authentication stage 2 started");
 
   auto [Na, Nb, ra, rb] = stage1result;
@@ -167,9 +167,11 @@ Stage2ResultOrFailure PairingHandlerLe::DoSecureConnectionsStage2(
   // DHKey exchange and check
 
   std::array<uint8_t, 3> iocapA{static_cast<uint8_t>(pairing_request.GetIoCapability()),
-                                static_cast<uint8_t>(pairing_request.GetOobDataFlag()), pairing_request.GetAuthReq()};
+                                static_cast<uint8_t>(pairing_request.GetOobDataFlag()),
+                                pairing_request.GetAuthReq()};
   std::array<uint8_t, 3> iocapB{static_cast<uint8_t>(pairing_response.GetIoCapability()),
-                                static_cast<uint8_t>(pairing_response.GetOobDataFlag()), pairing_response.GetAuthReq()};
+                                static_cast<uint8_t>(pairing_response.GetOobDataFlag()),
+                                pairing_response.GetAuthReq()};
 
   // log::info("{} LTK = {}", IAmCentral(i), base::HexEncode(ltk.data(), ltk.size()));
   // log::info("{} MAC_KEY = {}", IAmCentral(i), base::HexEncode(mac_key.data(), mac_key.size()));
@@ -221,16 +223,19 @@ Stage2ResultOrFailure PairingHandlerLe::DoSecureConnectionsStage2(
 }
 
 Stage1ResultOrFailure PairingHandlerLe::SecureConnectionsOutOfBand(const InitialInformations& i,
-                                                                   const EcdhPublicKey& Pka, const EcdhPublicKey& Pkb,
+                                                                   const EcdhPublicKey& Pka,
+                                                                   const EcdhPublicKey& Pkb,
                                                                    OobDataFlag my_oob_flag,
                                                                    OobDataFlag remote_oob_flag) {
   log::info("Out Of Band start");
 
   Octet16 zeros{0};
-  Octet16 localR = (remote_oob_flag == OobDataFlag::PRESENT && i.my_oob_data) ? i.my_oob_data->r : zeros;
+  Octet16 localR =
+          (remote_oob_flag == OobDataFlag::PRESENT && i.my_oob_data) ? i.my_oob_data->r : zeros;
   Octet16 remoteR;
 
-  if (my_oob_flag == OobDataFlag::NOT_PRESENT || (my_oob_flag == OobDataFlag::PRESENT && !i.remote_oob_data)) {
+  if (my_oob_flag == OobDataFlag::NOT_PRESENT ||
+      (my_oob_flag == OobDataFlag::PRESENT && !i.remote_oob_data)) {
     /* we have send the OOB data, but not received them. remote will check if
      * C value is correct */
     remoteR = zeros;
@@ -285,7 +290,8 @@ Stage1ResultOrFailure PairingHandlerLe::SecureConnectionsOutOfBand(const Initial
 
 Stage1ResultOrFailure PairingHandlerLe::SecureConnectionsPasskeyEntry(const InitialInformations& i,
                                                                       const EcdhPublicKey& PKa,
-                                                                      const EcdhPublicKey& PKb, IoCapability my_iocaps,
+                                                                      const EcdhPublicKey& PKb,
+                                                                      IoCapability my_iocaps,
                                                                       IoCapability remote_iocaps) {
   log::info("Passkey Entry start");
   Octet16 Na, Nb, ra{0}, rb{0};
@@ -297,17 +303,23 @@ Stage1ResultOrFailure PairingHandlerLe::SecureConnectionsPasskeyEntry(const Init
     passkey = GenerateRandom();
     passkey &= 0x0fffff; /* maximum 20 significant bytes */
     constexpr uint32_t PASSKEY_MAX = 999999;
-    while (passkey > PASSKEY_MAX) passkey >>= 1;
+    while (passkey > PASSKEY_MAX) {
+      passkey >>= 1;
+    }
 
     ConfirmationData data(i.remote_connection_address, i.remote_name, passkey);
-    i.user_interface_handler->Post(common::BindOnce(&UI::DisplayPasskey, common::Unretained(i.user_interface), data));
-
-  } else if (my_iocaps == IoCapability::KEYBOARD_ONLY || remote_iocaps == IoCapability::DISPLAY_ONLY) {
-    ConfirmationData data(i.remote_connection_address, i.remote_name);
     i.user_interface_handler->Post(
-        common::BindOnce(&UI::DisplayEnterPasskeyDialog, common::Unretained(i.user_interface), data));
+            common::BindOnce(&UI::DisplayPasskey, common::Unretained(i.user_interface), data));
+
+  } else if (my_iocaps == IoCapability::KEYBOARD_ONLY ||
+             remote_iocaps == IoCapability::DISPLAY_ONLY) {
+    ConfirmationData data(i.remote_connection_address, i.remote_name);
+    i.user_interface_handler->Post(common::BindOnce(&UI::DisplayEnterPasskeyDialog,
+                                                    common::Unretained(i.user_interface), data));
     std::optional<PairingEvent> response = WaitUiPasskey();
-    if (!response) return PairingFailure("Passkey did not arrive!");
+    if (!response) {
+      return PairingFailure("Passkey did not arrive!");
+    }
 
     passkey = response->ui_value;
 
@@ -407,9 +419,8 @@ Stage1ResultOrFailure PairingHandlerLe::SecureConnectionsPasskeyEntry(const Init
   return Stage1Result{Na, Nb, ra, rb};
 }
 
-Stage1ResultOrFailure PairingHandlerLe::SecureConnectionsNumericComparison(const InitialInformations& i,
-                                                                           const EcdhPublicKey& PKa,
-                                                                           const EcdhPublicKey& PKb) {
+Stage1ResultOrFailure PairingHandlerLe::SecureConnectionsNumericComparison(
+        const InitialInformations& i, const EcdhPublicKey& PKa, const EcdhPublicKey& PKb) {
   log::info("Numeric Comparison start");
   Stage1ResultOrFailure result = SecureConnectionsJustWorks(i, PKa, PKb);
   if (std::holds_alternative<PairingFailure>(result)) {
@@ -418,11 +429,12 @@ Stage1ResultOrFailure PairingHandlerLe::SecureConnectionsNumericComparison(const
 
   const auto [Na, Nb, ra, rb] = std::get<Stage1Result>(result);
 
-  uint32_t number_to_display = crypto_toolbox::g2((uint8_t*)PKa.x.data(), (uint8_t*)PKb.x.data(), Na, Nb);
+  uint32_t number_to_display =
+          crypto_toolbox::g2((uint8_t*)PKa.x.data(), (uint8_t*)PKb.x.data(), Na, Nb);
 
   ConfirmationData data(i.remote_connection_address, i.remote_name, number_to_display);
   i.user_interface_handler->Post(
-      common::BindOnce(&UI::DisplayConfirmValue, common::Unretained(i.user_interface), data));
+          common::BindOnce(&UI::DisplayConfirmValue, common::Unretained(i.user_interface), data));
 
   std::optional<PairingEvent> confirmyesno = WaitUiConfirmYesNo();
   if (!confirmyesno || confirmyesno->ui_value == 0) {
@@ -434,7 +446,8 @@ Stage1ResultOrFailure PairingHandlerLe::SecureConnectionsNumericComparison(const
 }
 
 Stage1ResultOrFailure PairingHandlerLe::SecureConnectionsJustWorks(const InitialInformations& i,
-                                                                   const EcdhPublicKey& PKa, const EcdhPublicKey& PKb) {
+                                                                   const EcdhPublicKey& PKa,
+                                                                   const EcdhPublicKey& PKb) {
   Octet16 Cb, Na, Nb, ra, rb;
 
   ra = rb = {0};

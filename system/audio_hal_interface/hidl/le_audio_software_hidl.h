@@ -55,9 +55,8 @@ bool is_source_hal_enabled();
 bool is_sink_hal_enabled();
 
 class LeAudioTransport {
- public:
-  LeAudioTransport(void (*flush)(void), StreamCallbacks stream_cb,
-                   PcmParameters pcm_config);
+public:
+  LeAudioTransport(void (*flush)(void), StreamCallbacks stream_cb, PcmParameters pcm_config);
 
   BluetoothAudioCtrlAck StartRequest();
   BluetoothAudioCtrlAck StartRequestV2();
@@ -66,8 +65,7 @@ class LeAudioTransport {
 
   void StopRequest();
 
-  bool GetPresentationPosition(uint64_t* remote_delay_report_ns,
-                               uint64_t* total_bytes_processed,
+  bool GetPresentationPosition(uint64_t* remote_delay_report_ns, uint64_t* total_bytes_processed,
                                timespec* data_position);
 
   void MetadataChanged(const source_metadata_t& source_metadata);
@@ -81,18 +79,16 @@ class LeAudioTransport {
   const PcmParameters& LeAudioGetSelectedHalPcmConfig();
 
   void LeAudioSetSelectedHalPcmConfig(uint32_t sample_rate_hz, uint8_t bit_rate,
-                                      uint8_t channels_count,
-                                      uint32_t data_interval);
+                                      uint8_t channels_count, uint32_t data_interval);
 
   bool IsRequestCompletedAfterUpdate(
-      const std::function<
-          std::pair<StartRequestState, bool>(StartRequestState)>& lambda);
+          const std::function<std::pair<StartRequestState, bool>(StartRequestState)>& lambda);
 
   StartRequestState GetStartRequestState(void);
   void ClearStartRequestState(void);
   void SetStartRequestState(StartRequestState state);
 
- private:
+private:
   void (*flush_)(void);
   StreamCallbacks stream_cb_;
   uint16_t remote_delay_report_ms_;
@@ -104,9 +100,8 @@ class LeAudioTransport {
 };
 
 // Sink transport implementation for Le Audio
-class LeAudioSinkTransport
-    : public ::bluetooth::audio::hidl::IBluetoothSinkTransportInstance {
- public:
+class LeAudioSinkTransport : public ::bluetooth::audio::hidl::IBluetoothSinkTransportInstance {
+public:
   LeAudioSinkTransport(SessionType_2_1 session_type, StreamCallbacks stream_cb);
 
   ~LeAudioSinkTransport();
@@ -118,8 +113,7 @@ class LeAudioSinkTransport
 
   void StopRequest() override;
 
-  bool GetPresentationPosition(uint64_t* remote_delay_report_ns,
-                               uint64_t* total_bytes_read,
+  bool GetPresentationPosition(uint64_t* remote_delay_report_ns, uint64_t* total_bytes_read,
                                timespec* data_position) override;
 
   void MetadataChanged(const source_metadata_t& source_metadata) override;
@@ -133,12 +127,10 @@ class LeAudioSinkTransport
   const PcmParameters& LeAudioGetSelectedHalPcmConfig();
 
   void LeAudioSetSelectedHalPcmConfig(uint32_t sample_rate_hz, uint8_t bit_rate,
-                                      uint8_t channels_count,
-                                      uint32_t data_interval);
+                                      uint8_t channels_count, uint32_t data_interval);
 
   bool IsRequestCompletedAfterUpdate(
-      const std::function<
-          std::pair<StartRequestState, bool>(StartRequestState)>& lambda);
+          const std::function<std::pair<StartRequestState, bool>(StartRequestState)>& lambda);
 
   StartRequestState GetStartRequestState(void);
   void ClearStartRequestState(void);
@@ -147,15 +139,13 @@ class LeAudioSinkTransport
   static inline LeAudioSinkTransport* instance = nullptr;
   static inline BluetoothAudioSinkClientInterface* interface = nullptr;
 
- private:
+private:
   LeAudioTransport* transport_;
 };
 
-class LeAudioSourceTransport
-    : public ::bluetooth::audio::hidl::IBluetoothSourceTransportInstance {
- public:
-  LeAudioSourceTransport(SessionType_2_1 session_type,
-                         StreamCallbacks stream_cb);
+class LeAudioSourceTransport : public ::bluetooth::audio::hidl::IBluetoothSourceTransportInstance {
+public:
+  LeAudioSourceTransport(SessionType_2_1 session_type, StreamCallbacks stream_cb);
 
   ~LeAudioSourceTransport();
 
@@ -165,8 +155,7 @@ class LeAudioSourceTransport
 
   void StopRequest() override;
 
-  bool GetPresentationPosition(uint64_t* remote_delay_report_ns,
-                               uint64_t* total_bytes_written,
+  bool GetPresentationPosition(uint64_t* remote_delay_report_ns, uint64_t* total_bytes_written,
                                timespec* data_position) override;
 
   void MetadataChanged(const source_metadata_t& source_metadata) override;
@@ -180,12 +169,10 @@ class LeAudioSourceTransport
   const PcmParameters& LeAudioGetSelectedHalPcmConfig();
 
   void LeAudioSetSelectedHalPcmConfig(uint32_t sample_rate_hz, uint8_t bit_rate,
-                                      uint8_t channels_count,
-                                      uint32_t data_interval);
+                                      uint8_t channels_count, uint32_t data_interval);
 
   bool IsRequestCompletedAfterUpdate(
-      const std::function<
-          std::pair<StartRequestState, bool>(StartRequestState)>& lambda);
+          const std::function<std::pair<StartRequestState, bool>(StartRequestState)>& lambda);
   StartRequestState GetStartRequestState(void);
   void ClearStartRequestState(void);
   void SetStartRequestState(StartRequestState state);
@@ -193,7 +180,7 @@ class LeAudioSourceTransport
   static inline LeAudioSourceTransport* instance = nullptr;
   static inline BluetoothAudioSourceClientInterface* interface = nullptr;
 
- private:
+private:
   LeAudioTransport* transport_;
 };
 

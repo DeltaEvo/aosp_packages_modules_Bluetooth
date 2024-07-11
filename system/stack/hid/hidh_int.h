@@ -63,9 +63,8 @@ typedef struct host_ctb {
   bool reg_flag;
 } tHID_HOST_CTB;
 
-tHID_STATUS hidh_conn_snd_data(uint8_t dhandle, uint8_t trans_type,
-                               uint8_t param, uint16_t data, uint8_t rpt_id,
-                               BT_HDR* buf);
+tHID_STATUS hidh_conn_snd_data(uint8_t dhandle, uint8_t trans_type, uint8_t param, uint16_t data,
+                               uint8_t rpt_id, BT_HDR* buf);
 tHID_STATUS hidh_conn_reg(void);
 void hidh_conn_dereg(void);
 tHID_STATUS hidh_conn_disconnect(uint8_t dhandle);

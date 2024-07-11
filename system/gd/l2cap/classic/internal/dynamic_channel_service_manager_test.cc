@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include <future>
-
 #include <gtest/gtest.h>
+
+#include <future>
 
 #include "common/bind.h"
 #include "l2cap/cid.h"
@@ -33,7 +33,7 @@ namespace internal {
 namespace {
 
 class L2capDynamicServiceManagerTest : public ::testing::Test {
- public:
+public:
   ~L2capDynamicServiceManagerTest() = default;
 
   void OnServiceRegistered(bool expect_success, DynamicChannelManager::RegistrationResult result,
@@ -42,7 +42,7 @@ class L2capDynamicServiceManagerTest : public ::testing::Test {
     service_registered_ = expect_success;
   }
 
- protected:
+protected:
   void SetUp() override {
     thread_ = new os::Thread("test_thread", os::Thread::Priority::NORMAL);
     user_handler_ = new os::Handler(thread_);
@@ -77,10 +77,11 @@ class L2capDynamicServiceManagerTest : public ::testing::Test {
 
 TEST_F(L2capDynamicServiceManagerTest, register_and_unregister_classic_dynamic_channel) {
   DynamicChannelServiceImpl::PendingRegistration pending_registration{
-      .user_handler_ = user_handler_,
-      .security_policy_ = SecurityPolicy::_SDP_ONLY_NO_SECURITY_WHATSOEVER_PLAINTEXT_TRANSPORT_OK,
-      .on_registration_complete_callback_ =
-          user_handler_->BindOnceOn(this, &L2capDynamicServiceManagerTest::OnServiceRegistered, true)};
+          .user_handler_ = user_handler_,
+          .security_policy_ =
+                  SecurityPolicy::_SDP_ONLY_NO_SECURITY_WHATSOEVER_PLAINTEXT_TRANSPORT_OK,
+          .on_registration_complete_callback_ = user_handler_->BindOnceOn(
+                  this, &L2capDynamicServiceManagerTest::OnServiceRegistered, true)};
   Cid cid = kSmpBrCid;
   EXPECT_FALSE(manager_->IsServiceRegistered(cid));
   manager_->Register(cid, std::move(pending_registration));
@@ -93,9 +94,10 @@ TEST_F(L2capDynamicServiceManagerTest, register_and_unregister_classic_dynamic_c
 
 TEST_F(L2capDynamicServiceManagerTest, register_classic_dynamic_channel_bad_cid) {
   DynamicChannelServiceImpl::PendingRegistration pending_registration{
-      .security_policy_ = SecurityPolicy::_SDP_ONLY_NO_SECURITY_WHATSOEVER_PLAINTEXT_TRANSPORT_OK,
-      .on_registration_complete_callback_ =
-          user_handler_->BindOnceOn(this, &L2capDynamicServiceManagerTest::OnServiceRegistered, false)};
+          .security_policy_ =
+                  SecurityPolicy::_SDP_ONLY_NO_SECURITY_WHATSOEVER_PLAINTEXT_TRANSPORT_OK,
+          .on_registration_complete_callback_ = user_handler_->BindOnceOn(
+                  this, &L2capDynamicServiceManagerTest::OnServiceRegistered, false)};
   Cid cid = 0x1000;
   EXPECT_FALSE(manager_->IsServiceRegistered(cid));
   manager_->Register(cid, std::move(pending_registration));

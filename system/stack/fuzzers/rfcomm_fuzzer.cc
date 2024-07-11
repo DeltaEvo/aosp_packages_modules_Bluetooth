@@ -17,6 +17,7 @@
 #include <base/location.h>
 #include <bluetooth/log.h>
 #include <fuzzer/FuzzedDataProvider.h>
+#include <gmock/gmock.h>
 
 #include <cstdint>
 #include <iostream>
@@ -42,8 +43,7 @@ namespace hal {
 class SnoopLogger;
 
 void SnoopLogger::AcceptlistRfcommDlci(uint16_t, uint16_t, uint8_t) {}
-void SnoopLogger::SetRfcommPortOpen(uint16_t, uint16_t, uint8_t, uint16_t,
-                                    bool) {}
+void SnoopLogger::SetRfcommPortOpen(uint16_t, uint16_t, uint8_t, uint16_t, bool) {}
 void SnoopLogger::SetRfcommPortClose(uint16_t, uint16_t, uint8_t, uint16_t) {}
 }  // namespace hal
 
@@ -71,26 +71,23 @@ void port_event_cback(uint32_t code, uint16_t port_handle) {
 }
 
 class FakeBtStack {
- public:
+public:
   FakeBtStack() {
-    test::mock::stack_l2cap_api::L2CA_DataWrite.body = [](uint16_t lcid,
-                                                          BT_HDR* hdr) {
+    test::mock::stack_l2cap_api::L2CA_DataWrite.body = [](uint16_t lcid, BT_HDR* hdr) {
       osi_free(hdr);
       return tL2CAP_DW_RESULT::SUCCESS;
     };
     test::mock::stack_l2cap_api::L2CA_ConnectReq.body =
-        [](uint16_t psm, const RawAddress& raw_address) { return kDummyCID; };
+            [](uint16_t psm, const RawAddress& raw_address) { return kDummyCID; };
 
-    test::mock::stack_l2cap_api::L2CA_DisconnectReq.body = [](uint16_t) {
-      return true;
-    };
+    test::mock::stack_l2cap_api::L2CA_DisconnectReq.body = [](uint16_t) { return true; };
     test::mock::stack_l2cap_api::L2CA_Register.body =
-        [](uint16_t psm, const tL2CAP_APPL_INFO& p_cb_info, bool enable_snoop,
-           tL2CAP_ERTM_INFO* p_ertm_info, uint16_t my_mtu,
-           uint16_t required_remote_mtu, uint16_t sec_level) {
-          appl_info = p_cb_info;
-          return psm;
-        };
+            [](uint16_t psm, const tL2CAP_APPL_INFO& p_cb_info, bool enable_snoop,
+               tL2CAP_ERTM_INFO* p_ertm_info, uint16_t my_mtu, uint16_t required_remote_mtu,
+               uint16_t sec_level) {
+              appl_info = p_cb_info;
+              return psm;
+            };
   }
 
   ~FakeBtStack() {
@@ -102,16 +99,23 @@ class FakeBtStack {
 };
 
 class Fakes {
- public:
+public:
   test::fake::FakeOsi fake_osi;
   FakeBtStack fake_stack;
 };
 
+class Mocks {
+public:
+  ::testing::NiceMock<bluetooth::rfcomm::MockRfcommCallback> mock_rfcomm_callback;
+
+  Mocks() { rfcomm_callback = &mock_rfcomm_callback; }
+
+  ~Mocks() { rfcomm_callback = nullptr; }
+};
+
 }  // namespace
 
-static int Cleanup(uint16_t* server_handle) {
-  return RFCOMM_RemoveServer(*server_handle);
-}
+static int Cleanup(uint16_t* server_handle) { return RFCOMM_RemoveServer(*server_handle); }
 
 static int ServerInit(FuzzedDataProvider* fdp, uint16_t* server_handle) {
   RFCOMM_Init();
@@ -120,13 +124,12 @@ static int ServerInit(FuzzedDataProvider* fdp, uint16_t* server_handle) {
   auto scn = fdp->ConsumeIntegral<uint8_t>();
   auto uuid = fdp->ConsumeIntegral<uint16_t>();
 
-  int status = RFCOMM_CreateConnectionWithSecurity(
-      uuid, scn, true, mtu, kDummyAddr, server_handle, port_mgmt_cback, 0);
+  int status = RFCOMM_CreateConnectionWithSecurity(uuid, scn, true, mtu, kDummyAddr, server_handle,
+                                                   port_mgmt_cback, 0);
   if (status != PORT_SUCCESS) {
     return status;
   }
-  status = PORT_SetEventMaskAndCallback(*server_handle, PORT_EV_RXCHAR,
-                                        port_event_cback);
+  status = PORT_SetEventMaskAndCallback(*server_handle, PORT_EV_RXCHAR, port_event_cback);
   return status;
 }
 
@@ -147,8 +150,7 @@ static void FuzzAsServer(FuzzedDataProvider* fdp) {
   while (fdp->remaining_bytes() > 0) {
     auto size = fdp->ConsumeIntegralInRange<uint16_t>(0, kMaxPacketSize);
     auto bytes = fdp->ConsumeBytes<uint8_t>(size);
-    BT_HDR* hdr =
-        reinterpret_cast<BT_HDR*>(osi_calloc(sizeof(BT_HDR) + bytes.size()));
+    BT_HDR* hdr = reinterpret_cast<BT_HDR*>(osi_calloc(sizeof(BT_HDR) + bytes.size()));
     hdr->len = bytes.size();
     std::copy(bytes.cbegin(), bytes.cend(), hdr->data);
     appl_info.pL2CA_DataInd_Cb(kDummyCID, hdr);
@@ -167,13 +169,12 @@ static int ClientInit(FuzzedDataProvider* fdp, uint16_t* client_handle) {
   auto scn = fdp->ConsumeIntegral<uint8_t>();
   auto uuid = fdp->ConsumeIntegral<uint16_t>();
 
-  int status = RFCOMM_CreateConnectionWithSecurity(
-      uuid, scn, false, mtu, kDummyAddr, client_handle, port_mgmt_cback, 0);
+  int status = RFCOMM_CreateConnectionWithSecurity(uuid, scn, false, mtu, kDummyAddr, client_handle,
+                                                   port_mgmt_cback, 0);
   if (status != PORT_SUCCESS) {
     return status;
   }
-  status = PORT_SetEventMaskAndCallback(*client_handle, PORT_EV_RXCHAR,
-                                        port_event_cback);
+  status = PORT_SetEventMaskAndCallback(*client_handle, PORT_EV_RXCHAR, port_event_cback);
   return status;
 }
 
@@ -196,8 +197,7 @@ static void FuzzAsClient(FuzzedDataProvider* fdp) {
   while (fdp->remaining_bytes() > 0) {
     auto size = fdp->ConsumeIntegralInRange<uint16_t>(0, kMaxPacketSize);
     auto bytes = fdp->ConsumeBytes<uint8_t>(size);
-    BT_HDR* hdr =
-        reinterpret_cast<BT_HDR*>(osi_calloc(sizeof(BT_HDR) + bytes.size()));
+    BT_HDR* hdr = reinterpret_cast<BT_HDR*>(osi_calloc(sizeof(BT_HDR) + bytes.size()));
     hdr->len = bytes.size();
     std::copy(bytes.cbegin(), bytes.cend(), hdr->data);
     appl_info.pL2CA_DataInd_Cb(kDummyCID, hdr);
@@ -208,6 +208,7 @@ static void FuzzAsClient(FuzzedDataProvider* fdp) {
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   auto fakes = std::make_unique<Fakes>();
+  auto mocks = std::make_unique<Mocks>();
 
   FuzzedDataProvider fdp(data, size);
 

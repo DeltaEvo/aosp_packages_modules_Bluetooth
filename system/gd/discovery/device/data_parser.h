@@ -25,14 +25,14 @@ namespace discovery {
 namespace device {
 
 class DataParser {
- public:
+public:
   DataParser(const std::vector<uint8_t>& data);
 
   std::vector<hci::GapData> GetData() const;
   std::vector<hci::GapDataType> GetDataTypes() const;
   size_t GetNumGapData() const;
 
- protected:
+protected:
   std::vector<hci::GapData> gap_data_;
 };
 
