@@ -2017,7 +2017,7 @@ void btm_cont_rswitch_from_handle(uint16_t hci_handle) {
  *
  ******************************************************************************/
 void btm_acl_notif_conn_collision(const RawAddress& bda) {
-  do_in_main_thread(FROM_HERE, base::BindOnce(bta_sys_notify_collision, bda));
+  do_in_main_thread(base::BindOnce(bta_sys_notify_collision, bda));
 }
 
 bool BTM_BLE_IS_RESOLVE_BDA(const RawAddress& x) {

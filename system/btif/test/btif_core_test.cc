@@ -764,18 +764,16 @@ TEST_F(BtifCoreWithControllerTest, debug_dump_unconfigured) {
   auto reading_promise = std::make_unique<std::promise<void>>();
   auto reading_done = reading_promise->get_future();
 
-  do_in_main_thread(FROM_HERE, BindOnce([]() { bluetooth::bqr::DebugDump(write_fd); }));
-  do_in_main_thread(FROM_HERE, BindOnce(
-                                       [](std::unique_ptr<std::promise<void>> done_promise) {
-                                         char line_buf[1024] = "";
-                                         int bytes_read = read(read_fd, line_buf, 1024);
-                                         EXPECT_GT(bytes_read, 0);
-                                         EXPECT_NE(
-                                                 std::string(line_buf).find("Event queue is empty"),
-                                                 std::string::npos);
-                                         done_promise->set_value();
-                                       },
-                                       std::move(reading_promise)));
+  do_in_main_thread(BindOnce([]() { bluetooth::bqr::DebugDump(write_fd); }));
+  do_in_main_thread(BindOnce(
+          [](std::unique_ptr<std::promise<void>> done_promise) {
+            char line_buf[1024] = "";
+            int bytes_read = read(read_fd, line_buf, 1024);
+            EXPECT_GT(bytes_read, 0);
+            EXPECT_NE(std::string(line_buf).find("Event queue is empty"), std::string::npos);
+            done_promise->set_value();
+          },
+          std::move(reading_promise)));
   EXPECT_EQ(std::future_status::ready, reading_done.wait_for(std::chrono::seconds(1)));
   close(write_fd);
   close(read_fd);
@@ -824,8 +822,7 @@ protected:
             .RetiresOnSaturation();
     EXPECT_CALL(hci_, RegisterVendorSpecificEventHandler(VseSubeventCode::BQR_EVENT, _))
             .WillOnce(SaveArg<1>(&this->vse_callback_));
-    do_in_main_thread(FROM_HERE,
-                      BindOnce([]() { bluetooth::bqr::EnableBtQualityReport(get_main()); }));
+    do_in_main_thread(BindOnce([]() { bluetooth::bqr::EnableBtQualityReport(get_main()); }));
     ASSERT_EQ(std::future_status::ready, configuration_done.wait_for(std::chrono::seconds(1)));
   }
 
@@ -838,8 +835,7 @@ protected:
                 EnqueueCommand(_, Matcher<ContextualOnceCallback<void(CommandCompleteView)>>(_)))
             .WillOnce(Invoke(set_promise))
             .RetiresOnSaturation();
-    do_in_main_thread(FROM_HERE,
-                      BindOnce([]() { bluetooth::bqr::EnableBtQualityReport(nullptr); }));
+    do_in_main_thread(BindOnce([]() { bluetooth::bqr::EnableBtQualityReport(nullptr); }));
     ASSERT_EQ(std::future_status::ready, disable_future.wait_for(std::chrono::seconds(1)));
 
     bluetooth::hci::testing::mock_hci_layer_ = nullptr;
@@ -901,18 +897,16 @@ TEST_F(BtifCoreVseWithSocketTest, debug_dump_empty) {
   auto reading_promise = std::make_unique<std::promise<void>>();
   auto reading_done = reading_promise->get_future();
 
-  do_in_main_thread(FROM_HERE, BindOnce([]() { bluetooth::bqr::DebugDump(write_fd); }));
-  do_in_main_thread(FROM_HERE, BindOnce(
-                                       [](std::unique_ptr<std::promise<void>> done_promise) {
-                                         char line_buf[1024] = "";
-                                         int bytes_read = read(read_fd, line_buf, 1024);
-                                         EXPECT_GT(bytes_read, 0);
-                                         EXPECT_NE(
-                                                 std::string(line_buf).find("Event queue is empty"),
-                                                 std::string::npos);
-                                         done_promise->set_value();
-                                       },
-                                       std::move(reading_promise)));
+  do_in_main_thread(BindOnce([]() { bluetooth::bqr::DebugDump(write_fd); }));
+  do_in_main_thread(BindOnce(
+          [](std::unique_ptr<std::promise<void>> done_promise) {
+            char line_buf[1024] = "";
+            int bytes_read = read(read_fd, line_buf, 1024);
+            EXPECT_GT(bytes_read, 0);
+            EXPECT_NE(std::string(line_buf).find("Event queue is empty"), std::string::npos);
+            done_promise->set_value();
+          },
+          std::move(reading_promise)));
   EXPECT_EQ(std::future_status::ready, reading_done.wait_for(std::chrono::seconds(1)));
 }
 
@@ -932,22 +926,21 @@ TEST_F(BtifCoreVseWithSocketTest, send_lmp_ll_msg) {
   auto reading_done = reading_promise->get_future();
 
   static int write_fd = write_fd_;
-  do_in_main_thread(FROM_HERE,
-                    BindOnce([]() { bluetooth::bqr::testing::set_lmp_trace_log_fd(write_fd); }));
+  do_in_main_thread(BindOnce([]() { bluetooth::bqr::testing::set_lmp_trace_log_fd(write_fd); }));
   vse_callback_(view);
 
-  do_in_main_thread(FROM_HERE, BindOnce(
-                                       [](std::unique_ptr<std::promise<void>> done_promise) {
-                                         char line_buf[1024] = "";
-                                         std::string line;
-                                         int bytes_read = read(read_fd, line_buf, 1024);
-                                         EXPECT_GT(bytes_read, 0);
-                                         line = std::string(line_buf);
-                                         EXPECT_NE(line.find("Handle: 0x0123"), std::string::npos);
-                                         EXPECT_NE(line.find("data"), std::string::npos);
-                                         done_promise->set_value();
-                                       },
-                                       std::move(reading_promise)));
+  do_in_main_thread(BindOnce(
+          [](std::unique_ptr<std::promise<void>> done_promise) {
+            char line_buf[1024] = "";
+            std::string line;
+            int bytes_read = read(read_fd, line_buf, 1024);
+            EXPECT_GT(bytes_read, 0);
+            line = std::string(line_buf);
+            EXPECT_NE(line.find("Handle: 0x0123"), std::string::npos);
+            EXPECT_NE(line.find("data"), std::string::npos);
+            done_promise->set_value();
+          },
+          std::move(reading_promise)));
   EXPECT_EQ(std::future_status::ready, reading_done.wait_for(std::chrono::seconds(1)));
 }
 
@@ -966,22 +959,21 @@ TEST_F(BtifCoreVseWithSocketTest, debug_dump_a2dp_choppy_no_payload) {
   auto reading_promise = std::make_unique<std::promise<void>>();
   auto reading_done = reading_promise->get_future();
 
-  do_in_main_thread(FROM_HERE, BindOnce([]() { bluetooth::bqr::DebugDump(write_fd); }));
-  do_in_main_thread(FROM_HERE, BindOnce(
-                                       [](std::unique_ptr<std::promise<void>> done_promise) {
-                                         char line_buf[1024] = "";
-                                         std::string line;
-                                         int bytes_read = read(read_fd, line_buf, 1024);
-                                         EXPECT_GT(bytes_read, 0);
-                                         line = std::string(line_buf);
-                                         EXPECT_EQ(line.find("Event queue is empty"),
-                                                   std::string::npos);
-                                         EXPECT_NE(line.find("Handle: 0x0123"), std::string::npos);
-                                         EXPECT_NE(line.find("UndFlow: 15"), std::string::npos);
-                                         EXPECT_NE(line.find("A2DP Choppy"), std::string::npos);
-                                         done_promise->set_value();
-                                       },
-                                       std::move(reading_promise)));
+  do_in_main_thread(BindOnce([]() { bluetooth::bqr::DebugDump(write_fd); }));
+  do_in_main_thread(BindOnce(
+          [](std::unique_ptr<std::promise<void>> done_promise) {
+            char line_buf[1024] = "";
+            std::string line;
+            int bytes_read = read(read_fd, line_buf, 1024);
+            EXPECT_GT(bytes_read, 0);
+            line = std::string(line_buf);
+            EXPECT_EQ(line.find("Event queue is empty"), std::string::npos);
+            EXPECT_NE(line.find("Handle: 0x0123"), std::string::npos);
+            EXPECT_NE(line.find("UndFlow: 15"), std::string::npos);
+            EXPECT_NE(line.find("A2DP Choppy"), std::string::npos);
+            done_promise->set_value();
+          },
+          std::move(reading_promise)));
   EXPECT_EQ(std::future_status::ready, reading_done.wait_for(std::chrono::seconds(1)));
 }
 
@@ -1000,21 +992,20 @@ TEST_F(BtifCoreVseWithSocketTest, debug_dump_a2dp_choppy) {
   auto reading_promise = std::make_unique<std::promise<void>>();
   auto reading_done = reading_promise->get_future();
 
-  do_in_main_thread(FROM_HERE, BindOnce([]() { bluetooth::bqr::DebugDump(write_fd); }));
-  do_in_main_thread(FROM_HERE, BindOnce(
-                                       [](std::unique_ptr<std::promise<void>> done_promise) {
-                                         char line_buf[1024] = "";
-                                         std::string line;
-                                         int bytes_read = read(read_fd, line_buf, 1024);
-                                         EXPECT_GT(bytes_read, 0);
-                                         line = std::string(line_buf);
-                                         EXPECT_EQ(line.find("Event queue is empty"),
-                                                   std::string::npos);
-                                         EXPECT_NE(line.find("Handle: 0x0123"), std::string::npos);
-                                         EXPECT_NE(line.find("UndFlow: 15"), std::string::npos);
-                                         EXPECT_NE(line.find("A2DP Choppy"), std::string::npos);
-                                         done_promise->set_value();
-                                       },
-                                       std::move(reading_promise)));
+  do_in_main_thread(BindOnce([]() { bluetooth::bqr::DebugDump(write_fd); }));
+  do_in_main_thread(BindOnce(
+          [](std::unique_ptr<std::promise<void>> done_promise) {
+            char line_buf[1024] = "";
+            std::string line;
+            int bytes_read = read(read_fd, line_buf, 1024);
+            EXPECT_GT(bytes_read, 0);
+            line = std::string(line_buf);
+            EXPECT_EQ(line.find("Event queue is empty"), std::string::npos);
+            EXPECT_NE(line.find("Handle: 0x0123"), std::string::npos);
+            EXPECT_NE(line.find("UndFlow: 15"), std::string::npos);
+            EXPECT_NE(line.find("A2DP Choppy"), std::string::npos);
+            done_promise->set_value();
+          },
+          std::move(reading_promise)));
   EXPECT_EQ(std::future_status::ready, reading_done.wait_for(std::chrono::seconds(1)));
 }

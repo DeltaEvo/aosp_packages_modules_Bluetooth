@@ -50,8 +50,7 @@ class CsipSetCoordinatorServiceInterfaceImpl : public CsisClientInterface,
   void Init(CsisClientCallbacks* callbacks) override {
     this->callbacks_ = callbacks;
 
-    do_in_main_thread(FROM_HERE,
-                      Bind(&CsisClient::Initialize, this,
+    do_in_main_thread(Bind(&CsisClient::Initialize, this,
                            jni_thread_wrapper(Bind(&btif_storage_load_bonded_csis_devices))));
     /* It might be not yet initialized, but setting this flag here is safe,
      * because other calls will check this and the native instance
@@ -67,7 +66,7 @@ class CsipSetCoordinatorServiceInterfaceImpl : public CsisClientInterface,
       return;
     }
 
-    do_in_main_thread(FROM_HERE, Bind(&CsisClient::Connect, Unretained(CsisClient::Get()), addr));
+    do_in_main_thread(Bind(&CsisClient::Connect, Unretained(CsisClient::Get()), addr));
   }
 
   void Disconnect(const RawAddress& addr) override {
@@ -78,8 +77,7 @@ class CsipSetCoordinatorServiceInterfaceImpl : public CsisClientInterface,
       return;
     }
 
-    do_in_main_thread(FROM_HERE,
-                      Bind(&CsisClient::Disconnect, Unretained(CsisClient::Get()), addr));
+    do_in_main_thread(Bind(&CsisClient::Disconnect, Unretained(CsisClient::Get()), addr));
   }
 
   void RemoveDevice(const RawAddress& addr) override {
@@ -93,8 +91,7 @@ class CsipSetCoordinatorServiceInterfaceImpl : public CsisClientInterface,
       return;
     }
 
-    do_in_main_thread(FROM_HERE,
-                      Bind(&CsisClient::RemoveDevice, Unretained(CsisClient::Get()), addr));
+    do_in_main_thread(Bind(&CsisClient::RemoveDevice, Unretained(CsisClient::Get()), addr));
     /* Clear storage */
     do_in_jni_thread(Bind(&btif_storage_remove_csis_device, addr));
   }
@@ -107,8 +104,8 @@ class CsipSetCoordinatorServiceInterfaceImpl : public CsisClientInterface,
       return;
     }
 
-    do_in_main_thread(FROM_HERE, Bind(&CsisClient::LockGroup, Unretained(CsisClient::Get()),
-                                      group_id, lock, base::DoNothing()));
+    do_in_main_thread(Bind(&CsisClient::LockGroup, Unretained(CsisClient::Get()), group_id, lock,
+                           base::DoNothing()));
   }
 
   void Cleanup(void) override {
@@ -120,7 +117,7 @@ class CsipSetCoordinatorServiceInterfaceImpl : public CsisClientInterface,
     }
 
     initialized = false;
-    do_in_main_thread(FROM_HERE, Bind(&CsisClient::CleanUp));
+    do_in_main_thread(Bind(&CsisClient::CleanUp));
   }
 
   void OnConnectionState(const RawAddress& addr, ConnectionState state) override {

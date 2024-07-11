@@ -156,7 +156,7 @@ public:
 
   void GetSongInfo(SongInfoCallback info_cb) override {
     auto cb_lambda = [](SongInfoCallback cb, SongInfo data) {
-      do_in_main_thread(FROM_HERE, base::BindOnce(cb, data));
+      do_in_main_thread(base::BindOnce(cb, data));
     };
 
     auto bound_cb = base::Bind(cb_lambda, info_cb);
@@ -167,7 +167,7 @@ public:
 
   void GetPlayStatus(PlayStatusCallback status_cb) override {
     auto cb_lambda = [](PlayStatusCallback cb, PlayStatus status) {
-      do_in_main_thread(FROM_HERE, base::BindOnce(cb, status));
+      do_in_main_thread(base::BindOnce(cb, status));
     };
 
     auto bound_cb = base::Bind(cb_lambda, status_cb);
@@ -179,7 +179,7 @@ public:
   void GetNowPlayingList(NowPlayingCallback now_playing_cb) override {
     auto cb_lambda = [](NowPlayingCallback cb, std::string curr_media_id,
                         std::vector<SongInfo> song_list) {
-      do_in_main_thread(FROM_HERE, base::BindOnce(cb, curr_media_id, std::move(song_list)));
+      do_in_main_thread(base::BindOnce(cb, curr_media_id, std::move(song_list)));
     };
 
     auto bound_cb = base::Bind(cb_lambda, now_playing_cb);
@@ -191,7 +191,7 @@ public:
   void GetMediaPlayerList(MediaListCallback list_cb) override {
     auto cb_lambda = [](MediaListCallback cb, uint16_t curr_player,
                         std::vector<MediaPlayerInfo> player_list) {
-      do_in_main_thread(FROM_HERE, base::BindOnce(cb, curr_player, std::move(player_list)));
+      do_in_main_thread(base::BindOnce(cb, curr_player, std::move(player_list)));
     };
 
     auto bound_cb = base::Bind(cb_lambda, list_cb);
@@ -203,7 +203,7 @@ public:
   void GetFolderItems(uint16_t player_id, std::string media_id,
                       FolderItemsCallback folder_cb) override {
     auto cb_lambda = [](FolderItemsCallback cb, std::vector<ListItem> item_list) {
-      do_in_main_thread(FROM_HERE, base::BindOnce(cb, std::move(item_list)));
+      do_in_main_thread(base::BindOnce(cb, std::move(item_list)));
     };
 
     auto bound_cb = base::Bind(cb_lambda, folder_cb);
@@ -215,7 +215,7 @@ public:
   void SetBrowsedPlayer(uint16_t player_id, SetBrowsedPlayerCallback browse_cb) override {
     auto cb_lambda = [](SetBrowsedPlayerCallback cb, bool success, std::string root_id,
                         uint32_t num_items) {
-      do_in_main_thread(FROM_HERE, base::BindOnce(cb, success, root_id, num_items));
+      do_in_main_thread(base::BindOnce(cb, success, root_id, num_items));
     };
 
     auto bound_cb = base::Bind(cb_lambda, browse_cb);
@@ -260,7 +260,7 @@ public:
 
   void DeviceConnected(const RawAddress& bdaddr, VolumeChangedCb cb) override {
     auto cb_lambda = [](VolumeChangedCb cb, int8_t volume) {
-      do_in_main_thread(FROM_HERE, base::BindOnce(cb, volume));
+      do_in_main_thread(base::BindOnce(cb, volume));
     };
 
     auto bound_cb = base::Bind(cb_lambda, cb);
@@ -293,7 +293,7 @@ public:
   void ListPlayerSettings(ListPlayerSettingsCallback cb) override {
     auto cb_lambda = [](const ListPlayerSettingsCallback& cb,
                         std::vector<PlayerAttribute> attributes) {
-      do_in_main_thread(FROM_HERE, base::BindOnce(cb, std::move(attributes)));
+      do_in_main_thread(base::BindOnce(cb, std::move(attributes)));
     };
 
     auto bound_cb = base::Bind(cb_lambda, cb);
@@ -306,7 +306,7 @@ public:
                                ListPlayerSettingValuesCallback cb) override {
     auto cb_lambda = [](const ListPlayerSettingValuesCallback& cb, PlayerAttribute setting,
                         std::vector<uint8_t> values) {
-      do_in_main_thread(FROM_HERE, base::BindOnce(cb, setting, std::move(values)));
+      do_in_main_thread(base::BindOnce(cb, setting, std::move(values)));
     };
 
     auto bound_cb = base::Bind(cb_lambda, cb);
@@ -319,7 +319,7 @@ public:
                                     GetCurrentPlayerSettingValueCallback cb) override {
     auto cb_lambda = [](const GetCurrentPlayerSettingValueCallback& cb,
                         std::vector<PlayerAttribute> attributes, std::vector<uint8_t> values) {
-      do_in_main_thread(FROM_HERE, base::BindOnce(cb, std::move(attributes), std::move(values)));
+      do_in_main_thread(base::BindOnce(cb, std::move(attributes), std::move(values)));
     };
 
     auto bound_cb = base::Bind(cb_lambda, cb);
@@ -331,7 +331,7 @@ public:
   void SetPlayerSettings(std::vector<PlayerAttribute> attributes, std::vector<uint8_t> values,
                          SetPlayerSettingValueCallback cb) override {
     auto cb_lambda = [](const SetPlayerSettingValueCallback& cb, bool success) {
-      do_in_main_thread(FROM_HERE, base::BindOnce(cb, success));
+      do_in_main_thread(base::BindOnce(cb, success));
     };
 
     auto bound_cb = base::Bind(cb_lambda, cb);
@@ -478,8 +478,8 @@ void AvrcpService::SendMediaUpdate(bool track_changed, bool play_state, bool que
   // This function may be called on any thread, we need to make sure that the
   // device update happens on the main thread.
   for (const auto& device : instance_->connection_handler_->GetListOfDevices()) {
-    do_in_main_thread(FROM_HERE, base::BindOnce(&Device::SendMediaUpdate, device.get()->Get(),
-                                                track_changed, play_state, queue));
+    do_in_main_thread(base::BindOnce(&Device::SendMediaUpdate, device.get()->Get(), track_changed,
+                                     play_state, queue));
   }
 }
 
@@ -489,8 +489,8 @@ void AvrcpService::SendFolderUpdate(bool available_players, bool addressed_playe
 
   // Ensure that the update is posted to the correct thread
   for (const auto& device : instance_->connection_handler_->GetListOfDevices()) {
-    do_in_main_thread(FROM_HERE, base::BindOnce(&Device::SendFolderUpdate, device.get()->Get(),
-                                                available_players, addressed_players, uids));
+    do_in_main_thread(base::BindOnce(&Device::SendFolderUpdate, device.get()->Get(),
+                                     available_players, addressed_players, uids));
   }
 }
 
@@ -522,8 +522,8 @@ void AvrcpService::SendPlayerSettingsChanged(std::vector<PlayerAttribute> attrib
 
   // Ensure that the update is posted to the correct thread
   for (const auto& device : instance_->connection_handler_->GetListOfDevices()) {
-    do_in_main_thread(FROM_HERE, base::BindOnce(&Device::HandlePlayerSettingChanged,
-                                                device.get()->Get(), attributes, values));
+    do_in_main_thread(base::BindOnce(&Device::HandlePlayerSettingChanged, device.get()->Get(),
+                                     attributes, values));
   }
 }
 
@@ -551,38 +551,37 @@ void AvrcpService::ServiceInterfaceImpl::Init(MediaInterface* media_interface,
   log::assert_that(instance_ == nullptr, "assert failed: instance_ == nullptr");
   instance_ = new AvrcpService();
 
-  do_in_main_thread(FROM_HERE,
-                    base::BindOnce(&AvrcpService::Init, base::Unretained(instance_),
+  do_in_main_thread(base::BindOnce(&AvrcpService::Init, base::Unretained(instance_),
                                    media_interface, volume_interface, player_settings_interface));
 }
 
 void AvrcpService::ServiceInterfaceImpl::RegisterBipServer(int psm) {
   std::lock_guard<std::mutex> lock(service_interface_lock_);
   log::assert_that(instance_ != nullptr, "assert failed: instance_ != nullptr");
-  do_in_main_thread(FROM_HERE, base::BindOnce(&AvrcpService::RegisterBipServer,
-                                              base::Unretained(instance_), psm));
+  do_in_main_thread(
+          base::BindOnce(&AvrcpService::RegisterBipServer, base::Unretained(instance_), psm));
 }
 
 void AvrcpService::ServiceInterfaceImpl::UnregisterBipServer() {
   std::lock_guard<std::mutex> lock(service_interface_lock_);
   log::assert_that(instance_ != nullptr, "assert failed: instance_ != nullptr");
-  do_in_main_thread(FROM_HERE, base::BindOnce(&AvrcpService::UnregisterBipServer,
-                                              base::Unretained(instance_)));
+  do_in_main_thread(
+          base::BindOnce(&AvrcpService::UnregisterBipServer, base::Unretained(instance_)));
 }
 
 bool AvrcpService::ServiceInterfaceImpl::ConnectDevice(const RawAddress& bdaddr) {
   std::lock_guard<std::mutex> lock(service_interface_lock_);
   log::assert_that(instance_ != nullptr, "assert failed: instance_ != nullptr");
-  do_in_main_thread(FROM_HERE, base::BindOnce(&AvrcpService::ConnectDevice,
-                                              base::Unretained(instance_), bdaddr));
+  do_in_main_thread(
+          base::BindOnce(&AvrcpService::ConnectDevice, base::Unretained(instance_), bdaddr));
   return true;
 }
 
 bool AvrcpService::ServiceInterfaceImpl::DisconnectDevice(const RawAddress& bdaddr) {
   std::lock_guard<std::mutex> lock(service_interface_lock_);
   log::assert_that(instance_ != nullptr, "assert failed: instance_ != nullptr");
-  do_in_main_thread(FROM_HERE, base::BindOnce(&AvrcpService::DisconnectDevice,
-                                              base::Unretained(instance_), bdaddr));
+  do_in_main_thread(
+          base::BindOnce(&AvrcpService::DisconnectDevice, base::Unretained(instance_), bdaddr));
   return true;
 }
 
@@ -611,8 +610,8 @@ void AvrcpService::ServiceInterfaceImpl::SetBipClientStatus(const RawAddress& bd
                                                             bool connected) {
   std::lock_guard<std::mutex> lock(service_interface_lock_);
   log::assert_that(instance_ != nullptr, "assert failed: instance_ != nullptr");
-  do_in_main_thread(FROM_HERE, base::BindOnce(&AvrcpService::SetBipClientStatus,
-                                              base::Unretained(instance_), bdaddr, connected));
+  do_in_main_thread(base::BindOnce(&AvrcpService::SetBipClientStatus, base::Unretained(instance_),
+                                   bdaddr, connected));
 }
 
 bool AvrcpService::ServiceInterfaceImpl::Cleanup() {
@@ -622,7 +621,7 @@ bool AvrcpService::ServiceInterfaceImpl::Cleanup() {
     return false;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(&AvrcpService::Cleanup, base::Owned(instance_)));
+  do_in_main_thread(base::BindOnce(&AvrcpService::Cleanup, base::Owned(instance_)));
 
   // Setting instance to nullptr here is fine since it will be deleted on the
   // other thread.

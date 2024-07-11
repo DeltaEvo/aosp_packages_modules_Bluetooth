@@ -159,12 +159,12 @@ void hearing_aid_data_cb(tUIPC_CH_ID, tUIPC_EVENT event) {
       UIPC_Ioctl(*uipc_hearing_aid, UIPC_CH_ID_AV_AUDIO, UIPC_SET_READ_POLL_TMO,
                  reinterpret_cast<void*>(0));
 
-      do_in_main_thread(FROM_HERE, base::BindOnce(start_audio_ticks));
+      do_in_main_thread(base::BindOnce(start_audio_ticks));
       break;
     case UIPC_CLOSE_EVT:
       log::info("UIPC_CLOSE_EVT");
       hearing_aid_send_ack(HEARING_AID_CTRL_ACK_SUCCESS);
-      do_in_main_thread(FROM_HERE, base::BindOnce(stop_audio_ticks));
+      do_in_main_thread(base::BindOnce(stop_audio_ticks));
       break;
     default:
       log::error("Hearing Aid audio data event not recognized: {}", event);
@@ -340,14 +340,14 @@ bool hearing_aid_on_resume_req(bool start_media_task) {
   }
   bt_status_t status;
   if (start_media_task) {
-    status = do_in_main_thread(
-            FROM_HERE, base::BindOnce(&HearingAidAudioReceiver::OnAudioResume,
-                                      base::Unretained(localAudioReceiver), start_audio_ticks));
+    status = do_in_main_thread(base::BindOnce(&HearingAidAudioReceiver::OnAudioResume,
+                                              base::Unretained(localAudioReceiver),
+                                              start_audio_ticks));
   } else {
     auto start_dummy_ticks = []() { log::info("start_audio_ticks: waiting for data path opened"); };
-    status = do_in_main_thread(
-            FROM_HERE, base::BindOnce(&HearingAidAudioReceiver::OnAudioResume,
-                                      base::Unretained(localAudioReceiver), start_dummy_ticks));
+    status = do_in_main_thread(base::BindOnce(&HearingAidAudioReceiver::OnAudioResume,
+                                              base::Unretained(localAudioReceiver),
+                                              start_dummy_ticks));
   }
   if (status != BT_STATUS_SUCCESS) {
     log::error("HEARING_AID_CTRL_CMD_START: do_in_main_thread err={}", status);
@@ -361,9 +361,9 @@ bool hearing_aid_on_suspend_req() {
     log::error("HEARING_AID_CTRL_CMD_SUSPEND: audio receiver not started");
     return false;
   }
-  bt_status_t status = do_in_main_thread(
-          FROM_HERE, base::BindOnce(&HearingAidAudioReceiver::OnAudioSuspend,
-                                    base::Unretained(localAudioReceiver), stop_audio_ticks));
+  bt_status_t status =
+          do_in_main_thread(base::BindOnce(&HearingAidAudioReceiver::OnAudioSuspend,
+                                           base::Unretained(localAudioReceiver), stop_audio_ticks));
   if (status != BT_STATUS_SUCCESS) {
     log::error("HEARING_AID_CTRL_CMD_SUSPEND: do_in_main_thread err={}", status);
     return false;

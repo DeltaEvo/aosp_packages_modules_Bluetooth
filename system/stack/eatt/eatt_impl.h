@@ -242,8 +242,7 @@ struct eatt_impl {
 
   void upper_tester_delay_connect(const RawAddress& bda, int timeout_ms) {
     bt_status_t status =
-            do_in_main_thread_delayed(FROM_HERE,
-                                      base::BindOnce(&eatt_impl::upper_tester_delay_connect_cb,
+            do_in_main_thread_delayed(base::BindOnce(&eatt_impl::upper_tester_delay_connect_cb,
                                                      weak_factory_.GetWeakPtr(), bda),
                                       std::chrono::milliseconds(timeout_ms));
 
@@ -284,7 +283,6 @@ struct eatt_impl {
 
     if (stack_config_get_interface()->get_pts_l2cap_ecoc_reconfigure()) {
       bt_status_t status = do_in_main_thread_delayed(
-              FROM_HERE,
               base::BindOnce(&eatt_impl::reconfigure_all, weak_factory_.GetWeakPtr(), bda, 300),
               std::chrono::seconds(4));
       log::info("Scheduled ECOC reconfiguration with status: {}", (int)status);
@@ -431,8 +429,7 @@ struct eatt_impl {
 
     if (stack_config_get_interface()->get_pts_l2cap_ecoc_reconfigure()) {
       /* Upper tester for L2CAP - schedule sending data */
-      do_in_main_thread_delayed(FROM_HERE,
-                                base::BindOnce(&eatt_impl::upper_tester_send_data_if_needed,
+      do_in_main_thread_delayed(base::BindOnce(&eatt_impl::upper_tester_send_data_if_needed,
                                                weak_factory_.GetWeakPtr(), bda, lcid),
                                 std::chrono::seconds(1));
     }

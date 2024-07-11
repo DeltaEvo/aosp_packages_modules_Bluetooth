@@ -97,17 +97,17 @@ bluetooth::common::MessageLoopThread message_loop_thread("test message loop");
 bluetooth::common::MessageLoopThread* get_main_thread() { return &message_loop_thread; }
 void invoke_switch_buffer_size_cb(bool is_low_latency_buffer_size) {}
 
-bt_status_t do_in_main_thread(const base::Location& from_here, base::OnceClosure task) {
+bt_status_t do_in_main_thread(base::OnceClosure task) {
   // Wrap the task with task counter so we could later know if there are
   // any callbacks scheduled and we should wait before performing some actions
   if (!message_loop_thread.DoInThread(
-              from_here, base::BindOnce(
+              FROM_HERE, base::BindOnce(
                                  [](base::OnceClosure task, std::atomic<int>& num_async_tasks) {
                                    std::move(task).Run();
                                    num_async_tasks--;
                                  },
                                  std::move(task), std::ref(num_async_tasks)))) {
-    log::error("failed from {}", from_here.ToString());
+    log::error("failed to post task to task runner!");
     return BT_STATUS_FAIL;
   }
   num_async_tasks++;
