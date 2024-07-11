@@ -1007,6 +1007,43 @@ public:
   void SetInCall(bool in_call) override {
     log::debug("in_call: {}", in_call);
     in_call_ = in_call;
+
+    if (!com::android::bluetooth::flags::leaudio_speed_up_reconfiguration_between_call()) {
+      log::debug("leaudio_speed_up_reconfiguration_between_call flag is not enabled");
+      return;
+    }
+
+    if (active_group_id_ == bluetooth::groups::kGroupUnknown) {
+      return;
+    }
+
+    LeAudioDeviceGroup* group = aseGroups_.FindById(active_group_id_);
+    if (!group || !group->IsStreaming()) {
+      return;
+    }
+
+    bool reconfigure = false;
+
+    if (in_call_) {
+      auto audio_set_conf = group->GetConfiguration(LeAudioContextType::CONVERSATIONAL);
+      if (audio_set_conf && group->IsGroupConfiguredTo(*audio_set_conf)) {
+        log::info("Call is coming, but CIG already set for a call");
+        return;
+      }
+      log::info("Call is coming, speed up reconfiguration for a call");
+      reconfigure = true;
+    } else {
+      if (configuration_context_type_ == LeAudioContextType::CONVERSATIONAL) {
+        log::info("Call is ended, speed up reconfiguration for media");
+        local_metadata_context_types_.sink.unset(LeAudioContextType::CONVERSATIONAL);
+        local_metadata_context_types_.source.unset(LeAudioContextType::CONVERSATIONAL);
+        reconfigure = true;
+      }
+    }
+
+    if (reconfigure) {
+      initReconfiguration(group, configuration_context_type_);
+    }
   }
 
   bool IsInCall() override { return in_call_; }
