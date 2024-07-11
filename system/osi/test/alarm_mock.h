@@ -14,20 +14,6 @@ public:
                void(alarm_t* alarm, uint64_t interval_ms, alarm_callback_t cb, void* data));
   MOCK_METHOD1(AlarmIsScheduled, bool(const alarm_t*));
 
-  alarm_t* AlarmNewImpl(const char* name) {
-    AlarmNew(name);
-    // We must return something from alarm_new in tests, if we just return null,
-    // unique_ptr will misbehave. Just reserve few bits they will be freed in
-    // AlarmFreeImpl
-    return (alarm_t*)new uint8_t[30];
-  }
-
-  void AlarmFreeImpl(alarm_t* alarm) {
-    uint8_t* ptr = (uint8_t*)alarm;
-    delete[] ptr;
-    return AlarmFree(alarm);
-  }
-
   static inline AlarmMock* Get() {
     if (!localAlarmMock) {
       localAlarmMock = std::make_unique<AlarmMock>();
@@ -43,9 +29,9 @@ private:
 
 std::unique_ptr<AlarmMock> AlarmMock::localAlarmMock;
 
-alarm_t* alarm_new(const char* name) { return AlarmMock::Get()->AlarmNewImpl(name); }
+alarm_t* alarm_new(const char* name) { return AlarmMock::Get()->AlarmNew(name); }
 
-void alarm_free(alarm_t* alarm) { AlarmMock::Get()->AlarmFreeImpl(alarm); }
+void alarm_free(alarm_t* alarm) { AlarmMock::Get()->AlarmFree(alarm); }
 
 void alarm_set_on_mloop(alarm_t* alarm, uint64_t interval_ms, alarm_callback_t cb, void* data) {
   AlarmMock::Get()->AlarmSetOnMloop(alarm, interval_ms, cb, data);

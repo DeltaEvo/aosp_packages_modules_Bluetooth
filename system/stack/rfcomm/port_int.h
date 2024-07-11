@@ -107,7 +107,7 @@ typedef struct {
  * RFCOMM Port Connection Control Block
  */
 typedef struct {
-  uint8_t state; /* Current state of the connection */
+  tRFC_PORT_STATE state; /* Current state of the connection */
 
 #define RFC_RSP_PN 0x01
 #define RFC_RSP_RPN_REPLY 0x02

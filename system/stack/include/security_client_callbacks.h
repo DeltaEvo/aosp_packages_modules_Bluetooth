@@ -23,6 +23,7 @@
 #include "stack/include/bt_name.h"
 #include "stack/include/bt_octets.h"
 #include "stack/include/btm_ble_sec_api_types.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/hci_error_code.h"
 #include "types/bt_transport.h"
 #include "types/raw_address.h"
@@ -71,7 +72,7 @@ typedef void(tBTM_AUTH_COMPLETE_CALLBACK)(const RawAddress& bd_addr, DEV_CLASS d
 /* Request SIRK verification for found member. Parameters are
  *              BD Address of remote
  */
-typedef uint8_t(tBTM_SIRK_VERIFICATION_CALLBACK)(const RawAddress& bd_addr);
+typedef tBTM_STATUS(tBTM_SIRK_VERIFICATION_CALLBACK)(const RawAddress& bd_addr);
 
 struct tBTM_APPL_INFO {
   tBTM_PIN_CALLBACK* p_pin_callback{nullptr};
