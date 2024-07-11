@@ -390,10 +390,11 @@ public:
         max_connected_peers_(kDefaultMaxConnectedAudioDevices) {}
   ~BtifAvSource();
 
-  bt_status_t Init(btav_source_callbacks_t* callbacks, int max_connected_audio_devices,
-                   const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
-                   const std::vector<btav_a2dp_codec_config_t>& offloading_preference,
-                   std::vector<btav_a2dp_codec_info_t>* supported_codecs);
+  void Init(btav_source_callbacks_t* callbacks, int max_connected_audio_devices,
+            const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
+            const std::vector<btav_a2dp_codec_config_t>& offloading_preference,
+            std::vector<btav_a2dp_codec_info_t>* supported_codecs,
+            std::promise<bt_status_t> complete_promise);
   void Cleanup();
 
   btav_source_callbacks_t* Callbacks() { return callbacks_; }
@@ -1182,14 +1183,13 @@ bool BtifAvPeer::IsStreaming() const {
 
 BtifAvSource::~BtifAvSource() { CleanupAllPeers(); }
 
-bt_status_t BtifAvSource::Init(btav_source_callbacks_t* callbacks, int max_connected_audio_devices,
-                               const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
-                               const std::vector<btav_a2dp_codec_config_t>& offloading_preference,
-                               std::vector<btav_a2dp_codec_info_t>* supported_codecs) {
+void BtifAvSource::Init(btav_source_callbacks_t* callbacks, int max_connected_audio_devices,
+                        const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
+                        const std::vector<btav_a2dp_codec_config_t>& offloading_preference,
+                        std::vector<btav_a2dp_codec_info_t>* supported_codecs,
+                        std::promise<bt_status_t> complete_promise) {
   log::info("max_connected_audio_devices={}", max_connected_audio_devices);
-  if (enabled_) {
-    return BT_STATUS_SUCCESS;
-  }
+  Cleanup();
   CleanupAllPeers();
   max_connected_peers_ = max_connected_audio_devices;
 
@@ -1209,11 +1209,12 @@ bt_status_t BtifAvSource::Init(btav_source_callbacks_t* callbacks, int max_conne
   bta_av_co_init(codec_priorities, supported_codecs);
 
   if (!btif_a2dp_source_init()) {
-    return BT_STATUS_FAIL;
+    complete_promise.set_value(BT_STATUS_FAIL);
+    return;
   }
   enabled_ = true;
   btif_enable_service(BTA_A2DP_SOURCE_SERVICE_ID);
-  return BT_STATUS_SUCCESS;
+  complete_promise.set_value(BT_STATUS_SUCCESS);
 }
 
 void BtifAvSource::Cleanup() {
@@ -1226,10 +1227,8 @@ void BtifAvSource::Cleanup() {
   btif_queue_cleanup(UUID_SERVCLASS_AUDIO_SOURCE);
 
   std::promise<void> peer_ready_promise;
-  do_in_main_thread(base::BindOnce(base::IgnoreResult(&BtifAvSource::SetActivePeer),
-                                   base::Unretained(&btif_av_source), RawAddress::kEmpty,
-                                   std::move(peer_ready_promise)));
-  do_in_main_thread(base::BindOnce(&btif_a2dp_source_cleanup));
+  btif_av_source.SetActivePeer(RawAddress::kEmpty, std::move(peer_ready_promise));
+  btif_a2dp_source_cleanup();
 
   btif_disable_service(BTA_A2DP_SOURCE_SERVICE_ID);
   CleanupAllPeers();
@@ -3446,8 +3445,19 @@ bt_status_t btif_av_source_init(btav_source_callbacks_t* callbacks, int max_conn
                                 const std::vector<btav_a2dp_codec_config_t>& offloading_preference,
                                 std::vector<btav_a2dp_codec_info_t>* supported_codecs) {
   log::info("");
-  return btif_av_source.Init(callbacks, max_connected_audio_devices, codec_priorities,
-                             offloading_preference, supported_codecs);
+  std::promise<bt_status_t> init_complete_promise;
+  std::future<bt_status_t> init_complete_promise_future = init_complete_promise.get_future();
+  const auto& status = do_in_main_thread(
+          base::BindOnce(&BtifAvSource::Init, base::Unretained(&btif_av_source), callbacks,
+                         max_connected_audio_devices, codec_priorities, offloading_preference,
+                         supported_codecs, std::move(init_complete_promise)));
+  if (status == BT_STATUS_SUCCESS) {
+    init_complete_promise_future.wait();
+    return init_complete_promise_future.get();
+  } else {
+    log::warn("Failed to init source profile");
+    return status;
+  }
 }
 
 // Initializes the AV interface for sink mode
