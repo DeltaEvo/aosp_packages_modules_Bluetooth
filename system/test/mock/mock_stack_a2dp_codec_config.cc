@@ -100,10 +100,6 @@ bool A2DP_IsSinkCodecSupported(const uint8_t* /* p_codec_info */) {
   inc_func_call_count(__func__);
   return false;
 }
-bool A2DP_IsSinkCodecValid(const uint8_t* /* p_codec_info */) {
-  inc_func_call_count(__func__);
-  return false;
-}
 bool A2DP_IsSourceCodecValid(const uint8_t* /* p_codec_info */) {
   inc_func_call_count(__func__);
   return false;

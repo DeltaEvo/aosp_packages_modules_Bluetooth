@@ -54,13 +54,6 @@ typedef enum {
 // vendor-specific codec, otherwise false.
 bool A2DP_IsVendorSourceCodecValid(const uint8_t* p_codec_info);
 
-// Checks whether the codec capabilities contain a valid A2DP vendor-specific
-// Sink codec.
-// NOTE: only codecs that are implemented are considered valid.
-// Returns true if |p_codec_info| contains information about a valid
-// vendor-specific codec, otherwise false.
-bool A2DP_IsVendorSinkCodecValid(const uint8_t* p_codec_info);
-
 // Checks whether the codec capabilities contain a valid peer A2DP
 // vendor-specific Source codec.
 // NOTE: only codecs that are implemented are considered valid.
