@@ -81,6 +81,7 @@ import com.android.bluetooth.btservice.CompanionManager;
 import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.flags.Flags;
+import com.android.bluetooth.hid.HidHostService;
 import com.android.bluetooth.le_scan.TransitionalScanHelper;
 import com.android.internal.annotations.VisibleForTesting;
 
@@ -3387,8 +3388,15 @@ public class GattService extends ProfileService {
         return false;
     }
 
+    private boolean isAndroidHeadtrackerSrvcUuid(final UUID uuid) {
+        return HidHostService.ANDROID_HEADTRACKER_UUID.getUuid().equals(uuid);
+    }
+
     private boolean isRestrictedSrvcUuid(final UUID uuid) {
-        return isFidoSrvcUuid(uuid) || isAndroidTvRemoteSrvcUuid(uuid) || isLeAudioSrvcUuid(uuid);
+        return isFidoSrvcUuid(uuid)
+                || isAndroidTvRemoteSrvcUuid(uuid)
+                || isLeAudioSrvcUuid(uuid)
+                || isAndroidHeadtrackerSrvcUuid(uuid);
     }
 
     private int getDeviceType(BluetoothDevice device) {
