@@ -494,6 +494,28 @@ public class HeadsetServiceAndStateMachineTest {
         assertThat(mHeadsetService.isVirtualCallStarted()).isFalse();
     }
 
+    /** Test the value of isInbandRingingEnabled will be changed with the change of active device */
+    @Test
+    public void testIsInbandRingingEnabled_SwitchActiveDevice() {
+        mSetFlagsRule.enableFlags(Flags.FLAG_UPDATE_ACTIVE_DEVICE_IN_BAND_RINGTONE);
+        BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
+        connectTestDevice(device);
+
+        assertThat(mHeadsetService.setActiveDevice(device)).isTrue();
+        mTestLooper.dispatchAll();
+        assertThat(mHeadsetService.isInbandRingingEnabled()).isTrue();
+
+        assertThat(mHeadsetService.setActiveDevice(null)).isTrue();
+        mTestLooper.dispatchAll();
+        verify(mNativeInterface, atLeastOnce()).sendBsir(eq(device), eq(false));
+        assertThat(mHeadsetService.isInbandRingingEnabled()).isFalse();
+
+        assertThat(mHeadsetService.setActiveDevice(device)).isTrue();
+        mTestLooper.dispatchAll();
+        verify(mNativeInterface, atLeastOnce()).sendBsir(eq(device), eq(true));
+        assertThat(mHeadsetService.isInbandRingingEnabled()).isTrue();
+    }
+
     /** Test the behavior when dialing outgoing call from the headset */
     @Test
     public void testDialingOutCall_NormalDialingOut() throws RemoteException {
