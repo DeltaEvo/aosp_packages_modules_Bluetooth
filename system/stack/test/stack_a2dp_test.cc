@@ -481,18 +481,6 @@ TEST_F(StackA2dpTest, test_a2dp_is_sink_codec_supported) {
   EXPECT_FALSE(A2DP_IsSinkCodecSupported(codec_info_non_a2dp));
 }
 
-TEST_F(StackA2dpTest, test_a2dp_is_peer_source_codec_supported) {
-  EXPECT_TRUE(A2DP_IsPeerSourceCodecSupported(codec_info_sbc));
-  EXPECT_TRUE(A2DP_IsPeerSourceCodecSupported(codec_info_sbc_capability));
-  EXPECT_TRUE(A2DP_IsPeerSourceCodecSupported(codec_info_sbc_sink_capability));
-
-  EXPECT_TRUE(A2DP_IsPeerSourceCodecSupported(codec_info_aac));
-  EXPECT_TRUE(A2DP_IsPeerSourceCodecSupported(codec_info_aac_capability));
-  EXPECT_TRUE(A2DP_IsPeerSourceCodecSupported(codec_info_aac_sink_capability));
-
-  EXPECT_FALSE(A2DP_IsPeerSourceCodecSupported(codec_info_non_a2dp));
-}
-
 TEST_F(StackA2dpTest, test_init_default_codec) {
   uint8_t codec_info_result[AVDT_CODEC_SIZE];
 

@@ -151,26 +151,6 @@ bool A2DP_IsVendorSinkCodecSupported(const uint8_t* p_codec_info) {
   return false;
 }
 
-bool A2DP_IsVendorPeerSourceCodecSupported(const uint8_t* p_codec_info) {
-  uint32_t vendor_id = A2DP_VendorCodecGetVendorId(p_codec_info);
-  uint16_t codec_id = A2DP_VendorCodecGetCodecId(p_codec_info);
-
-  // Add checks based on <vendor_id, codec_id> and peer codec capabilities
-  // NOTE: Should be done only for local Sink codecs.
-
-  // Check for LDAC
-  if (vendor_id == A2DP_LDAC_VENDOR_ID && codec_id == A2DP_LDAC_CODEC_ID) {
-    return A2DP_IsPeerSourceCodecSupportedLdac(p_codec_info);
-  }
-
-  // Check for Opus
-  if (vendor_id == A2DP_OPUS_VENDOR_ID && codec_id == A2DP_OPUS_CODEC_ID) {
-    return A2DP_IsPeerSourceCodecSupportedOpus(p_codec_info);
-  }
-
-  return false;
-}
-
 uint32_t A2DP_VendorCodecGetVendorId(const uint8_t* p_codec_info) {
   const uint8_t* p = &p_codec_info[A2DP_VENDOR_CODEC_VENDOR_ID_START_IDX];
 

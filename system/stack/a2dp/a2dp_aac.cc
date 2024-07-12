@@ -266,11 +266,6 @@ bool A2DP_IsSinkCodecSupportedAac(const uint8_t* p_codec_info) {
          A2DP_SUCCESS;
 }
 
-bool A2DP_IsPeerSourceCodecSupportedAac(const uint8_t* p_codec_info) {
-  return A2DP_CodecInfoMatchesCapabilityAac(&a2dp_aac_sink_caps, p_codec_info, true) ==
-         A2DP_SUCCESS;
-}
-
 // Checks whether A2DP AAC codec configuration matches with a device's codec
 // capabilities. |p_cap| is the AAC codec configuration. |p_codec_info| is
 // the device's codec capabilities. |is_capability| is true if

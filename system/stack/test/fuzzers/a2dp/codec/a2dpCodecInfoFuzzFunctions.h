@@ -85,11 +85,6 @@ std::vector<std::function<void(FuzzedDataProvider*, uint8_t*)>> a2dp_codec_info_
           A2DP_IsSinkCodecSupported(codec_info);
         },
 
-        // A2DP_IsPeerSourceCodecSupported
-        [](FuzzedDataProvider* fdp, uint8_t* codec_info) -> void {
-          A2DP_IsPeerSourceCodecSupported(codec_info);
-        },
-
         // A2DP_UsesRtpHeader
         [](FuzzedDataProvider* fdp, uint8_t* codec_info) -> void {
           A2DP_UsesRtpHeader(fdp->ConsumeBool(), codec_info);

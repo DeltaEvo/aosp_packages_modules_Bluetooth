@@ -246,10 +246,6 @@ bool A2DP_IsVendorSinkCodecSupportedLdac(const uint8_t* p_codec_info) {
   return A2DP_CodecInfoMatchesCapabilityLdac(&a2dp_ldac_sink_caps, p_codec_info, false) ==
          A2DP_SUCCESS;
 }
-bool A2DP_IsPeerSourceCodecSupportedLdac(const uint8_t* p_codec_info) {
-  return A2DP_CodecInfoMatchesCapabilityLdac(&a2dp_ldac_sink_caps, p_codec_info, true) ==
-         A2DP_SUCCESS;
-}
 
 // Checks whether A2DP LDAC codec configuration matches with a device's codec
 // capabilities. |p_cap| is the LDAC codec configuration. |p_codec_info| is

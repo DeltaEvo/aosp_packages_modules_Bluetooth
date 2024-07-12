@@ -315,11 +315,6 @@ bool A2DP_IsSinkCodecSupportedSbc(const uint8_t* p_codec_info) {
          A2DP_SUCCESS;
 }
 
-bool A2DP_IsPeerSourceCodecSupportedSbc(const uint8_t* p_codec_info) {
-  return A2DP_CodecInfoMatchesCapabilitySbc(&a2dp_sbc_sink_caps, p_codec_info, true) ==
-         A2DP_SUCCESS;
-}
-
 void A2DP_InitDefaultCodecSbc(uint8_t* p_codec_info) {
   if (A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &a2dp_sbc_default_config, p_codec_info) !=
       A2DP_SUCCESS) {

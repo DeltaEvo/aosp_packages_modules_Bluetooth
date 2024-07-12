@@ -62,7 +62,6 @@ struct A2DP_GetTrackSampleRateSbc A2DP_GetTrackSampleRateSbc;
 struct A2DP_InitCodecConfigSbc A2DP_InitCodecConfigSbc;
 struct A2DP_InitCodecConfigSbcSink A2DP_InitCodecConfigSbcSink;
 struct A2DP_InitDefaultCodecSbc A2DP_InitDefaultCodecSbc;
-struct A2DP_IsPeerSourceCodecSupportedSbc A2DP_IsPeerSourceCodecSupportedSbc;
 struct A2DP_IsSinkCodecSupportedSbc A2DP_IsSinkCodecSupportedSbc;
 struct A2DP_SinkCodecIndexSbc A2DP_SinkCodecIndexSbc;
 struct A2DP_SourceCodecIndexSbc A2DP_SourceCodecIndexSbc;
@@ -101,7 +100,6 @@ int A2DP_GetTrackChannelCountSbc::return_value = 0;
 int A2DP_GetTrackSampleRateSbc::return_value = 0;
 bool A2DP_InitCodecConfigSbc::return_value = false;
 bool A2DP_InitCodecConfigSbcSink::return_value = false;
-bool A2DP_IsPeerSourceCodecSupportedSbc::return_value = false;
 bool A2DP_IsSinkCodecSupportedSbc::return_value = false;
 btav_a2dp_codec_index_t A2DP_SinkCodecIndexSbc::return_value =
     BTAV_A2DP_CODEC_INDEX_SOURCE_MIN;
@@ -219,10 +217,6 @@ bool A2DP_InitCodecConfigSbcSink(AvdtpSepConfig* p_cfg) {
 void A2DP_InitDefaultCodecSbc(uint8_t* p_codec_info) {
   inc_func_call_count(__func__);
   test::mock::stack_a2dp_sbc::A2DP_InitDefaultCodecSbc(p_codec_info);
-}
-bool A2DP_IsPeerSourceCodecSupportedSbc(const uint8_t* p_codec_info) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_a2dp_sbc::A2DP_IsPeerSourceCodecSupportedSbc(p_codec_info);
 }
 bool A2DP_IsSinkCodecSupportedSbc(const uint8_t* p_codec_info) {
   inc_func_call_count(__func__);
