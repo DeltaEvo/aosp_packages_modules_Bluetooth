@@ -127,8 +127,6 @@ static void initNative(JNIEnv* env, jobject object, jint maxConnectedAudioDevice
     return;
   }
 
-  btif_av_sink_cleanup();
-
   if (mCallbacksObj != NULL) {
     log::warn("Cleaning up A2DP callback object");
     env->DeleteGlobalRef(mCallbacksObj);
