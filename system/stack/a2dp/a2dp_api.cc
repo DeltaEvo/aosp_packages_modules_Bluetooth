@@ -178,13 +178,12 @@ static void a2dp_sdp_cback(const RawAddress& /* bd_addr */, tSDP_STATUS status) 
  *                  Output Parameters:
  *                      None.
  *
- * Returns          A2DP_SUCCESS if function execution succeeded,
- *                  A2DP_INVALID_PARAMS if bad parameters are given.
- *                  A2DP_FAIL if function execution failed.
+ * Returns          true if function execution succeeded,
+ *                  false if bad parameters are given or execution failed.
  *
  *****************************************************************************/
-tA2DP_STATUS A2DP_AddRecord(uint16_t service_uuid, char* p_service_name, char* p_provider_name,
-                            uint16_t features, uint32_t sdp_handle) {
+bool A2DP_AddRecord(uint16_t service_uuid, char* p_service_name, char* p_provider_name,
+                    uint16_t features, uint32_t sdp_handle) {
   uint16_t browse_list[1];
   bool result = true;
   uint8_t temp[8];
@@ -195,7 +194,7 @@ tA2DP_STATUS A2DP_AddRecord(uint16_t service_uuid, char* p_service_name, char* p
 
   if ((sdp_handle == 0) ||
       (service_uuid != UUID_SERVCLASS_AUDIO_SOURCE && service_uuid != UUID_SERVCLASS_AUDIO_SINK)) {
-    return A2DP_INVALID_PARAMS;
+    return false;
   }
 
   /* add service class id list */
@@ -246,7 +245,7 @@ tA2DP_STATUS A2DP_AddRecord(uint16_t service_uuid, char* p_service_name, char* p
   result &= get_legacy_stack_sdp_api()->handle.SDP_AddUuidSequence(
           sdp_handle, ATTR_ID_BROWSE_GROUP_LIST, 1, browse_list);
 
-  return result ? A2DP_SUCCESS : A2DP_FAIL;
+  return result;
 }
 
 /******************************************************************************
@@ -279,7 +278,6 @@ tA2DP_STATUS A2DP_AddRecord(uint16_t service_uuid, char* p_service_name, char* p
  *                      None.
  *
  * Returns          A2DP_SUCCESS if function execution succeeded,
- *                  A2DP_INVALID_PARAMS if bad parameters are given.
  *                  A2DP_BUSY if discovery is already in progress.
  *                  A2DP_FAIL if function execution failed.
  *
@@ -290,7 +288,7 @@ tA2DP_STATUS A2DP_FindService(uint16_t service_uuid, const RawAddress& bd_addr,
       p_db == NULL || p_cback.is_null()) {
     log::error("Cannot find service for peer {} UUID 0x{:04x}: invalid parameters", bd_addr,
                service_uuid);
-    return A2DP_INVALID_PARAMS;
+    return A2DP_FAIL;
   }
 
   if (a2dp_cb.find.service_uuid == UUID_SERVCLASS_AUDIO_SOURCE ||

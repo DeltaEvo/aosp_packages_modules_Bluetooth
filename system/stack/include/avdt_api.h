@@ -226,20 +226,6 @@ typedef uint8_t AVDT_REPORT_TYPE;
 #define AVDT_ERR_REPORT_FMT 0x65
 /* Invalid service category */
 #define AVDT_ERR_SERVICE 0x80
-/* Insufficient resources */
-#define AVDT_ERR_RESOURCE 0x81
-/* Invalid Media Codec Type */
-#define AVDT_ERR_INVALID_MCT 0xC1
-/* Unsupported Media Codec Type */
-#define AVDT_ERR_UNSUP_MCT 0xC2
-/* Invalid Level */
-#define AVDT_ERR_INVALID_LEVEL 0xC3
-/* Unsupported Level */
-#define AVDT_ERR_UNSUP_LEVEL 0xC4
-/* Invalid Content Protection Type */
-#define AVDT_ERR_INVALID_CP 0xE0
-/* Invalid Content Protection format */
-#define AVDT_ERR_INVALID_FORMAT 0xE1
 
 /* Additional error codes.  This indicates error codes used by AVDTP
  * in addition to the ones defined in the specifications.
