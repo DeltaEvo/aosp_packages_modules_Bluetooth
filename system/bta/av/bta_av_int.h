@@ -345,8 +345,6 @@ typedef struct {
   tBTA_AV_HNDL hndl;
   uint8_t err_code;
   uint8_t category;
-  uint8_t num_seid;
-  uint8_t* p_seid;
   bool recfg_needed;
   uint8_t avdt_handle; /* local sep type for which this stream will be set up */
 } tBTA_AV_CI_SETCONFIG;

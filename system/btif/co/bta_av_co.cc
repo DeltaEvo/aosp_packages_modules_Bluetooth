@@ -447,7 +447,7 @@ void BtaAvCo::ProcessSetConfig(tBTA_AV_HNDL bta_av_handle, const RawAddress& pee
     log::error("could not find peer entry for bta_av_handle 0x{:x} peer {}", bta_av_handle,
                peer_address);
     // Call call-in rejecting the configuration
-    bta_av_ci_setconfig(bta_av_handle, A2DP_BUSY, AVDT_ASC_CODEC, 0, nullptr, false, avdt_handle);
+    bta_av_ci_setconfig(bta_av_handle, A2DP_BUSY, AVDT_ASC_CODEC, false, avdt_handle);
     return;
   }
 
@@ -515,7 +515,7 @@ void BtaAvCo::ProcessSetConfig(tBTA_AV_HNDL bta_av_handle, const RawAddress& pee
   if (status != A2DP_SUCCESS) {
     log::verbose("peer {} reject s={} c={}", p_peer->addr, status, category);
     // Call call-in rejecting the configuration
-    bta_av_ci_setconfig(bta_av_handle, status, category, 0, nullptr, false, avdt_handle);
+    bta_av_ci_setconfig(bta_av_handle, status, category, false, avdt_handle);
     return;
   }
 
@@ -524,8 +524,7 @@ void BtaAvCo::ProcessSetConfig(tBTA_AV_HNDL bta_av_handle, const RawAddress& pee
   p_peer->reconfig_needed = reconfig_needed;
   log::verbose("peer {} accept reconf={}", p_peer->addr, reconfig_needed);
   // Call call-in accepting the configuration
-  bta_av_ci_setconfig(bta_av_handle, A2DP_SUCCESS, A2DP_SUCCESS, 0, nullptr, reconfig_needed,
-                      avdt_handle);
+  bta_av_ci_setconfig(bta_av_handle, A2DP_SUCCESS, A2DP_SUCCESS, reconfig_needed, avdt_handle);
 }
 
 void BtaAvCo::ProcessOpen(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
