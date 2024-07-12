@@ -88,10 +88,6 @@ static const tA2DP_ENCODER_INTERFACE a2dp_encoder_interface_aptx_hd = {
         nullptr  // set_transmit_queue_length
 };
 
-static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilityAptxHd(const tA2DP_APTX_HD_CIE* p_cap,
-                                                          const uint8_t* p_codec_info,
-                                                          bool is_peer_codec_info);
-
 // Builds the aptX-HD Media Codec Capabilities byte sequence beginning from the
 // LOSC octet. |media_type| is the media type |AVDT_MEDIA_TYPE_*|.
 // |p_ie| is a pointer to the aptX-HD Codec Information Element information.
@@ -200,45 +196,6 @@ bool A2DP_IsCodecValidAptxHd(const uint8_t* p_codec_info) {
   /* Use a liberal check when parsing the codec info */
   return (A2DP_ParseInfoAptxHd(&cfg_cie, p_codec_info, false) == A2DP_SUCCESS) ||
          (A2DP_ParseInfoAptxHd(&cfg_cie, p_codec_info, true) == A2DP_SUCCESS);
-}
-
-// Checks whether A2DP aptX-HD codec configuration matches with a device's
-// codec capabilities. |p_cap| is the aptX-HD codec configuration.
-// |p_codec_info| is the device's codec capabilities.
-// If |is_capability| is true, the byte sequence is codec capabilities,
-// otherwise is codec configuration.
-// |p_codec_info| contains the codec capabilities for a peer device that
-// is acting as an A2DP source.
-// Returns A2DP_SUCCESS if the codec configuration matches with capabilities,
-// otherwise the corresponding A2DP error status code.
-UNUSED_ATTR static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilityAptxHd(
-        const tA2DP_APTX_HD_CIE* p_cap, const uint8_t* p_codec_info, bool is_capability) {
-  tA2DP_STATUS status;
-  tA2DP_APTX_HD_CIE cfg_cie;
-
-  /* parse configuration */
-  status = A2DP_ParseInfoAptxHd(&cfg_cie, p_codec_info, is_capability);
-  if (status != A2DP_SUCCESS) {
-    log::error("parsing failed {}", status);
-    return status;
-  }
-
-  /* verify that each parameter is in range */
-
-  log::verbose("FREQ peer: 0x{:x}, capability 0x{:x}", cfg_cie.sampleRate, p_cap->sampleRate);
-  log::verbose("CH_MODE peer: 0x{:x}, capability 0x{:x}", cfg_cie.channelMode, p_cap->channelMode);
-
-  /* sampling frequency */
-  if ((cfg_cie.sampleRate & p_cap->sampleRate) == 0) {
-    return A2DP_NS_SAMP_FREQ;
-  }
-
-  /* channel mode */
-  if ((cfg_cie.channelMode & p_cap->channelMode) == 0) {
-    return A2DP_NS_CH_MODE;
-  }
-
-  return A2DP_SUCCESS;
 }
 
 bool A2DP_VendorUsesRtpHeaderAptxHd(bool /* content_protection_enabled */,

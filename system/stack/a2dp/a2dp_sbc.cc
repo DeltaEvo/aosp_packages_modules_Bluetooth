@@ -115,8 +115,6 @@ static const tA2DP_DECODER_INTERFACE a2dp_decoder_interface_sbc = {
 static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilitySbc(const tA2DP_SBC_CIE* p_cap,
                                                        const uint8_t* p_codec_info,
                                                        bool is_capability);
-static void A2DP_ParseMplHeaderSbc(uint8_t* p_src, bool* p_frag, bool* p_start, bool* p_last,
-                                   uint8_t* p_num);
 
 // Builds the SBC Media Codec Capabilities byte sequence beginning from the
 // LOSC octet. |media_type| is the media type |AVDT_MEDIA_TYPE_*|.
@@ -264,40 +262,6 @@ static void A2DP_BuildMediaPayloadHeaderSbc(uint8_t* p_dst, bool frag, bool star
     *p_dst |= A2DP_SBC_HDR_L_MSK;
   }
   *p_dst |= (A2DP_SBC_HDR_NUM_MSK & num);
-}
-
-/******************************************************************************
- *
- * Function         A2DP_ParseMplHeaderSbc
- *
- * Description      This function is called by an application to parse
- *                  the SBC Media Payload header.
- *                  Input Parameters:
- *                      p_src:  the byte sequence to parse..
- *
- *                  Output Parameters:
- *                      frag:  1, if fragmented. 0, otherwise.
- *
- *                      start:  1, if the starting packet of a fragmented frame.
- *
- *                      last:  1, if the last packet of a fragmented frame.
- *
- *                      num:  If frag is 1, this is the number of remaining
- *                            fragments
- *                            (including this fragment) of this frame.
- *                            If frag is 0, this is the number of frames in
- *                            this packet.
- *
- * Returns          void.
- *****************************************************************************/
-UNUSED_ATTR static void A2DP_ParseMplHeaderSbc(uint8_t* p_src, bool* p_frag, bool* p_start,
-                                               bool* p_last, uint8_t* p_num) {
-  if (p_src && p_frag && p_start && p_last && p_num) {
-    *p_frag = (*p_src & A2DP_SBC_HDR_F_MSK) ? true : false;
-    *p_start = (*p_src & A2DP_SBC_HDR_S_MSK) ? true : false;
-    *p_last = (*p_src & A2DP_SBC_HDR_L_MSK) ? true : false;
-    *p_num = (*p_src & A2DP_SBC_HDR_NUM_MSK);
-  }
 }
 
 const char* A2DP_CodecNameSbc(const uint8_t* /* p_codec_info */) { return "SBC"; }
@@ -823,27 +787,6 @@ bool A2DP_InitCodecConfigSbcSink(AvdtpSepConfig* p_cfg) {
   }
 
   return true;
-}
-
-UNUSED_ATTR static void build_codec_config(const tA2DP_SBC_CIE& config_cie,
-                                           btav_a2dp_codec_config_t* result) {
-  if (config_cie.samp_freq & A2DP_SBC_IE_SAMP_FREQ_44) {
-    result->sample_rate |= BTAV_A2DP_CODEC_SAMPLE_RATE_44100;
-  }
-  if (config_cie.samp_freq & A2DP_SBC_IE_SAMP_FREQ_48) {
-    result->sample_rate |= BTAV_A2DP_CODEC_SAMPLE_RATE_48000;
-  }
-
-  result->bits_per_sample = config_cie.bits_per_sample;
-
-  if (config_cie.ch_mode & A2DP_SBC_IE_CH_MD_MONO) {
-    result->channel_mode |= BTAV_A2DP_CODEC_CHANNEL_MODE_MONO;
-  }
-
-  if (config_cie.ch_mode &
-      (A2DP_SBC_IE_CH_MD_STEREO | A2DP_SBC_IE_CH_MD_JOINT | A2DP_SBC_IE_CH_MD_DUAL)) {
-    result->channel_mode |= BTAV_A2DP_CODEC_CHANNEL_MODE_STEREO;
-  }
 }
 
 A2dpCodecConfigSbcSource::A2dpCodecConfigSbcSource(btav_a2dp_codec_priority_t codec_priority)

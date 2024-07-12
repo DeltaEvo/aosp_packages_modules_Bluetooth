@@ -638,29 +638,6 @@ bool A2DP_VendorInitCodecConfigOpusSink(AvdtpSepConfig* p_cfg) {
          A2DP_SUCCESS;
 }
 
-UNUSED_ATTR static void build_codec_config(const tA2DP_OPUS_CIE& config_cie,
-                                           btav_a2dp_codec_config_t* result) {
-  if (config_cie.sampleRate & A2DP_OPUS_SAMPLING_FREQ_48000) {
-    result->sample_rate |= BTAV_A2DP_CODEC_SAMPLE_RATE_48000;
-  }
-
-  result->bits_per_sample = config_cie.bits_per_sample;
-
-  if (config_cie.channelMode & A2DP_OPUS_CHANNEL_MODE_MONO) {
-    result->channel_mode |= BTAV_A2DP_CODEC_CHANNEL_MODE_MONO;
-  }
-  if (config_cie.channelMode & A2DP_OPUS_CHANNEL_MODE_STEREO) {
-    result->channel_mode |= BTAV_A2DP_CODEC_CHANNEL_MODE_STEREO;
-  }
-
-  if (config_cie.future1 & A2DP_OPUS_20MS_FRAMESIZE) {
-    result->codec_specific_1 |= BTAV_A2DP_CODEC_FRAME_SIZE_20MS;
-  }
-  if (config_cie.future1 & A2DP_OPUS_10MS_FRAMESIZE) {
-    result->codec_specific_1 |= BTAV_A2DP_CODEC_FRAME_SIZE_10MS;
-  }
-}
-
 A2dpCodecConfigOpusSource::A2dpCodecConfigOpusSource(btav_a2dp_codec_priority_t codec_priority)
     : A2dpCodecConfigOpusBase(BTAV_A2DP_CODEC_INDEX_SOURCE_OPUS, A2DP_VendorCodecIndexStrOpus(),
                               codec_priority, true) {
