@@ -569,7 +569,13 @@ static bt_status_t btif_gattc_read_remote_rssi(int client_if, const RawAddress& 
   CHECK_BTGATT_INIT();
   rssi_request_client_if = client_if;
 
-  return do_in_jni_thread(Bind(base::IgnoreResult(&BTM_ReadRSSI), bd_addr, btm_read_rssi_cb));
+  return do_in_jni_thread(base::Bind(
+          [](int client_if, const RawAddress& bd_addr) {
+            if (BTM_ReadRSSI(bd_addr, btm_read_rssi_cb) != BTM_SUCCESS) {
+              log::warn("Unable to read RSSI peer:{} client_if:{}", bd_addr, client_if);
+            }
+          },
+          client_if, bd_addr));
 }
 
 static bt_status_t btif_gattc_configure_mtu(int conn_id, int mtu) {
