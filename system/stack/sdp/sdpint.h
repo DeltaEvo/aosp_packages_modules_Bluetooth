@@ -252,6 +252,7 @@ tCONN_CB* sdpu_find_ccb_by_cid(uint16_t cid);
 tCONN_CB* sdpu_find_ccb_by_db(const tSDP_DISCOVERY_DB* p_db);
 tCONN_CB* sdpu_allocate_ccb(void);
 void sdpu_release_ccb(tCONN_CB& p_ccb);
+void sdpu_dump_all_ccb();
 
 uint8_t* sdpu_build_attrib_seq(uint8_t* p_out, uint16_t* p_attr, uint16_t num_attrs);
 uint8_t* sdpu_build_attrib_entry(uint8_t* p_out, const tSDP_ATTRIBUTE* p_attr);

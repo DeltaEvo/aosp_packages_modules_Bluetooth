@@ -421,6 +421,25 @@ void sdpu_release_ccb(tCONN_CB& ccb) {
 
 /*******************************************************************************
  *
+ * Function         sdpu_dump_all_ccb
+ *
+ * Description      Dump relevant data for all control blocks.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void sdpu_dump_all_ccb() {
+  uint16_t xx{};
+  tCONN_CB* p_ccb{};
+
+  for (xx = 0, p_ccb = sdp_cb.ccb; xx < SDP_MAX_CONNECTIONS; xx++, p_ccb++) {
+    log::info("peer:{} cid:{} state:{} flags:{} ", p_ccb->device_address, p_ccb->connection_id,
+              sdp_state_text(p_ccb->con_state), sdp_flags_text(p_ccb->con_flags));
+  }
+}
+
+/*******************************************************************************
+ *
  * Function         sdpu_get_active_ccb_cid
  *
  * Description      This function checks if any sdp connecting is there for
