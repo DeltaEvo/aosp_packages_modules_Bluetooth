@@ -65,7 +65,7 @@ public:
 static MockIsoInterface* iso_interface = nullptr;
 static void SetMockIsoInterface(MockIsoInterface* interface) { iso_interface = interface; }
 
-static void set_data_cb(base::Callback<void(const base::Location&, BT_HDR*)> /* send_data_cb */) {
+static void set_data_cb(base::Callback<void(BT_HDR*)> /* send_data_cb */) {
   FAIL() << __func__ << " should never be called";
 }
 
