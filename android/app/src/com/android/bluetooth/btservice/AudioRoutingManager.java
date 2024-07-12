@@ -19,7 +19,6 @@ package com.android.bluetooth.btservice;
 import static android.bluetooth.IBluetoothLeAudio.LE_AUDIO_GROUP_ID_INVALID;
 
 import android.annotation.NonNull;
-import android.annotation.RequiresPermission;
 import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothClass;
@@ -734,7 +733,6 @@ public class AudioRoutingManager extends ActiveDeviceManager {
          * time a wired audio device is connected.
          */
         @VisibleForTesting
-        @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
         void wiredAudioDeviceConnected() {
             Log.d(TAG, "wiredAudioDeviceConnected");
             removeActiveDevice(BluetoothProfile.A2DP, true);

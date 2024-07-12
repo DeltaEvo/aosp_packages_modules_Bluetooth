@@ -18,7 +18,6 @@ package com.android.bluetooth.btservice;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
@@ -917,7 +916,6 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
         return true;
     }
 
-    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     private boolean setHfpActiveDevice(BluetoothDevice device) {
         synchronized (mLock) {
             Log.d(TAG, "setHfpActiveDevice(" + device + ")");
@@ -1276,7 +1274,6 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
      * wired audio device is connected.
      */
     @VisibleForTesting
-    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     void wiredAudioDeviceConnected() {
         Log.d(TAG, "wiredAudioDeviceConnected");
         setA2dpActiveDevice(null, true);

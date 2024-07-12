@@ -405,7 +405,6 @@ final class BondStateMachine extends StateMachine {
     @RequiresPermission(
             allOf = {
                 android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.INTERACT_ACROSS_USERS,
             })
     private boolean createBond(
             BluetoothDevice dev,
@@ -507,11 +506,6 @@ final class BondStateMachine extends StateMachine {
     }
 
     @VisibleForTesting
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.INTERACT_ACROSS_USERS,
-            })
     void sendIntent(
             BluetoothDevice device, int newState, int reason, boolean isTriggerFromDelayMessage) {
         DeviceProperties devProp = mRemoteDevices.getDeviceProperties(device);
@@ -767,11 +761,7 @@ final class BondStateMachine extends StateMachine {
         removeMessages(what);
     }
 
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-                android.Manifest.permission.MODIFY_PHONE_STATE,
-            })
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     private void clearProfilePriority(BluetoothDevice device) {
         HidHostService hidService = HidHostService.getHidHostService();
         A2dpService a2dpService = A2dpService.getA2dpService();

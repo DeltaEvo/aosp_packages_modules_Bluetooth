@@ -20,7 +20,6 @@ import android.annotation.NonNull;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUtils;
-import android.bluetooth.IBluetoothAvrcpTarget;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -36,7 +35,6 @@ import android.view.KeyEvent;
 import com.android.bluetooth.BluetoothEventLogger;
 import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.R;
-import com.android.bluetooth.Utils;
 import com.android.bluetooth.a2dp.A2dpService;
 import com.android.bluetooth.audio_util.MediaData;
 import com.android.bluetooth.audio_util.MediaPlayerList;
@@ -188,7 +186,7 @@ public class AvrcpTargetService extends ProfileService {
 
     @Override
     protected IProfileServiceBinder initBinder() {
-        return new AvrcpTargetBinder(this);
+        return null;
     }
 
     @Override
@@ -588,29 +586,5 @@ public class AvrcpTargetService extends ProfileService {
 
         // Tab everything over by two spaces
         sb.append(tempBuilder.toString().replaceAll("(?m)^", "  "));
-    }
-
-    private static class AvrcpTargetBinder extends IBluetoothAvrcpTarget.Stub
-            implements IProfileServiceBinder {
-        private AvrcpTargetService mService;
-
-        AvrcpTargetBinder(AvrcpTargetService service) {
-            mService = service;
-        }
-
-        @Override
-        public void cleanup() {
-            mService = null;
-        }
-
-        @Override
-        public void sendVolumeChanged(int volume) {
-            if (mService == null
-                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)) {
-                return;
-            }
-
-            mService.sendVolumeChanged(volume);
-        }
     }
 }
