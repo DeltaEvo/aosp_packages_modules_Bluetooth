@@ -20,6 +20,8 @@ package android.bluetooth;
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 
+import static java.util.Objects.requireNonNull;
+
 import android.annotation.CallbackExecutor;
 import android.annotation.FlaggedApi;
 import android.annotation.IntDef;
@@ -27,7 +29,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
-import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.bluetooth.annotations.RequiresBluetoothConnectPermission;
 import android.content.AttributionSource;
@@ -38,6 +39,7 @@ import android.util.CloseGuard;
 import android.util.Log;
 
 import com.android.bluetooth.flags.Flags;
+import com.android.internal.annotations.GuardedBy;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -45,8 +47,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 
 /**
  * This class provides a public APIs to control the Bluetooth Hearing Access Profile client service.
@@ -58,10 +60,9 @@ import java.util.concurrent.Executor;
  */
 @SystemApi
 public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable {
-    private static final String TAG = "BluetoothHapClient";
-    private static final boolean DBG = false;
-    private static final boolean VDBG = false;
+    private static final String TAG = BluetoothHapClient.class.getSimpleName();
 
+    @GuardedBy("mCallbackExecutorMap")
     private final Map<Callback, Executor> mCallbackExecutorMap = new HashMap<>();
 
     private CloseGuard mCloseGuard;
@@ -236,83 +237,51 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
                 int hapGroupId, @GroupPresetNameChangeFailureReason int reason);
     }
 
-    @SuppressLint("AndroidFrameworkBluetoothPermission")
     private final IBluetoothHapClientCallback mCallback =
             new IBluetoothHapClientCallback.Stub() {
-                @Override
-                public void onPresetSelected(
-                        @NonNull BluetoothDevice device, int presetIndex, int reasonCode) {
-                    Attributable.setAttributionSource(device, mAttributionSource);
-                    for (Map.Entry<BluetoothHapClient.Callback, Executor> callbackExecutorEntry :
-                            mCallbackExecutorMap.entrySet()) {
-                        BluetoothHapClient.Callback callback = callbackExecutorEntry.getKey();
-                        Executor executor = callbackExecutorEntry.getValue();
-                        executor.execute(
-                                () -> callback.onPresetSelected(device, presetIndex, reasonCode));
+                private void forEach(Consumer<BluetoothHapClient.Callback> consumer) {
+                    synchronized (mCallbackExecutorMap) {
+                        mCallbackExecutorMap.forEach(
+                                (callback, executor) ->
+                                        executor.execute(() -> consumer.accept(callback)));
                     }
                 }
 
                 @Override
-                public void onPresetSelectionFailed(@NonNull BluetoothDevice device, int status) {
+                public void onPresetSelected(BluetoothDevice device, int presetIndex, int reason) {
                     Attributable.setAttributionSource(device, mAttributionSource);
-                    for (Map.Entry<BluetoothHapClient.Callback, Executor> callbackExecutorEntry :
-                            mCallbackExecutorMap.entrySet()) {
-                        BluetoothHapClient.Callback callback = callbackExecutorEntry.getKey();
-                        Executor executor = callbackExecutorEntry.getValue();
-                        executor.execute(() -> callback.onPresetSelectionFailed(device, status));
-                    }
+                    forEach((cb) -> cb.onPresetSelected(device, presetIndex, reason));
                 }
 
                 @Override
-                public void onPresetSelectionForGroupFailed(int hapGroupId, int statusCode) {
-                    for (Map.Entry<BluetoothHapClient.Callback, Executor> callbackExecutorEntry :
-                            mCallbackExecutorMap.entrySet()) {
-                        BluetoothHapClient.Callback callback = callbackExecutorEntry.getKey();
-                        Executor executor = callbackExecutorEntry.getValue();
-                        executor.execute(
-                                () ->
-                                        callback.onPresetSelectionForGroupFailed(
-                                                hapGroupId, statusCode));
-                    }
+                public void onPresetSelectionFailed(BluetoothDevice device, int status) {
+                    Attributable.setAttributionSource(device, mAttributionSource);
+                    forEach((cb) -> cb.onPresetSelectionFailed(device, status));
+                }
+
+                @Override
+                public void onPresetSelectionForGroupFailed(int hapGroupId, int status) {
+                    forEach((cb) -> cb.onPresetSelectionForGroupFailed(hapGroupId, status));
                 }
 
                 @Override
                 public void onPresetInfoChanged(
-                        @NonNull BluetoothDevice device,
-                        @NonNull List<BluetoothHapPresetInfo> presetInfoList,
-                        int statusCode) {
+                        BluetoothDevice device,
+                        List<BluetoothHapPresetInfo> presetInfoList,
+                        int status) {
                     Attributable.setAttributionSource(device, mAttributionSource);
-                    for (Map.Entry<BluetoothHapClient.Callback, Executor> callbackExecutorEntry :
-                            mCallbackExecutorMap.entrySet()) {
-                        BluetoothHapClient.Callback callback = callbackExecutorEntry.getKey();
-                        Executor executor = callbackExecutorEntry.getValue();
-                        executor.execute(
-                                () ->
-                                        callback.onPresetInfoChanged(
-                                                device, presetInfoList, statusCode));
-                    }
+                    forEach((cb) -> cb.onPresetInfoChanged(device, presetInfoList, status));
                 }
 
                 @Override
-                public void onSetPresetNameFailed(@NonNull BluetoothDevice device, int status) {
+                public void onSetPresetNameFailed(BluetoothDevice device, int status) {
                     Attributable.setAttributionSource(device, mAttributionSource);
-                    for (Map.Entry<BluetoothHapClient.Callback, Executor> callbackExecutorEntry :
-                            mCallbackExecutorMap.entrySet()) {
-                        BluetoothHapClient.Callback callback = callbackExecutorEntry.getKey();
-                        Executor executor = callbackExecutorEntry.getValue();
-                        executor.execute(() -> callback.onSetPresetNameFailed(device, status));
-                    }
+                    forEach((cb) -> cb.onSetPresetNameFailed(device, status));
                 }
 
                 @Override
                 public void onSetPresetNameForGroupFailed(int hapGroupId, int status) {
-                    for (Map.Entry<BluetoothHapClient.Callback, Executor> callbackExecutorEntry :
-                            mCallbackExecutorMap.entrySet()) {
-                        BluetoothHapClient.Callback callback = callbackExecutorEntry.getKey();
-                        Executor executor = callbackExecutorEntry.getValue();
-                        executor.execute(
-                                () -> callback.onSetPresetNameForGroupFailed(hapGroupId, status));
-                    }
+                    forEach((cb) -> cb.onSetPresetNameForGroupFailed(hapGroupId, status));
                 }
             };
 
@@ -396,7 +365,8 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      *
      * @hide
      */
-    @SystemApi public static final int TYPE_MONAURAL = 0b01;
+    @SystemApi
+    public static final int TYPE_MONAURAL = 1 << IBluetoothHapClient.FEATURE_BIT_NUM_TYPE_MONAURAL;
 
     /**
      * Hearing aid type value. Indicates this Bluetooth device is two hearing aids with a connection
@@ -404,14 +374,15 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      *
      * @hide
      */
-    @SystemApi public static final int TYPE_BANDED = 0b10;
+    @SystemApi
+    public static final int TYPE_BANDED = 1 << IBluetoothHapClient.FEATURE_BIT_NUM_TYPE_BANDED;
 
     /**
      * Hearing aid type value. This value is reserved for future use.
      *
      * @hide
      */
-    @SystemApi public static final int TYPE_RFU = 0b11;
+    @SystemApi public static final int TYPE_RFU = TYPE_BANDED + 1;
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
@@ -430,7 +401,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      *
      * @hide
      */
-    public static final int FEATURE_HEARING_AID_TYPE_MASK = 0b11;
+    public static final int FEATURE_HEARING_AID_TYPE_MASK = TYPE_MONAURAL | TYPE_BANDED;
 
     /**
      * Feature mask value.
@@ -486,7 +457,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      * Create a BluetoothHapClient proxy object for interacting with the local Bluetooth Hearing
      * Access Profile (HAP) client.
      */
-    /*package*/ BluetoothHapClient(Context context, BluetoothAdapter adapter) {
+    BluetoothHapClient(Context context, BluetoothAdapter adapter) {
         mAdapter = adapter;
         mAttributionSource = mAdapter.getAttributionSource();
         mService = null;
@@ -507,8 +478,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     /** @hide */
     @Override
     public void close() {
-        if (VDBG) log("close()");
-
+        Log.v(TAG, "close()");
         mAdapter.closeProfileProxy(this);
     }
 
@@ -523,9 +493,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
             }
 
             try {
-                if (service != null) {
-                    mService.registerCallback(mCallback, mAttributionSource);
-                }
+                mService.registerCallback(mCallback, mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
             }
@@ -567,18 +535,15 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void registerCallback(
             @NonNull @CallbackExecutor Executor executor, @NonNull Callback callback) {
-        Objects.requireNonNull(executor, "executor cannot be null");
-        Objects.requireNonNull(callback, "callback cannot be null");
-
-        if (DBG) log("registerCallback");
+        requireNonNull(executor);
+        requireNonNull(callback);
 
         synchronized (mCallbackExecutorMap) {
             // If the callback map is empty, we register the service-to-app callback
             if (mCallbackExecutorMap.isEmpty()) {
-                if (!isEnabled()) {
+                if (!mAdapter.isEnabled()) {
                     /* If Bluetooth is off, just store callback and it will be registered
-                     * when Bluetooth is on
-                     */
+                     * when Bluetooth is on */
                     mCallbackExecutorMap.put(callback, executor);
                     return;
                 }
@@ -617,25 +582,23 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     @RequiresBluetoothConnectPermission
     @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void unregisterCallback(@NonNull Callback callback) {
-        Objects.requireNonNull(callback, "callback cannot be null");
-
-        if (DBG) log("unregisterCallback");
+        requireNonNull(callback);
 
         synchronized (mCallbackExecutorMap) {
             if (mCallbackExecutorMap.remove(callback) == null) {
                 throw new IllegalArgumentException("This callback has not been registered");
             }
-        }
 
-        // If the callback map is empty, we unregister the service-to-app callback
-        if (mCallbackExecutorMap.isEmpty()) {
-            try {
-                final IBluetoothHapClient service = getService();
-                if (service != null) {
-                    service.unregisterCallback(mCallback, mAttributionSource);
+            // If the callback map is empty, we unregister the service-to-app callback
+            if (mCallbackExecutorMap.isEmpty()) {
+                try {
+                    final IBluetoothHapClient service = getService();
+                    if (service != null) {
+                        service.unregisterCallback(mCallback, mAttributionSource);
+                    }
+                } catch (RemoteException e) {
+                    throw e.rethrowAsRuntimeException();
                 }
-            } catch (RemoteException e) {
-                throw e.rethrowAsRuntimeException();
             }
         }
     }
@@ -657,12 +620,11 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public boolean setConnectionPolicy(
             @NonNull BluetoothDevice device, @ConnectionPolicy int connectionPolicy) {
-        if (DBG) log("setConnectionPolicy(" + device + ", " + connectionPolicy + ")");
-        Objects.requireNonNull(device, "BluetoothDevice cannot be null");
+        requireNonNull(device);
+
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
+            Log.d(TAG, "setConnectionPolicy: Proxy not attached to service");
         } else if (mAdapter.isEnabled()
                 && isValidDevice(device)
                 && (connectionPolicy == BluetoothProfile.CONNECTION_POLICY_FORBIDDEN
@@ -691,11 +653,9 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     @RequiresBluetoothConnectPermission
     @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public @ConnectionPolicy int getConnectionPolicy(@Nullable BluetoothDevice device) {
-        if (VDBG) log("getConnectionPolicy(" + device + ")");
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
+            Log.d(TAG, "getConnectionPolicy: Proxy not attached to service");
         } else if (mAdapter.isEnabled() && isValidDevice(device)) {
             try {
                 return service.getConnectionPolicy(device, mAttributionSource);
@@ -716,12 +676,10 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     @Override
     public @NonNull List<BluetoothDevice> getConnectedDevices() {
-        if (VDBG) Log.d(TAG, "getConnectedDevices()");
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled()) {
+            Log.d(TAG, "getConnectedDevices: Proxy not attached to service");
+        } else if (mAdapter.isEnabled()) {
             try {
                 return Attributable.setAttributionSource(
                         service.getConnectedDevices(mAttributionSource), mAttributionSource);
@@ -743,12 +701,10 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     @Override
     @NonNull
     public List<BluetoothDevice> getDevicesMatchingConnectionStates(@NonNull int[] states) {
-        if (VDBG) Log.d(TAG, "getDevicesMatchingConnectionStates()");
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled()) {
+            Log.d(TAG, "getDevicesMatchingConnectionStates: Proxy not attached to service");
+        } else if (mAdapter.isEnabled()) {
             try {
                 return Attributable.setAttributionSource(
                         service.getDevicesMatchingConnectionStates(states, mAttributionSource),
@@ -771,12 +727,10 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     @Override
     @BluetoothProfile.BtProfileState
     public int getConnectionState(@NonNull BluetoothDevice device) {
-        if (VDBG) Log.d(TAG, "getConnectionState(" + device + ")");
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled() && isValidDevice(device)) {
+            Log.d(TAG, "getConnectionState: Proxy not attached to service");
+        } else if (mAdapter.isEnabled() && isValidDevice(device)) {
             try {
                 return service.getConnectionState(device, mAttributionSource);
             } catch (RemoteException e) {
@@ -811,9 +765,8 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     public int getHapGroup(@NonNull BluetoothDevice device) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled() && isValidDevice(device)) {
+            Log.d(TAG, "getHapGroup: Proxy not attached to service");
+        } else if (mAdapter.isEnabled() && isValidDevice(device)) {
             try {
                 return service.getHapGroup(device, mAttributionSource);
             } catch (RemoteException e) {
@@ -837,9 +790,8 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     public int getActivePresetIndex(@NonNull BluetoothDevice device) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled() && isValidDevice(device)) {
+            Log.d(TAG, "getActivePresetIndex: Proxy not attached to service");
+        } else if (mAdapter.isEnabled() && isValidDevice(device)) {
             try {
                 return service.getActivePresetIndex(device, mAttributionSource);
             } catch (RemoteException e) {
@@ -863,9 +815,8 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     public @Nullable BluetoothHapPresetInfo getActivePresetInfo(@NonNull BluetoothDevice device) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled() && isValidDevice(device)) {
+            Log.d(TAG, "getActivePresetInfo: Proxy not attached to service");
+        } else if (mAdapter.isEnabled() && isValidDevice(device)) {
             try {
                 return service.getActivePresetInfo(device, mAttributionSource);
             } catch (RemoteException e) {
@@ -893,9 +844,8 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     public void selectPreset(@NonNull BluetoothDevice device, int presetIndex) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled() && isValidDevice(device)) {
+            Log.d(TAG, "selectPreset: Proxy not attached to service");
+        } else if (mAdapter.isEnabled() && isValidDevice(device)) {
             try {
                 service.selectPreset(device, presetIndex, mAttributionSource);
             } catch (RemoteException e) {
@@ -925,9 +875,8 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     public void selectPresetForGroup(int groupId, int presetIndex) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled()) {
+            Log.d(TAG, "selectPresetForGroup: Proxy not attached to service");
+        } else if (mAdapter.isEnabled()) {
             try {
                 service.selectPresetForGroup(groupId, presetIndex, mAttributionSource);
             } catch (RemoteException e) {
@@ -952,9 +901,8 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     public void switchToNextPreset(@NonNull BluetoothDevice device) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled() && isValidDevice(device)) {
+            Log.d(TAG, "switchToNextPreset: Proxy not attached to service");
+        } else if (mAdapter.isEnabled() && isValidDevice(device)) {
             try {
                 service.switchToNextPreset(device, mAttributionSource);
             } catch (RemoteException e) {
@@ -982,9 +930,8 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     public void switchToNextPresetForGroup(int groupId) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled()) {
+            Log.d(TAG, "switchToNextPresetForGroup: Proxy not attached to service");
+        } else if (mAdapter.isEnabled()) {
             try {
                 service.switchToNextPresetForGroup(groupId, mAttributionSource);
             } catch (RemoteException e) {
@@ -1009,9 +956,8 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     public void switchToPreviousPreset(@NonNull BluetoothDevice device) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled() && isValidDevice(device)) {
+            Log.d(TAG, "switchToPreviousPreset: Proxy not attached to service");
+        } else if (mAdapter.isEnabled() && isValidDevice(device)) {
             try {
                 service.switchToPreviousPreset(device, mAttributionSource);
             } catch (RemoteException e) {
@@ -1039,9 +985,8 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     public void switchToPreviousPresetForGroup(int groupId) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled()) {
+            Log.d(TAG, "switchToPreviousPresetForGroup: Proxy not attached to service");
+        } else if (mAdapter.isEnabled()) {
             try {
                 service.switchToPreviousPresetForGroup(groupId, mAttributionSource);
             } catch (RemoteException e) {
@@ -1066,9 +1011,8 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     public BluetoothHapPresetInfo getPresetInfo(@NonNull BluetoothDevice device, int presetIndex) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled() && isValidDevice(device)) {
+            Log.d(TAG, "getPresetInfo: Proxy not attached to service");
+        } else if (mAdapter.isEnabled() && isValidDevice(device)) {
             try {
                 return service.getPresetInfo(device, presetIndex, mAttributionSource);
             } catch (RemoteException e) {
@@ -1091,9 +1035,8 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     public @NonNull List<BluetoothHapPresetInfo> getAllPresetInfo(@NonNull BluetoothDevice device) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled() && isValidDevice(device)) {
+            Log.d(TAG, "getAllPresetInfo: Proxy not attached to service");
+        } else if (mAdapter.isEnabled() && isValidDevice(device)) {
             try {
                 return service.getAllPresetInfo(device, mAttributionSource);
             } catch (RemoteException e) {
@@ -1115,9 +1058,8 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     public int getFeatures(@NonNull BluetoothDevice device) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled() && isValidDevice(device)) {
+            Log.d(TAG, "getFeatures: Proxy not attached to service");
+        } else if (mAdapter.isEnabled() && isValidDevice(device)) {
             try {
                 return service.getFeatures(device, mAttributionSource);
             } catch (RemoteException e) {
@@ -1222,9 +1164,8 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
             @NonNull BluetoothDevice device, int presetIndex, @NonNull String name) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled() && isValidDevice(device)) {
+            Log.d(TAG, "setPresetName: Proxy not attached to service");
+        } else if (mAdapter.isEnabled() && isValidDevice(device)) {
             try {
                 service.setPresetName(device, presetIndex, name, mAttributionSource);
             } catch (RemoteException e) {
@@ -1254,9 +1195,8 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     public void setPresetNameForGroup(int groupId, int presetIndex, @NonNull String name) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) log(Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled()) {
+            Log.d(TAG, "setPresetNameForGroup: Proxy not attached to service");
+        } else if (mAdapter.isEnabled()) {
             try {
                 service.setPresetNameForGroup(groupId, presetIndex, name, mAttributionSource);
             } catch (RemoteException e) {
@@ -1265,19 +1205,10 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
         }
     }
 
-    private boolean isEnabled() {
-        if (mAdapter.getState() == BluetoothAdapter.STATE_ON) return true;
-        return false;
-    }
-
     private boolean isValidDevice(BluetoothDevice device) {
         if (device == null) return false;
 
         if (BluetoothAdapter.checkBluetoothAddress(device.getAddress())) return true;
         return false;
-    }
-
-    private static void log(String msg) {
-        Log.d(TAG, msg);
     }
 }
