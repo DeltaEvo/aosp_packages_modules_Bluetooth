@@ -522,6 +522,7 @@ tPAN_RESULT PAN_WriteBuf(uint16_t handle, const RawAddress& dst, const RawAddres
       return PAN_FAILURE;
     }
 
+    uint16_t len = p_buf->len;
     result = BNEP_WriteBuf(pan_cb.pcb[i].handle, dst, p_buf, protocol, src, ext);
     if (result == BNEP_IGNORE_CMD) {
       log::verbose("PAN ignored data write for PANU connection");
@@ -531,7 +532,7 @@ tPAN_RESULT PAN_WriteBuf(uint16_t handle, const RawAddress& dst, const RawAddres
       return (tPAN_RESULT)result;
     }
 
-    pan_cb.pcb[i].write.octets += p_buf->len;
+    pan_cb.pcb[i].write.octets += len;
     pan_cb.pcb[i].write.packets++;
 
     log::verbose("PAN successfully wrote data for the PANU connection");
