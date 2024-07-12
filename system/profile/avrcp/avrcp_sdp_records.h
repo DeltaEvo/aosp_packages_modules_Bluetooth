@@ -103,7 +103,7 @@ public:
    * @return the request id.
    */
   virtual uint16_t AddRecord(const AvrcpSdpRecord& add_record_request, uint16_t& request_id,
-                             const bool add_sys_uid = true);
+                             bool add_sys_uid = true);
 
   /**
    * Removes the SDP records. If there were multiple SDP record request, it would remove the
@@ -113,7 +113,7 @@ public:
    * @return AVRC_SUCCESS if successful.
    *         AVRC_FAIL otherwise
    */
-  uint16_t RemoveRecord(const uint16_t request_id);
+  uint16_t RemoveRecord(uint16_t request_id);
 
   /**
    * Abstract method for child class to implement.
@@ -122,7 +122,7 @@ public:
    * @return AVRC_SUCCESS if successful.
    *         AVRC_FAIL otherwise
    */
-  virtual uint16_t EnableCovertArt(uint16_t cover_art_psm, const uint16_t request_id) = 0;
+  virtual uint16_t EnableCovertArt(uint16_t cover_art_psm, uint16_t request_id) = 0;
 
   /**
    * Abstract method for child class to implement.
@@ -130,7 +130,7 @@ public:
    * @return AVRC_SUCCESS if successful.
    *         AVRC_FAIL otherwise
    */
-  virtual uint16_t DisableCovertArt(const uint16_t request_id) = 0;
+  virtual uint16_t DisableCovertArt(uint16_t request_id) = 0;
 
 protected:
   /**
@@ -144,7 +144,7 @@ protected:
    * @return AVRC_SUCCESS if successful.
    *         AVRC_FAIL otherwise
    */
-  virtual uint16_t UpdateRecord(const uint16_t updated_categories);
+  virtual uint16_t UpdateRecord(uint16_t updated_categories);
 
   /**
    * Merges all the cached requests submitted to the service.
@@ -178,14 +178,14 @@ public:
    * @param request_id no-op
    * @return AVRC_FAIL as it's unsupported.
    */
-  uint16_t EnableCovertArt(const uint16_t request_id, uint16_t cover_art_psm) override;
+  uint16_t EnableCovertArt(uint16_t cover_art_psm, uint16_t request_id) override;
 
   /**
    * Unsupported method for control SDP records.
    * @param request_id no-op
    * @return AVRC_FAIL as it's unsupported.
    */
-  uint16_t DisableCovertArt(const uint16_t request_id) override;
+  uint16_t DisableCovertArt(uint16_t request_id) override;
 
 protected:
   /**
@@ -195,7 +195,7 @@ protected:
    * @return AVRC_SUCCESS if successful.
    *         AVRC_FAIL otherwise
    */
-  uint16_t UpdateRecord(const uint16_t updated_categories) override;
+  uint16_t UpdateRecord(uint16_t updated_categories) override;
 };
 
 /**
@@ -216,7 +216,7 @@ public:
    * @return AVRC_SUCCESS if successful.
    *         AVRC_FAIL otherwise
    */
-  uint16_t EnableCovertArt(uint16_t cover_art_psm, const uint16_t request_id) override;
+  uint16_t EnableCovertArt(uint16_t cover_art_psm, uint16_t request_id) override;
 
   /**
    * Disables cover art support. It removes the existing SDP records, removes
@@ -226,6 +226,6 @@ public:
    * @return AVRC_SUCCESS if successful.
    *         AVRC_FAIL otherwise
    */
-  uint16_t DisableCovertArt(const uint16_t request_id) override;
+  uint16_t DisableCovertArt(uint16_t request_id) override;
 };
 }  // namespace bluetooth::avrcp
