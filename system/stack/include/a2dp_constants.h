@@ -16,14 +16,8 @@
  *
  ******************************************************************************/
 
-//
-// A2DP constants defined by the Profile Specification
-//
-
-#ifndef A2DP_CONSTANTS_H
-#define A2DP_CONSTANTS_H
-
-#include <inttypes.h>
+#pragma once
+#include <bluetooth/log.h>
 
 #include <cstdint>
 
@@ -38,17 +32,17 @@
 #define A2DP_SUPF_RECORDER 0x0004
 #define A2DP_SUPF_AMP 0x0008
 
-/* AV Media Codec Types (Audio Codec ID) */
-#define A2DP_MEDIA_CT_SBC 0x00 /* SBC media codec type */
-#define A2DP_MEDIA_CT_AAC 0x02 /* AAC media codec type */
-/* Non-A2DP media codec type (vendor-specific codec) */
-#define A2DP_MEDIA_CT_NON_A2DP 0xFF
-
-typedef uint8_t tA2DP_CODEC_TYPE; /* A2DP Codec type: A2DP_MEDIA_CT_* */
+// AV Media Codec Types (Audio Codec ID).
+// cf. Assigned Numbers § 6.5.1 Audio Codec ID
+enum tA2DP_CODEC_TYPE : uint8_t {
+  A2DP_MEDIA_CT_SBC = 0x00,
+  A2DP_MEDIA_CT_AAC = 0x02,
+  A2DP_MEDIA_CT_NON_A2DP = 0xff,
+};
 
 // Standardized codec identifiers.
 // The codec identifier is 40 bits,
-//  - Bits 0-7: Audio Codec ID, as defined by [ID 6.5.1]
+//  - Bits 0-7: Audio Codec ID, as defined by Assigned Numbers § 6.5.1 Audio Codec ID
 //          0x00: SBC
 //          0x02: AAC
 //          0xFF: Vendor
@@ -56,7 +50,7 @@ typedef uint8_t tA2DP_CODEC_TYPE; /* A2DP Codec type: A2DP_MEDIA_CT_* */
 //          set to 0, if octet 0 is not 0xFF.
 //  - Bits 24-39: Vendor-defined codec ID,
 //          set to 0, if octet 0 is not 0xFF.
-enum : uint64_t {
+enum tA2DP_CODEC_ID : uint64_t {
   A2DP_CODEC_ID_SBC = 0x0000000000,
   A2DP_CODEC_ID_AAC = 0x0000000002,
   A2DP_CODEC_ID_APTX = 0x0001004fff,
@@ -65,4 +59,7 @@ enum : uint64_t {
   A2DP_CODEC_ID_OPUS = 0x000100e0ff,
 };
 
-#endif  // A2DP_CONSTANTS_H
+namespace fmt {
+template <>
+struct formatter<tA2DP_CODEC_TYPE> : enum_formatter<tA2DP_CODEC_TYPE> {};
+}  // namespace fmt
