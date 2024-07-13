@@ -82,7 +82,7 @@ const tBTA_AG_SDP_CBACK bta_ag_sdp_cback_tbl[] = {bta_ag_sdp_cback_1, bta_ag_sdp
  * Returns          void
  *
  ******************************************************************************/
-static void bta_ag_sdp_cback(uint16_t status, uint8_t idx) {
+static void bta_ag_sdp_cback(tSDP_STATUS status, uint8_t idx) {
   log::verbose("status:0x{:x}", status);
   tBTA_AG_SCB* p_scb = bta_ag_scb_by_idx(idx);
   if (p_scb) {
