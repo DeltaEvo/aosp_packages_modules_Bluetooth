@@ -275,7 +275,7 @@ void sdpu_log_attribute_metrics(const RawAddress& bda, tSDP_DISCOVERY_DB* p_db) 
   // Log the first DI record if there is one
   if (has_di_record) {
     tSDP_DI_GET_RECORD di_record = {};
-    if (SDP_GetDiRecord(1, &di_record, p_db) == SDP_SUCCESS) {
+    if (SDP_GetDiRecord(1, &di_record, p_db) == tSDP_STATUS::SDP_SUCCESS) {
       auto version_array = to_little_endian_array(di_record.spec_id);
       log_sdp_attribute(bda, UUID_SERVCLASS_PNP_INFORMATION, ATTR_ID_SPECIFICATION_ID,
                         version_array.size(), version_array.data());
@@ -530,7 +530,7 @@ bool sdpu_process_pend_ccb_new_cid(tCONN_CB& ccb) {
         // update alls cid to the new one for future reference
         p_ccb->connection_id = new_cid;
       } else {
-        sdpu_callback(*p_ccb, SDP_CONN_FAILED);
+        sdpu_callback(*p_ccb, tSDP_STATUS::SDP_CONN_FAILED);
         sdpu_release_ccb(*p_ccb);
       }
     }
@@ -557,7 +557,7 @@ void sdpu_clear_pend_ccb(tCONN_CB& ccb) {
   for (xx = 0, p_ccb = sdp_cb.ccb; xx < SDP_MAX_CONNECTIONS; xx++, p_ccb++) {
     if ((p_ccb->con_state == tSDP_STATE::CONN_PEND) &&
         (p_ccb->connection_id == ccb.connection_id) && (p_ccb->con_flags & SDP_FLAGS_IS_ORIG)) {
-      sdpu_callback(*p_ccb, SDP_CONN_FAILED);
+      sdpu_callback(*p_ccb, tSDP_STATUS::SDP_CONN_FAILED);
       sdpu_release_ccb(*p_ccb);
     }
   }

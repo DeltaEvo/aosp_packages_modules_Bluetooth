@@ -79,7 +79,7 @@ static void sdp_on_l2cap_error(uint16_t l2cap_cid, uint16_t /* result */) {
     sdpu_dump_all_ccb();
     return;
   }
-  sdp_disconnect(p_ccb, SDP_CFG_FAILED);
+  sdp_disconnect(p_ccb, tSDP_STATUS::SDP_CFG_FAILED);
 }
 
 /*******************************************************************************
@@ -199,8 +199,9 @@ static void sdp_disconnect_ind(uint16_t l2cap_cid, bool ack_needed) {
   }
   tCONN_CB& ccb = *p_ccb;
 
-  const tSDP_REASON reason =
-          (ccb.con_state == tSDP_STATE::CONNECTED) ? SDP_SUCCESS : SDP_CONN_FAILED;
+  const tSDP_REASON reason = (ccb.con_state == tSDP_STATE::CONNECTED)
+                                     ? tSDP_STATUS::SDP_SUCCESS
+                                     : tSDP_STATUS::SDP_CONN_FAILED;
   sdpu_callback(ccb, reason);
 
   if (ack_needed) {
@@ -317,7 +318,7 @@ void sdp_disconnect(tCONN_CB* p_ccb, tSDP_REASON reason) {
   /* Check if we have a connection ID */
   if (ccb.connection_id != 0) {
     ccb.disconnect_reason = reason;
-    if (SDP_SUCCESS == reason && sdpu_process_pend_ccb_same_cid(*p_ccb)) {
+    if (tSDP_STATUS::SDP_SUCCESS == reason && sdpu_process_pend_ccb_same_cid(*p_ccb)) {
       sdpu_callback(ccb, reason);
       sdpu_release_ccb(ccb);
       return;
@@ -384,7 +385,7 @@ void sdp_conn_timer_timeout(void* data) {
     log::warn("Unable to disconnect L2CAP peer:{} cid:{}", ccb.device_address, ccb.connection_id);
   }
 
-  sdpu_callback(ccb, SDP_CONN_FAILED);
+  sdpu_callback(ccb, tSDP_STATUS::SDP_CONN_FAILED);
   sdpu_clear_pend_ccb(ccb);
   sdpu_release_ccb(ccb);
 }

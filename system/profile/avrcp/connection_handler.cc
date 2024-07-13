@@ -137,7 +137,7 @@ bool ConnectionHandler::ConnectDevice(const RawAddress& bdaddr) {
   auto connection_lambda = [](ConnectionHandler* instance_, const RawAddress& bdaddr,
                               tSDP_STATUS status, uint16_t version, uint16_t features) {
     log::info("SDP Completed features=0x{:x}", features);
-    if (status != SDP_SUCCESS || !(features & BTA_AV_FEAT_RCCT)) {
+    if (status != tSDP_STATUS::SDP_SUCCESS || !(features & BTA_AV_FEAT_RCCT)) {
       log::error(
               "Failed to do SDP: status=0x{:x} features=0x{:x} supports "
               "controller: {}",
@@ -477,11 +477,11 @@ void ConnectionHandler::SdpCb(RawAddress bdaddr, SdpCallback cb, tSDP_DISCOVERY_
                               bool retry, tSDP_STATUS status) {
   log::verbose("SDP lookup callback received");
 
-  if (status == SDP_CONN_FAILED && !retry) {
+  if (status == tSDP_STATUS::SDP_CONN_FAILED && !retry) {
     log::warn("SDP Failure retry again");
     SdpLookup(bdaddr, cb, true);
     return;
-  } else if (status != AVRC_SUCCESS) {
+  } else if (status != tSDP_STATUS::SDP_SUCCESS) {
     log::error("SDP Failure: status = {}", (unsigned int)status);
     cb.Run(status, 0, 0);
     osi_free(disc_db);
