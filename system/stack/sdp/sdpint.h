@@ -197,7 +197,7 @@ struct tCONN_CB {
   uint16_t num_handles;                       /* Number of server handles     */
   uint16_t cur_handle;                        /* Current handle being processed */
   uint16_t transaction_id;
-  uint16_t disconnect_reason; /* Disconnect reason            */
+  tSDP_REASON disconnect_reason; /* Disconnect reason            */
 
   uint8_t disc_state;
   bool is_attr_search;
