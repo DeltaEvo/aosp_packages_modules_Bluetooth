@@ -25,6 +25,7 @@
 #include "avrcp_test_helper.h"
 #include "connection_handler.h"
 #include "sdpdefs.h"
+#include "stack/include/sdp_status.h"
 #include "types/raw_address.h"
 
 using ::testing::_;
@@ -213,7 +214,7 @@ TEST_F(AvrcpConnectionHandlerTest, remoteDeviceConnectionTest) {
   conn_cb.ctrl_cback.Run(1, AVRC_OPEN_IND_EVT, 0, &RawAddress::kAny);
 
   // Run the SDP callback with status success
-  sdp_cb.Run(0);
+  sdp_cb.Run(SDP_SUCCESS);
 
   // Check that a device was created
   ASSERT_TRUE(current_device_ != nullptr);
@@ -255,7 +256,7 @@ TEST_F(AvrcpConnectionHandlerTest, noAbsoluteVolumeTest) {
   conn_cb.ctrl_cback.Run(1, AVRC_OPEN_IND_EVT, 0, &RawAddress::kAny);
 
   // Run the SDP callback with status success
-  sdp_cb.Run(0);
+  sdp_cb.Run(SDP_SUCCESS);
 
   // Check that a device was created
   ASSERT_TRUE(current_device_ != nullptr);
@@ -297,7 +298,7 @@ TEST_F(AvrcpConnectionHandlerTest, absoluteVolumeTest) {
   conn_cb.ctrl_cback.Run(1, AVRC_OPEN_IND_EVT, 0, &RawAddress::kAny);
 
   // Run the SDP callback with status success
-  sdp_cb.Run(0);
+  sdp_cb.Run(SDP_SUCCESS);
 
   // Check that a device was created
   ASSERT_TRUE(current_device_ != nullptr);
@@ -380,7 +381,7 @@ TEST_F(AvrcpConnectionHandlerTest, multipleRemoteDeviceConnectionTest) {
   current_device_.reset();
 
   // Run the SDP callback with status success
-  sdp_cb.Run(0);
+  sdp_cb.Run(SDP_SUCCESS);
 
   // Set an Expectations that SDP will be performed again
   SetUpSdp(&sdp_cb, false, false);
@@ -397,7 +398,7 @@ TEST_F(AvrcpConnectionHandlerTest, multipleRemoteDeviceConnectionTest) {
   ASSERT_TRUE(current_device_ != nullptr);
 
   // Run the SDP callback with status success
-  sdp_cb.Run(0);
+  sdp_cb.Run(SDP_SUCCESS);
 
   connection_handler_ = nullptr;
   ConnectionHandler::CleanUp();
@@ -451,7 +452,7 @@ TEST_F(AvrcpConnectionHandlerTest, connectToRemoteDeviceTest) {
           .WillOnce(DoAll(SetArgPointee<0>(1), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Complete SDP
-  sdp_cb.Run(0);
+  sdp_cb.Run(SDP_SUCCESS);
 
   // Check that the callback was sent with us as the initiator
   ASSERT_EQ(conn_cb.conn, 0);
@@ -493,7 +494,7 @@ TEST_F(AvrcpConnectionHandlerTest, connectToBrowsableRemoteDeviceTest) {
           .WillOnce(DoAll(SetArgPointee<0>(1), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Complete SDP
-  sdp_cb.Run(0);
+  sdp_cb.Run(SDP_SUCCESS);
 
   // Check that the callback was sent with us as the initiator
   ASSERT_EQ(conn_cb.conn, 0);
@@ -543,7 +544,7 @@ TEST_F(AvrcpConnectionHandlerTest, disconnectWhileDoingSdpTest) {
   conn_cb.ctrl_cback.Run(1, AVRC_CLOSE_IND_EVT, 0, &RawAddress::kAny);
 
   // Signal that SDP has completed
-  sdp_cb.Run(0);
+  sdp_cb.Run(SDP_SUCCESS);
 
   connection_handler_ = nullptr;
   ConnectionHandler::CleanUp();
@@ -592,7 +593,7 @@ TEST_F(AvrcpConnectionHandlerTest, connectionCollisionTest) {
   EXPECT_CALL(mock_avrcp_, Close(_));
 
   // Run the SDP callback with status success
-  sdp_cb.Run(0);
+  sdp_cb.Run(SDP_SUCCESS);
 
   connection_handler_ = nullptr;
   ConnectionHandler::CleanUp();

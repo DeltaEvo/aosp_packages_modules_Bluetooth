@@ -46,6 +46,7 @@
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/l2c_api.h"
 #include "stack/include/sdp_api.h"
+#include "stack/include/sdp_status.h"
 #include "types/raw_address.h"
 
 using namespace bluetooth::legacy::stack::sdp;
@@ -199,7 +200,7 @@ static void bta_av_del_sdp_rec(uint32_t* p_sdp_handle) {
  * Returns          void
  *
  ******************************************************************************/
-static void bta_av_avrc_sdp_cback(uint16_t /* status */) {
+static void bta_av_avrc_sdp_cback(tSDP_STATUS /* status */) {
   BT_HDR_RIGID* p_msg = (BT_HDR_RIGID*)osi_malloc(sizeof(BT_HDR_RIGID));
 
   p_msg->event = BTA_AV_SDP_AVRC_DISC_EVT;
