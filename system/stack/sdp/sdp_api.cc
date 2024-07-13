@@ -824,9 +824,9 @@ static void SDP_AttrStringCopy(char* dst, const tSDP_DISC_ATTR* p_attr, uint16_t
  * Returns          SDP_SUCCESS if record retrieved, else error
  *
  ******************************************************************************/
-uint16_t SDP_GetDiRecord(uint8_t get_record_index, tSDP_DI_GET_RECORD* p_device_info,
-                         const tSDP_DISCOVERY_DB* p_db) {
-  uint16_t result = SDP_NO_DI_RECORD_FOUND;
+tSDP_STATUS SDP_GetDiRecord(uint8_t get_record_index, tSDP_DI_GET_RECORD* p_device_info,
+                            const tSDP_DISCOVERY_DB* p_db) {
+  tSDP_STATUS result = SDP_NO_DI_RECORD_FOUND;
   uint8_t curr_record_index = 1;
 
   tSDP_DISC_REC* p_curr_record = NULL;

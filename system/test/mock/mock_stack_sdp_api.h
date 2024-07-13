@@ -222,12 +222,12 @@ extern struct SDP_DiDiscover SDP_DiDiscover;
 // Params: uint8_t get_record_index, tSDP_DI_GET_RECORD* p_device_info,
 // tSDP_DISCOVERY_DB* p_db Returns: uint16_t
 struct SDP_GetDiRecord {
-  std::function<uint16_t(uint8_t get_record_index, tSDP_DI_GET_RECORD* p_device_info,
-                         const tSDP_DISCOVERY_DB* p_db)>
+  std::function<tSDP_STATUS(uint8_t get_record_index, tSDP_DI_GET_RECORD* p_device_info,
+                            const tSDP_DISCOVERY_DB* p_db)>
           body{[](uint8_t /* get_record_index */, tSDP_DI_GET_RECORD* /* p_device_info */,
-                  const tSDP_DISCOVERY_DB* /* p_db */) { return 0; }};
-  uint16_t operator()(uint8_t get_record_index, tSDP_DI_GET_RECORD* p_device_info,
-                      const tSDP_DISCOVERY_DB* p_db) {
+                  const tSDP_DISCOVERY_DB* /* p_db */) { return SDP_SUCCESS; }};
+  tSDP_STATUS operator()(uint8_t get_record_index, tSDP_DI_GET_RECORD* p_device_info,
+                         const tSDP_DISCOVERY_DB* p_db) {
     return body(get_record_index, p_device_info, p_db);
   }
 };

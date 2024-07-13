@@ -420,5 +420,5 @@ uint8_t SDP_GetNumDiRecords(const tSDP_DISCOVERY_DB* p_db);
  * Returns          SDP_SUCCESS if record retrieved, else error
  *
  ******************************************************************************/
-uint16_t SDP_GetDiRecord(uint8_t getRecordIndex, tSDP_DI_GET_RECORD* device_info,
-                         const tSDP_DISCOVERY_DB* p_db);
+tSDP_STATUS SDP_GetDiRecord(uint8_t getRecordIndex, tSDP_DI_GET_RECORD* device_info,
+                            const tSDP_DISCOVERY_DB* p_db);

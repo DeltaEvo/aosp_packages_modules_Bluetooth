@@ -130,8 +130,8 @@ tSDP_STATUS SDP_DiDiscover(const RawAddress& remote_device, tSDP_DISCOVERY_DB* p
   inc_func_call_count(__func__);
   return test::mock::stack_sdp_api::SDP_DiDiscover(remote_device, p_db, len, p_cb);
 }
-uint16_t SDP_GetDiRecord(uint8_t get_record_index, tSDP_DI_GET_RECORD* p_device_info,
-                         const tSDP_DISCOVERY_DB* p_db) {
+tSDP_STATUS SDP_GetDiRecord(uint8_t get_record_index, tSDP_DI_GET_RECORD* p_device_info,
+                            const tSDP_DISCOVERY_DB* p_db) {
   inc_func_call_count(__func__);
   return test::mock::stack_sdp_api::SDP_GetDiRecord(get_record_index, p_device_info, p_db);
 }
