@@ -929,8 +929,8 @@ uint16_t SDP_GetDiRecord(uint8_t get_record_index, tSDP_DI_GET_RECORD* p_device_
  * Returns          Returns SDP_SUCCESS if record added successfully, else error
  *
  ******************************************************************************/
-uint16_t SDP_SetLocalDiRecord(const tSDP_DI_RECORD* p_device_info, uint32_t* p_handle) {
-  uint16_t result = SDP_SUCCESS;
+tSDP_STATUS SDP_SetLocalDiRecord(const tSDP_DI_RECORD* p_device_info, uint32_t* p_handle) {
+  tSDP_STATUS result = SDP_SUCCESS;
   uint32_t handle;
   uint16_t di_uuid = UUID_SERVCLASS_PNP_INFORMATION;
   uint16_t di_specid = BLUETOOTH_DI_SPECIFICATION;

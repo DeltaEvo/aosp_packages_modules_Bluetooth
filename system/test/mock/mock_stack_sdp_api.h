@@ -236,9 +236,11 @@ extern struct SDP_GetDiRecord SDP_GetDiRecord;
 // Params: tSDP_DI_RECORD* p_device_info, uint32_t* p_handle
 // Returns: uint16_t
 struct SDP_SetLocalDiRecord {
-  std::function<uint16_t(const tSDP_DI_RECORD* p_device_info, uint32_t* p_handle)> body{
-          [](const tSDP_DI_RECORD* /* p_device_info */, uint32_t* /* p_handle */) { return 0; }};
-  uint16_t operator()(const tSDP_DI_RECORD* p_device_info, uint32_t* p_handle) {
+  std::function<tSDP_STATUS(const tSDP_DI_RECORD* p_device_info, uint32_t* p_handle)> body{
+          [](const tSDP_DI_RECORD* /* p_device_info */, uint32_t* /* p_handle */) {
+            return SDP_SUCCESS;
+          }};
+  tSDP_STATUS operator()(const tSDP_DI_RECORD* p_device_info, uint32_t* p_handle) {
     return body(p_device_info, p_handle);
   }
 };

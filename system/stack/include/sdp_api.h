@@ -504,8 +504,8 @@ struct tSdpApi {
                        error
 
      ******************************************************************************/
-    [[nodiscard]] uint16_t (*SDP_SetLocalDiRecord)(const tSDP_DI_RECORD* device_info,
-                                                   uint32_t* p_handle);
+    [[nodiscard]] tSDP_STATUS (*SDP_SetLocalDiRecord)(const tSDP_DI_RECORD* device_info,
+                                                      uint32_t* p_handle);
 
     /*******************************************************************************
 
