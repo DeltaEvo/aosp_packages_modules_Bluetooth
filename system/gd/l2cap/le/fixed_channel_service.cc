@@ -15,17 +15,19 @@
  */
 
 #include "l2cap/le/fixed_channel_service.h"
+
 #include "l2cap/le/internal/fixed_channel_service_manager_impl.h"
 
 namespace bluetooth {
 namespace l2cap {
 namespace le {
 
-void FixedChannelService::Unregister(OnUnregisteredCallback on_unregistered, os::Handler* on_unregistered_handler) {
+void FixedChannelService::Unregister(OnUnregisteredCallback on_unregistered,
+                                     os::Handler* on_unregistered_handler) {
   log::assert_that(manager_ != nullptr, "this service is invalid");
   l2cap_layer_handler_->Post(common::BindOnce(&internal::FixedChannelServiceManagerImpl::Unregister,
-                                              common::Unretained(manager_), cid_, std::move(on_unregistered),
-                                              on_unregistered_handler));
+                                              common::Unretained(manager_), cid_,
+                                              std::move(on_unregistered), on_unregistered_handler));
 }
 
 }  // namespace le

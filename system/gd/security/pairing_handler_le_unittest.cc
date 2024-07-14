@@ -50,7 +50,7 @@ CommandView BuilderToView(std::unique_ptr<BasePacketBuilder> builder) {
 }
 
 class PairingResultHandlerMock {
- public:
+public:
   MOCK_CONST_METHOD1(OnPairingFinished, void(PairingResultOrFailure));
 };
 
@@ -60,8 +60,8 @@ UIMock uiMock;
 
 void OnPairingFinished(PairingResultOrFailure r) {
   if (std::holds_alternative<PairingResult>(r)) {
-    log::info(
-        "pairing with {} finished successfully!", std::get<PairingResult>(r).connection_address);
+    log::info("pairing with {} finished successfully!",
+              std::get<PairingResult>(r).connection_address);
   } else {
     log::info("pairing with ... failed!");
   }
@@ -70,17 +70,19 @@ void OnPairingFinished(PairingResultOrFailure r) {
 }  // namespace
 
 class PairingHandlerUnitTest : public testing::Test {
- protected:
+protected:
   void SetUp() {
     thread_ = new os::Thread("test_thread", os::Thread::Priority::NORMAL);
     handler_ = new os::Handler(thread_);
 
-    bidi_queue_ =
-        std::make_unique<common::BidiQueue<packet::PacketView<packet::kLittleEndian>, packet::BasePacketBuilder>>(10);
-    up_buffer_ = std::make_unique<os::EnqueueBuffer<packet::BasePacketBuilder>>(bidi_queue_->GetUpEnd());
+    bidi_queue_ = std::make_unique<common::BidiQueue<packet::PacketView<packet::kLittleEndian>,
+                                                     packet::BasePacketBuilder>>(10);
+    up_buffer_ =
+            std::make_unique<os::EnqueueBuffer<packet::BasePacketBuilder>>(bidi_queue_->GetUpEnd());
 
     bidi_queue_->GetDownEnd()->RegisterDequeue(
-        handler_, common::Bind(&PairingHandlerUnitTest::L2CAP_SendSmp, common::Unretained(this)));
+            handler_,
+            common::Bind(&PairingHandlerUnitTest::L2CAP_SendSmp, common::Unretained(this)));
 
     pairingResult.reset(new PairingResultHandlerMock);
   }
@@ -108,7 +110,8 @@ class PairingHandlerUnitTest : public testing::Test {
     std::mutex mutex;
     std::unique_lock<std::mutex> lock(mutex);
 
-    // It is possible that we lost wakeup from condition_variable, check if data is already waiting to be processed
+    // It is possible that we lost wakeup from condition_variable, check if data is already waiting
+    // to be processed
     if (outgoing_l2cap_packet_ != std::nullopt) {
       std::optional<bluetooth::security::CommandView> tmp = std::nullopt;
       outgoing_l2cap_packet_.swap(tmp);
@@ -116,7 +119,8 @@ class PairingHandlerUnitTest : public testing::Test {
     }
 
     // Data not ready yet, wait for it.
-    if (outgoing_l2cap_blocker_.wait_for(lock, std::chrono::seconds(5)) == std::cv_status::timeout) {
+    if (outgoing_l2cap_blocker_.wait_for(lock, std::chrono::seconds(5)) ==
+        std::cv_status::timeout) {
       return std::nullopt;
     }
 
@@ -125,34 +129,37 @@ class PairingHandlerUnitTest : public testing::Test {
     return tmp;
   }
 
- public:
+public:
   os::Thread* thread_;
   os::Handler* handler_;
-  std::unique_ptr<common::BidiQueue<packet::PacketView<packet::kLittleEndian>, packet::BasePacketBuilder>> bidi_queue_;
+  std::unique_ptr<
+          common::BidiQueue<packet::PacketView<packet::kLittleEndian>, packet::BasePacketBuilder>>
+          bidi_queue_;
   std::unique_ptr<os::EnqueueBuffer<packet::BasePacketBuilder>> up_buffer_;
   std::condition_variable outgoing_l2cap_blocker_;
   std::optional<bluetooth::security::CommandView> outgoing_l2cap_packet_ = std::nullopt;
 };
 
 InitialInformations initial_informations{
-    .my_role = hci::Role::CENTRAL,
-    .my_connection_address = {{}, hci::AddressType::PUBLIC_DEVICE_ADDRESS},
-    .my_identity_address = {{}, hci::AddressType::PUBLIC_DEVICE_ADDRESS},
-    .my_identity_resolving_key =
-        {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
+        .my_role = hci::Role::CENTRAL,
+        .my_connection_address = {{}, hci::AddressType::PUBLIC_DEVICE_ADDRESS},
+        .my_identity_address = {{}, hci::AddressType::PUBLIC_DEVICE_ADDRESS},
+        .my_identity_resolving_key = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+                                      0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
 
-    .myPairingCapabilities = {.io_capability = IoCapability::NO_INPUT_NO_OUTPUT,
-                              .oob_data_flag = OobDataFlag::NOT_PRESENT,
-                              .auth_req = AuthReqMaskBondingFlag | AuthReqMaskMitm | AuthReqMaskSc,
-                              .maximum_encryption_key_size = 16,
-                              .initiator_key_distribution = 0x03,
-                              .responder_key_distribution = 0x03},
+        .myPairingCapabilities = {.io_capability = IoCapability::NO_INPUT_NO_OUTPUT,
+                                  .oob_data_flag = OobDataFlag::NOT_PRESENT,
+                                  .auth_req =
+                                          AuthReqMaskBondingFlag | AuthReqMaskMitm | AuthReqMaskSc,
+                                  .maximum_encryption_key_size = 16,
+                                  .initiator_key_distribution = 0x03,
+                                  .responder_key_distribution = 0x03},
 
-    .remotely_initiated = false,
-    .remote_connection_address = {{}, hci::AddressType::RANDOM_DEVICE_ADDRESS},
-    .user_interface = &uiMock,
-    .le_security_interface = &leSecurityMock,
-    .OnPairingFinished = OnPairingFinished,
+        .remotely_initiated = false,
+        .remote_connection_address = {{}, hci::AddressType::RANDOM_DEVICE_ADDRESS},
+        .user_interface = &uiMock,
+        .le_security_interface = &leSecurityMock,
+        .OnPairingFinished = OnPairingFinished,
 };
 
 TEST_F(PairingHandlerUnitTest, test_phase_1_failure) {
@@ -161,7 +168,7 @@ TEST_F(PairingHandlerUnitTest, test_phase_1_failure) {
   initial_informations.user_interface_handler = handler_;
 
   std::unique_ptr<PairingHandlerLe> pairing_handler =
-      std::make_unique<PairingHandlerLe>(PairingHandlerLe::PHASE1, initial_informations);
+          std::make_unique<PairingHandlerLe>(PairingHandlerLe::PHASE1, initial_informations);
 
   std::optional<bluetooth::security::CommandView> pairing_request = WaitForOutgoingL2capPacket();
   EXPECT_TRUE(pairing_request.has_value());
@@ -187,16 +194,17 @@ TEST_F(PairingHandlerUnitTest, test_secure_connections_just_works) {
   // we keep the pairing_handler as unique_ptr to better mimick how it's used
   // in the real world
   std::unique_ptr<PairingHandlerLe> pairing_handler =
-      std::make_unique<PairingHandlerLe>(PairingHandlerLe::PHASE1, initial_informations);
+          std::make_unique<PairingHandlerLe>(PairingHandlerLe::PHASE1, initial_informations);
 
-  std::optional<bluetooth::security::CommandView> pairing_request_pkt = WaitForOutgoingL2capPacket();
+  std::optional<bluetooth::security::CommandView> pairing_request_pkt =
+          WaitForOutgoingL2capPacket();
   EXPECT_TRUE(pairing_request_pkt.has_value());
   EXPECT_EQ(pairing_request_pkt->GetCode(), Code::PAIRING_REQUEST);
   CommandView pairing_request = pairing_request_pkt.value();
 
-  auto pairing_response = BuilderToView(
-      PairingResponseBuilder::Create(IoCapability::KEYBOARD_DISPLAY, OobDataFlag::NOT_PRESENT,
-                                     AuthReqMaskBondingFlag | AuthReqMaskMitm | AuthReqMaskSc, 16, 0x03, 0x03));
+  auto pairing_response = BuilderToView(PairingResponseBuilder::Create(
+          IoCapability::KEYBOARD_DISPLAY, OobDataFlag::NOT_PRESENT,
+          AuthReqMaskBondingFlag | AuthReqMaskMitm | AuthReqMaskSc, 16, 0x03, 0x03));
   pairing_handler->OnCommandView(pairing_response);
   // Phase 1 finished.
 
@@ -212,7 +220,8 @@ TEST_F(PairingHandlerUnitTest, test_secure_connections_just_works) {
 
   const auto [private_key, public_key] = GenerateECDHKeyPair();
 
-  pairing_handler->OnCommandView(BuilderToView(PairingPublicKeyBuilder::Create(public_key.x, public_key.y)));
+  pairing_handler->OnCommandView(
+          BuilderToView(PairingPublicKeyBuilder::Create(public_key.x, public_key.y)));
   // DHKey exchange finished
   std::array<uint8_t, 32> dhkey = ComputeDHKey(private_key, my_public_key);
 
@@ -223,7 +232,8 @@ TEST_F(PairingHandlerUnitTest, test_secure_connections_just_works) {
   Octet16 Nb = GenerateRandom<16>();
 
   // Compute confirm
-  Octet16 Cb = crypto_toolbox::f4((uint8_t*)public_key.x.data(), (uint8_t*)my_public_key.x.data(), Nb, 0);
+  Octet16 Cb = crypto_toolbox::f4((uint8_t*)public_key.x.data(), (uint8_t*)my_public_key.x.data(),
+                                  Nb, 0);
 
   pairing_handler->OnCommandView(BuilderToView(PairingConfirmBuilder::Create(Cb)));
 
@@ -240,7 +250,8 @@ TEST_F(PairingHandlerUnitTest, test_secure_connections_just_works) {
   // Start of authentication stage 2
   uint8_t a[7];
   uint8_t b[7];
-  memcpy(b, initial_informations.remote_connection_address.GetAddress().data(), hci::Address::kLength);
+  memcpy(b, initial_informations.remote_connection_address.GetAddress().data(),
+         hci::Address::kLength);
   b[6] = (uint8_t)initial_informations.remote_connection_address.GetAddressType();
   memcpy(a, initial_informations.my_connection_address.GetAddress().data(), hci::Address::kLength);
   a[6] = (uint8_t)initial_informations.my_connection_address.GetAddressType();
@@ -275,24 +286,25 @@ TEST_F(PairingHandlerUnitTest, test_secure_connections_just_works) {
 }
 
 InitialInformations initial_informations_trsi{
-    .my_role = hci::Role::CENTRAL,
-    .my_connection_address = hci::AddressWithType(),
-    .my_identity_address = {{}, hci::AddressType::PUBLIC_DEVICE_ADDRESS},
-    .my_identity_resolving_key =
-        {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
+        .my_role = hci::Role::CENTRAL,
+        .my_connection_address = hci::AddressWithType(),
+        .my_identity_address = {{}, hci::AddressType::PUBLIC_DEVICE_ADDRESS},
+        .my_identity_resolving_key = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+                                      0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
 
-    .myPairingCapabilities = {.io_capability = IoCapability::NO_INPUT_NO_OUTPUT,
-                              .oob_data_flag = OobDataFlag::NOT_PRESENT,
-                              .auth_req = AuthReqMaskBondingFlag | AuthReqMaskMitm | AuthReqMaskSc,
-                              .maximum_encryption_key_size = 16,
-                              .initiator_key_distribution = 0x03,
-                              .responder_key_distribution = 0x03},
+        .myPairingCapabilities = {.io_capability = IoCapability::NO_INPUT_NO_OUTPUT,
+                                  .oob_data_flag = OobDataFlag::NOT_PRESENT,
+                                  .auth_req =
+                                          AuthReqMaskBondingFlag | AuthReqMaskMitm | AuthReqMaskSc,
+                                  .maximum_encryption_key_size = 16,
+                                  .initiator_key_distribution = 0x03,
+                                  .responder_key_distribution = 0x03},
 
-    .remotely_initiated = true,
-    .remote_connection_address = hci::AddressWithType(),
-    .user_interface = &uiMock,
-    .le_security_interface = &leSecurityMock,
-    .OnPairingFinished = OnPairingFinished,
+        .remotely_initiated = true,
+        .remote_connection_address = hci::AddressWithType(),
+        .user_interface = &uiMock,
+        .le_security_interface = &leSecurityMock,
+        .OnPairingFinished = OnPairingFinished,
 };
 
 /* This test verifies that when remote peripheral device sends security request , and user
@@ -302,13 +314,15 @@ TEST_F(PairingHandlerUnitTest, test_remote_peripheral_initiating) {
   initial_informations_trsi.l2cap_handler = handler_;
   initial_informations_trsi.user_interface_handler = handler_;
 
-  std::unique_ptr<PairingHandlerLe> pairing_handler =
-      std::make_unique<PairingHandlerLe>(PairingHandlerLe::ACCEPT_PROMPT, initial_informations_trsi);
+  std::unique_ptr<PairingHandlerLe> pairing_handler = std::make_unique<PairingHandlerLe>(
+          PairingHandlerLe::ACCEPT_PROMPT, initial_informations_trsi);
 
   // Simulate user accepting the pairing in UI
-  pairing_handler->OnUiAction(PairingEvent::PAIRING_ACCEPTED, 0x01 /* Non-zero value means success */);
+  pairing_handler->OnUiAction(PairingEvent::PAIRING_ACCEPTED,
+                              0x01 /* Non-zero value means success */);
 
-  std::optional<bluetooth::security::CommandView> pairing_request_pkt = WaitForOutgoingL2capPacket();
+  std::optional<bluetooth::security::CommandView> pairing_request_pkt =
+          WaitForOutgoingL2capPacket();
   EXPECT_TRUE(pairing_request_pkt.has_value());
   EXPECT_EQ(Code::PAIRING_REQUEST, pairing_request_pkt->GetCode());
 
@@ -317,48 +331,47 @@ TEST_F(PairingHandlerUnitTest, test_remote_peripheral_initiating) {
 }
 
 InitialInformations initial_informations_trmi{
-    .my_role = hci::Role::PERIPHERAL,
-    .my_connection_address = hci::AddressWithType(),
-    .my_identity_address = {{}, hci::AddressType::PUBLIC_DEVICE_ADDRESS},
-    .my_identity_resolving_key =
-        {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
+        .my_role = hci::Role::PERIPHERAL,
+        .my_connection_address = hci::AddressWithType(),
+        .my_identity_address = {{}, hci::AddressType::PUBLIC_DEVICE_ADDRESS},
+        .my_identity_resolving_key = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+                                      0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
 
-    .myPairingCapabilities = {.io_capability = IoCapability::NO_INPUT_NO_OUTPUT,
-                              .oob_data_flag = OobDataFlag::NOT_PRESENT,
-                              .auth_req = AuthReqMaskBondingFlag | AuthReqMaskMitm | AuthReqMaskSc,
-                              .maximum_encryption_key_size = 16,
-                              .initiator_key_distribution = 0x03,
-                              .responder_key_distribution = 0x03},
+        .myPairingCapabilities = {.io_capability = IoCapability::NO_INPUT_NO_OUTPUT,
+                                  .oob_data_flag = OobDataFlag::NOT_PRESENT,
+                                  .auth_req =
+                                          AuthReqMaskBondingFlag | AuthReqMaskMitm | AuthReqMaskSc,
+                                  .maximum_encryption_key_size = 16,
+                                  .initiator_key_distribution = 0x03,
+                                  .responder_key_distribution = 0x03},
 
-    .remotely_initiated = true,
-    .remote_connection_address = hci::AddressWithType(),
-    .pairing_request = PairingRequestView::Create(BuilderToView(PairingRequestBuilder::Create(
-        IoCapability::NO_INPUT_NO_OUTPUT,
-        OobDataFlag::NOT_PRESENT,
-        AuthReqMaskBondingFlag | AuthReqMaskMitm | AuthReqMaskSc,
-        16,
-        0x03,
-        0x03))),
-    .user_interface = &uiMock,
-    .le_security_interface = &leSecurityMock,
+        .remotely_initiated = true,
+        .remote_connection_address = hci::AddressWithType(),
+        .pairing_request = PairingRequestView::Create(BuilderToView(PairingRequestBuilder::Create(
+                IoCapability::NO_INPUT_NO_OUTPUT, OobDataFlag::NOT_PRESENT,
+                AuthReqMaskBondingFlag | AuthReqMaskMitm | AuthReqMaskSc, 16, 0x03, 0x03))),
+        .user_interface = &uiMock,
+        .le_security_interface = &leSecurityMock,
 
-    .OnPairingFinished = OnPairingFinished,
+        .OnPairingFinished = OnPairingFinished,
 };
 
-/* This test verifies that when remote device sends pairing request, and user does accept the prompt, we do send proper
- * reply back */
+/* This test verifies that when remote device sends pairing request, and user does accept the
+ * prompt, we do send proper reply back */
 TEST_F(PairingHandlerUnitTest, test_remote_central_initiating) {
   initial_informations_trmi.proper_l2cap_interface = up_buffer_.get();
   initial_informations_trmi.l2cap_handler = handler_;
   initial_informations_trmi.user_interface_handler = handler_;
 
-  std::unique_ptr<PairingHandlerLe> pairing_handler =
-      std::make_unique<PairingHandlerLe>(PairingHandlerLe::ACCEPT_PROMPT, initial_informations_trmi);
+  std::unique_ptr<PairingHandlerLe> pairing_handler = std::make_unique<PairingHandlerLe>(
+          PairingHandlerLe::ACCEPT_PROMPT, initial_informations_trmi);
 
   // Simulate user accepting the pairing in UI
-  pairing_handler->OnUiAction(PairingEvent::PAIRING_ACCEPTED, 0x01 /* Non-zero value means success */);
+  pairing_handler->OnUiAction(PairingEvent::PAIRING_ACCEPTED,
+                              0x01 /* Non-zero value means success */);
 
-  std::optional<bluetooth::security::CommandView> pairing_response_pkt = WaitForOutgoingL2capPacket();
+  std::optional<bluetooth::security::CommandView> pairing_response_pkt =
+          WaitForOutgoingL2capPacket();
   EXPECT_TRUE(pairing_response_pkt.has_value());
   EXPECT_EQ(Code::PAIRING_RESPONSE, pairing_response_pkt->GetCode());
   // Phase 1 finished.

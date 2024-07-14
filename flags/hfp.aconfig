@@ -49,7 +49,7 @@ flag {
 flag {
     name: "reset_after_collision"
     namespace: "bluetooth"
-    description: "Reset p_scb when collision occured and rfcomm is not opened yet"
+    description: "Reset p_scb when collision occurred and rfcomm is not opened yet"
     bug: "332324315"
     metadata {
         purpose: PURPOSE_BUGFIX
@@ -121,6 +121,16 @@ flag {
     namespace: "bluetooth"
     description: "Flag to ignore connect state notification from Native to Java layer when already connected"
     bug: "346679106"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "update_sco_state_correctly_on_rfcomm_disconnect_during_codec_nego"
+    namespace: "bluetooth"
+    description: "Flag to set the SCO state correctly on RFCOMM disconnection during Codec Negotiation"
+    bug: "351778741"
     metadata {
         purpose: PURPOSE_BUGFIX
     }

@@ -34,7 +34,7 @@ static const char* CONFIG_FILE_PATH = "bt_config.conf";
 #endif  // __ANDROID__
 
 class SecurityRecordStorage {
- public:
+public:
   SecurityRecordStorage(storage::StorageModule* storage_module, os::Handler* handler);
 
   /**
@@ -62,7 +62,7 @@ class SecurityRecordStorage {
    */
   void RemoveDevice(hci::AddressWithType address);
 
- private:
+private:
   storage::StorageModule* storage_module_ __attribute__((unused));
   os::Handler* handler_ __attribute__((unused));
 };

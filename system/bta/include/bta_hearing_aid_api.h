@@ -44,7 +44,7 @@ const static uint8_t kPhyUpdateRetryLimit = 5;
 
 /** Implementations of HearingAid will also implement this interface */
 class HearingAidAudioReceiver {
- public:
+public:
   virtual ~HearingAidAudioReceiver() = default;
   virtual void OnAudioDataReady(const std::vector<uint8_t>& data) = 0;
 
@@ -53,16 +53,14 @@ class HearingAidAudioReceiver {
   //
   // @param stop_audio_ticks a callable function calls out to stop the media
   // timer for reading data.
-  virtual void OnAudioSuspend(
-      const std::function<void()>& stop_audio_ticks) = 0;
+  virtual void OnAudioSuspend(const std::function<void()>& stop_audio_ticks) = 0;
 
   // To notify hearing aid devices to be ready for streaming, and start the
   // media timer to feed the audio data.
   //
   // @param start_audio_ticks a callable function calls out to start a periodic
   // timer for feeding data from the audio HAL.
-  virtual void OnAudioResume(
-      const std::function<void()>& start_audio_ticks) = 0;
+  virtual void OnAudioResume(const std::function<void()>& start_audio_ticks) = 0;
 };
 
 // Number of rssi reads to attempt when requested
@@ -231,7 +229,7 @@ struct HearingDevice {
 };
 
 class HearingAid {
- public:
+public:
   virtual ~HearingAid() = default;
 
   static void Initialize(bluetooth::hearing_aid::HearingAidCallbacks* callbacks,
@@ -240,8 +238,7 @@ class HearingAid {
   static bool IsHearingAidRunning();
   static void DebugDump(int fd);
 
-  static void AddFromStorage(const HearingDevice& dev_info,
-                             bool is_acceptlisted);
+  static void AddFromStorage(const HearingDevice& dev_info, bool is_acceptlisted);
 
   static int GetDeviceCount();
 
@@ -275,10 +272,9 @@ struct CodecConfiguration {
 
 /** Represents source of audio for hearing aids */
 class HearingAidAudioSource {
- public:
+public:
   static void Start(const CodecConfiguration& codecConfiguration,
-                    HearingAidAudioReceiver* audioReceiver,
-                    uint16_t remote_delay_ms);
+                    HearingAidAudioReceiver* audioReceiver, uint16_t remote_delay_ms);
   static void Stop();
   static void Initialize();
   static void CleanUp();
@@ -287,6 +283,5 @@ class HearingAidAudioSource {
 
 namespace fmt {
 template <>
-struct formatter<connection_update_status_t>
-    : enum_formatter<connection_update_status_t> {};
+struct formatter<connection_update_status_t> : enum_formatter<connection_update_status_t> {};
 }  // namespace fmt

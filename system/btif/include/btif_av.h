@@ -31,25 +31,21 @@
 
 /* Interface methods for the A2DP source stack. */
 
-bt_status_t btif_av_source_init(
-    btav_source_callbacks_t* callbacks, int max_connected_audio_devices,
-    const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
-    const std::vector<btav_a2dp_codec_config_t>& offloading_preference,
-    std::vector<btav_a2dp_codec_info_t>* supported_codecs);
+bt_status_t btif_av_source_init(btav_source_callbacks_t* callbacks, int max_connected_audio_devices,
+                                const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
+                                const std::vector<btav_a2dp_codec_config_t>& offloading_preference,
+                                std::vector<btav_a2dp_codec_info_t>* supported_codecs);
 bt_status_t btif_av_source_connect(const RawAddress& peer_address);
 bt_status_t btif_av_source_disconnect(const RawAddress& peer_address);
-bt_status_t btif_av_source_set_silence_device(const RawAddress& peer_address,
-                                              bool silence);
+bt_status_t btif_av_source_set_silence_device(const RawAddress& peer_address, bool silence);
 bt_status_t btif_av_source_set_active_device(const RawAddress& peer_address);
 bt_status_t btif_av_source_set_codec_config_preference(
-    const RawAddress& peer_address,
-    std::vector<btav_a2dp_codec_config_t> codec_preferences);
+        const RawAddress& peer_address, std::vector<btav_a2dp_codec_config_t> codec_preferences);
 void btif_av_source_cleanup();
 
 /* Interface methods for the A2DP sink stack. */
 
-bt_status_t btif_av_sink_init(btav_sink_callbacks_t* callbacks,
-                              int max_connected_audio_devices);
+bt_status_t btif_av_sink_init(btav_sink_callbacks_t* callbacks, int max_connected_audio_devices);
 bt_status_t btif_av_sink_connect(const RawAddress& peer_address);
 bt_status_t btif_av_sink_disconnect(const RawAddress& peer_address);
 void btif_av_sink_cleanup();
@@ -153,8 +149,7 @@ void btif_av_clear_remote_suspend_flag(const A2dpType local_a2dp_type);
  * @param local_a2dp_type type of local a2dp profile.
  * @return true if the remote peer is capable of EDR
  */
-bool btif_av_is_peer_edr(const RawAddress& peer_address,
-                         const A2dpType local_a2dp_type);
+bool btif_av_is_peer_edr(const RawAddress& peer_address, const A2dpType local_a2dp_type);
 
 /**
  * Check whether the connected A2DP peer supports 3 Mbps EDR.
@@ -166,8 +161,7 @@ bool btif_av_is_peer_edr(const RawAddress& peer_address,
  * @param local_a2dp_type type of local a2dp profile.
  * @return true if the remote peer is capable of EDR and supports 3 Mbps
  */
-bool btif_av_peer_supports_3mbps(const RawAddress& peer_address,
-                                 const A2dpType local_a2dp_type);
+bool btif_av_peer_supports_3mbps(const RawAddress& peer_address, const A2dpType local_a2dp_type);
 
 /**
  * Check whether the mandatory codec is more preferred for this peer.
@@ -189,11 +183,9 @@ bool btif_av_peer_prefers_mandatory_codec(const RawAddress& peer_address,
  * to report
  */
 void btif_av_report_source_codec_state(
-    const RawAddress& peer_address,
-    const btav_a2dp_codec_config_t& codec_config,
-    const std::vector<btav_a2dp_codec_config_t>& codecs_local_capabilities,
-    const std::vector<btav_a2dp_codec_config_t>&
-        codecs_selectable_capabilities);
+        const RawAddress& peer_address, const btav_a2dp_codec_config_t& codec_config,
+        const std::vector<btav_a2dp_codec_config_t>& codecs_local_capabilities,
+        const std::vector<btav_a2dp_codec_config_t>& codecs_selectable_capabilities);
 
 /**
  * Initialize / shut down the A2DP Source service.
@@ -217,8 +209,7 @@ bt_status_t btif_av_sink_execute_service(bool enable);
  * @param peer_address the disconnected peer address
  * @param local_a2dp_type type of local a2dp profile.
  */
-void btif_av_acl_disconnected(const RawAddress& peer_address,
-                              const A2dpType local_a2dp_type);
+void btif_av_acl_disconnected(const RawAddress& peer_address, const A2dpType local_a2dp_type);
 
 /**
  * Dump debug-related information for the BTIF AV module.
@@ -271,8 +262,7 @@ bool btif_av_is_peer_silenced(const RawAddress& peer_address);
  * @param local_a2dp_type type of local a2dp profile.
  *
  */
-bool btif_av_is_connected_addr(const RawAddress& peer_address,
-                               const A2dpType local_a2dp_type);
+bool btif_av_is_connected_addr(const RawAddress& peer_address, const A2dpType local_a2dp_type);
 
 /**
  * Set the dynamic audio buffer size
@@ -293,8 +283,7 @@ void btif_av_set_low_latency(bool is_low_latency);
  * @param handle bta handle
  * @param peer_addr peer address
  */
-void btif_av_connect_sink_delayed(uint8_t handle,
-                                  const RawAddress& peer_address);
+void btif_av_connect_sink_delayed(uint8_t handle, const RawAddress& peer_address);
 
 /**
  * Check whether A2DP Source is enabled.

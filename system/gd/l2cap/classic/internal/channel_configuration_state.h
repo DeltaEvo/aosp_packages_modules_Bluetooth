@@ -25,21 +25,22 @@ namespace classic {
 namespace internal {
 
 struct ChannelConfigurationState {
- public:
+public:
   enum State {
     /**
-     * for the initiator path, a request has been sent but a positive response has not yet been received, and for the
-     * acceptor path, a request with acceptable options has not yet been received.
+     * for the initiator path, a request has been sent but a positive response has not yet been
+     * received, and for the acceptor path, a request with acceptable options has not yet been
+     * received.
      */
     WAIT_CONFIG_REQ_RSP,
     /**
-     * the acceptor path is complete after having responded to acceptable options, but for the initiator path, a
-     * positive response on the recent request has not yet been received.
+     * the acceptor path is complete after having responded to acceptable options, but for the
+     * initiator path, a positive response on the recent request has not yet been received.
      */
     WAIT_CONFIG_RSP,
     /**
-     * the initiator path is complete after having received a positive response, but for the acceptor path, a request
-     * with acceptable options has not yet been received.
+     * the initiator path is complete after having received a positive response, but for the
+     * acceptor path, a request with acceptable options has not yet been received.
      */
     WAIT_CONFIG_REQ,
     /**

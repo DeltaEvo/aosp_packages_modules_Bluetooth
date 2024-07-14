@@ -24,7 +24,7 @@
  * BTA AV codec callouts state.
  */
 class BtaAvCoState {
- public:
+public:
   BtaAvCoState() = default;
 
   /**
@@ -62,7 +62,7 @@ class BtaAvCoState {
   void Reset();
   virtual ~BtaAvCoState() = default;
 
- private:
+private:
   // The current active peer
   BtaAvCoPeer* active_peer_;
   // Current codec configuration
@@ -70,7 +70,7 @@ class BtaAvCoState {
 };
 
 class BtaAvCo {
- public:
+public:
   BtaAvCo(bool content_protect_enabled, BtaAvCoPeerCache* bta_av_co_peer_bank)
       : peer_cache_(bta_av_co_peer_bank),
         content_protect_enabled_(content_protect_enabled),
@@ -123,9 +123,8 @@ class BtaAvCo {
    * @param num_sources number of discovered Source SEPs
    * @param uuid_local local UUID
    */
-  void ProcessDiscoveryResult(tBTA_AV_HNDL bta_av_handle,
-                              const RawAddress& peer_address, uint8_t num_seps,
-                              uint8_t num_sinks, uint8_t num_sources,
+  void ProcessDiscoveryResult(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
+                              uint8_t num_seps, uint8_t num_sinks, uint8_t num_sources,
                               uint16_t uuid_local);
 
   /**
@@ -149,12 +148,9 @@ class BtaAvCo {
    * for the current codec configuration for the peer.
    * @return A2DP_SUCCESS on success, otherwise A2DP_FAIL
    */
-  tA2DP_STATUS ProcessSourceGetConfig(tBTA_AV_HNDL bta_av_handle,
-                                      const RawAddress& peer_address,
-                                      uint8_t* p_codec_info,
-                                      uint8_t* p_sep_info_idx, uint8_t seid,
-                                      uint8_t* p_num_protect,
-                                      uint8_t* p_protect_info);
+  tA2DP_STATUS ProcessSourceGetConfig(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
+                                      uint8_t* p_codec_info, uint8_t* p_sep_info_idx, uint8_t seid,
+                                      uint8_t* p_num_protect, uint8_t* p_protect_info);
 
   /**
    * Process retrieved codec configuration and content protection from
@@ -177,12 +173,9 @@ class BtaAvCo {
    * for the current codec configuration for the peer.
    * @return A2DP_SUCCESS on success, otherwise A2DP_FAIL
    */
-  tA2DP_STATUS ProcessSinkGetConfig(tBTA_AV_HNDL bta_av_handle,
-                                    const RawAddress& peer_address,
-                                    uint8_t* p_codec_info,
-                                    uint8_t* p_sep_info_idx, uint8_t seid,
-                                    uint8_t* p_num_protect,
-                                    uint8_t* p_protect_info);
+  tA2DP_STATUS ProcessSinkGetConfig(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
+                                    uint8_t* p_codec_info, uint8_t* p_sep_info_idx, uint8_t seid,
+                                    uint8_t* p_num_protect, uint8_t* p_protect_info);
 
   /**
    * Process AVDTP Set Config to set the codec and content protection
@@ -198,11 +191,9 @@ class BtaAvCo {
    * @param t_local_sep the local SEP: AVDT_TSEP_SRC or AVDT_TSEP_SNK
    * @param avdt_handle the AVDTP handle
    */
-  void ProcessSetConfig(tBTA_AV_HNDL bta_av_handle,
-                        const RawAddress& peer_address,
-                        const uint8_t* p_codec_info, uint8_t seid,
-                        uint8_t num_protect, const uint8_t* p_protect_info,
-                        uint8_t t_local_sep, uint8_t avdt_handle);
+  void ProcessSetConfig(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
+                        const uint8_t* p_codec_info, uint8_t seid, uint8_t num_protect,
+                        const uint8_t* p_protect_info, uint8_t t_local_sep, uint8_t avdt_handle);
 
   /**
    * Process AVDTP Open when the stream connection is opened.
@@ -211,8 +202,7 @@ class BtaAvCo {
    * @param peer_address the peer address
    * @param mtu the MTU of the connection
    */
-  void ProcessOpen(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
-                   uint16_t mtu);
+  void ProcessOpen(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address, uint16_t mtu);
 
   /**
    * Process AVDTP Close when the stream connection is closed.
@@ -249,8 +239,7 @@ class BtaAvCo {
    * @param p_timestamp on return, set to the timestamp of the data packet
    * @return the next encoded data packet or nullptr if no encoded data to send
    */
-  BT_HDR* GetNextSourceDataPacket(const uint8_t* p_codec_info,
-                                  uint32_t* p_timestamp);
+  BT_HDR* GetNextSourceDataPacket(const uint8_t* p_codec_info, uint32_t* p_timestamp);
 
   /**
    * An audio packet has been dropped.
@@ -260,8 +249,7 @@ class BtaAvCo {
    * @param bta_av_handle the BTA AV handle to identify the peer
    * @param peer_address the peer address
    */
-  void DataPacketWasDropped(tBTA_AV_HNDL bta_av_handle,
-                            const RawAddress& peer_address);
+  void DataPacketWasDropped(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address);
 
   /**
    * Process AVDTP Audio Delay when the initial delay report is received by
@@ -271,8 +259,8 @@ class BtaAvCo {
    * @param peer_address the peer address
    * @param delay the reported delay in 1/10th of a millisecond
    */
-  void ProcessAudioDelay(tBTA_AV_HNDL bta_av_handle,
-                         const RawAddress& peer_address, uint16_t delay);
+  void ProcessAudioDelay(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
+                         uint16_t delay);
 
   /**
    * Update the MTU of the audio data connection.
@@ -281,8 +269,7 @@ class BtaAvCo {
    * @param peer_address the peer address
    * @param mtu the new MTU of the audio data connection
    */
-  void UpdateMtu(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
-                 uint16_t mtu);
+  void UpdateMtu(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address, uint16_t mtu);
 
   /**
    * Set the active peer.
@@ -405,7 +392,7 @@ class BtaAvCo {
    */
   BtaAvCoPeerCache* peer_cache_;
 
- private:
+private:
   /**
    * Reset the state.
    */
@@ -445,9 +432,8 @@ class BtaAvCo {
    * @param t_local_sep the profile for which the codec config needs to be
    * saved.
    */
-  void SaveNewCodecConfig(BtaAvCoPeer* p_peer, const uint8_t* new_codec_config,
-                          uint8_t num_protect, const uint8_t* p_protect_info,
-                          const uint8_t t_local_sep);
+  void SaveNewCodecConfig(BtaAvCoPeer* p_peer, const uint8_t* new_codec_config, uint8_t num_protect,
+                          const uint8_t* p_protect_info, const uint8_t t_local_sep);
 
   /**
    * Set the Over-The-Air preferred codec configuration.
@@ -470,8 +456,8 @@ class BtaAvCo {
    * @return true on success, otherwise false
    */
   bool SetCodecOtaConfig(BtaAvCoPeer* p_peer, const uint8_t* p_ota_codec_config,
-                         uint8_t num_protect, const uint8_t* p_protect_info,
-                         bool* p_restart_output, const uint8_t t_local_sep);
+                         uint8_t num_protect, const uint8_t* p_protect_info, bool* p_restart_output,
+                         const uint8_t t_local_sep);
 
   /**
    * Update all selectable Source codecs with the corresponding codec
@@ -490,8 +476,7 @@ class BtaAvCo {
    * @param p_peer the peer Sink SEP to use
    * @return true if the codec is updated, otherwise false
    */
-  bool UpdateSelectableSourceCodec(const A2dpCodecConfig& codec_config,
-                                   BtaAvCoPeer* p_peer);
+  bool UpdateSelectableSourceCodec(const A2dpCodecConfig& codec_config, BtaAvCoPeer* p_peer);
 
   /**
    * Update all selectable Sink codecs with the corresponding codec
@@ -510,8 +495,7 @@ class BtaAvCo {
    * @param p_peer the peer Source SEP to use
    * @return true if the codec is updated, otherwise false
    */
-  bool UpdateSelectableSinkCodec(const A2dpCodecConfig& codec_config,
-                                 BtaAvCoPeer* p_peer);
+  bool UpdateSelectableSinkCodec(const A2dpCodecConfig& codec_config, BtaAvCoPeer* p_peer);
 
   /**
    * Attempt to select Source codec configuration for a Sink peer.
@@ -521,8 +505,8 @@ class BtaAvCo {
    * @return a pointer to the corresponding SEP Sink entry on success,
    * otnerwise nullptr
    */
-  const BtaAvCoSep* AttemptSourceCodecSelection(
-      const A2dpCodecConfig& codec_config, BtaAvCoPeer* p_peer);
+  const BtaAvCoSep* AttemptSourceCodecSelection(const A2dpCodecConfig& codec_config,
+                                                BtaAvCoPeer* p_peer);
 
   /**
    * Attempt to select Sink codec configuration for a Source peer.
@@ -532,8 +516,8 @@ class BtaAvCo {
    * @return a pointer to the corresponding SEP Source entry on success,
    * otnerwise nullptr
    */
-  const BtaAvCoSep* AttemptSinkCodecSelection(
-      const A2dpCodecConfig& codec_config, BtaAvCoPeer* p_peer);
+  const BtaAvCoSep* AttemptSinkCodecSelection(const A2dpCodecConfig& codec_config,
+                                              BtaAvCoPeer* p_peer);
 
   /**
    * Let the HAL offload provider select codec configuration.
@@ -548,9 +532,8 @@ class BtaAvCo {
    * Select the HAL proposed configuration.
    */
   BtaAvCoSep* SelectProviderCodecConfiguration(
-      BtaAvCoPeer* p_peer,
-      const ::bluetooth::audio::a2dp::provider::a2dp_configuration&
-          provider_codec_config);
+          BtaAvCoPeer* p_peer,
+          const ::bluetooth::audio::a2dp::provider::a2dp_configuration& provider_codec_config);
 
   /**
    * Returns the state that needs to be accessed.

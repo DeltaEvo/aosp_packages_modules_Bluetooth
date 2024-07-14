@@ -40,10 +40,10 @@ namespace internal {
 
 class DynamicChannelImpl;
 
-// Helper class for keeping channels in a Link. It allocates and frees Channel object, and supports querying whether a
-// channel is in use
+// Helper class for keeping channels in a Link. It allocates and frees Channel object, and supports
+// querying whether a channel is in use
 class DynamicChannelAllocator {
- public:
+public:
   DynamicChannelAllocator(l2cap::internal::ILink* link, os::Handler* l2cap_handler)
       : link_(link), l2cap_handler_(l2cap_handler) {
     log::assert_that(link_ != nullptr, "assert failed: link_ != nullptr");
@@ -51,13 +51,15 @@ class DynamicChannelAllocator {
   }
 
   // Allocates a channel. If psm is used, OR the remote cid already exists, return nullptr.
-  // NOTE: The returned DynamicChannelImpl object is still owned by the channel allocator, NOT the client.
+  // NOTE: The returned DynamicChannelImpl object is still owned by the channel allocator, NOT the
+  // client.
   std::shared_ptr<DynamicChannelImpl> AllocateChannel(Psm psm, Cid remote_cid);
 
-  std::shared_ptr<DynamicChannelImpl> AllocateReservedChannel(Cid reserved_cid, Psm psm, Cid remote_cid);
+  std::shared_ptr<DynamicChannelImpl> AllocateReservedChannel(Cid reserved_cid, Psm psm,
+                                                              Cid remote_cid);
 
-  // Gives an unused Cid to be used for opening a channel. If a channel is used, call AllocateReservedChannel. If no
-  // longer needed, use FreeChannel.
+  // Gives an unused Cid to be used for opening a channel. If a channel is used, call
+  // AllocateReservedChannel. If no longer needed, use FreeChannel.
   Cid ReserveChannel();
 
   // Frees a channel (existing or reserved)
@@ -73,7 +75,7 @@ class DynamicChannelAllocator {
 
   void OnAclDisconnected(hci::ErrorCode hci_status);
 
- private:
+private:
   friend class bluetooth::l2cap::classic::internal::DumpsysHelper;
   l2cap::internal::ILink* link_;
   os::Handler* l2cap_handler_;

@@ -2216,17 +2216,10 @@ public class HeadsetService extends ProfileService {
     /** Called from {@link HeadsetClientStateMachine} to update inband ringing status. */
     public void updateInbandRinging(BluetoothDevice device, boolean connected) {
         synchronized (mStateMachines) {
-            List<BluetoothDevice> audioConnectableDevices = getConnectedDevices();
-            final int enabled;
             final boolean inbandRingingRuntimeDisable = mInbandRingingRuntimeDisable;
 
-            if (audioConnectableDevices.size() > 1 || isHeadsetClientConnected()) {
-                mInbandRingingRuntimeDisable = true;
-                enabled = 0;
-            } else {
-                mInbandRingingRuntimeDisable = false;
-                enabled = 1;
-            }
+            mInbandRingingRuntimeDisable =
+                    getConnectedDevices().size() > 1 || isHeadsetClientConnected();
 
             final boolean updateAll = inbandRingingRuntimeDisable != mInbandRingingRuntimeDisable;
 
@@ -2236,7 +2229,7 @@ public class HeadsetService extends ProfileService {
                             + " Device="
                             + device
                             + " enabled="
-                            + enabled
+                            + !mInbandRingingRuntimeDisable
                             + " connected="
                             + connected
                             + " Update all="
@@ -2244,7 +2237,9 @@ public class HeadsetService extends ProfileService {
 
             StateMachineTask sendBsirTask =
                     stateMachine ->
-                            stateMachine.sendMessage(HeadsetStateMachine.SEND_BSIR, enabled);
+                            stateMachine.sendMessage(
+                                    HeadsetStateMachine.SEND_BSIR,
+                                    mInbandRingingRuntimeDisable ? 0 : 1);
 
             if (updateAll) {
                 doForEachConnectedStateMachine(sendBsirTask);

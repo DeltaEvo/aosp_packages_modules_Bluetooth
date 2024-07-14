@@ -39,8 +39,7 @@ namespace mock {
 namespace stack_btm_sec {
 
 // Function state capture and return values, if needed
-struct BTM_CanReadDiscoverableCharacteristics
-    BTM_CanReadDiscoverableCharacteristics;
+struct BTM_CanReadDiscoverableCharacteristics BTM_CanReadDiscoverableCharacteristics;
 struct BTM_ConfirmReqReply BTM_ConfirmReqReply;
 struct BTM_GetPeerDeviceTypeFromFeatures BTM_GetPeerDeviceTypeFromFeatures;
 struct BTM_IsAuthenticated BTM_IsAuthenticated;
@@ -89,11 +88,9 @@ struct btm_sec_encrypt_change btm_sec_encrypt_change;
 struct btm_sec_encryption_change_evt btm_sec_encryption_change_evt;
 struct btm_sec_is_a_bonded_dev btm_sec_is_a_bonded_dev;
 struct btm_sec_l2cap_access_req btm_sec_l2cap_access_req;
-struct btm_sec_l2cap_access_req_by_requirement
-    btm_sec_l2cap_access_req_by_requirement;
+struct btm_sec_l2cap_access_req_by_requirement btm_sec_l2cap_access_req_by_requirement;
 struct btm_sec_link_key_notification btm_sec_link_key_notification;
-struct btm_sec_encryption_key_refresh_complete
-    btm_sec_encryption_key_refresh_complete;
+struct btm_sec_encryption_key_refresh_complete btm_sec_encryption_key_refresh_complete;
 struct btm_sec_link_key_request btm_sec_link_key_request;
 struct btm_sec_mx_access_request btm_sec_mx_access_request;
 struct btm_sec_pin_code_request btm_sec_pin_code_request;
@@ -150,8 +147,7 @@ bool BTM_IsRemoteNameKnown::return_value = false;
 // Mocked functions, if any
 bool BTM_CanReadDiscoverableCharacteristics(const RawAddress& bd_addr) {
   inc_func_call_count(__func__);
-  return test::mock::stack_btm_sec::BTM_CanReadDiscoverableCharacteristics(
-      bd_addr);
+  return test::mock::stack_btm_sec::BTM_CanReadDiscoverableCharacteristics(bd_addr);
 }
 void BTM_ConfirmReqReply(tBTM_STATUS res, const RawAddress& bd_addr) {
   inc_func_call_count(__func__);
@@ -177,13 +173,11 @@ bool BTM_IsLinkKeyKnown(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
   inc_func_call_count(__func__);
   return test::mock::stack_btm_sec::BTM_IsLinkKeyKnown(bd_addr, transport);
 }
-void BTM_PINCodeReply(const RawAddress& bd_addr, tBTM_STATUS res,
-                      uint8_t pin_len, uint8_t* p_pin) {
+void BTM_PINCodeReply(const RawAddress& bd_addr, tBTM_STATUS res, uint8_t pin_len, uint8_t* p_pin) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_sec::BTM_PINCodeReply(bd_addr, res, pin_len, p_pin);
 }
-void BTM_PasskeyReqReply(tBTM_STATUS res, const RawAddress& bd_addr,
-                         uint32_t passkey) {
+void BTM_PasskeyReqReply(tBTM_STATUS res, const RawAddress& bd_addr, uint32_t passkey) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_sec::BTM_PasskeyReqReply(res, bd_addr, passkey);
 }
@@ -195,8 +189,8 @@ void BTM_ReadLocalOobData(void) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_sec::BTM_ReadLocalOobData();
 }
-void BTM_RemoteOobDataReply(tBTM_STATUS res, const RawAddress& bd_addr,
-                            const Octet16& c, const Octet16& r) {
+void BTM_RemoteOobDataReply(tBTM_STATUS res, const RawAddress& bd_addr, const Octet16& c,
+                            const Octet16& r) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_sec::BTM_RemoteOobDataReply(res, bd_addr, c, r);
 }
@@ -207,8 +201,7 @@ bool BTM_SecAddRmtNameNotifyCallback(tBTM_RMT_NAME_CALLBACK* p_callback) {
 tBTM_STATUS BTM_SecBond(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
                         tBT_TRANSPORT transport, tBT_DEVICE_TYPE device_type) {
   inc_func_call_count(__func__);
-  return test::mock::stack_btm_sec::BTM_SecBond(bd_addr, addr_type, transport,
-                                                device_type);
+  return test::mock::stack_btm_sec::BTM_SecBond(bd_addr, addr_type, transport, device_type);
 }
 tBTM_STATUS BTM_SecBondCancel(const RawAddress& bd_addr) {
   inc_func_call_count(__func__);
@@ -224,8 +217,7 @@ uint8_t BTM_SecClrServiceByPsm(uint16_t psm) {
 }
 bool BTM_SecDeleteRmtNameNotifyCallback(tBTM_RMT_NAME_CALLBACK* p_callback) {
   inc_func_call_count(__func__);
-  return test::mock::stack_btm_sec::BTM_SecDeleteRmtNameNotifyCallback(
-      p_callback);
+  return test::mock::stack_btm_sec::BTM_SecDeleteRmtNameNotifyCallback(p_callback);
 }
 tBTM_LINK_KEY_TYPE BTM_SecGetDeviceLinkKeyType(const RawAddress& bd_addr) {
   inc_func_call_count(__func__);
@@ -239,31 +231,28 @@ bool BTM_SecRegister(const tBTM_APPL_INFO* p_cb_info) {
   inc_func_call_count(__func__);
   return test::mock::stack_btm_sec::BTM_SecRegister(p_cb_info);
 }
-tBTM_STATUS BTM_SetEncryption(const RawAddress& bd_addr,
-                              tBT_TRANSPORT transport,
+tBTM_STATUS BTM_SetEncryption(const RawAddress& bd_addr, tBT_TRANSPORT transport,
                               tBTM_SEC_CALLBACK* p_callback, void* p_ref_data,
                               tBTM_BLE_SEC_ACT sec_act) {
   inc_func_call_count(__func__);
-  return test::mock::stack_btm_sec::BTM_SetEncryption(
-      bd_addr, transport, p_callback, p_ref_data, sec_act);
+  return test::mock::stack_btm_sec::BTM_SetEncryption(bd_addr, transport, p_callback, p_ref_data,
+                                                      sec_act);
 }
 void BTM_SetPinType(uint8_t pin_type, PIN_CODE pin_code, uint8_t pin_code_len) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_sec::BTM_SetPinType(pin_type, pin_code, pin_code_len);
 }
-bool BTM_SetSecurityLevel(bool is_originator, const char* p_name,
-                          uint8_t service_id, uint16_t sec_level, uint16_t psm,
-                          uint32_t mx_proto_id, uint32_t mx_chan_id) {
+bool BTM_SetSecurityLevel(bool is_originator, const char* p_name, uint8_t service_id,
+                          uint16_t sec_level, uint16_t psm, uint32_t mx_proto_id,
+                          uint32_t mx_chan_id) {
   inc_func_call_count(__func__);
-  return test::mock::stack_btm_sec::BTM_SetSecurityLevel(
-      is_originator, p_name, service_id, sec_level, psm, mx_proto_id,
-      mx_chan_id);
+  return test::mock::stack_btm_sec::BTM_SetSecurityLevel(is_originator, p_name, service_id,
+                                                         sec_level, psm, mx_proto_id, mx_chan_id);
 }
 void BTM_update_version_info(const RawAddress& bd_addr,
                              const remote_version_info& remote_version_info) {
   inc_func_call_count(__func__);
-  test::mock::stack_btm_sec::BTM_update_version_info(bd_addr,
-                                                     remote_version_info);
+  test::mock::stack_btm_sec::BTM_update_version_info(bd_addr, remote_version_info);
 }
 void NotifyBondingCanceled(tBTM_STATUS btm_status) {
   inc_func_call_count(__func__);
@@ -285,8 +274,7 @@ void btm_io_capabilities_rsp(const tBTM_SP_IO_RSP evt_data) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_sec::btm_io_capabilities_rsp(evt_data);
 }
-void btm_proc_sp_req_evt(tBTM_SP_EVT event, const RawAddress bd_addr,
-                         uint32_t value) {
+void btm_proc_sp_req_evt(tBTM_SP_EVT event, const RawAddress bd_addr, uint32_t value) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_sec::btm_proc_sp_req_evt(event, bd_addr, value);
 }
@@ -306,12 +294,10 @@ void btm_sec_auth_complete(uint16_t handle, tHCI_STATUS status) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_sec::btm_sec_auth_complete(handle, status);
 }
-tBTM_STATUS btm_sec_bond_by_transport(const RawAddress& bd_addr,
-                                      tBLE_ADDR_TYPE addr_type,
+tBTM_STATUS btm_sec_bond_by_transport(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
                                       tBT_TRANSPORT transport) {
   inc_func_call_count(__func__);
-  return test::mock::stack_btm_sec::btm_sec_bond_by_transport(
-      bd_addr, addr_type, transport);
+  return test::mock::stack_btm_sec::btm_sec_bond_by_transport(bd_addr, addr_type, transport);
 }
 void btm_sec_check_pending_reqs(void) {
   inc_func_call_count(__func__);
@@ -325,126 +311,103 @@ void btm_sec_conn_req(const RawAddress& bda, const DEV_CLASS dc) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_sec::btm_sec_conn_req(bda, dc);
 }
-void btm_sec_connected(const RawAddress& bda, uint16_t handle,
-                       tHCI_STATUS status, uint8_t enc_mode,
+void btm_sec_connected(const RawAddress& bda, uint16_t handle, tHCI_STATUS status, uint8_t enc_mode,
                        tHCI_ROLE assigned_role) {
   inc_func_call_count(__func__);
-  test::mock::stack_btm_sec::btm_sec_connected(bda, handle, status, enc_mode,
-                                               assigned_role);
+  test::mock::stack_btm_sec::btm_sec_connected(bda, handle, status, enc_mode, assigned_role);
 }
 void btm_sec_cr_loc_oob_data_cback_event(const RawAddress& address,
                                          tSMP_LOC_OOB_DATA loc_oob_data) {
   inc_func_call_count(__func__);
-  test::mock::stack_btm_sec::btm_sec_cr_loc_oob_data_cback_event(address,
-                                                                 loc_oob_data);
+  test::mock::stack_btm_sec::btm_sec_cr_loc_oob_data_cback_event(address, loc_oob_data);
 }
-void btm_sec_dev_rec_cback_event(tBTM_SEC_DEV_REC* p_dev_rec,
-                                 tBTM_STATUS btm_status, bool is_le_transport) {
+void btm_sec_dev_rec_cback_event(tBTM_SEC_DEV_REC* p_dev_rec, tBTM_STATUS btm_status,
+                                 bool is_le_transport) {
   inc_func_call_count(__func__);
-  test::mock::stack_btm_sec::btm_sec_dev_rec_cback_event(p_dev_rec, btm_status,
-                                                         is_le_transport);
+  test::mock::stack_btm_sec::btm_sec_dev_rec_cback_event(p_dev_rec, btm_status, is_le_transport);
 }
 void btm_sec_dev_reset(void) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_sec::btm_sec_dev_reset();
 }
-tBTM_STATUS btm_sec_disconnect(uint16_t handle, tHCI_STATUS reason,
-                               std::string comment) {
+tBTM_STATUS btm_sec_disconnect(uint16_t handle, tHCI_STATUS reason, std::string comment) {
   inc_func_call_count(__func__);
   return test::mock::stack_btm_sec::btm_sec_disconnect(handle, reason, comment);
 }
-void btm_sec_disconnected(uint16_t handle, tHCI_REASON reason,
-                          std::string comment) {
+void btm_sec_disconnected(uint16_t handle, tHCI_REASON reason, std::string comment) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_sec::btm_sec_disconnected(handle, reason, comment);
 }
-void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
-                            uint8_t encr_enable) {
+void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status, uint8_t encr_enable) {
   inc_func_call_count(__func__);
-  test::mock::stack_btm_sec::btm_sec_encrypt_change(handle, status,
-                                                    encr_enable);
+  test::mock::stack_btm_sec::btm_sec_encrypt_change(handle, status, encr_enable);
 }
-void btm_sec_encryption_change_evt(uint16_t handle, tHCI_STATUS status,
-                                   uint8_t encr_enable) {
+void btm_sec_encryption_change_evt(uint16_t handle, tHCI_STATUS status, uint8_t encr_enable) {
   inc_func_call_count(__func__);
-  test::mock::stack_btm_sec::btm_sec_encryption_change_evt(handle, status,
-                                                           encr_enable);
+  test::mock::stack_btm_sec::btm_sec_encryption_change_evt(handle, status, encr_enable);
 }
 bool btm_sec_is_a_bonded_dev(const RawAddress& bda) {
   inc_func_call_count(__func__);
   return test::mock::stack_btm_sec::btm_sec_is_a_bonded_dev(bda);
 }
-tBTM_STATUS btm_sec_l2cap_access_req(const RawAddress& bd_addr, uint16_t psm,
-                                     bool is_originator,
-                                     tBTM_SEC_CALLBACK* p_callback,
-                                     void* p_ref_data) {
+tBTM_STATUS btm_sec_l2cap_access_req(const RawAddress& bd_addr, uint16_t psm, bool is_originator,
+                                     tBTM_SEC_CALLBACK* p_callback, void* p_ref_data) {
   inc_func_call_count(__func__);
-  return test::mock::stack_btm_sec::btm_sec_l2cap_access_req(
-      bd_addr, psm, is_originator, p_callback, p_ref_data);
+  return test::mock::stack_btm_sec::btm_sec_l2cap_access_req(bd_addr, psm, is_originator,
+                                                             p_callback, p_ref_data);
 }
-tBTM_STATUS btm_sec_l2cap_access_req_by_requirement(
-    const RawAddress& bd_addr, uint16_t security_required, bool is_originator,
-    tBTM_SEC_CALLBACK* p_callback, void* p_ref_data) {
+tBTM_STATUS btm_sec_l2cap_access_req_by_requirement(const RawAddress& bd_addr,
+                                                    uint16_t security_required, bool is_originator,
+                                                    tBTM_SEC_CALLBACK* p_callback,
+                                                    void* p_ref_data) {
   inc_func_call_count(__func__);
   return test::mock::stack_btm_sec::btm_sec_l2cap_access_req_by_requirement(
-      bd_addr, security_required, is_originator, p_callback, p_ref_data);
+          bd_addr, security_required, is_originator, p_callback, p_ref_data);
 }
-void btm_sec_link_key_notification(const RawAddress& p_bda,
-                                   const Octet16& link_key, uint8_t key_type) {
+void btm_sec_link_key_notification(const RawAddress& p_bda, const Octet16& link_key,
+                                   uint8_t key_type) {
   inc_func_call_count(__func__);
-  test::mock::stack_btm_sec::btm_sec_link_key_notification(p_bda, link_key,
-                                                           key_type);
+  test::mock::stack_btm_sec::btm_sec_link_key_notification(p_bda, link_key, key_type);
 }
-void btm_sec_encryption_key_refresh_complete(uint16_t handle,
-                                             tHCI_STATUS status) {
+void btm_sec_encryption_key_refresh_complete(uint16_t handle, tHCI_STATUS status) {
   inc_func_call_count(__func__);
-  test::mock::stack_btm_sec::btm_sec_encryption_key_refresh_complete(handle,
-                                                                     status);
+  test::mock::stack_btm_sec::btm_sec_encryption_key_refresh_complete(handle, status);
 }
 void btm_sec_link_key_request(const RawAddress bda) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_sec::btm_sec_link_key_request(bda);
 }
-tBTM_STATUS btm_sec_mx_access_request(const RawAddress& bd_addr,
-                                      bool is_originator,
-                                      uint16_t security_required,
-                                      tBTM_SEC_CALLBACK* p_callback,
+tBTM_STATUS btm_sec_mx_access_request(const RawAddress& bd_addr, bool is_originator,
+                                      uint16_t security_required, tBTM_SEC_CALLBACK* p_callback,
                                       void* p_ref_data) {
   inc_func_call_count(__func__);
   return test::mock::stack_btm_sec::btm_sec_mx_access_request(
-      bd_addr, is_originator, security_required, p_callback, p_ref_data);
+          bd_addr, is_originator, security_required, p_callback, p_ref_data);
 }
 void btm_sec_pin_code_request(const RawAddress bda) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_sec::btm_sec_pin_code_request(bda);
 }
-void btm_sec_rmt_host_support_feat_evt(const RawAddress bd_addr,
-                                       uint8_t features_0) {
+void btm_sec_rmt_host_support_feat_evt(const RawAddress bd_addr, uint8_t features_0) {
   inc_func_call_count(__func__);
-  test::mock::stack_btm_sec::btm_sec_rmt_host_support_feat_evt(bd_addr,
-                                                               features_0);
+  test::mock::stack_btm_sec::btm_sec_rmt_host_support_feat_evt(bd_addr, features_0);
 }
-void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
-                                       const uint8_t* p_bd_name,
+void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr, const uint8_t* p_bd_name,
                                        tHCI_STATUS status) {
   inc_func_call_count(__func__);
-  test::mock::stack_btm_sec::btm_sec_rmt_name_request_complete(
-      p_bd_addr, p_bd_name, status);
+  test::mock::stack_btm_sec::btm_sec_rmt_name_request_complete(p_bd_addr, p_bd_name, status);
 }
-void btm_sec_role_changed(tHCI_STATUS hci_status, const RawAddress& bd_addr,
-                          tHCI_ROLE new_role) {
+void btm_sec_role_changed(tHCI_STATUS hci_status, const RawAddress& bd_addr, tHCI_ROLE new_role) {
   inc_func_call_count(__func__);
-  test::mock::stack_btm_sec::btm_sec_role_changed(hci_status, bd_addr,
-                                                  new_role);
+  test::mock::stack_btm_sec::btm_sec_role_changed(hci_status, bd_addr, new_role);
 }
-void btm_sec_set_peer_sec_caps(uint16_t hci_handle, bool ssp_supported,
-                               bool sc_supported,
-                               bool hci_role_switch_supported,
-                               bool br_edr_supported, bool le_supported) {
+void btm_sec_set_peer_sec_caps(uint16_t hci_handle, bool ssp_supported, bool sc_supported,
+                               bool hci_role_switch_supported, bool br_edr_supported,
+                               bool le_supported) {
   inc_func_call_count(__func__);
-  test::mock::stack_btm_sec::btm_sec_set_peer_sec_caps(
-      hci_handle, ssp_supported, sc_supported, hci_role_switch_supported,
-      br_edr_supported, le_supported);
+  test::mock::stack_btm_sec::btm_sec_set_peer_sec_caps(hci_handle, ssp_supported, sc_supported,
+                                                       hci_role_switch_supported, br_edr_supported,
+                                                       le_supported);
 }
 void btm_sec_update_clock_offset(uint16_t handle, uint16_t clock_offset) {
   inc_func_call_count(__func__);

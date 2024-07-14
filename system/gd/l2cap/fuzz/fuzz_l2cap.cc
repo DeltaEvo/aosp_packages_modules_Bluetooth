@@ -18,10 +18,10 @@
 
 #include <fuzzer/FuzzedDataProvider.h>
 #include <hci/address.h>
-#include "l2cap/psm.h"
-#include "os/log.h"
 
 #include "channel_fuzz_controller.h"
+#include "l2cap/psm.h"
+#include "os/log.h"
 #include "shim_l2cap.h"
 
 namespace bluetooth {
@@ -36,14 +36,14 @@ using l2cap::classic::internal::Link;
 using shim::ShimL2capFuzz;
 
 class FakeCommandInterface : public hci::CommandInterface<hci::AclCommandBuilder> {
- public:
+public:
   virtual void EnqueueCommand(
-      std::unique_ptr<hci::AclCommandBuilder> command,
-      common::ContextualOnceCallback<void(hci::CommandCompleteView)> on_complete) {}
+          std::unique_ptr<hci::AclCommandBuilder> command,
+          common::ContextualOnceCallback<void(hci::CommandCompleteView)> on_complete) {}
 
   virtual void EnqueueCommand(
-      std::unique_ptr<hci::AclCommandBuilder> command,
-      common::ContextualOnceCallback<void(hci::CommandStatusView)> on_status) {}
+          std::unique_ptr<hci::AclCommandBuilder> command,
+          common::ContextualOnceCallback<void(hci::CommandStatusView)> on_status) {}
 } fake_command_interface;
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
@@ -58,12 +58,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   }
   Address myAddress;
   myAddress.FromOctets(addressVals.data());
-  hci::AddressWithType addressWithType = hci::AddressWithType(myAddress, AddressType::PUBLIC_DEVICE_ADDRESS);
+  hci::AddressWithType addressWithType =
+          hci::AddressWithType(myAddress, AddressType::PUBLIC_DEVICE_ADDRESS);
 
   // Associate a ClassicAclConnection so that we can grab a link.
   auto throwaway_queue = std::make_shared<AclConnection::Queue>(10);
   l2shim.link_manager->OnConnectSuccess(std::unique_ptr<ClassicAclConnection>(
-      new ClassicAclConnection(throwaway_queue, &fake_command_interface, 0, myAddress)));
+          new ClassicAclConnection(throwaway_queue, &fake_command_interface, 0, myAddress)));
   Link* link = l2shim.link_manager->GetLink(myAddress);
 
   // 0x0001-0x007F Fixed, 0x0080-0x00FF Dynamic
@@ -77,11 +78,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
   // Fixed channels must be acquired.
   auto fixedChannel = link->AllocateFixedChannel(fixedCid);
-  fixedChannel->RegisterOnCloseCallback(l2shim.handler_.get(), common::BindOnce([](hci::ErrorCode) {}));
+  fixedChannel->RegisterOnCloseCallback(l2shim.handler_.get(),
+                                        common::BindOnce([](hci::ErrorCode) {}));
   fixedChannel->Acquire();
   ChannelFuzzController fixedChannelController(l2shim.handler_.get(), fixedChannel);
   // Generate a valid dynamic channel ID
-  Cid dynamicCid = fdp.ConsumeIntegralInRange<uint16_t>(l2cap::kFirstDynamicChannel, l2cap::kLastDynamicChannel);
+  Cid dynamicCid = fdp.ConsumeIntegralInRange<uint16_t>(l2cap::kFirstDynamicChannel,
+                                                        l2cap::kLastDynamicChannel);
   auto dynamicChannel = link->AllocateDynamicChannel(dynamicPsm, dynamicCid);
   ChannelFuzzController dynamicChannelController(l2shim.handler_.get(), dynamicChannel);
 
@@ -90,8 +93,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     bool dynamic = fdp.ConsumeBool();
 
     // Consume at most UINT16_MAX or remaining_bytes, whatever is smaller.
-    uint16_t packetSize =
-        static_cast<uint16_t>(std::min(static_cast<size_t>(fdp.ConsumeIntegral<uint16_t>()), fdp.remaining_bytes()));
+    uint16_t packetSize = static_cast<uint16_t>(
+            std::min(static_cast<size_t>(fdp.ConsumeIntegral<uint16_t>()), fdp.remaining_bytes()));
     std::vector<uint8_t> data = fdp.ConsumeBytes<uint8_t>(packetSize);
     if (dynamic) {
       dynamicChannelController.injectFrame(data);

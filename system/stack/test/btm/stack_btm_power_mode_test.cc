@@ -31,8 +31,8 @@ using testing::Return;
 
 namespace {
 const char* test_flags[] = {
-    "INIT_default_log_level_str=LOG_DEBUG",
-    nullptr,
+        "INIT_default_log_level_str=LOG_DEBUG",
+        nullptr,
 };
 
 const RawAddress kRawAddress = RawAddress({0x11, 0x22, 0x33, 0x44, 0x55, 0x66});
@@ -51,33 +51,30 @@ struct power_mode_callback {
 std::deque<power_mode_callback> power_mode_callback_queue;
 
 class StackBtmPowerMode : public testing::Test {
- protected:
+protected:
   void SetUp() override {
     ON_CALL(controller_, SupportsSniffMode).WillByDefault(Return(true));
     bluetooth::hci::testing::mock_controller_ = &controller_;
     power_mode_callback_queue.clear();
     reset_mock_function_count_map();
     bluetooth::common::InitFlags::Load(test_flags);
-    ASSERT_EQ(BTM_SUCCESS,
-              BTM_PmRegister(BTM_PM_REG_SET, &pm_id_,
-                             [](const RawAddress& p_bda, tBTM_PM_STATUS status,
-                                uint16_t value, tHCI_STATUS hci_status) {
-                               power_mode_callback_queue.push_back(
-                                   power_mode_callback{
-                                       .bd_addr = p_bda,
-                                       .status = status,
-                                       .value = value,
-                                       .hci_status = hci_status,
-                                   });
-                             }));
+    ASSERT_EQ(BTM_SUCCESS, BTM_PmRegister(BTM_PM_REG_SET, &pm_id_,
+                                          [](const RawAddress& p_bda, tBTM_PM_STATUS status,
+                                             uint16_t value, tHCI_STATUS hci_status) {
+                                            power_mode_callback_queue.push_back(power_mode_callback{
+                                                    .bd_addr = p_bda,
+                                                    .status = status,
+                                                    .value = value,
+                                                    .hci_status = hci_status,
+                                            });
+                                          }));
   }
 
   void TearDown() override {
     ASSERT_EQ(BTM_SUCCESS,
-              BTM_PmRegister(
-                  BTM_PM_DEREG, &pm_id_,
-                  [](const RawAddress& /* p_bda */, tBTM_PM_STATUS /* status */,
-                     uint16_t /* value */, tHCI_STATUS /* hci_status */) {}));
+              BTM_PmRegister(BTM_PM_DEREG, &pm_id_,
+                             [](const RawAddress& /* p_bda */, tBTM_PM_STATUS /* status */,
+                                uint16_t /* value */, tHCI_STATUS /* hci_status */) {}));
     bluetooth::hci::testing::mock_controller_ = nullptr;
   }
 
@@ -86,7 +83,7 @@ class StackBtmPowerMode : public testing::Test {
 };
 
 class StackBtmPowerModeConnected : public StackBtmPowerMode {
- protected:
+protected:
   void SetUp() override {
     StackBtmPowerMode::SetUp();
     BTM_PM_OnConnected(kHciHandle, kRawAddress);
@@ -110,10 +107,9 @@ TEST_F(StackBtmPowerModeConnected, BTM_SetPowerMode__AlreadyActive) {
 
 TEST_F(StackBtmPowerModeConnected, BTM_SetPowerMode__ActiveToSniff) {
   tBTM_PM_PWR_MD mode = {
-      .mode = BTM_PM_MD_SNIFF,
+          .mode = BTM_PM_MD_SNIFF,
   };
-  ASSERT_EQ("BTM_CMD_STARTED",
-            btm_status_text(BTM_SetPowerMode(pm_id_, kRawAddress, &mode)));
+  ASSERT_EQ("BTM_CMD_STARTED", btm_status_text(BTM_SetPowerMode(pm_id_, kRawAddress, &mode)));
   ASSERT_EQ(1, get_func_call_count("btsnd_hcic_sniff_mode"));
 
   // Respond with successful command status for mode command
@@ -162,10 +158,9 @@ TEST_F(StackBtmPowerModeConnected, BTM_SetPowerMode__ActiveToSniff) {
 
 TEST_F(StackBtmPowerModeConnected, BTM_SetPowerMode__ActiveToSniffTwice) {
   tBTM_PM_PWR_MD mode = {
-      .mode = BTM_PM_MD_SNIFF,
+          .mode = BTM_PM_MD_SNIFF,
   };
-  ASSERT_EQ("BTM_CMD_STARTED",
-            btm_status_text(BTM_SetPowerMode(pm_id_, kRawAddress, &mode)));
+  ASSERT_EQ("BTM_CMD_STARTED", btm_status_text(BTM_SetPowerMode(pm_id_, kRawAddress, &mode)));
   ASSERT_EQ(1, get_func_call_count("btsnd_hcic_sniff_mode"));
 
   // Respond with successful command status for mode command
@@ -191,8 +186,7 @@ TEST_F(StackBtmPowerModeConnected, BTM_SetPowerMode__ActiveToSniffTwice) {
   }
 
   // Send a second active to sniff command
-  ASSERT_EQ("BTM_CMD_STORED",
-            btm_status_text(BTM_SetPowerMode(pm_id_, kRawAddress, &mode)));
+  ASSERT_EQ("BTM_CMD_STORED", btm_status_text(BTM_SetPowerMode(pm_id_, kRawAddress, &mode)));
   // No command should be issued
   ASSERT_EQ(1, get_func_call_count("btsnd_hcic_sniff_mode"));
 
@@ -201,8 +195,7 @@ TEST_F(StackBtmPowerModeConnected, BTM_SetPowerMode__ActiveToSniffTwice) {
     tBTM_PM_MODE current_power_mode;
     ASSERT_TRUE(BTM_ReadPowerMode(kRawAddress, &current_power_mode));
     // NOTE: The mixed enum values
-    ASSERT_EQ(
-        static_cast<tBTM_PM_MODE>(BTM_PM_STS_PENDING | BTM_PM_STORED_MASK),
-        current_power_mode);
+    ASSERT_EQ(static_cast<tBTM_PM_MODE>(BTM_PM_STS_PENDING | BTM_PM_STORED_MASK),
+              current_power_mode);
   }
 }

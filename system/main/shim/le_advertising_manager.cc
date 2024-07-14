@@ -51,8 +51,8 @@ constexpr char kBtmLogTag[] = "ADV";
 
 class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
                                    public bluetooth::hci::AdvertisingCallback {
- public:
-  ~BleAdvertiserInterfaceImpl() override{};
+public:
+  ~BleAdvertiserInterfaceImpl() override {}
 
   void Init() {
     // Register callback
@@ -63,22 +63,20 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
     log::info("in shim layer");
 
     bluetooth::shim::GetAdvertising()->RegisterAdvertiser(
-        bluetooth::shim::GetGdShimHandler()->BindOnce(
-            [](IdStatusCallback cb, uint8_t id, uint8_t status) {
-              do_in_main_thread(
-                  FROM_HERE,
-                  base::BindOnce([](IdStatusCallback cb, uint8_t id,
-                                    uint8_t status) { cb.Run(id, status); },
-                                 cb, id, status));
-            },
-            cb));
+            bluetooth::shim::GetGdShimHandler()->BindOnce(
+                    [](IdStatusCallback cb, uint8_t id, uint8_t status) {
+                      do_in_main_thread(FROM_HERE,
+                                        base::BindOnce([](IdStatusCallback cb, uint8_t id,
+                                                          uint8_t status) { cb.Run(id, status); },
+                                                       cb, id, status));
+                    },
+                    cb));
   }
 
   void Unregister(uint8_t advertiser_id) override {
     log::info("in shim layer");
     bluetooth::shim::GetAdvertising()->RemoveAdvertiser(advertiser_id);
-    int reg_id =
-        bluetooth::shim::GetAdvertising()->GetAdvertiserRegId(advertiser_id);
+    int reg_id = bluetooth::shim::GetAdvertising()->GetAdvertiserRegId(advertiser_id);
     uint8_t client_id = is_native_advertiser(reg_id);
     // if registered by native client, remove the register id
     if (client_id != kAdvertiserClientIdJni) {
@@ -107,21 +105,18 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
     log::info("in shim layer");
     std::vector<GapData> advertising_data = {};
     parse_gap_data(data, advertising_data);
-    bluetooth::shim::GetAdvertising()->SetData(advertiser_id, set_scan_rsp,
-                                               advertising_data);
+    bluetooth::shim::GetAdvertising()->SetData(advertiser_id, set_scan_rsp, advertising_data);
   }
 
-  void Enable(uint8_t advertiser_id, bool enable, StatusCallback /* cb */,
-              uint16_t duration, uint8_t maxExtAdvEvents,
-              StatusCallback /* timeout_cb */) override {
+  void Enable(uint8_t advertiser_id, bool enable, StatusCallback /* cb */, uint16_t duration,
+              uint8_t maxExtAdvEvents, StatusCallback /* timeout_cb */) override {
     log::info("in shim layer");
-    bluetooth::shim::GetAdvertising()->EnableAdvertiser(
-        advertiser_id, enable, duration, maxExtAdvEvents);
+    bluetooth::shim::GetAdvertising()->EnableAdvertiser(advertiser_id, enable, duration,
+                                                        maxExtAdvEvents);
   }
 
   // nobody use this function
-  void StartAdvertising(uint8_t advertiser_id, StatusCallback cb,
-                        AdvertiseParameters params,
+  void StartAdvertising(uint8_t advertiser_id, StatusCallback cb, AdvertiseParameters params,
                         std::vector<uint8_t> advertise_data,
                         std::vector<uint8_t> scan_response_data, int timeout_s,
                         StatusCallback timeout_cb) override {
@@ -134,25 +129,21 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
     parse_gap_data(scan_response_data, config.scan_response);
 
     bluetooth::shim::GetAdvertising()->StartAdvertising(
-        advertiser_id, config, timeout_s * 100, cb, timeout_cb, scan_callback,
-        set_terminated_callback, bluetooth::shim::GetGdShimHandler());
+            advertiser_id, config, timeout_s * 100, cb, timeout_cb, scan_callback,
+            set_terminated_callback, bluetooth::shim::GetGdShimHandler());
   }
 
-  void StartAdvertisingSet(uint8_t client_id, int reg_id,
-                           IdTxPowerStatusCallback /* register_cb */,
-                           AdvertiseParameters params,
-                           std::vector<uint8_t> advertise_data,
+  void StartAdvertisingSet(uint8_t client_id, int reg_id, IdTxPowerStatusCallback /* register_cb */,
+                           AdvertiseParameters params, std::vector<uint8_t> advertise_data,
                            std::vector<uint8_t> scan_response_data,
                            PeriodicAdvertisingParameters periodic_params,
-                           std::vector<uint8_t> periodic_data,
-                           uint16_t duration, uint8_t maxExtAdvEvents,
-                           IdStatusCallback /* timeout_cb */) {
+                           std::vector<uint8_t> periodic_data, uint16_t duration,
+                           uint8_t maxExtAdvEvents, IdStatusCallback /* timeout_cb */) {
     log::info("in shim layer");
 
     bluetooth::hci::AdvertisingConfig config{};
     parse_parameter(config, params);
-    parse_periodic_advertising_parameter(config.periodic_advertising_parameters,
-                                         periodic_params);
+    parse_periodic_advertising_parameter(config.periodic_advertising_parameters, periodic_params);
 
     parse_gap_data(advertise_data, config.advertisement);
     parse_gap_data(scan_response_data, config.scan_response);
@@ -164,27 +155,25 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
     }
 
     bluetooth::shim::GetAdvertising()->ExtendedCreateAdvertiser(
-        client_id, reg_id, config, scan_callback, set_terminated_callback,
-        duration, maxExtAdvEvents, bluetooth::shim::GetGdShimHandler());
+            client_id, reg_id, config, scan_callback, set_terminated_callback, duration,
+            maxExtAdvEvents, bluetooth::shim::GetGdShimHandler());
 
-    log::info("create advertising set, client_id:{}, reg_id:{}", client_id,
-              reg_id);
+    log::info("create advertising set, client_id:{}, reg_id:{}", client_id, reg_id);
     BTM_LogHistory(kBtmLogTag, RawAddress::kEmpty, "Le advert started",
                    base::StringPrintf("reg_id:%d", reg_id));
 
     return;
   }
 
-  void SetPeriodicAdvertisingParameters(
-      int advertiser_id, PeriodicAdvertisingParameters periodic_params,
-      StatusCallback /* cb */) override {
+  void SetPeriodicAdvertisingParameters(int advertiser_id,
+                                        PeriodicAdvertisingParameters periodic_params,
+                                        StatusCallback /* cb */) override {
     log::info("in shim layer");
     bluetooth::hci::PeriodicAdvertisingParameters parameters;
     parameters.max_interval = periodic_params.max_interval;
     parameters.min_interval = periodic_params.min_interval;
     parameters.properties = periodic_params.periodic_advertising_properties;
-    bluetooth::shim::GetAdvertising()->SetPeriodicParameters(advertiser_id,
-                                                             parameters);
+    bluetooth::shim::GetAdvertising()->SetPeriodicParameters(advertiser_id, parameters);
   }
 
   void SetPeriodicAdvertisingData(int advertiser_id, std::vector<uint8_t> data,
@@ -192,24 +181,19 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
     log::info("in shim layer");
     std::vector<GapData> advertising_data = {};
     parse_gap_data(data, advertising_data);
-    bluetooth::shim::GetAdvertising()->SetPeriodicData(advertiser_id,
-                                                       advertising_data);
+    bluetooth::shim::GetAdvertising()->SetPeriodicData(advertiser_id, advertising_data);
   }
 
-  void SetPeriodicAdvertisingEnable(int advertiser_id, bool enable,
-                                    bool include_adi,
+  void SetPeriodicAdvertisingEnable(int advertiser_id, bool enable, bool include_adi,
                                     StatusCallback /* cb */) override {
     log::info("in shim layer");
-    bluetooth::shim::GetAdvertising()->EnablePeriodicAdvertising(
-        advertiser_id, enable, include_adi);
+    bluetooth::shim::GetAdvertising()->EnablePeriodicAdvertising(advertiser_id, enable,
+                                                                 include_adi);
   }
 
-  void RegisterCallbacks(AdvertisingCallbacks* callbacks) {
-    advertising_callbacks_ = callbacks;
-  }
+  void RegisterCallbacks(AdvertisingCallbacks* callbacks) { advertising_callbacks_ = callbacks; }
 
-  void RegisterCallbacksNative(AdvertisingCallbacks* callbacks,
-                               uint8_t client_id) {
+  void RegisterCallbacksNative(AdvertisingCallbacks* callbacks, uint8_t client_id) {
     native_adv_callbacks_map_[client_id] = callbacks;
   }
 
@@ -222,119 +206,105 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
   }
 
   const bluetooth::common::Callback<void(Address, AddressType)> scan_callback =
-      bluetooth::common::Bind(&BleAdvertiserInterfaceImpl::on_scan,
-                              bluetooth::common::Unretained(this));
+          bluetooth::common::Bind(&BleAdvertiserInterfaceImpl::on_scan,
+                                  bluetooth::common::Unretained(this));
 
-  const bluetooth::common::Callback<void(ErrorCode, uint8_t, uint8_t)>
-      set_terminated_callback = bluetooth::common::Bind(
-          &BleAdvertiserInterfaceImpl::on_set_terminated,
-          bluetooth::common::Unretained(this));
+  const bluetooth::common::Callback<void(ErrorCode, uint8_t, uint8_t)> set_terminated_callback =
+          bluetooth::common::Bind(&BleAdvertiserInterfaceImpl::on_set_terminated,
+                                  bluetooth::common::Unretained(this));
 
   // AdvertisingCallback
-  void OnAdvertisingSetStarted(int reg_id, uint8_t advertiser_id,
-                               int8_t tx_power,
+  void OnAdvertisingSetStarted(int reg_id, uint8_t advertiser_id, int8_t tx_power,
                                AdvertisingStatus status) override {
     uint8_t client_id = is_native_advertiser(reg_id);
     if (client_id != kAdvertiserClientIdJni) {
       // Invoke callback for native client
-      do_in_main_thread(
-          FROM_HERE,
-          base::Bind(&AdvertisingCallbacks::OnAdvertisingSetStarted,
-                     base::Unretained(native_adv_callbacks_map_[client_id]),
-                     reg_id, advertiser_id, tx_power, status));
+      do_in_main_thread(FROM_HERE,
+                        base::Bind(&AdvertisingCallbacks::OnAdvertisingSetStarted,
+                                   base::Unretained(native_adv_callbacks_map_[client_id]), reg_id,
+                                   advertiser_id, tx_power, status));
       return;
     }
-    do_in_jni_thread(
-        base::BindOnce(&AdvertisingCallbacks::OnAdvertisingSetStarted,
-                       base::Unretained(advertising_callbacks_), reg_id,
-                       advertiser_id, tx_power, status));
+    do_in_jni_thread(base::BindOnce(&AdvertisingCallbacks::OnAdvertisingSetStarted,
+                                    base::Unretained(advertising_callbacks_), reg_id, advertiser_id,
+                                    tx_power, status));
   }
 
   void OnAdvertisingEnabled(uint8_t advertiser_id, bool enable, AdvertisingStatus status) {
-    int reg_id =
-        bluetooth::shim::GetAdvertising()->GetAdvertiserRegId(advertiser_id);
+    int reg_id = bluetooth::shim::GetAdvertising()->GetAdvertiserRegId(advertiser_id);
     uint8_t client_id = is_native_advertiser(reg_id);
     if (client_id != kAdvertiserClientIdJni) {
       // Invoke callback for native client
-      do_in_main_thread(
-          FROM_HERE,
-          base::Bind(&AdvertisingCallbacks::OnAdvertisingEnabled,
-                     base::Unretained(native_adv_callbacks_map_[client_id]),
-                     advertiser_id, enable, status));
+      do_in_main_thread(FROM_HERE,
+                        base::Bind(&AdvertisingCallbacks::OnAdvertisingEnabled,
+                                   base::Unretained(native_adv_callbacks_map_[client_id]),
+                                   advertiser_id, enable, status));
       return;
     }
     do_in_jni_thread(base::BindOnce(&AdvertisingCallbacks::OnAdvertisingEnabled,
-                                    base::Unretained(advertising_callbacks_),
-                                    advertiser_id, enable, status));
+                                    base::Unretained(advertising_callbacks_), advertiser_id, enable,
+                                    status));
   }
 
   void OnAdvertisingDataSet(uint8_t advertiser_id, AdvertisingStatus status) {
-    if (com::android::bluetooth::flags::
-            leaudio_broadcast_update_metadata_callback()) {
-      int reg_id =
-          bluetooth::shim::GetAdvertising()->GetAdvertiserRegId(advertiser_id);
+    if (com::android::bluetooth::flags::leaudio_broadcast_update_metadata_callback()) {
+      int reg_id = bluetooth::shim::GetAdvertising()->GetAdvertiserRegId(advertiser_id);
       uint8_t client_id = is_native_advertiser(reg_id);
       if (client_id != kAdvertiserClientIdJni) {
         // Invoke callback for native client
-        do_in_main_thread(
-            FROM_HERE,
-            base::Bind(&AdvertisingCallbacks::OnAdvertisingDataSet,
-                       base::Unretained(native_adv_callbacks_map_[client_id]),
-                       advertiser_id, status));
+        do_in_main_thread(FROM_HERE,
+                          base::Bind(&AdvertisingCallbacks::OnAdvertisingDataSet,
+                                     base::Unretained(native_adv_callbacks_map_[client_id]),
+                                     advertiser_id, status));
         return;
       }
     }
     do_in_jni_thread(base::BindOnce(&AdvertisingCallbacks::OnAdvertisingDataSet,
-                                    base::Unretained(advertising_callbacks_),
-                                    advertiser_id, status));
+                                    base::Unretained(advertising_callbacks_), advertiser_id,
+                                    status));
   }
 
   void OnScanResponseDataSet(uint8_t advertiser_id, AdvertisingStatus status) {
-    do_in_jni_thread(base::BindOnce(
-        &AdvertisingCallbacks::OnScanResponseDataSet,
-        base::Unretained(advertising_callbacks_), advertiser_id, status));
+    do_in_jni_thread(base::BindOnce(&AdvertisingCallbacks::OnScanResponseDataSet,
+                                    base::Unretained(advertising_callbacks_), advertiser_id,
+                                    status));
   }
 
   void OnAdvertisingParametersUpdated(uint8_t advertiser_id, int8_t tx_power,
                                       AdvertisingStatus status) {
-    do_in_jni_thread(
-        base::BindOnce(&AdvertisingCallbacks::OnAdvertisingParametersUpdated,
-                       base::Unretained(advertising_callbacks_), advertiser_id,
-                       tx_power, status));
+    do_in_jni_thread(base::BindOnce(&AdvertisingCallbacks::OnAdvertisingParametersUpdated,
+                                    base::Unretained(advertising_callbacks_), advertiser_id,
+                                    tx_power, status));
   }
 
   void OnPeriodicAdvertisingParametersUpdated(uint8_t advertiser_id, AdvertisingStatus status) {
-    do_in_jni_thread(base::BindOnce(
-        &AdvertisingCallbacks::OnPeriodicAdvertisingParametersUpdated,
-        base::Unretained(advertising_callbacks_), advertiser_id, status));
+    do_in_jni_thread(base::BindOnce(&AdvertisingCallbacks::OnPeriodicAdvertisingParametersUpdated,
+                                    base::Unretained(advertising_callbacks_), advertiser_id,
+                                    status));
   }
 
   void OnPeriodicAdvertisingDataSet(uint8_t advertiser_id, AdvertisingStatus status) {
-    if (com::android::bluetooth::flags::
-            leaudio_broadcast_update_metadata_callback()) {
-      int reg_id =
-          bluetooth::shim::GetAdvertising()->GetAdvertiserRegId(advertiser_id);
+    if (com::android::bluetooth::flags::leaudio_broadcast_update_metadata_callback()) {
+      int reg_id = bluetooth::shim::GetAdvertising()->GetAdvertiserRegId(advertiser_id);
       uint8_t client_id = is_native_advertiser(reg_id);
       if (client_id != kAdvertiserClientIdJni) {
         // Invoke callback for native client
-        do_in_main_thread(
-            FROM_HERE,
-            base::Bind(&AdvertisingCallbacks::OnPeriodicAdvertisingDataSet,
-                       base::Unretained(native_adv_callbacks_map_[client_id]),
-                       advertiser_id, status));
+        do_in_main_thread(FROM_HERE,
+                          base::Bind(&AdvertisingCallbacks::OnPeriodicAdvertisingDataSet,
+                                     base::Unretained(native_adv_callbacks_map_[client_id]),
+                                     advertiser_id, status));
         return;
       }
     }
-    do_in_jni_thread(base::BindOnce(
-        &AdvertisingCallbacks::OnPeriodicAdvertisingDataSet,
-        base::Unretained(advertising_callbacks_), advertiser_id, status));
+    do_in_jni_thread(base::BindOnce(&AdvertisingCallbacks::OnPeriodicAdvertisingDataSet,
+                                    base::Unretained(advertising_callbacks_), advertiser_id,
+                                    status));
   }
 
   void OnPeriodicAdvertisingEnabled(uint8_t advertiser_id, bool enable, AdvertisingStatus status) {
-    do_in_jni_thread(
-        base::BindOnce(&AdvertisingCallbacks::OnPeriodicAdvertisingEnabled,
-                       base::Unretained(advertising_callbacks_), advertiser_id,
-                       enable, status));
+    do_in_jni_thread(base::BindOnce(&AdvertisingCallbacks::OnPeriodicAdvertisingEnabled,
+                                    base::Unretained(advertising_callbacks_), advertiser_id, enable,
+                                    status));
   }
 
   void OnOwnAddressRead(uint8_t advertiser_id, uint8_t address_type,
@@ -346,16 +316,15 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
       return;
     }
     do_in_jni_thread(base::BindOnce(&AdvertisingCallbacks::OnOwnAddressRead,
-                                    base::Unretained(advertising_callbacks_),
-                                    advertiser_id, address_type, raw_address));
+                                    base::Unretained(advertising_callbacks_), advertiser_id,
+                                    address_type, raw_address));
   }
 
   AdvertisingCallbacks* advertising_callbacks_;
   std::map<uint8_t, AdvertisingCallbacks*> native_adv_callbacks_map_;
 
- private:
-  void parse_parameter(bluetooth::hci::AdvertisingConfig& config,
-                       AdvertiseParameters params) {
+private:
+  void parse_parameter(bluetooth::hci::AdvertisingConfig& config, AdvertiseParameters params) {
     config.connectable = params.advertising_event_properties & 0x01;
     config.scannable = params.advertising_event_properties & 0x02;
     config.discoverable = params.advertising_event_properties & 0x04;
@@ -368,40 +337,31 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
     config.tx_power = params.tx_power;
     config.use_le_coded_phy = params.primary_advertising_phy == 0x03;
     config.secondary_advertising_phy =
-        static_cast<bluetooth::hci::SecondaryPhyType>(
-            params.secondary_advertising_phy);
+            static_cast<bluetooth::hci::SecondaryPhyType>(params.secondary_advertising_phy);
     config.enable_scan_request_notifications =
-        static_cast<bluetooth::hci::Enable>(
-            params.scan_request_notification_enable);
+            static_cast<bluetooth::hci::Enable>(params.scan_request_notification_enable);
     // Matching the ADDRESS_TYPE_* enums from Java
     switch (params.own_address_type) {
       case -1:
-        config.requested_advertiser_address_type =
-            AdvertiserAddressType::RESOLVABLE_RANDOM;
+        config.requested_advertiser_address_type = AdvertiserAddressType::RESOLVABLE_RANDOM;
         break;
       case 0:
-        config.requested_advertiser_address_type =
-            AdvertiserAddressType::PUBLIC;
+        config.requested_advertiser_address_type = AdvertiserAddressType::PUBLIC;
         break;
       case 1:
-        config.requested_advertiser_address_type =
-            AdvertiserAddressType::RESOLVABLE_RANDOM;
+        config.requested_advertiser_address_type = AdvertiserAddressType::RESOLVABLE_RANDOM;
         break;
       case 2:
-        config.requested_advertiser_address_type =
-            AdvertiserAddressType::NONRESOLVABLE_RANDOM;
+        config.requested_advertiser_address_type = AdvertiserAddressType::NONRESOLVABLE_RANDOM;
         break;
       default:
-        log::error("Received unexpected address type: {}",
-                   params.own_address_type);
-        config.requested_advertiser_address_type =
-            AdvertiserAddressType::RESOLVABLE_RANDOM;
+        log::error("Received unexpected address type: {}", params.own_address_type);
+        config.requested_advertiser_address_type = AdvertiserAddressType::RESOLVABLE_RANDOM;
     }
   }
 
-  void parse_periodic_advertising_parameter(
-      bluetooth::hci::PeriodicAdvertisingParameters& config,
-      PeriodicAdvertisingParameters periodic_params) {
+  void parse_periodic_advertising_parameter(bluetooth::hci::PeriodicAdvertisingParameters& config,
+                                            PeriodicAdvertisingParameters periodic_params) {
     config.max_interval = periodic_params.max_interval;
     config.min_interval = periodic_params.min_interval;
     config.properties = periodic_params.periodic_advertising_properties;
@@ -431,10 +391,8 @@ BleAdvertiserInterface* bluetooth::shim::get_ble_advertiser_instance() {
     bt_le_advertiser_instance = new BleAdvertiserInterfaceImpl();
   }
   return bt_le_advertiser_instance;
-};
+}
 
 void bluetooth::shim::init_advertising_manager() {
-  static_cast<BleAdvertiserInterfaceImpl*>(
-      bluetooth::shim::get_ble_advertiser_instance())
-      ->Init();
+  static_cast<BleAdvertiserInterfaceImpl*>(bluetooth::shim::get_ble_advertiser_instance())->Init();
 }

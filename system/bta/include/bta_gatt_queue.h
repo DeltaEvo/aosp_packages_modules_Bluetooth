@@ -34,25 +34,18 @@
  * existing BTA_GATTC_* API.
  */
 class BtaGattQueue {
- public:
+public:
   static void Clean(uint16_t conn_id);
-  static void ReadCharacteristic(uint16_t conn_id, uint16_t handle,
-                                 GATT_READ_OP_CB cb, void* cb_data);
-  static void ReadDescriptor(uint16_t conn_id, uint16_t handle,
-                             GATT_READ_OP_CB cb, void* cb_data);
-  static void WriteCharacteristic(uint16_t conn_id, uint16_t handle,
-                                  std::vector<uint8_t> value,
-                                  tGATT_WRITE_TYPE write_type,
-                                  GATT_WRITE_OP_CB cb, void* cb_data);
-  static void WriteDescriptor(uint16_t conn_id, uint16_t handle,
-                              std::vector<uint8_t> value,
-                              tGATT_WRITE_TYPE write_type, GATT_WRITE_OP_CB cb,
-                              void* cb_data);
+  static void ReadCharacteristic(uint16_t conn_id, uint16_t handle, GATT_READ_OP_CB cb,
+                                 void* cb_data);
+  static void ReadDescriptor(uint16_t conn_id, uint16_t handle, GATT_READ_OP_CB cb, void* cb_data);
+  static void WriteCharacteristic(uint16_t conn_id, uint16_t handle, std::vector<uint8_t> value,
+                                  tGATT_WRITE_TYPE write_type, GATT_WRITE_OP_CB cb, void* cb_data);
+  static void WriteDescriptor(uint16_t conn_id, uint16_t handle, std::vector<uint8_t> value,
+                              tGATT_WRITE_TYPE write_type, GATT_WRITE_OP_CB cb, void* cb_data);
   static void ConfigureMtu(uint16_t conn_id, uint16_t mtu);
-  static void ReadMultiCharacteristic(uint16_t conn_id,
-                                      tBTA_GATTC_MULTI& p_read_multi,
-                                      bool variable_len,
-                                      GATT_READ_MULTI_OP_CB cb, void* cb_data);
+  static void ReadMultiCharacteristic(uint16_t conn_id, tBTA_GATTC_MULTI& p_read_multi,
+                                      bool variable_len, GATT_READ_MULTI_OP_CB cb, void* cb_data);
 
   /* Holds pending GATT operations */
   struct gatt_operation {
@@ -73,20 +66,16 @@ class BtaGattQueue {
     std::vector<uint8_t> value;
   };
 
- private:
+private:
   static void mark_as_not_executing(uint16_t conn_id);
   static void gatt_execute_next_op(uint16_t conn_id);
-  static void gatt_read_op_finished(uint16_t conn_id, tGATT_STATUS status,
-                                    uint16_t handle, uint16_t len,
-                                    uint8_t* value, void* data);
-  static void gatt_write_op_finished(uint16_t conn_id, tGATT_STATUS status,
-                                     uint16_t handle, uint16_t len,
-                                     const uint8_t* value, void* data);
-  static void gatt_configure_mtu_op_finished(uint16_t conn_id,
-                                             tGATT_STATUS status, void* data);
+  static void gatt_read_op_finished(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
+                                    uint16_t len, uint8_t* value, void* data);
+  static void gatt_write_op_finished(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
+                                     uint16_t len, const uint8_t* value, void* data);
+  static void gatt_configure_mtu_op_finished(uint16_t conn_id, tGATT_STATUS status, void* data);
   static void gatt_read_multi_op_finished(uint16_t conn_id, tGATT_STATUS status,
-                                          tBTA_GATTC_MULTI& handle,
-                                          uint16_t len, uint8_t* value,
+                                          tBTA_GATTC_MULTI& handle, uint16_t len, uint8_t* value,
                                           void* data);
   // maps connection id to operations waiting for execution
   static std::unordered_map<uint16_t, std::list<gatt_operation>> gatt_op_queue;

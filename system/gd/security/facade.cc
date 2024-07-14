@@ -62,12 +62,10 @@ class SecurityModuleFacadeService : public SecurityModuleFacade::Service,
                                     public ISecurityManagerListener,
                                     public UI,
                                     public hci::AdvertisingCallback {
- public:
-  SecurityModuleFacadeService(
-      SecurityModule* security_module,
-      L2capLeModule* l2cap_le_module,
-      ::bluetooth::os::Handler* security_handler,
-      hci::LeAdvertisingManager* le_advertising_manager)
+public:
+  SecurityModuleFacadeService(SecurityModule* security_module, L2capLeModule* l2cap_le_module,
+                              ::bluetooth::os::Handler* security_handler,
+                              hci::LeAdvertisingManager* le_advertising_manager)
       : security_module_(security_module),
         l2cap_le_module_(l2cap_le_module),
         security_handler_(security_handler),
@@ -77,25 +75,26 @@ class SecurityModuleFacadeService : public SecurityModuleFacade::Service,
 
     /* In order to receive connect/disconenct event, we must register service */
     l2cap_le_module_->GetFixedChannelManager()->RegisterService(
-        bluetooth::l2cap::kLastFixedChannel - 2,
-        common::BindOnce(&SecurityModuleFacadeService::OnL2capRegistrationCompleteLe, common::Unretained(this)),
-        common::Bind(&SecurityModuleFacadeService::OnConnectionOpenLe, common::Unretained(this)),
-        security_handler_);
+            bluetooth::l2cap::kLastFixedChannel - 2,
+            common::BindOnce(&SecurityModuleFacadeService::OnL2capRegistrationCompleteLe,
+                             common::Unretained(this)),
+            common::Bind(&SecurityModuleFacadeService::OnConnectionOpenLe,
+                         common::Unretained(this)),
+            security_handler_);
   }
 
   void OnL2capRegistrationCompleteLe(
-      l2cap::le::FixedChannelManager::RegistrationResult result,
-      std::unique_ptr<l2cap::le::FixedChannelService> /* le_smp_service */) {
+          l2cap::le::FixedChannelManager::RegistrationResult result,
+          std::unique_ptr<l2cap::le::FixedChannelService> /* le_smp_service */) {
     log::assert_that(
-        result == bluetooth::l2cap::le::FixedChannelManager::RegistrationResult::SUCCESS,
-        "Failed to register to LE SMP Fixed Channel Service");
+            result == bluetooth::l2cap::le::FixedChannelManager::RegistrationResult::SUCCESS,
+            "Failed to register to LE SMP Fixed Channel Service");
   }
 
   void OnConnectionOpenLe(std::unique_ptr<l2cap::le::FixedChannel> channel) {
     channel->RegisterOnCloseCallback(
-        security_handler_,
-        common::BindOnce(
-            &SecurityModuleFacadeService::OnConnectionClosedLe, common::Unretained(this), channel->GetDevice()));
+            security_handler_, common::BindOnce(&SecurityModuleFacadeService::OnConnectionClosedLe,
+                                                common::Unretained(this), channel->GetDevice()));
   }
 
   void OnConnectionClosedLe(hci::AddressWithType address, hci::ErrorCode /* error_code */) {
@@ -105,137 +104,121 @@ class SecurityModuleFacadeService : public SecurityModuleFacade::Service,
     helper_events_.OnIncomingEvent(disconnected);
   }
 
-  ::grpc::Status CreateBond(
-      ::grpc::ServerContext* /* context */,
-      const blueberry::facade::BluetoothAddressWithType* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status CreateBond(::grpc::ServerContext* /* context */,
+                            const blueberry::facade::BluetoothAddressWithType* request,
+                            ::google::protobuf::Empty* /* response */) override {
     hci::Address peer;
-    log::assert_that(
-        hci::Address::FromString(request->address().address(), peer),
-        "assert failed: hci::Address::FromString(request->address().address(), peer)");
+    log::assert_that(hci::Address::FromString(request->address().address(), peer),
+                     "assert failed: hci::Address::FromString(request->address().address(), peer)");
     hci::AddressType peer_type = static_cast<hci::AddressType>(request->type());
     security_module_->GetSecurityManager()->CreateBond(hci::AddressWithType(peer, peer_type));
     return ::grpc::Status::OK;
   }
 
-  ::grpc::Status CreateBondOutOfBand(
-      ::grpc::ServerContext* /* context */,
-      const OobDataBondMessage* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status CreateBondOutOfBand(::grpc::ServerContext* /* context */,
+                                     const OobDataBondMessage* request,
+                                     ::google::protobuf::Empty* /* response */) override {
     hci::Address peer;
-    log::assert_that(
-        hci::Address::FromString(request->address().address().address(), peer),
-        "assert failed: hci::Address::FromString(request->address().address().address(), peer)");
+    log::assert_that(hci::Address::FromString(request->address().address().address(), peer),
+                     "assert failed: "
+                     "hci::Address::FromString(request->address().address().address(), peer)");
     hci::AddressType peer_type = static_cast<hci::AddressType>(request->address().type());
     pairing::SimplePairingHash c;
     pairing::SimplePairingRandomizer r;
-    std::copy(
-        std::begin(request->p192_data().confirmation_value()),
-        std::end(request->p192_data().confirmation_value()),
-        c.data());
-    std::copy(std::begin(request->p192_data().random_value()), std::end(request->p192_data().random_value()), r.data());
+    std::copy(std::begin(request->p192_data().confirmation_value()),
+              std::end(request->p192_data().confirmation_value()), c.data());
+    std::copy(std::begin(request->p192_data().random_value()),
+              std::end(request->p192_data().random_value()), r.data());
     pairing::OobData p192_data(c, r);
-    std::copy(
-        std::begin(request->p256_data().confirmation_value()),
-        std::end(request->p256_data().confirmation_value()),
-        c.data());
-    std::copy(std::begin(request->p256_data().random_value()), std::end(request->p256_data().random_value()), r.data());
+    std::copy(std::begin(request->p256_data().confirmation_value()),
+              std::end(request->p256_data().confirmation_value()), c.data());
+    std::copy(std::begin(request->p256_data().random_value()),
+              std::end(request->p256_data().random_value()), r.data());
     pairing::OobData p256_data(c, r);
     security_module_->GetSecurityManager()->CreateBondOutOfBand(
-        hci::AddressWithType(peer, peer_type), p192_data, p256_data);
+            hci::AddressWithType(peer, peer_type), p192_data, p256_data);
     return ::grpc::Status::OK;
   }
 
-  ::grpc::Status GetOutOfBandData(
-      ::grpc::ServerContext* /* context */,
-      const ::google::protobuf::Empty* /* request */,
-      ::google::protobuf::Empty* /* response */) override {
-    security_module_->GetSecurityManager()->GetOutOfBandData(
-        security_handler_->BindOnceOn(this, &SecurityModuleFacadeService::OobDataEventOccurred));
+  ::grpc::Status GetOutOfBandData(::grpc::ServerContext* /* context */,
+                                  const ::google::protobuf::Empty* /* request */,
+                                  ::google::protobuf::Empty* /* response */) override {
+    security_module_->GetSecurityManager()->GetOutOfBandData(security_handler_->BindOnceOn(
+            this, &SecurityModuleFacadeService::OobDataEventOccurred));
     return ::grpc::Status::OK;
   }
 
   ::grpc::Status FetchGetOutOfBandDataEvents(
-      ::grpc::ServerContext* context,
-      const ::google::protobuf::Empty* /* request */,
-      ::grpc::ServerWriter<OobDataBondMessage>* writer) override {
+          ::grpc::ServerContext* context, const ::google::protobuf::Empty* /* request */,
+          ::grpc::ServerWriter<OobDataBondMessage>* writer) override {
     return oob_events_.RunLoop(context, writer);
   }
 
-  ::grpc::Status CreateBondLe(
-      ::grpc::ServerContext* /* context */,
-      const blueberry::facade::BluetoothAddressWithType* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status CreateBondLe(::grpc::ServerContext* /* context */,
+                              const blueberry::facade::BluetoothAddressWithType* request,
+                              ::google::protobuf::Empty* /* response */) override {
     hci::Address peer;
-    log::assert_that(
-        hci::Address::FromString(request->address().address(), peer),
-        "assert failed: hci::Address::FromString(request->address().address(), peer)");
+    log::assert_that(hci::Address::FromString(request->address().address(), peer),
+                     "assert failed: hci::Address::FromString(request->address().address(), peer)");
     hci::AddressType peer_type = static_cast<hci::AddressType>(request->type());
     security_module_->GetSecurityManager()->CreateBondLe(hci::AddressWithType(peer, peer_type));
     return ::grpc::Status::OK;
   }
 
-  ::grpc::Status CancelBond(
-      ::grpc::ServerContext* /* context */,
-      const blueberry::facade::BluetoothAddressWithType* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status CancelBond(::grpc::ServerContext* /* context */,
+                            const blueberry::facade::BluetoothAddressWithType* request,
+                            ::google::protobuf::Empty* /* response */) override {
     hci::Address peer;
-    log::assert_that(
-        hci::Address::FromString(request->address().address(), peer),
-        "assert failed: hci::Address::FromString(request->address().address(), peer)");
+    log::assert_that(hci::Address::FromString(request->address().address(), peer),
+                     "assert failed: hci::Address::FromString(request->address().address(), peer)");
     hci::AddressType peer_type = hci::AddressType::PUBLIC_DEVICE_ADDRESS;
     security_module_->GetSecurityManager()->CancelBond(hci::AddressWithType(peer, peer_type));
     return ::grpc::Status::OK;
   }
 
-  ::grpc::Status RemoveBond(
-      ::grpc::ServerContext* /* context */,
-      const blueberry::facade::BluetoothAddressWithType* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status RemoveBond(::grpc::ServerContext* /* context */,
+                            const blueberry::facade::BluetoothAddressWithType* request,
+                            ::google::protobuf::Empty* /* response */) override {
     hci::Address peer;
-    log::assert_that(
-        hci::Address::FromString(request->address().address(), peer),
-        "assert failed: hci::Address::FromString(request->address().address(), peer)");
+    log::assert_that(hci::Address::FromString(request->address().address(), peer),
+                     "assert failed: hci::Address::FromString(request->address().address(), peer)");
     hci::AddressType peer_type = hci::AddressType::PUBLIC_DEVICE_ADDRESS;
     security_module_->GetSecurityManager()->RemoveBond(hci::AddressWithType(peer, peer_type));
     return ::grpc::Status::OK;
   }
 
-  ::grpc::Status FetchUiEvents(
-      ::grpc::ServerContext* context,
-      const ::google::protobuf::Empty* /* request */,
-      ::grpc::ServerWriter<UiMsg>* writer) override {
+  ::grpc::Status FetchUiEvents(::grpc::ServerContext* context,
+                               const ::google::protobuf::Empty* /* request */,
+                               ::grpc::ServerWriter<UiMsg>* writer) override {
     return ui_events_.RunLoop(context, writer);
   }
 
-  ::grpc::Status SendUiCallback(
-      ::grpc::ServerContext* /* context */,
-      const UiCallbackMsg* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status SendUiCallback(::grpc::ServerContext* /* context */, const UiCallbackMsg* request,
+                                ::google::protobuf::Empty* /* response */) override {
     hci::Address peer;
-    log::assert_that(
-        hci::Address::FromString(request->address().address().address(), peer),
-        "assert failed: hci::Address::FromString(request->address().address().address(), peer)");
+    log::assert_that(hci::Address::FromString(request->address().address().address(), peer),
+                     "assert failed: "
+                     "hci::Address::FromString(request->address().address().address(), peer)");
     hci::AddressType remote_type = static_cast<hci::AddressType>(request->address().type());
 
     switch (request->message_type()) {
       case UiCallbackType::PASSKEY:
         security_module_->GetSecurityManager()->OnPasskeyEntry(
-            hci::AddressWithType(peer, remote_type), request->numeric_value());
+                hci::AddressWithType(peer, remote_type), request->numeric_value());
         break;
       case UiCallbackType::YES_NO:
-        security_module_->GetSecurityManager()->OnConfirmYesNo(hci::AddressWithType(peer, remote_type),
-                                                               request->boolean());
+        security_module_->GetSecurityManager()->OnConfirmYesNo(
+                hci::AddressWithType(peer, remote_type), request->boolean());
         break;
       case UiCallbackType::PAIRING_PROMPT:
         security_module_->GetSecurityManager()->OnPairingPromptAccepted(
-            hci::AddressWithType(peer, remote_type), request->boolean());
+                hci::AddressWithType(peer, remote_type), request->boolean());
         break;
       case UiCallbackType::PIN:
         log::info("PIN Callback");
         security_module_->GetSecurityManager()->OnPinEntry(
-            hci::AddressWithType(peer, remote_type),
-            std::vector<uint8_t>(request->pin().cbegin(), request->pin().cend()));
+                hci::AddressWithType(peer, remote_type),
+                std::vector<uint8_t>(request->pin().cbegin(), request->pin().cend()));
         break;
       default:
         log::error("Unknown UiCallbackType {}", static_cast<int>(request->message_type()));
@@ -244,33 +227,27 @@ class SecurityModuleFacadeService : public SecurityModuleFacade::Service,
     return ::grpc::Status::OK;
   }
 
-  ::grpc::Status FetchBondEvents(
-      ::grpc::ServerContext* context,
-      const ::google::protobuf::Empty* /* request */,
-      ::grpc::ServerWriter<BondMsg>* writer) override {
+  ::grpc::Status FetchBondEvents(::grpc::ServerContext* context,
+                                 const ::google::protobuf::Empty* /* request */,
+                                 ::grpc::ServerWriter<BondMsg>* writer) override {
     return bond_events_.RunLoop(context, writer);
   }
 
-  ::grpc::Status FetchHelperEvents(
-      ::grpc::ServerContext* context,
-      const ::google::protobuf::Empty* /* request */,
-      ::grpc::ServerWriter<SecurityHelperMsg>* writer) override {
+  ::grpc::Status FetchHelperEvents(::grpc::ServerContext* context,
+                                   const ::google::protobuf::Empty* /* request */,
+                                   ::grpc::ServerWriter<SecurityHelperMsg>* writer) override {
     return helper_events_.RunLoop(context, writer);
   }
 
   ::grpc::Status FetchAdvertisingCallbackEvents(
-      ::grpc::ServerContext* context,
-      const ::google::protobuf::Empty* /* request */,
-      ::grpc::ServerWriter<AdvertisingCallbackMsg>* writer) override {
+          ::grpc::ServerContext* context, const ::google::protobuf::Empty* /* request */,
+          ::grpc::ServerWriter<AdvertisingCallbackMsg>* writer) override {
     le_advertising_manager_->RegisterAdvertisingCallback(this);
     return advertising_callback_events_.RunLoop(context, writer);
   }
 
-  void OnAdvertisingSetStarted(
-      int /* reg_id */,
-      uint8_t advertiser_id,
-      int8_t /* tx_power */,
-      AdvertisingStatus /* status */) {
+  void OnAdvertisingSetStarted(int /* reg_id */, uint8_t advertiser_id, int8_t /* tx_power */,
+                               AdvertisingStatus /* status */) {
     AdvertisingCallbackMsg advertising_set_started;
     advertising_set_started.set_message_type(AdvertisingCallbackMsgType::ADVERTISING_SET_STARTED);
     advertising_set_started.set_advertising_started(AdvertisingSetStarted::STARTED);
@@ -317,82 +294,87 @@ class SecurityModuleFacadeService : public SecurityModuleFacade::Service,
     advertising_callback_events_.OnIncomingEvent(get_own_address);
   }
 
-  ::grpc::Status SetIoCapability(
-      ::grpc::ServerContext* /* context */,
-      const IoCapabilityMessage* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status SetIoCapability(::grpc::ServerContext* /* context */,
+                                 const IoCapabilityMessage* request,
+                                 ::google::protobuf::Empty* /* response */) override {
     security_module_->GetFacadeConfigurationApi()->SetIoCapability(
-        static_cast<hci::IoCapability>(request->capability()));
+            static_cast<hci::IoCapability>(request->capability()));
     return ::grpc::Status::OK;
   }
 
-  ::grpc::Status SetLeIoCapability(
-      ::grpc::ServerContext* /* context */,
-      const LeIoCapabilityMessage* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status SetLeIoCapability(::grpc::ServerContext* /* context */,
+                                   const LeIoCapabilityMessage* request,
+                                   ::google::protobuf::Empty* /* response */) override {
     security_module_->GetFacadeConfigurationApi()->SetLeIoCapability(
-        static_cast<security::IoCapability>(request->capabilities()));
+            static_cast<security::IoCapability>(request->capabilities()));
     return ::grpc::Status::OK;
   }
 
-  ::grpc::Status SetAuthenticationRequirements(
-      ::grpc::ServerContext* /* context */,
-      const AuthenticationRequirementsMessage* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status SetAuthenticationRequirements(::grpc::ServerContext* /* context */,
+                                               const AuthenticationRequirementsMessage* request,
+                                               ::google::protobuf::Empty* /* response */) override {
     security_module_->GetFacadeConfigurationApi()->SetAuthenticationRequirements(
-        static_cast<hci::AuthenticationRequirements>(request->requirement()));
+            static_cast<hci::AuthenticationRequirements>(request->requirement()));
     return ::grpc::Status::OK;
   }
 
-  ::grpc::Status SetLeAuthRequirements(
-      ::grpc::ServerContext* /* context */,
-      const LeAuthRequirementsMessage* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status SetLeAuthRequirements(::grpc::ServerContext* /* context */,
+                                       const LeAuthRequirementsMessage* request,
+                                       ::google::protobuf::Empty* /* response */) override {
     uint8_t auth_req = request->bond() ? AUTH_REQ_BOND : AUTH_REQ_NO_BOND;
 
-    if (request->mitm()) auth_req |= AUTH_REQ_MITM_MASK;
-    if (request->secure_connections()) auth_req |= AUTH_REQ_SECURE_CONNECTIONS_MASK;
-    if (request->keypress()) auth_req |= AUTH_REQ_KEYPRESS_MASK;
-    if (request->ct2()) auth_req |= AUTH_REQ_CT2_MASK;
-    if (request->reserved_bits()) auth_req |= (((request->reserved_bits()) << 6) & AUTH_REQ_RFU_MASK);
+    if (request->mitm()) {
+      auth_req |= AUTH_REQ_MITM_MASK;
+    }
+    if (request->secure_connections()) {
+      auth_req |= AUTH_REQ_SECURE_CONNECTIONS_MASK;
+    }
+    if (request->keypress()) {
+      auth_req |= AUTH_REQ_KEYPRESS_MASK;
+    }
+    if (request->ct2()) {
+      auth_req |= AUTH_REQ_CT2_MASK;
+    }
+    if (request->reserved_bits()) {
+      auth_req |= (((request->reserved_bits()) << 6) & AUTH_REQ_RFU_MASK);
+    }
 
     security_module_->GetFacadeConfigurationApi()->SetLeAuthRequirements(auth_req);
     return ::grpc::Status::OK;
   }
 
-  ::grpc::Status SetLeMaximumEncryptionKeySize(
-      ::grpc::ServerContext* /* context */,
-      const LeMaximumEncryptionKeySizeMessage* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status SetLeMaximumEncryptionKeySize(::grpc::ServerContext* /* context */,
+                                               const LeMaximumEncryptionKeySizeMessage* request,
+                                               ::google::protobuf::Empty* /* response */) override {
     security_module_->GetFacadeConfigurationApi()->SetLeMaximumEncryptionKeySize(
-        request->maximum_encryption_key_size());
+            request->maximum_encryption_key_size());
     return ::grpc::Status::OK;
   }
 
-  ::grpc::Status SetLeOobDataPresent(
-      ::grpc::ServerContext* /* context */,
-      const LeOobDataPresentMessage* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status SetLeOobDataPresent(::grpc::ServerContext* /* context */,
+                                     const LeOobDataPresentMessage* request,
+                                     ::google::protobuf::Empty* /* response */) override {
     security_module_->GetFacadeConfigurationApi()->SetLeOobDataPresent(
-        static_cast<OobDataFlag>(request->data_present()));
+            static_cast<OobDataFlag>(request->data_present()));
     return ::grpc::Status::OK;
   }
 
-  ::grpc::Status SetLeInitiatorAddressPolicy(
-      ::grpc::ServerContext* /* context */,
-      const blueberry::facade::hci::PrivacyPolicy* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status SetLeInitiatorAddressPolicy(::grpc::ServerContext* /* context */,
+                                             const blueberry::facade::hci::PrivacyPolicy* request,
+                                             ::google::protobuf::Empty* /* response */) override {
     Address address = Address::kEmpty;
     hci::LeAddressManager::AddressPolicy address_policy =
-        static_cast<hci::LeAddressManager::AddressPolicy>(request->address_policy());
+            static_cast<hci::LeAddressManager::AddressPolicy>(request->address_policy());
     if (address_policy == hci::LeAddressManager::AddressPolicy::USE_STATIC_ADDRESS ||
         address_policy == hci::LeAddressManager::AddressPolicy::USE_PUBLIC_ADDRESS) {
       log::assert_that(
-          Address::FromString(request->address_with_type().address().address(), address),
-          "assert failed: Address::FromString(request->address_with_type().address().address(), "
-          "address)");
+              Address::FromString(request->address_with_type().address().address(), address),
+              "assert failed: "
+              "Address::FromString(request->address_with_type().address().address(), "
+              "address)");
     }
-    hci::AddressWithType address_with_type(address, static_cast<hci::AddressType>(request->address_with_type().type()));
+    hci::AddressWithType address_with_type(
+            address, static_cast<hci::AddressType>(request->address_with_type().type()));
     hci::Octet16 irk = {};
     auto request_irk_length = request->rotation_irk().end() - request->rotation_irk().begin();
     if (request_irk_length == hci::kOctet16Length) {
@@ -404,38 +386,37 @@ class SecurityModuleFacadeService : public SecurityModuleFacade::Service,
     auto minimum_rotation_time = std::chrono::milliseconds(request->minimum_rotation_time());
     auto maximum_rotation_time = std::chrono::milliseconds(request->maximum_rotation_time());
     security_module_->GetSecurityManager()->SetLeInitiatorAddressPolicyForTest(
-        address_policy, address_with_type, irk, minimum_rotation_time, maximum_rotation_time);
+            address_policy, address_with_type, irk, minimum_rotation_time, maximum_rotation_time);
     return ::grpc::Status::OK;
   }
 
   ::grpc::Status FetchEnforceSecurityPolicyEvents(
-      ::grpc::ServerContext* context,
-      const ::google::protobuf::Empty* /* request */,
-      ::grpc::ServerWriter<EnforceSecurityPolicyMsg>* writer) override {
+          ::grpc::ServerContext* context, const ::google::protobuf::Empty* /* request */,
+          ::grpc::ServerWriter<EnforceSecurityPolicyMsg>* writer) override {
     return enforce_security_policy_events_.RunLoop(context, writer);
   }
 
-  ::grpc::Status EnforceSecurityPolicy(
-      ::grpc::ServerContext* /* context */,
-      const SecurityPolicyMessage* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status EnforceSecurityPolicy(::grpc::ServerContext* /* context */,
+                                       const SecurityPolicyMessage* request,
+                                       ::google::protobuf::Empty* /* response */) override {
     hci::Address peer;
-    log::assert_that(
-        hci::Address::FromString(request->address().address().address(), peer),
-        "assert failed: hci::Address::FromString(request->address().address().address(), peer)");
+    log::assert_that(hci::Address::FromString(request->address().address().address(), peer),
+                     "assert failed: "
+                     "hci::Address::FromString(request->address().address().address(), peer)");
     hci::AddressType peer_type = static_cast<hci::AddressType>(request->address().type());
     hci::AddressWithType peer_with_type(peer, peer_type);
     l2cap::classic::SecurityEnforcementInterface::ResultCallback callback =
-        security_handler_->BindOnceOn(this, &SecurityModuleFacadeService::EnforceSecurityPolicyEvent);
+            security_handler_->BindOnceOn(this,
+                                          &SecurityModuleFacadeService::EnforceSecurityPolicyEvent);
     security_module_->GetFacadeConfigurationApi()->EnforceSecurityPolicy(
-        peer_with_type, static_cast<l2cap::classic::SecurityPolicy>(request->policy()), std::move(callback));
+            peer_with_type, static_cast<l2cap::classic::SecurityPolicy>(request->policy()),
+            std::move(callback));
     return ::grpc::Status::OK;
   }
 
-  ::grpc::Status GetLeOutOfBandData(
-      ::grpc::ServerContext* /* context */,
-      const ::google::protobuf::Empty* /* request */,
-      OobDataMessage* response) override {
+  ::grpc::Status GetLeOutOfBandData(::grpc::ServerContext* /* context */,
+                                    const ::google::protobuf::Empty* /* request */,
+                                    OobDataMessage* response) override {
     std::array<uint8_t, 16> le_sc_c;
     std::array<uint8_t, 16> le_sc_r;
     security_module_->GetFacadeConfigurationApi()->GetLeOutOfBandData(&le_sc_c, &le_sc_r);
@@ -451,19 +432,18 @@ class SecurityModuleFacadeService : public SecurityModuleFacade::Service,
     return ::grpc::Status::OK;
   }
 
-  ::grpc::Status SetOutOfBandData(
-      ::grpc::ServerContext* /* context */,
-      const OobDataMessage* request,
-      ::google::protobuf::Empty* /* response */) override {
+  ::grpc::Status SetOutOfBandData(::grpc::ServerContext* /* context */,
+                                  const OobDataMessage* request,
+                                  ::google::protobuf::Empty* /* response */) override {
     hci::Address peer;
-    log::assert_that(
-        hci::Address::FromString(request->address().address().address(), peer),
-        "assert failed: hci::Address::FromString(request->address().address().address(), peer)");
+    log::assert_that(hci::Address::FromString(request->address().address().address(), peer),
+                     "assert failed: "
+                     "hci::Address::FromString(request->address().address().address(), peer)");
     hci::AddressType peer_type = static_cast<hci::AddressType>(request->address().type());
     hci::AddressWithType peer_with_type(peer, peer_type);
 
-    // We can't simply iterate till end of string, because we have an empty byte added at the end. We know confirm and
-    // random are fixed size, 16 bytes
+    // We can't simply iterate till end of string, because we have an empty byte added at the end.
+    // We know confirm and random are fixed size, 16 bytes
     std::array<uint8_t, 16> le_sc_c;
     auto req_le_sc_c = request->confirmation_value();
     std::copy(req_le_sc_c.begin(), req_le_sc_c.begin() + 16, le_sc_c.data());
@@ -472,16 +452,16 @@ class SecurityModuleFacadeService : public SecurityModuleFacade::Service,
     auto req_le_sc_r = request->random_value();
     std::copy(req_le_sc_r.begin(), req_le_sc_r.begin() + 16, le_sc_r.data());
 
-    security_module_->GetFacadeConfigurationApi()->SetOutOfBandData(peer_with_type, le_sc_c, le_sc_r);
+    security_module_->GetFacadeConfigurationApi()->SetOutOfBandData(peer_with_type, le_sc_c,
+                                                                    le_sc_r);
     return ::grpc::Status::OK;
   }
 
-  ::grpc::Status FetchDisconnectEvents(
-      ::grpc::ServerContext* context,
-      const ::google::protobuf::Empty* /* request */,
-      ::grpc::ServerWriter<DisconnectMsg>* writer) override {
-    security_module_->GetFacadeConfigurationApi()->SetDisconnectCallback(
-        common::Bind(&SecurityModuleFacadeService::DisconnectEventOccurred, common::Unretained(this)));
+  ::grpc::Status FetchDisconnectEvents(::grpc::ServerContext* context,
+                                       const ::google::protobuf::Empty* /* request */,
+                                       ::grpc::ServerWriter<DisconnectMsg>* writer) override {
+    security_module_->GetFacadeConfigurationApi()->SetDisconnectCallback(common::Bind(
+            &SecurityModuleFacadeService::DisconnectEventOccurred, common::Unretained(this)));
     return disconnect_events_.RunLoop(context, writer);
   }
 
@@ -635,19 +615,21 @@ class SecurityModuleFacadeService : public SecurityModuleFacade::Service,
     enforce_security_policy_events_.OnIncomingEvent(msg);
   }
 
- private:
+private:
   SecurityModule* security_module_;
   L2capLeModule* l2cap_le_module_;
   ::bluetooth::os::Handler* security_handler_;
   hci::LeAdvertisingManager* le_advertising_manager_;
   ::bluetooth::grpc::GrpcEventQueue<UiMsg> ui_events_{"UI events"};
   ::bluetooth::grpc::GrpcEventQueue<BondMsg> bond_events_{"Bond events"};
-  ::bluetooth::grpc::GrpcEventQueue<SecurityHelperMsg> helper_events_{"Events that don't fit any other category"};
+  ::bluetooth::grpc::GrpcEventQueue<SecurityHelperMsg> helper_events_{
+          "Events that don't fit any other category"};
   ::bluetooth::grpc::GrpcEventQueue<EnforceSecurityPolicyMsg> enforce_security_policy_events_{
-      "Enforce Security Policy Events"};
+          "Enforce Security Policy Events"};
   ::bluetooth::grpc::GrpcEventQueue<DisconnectMsg> disconnect_events_{"Disconnect events"};
   ::bluetooth::grpc::GrpcEventQueue<OobDataBondMessage> oob_events_{"OOB Data events"};
-  ::bluetooth::grpc::GrpcEventQueue<AdvertisingCallbackMsg> advertising_callback_events_{"Advertising callback events"};
+  ::bluetooth::grpc::GrpcEventQueue<AdvertisingCallbackMsg> advertising_callback_events_{
+          "Advertising callback events"};
   uint32_t unique_id{1};
   std::map<uint32_t, common::OnceCallback<void(bool)>> user_yes_no_callbacks_;
   std::map<uint32_t, common::OnceCallback<void(uint32_t)>> user_passkey_callbacks_;
@@ -662,11 +644,9 @@ void SecurityModuleFacadeModule::ListDependencies(ModuleList* list) const {
 
 void SecurityModuleFacadeModule::Start() {
   ::bluetooth::grpc::GrpcFacadeModule::Start();
-  service_ = new SecurityModuleFacadeService(
-      GetDependency<SecurityModule>(),
-      GetDependency<L2capLeModule>(),
-      GetHandler(),
-      GetDependency<hci::LeAdvertisingManager>());
+  service_ = new SecurityModuleFacadeService(GetDependency<SecurityModule>(),
+                                             GetDependency<L2capLeModule>(), GetHandler(),
+                                             GetDependency<hci::LeAdvertisingManager>());
 }
 
 void SecurityModuleFacadeModule::Stop() {
@@ -674,12 +654,10 @@ void SecurityModuleFacadeModule::Stop() {
   ::bluetooth::grpc::GrpcFacadeModule::Stop();
 }
 
-::grpc::Service* SecurityModuleFacadeModule::GetService() const {
-  return service_;
-}
+::grpc::Service* SecurityModuleFacadeModule::GetService() const { return service_; }
 
 const ModuleFactory SecurityModuleFacadeModule::Factory =
-    ::bluetooth::ModuleFactory([]() { return new SecurityModuleFacadeModule(); });
+        ::bluetooth::ModuleFactory([]() { return new SecurityModuleFacadeModule(); });
 
 }  // namespace security
 }  // namespace bluetooth

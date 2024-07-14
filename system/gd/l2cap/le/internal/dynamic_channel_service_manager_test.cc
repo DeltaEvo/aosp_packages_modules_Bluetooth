@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include <future>
-
 #include <gtest/gtest.h>
+
+#include <future>
 
 #include "common/bind.h"
 #include "l2cap/cid.h"
@@ -32,7 +32,7 @@ namespace le {
 namespace internal {
 
 class L2capLeDynamicServiceManagerTest : public ::testing::Test {
- public:
+public:
   ~L2capLeDynamicServiceManagerTest() = default;
 
   void OnServiceRegistered(bool expect_success, DynamicChannelManager::RegistrationResult result,
@@ -41,7 +41,7 @@ class L2capLeDynamicServiceManagerTest : public ::testing::Test {
     service_registered_ = expect_success;
   }
 
- protected:
+protected:
   void SetUp() override {
     thread_ = new os::Thread("test_thread", os::Thread::Priority::NORMAL);
     user_handler_ = new os::Handler(thread_);
@@ -61,7 +61,8 @@ class L2capLeDynamicServiceManagerTest : public ::testing::Test {
   void sync_user_handler() {
     std::promise<void> promise;
     auto future = promise.get_future();
-    user_handler_->Post(common::BindOnce(&std::promise<void>::set_value, common::Unretained(&promise)));
+    user_handler_->Post(
+            common::BindOnce(&std::promise<void>::set_value, common::Unretained(&promise)));
     future.wait_for(std::chrono::milliseconds(3));
   }
 
@@ -75,10 +76,11 @@ class L2capLeDynamicServiceManagerTest : public ::testing::Test {
 
 TEST_F(L2capLeDynamicServiceManagerTest, register_and_unregister_le_dynamic_channel) {
   DynamicChannelServiceImpl::PendingRegistration pending_registration{
-      .user_handler_ = user_handler_,
-      .security_policy_ = SecurityPolicy::NO_SECURITY_WHATSOEVER_PLAINTEXT_TRANSPORT_OK,
-      .on_registration_complete_callback_ =
-          common::BindOnce(&L2capLeDynamicServiceManagerTest::OnServiceRegistered, common::Unretained(this), true)};
+          .user_handler_ = user_handler_,
+          .security_policy_ = SecurityPolicy::NO_SECURITY_WHATSOEVER_PLAINTEXT_TRANSPORT_OK,
+          .on_registration_complete_callback_ =
+                  common::BindOnce(&L2capLeDynamicServiceManagerTest::OnServiceRegistered,
+                                   common::Unretained(this), true)};
   Psm psm = 0x41;
   EXPECT_FALSE(manager_->IsServiceRegistered(psm));
   manager_->Register(psm, std::move(pending_registration));
@@ -91,10 +93,11 @@ TEST_F(L2capLeDynamicServiceManagerTest, register_and_unregister_le_dynamic_chan
 
 TEST_F(L2capLeDynamicServiceManagerTest, register_le_dynamic_channel_even_number_psm) {
   DynamicChannelServiceImpl::PendingRegistration pending_registration{
-      .user_handler_ = user_handler_,
-      .security_policy_ = SecurityPolicy::NO_SECURITY_WHATSOEVER_PLAINTEXT_TRANSPORT_OK,
-      .on_registration_complete_callback_ =
-          common::BindOnce(&L2capLeDynamicServiceManagerTest::OnServiceRegistered, common::Unretained(this), true)};
+          .user_handler_ = user_handler_,
+          .security_policy_ = SecurityPolicy::NO_SECURITY_WHATSOEVER_PLAINTEXT_TRANSPORT_OK,
+          .on_registration_complete_callback_ =
+                  common::BindOnce(&L2capLeDynamicServiceManagerTest::OnServiceRegistered,
+                                   common::Unretained(this), true)};
   Psm psm = 0x0100;
   EXPECT_FALSE(manager_->IsServiceRegistered(psm));
   manager_->Register(psm, std::move(pending_registration));

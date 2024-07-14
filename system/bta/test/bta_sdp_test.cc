@@ -39,14 +39,14 @@ void bta_dm_sdp_result(tSDP_STATUS sdp_status, tBTA_DM_SDP_STATE* state);
 }  // namespace bluetooth
 
 class BtaSdpTest : public BtaWithHwOnTest {
- protected:
+protected:
   void SetUp() override { BtaWithHwOnTest::SetUp(); }
 
   void TearDown() override { BtaWithHwOnTest::TearDown(); }
 };
 
 class BtaSdpRegisteredTest : public BtaSdpTest {
- protected:
+protected:
   void SetUp() override { BtaSdpTest::SetUp(); }
 
   void TearDown() override { BtaSdpTest::TearDown(); }
@@ -55,8 +55,7 @@ class BtaSdpRegisteredTest : public BtaSdpTest {
 TEST_F(BtaSdpTest, nop) {}
 
 TEST_F(BtaSdpRegisteredTest, bta_dm_sdp_result_SDP_SUCCESS) {
-  std::unique_ptr<tBTA_DM_SDP_STATE> state =
-      std::make_unique<tBTA_DM_SDP_STATE>(
+  std::unique_ptr<tBTA_DM_SDP_STATE> state = std::make_unique<tBTA_DM_SDP_STATE>(
           tBTA_DM_SDP_STATE{.service_index = BTA_MAX_SERVICE_ID});
   bluetooth::legacy::testing::bta_dm_sdp_result(SDP_SUCCESS, state.get());
 }

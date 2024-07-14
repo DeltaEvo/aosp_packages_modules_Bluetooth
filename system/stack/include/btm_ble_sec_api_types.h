@@ -19,6 +19,7 @@
 #pragma once
 
 #include <cstdint>
+
 #include "stack/include/bt_octets.h"
 #include "stack/include/btm_sec_api_types.h"
 
@@ -115,6 +116,4 @@ typedef union {
 
 /* New LE identity key for local device.
  */
-typedef void(tBTM_LE_KEY_CALLBACK)(uint8_t key_type,
-                                   tBTM_BLE_LOCAL_KEYS* p_key);
-
+typedef void(tBTM_LE_KEY_CALLBACK)(uint8_t key_type, tBTM_BLE_LOCAL_KEYS* p_key);

@@ -70,30 +70,31 @@ void sync_handler(os::Handler* handler) {
 }  // namespace
 
 class FakeL2capTest : public testing::Test {
- protected:
+protected:
   void SetUp() {}
 
   void TearDown() {}
 
- public:
+public:
 };
 
-void my_enqueue_callback() {
-  log::info("packet ready for dequeue!");
-}
+void my_enqueue_callback() { log::info("packet ready for dequeue!"); }
 
 /* This test verifies that Just Works pairing flow works.
- * Both simulated devices specify capabilities as NO_INPUT_NO_OUTPUT, and secure connecitons support */
+ * Both simulated devices specify capabilities as NO_INPUT_NO_OUTPUT, and secure connections support
+ */
 TEST_F(FakeL2capTest, test_bidi_queue_example) {
   os::Thread* thread_ = new os::Thread("test_thread", os::Thread::Priority::NORMAL);
   os::Handler* handler_ = new os::Handler(thread_);
 
-  common::BidiQueue<packet::BasePacketBuilder, packet::PacketView<packet::kLittleEndian>> bidi_queue{10};
+  common::BidiQueue<packet::BasePacketBuilder, packet::PacketView<packet::kLittleEndian>>
+          bidi_queue{10};
 
   os::EnqueueBuffer<packet::BasePacketBuilder> enqueue_buffer{bidi_queue.GetDownEnd()};
 
   // This is test packet we are sending down the queue to the other end;
-  auto test_packet = EncryptionChangeBuilder::Create(ErrorCode::SUCCESS, 0x0020, EncryptionEnabled::ON);
+  auto test_packet =
+          EncryptionChangeBuilder::Create(ErrorCode::SUCCESS, 0x0020, EncryptionEnabled::ON);
 
   // send the packet through the queue
   enqueue_buffer.Enqueue(std::move(test_packet), handler_);
@@ -107,14 +108,16 @@ TEST_F(FakeL2capTest, test_bidi_queue_example) {
   EXPECT_TRUE(test_packet_from_other_end != nullptr);
 
   // This is how we receive data
-  os::EnqueueBuffer<packet::PacketView<packet::kLittleEndian>> up_end_enqueue_buffer{bidi_queue.GetUpEnd()};
+  os::EnqueueBuffer<packet::PacketView<packet::kLittleEndian>> up_end_enqueue_buffer{
+          bidi_queue.GetUpEnd()};
   bidi_queue.GetDownEnd()->RegisterDequeue(handler_, common::Bind(&my_enqueue_callback));
 
   auto packet_one = std::make_unique<packet::RawBuilder>();
   packet_one->AddOctets({1, 2, 3});
 
-  up_end_enqueue_buffer.Enqueue(std::make_unique<PacketView<kLittleEndian>>(GetPacketView(std::move(packet_one))),
-                                handler_);
+  up_end_enqueue_buffer.Enqueue(
+          std::make_unique<PacketView<kLittleEndian>>(GetPacketView(std::move(packet_one))),
+          handler_);
 
   sync_handler(handler_);
 

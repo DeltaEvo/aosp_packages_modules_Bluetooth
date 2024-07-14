@@ -65,8 +65,8 @@ void bta_hh_co_data(uint8_t dev_handle, uint8_t* p_rpt, uint16_t len);
  * Returns          True if platform specific initialization is successful
  *
  ******************************************************************************/
-bool bta_hh_co_open(uint8_t dev_handle, uint8_t sub_class, uint16_t attr_mask,
-                    uint8_t app_id, tAclLinkSpec& link_spec);
+bool bta_hh_co_open(uint8_t dev_handle, uint8_t sub_class, uint16_t attr_mask, uint8_t app_id,
+                    tAclLinkSpec& link_spec);
 
 /*******************************************************************************
  *
@@ -90,8 +90,7 @@ void bta_hh_co_set_rpt_rsp(uint8_t dev_handle, uint8_t status);
  * Returns          void.
  *
  ******************************************************************************/
-void bta_hh_co_get_rpt_rsp(uint8_t dev_handle, uint8_t status,
-                           const uint8_t* p_rpt, uint16_t len);
+void bta_hh_co_get_rpt_rsp(uint8_t dev_handle, uint8_t status, const uint8_t* p_rpt, uint16_t len);
 
 /*******************************************************************************
  *
@@ -109,8 +108,8 @@ void bta_hh_co_get_rpt_rsp(uint8_t dev_handle, uint8_t status,
  * Returns          void.
  *
  ******************************************************************************/
-void bta_hh_le_co_rpt_info(const tAclLinkSpec& link_spec,
-                           tBTA_HH_RPT_CACHE_ENTRY* p_entry, uint8_t app_id);
+void bta_hh_le_co_rpt_info(const tAclLinkSpec& link_spec, tBTA_HH_RPT_CACHE_ENTRY* p_entry,
+                           uint8_t app_id);
 
 /*******************************************************************************
  *
@@ -128,8 +127,7 @@ void bta_hh_le_co_rpt_info(const tAclLinkSpec& link_spec,
  * Returns          the acched report array
  *
  ******************************************************************************/
-tBTA_HH_RPT_CACHE_ENTRY* bta_hh_le_co_cache_load(const tAclLinkSpec& link_spec,
-                                                 uint8_t* p_num_rpt,
+tBTA_HH_RPT_CACHE_ENTRY* bta_hh_le_co_cache_load(const tAclLinkSpec& link_spec, uint8_t* p_num_rpt,
                                                  uint8_t app_id);
 
 /*******************************************************************************
@@ -143,7 +141,6 @@ tBTA_HH_RPT_CACHE_ENTRY* bta_hh_le_co_cache_load(const tAclLinkSpec& link_spec,
  * Returns          none
  *
  ******************************************************************************/
-void bta_hh_le_co_reset_rpt_cache(const tAclLinkSpec& link_spec,
-                                  uint8_t app_id);
+void bta_hh_le_co_reset_rpt_cache(const tAclLinkSpec& link_spec, uint8_t app_id);
 
 #endif /* BTA_HH_CO_H */

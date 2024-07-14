@@ -26,7 +26,7 @@ namespace le {
 class L2capLeModuleFacadeService;
 
 class L2capLeModuleFacadeModule : public ::bluetooth::grpc::GrpcFacadeModule {
- public:
+public:
   static const ModuleFactory Factory;
 
   void ListDependencies(ModuleList* list) const override;
@@ -37,7 +37,7 @@ class L2capLeModuleFacadeModule : public ::bluetooth::grpc::GrpcFacadeModule {
 
   ::grpc::Service* GetService() const override;
 
- private:
+private:
   L2capLeModuleFacadeService* service_;
 };
 

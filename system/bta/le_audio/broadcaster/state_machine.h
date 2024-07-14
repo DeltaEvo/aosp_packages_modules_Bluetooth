@@ -31,16 +31,18 @@
 namespace {
 template <int S, typename StateT = uint8_t>
 class StateMachine {
- public:
+public:
   StateMachine() : state_(std::numeric_limits<StateT>::min()) {}
 
- protected:
+protected:
   StateT GetState() const { return state_; }
   void SetState(StateT state) {
-    if (state < S) state_ = state;
+    if (state < S) {
+      state_ = state;
+    }
   }
 
- private:
+private:
   StateT state_;
 };
 } /* namespace */
@@ -107,7 +109,7 @@ struct BroadcastStateMachineConfig {
 };
 
 class BroadcastStateMachine : public StateMachine<5> {
- public:
+public:
   static constexpr uint8_t kAdvSidUndefined = 0xFF;
   static constexpr uint8_t kPaIntervalMax = 0xA0; /* 160 * 0.625 = 100ms */
   static constexpr uint8_t kPaIntervalMin = 0x50; /* 80 * 0.625 = 50ms */
@@ -120,10 +122,8 @@ class BroadcastStateMachine : public StateMachine<5> {
   // ADDRESS_TYPE_RANDOM_NON_RESOLVABLE = 2
   static constexpr int8_t kBroadcastAdvertisingType = 0x2;
 
-  static void Initialize(IBroadcastStateMachineCallbacks*,
-                         AdvertisingCallbacks* adv_callbacks);
-  static std::unique_ptr<BroadcastStateMachine> CreateInstance(
-      BroadcastStateMachineConfig msg);
+  static void Initialize(IBroadcastStateMachineCallbacks*, AdvertisingCallbacks* adv_callbacks);
+  static std::unique_ptr<BroadcastStateMachine> CreateInstance(BroadcastStateMachineConfig msg);
 
   enum class Message : uint8_t {
     START = 0,
@@ -131,7 +131,7 @@ class BroadcastStateMachine : public StateMachine<5> {
     STOP,
   };
   static const std::underlying_type<Message>::type MESSAGE_COUNT =
-      static_cast<std::underlying_type<Message>::type>(Message::STOP) + 1;
+          static_cast<std::underlying_type<Message>::type>(Message::STOP) + 1;
 
   enum class State : uint8_t {
     STOPPED = 0,
@@ -141,48 +141,41 @@ class BroadcastStateMachine : public StateMachine<5> {
     STREAMING,
   };
   static const std::underlying_type<State>::type STATE_COUNT =
-      static_cast<std::underlying_type<State>::type>(State::STREAMING) + 1;
+          static_cast<std::underlying_type<State>::type>(State::STREAMING) + 1;
 
-  inline State GetState(void) const {
-    return static_cast<State>(StateMachine::GetState());
-  }
+  inline State GetState(void) const { return static_cast<State>(StateMachine::GetState()); }
 
   virtual uint8_t GetAdvertisingSid() const { return advertising_sid_; }
   virtual uint8_t GetPaInterval() const { return kPaIntervalMax; }
 
   virtual bool Initialize() = 0;
-  virtual const std::vector<BroadcastSubgroupCodecConfig>& GetCodecConfig()
-      const = 0;
+  virtual const std::vector<BroadcastSubgroupCodecConfig>& GetCodecConfig() const = 0;
   virtual const BroadcastConfiguration& GetBroadcastConfig() const = 0;
   virtual std::optional<BigConfig> const& GetBigConfig() const = 0;
   virtual BroadcastStateMachineConfig const& GetStateMachineConfig() const = 0;
   virtual void RequestOwnAddress(
-      base::Callback<void(uint8_t /* address_type*/, RawAddress /*address*/)>
-          cb) = 0;
+          base::Callback<void(uint8_t /* address_type*/, RawAddress /*address*/)> cb) = 0;
   virtual void RequestOwnAddress() = 0;
   virtual RawAddress GetOwnAddress() = 0;
   virtual uint8_t GetOwnAddressType() = 0;
-  virtual std::optional<bluetooth::le_audio::BroadcastCode> GetBroadcastCode()
-      const = 0;
+  virtual std::optional<bluetooth::le_audio::BroadcastCode> GetBroadcastCode() const = 0;
   virtual bluetooth::le_audio::BroadcastId GetBroadcastId() const = 0;
-  virtual const bluetooth::le_audio::BasicAudioAnnouncementData&
-  GetBroadcastAnnouncement() const = 0;
+  virtual const bluetooth::le_audio::BasicAudioAnnouncementData& GetBroadcastAnnouncement()
+          const = 0;
   virtual void UpdateBroadcastAnnouncement(
-      bluetooth::le_audio::BasicAudioAnnouncementData announcement) = 0;
+          bluetooth::le_audio::BasicAudioAnnouncementData announcement) = 0;
   virtual bool IsPublicBroadcast() = 0;
   virtual std::string GetBroadcastName() = 0;
   virtual const bluetooth::le_audio::PublicBroadcastAnnouncementData&
   GetPublicBroadcastAnnouncement() const = 0;
   virtual void UpdatePublicBroadcastAnnouncement(
-      uint32_t broadcast_id, const std::string& broadcast_name,
-      const bluetooth::le_audio::PublicBroadcastAnnouncementData&
-          announcement) = 0;
-  virtual void OnCreateAnnouncement(uint8_t advertising_sid, int8_t tx_power,
-                                    uint8_t status) = 0;
+          uint32_t broadcast_id, const std::string& broadcast_name,
+          const bluetooth::le_audio::PublicBroadcastAnnouncementData& announcement) = 0;
+  virtual void OnCreateAnnouncement(uint8_t advertising_sid, int8_t tx_power, uint8_t status) = 0;
   virtual void OnEnableAnnouncement(bool enable, uint8_t status) = 0;
   virtual void OnUpdateAnnouncement(uint8_t status) = 0;
-  void SetMuted(bool muted) { is_muted_ = muted; };
-  bool IsMuted() const { return is_muted_; };
+  void SetMuted(bool muted) { is_muted_ = muted; }
+  bool IsMuted() const { return is_muted_; }
 
   virtual void HandleHciEvent(uint16_t event, void* data) = 0;
   virtual void OnSetupIsoDataPath(uint8_t status, uint16_t conn_handle) = 0;
@@ -191,12 +184,11 @@ class BroadcastStateMachine : public StateMachine<5> {
   virtual void ProcessMessage(Message event, const void* data = nullptr) = 0;
   virtual ~BroadcastStateMachine() {}
 
- protected:
+protected:
   BroadcastStateMachine() = default;
 
   void SetState(State state) {
-    StateMachine::SetState(
-        static_cast<std::underlying_type<State>::type>(state));
+    StateMachine::SetState(static_cast<std::underlying_type<State>::type>(state));
   }
 
   uint8_t advertising_sid_ = kAdvSidUndefined;
@@ -207,14 +199,12 @@ class BroadcastStateMachine : public StateMachine<5> {
 };
 
 class IBroadcastStateMachineCallbacks {
- public:
+public:
   IBroadcastStateMachineCallbacks() = default;
   virtual ~IBroadcastStateMachineCallbacks() = default;
-  virtual void OnStateMachineCreateStatus(uint32_t broadcast_id,
-                                          bool initialized) = 0;
+  virtual void OnStateMachineCreateStatus(uint32_t broadcast_id, bool initialized) = 0;
   virtual void OnStateMachineDestroyed(uint32_t broadcast_id) = 0;
-  virtual void OnStateMachineEvent(uint32_t broadcast_id,
-                                   BroadcastStateMachine::State state,
+  virtual void OnStateMachineEvent(uint32_t broadcast_id, BroadcastStateMachine::State state,
                                    const void* data = nullptr) = 0;
   virtual void OnOwnAddressResponse(uint32_t broadcast_id, uint8_t addr_type,
                                     RawAddress address) = 0;
@@ -223,27 +213,22 @@ class IBroadcastStateMachineCallbacks {
 };
 
 std::ostream& operator<<(
-    std::ostream& os,
-    const bluetooth::le_audio::broadcaster::BroadcastStateMachine::Message&
-        state);
+        std::ostream& os,
+        const bluetooth::le_audio::broadcaster::BroadcastStateMachine::Message& state);
 
 std::ostream& operator<<(
-    std::ostream& os,
-    const bluetooth::le_audio::broadcaster::BroadcastStateMachine::State&
-        state);
+        std::ostream& os,
+        const bluetooth::le_audio::broadcaster::BroadcastStateMachine::State& state);
+
+std::ostream& operator<<(std::ostream& os,
+                         const bluetooth::le_audio::broadcaster::BroadcastStateMachine& machine);
+
+std::ostream& operator<<(std::ostream& os,
+                         const bluetooth::le_audio::broadcaster::BigConfig& machine);
 
 std::ostream& operator<<(
-    std::ostream& os,
-    const bluetooth::le_audio::broadcaster::BroadcastStateMachine& machine);
-
-std::ostream& operator<<(
-    std::ostream& os,
-    const bluetooth::le_audio::broadcaster::BigConfig& machine);
-
-std::ostream& operator<<(
-    std::ostream& os,
-    const bluetooth::le_audio::broadcaster::BroadcastStateMachineConfig&
-        machine);
+        std::ostream& os,
+        const bluetooth::le_audio::broadcaster::BroadcastStateMachineConfig& machine);
 
 } /* namespace broadcaster */
 }  // namespace bluetooth::le_audio

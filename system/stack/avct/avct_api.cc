@@ -62,23 +62,20 @@ void AVCT_Register() {
   memset(&avct_cb, 0, sizeof(tAVCT_CB));
 
   /* register PSM with L2CAP */
-  if (!L2CA_RegisterWithSecurity(AVCT_PSM, avct_l2c_appl,
-                                 true /* enable_snoop */, nullptr, kAvrcMtu, 0,
-                                 BTA_SEC_AUTHENTICATE)) {
-    log::error(
-        "Unable to register with L2CAP AVCT profile psm:AVCT_PSM[0x0017]");
+  if (!L2CA_RegisterWithSecurity(AVCT_PSM, avct_l2c_appl, true /* enable_snoop */, nullptr,
+                                 kAvrcMtu, 0, BTA_SEC_AUTHENTICATE)) {
+    log::error("Unable to register with L2CAP AVCT profile psm:AVCT_PSM[0x0017]");
   }
 
   /* Include the browsing channel which uses eFCR */
   tL2CAP_ERTM_INFO ertm_info;
   ertm_info.preferred_mode = L2CAP_FCR_ERTM_MODE;
 
-  if (!L2CA_RegisterWithSecurity(AVCT_BR_PSM, avct_l2c_br_appl,
-                                 true /*enable_snoop*/, &ertm_info, kAvrcBrMtu,
-                                 AVCT_MIN_BROWSE_MTU, BTA_SEC_AUTHENTICATE)) {
+  if (!L2CA_RegisterWithSecurity(AVCT_BR_PSM, avct_l2c_br_appl, true /*enable_snoop*/, &ertm_info,
+                                 kAvrcBrMtu, AVCT_MIN_BROWSE_MTU, BTA_SEC_AUTHENTICATE)) {
     log::error(
-        "Unable to register with L2CAP AVCT_BR profile "
-        "psm:AVCT_BR_PSM[0x001b]");
+            "Unable to register with L2CAP AVCT_BR profile "
+            "psm:AVCT_BR_PSM[0x001b]");
   }
 }
 
@@ -120,8 +117,7 @@ void AVCT_Deregister(void) {
  * Returns          AVCT_SUCCESS if successful, otherwise error.
  *
  ******************************************************************************/
-uint16_t AVCT_CreateConn(uint8_t* p_handle, tAVCT_CC* p_cc,
-                         const RawAddress& peer_addr) {
+uint16_t AVCT_CreateConn(uint8_t* p_handle, tAVCT_CC* p_cc, const RawAddress& peer_addr) {
   uint16_t result = AVCT_SUCCESS;
   tAVCT_CCB* p_ccb;
   tAVCT_LCB* p_lcb;

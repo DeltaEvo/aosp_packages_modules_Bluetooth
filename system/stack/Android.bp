@@ -473,6 +473,7 @@ cc_fuzz {
     ],
     static_libs: [
         "bluetooth_flags_c_lib",
+        "libaconfig_storage_read_api_cc",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_hci_pdl",
@@ -904,6 +905,7 @@ cc_test {
         "libcutils",
     ],
     static_libs: [
+        "libaconfig_storage_read_api_cc",
         "libbase",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
@@ -924,6 +926,7 @@ cc_test {
         "libosi",
         "libprotobuf-cpp-lite",
         "libstatslog_bt",
+        "server_configurable_flags",
     ],
     target: {
         android: {

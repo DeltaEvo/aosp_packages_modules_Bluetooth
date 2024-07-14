@@ -44,8 +44,7 @@ bool BTM_IsDeviceUp(void) {
   return test::mock::stack_btm_devctl::BTM_IsDeviceUp();
 }
 
-tBTM_STATUS BTM_DeleteStoredLinkKey(const RawAddress* /* bd_addr */,
-                                    tBTM_CMPL_CB* /* p_cb */) {
+tBTM_STATUS BTM_DeleteStoredLinkKey(const RawAddress* /* bd_addr */, tBTM_CMPL_CB* /* p_cb */) {
   inc_func_call_count(__func__);
   return BTM_SUCCESS;
 }
@@ -57,8 +56,7 @@ tBTM_STATUS BTM_ReadLocalDeviceName(const char** /* p_name */) {
   inc_func_call_count(__func__);
   return BTM_SUCCESS;
 }
-tBTM_STATUS BTM_ReadLocalDeviceNameFromController(
-    tBTM_CMPL_CB* /* p_rln_cmpl_cback */) {
+tBTM_STATUS BTM_ReadLocalDeviceNameFromController(tBTM_CMPL_CB* /* p_rln_cmpl_cback */) {
   inc_func_call_count(__func__);
   return BTM_SUCCESS;
 }
@@ -75,15 +73,13 @@ DEV_CLASS BTM_ReadDeviceClass(void) {
   return kDevClassEmpty;
 }
 void BTM_VendorSpecificCommand(uint16_t /* opcode */, uint8_t /* param_len */,
-                               uint8_t* /* p_param_buf */,
-                               tBTM_VSC_CMPL_CB* /* p_cb */) {
+                               uint8_t* /* p_param_buf */, tBTM_VSC_CMPL_CB* /* p_cb */) {
   inc_func_call_count(__func__);
 }
 void BTM_WritePageTimeout(uint16_t /* timeout */) { inc_func_call_count(__func__); }
 void BTM_db_reset(void) { inc_func_call_count(__func__); }
 void BTM_reset_complete() { inc_func_call_count(__func__); }
-void btm_delete_stored_link_key_complete(uint8_t* /* p */,
-                                         uint16_t /* evt_len */) {
+void btm_delete_stored_link_key_complete(uint8_t* /* p */, uint16_t /* evt_len */) {
   inc_func_call_count(__func__);
 }
 void btm_dev_free() { inc_func_call_count(__func__); }

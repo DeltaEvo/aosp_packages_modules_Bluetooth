@@ -15,6 +15,7 @@
  */
 
 #include "l2cap/le/fixed_channel_manager.h"
+
 #include "l2cap/le/internal/fixed_channel_service_impl.h"
 #include "l2cap/le/internal/fixed_channel_service_manager_impl.h"
 #include "l2cap/le/internal/link_manager.h"
@@ -24,10 +25,11 @@ namespace l2cap {
 namespace le {
 
 bool FixedChannelManager::ConnectServices(hci::AddressWithType address_with_type,
-                                          OnConnectionFailureCallback on_fail_callback, os::Handler* handler) {
+                                          OnConnectionFailureCallback on_fail_callback,
+                                          os::Handler* handler) {
   internal::LinkManager::PendingFixedChannelConnection pending_fixed_channel_connection{
-      .handler_ = handler,
-      .on_fail_callback_ = std::move(on_fail_callback),
+          .handler_ = handler,
+          .on_fail_callback_ = std::move(on_fail_callback),
   };
   l2cap_layer_handler_->Post(common::BindOnce(&internal::LinkManager::ConnectFixedChannelServices,
                                               common::Unretained(link_manager_), address_with_type,
@@ -35,12 +37,14 @@ bool FixedChannelManager::ConnectServices(hci::AddressWithType address_with_type
   return true;
 }
 
-bool FixedChannelManager::RegisterService(Cid cid, OnRegistrationCompleteCallback on_registration_complete,
-                                          OnConnectionOpenCallback on_connection_open, os::Handler* handler) {
+bool FixedChannelManager::RegisterService(Cid cid,
+                                          OnRegistrationCompleteCallback on_registration_complete,
+                                          OnConnectionOpenCallback on_connection_open,
+                                          os::Handler* handler) {
   internal::FixedChannelServiceImpl::PendingRegistration pending_registration{
-      .user_handler_ = handler,
-      .on_registration_complete_callback_ = std::move(on_registration_complete),
-      .on_connection_open_callback_ = std::move(on_connection_open)};
+          .user_handler_ = handler,
+          .on_registration_complete_callback_ = std::move(on_registration_complete),
+          .on_connection_open_callback_ = std::move(on_connection_open)};
   l2cap_layer_handler_->Post(common::BindOnce(&internal::FixedChannelServiceManagerImpl::Register,
                                               common::Unretained(service_manager_), cid,
                                               std::move(pending_registration)));

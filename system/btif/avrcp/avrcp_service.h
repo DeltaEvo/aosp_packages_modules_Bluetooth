@@ -37,7 +37,7 @@ namespace avrcp {
  * it indirectly.
  */
 class AvrcpService : public MediaCallbacks {
- public:
+public:
   /**
    * Gets a handle to the AvrcpService
    *
@@ -67,10 +67,8 @@ class AvrcpService : public MediaCallbacks {
   void SetBipClientStatus(const RawAddress& bdaddr, bool connected);
 
   // Functions inherited from MediaCallbacks in order to receive updates
-  void SendMediaUpdate(bool track_changed, bool play_state,
-                       bool queue) override;
-  void SendFolderUpdate(bool available_players, bool addressed_player,
-                        bool queue) override;
+  void SendMediaUpdate(bool track_changed, bool play_state, bool queue) override;
+  void SendFolderUpdate(bool available_players, bool addressed_player, bool queue) override;
   void SendActiveDeviceChanged(const RawAddress& address) override;
 
   void SendPlayerSettingsChanged(std::vector<PlayerAttribute> attributes,
@@ -83,9 +81,8 @@ class AvrcpService : public MediaCallbacks {
   void RegisterVolChanged(const RawAddress& bdaddr);
 
   class ServiceInterfaceImpl : public ServiceInterface {
-   public:
-    void Init(MediaInterface* media_interface,
-              VolumeInterface* volume_interface,
+  public:
+    void Init(MediaInterface* media_interface, VolumeInterface* volume_interface,
               PlayerSettingsInterface* player_settings_interface) override;
     void RegisterBipServer(int psm) override;
     void UnregisterBipServer() override;
@@ -94,17 +91,17 @@ class AvrcpService : public MediaCallbacks {
     void SetBipClientStatus(const RawAddress& bdaddr, bool connected) override;
     bool Cleanup() override;
 
-   private:
+  private:
     std::mutex service_interface_lock_;
   };
 
   static void DebugDump(int fd);
 
- protected:
+protected:
   void DeviceCallback(std::shared_ptr<Device> device);
   uint16_t GetSupportedFeatures(uint16_t profile_version);
 
- private:
+private:
   static AvrcpService* instance_;
   static ServiceInterfaceImpl* service_interface_;
 

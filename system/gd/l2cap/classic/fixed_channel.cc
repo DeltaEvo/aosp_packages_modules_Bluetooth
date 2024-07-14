@@ -15,6 +15,7 @@
  */
 
 #include "l2cap/classic/fixed_channel.h"
+
 #include "common/bind.h"
 #include "l2cap/classic/internal/fixed_channel_impl.h"
 
@@ -22,13 +23,12 @@ namespace bluetooth {
 namespace l2cap {
 namespace classic {
 
-hci::Address FixedChannel::GetDevice() const {
-  return impl_->GetDevice();
-}
+hci::Address FixedChannel::GetDevice() const { return impl_->GetDevice(); }
 
-void FixedChannel::RegisterOnCloseCallback(os::Handler* user_handler, FixedChannel::OnCloseCallback on_close_callback) {
-  l2cap_handler_->Post(common::BindOnce(&internal::FixedChannelImpl::RegisterOnCloseCallback, impl_, user_handler,
-                                        std::move(on_close_callback)));
+void FixedChannel::RegisterOnCloseCallback(os::Handler* user_handler,
+                                           FixedChannel::OnCloseCallback on_close_callback) {
+  l2cap_handler_->Post(common::BindOnce(&internal::FixedChannelImpl::RegisterOnCloseCallback, impl_,
+                                        user_handler, std::move(on_close_callback)));
 }
 
 void FixedChannel::Acquire() {

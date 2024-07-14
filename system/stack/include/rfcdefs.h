@@ -31,24 +31,23 @@
 
 /*
  *  If nothing is negotiated MTU should be 127
-*/
+ */
 #define RFCOMM_DEFAULT_MTU 127
 
 /*
  * Define used by RFCOMM TS frame types
-*/
+ */
 #define RFCOMM_SABME 0x2F  // Start Asynchronous Balanced Mode (startup command)
-#define RFCOMM_UA 0x63  // Unnumbered Acknowledgement (response when connected)
-#define RFCOMM_DM \
-  0x0F  // Disconnected Mode (response to a command when disconnected)
-#define RFCOMM_DISC 0x43  // Disconnect (disconnect command)
-#define RFCOMM_UIH 0xEF   // Unnumbered Information with Header check
+#define RFCOMM_UA 0x63     // Unnumbered Acknowledgement (response when connected)
+#define RFCOMM_DM 0x0F     // Disconnected Mode (response to a command when disconnected)
+#define RFCOMM_DISC 0x43   // Disconnect (disconnect command)
+#define RFCOMM_UIH 0xEF    // Unnumbered Information with Header check
 
 /*
  * Defenitions for the TS control frames
-*/
+ */
 #define RFCOMM_CTRL_FRAME_LEN 3
-#define RFCOMM_MIN_OFFSET 5 /* ctrl 2 , len 1 or 2 bytes, credit 1 byte */
+#define RFCOMM_MIN_OFFSET 5                          /* ctrl 2 , len 1 or 2 bytes, credit 1 byte */
 #define RFCOMM_DATA_OVERHEAD (RFCOMM_MIN_OFFSET + 1) /* add 1 for checksum */
 
 #define RFCOMM_EA 1
@@ -71,10 +70,11 @@
 
 #define RFCOMM_PARSE_CTRL_FIELD(ea, cr, dlci, p_data)       \
   {                                                         \
-    (ea) = *(p_data)&RFCOMM_EA;                             \
-    (cr) = (*(p_data)&RFCOMM_CR_MASK) >> RFCOMM_SHIFT_CR;   \
+    (ea) = *(p_data) & RFCOMM_EA;                           \
+    (cr) = (*(p_data) & RFCOMM_CR_MASK) >> RFCOMM_SHIFT_CR; \
     (dlci) = *(p_data)++ >> RFCOMM_SHIFT_DLCI;              \
-    if (!(ea)) (dlci) += *(p_data)++ << RFCOMM_SHIFT_DLCI2; \
+    if (!(ea))                                              \
+      (dlci) += *(p_data)++ << RFCOMM_SHIFT_DLCI2;          \
   }
 
 #define RFCOMM_FORMAT_CTRL_FIELD(p_data, ea, cr, dlci) \
@@ -92,11 +92,9 @@
     (pf) = (*(p_data)++ & RFCOMM_PF_MASK) >> RFCOMM_PF_OFFSET; \
   }
 
-#define RFCOMM_FRAME_IS_CMD(initiator, cr) \
-  (((initiator) && !(cr)) || (!(initiator) && (cr)))
+#define RFCOMM_FRAME_IS_CMD(initiator, cr) (((initiator) && !(cr)) || (!(initiator) && (cr)))
 
-#define RFCOMM_FRAME_IS_RSP(initiator, cr) \
-  (((initiator) && (cr)) || (!(initiator) && !(cr)))
+#define RFCOMM_FRAME_IS_RSP(initiator, cr) (((initiator) && (cr)) || (!(initiator) && !(cr)))
 
 #define RFCOMM_CR(initiator, is_command) \
   ((((initiator) && (is_command)) || (!(initiator) && !(is_command))) << 1)
@@ -105,8 +103,7 @@
 
 #define RFCOMM_MAX_DLCI 61
 
-#define RFCOMM_VALID_DLCI(dlci) \
-  (((dlci) == 0) || (((dlci) >= 2) && ((dlci) <= RFCOMM_MAX_DLCI)))
+#define RFCOMM_VALID_DLCI(dlci) (((dlci) == 0) || (((dlci) >= 2) && ((dlci) <= RFCOMM_MAX_DLCI)))
 
 /* Port Negotiation (PN) */
 #define RFCOMM_PN_DLCI_MASK 0x3F
@@ -210,7 +207,7 @@
 
 /*
  * Define RFCOMM Multiplexer message types
-*/
+ */
 #define RFCOMM_MX_PN 0x80
 #define RFCOMM_MX_PN_LEN 8
 

@@ -33,8 +33,9 @@ namespace l2cap {
 namespace internal {
 
 class DynamicChannelImpl : public l2cap::internal::ChannelImpl {
- public:
-  DynamicChannelImpl(Psm psm, Cid cid, Cid remote_cid, l2cap::internal::ILink* link, os::Handler* l2cap_handler);
+public:
+  DynamicChannelImpl(Psm psm, Cid cid, Cid remote_cid, l2cap::internal::ILink* link,
+                     os::Handler* l2cap_handler);
 
   DynamicChannelImpl(const DynamicChannelImpl&) = delete;
   DynamicChannelImpl& operator=(const DynamicChannelImpl&) = delete;
@@ -48,25 +49,21 @@ class DynamicChannelImpl : public l2cap::internal::ChannelImpl {
   virtual void Close();
   virtual void OnClosed(hci::ErrorCode status);
 
-  common::BidiQueueEnd<packet::BasePacketBuilder, packet::PacketView<packet::kLittleEndian>>* GetQueueUpEnd() {
+  common::BidiQueueEnd<packet::BasePacketBuilder, packet::PacketView<packet::kLittleEndian>>*
+  GetQueueUpEnd() {
     return channel_queue_.GetUpEnd();
   }
 
-  common::BidiQueueEnd<packet::PacketView<packet::kLittleEndian>, packet::BasePacketBuilder>* GetQueueDownEnd() {
+  common::BidiQueueEnd<packet::PacketView<packet::kLittleEndian>, packet::BasePacketBuilder>*
+  GetQueueDownEnd() {
     return channel_queue_.GetDownEnd();
   }
 
-  virtual Cid GetCid() const {
-    return cid_;
-  }
+  virtual Cid GetCid() const { return cid_; }
 
-  virtual Cid GetRemoteCid() const {
-    return remote_cid_;
-  }
+  virtual Cid GetRemoteCid() const { return remote_cid_; }
 
-  virtual Psm GetPsm() const {
-    return psm_;
-  }
+  virtual Psm GetPsm() const { return psm_; }
 
   virtual void SetChannelTxPriority(bool high_priority) {
     link_->SetChannelTxPriority(cid_, high_priority);
@@ -75,7 +72,7 @@ class DynamicChannelImpl : public l2cap::internal::ChannelImpl {
   // TODO(cmanton) Do something a little bit better than this
   bool local_initiated_{false};
 
- private:
+private:
   const Psm psm_;
   const Cid cid_;
   const Cid remote_cid_;
@@ -90,8 +87,8 @@ class DynamicChannelImpl : public l2cap::internal::ChannelImpl {
   bool closed_ = false;
   hci::ErrorCode close_reason_ = hci::ErrorCode::SUCCESS;
   static constexpr size_t kChannelQueueSize = 5;
-  common::BidiQueue<packet::PacketView<packet::kLittleEndian>, packet::BasePacketBuilder> channel_queue_{
-      kChannelQueueSize};
+  common::BidiQueue<packet::PacketView<packet::kLittleEndian>, packet::BasePacketBuilder>
+          channel_queue_{kChannelQueueSize};
 };
 
 }  // namespace internal

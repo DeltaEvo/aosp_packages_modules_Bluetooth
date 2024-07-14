@@ -58,15 +58,14 @@ future_t* Start() {
     // startup/cleanup logic and start the stack without GATT, but don't fully
     // mock out the native layer.
     bluetooth::log::error(
-        "GATT profile not started, so we cannot start the Rust loop - this "
-        "happens only in tests.");
+            "GATT profile not started, so we cannot start the Rust loop - this "
+            "happens only in tests.");
     bluetooth::rust_shim::FutureReady(*fut);
     return fut;
   }
   bluetooth::rust_shim::start(
-      std::make_unique<bluetooth::gatt::GattServerCallbacks>(
-          *bt_gatt_callbacks->server),
-      std::make_unique<bluetooth::connection::LeAclManagerShim>(), *fut);
+          std::make_unique<bluetooth::gatt::GattServerCallbacks>(*bt_gatt_callbacks->server),
+          std::make_unique<bluetooth::connection::LeAclManagerShim>(), *fut);
 
   return fut;
 }

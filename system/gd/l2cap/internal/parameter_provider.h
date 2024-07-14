@@ -28,7 +28,7 @@ namespace internal {
  * All methods are virtual so that they can be override in unit tests
  */
 class ParameterProvider {
- public:
+public:
   virtual ~ParameterProvider() = default;
   virtual std::chrono::milliseconds GetClassicLinkIdleDisconnectTimeout() {
     return std::chrono::seconds(20);
@@ -36,12 +36,8 @@ class ParameterProvider {
   virtual std::chrono::milliseconds GetLeLinkIdleDisconnectTimeout() {
     return std::chrono::seconds(1);
   }
-  virtual uint16_t GetLeMps() {
-    return 251;
-  }
-  virtual uint16_t GetLeInitialCredit() {
-    return 100;
-  }
+  virtual uint16_t GetLeMps() { return 251; }
+  virtual uint16_t GetLeInitialCredit() { return 100; }
 };
 
 }  // namespace internal

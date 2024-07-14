@@ -28,7 +28,7 @@ namespace bluetooth {
 namespace security {
 
 class UIMock : public UI {
- public:
+public:
   UIMock() = default;
   UIMock(const UIMock&) = delete;
   UIMock& operator=(const UIMock&) = delete;
@@ -36,7 +36,8 @@ class UIMock : public UI {
   ~UIMock() = default;
 
   // Convert these to accept ConfirmationData
-  MOCK_METHOD2(DisplayPairingPrompt, void(const bluetooth::hci::AddressWithType& address, std::string name));
+  MOCK_METHOD2(DisplayPairingPrompt,
+               void(const bluetooth::hci::AddressWithType& address, std::string name));
   MOCK_METHOD1(Cancel, void(const bluetooth::hci::AddressWithType& address));
   MOCK_METHOD1(DisplayConfirmValue, void(ConfirmationData));
   MOCK_METHOD1(DisplayYesNoDialog, void(ConfirmationData));
@@ -46,11 +47,13 @@ class UIMock : public UI {
 };
 
 class LeSecurityInterfaceMock : public hci::LeSecurityInterface {
- public:
-  MOCK_METHOD2(EnqueueCommand, void(std::unique_ptr<hci::LeSecurityCommandBuilder> command,
-                                    common::ContextualOnceCallback<void(hci::CommandCompleteView)> on_complete));
-  MOCK_METHOD2(EnqueueCommand, void(std::unique_ptr<hci::LeSecurityCommandBuilder> command,
-                                    common::ContextualOnceCallback<void(hci::CommandStatusView)> on_status));
+public:
+  MOCK_METHOD2(EnqueueCommand,
+               void(std::unique_ptr<hci::LeSecurityCommandBuilder> command,
+                    common::ContextualOnceCallback<void(hci::CommandCompleteView)> on_complete));
+  MOCK_METHOD2(EnqueueCommand,
+               void(std::unique_ptr<hci::LeSecurityCommandBuilder> command,
+                    common::ContextualOnceCallback<void(hci::CommandStatusView)> on_status));
 };
 
 }  // namespace security

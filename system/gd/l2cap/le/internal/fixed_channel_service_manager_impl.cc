@@ -28,31 +28,35 @@ namespace l2cap {
 namespace le {
 namespace internal {
 
-void FixedChannelServiceManagerImpl::Register(Cid cid,
-                                              FixedChannelServiceImpl::PendingRegistration pending_registration) {
+void FixedChannelServiceManagerImpl::Register(
+        Cid cid, FixedChannelServiceImpl::PendingRegistration pending_registration) {
   if (cid < kFirstFixedChannel || cid > kLastFixedChannel || cid == kLeSignallingCid) {
     std::unique_ptr<FixedChannelService> invalid_service(new FixedChannelService());
     pending_registration.user_handler_->Post(
-        common::BindOnce(std::move(pending_registration.on_registration_complete_callback_),
-                         FixedChannelManager::RegistrationResult::FAIL_INVALID_SERVICE, std::move(invalid_service)));
+            common::BindOnce(std::move(pending_registration.on_registration_complete_callback_),
+                             FixedChannelManager::RegistrationResult::FAIL_INVALID_SERVICE,
+                             std::move(invalid_service)));
   } else if (IsServiceRegistered(cid)) {
     std::unique_ptr<FixedChannelService> invalid_service(new FixedChannelService());
     pending_registration.user_handler_->Post(
-        common::BindOnce(std::move(pending_registration.on_registration_complete_callback_),
-                         FixedChannelManager::RegistrationResult::FAIL_DUPLICATE_SERVICE, std::move(invalid_service)));
+            common::BindOnce(std::move(pending_registration.on_registration_complete_callback_),
+                             FixedChannelManager::RegistrationResult::FAIL_DUPLICATE_SERVICE,
+                             std::move(invalid_service)));
   } else {
-    service_map_.try_emplace(cid,
-                             FixedChannelServiceImpl(pending_registration.user_handler_,
-                                                     std::move(pending_registration.on_connection_open_callback_)));
-    std::unique_ptr<FixedChannelService> user_service(new FixedChannelService(cid, this, l2cap_layer_handler_));
-    pending_registration.user_handler_->Post(
-        common::BindOnce(std::move(pending_registration.on_registration_complete_callback_),
-                         FixedChannelManager::RegistrationResult::SUCCESS, std::move(user_service)));
+    service_map_.try_emplace(
+            cid,
+            FixedChannelServiceImpl(pending_registration.user_handler_,
+                                    std::move(pending_registration.on_connection_open_callback_)));
+    std::unique_ptr<FixedChannelService> user_service(
+            new FixedChannelService(cid, this, l2cap_layer_handler_));
+    pending_registration.user_handler_->Post(common::BindOnce(
+            std::move(pending_registration.on_registration_complete_callback_),
+            FixedChannelManager::RegistrationResult::SUCCESS, std::move(user_service)));
   }
 }
 
-void FixedChannelServiceManagerImpl::Unregister(Cid cid, FixedChannelService::OnUnregisteredCallback callback,
-                                                os::Handler* handler) {
+void FixedChannelServiceManagerImpl::Unregister(
+        Cid cid, FixedChannelService::OnUnregisteredCallback callback, os::Handler* handler) {
   if (IsServiceRegistered(cid)) {
     service_map_.erase(cid);
     handler->Post(std::move(callback));
@@ -70,7 +74,8 @@ FixedChannelServiceImpl* FixedChannelServiceManagerImpl::GetService(Cid cid) {
   return &service_map_.find(cid)->second;
 }
 
-std::vector<std::pair<Cid, FixedChannelServiceImpl*>> FixedChannelServiceManagerImpl::GetRegisteredServices() {
+std::vector<std::pair<Cid, FixedChannelServiceImpl*>>
+FixedChannelServiceManagerImpl::GetRegisteredServices() {
   std::vector<std::pair<Cid, FixedChannelServiceImpl*>> results;
   for (auto& elem : service_map_) {
     results.emplace_back(elem.first, &elem.second);

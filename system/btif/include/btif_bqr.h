@@ -96,14 +96,14 @@ static constexpr uint32_t kQualityEventMaskBtSchedulingTrace = 0x1 << 17;
 static constexpr uint32_t kQualityEventMaskControllerDbgInfo = 0x1 << 18;
 static constexpr uint32_t kQualityEventMaskVendorSpecificTrace = 0x1 << 31;
 static constexpr uint32_t kQualityEventMaskAll =
-    kQualityEventMaskMonitorMode | kQualityEventMaskApproachLsto |
-    kQualityEventMaskA2dpAudioChoppy | kQualityEventMaskScoVoiceChoppy |
-    kQualityEventMaskRootInflammation | kQualityEventMaskEnergyMonitoring |
-    kQualityEventMaskLeAudioChoppy | kQualityEventMaskConnectFail |
-    kQualityEventMaskAdvRFStatsEvent | kQualityEventMaskAdvRFStatsMonitor |
-    kQualityEventMaskVendorSpecificQuality | kQualityEventMaskLmpMessageTrace |
-    kQualityEventMaskBtSchedulingTrace | kQualityEventMaskControllerDbgInfo |
-    kQualityEventMaskVendorSpecificTrace;
+        kQualityEventMaskMonitorMode | kQualityEventMaskApproachLsto |
+        kQualityEventMaskA2dpAudioChoppy | kQualityEventMaskScoVoiceChoppy |
+        kQualityEventMaskRootInflammation | kQualityEventMaskEnergyMonitoring |
+        kQualityEventMaskLeAudioChoppy | kQualityEventMaskConnectFail |
+        kQualityEventMaskAdvRFStatsEvent | kQualityEventMaskAdvRFStatsMonitor |
+        kQualityEventMaskVendorSpecificQuality | kQualityEventMaskLmpMessageTrace |
+        kQualityEventMaskBtSchedulingTrace | kQualityEventMaskControllerDbgInfo |
+        kQualityEventMaskVendorSpecificTrace;
 // Define the minimum time interval (in ms) of quality event reporting for the
 // selected quality event(s). Controller Firmware should not report the next
 // event within the defined Minimum Report Interval * Report Interval
@@ -141,38 +141,33 @@ static constexpr uint8_t kCriWarnUnusedCh = 55;
 // The queue size of recording the BQR events.
 static constexpr uint8_t kBqrEventQueueSize = 25;
 // The Property of BQR event mask configuration.
-static constexpr const char* kpPropertyEventMask =
-    "persist.bluetooth.bqr.event_mask";
+static constexpr const char* kpPropertyEventMask = "persist.bluetooth.bqr.event_mask";
 // The Property of BQR Vendor Quality configuration.
-static constexpr const char* kpPropertyVndQualityMask =
-    "persist.bluetooth.bqr.vnd_quality_mask";
+static constexpr const char* kpPropertyVndQualityMask = "persist.bluetooth.bqr.vnd_quality_mask";
 // The Property of BQR Vendor Trace configuration.
-static constexpr const char* kpPropertyVndTraceMask =
-    "persist.bluetooth.bqr.vnd_trace_mask";
+static constexpr const char* kpPropertyVndTraceMask = "persist.bluetooth.bqr.vnd_trace_mask";
 // The Property of BQR minimum report interval configuration.
 static constexpr const char* kpPropertyMinReportIntervalMs =
-    "persist.bluetooth.bqr.min_interval_ms";
+        "persist.bluetooth.bqr.min_interval_ms";
 // The Property of BQR minimum report interval multiple.
-static constexpr const char* kpPropertyIntervalMultiple =
-    "persist.bluetooth.bqr.interval_multiple";
+static constexpr const char* kpPropertyIntervalMultiple = "persist.bluetooth.bqr.interval_multiple";
 // Path of the LMP/LL message trace log file.
 static constexpr const char* kpLmpLlMessageTraceLogPath =
-    "/data/misc/bluetooth/logs/lmp_ll_message_trace.log";
+        "/data/misc/bluetooth/logs/lmp_ll_message_trace.log";
 // Path of the last LMP/LL message trace log file.
 static constexpr const char* kpLmpLlMessageTraceLastLogPath =
-    "/data/misc/bluetooth/logs/lmp_ll_message_trace.log.last";
+        "/data/misc/bluetooth/logs/lmp_ll_message_trace.log.last";
 // Path of the Bluetooth Multi-profile/Coex scheduling trace log file.
 static constexpr const char* kpBtSchedulingTraceLogPath =
-    "/data/misc/bluetooth/logs/bt_scheduling_trace.log";
+        "/data/misc/bluetooth/logs/bt_scheduling_trace.log";
 // Path of the last Bluetooth Multi-profile/Coex scheduling trace log file.
 static constexpr const char* kpBtSchedulingTraceLastLogPath =
-    "/data/misc/bluetooth/logs/bt_scheduling_trace.log.last";
+        "/data/misc/bluetooth/logs/bt_scheduling_trace.log.last";
 // The Property of BQR a2dp choppy report and sco choppy report thresholds.
 // A2dp choppy will be reported only when a2dp choppy times is >=
 // a2dp_choppy_threshold. The default value in firmware side is 1. It is same
 // for sco choppy. Value format is a2dp_choppy_threshold,sco_choppy_threshold
-static constexpr const char* kpPropertyChoppyThreshold =
-    "persist.bluetooth.bqr.choppy_threshold";
+static constexpr const char* kpPropertyChoppyThreshold = "persist.bluetooth.bqr.choppy_threshold";
 
 // File Descriptor of LMP/LL message trace log
 static int LmpLlMessageTraceLogFd = INVALID_FD;
@@ -353,7 +348,7 @@ typedef struct {
 
 // BQR sub-event of Vendor Specific Event
 class BqrVseSubEvt {
- public:
+public:
   // Parse the Link Quality related BQR event.
   //
   // @param length Total length of all parameters contained in the sub-event.
@@ -364,15 +359,13 @@ class BqrVseSubEvt {
   // @param fd The File Descriptor of the log file.
   // @param length Total length of all parameters contained in the sub-event.
   // @param p_param_buf A pointer to the parameters contained in the sub-event.
-  void WriteLmpLlTraceLogFile(int fd, uint8_t length,
-                              const uint8_t* p_param_buf);
+  void WriteLmpLlTraceLogFile(int fd, uint8_t length, const uint8_t* p_param_buf);
   // Write the Bluetooth Multi-profile/Coex scheduling trace to the log file.
   //
   // @param fd The File Descriptor of the log file.
   // @param length Total length of all parameters contained in the sub-event.
   // @param p_param_buf A pointer to the parameters contained in the sub-event.
-  void WriteBtSchedulingTraceLogFile(int fd, uint8_t length,
-                                     const uint8_t* p_param_buf);
+  void WriteBtSchedulingTraceLogFile(int fd, uint8_t length, const uint8_t* p_param_buf);
   // Get a string representation of the Bluetooth Quality event.
   //
   // @return a string representation of the Bluetooth Quality event.

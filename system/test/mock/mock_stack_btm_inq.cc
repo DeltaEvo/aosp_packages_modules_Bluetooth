@@ -126,19 +126,17 @@ void BTM_EnableInterlacedPageScan() {
   inc_func_call_count(__func__);
   test::mock::stack_btm_inq::BTM_EnableInterlacedPageScan();
 }
-uint8_t BTM_GetEirSupportedServices(uint32_t* p_eir_uuid, uint8_t** p,
-                                    uint8_t max_num_uuid16,
+uint8_t BTM_GetEirSupportedServices(uint32_t* p_eir_uuid, uint8_t** p, uint8_t max_num_uuid16,
                                     uint8_t* p_num_uuid16) {
   inc_func_call_count(__func__);
-  return test::mock::stack_btm_inq::BTM_GetEirSupportedServices(
-      p_eir_uuid, p, max_num_uuid16, p_num_uuid16);
+  return test::mock::stack_btm_inq::BTM_GetEirSupportedServices(p_eir_uuid, p, max_num_uuid16,
+                                                                p_num_uuid16);
 }
-uint8_t BTM_GetEirUuidList(const uint8_t* p_eir, size_t eir_len,
-                           uint8_t uuid_size, uint8_t* p_num_uuid,
-                           uint8_t* p_uuid_list, uint8_t max_num_uuid) {
+uint8_t BTM_GetEirUuidList(const uint8_t* p_eir, size_t eir_len, uint8_t uuid_size,
+                           uint8_t* p_num_uuid, uint8_t* p_uuid_list, uint8_t max_num_uuid) {
   inc_func_call_count(__func__);
-  return test::mock::stack_btm_inq::BTM_GetEirUuidList(
-      p_eir, eir_len, uuid_size, p_num_uuid, p_uuid_list, max_num_uuid);
+  return test::mock::stack_btm_inq::BTM_GetEirUuidList(p_eir, eir_len, uuid_size, p_num_uuid,
+                                                       p_uuid_list, max_num_uuid);
 }
 bool BTM_HasEirService(const uint32_t* p_eir_uuid, uint16_t uuid16) {
   inc_func_call_count(__func__);
@@ -161,12 +159,10 @@ uint16_t BTM_IsInquiryActive(void) {
   return test::mock::stack_btm_inq::BTM_IsInquiryActive();
 }
 
-tBTM_STATUS BTM_ReadRemoteDeviceName(const RawAddress& remote_bda,
-                                     tBTM_NAME_CMPL_CB* p_cb,
+tBTM_STATUS BTM_ReadRemoteDeviceName(const RawAddress& remote_bda, tBTM_NAME_CMPL_CB* p_cb,
                                      tBT_TRANSPORT transport) {
   inc_func_call_count(__func__);
-  return test::mock::stack_btm_inq::BTM_ReadRemoteDeviceName(remote_bda, p_cb,
-                                                             transport);
+  return test::mock::stack_btm_inq::BTM_ReadRemoteDeviceName(remote_bda, p_cb, transport);
 }
 void BTM_RemoveEirService(uint32_t* p_eir_uuid, uint16_t uuid16) {
   inc_func_call_count(__func__);
@@ -184,8 +180,7 @@ tBTM_STATUS BTM_SetInquiryMode(uint8_t mode) {
   inc_func_call_count(__func__);
   return test::mock::stack_btm_inq::BTM_SetInquiryMode(mode);
 }
-tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb,
-                             tBTM_CMPL_CB* p_cmpl_cb) {
+tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb, tBTM_CMPL_CB* p_cmpl_cb) {
   inc_func_call_count(__func__);
   return test::mock::stack_btm_inq::BTM_StartInquiry(p_results_cb, p_cmpl_cb);
 }
@@ -233,11 +228,10 @@ void btm_process_inq_complete(tHCI_STATUS status, uint8_t mode) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_inq::btm_process_inq_complete(status, mode);
 }
-void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn,
-                             uint16_t evt_len, tHCI_STATUS hci_status) {
+void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn, uint16_t evt_len,
+                             tHCI_STATUS hci_status) {
   inc_func_call_count(__func__);
-  test::mock::stack_btm_inq::btm_process_remote_name(bda, bdn, evt_len,
-                                                     hci_status);
+  test::mock::stack_btm_inq::btm_process_remote_name(bda, bdn, evt_len, hci_status);
 }
 void btm_set_eir_uuid(const uint8_t* p_eir, tBTM_INQ_RESULTS* p_results) {
   inc_func_call_count(__func__);

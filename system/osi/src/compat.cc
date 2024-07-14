@@ -25,13 +25,14 @@
  *
  ******************************************************************************/
 
+#include "osi/include/compat.h"
+
 #include <features.h>
 #include <string.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "osi/include/compat.h"
 #include "osi/include/osi.h"
 
 #if __GLIBC__
@@ -69,17 +70,21 @@ size_t strlcpy(char* dst, const char* src, size_t siz) {
   /* Copy as many bytes as will fit */
   if (n != 0) {
     while (--n != 0) {
-      if ((*d++ = *s++) == '\0') break;
+      if ((*d++ = *s++) == '\0') {
+        break;
+      }
     }
   }
 
   /* Not enough room in dst, add NUL and traverse rest of src */
   if (n == 0) {
-    if (siz != 0) *d = '\0'; /* NUL-terminate dst */
+    if (siz != 0) {
+      *d = '\0'; /* NUL-terminate dst */
+    }
     while (*s++)
       ;
   }
 
-  return (s - src - 1); /* count does not include NUL */
+  return s - src - 1; /* count does not include NUL */
 }
 #endif

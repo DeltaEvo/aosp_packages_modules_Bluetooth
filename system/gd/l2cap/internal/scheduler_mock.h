@@ -15,10 +15,10 @@
  */
 #pragma once
 
+#include <gmock/gmock.h>
+
 #include "l2cap/internal/channel_impl.h"
 #include "l2cap/internal/scheduler.h"
-
-#include <gmock/gmock.h>
 
 // Unit test interfaces
 namespace bluetooth {
@@ -27,7 +27,7 @@ namespace internal {
 namespace testing {
 
 class MockScheduler : public Scheduler {
- public:
+public:
   MOCK_METHOD(void, OnPacketsReady, (Cid cid, int number_packet), (override));
 };
 

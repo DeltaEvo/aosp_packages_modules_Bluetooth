@@ -19,27 +19,19 @@
 namespace bluetooth {
 namespace avrcp {
 
-std::string GetPlayStatusRequest::ToString() const {
-  return "GetPlayStatusRequest";
-}
+std::string GetPlayStatusRequest::ToString() const { return "GetPlayStatusRequest"; }
 
-std::unique_ptr<GetPlayStatusResponseBuilder>
-GetPlayStatusResponseBuilder::MakeBuilder(uint32_t song_length,
-                                          uint32_t song_position,
-                                          uint8_t play_status) {
+std::unique_ptr<GetPlayStatusResponseBuilder> GetPlayStatusResponseBuilder::MakeBuilder(
+        uint32_t song_length, uint32_t song_position, uint8_t play_status) {
   std::unique_ptr<GetPlayStatusResponseBuilder> builder(
-      new GetPlayStatusResponseBuilder(song_length, song_position,
-                                       play_status));
+          new GetPlayStatusResponseBuilder(song_length, song_position, play_status));
 
   return builder;
 }
 
-size_t GetPlayStatusResponseBuilder::size() const {
-  return VendorPacket::kMinSize() + 4 + 4 + 1;
-}
+size_t GetPlayStatusResponseBuilder::size() const { return VendorPacket::kMinSize() + 4 + 4 + 1; }
 
-bool GetPlayStatusResponseBuilder::Serialize(
-    const std::shared_ptr<::bluetooth::Packet>& pkt) {
+bool GetPlayStatusResponseBuilder::Serialize(const std::shared_ptr<::bluetooth::Packet>& pkt) {
   ReserveSpace(pkt, size());
 
   // Push the standard avrcp headers

@@ -37,7 +37,7 @@ RasClientImpl* instance;
 enum CallbackDataType { VENDOR_SPECIFIC_REPLY };
 
 class RasClientImpl : public bluetooth::ras::RasClient {
- public:
+public:
   struct GattWriteCallbackData {
     const CallbackDataType type_;
   };
@@ -74,8 +74,7 @@ class RasClientImpl : public bluetooth::ras::RasClient {
       return nullptr;
     }
 
-    VendorSpecificCharacteristic* GetVendorSpecificCharacteristic(
-        const bluetooth::Uuid& uuid) {
+    VendorSpecificCharacteristic* GetVendorSpecificCharacteristic(const bluetooth::Uuid& uuid) {
       for (auto& characteristic : vendor_specific_characteristics_) {
         if (characteristic.characteristicUuid_ == uuid) {
           return &characteristic;
@@ -87,23 +86,23 @@ class RasClientImpl : public bluetooth::ras::RasClient {
 
   void Initialize() override {
     BTA_GATTC_AppRegister(
-        [](tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
-          if (instance && p_data) instance->GattcCallback(event, p_data);
-        },
-        base::Bind([](uint8_t client_id, uint8_t status) {
-          if (status != GATT_SUCCESS) {
-            log::error("Can't start Gatt client for Ranging Service");
-            return;
-          }
-          log::info("Initialize, client_id {}", client_id);
-          instance->gatt_if_ = client_id;
-        }),
-        true);
+            [](tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
+              if (instance && p_data) {
+                instance->GattcCallback(event, p_data);
+              }
+            },
+            base::Bind([](uint8_t client_id, uint8_t status) {
+              if (status != GATT_SUCCESS) {
+                log::error("Can't start Gatt client for Ranging Service");
+                return;
+              }
+              log::info("Initialize, client_id {}", client_id);
+              instance->gatt_if_ = client_id;
+            }),
+            true);
   }
 
-  void RegisterCallbacks(bluetooth::ras::RasClientCallbacks* callbacks) {
-    callbacks_ = callbacks;
-  }
+  void RegisterCallbacks(bluetooth::ras::RasClientCallbacks* callbacks) { callbacks_ = callbacks; }
 
   void Connect(const RawAddress& address) override {
     tBLE_BD_ADDR ble_bd_addr;
@@ -112,32 +111,28 @@ class RasClientImpl : public bluetooth::ras::RasClient {
 
     auto tracker = FindTrackerByAddress(ble_bd_addr.bda);
     if (tracker == nullptr) {
-      trackers_.emplace_back(
-          std::make_shared<RasTracker>(ble_bd_addr.bda, address));
+      trackers_.emplace_back(std::make_shared<RasTracker>(ble_bd_addr.bda, address));
     } else if (tracker->is_connected_) {
       log::info("Already connected");
-      uint16_t att_handle =
-          tracker
-              ->FindCharacteristicByUuid(kRasRealTimeRangingDataCharacteristic)
-              ->value_handle;
-      callbacks_->OnConnected(address, att_handle,
-                              tracker->vendor_specific_characteristics_);
+      uint16_t att_handle = tracker->FindCharacteristicByUuid(kRasRealTimeRangingDataCharacteristic)
+                                    ->value_handle;
+      callbacks_->OnConnected(address, att_handle, tracker->vendor_specific_characteristics_);
       return;
     }
     BTA_GATTC_Open(gatt_if_, ble_bd_addr.bda, BTM_BLE_DIRECT_CONNECTION, false);
   }
 
   void SendVendorSpecificReply(
-      const RawAddress& address,
-      const std::vector<VendorSpecificCharacteristic>& vendor_specific_data) {
+          const RawAddress& address,
+          const std::vector<VendorSpecificCharacteristic>& vendor_specific_data) {
     tBLE_BD_ADDR ble_bd_addr;
     ResolveAddress(ble_bd_addr, address);
     log::info("address {}, resolve {}", address, ble_bd_addr.bda);
     auto tracker = FindTrackerByAddress(ble_bd_addr.bda);
 
     for (auto& vendor_specific_characteristic : vendor_specific_data) {
-      auto characteristic = tracker->FindCharacteristicByUuid(
-          vendor_specific_characteristic.characteristicUuid_);
+      auto characteristic =
+              tracker->FindCharacteristicByUuid(vendor_specific_characteristic.characteristicUuid_);
       if (characteristic == nullptr) {
         log::warn("Can't find characteristic uuid {}",
                   vendor_specific_characteristic.characteristicUuid_);
@@ -146,10 +141,9 @@ class RasClientImpl : public bluetooth::ras::RasClient {
       log::debug("write to remote, uuid {}, len {}",
                  vendor_specific_characteristic.characteristicUuid_,
                  vendor_specific_characteristic.value_.size());
-      BTA_GATTC_WriteCharValue(
-          tracker->conn_id_, characteristic->value_handle, GATT_WRITE,
-          vendor_specific_characteristic.value_, GATT_AUTH_REQ_NO_MITM,
-          GattWriteCallback, &gatt_write_callback_data_);
+      BTA_GATTC_WriteCharValue(tracker->conn_id_, characteristic->value_handle, GATT_WRITE,
+                               vendor_specific_characteristic.value_, GATT_AUTH_REQ_NO_MITM,
+                               GattWriteCallback, &gatt_write_callback_data_);
     }
   }
 
@@ -175,13 +169,11 @@ class RasClientImpl : public bluetooth::ras::RasClient {
   }
 
   void OnGattConnected(const tBTA_GATTC_OPEN& evt) {
-    log::info("{}, conn_id=0x{:04x}, transport:{}, status:{}", evt.remote_bda,
-              evt.conn_id, bt_transport_text(evt.transport),
-              gatt_status_text(evt.status));
+    log::info("{}, conn_id=0x{:04x}, transport:{}, status:{}", evt.remote_bda, evt.conn_id,
+              bt_transport_text(evt.transport), gatt_status_text(evt.status));
 
     if (evt.transport != BT_TRANSPORT_LE) {
-      log::warn("Only LE connection is allowed (transport {})",
-                bt_transport_text(evt.transport));
+      log::warn("Only LE connection is allowed (transport {})", bt_transport_text(evt.transport));
       BTA_GATTC_Close(evt.conn_id);
       return;
     }
@@ -204,9 +196,8 @@ class RasClientImpl : public bluetooth::ras::RasClient {
   }
 
   void OnGattDisconnected(const tBTA_GATTC_CLOSE& evt) {
-    log::info("{}, conn_id=0x{:04x}, status:{}, reason:{}", evt.remote_bda,
-              evt.conn_id, gatt_status_text(evt.status),
-              gatt_disconnection_reason_text(evt.reason));
+    log::info("{}, conn_id=0x{:04x}, status:{}, reason:{}", evt.remote_bda, evt.conn_id,
+              gatt_status_text(evt.status), gatt_disconnection_reason_text(evt.reason));
 
     auto tracker = FindTrackerByAddress(evt.remote_bda);
     if (tracker == nullptr) {
@@ -226,8 +217,7 @@ class RasClientImpl : public bluetooth::ras::RasClient {
 
     // Get Ranging Service
     bool service_found = false;
-    const std::list<gatt::Service>* all_services =
-        BTA_GATTC_GetServices(evt.conn_id);
+    const std::list<gatt::Service>* all_services = BTA_GATTC_GetServices(evt.conn_id);
     for (const auto& service : *all_services) {
       if (service.uuid == kRangingService) {
         tracker->service_ = &service;
@@ -246,41 +236,36 @@ class RasClientImpl : public bluetooth::ras::RasClient {
 
     // Read Vendor Specific Uuid
     if (!tracker->vendor_specific_characteristics_.empty()) {
-      for (auto& vendor_specific_characteristic :
-           tracker->vendor_specific_characteristics_) {
+      for (auto& vendor_specific_characteristic : tracker->vendor_specific_characteristics_) {
         log::debug("Read vendor specific characteristic uuid {}",
                    vendor_specific_characteristic.characteristicUuid_);
         auto characteristic = tracker->FindCharacteristicByUuid(
-            vendor_specific_characteristic.characteristicUuid_);
+                vendor_specific_characteristic.characteristicUuid_);
 
         BTA_GATTC_ReadCharacteristic(
-            tracker->conn_id_, characteristic->value_handle,
-            GATT_AUTH_REQ_NO_MITM,
-            [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
-               uint16_t len, uint8_t* value, void* data) {
-              instance->OnReadCharacteristicCallback(conn_id, status, handle,
-                                                     len, value, data);
-            },
-            nullptr);
+                tracker->conn_id_, characteristic->value_handle, GATT_AUTH_REQ_NO_MITM,
+                [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
+                   uint8_t* value, void* data) {
+                  instance->OnReadCharacteristicCallback(conn_id, status, handle, len, value, data);
+                },
+                nullptr);
       }
     }
 
     // Read Ras Features
     log::info("Read Ras Features");
-    auto characteristic =
-        tracker->FindCharacteristicByUuid(kRasFeaturesCharacteristic);
+    auto characteristic = tracker->FindCharacteristicByUuid(kRasFeaturesCharacteristic);
     if (characteristic == nullptr) {
       log::error("Can not find Characteristic for Ras Features");
       return;
     }
     BTA_GATTC_ReadCharacteristic(
-        tracker->conn_id_, characteristic->value_handle, GATT_AUTH_REQ_NO_MITM,
-        [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
-           uint8_t* value, void* data) {
-          instance->OnReadCharacteristicCallback(conn_id, status, handle, len,
-                                                 value, data);
-        },
-        nullptr);
+            tracker->conn_id_, characteristic->value_handle, GATT_AUTH_REQ_NO_MITM,
+            [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len, uint8_t* value,
+               void* data) {
+              instance->OnReadCharacteristicCallback(conn_id, status, handle, len, value, data);
+            },
+            nullptr);
 
     SubscribeCharacteristic(tracker, kRasControlPointCharacteristic);
   }
@@ -298,8 +283,8 @@ class RasClientImpl : public bluetooth::ras::RasClient {
     }
 
     uint16_t uuid_16bit = characteristic->uuid.As16Bit();
-    log::debug("Handle uuid 0x{:04x}, {}, size {}", uuid_16bit,
-               getUuidName(characteristic->uuid), evt.len);
+    log::debug("Handle uuid 0x{:04x}, {}, size {}", uuid_16bit, getUuidName(characteristic->uuid),
+               evt.len);
 
     switch (uuid_16bit) {
       case kRasRealTimeRangingDataCharacteristic16bit:
@@ -318,23 +303,19 @@ class RasClientImpl : public bluetooth::ras::RasClient {
     }
   }
 
-  void OnRemoteData(const tBTA_GATTC_NOTIFY& evt,
-                    std::shared_ptr<RasTracker> tracker) {
+  void OnRemoteData(const tBTA_GATTC_NOTIFY& evt, std::shared_ptr<RasTracker> tracker) {
     std::vector<uint8_t> data;
     data.resize(evt.len);
     std::copy(evt.value, evt.value + evt.len, data.begin());
     callbacks_->OnRemoteData(tracker->address_for_cs_, data);
   }
 
-  void OnControlPointEvent(const tBTA_GATTC_NOTIFY& evt,
-                           std::shared_ptr<RasTracker> tracker) {
+  void OnControlPointEvent(const tBTA_GATTC_NOTIFY& evt, std::shared_ptr<RasTracker> tracker) {
     switch (evt.value[0]) {
       case (uint8_t)EventCode::COMPLETE_RANGING_DATA_RESPONSE: {
         uint16_t ranging_counter = evt.value[1];
         ranging_counter |= (evt.value[2] << 8);
-        log::debug(
-            "Received complete ranging data response, ranging_counter: {}",
-            ranging_counter);
+        log::debug("Received complete ranging data response, ranging_counter: {}", ranging_counter);
         AckRangingData(ranging_counter, tracker);
       } break;
       case (uint8_t)EventCode::RESPONSE_CODE: {
@@ -346,8 +327,7 @@ class RasClientImpl : public bluetooth::ras::RasClient {
     }
   }
 
-  void OnRangingDataReady(const tBTA_GATTC_NOTIFY& evt,
-                          std::shared_ptr<RasTracker> tracker) {
+  void OnRangingDataReady(const tBTA_GATTC_NOTIFY& evt, std::shared_ptr<RasTracker> tracker) {
     if (evt.len != kRingingCounterSize) {
       log::error("Invalid len for ranging data ready");
       return;
@@ -361,16 +341,14 @@ class RasClientImpl : public bluetooth::ras::RasClient {
     GetRangingData(ranging_counter, tracker);
   }
 
-  void GetRangingData(uint16_t ranging_counter,
-                      std::shared_ptr<RasTracker> tracker) {
+  void GetRangingData(uint16_t ranging_counter, std::shared_ptr<RasTracker> tracker) {
     log::debug("ranging_counter:{}", ranging_counter);
     if (tracker->handling_on_demand_data_) {
       log::warn("Handling other procedure, skip");
       return;
     }
 
-    auto characteristic =
-        tracker->FindCharacteristicByUuid(kRasControlPointCharacteristic);
+    auto characteristic = tracker->FindCharacteristicByUuid(kRasControlPointCharacteristic);
     if (characteristic == nullptr) {
       log::warn("Can't find characteristic for RAS-CP");
       return;
@@ -381,16 +359,13 @@ class RasClientImpl : public bluetooth::ras::RasClient {
     value[0] = (uint8_t)Opcode::GET_RANGING_DATA;
     value[1] = (uint8_t)(ranging_counter & 0xFF);
     value[2] = (uint8_t)((ranging_counter >> 8) & 0xFF);
-    BTA_GATTC_WriteCharValue(tracker->conn_id_, characteristic->value_handle,
-                             GATT_WRITE, value, GATT_AUTH_REQ_NO_MITM,
-                             GattWriteCallback, nullptr);
+    BTA_GATTC_WriteCharValue(tracker->conn_id_, characteristic->value_handle, GATT_WRITE, value,
+                             GATT_AUTH_REQ_NO_MITM, GattWriteCallback, nullptr);
   }
 
-  void AckRangingData(uint16_t ranging_counter,
-                      std::shared_ptr<RasTracker> tracker) {
+  void AckRangingData(uint16_t ranging_counter, std::shared_ptr<RasTracker> tracker) {
     log::debug("ranging_counter:{}", ranging_counter);
-    auto characteristic =
-        tracker->FindCharacteristicByUuid(kRasControlPointCharacteristic);
+    auto characteristic = tracker->FindCharacteristicByUuid(kRasControlPointCharacteristic);
     if (characteristic == nullptr) {
       log::warn("Can't find characteristic for RAS-CP");
       return;
@@ -400,22 +375,18 @@ class RasClientImpl : public bluetooth::ras::RasClient {
     value[0] = (uint8_t)Opcode::ACK_RANGING_DATA;
     value[1] = (uint8_t)(ranging_counter & 0xFF);
     value[2] = (uint8_t)((ranging_counter >> 8) & 0xFF);
-    BTA_GATTC_WriteCharValue(tracker->conn_id_, characteristic->value_handle,
-                             GATT_WRITE, value, GATT_AUTH_REQ_NO_MITM,
-                             GattWriteCallback, nullptr);
+    BTA_GATTC_WriteCharValue(tracker->conn_id_, characteristic->value_handle, GATT_WRITE, value,
+                             GATT_AUTH_REQ_NO_MITM, GattWriteCallback, nullptr);
     if (ranging_counter != tracker->latest_ranging_counter_) {
       GetRangingData(tracker->latest_ranging_counter_, tracker);
     }
   }
 
-  void GattWriteCallbackForVendorSpecificData(uint16_t conn_id,
-                                              tGATT_STATUS status,
-                                              uint16_t handle,
-                                              const uint8_t* value,
+  void GattWriteCallbackForVendorSpecificData(uint16_t conn_id, tGATT_STATUS status,
+                                              uint16_t handle, const uint8_t* value,
                                               GattWriteCallbackData* data) {
     if (data != nullptr) {
-      GattWriteCallbackData* structPtr =
-          static_cast<GattWriteCallbackData*>(data);
+      GattWriteCallbackData* structPtr = static_cast<GattWriteCallbackData*>(data);
       if (structPtr->type_ == CallbackDataType::VENDOR_SPECIFIC_REPLY) {
         log::info("Write vendor specific reply complete");
         auto tracker = FindTrackerByHandle(conn_id);
@@ -424,24 +395,22 @@ class RasClientImpl : public bluetooth::ras::RasClient {
           tracker->writeReplySuccessCounter_++;
         } else {
           log::error(
-              "Fail to write vendor specific reply conn_id {}, status {}, "
-              "handle {}",
-              conn_id, gatt_status_text(status), handle);
+                  "Fail to write vendor specific reply conn_id {}, status {}, "
+                  "handle {}",
+                  conn_id, gatt_status_text(status), handle);
         }
         // All reply complete
-        if (tracker->writeReplyCounter_ ==
-            tracker->vendor_specific_characteristics_.size()) {
+        if (tracker->writeReplyCounter_ == tracker->vendor_specific_characteristics_.size()) {
           log::info(
-              "All vendor specific reply write complete, size {} "
-              "successCounter {}",
-              tracker->vendor_specific_characteristics_.size(),
-              tracker->writeReplySuccessCounter_);
+                  "All vendor specific reply write complete, size {} "
+                  "successCounter {}",
+                  tracker->vendor_specific_characteristics_.size(),
+                  tracker->writeReplySuccessCounter_);
           bool success = tracker->writeReplySuccessCounter_ ==
                          tracker->vendor_specific_characteristics_.size();
           tracker->writeReplyCounter_ = 0;
           tracker->writeReplySuccessCounter_ = 0;
-          callbacks_->OnWriteVendorSpecificReplyComplete(
-              tracker->address_for_cs_, success);
+          callbacks_->OnWriteVendorSpecificReplyComplete(tracker->address_for_cs_, success);
         }
         return;
       }
@@ -472,16 +441,14 @@ class RasClientImpl : public bluetooth::ras::RasClient {
     }
   }
 
-  static void GattWriteCallback(uint16_t conn_id, tGATT_STATUS status,
-                                uint16_t handle, uint16_t len,
-                                const uint8_t* value, void* data) {
+  static void GattWriteCallback(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
+                                uint16_t len, const uint8_t* value, void* data) {
     if (instance != nullptr) {
       if (data != nullptr) {
-        GattWriteCallbackData* structPtr =
-            static_cast<GattWriteCallbackData*>(data);
+        GattWriteCallbackData* structPtr = static_cast<GattWriteCallbackData*>(data);
         if (structPtr->type_ == CallbackDataType::VENDOR_SPECIFIC_REPLY) {
-          instance->GattWriteCallbackForVendorSpecificData(
-              conn_id, status, handle, value, structPtr);
+          instance->GattWriteCallbackForVendorSpecificData(conn_id, status, handle, value,
+                                                           structPtr);
           return;
         }
       }
@@ -489,8 +456,7 @@ class RasClientImpl : public bluetooth::ras::RasClient {
     }
   }
 
-  void SubscribeCharacteristic(std::shared_ptr<RasTracker> tracker,
-                               const Uuid uuid) {
+  void SubscribeCharacteristic(std::shared_ptr<RasTracker> tracker, const Uuid uuid) {
     auto characteristic = tracker->FindCharacteristicByUuid(uuid);
     if (characteristic == nullptr) {
       log::warn("Can't find characteristic 0x{:04x}", uuid.As16Bit());
@@ -502,8 +468,8 @@ class RasClientImpl : public bluetooth::ras::RasClient {
       return;
     }
 
-    tGATT_STATUS register_status = BTA_GATTC_RegisterForNotifications(
-        gatt_if_, tracker->address_, characteristic->value_handle);
+    tGATT_STATUS register_status = BTA_GATTC_RegisterForNotifications(gatt_if_, tracker->address_,
+                                                                      characteristic->value_handle);
     if (register_status != GATT_SUCCESS) {
       log::error("Fail to register, {}", gatt_status_text(register_status));
       return;
@@ -518,44 +484,39 @@ class RasClientImpl : public bluetooth::ras::RasClient {
       UINT16_TO_STREAM(value_ptr, GATT_CHAR_CLIENT_CONFIG_INDICTION);
     }
     BTA_GATTC_WriteCharDescr(
-        tracker->conn_id_, ccc_handle, value, GATT_AUTH_REQ_NONE,
-        [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
-           const uint8_t* value, void* data) {
-          if (instance)
-            instance->OnDescriptorWrite(conn_id, status, handle, len, value,
-                                        data);
-        },
-        nullptr);
+            tracker->conn_id_, ccc_handle, value, GATT_AUTH_REQ_NONE,
+            [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
+               const uint8_t* value, void* data) {
+              if (instance) {
+                instance->OnDescriptorWrite(conn_id, status, handle, len, value, data);
+              }
+            },
+            nullptr);
   }
 
-  void OnDescriptorWrite(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
-                         uint16_t len, const uint8_t* value, void* data) {
-    log::info("conn_id:{}, handle:{}, status:{}", conn_id, handle,
-              gatt_status_text(status));
+  void OnDescriptorWrite(uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
+                         const uint8_t* value, void* data) {
+    log::info("conn_id:{}, handle:{}, status:{}", conn_id, handle, gatt_status_text(status));
   }
 
   void ListCharacteristic(std::shared_ptr<RasTracker> tracker) {
     for (auto& characteristic : tracker->service_->characteristics) {
-      bool vendor_specific =
-          !IsRangingServiceCharacteristic(characteristic.uuid);
+      bool vendor_specific = !IsRangingServiceCharacteristic(characteristic.uuid);
       log::info(
-          "{}Characteristic uuid:0x{:04x}, handle:0x{:04x}, "
-          "properties:0x{:02x}, "
-          "{}",
-          vendor_specific ? "Vendor Specific " : "",
-          characteristic.uuid.As16Bit(), characteristic.value_handle,
-          characteristic.properties, getUuidName(characteristic.uuid));
+              "{}Characteristic uuid:0x{:04x}, handle:0x{:04x}, "
+              "properties:0x{:02x}, "
+              "{}",
+              vendor_specific ? "Vendor Specific " : "", characteristic.uuid.As16Bit(),
+              characteristic.value_handle, characteristic.properties,
+              getUuidName(characteristic.uuid));
       if (vendor_specific) {
         VendorSpecificCharacteristic vendor_specific_characteristic;
-        vendor_specific_characteristic.characteristicUuid_ =
-            characteristic.uuid;
-        tracker->vendor_specific_characteristics_.emplace_back(
-            vendor_specific_characteristic);
+        vendor_specific_characteristic.characteristicUuid_ = characteristic.uuid;
+        tracker->vendor_specific_characteristics_.emplace_back(vendor_specific_characteristic);
       }
       for (auto& descriptor : characteristic.descriptors) {
-        log::info("\tDescriptor uuid:0x{:04x}, handle:0x{:04x}, {}",
-                  descriptor.uuid.As16Bit(), descriptor.handle,
-                  getUuidName(descriptor.uuid));
+        log::info("\tDescriptor uuid:0x{:04x}, handle:0x{:04x}, {}", descriptor.uuid.As16Bit(),
+                  descriptor.handle, getUuidName(descriptor.uuid));
       }
     }
   }
@@ -566,9 +527,8 @@ class RasClientImpl : public bluetooth::ras::RasClient {
     maybe_resolve_address(&ble_bd_addr.bda, &ble_bd_addr.type);
   }
 
-  void OnReadCharacteristicCallback(uint16_t conn_id, tGATT_STATUS status,
-                                    uint16_t handle, uint16_t len,
-                                    uint8_t* value, void* data) {
+  void OnReadCharacteristicCallback(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
+                                    uint16_t len, uint8_t* value, void* data) {
     log::info("conn_id: {}, handle: {}, len: {}", conn_id, handle, len);
     if (status != GATT_SUCCESS) {
       log::error("Fail with status {}", gatt_status_text(status));
@@ -586,7 +546,7 @@ class RasClientImpl : public bluetooth::ras::RasClient {
     }
 
     auto vendor_specific_characteristic =
-        tracker->GetVendorSpecificCharacteristic(characteristic->uuid);
+            tracker->GetVendorSpecificCharacteristic(characteristic->uuid);
     if (vendor_specific_characteristic != nullptr) {
       log::info("Update vendor specific data, uuid: {}",
                 vendor_specific_characteristic->characteristicUuid_);
@@ -597,8 +557,7 @@ class RasClientImpl : public bluetooth::ras::RasClient {
     }
 
     uint16_t uuid_16bit = characteristic->uuid.As16Bit();
-    log::info("Handle uuid 0x{:04x}, {}", uuid_16bit,
-              getUuidName(characteristic->uuid));
+    log::info("Handle uuid 0x{:04x}, {}", uuid_16bit, getUuidName(characteristic->uuid));
 
     switch (uuid_16bit) {
       case kRasFeaturesCharacteristic16bit: {
@@ -609,22 +568,18 @@ class RasClientImpl : public bluetooth::ras::RasClient {
         STREAM_TO_UINT32(tracker->remote_supported_features_, value);
         log::info("Remote supported features : {}",
                   getFeaturesString(tracker->remote_supported_features_));
-        if (tracker->remote_supported_features_ &
-            feature::kRealTimeRangingData) {
+        if (tracker->remote_supported_features_ & feature::kRealTimeRangingData) {
           log::info("Subscribe Real-time Ranging Data");
-          SubscribeCharacteristic(tracker,
-                                  kRasRealTimeRangingDataCharacteristic);
+          SubscribeCharacteristic(tracker, kRasRealTimeRangingDataCharacteristic);
         } else {
           log::info("Subscribe On-demand Ranging Data");
           SubscribeCharacteristic(tracker, kRasOnDemandDataCharacteristic);
           SubscribeCharacteristic(tracker, kRasRangingDataReadyCharacteristic);
-          SubscribeCharacteristic(tracker,
-                                  kRasRangingDataOverWrittenCharacteristic);
+          SubscribeCharacteristic(tracker, kRasRangingDataOverWrittenCharacteristic);
         }
-        uint16_t att_handle = tracker
-                                  ->FindCharacteristicByUuid(
-                                      kRasRealTimeRangingDataCharacteristic)
-                                  ->value_handle;
+        uint16_t att_handle =
+                tracker->FindCharacteristicByUuid(kRasRealTimeRangingDataCharacteristic)
+                        ->value_handle;
         callbacks_->OnConnected(tracker->address_for_cs_, att_handle,
                                 tracker->vendor_specific_characteristics_);
       } break;
@@ -676,8 +631,7 @@ class RasClientImpl : public bluetooth::ras::RasClient {
     return nullptr;
   }
 
-  std::shared_ptr<RasTracker> FindTrackerByAddress(
-      const RawAddress& address) const {
+  std::shared_ptr<RasTracker> FindTrackerByAddress(const RawAddress& address) const {
     for (auto tracker : trackers_) {
       if (tracker->address_ == address) {
         return tracker;
@@ -686,12 +640,11 @@ class RasClientImpl : public bluetooth::ras::RasClient {
     return nullptr;
   }
 
- private:
+private:
   uint16_t gatt_if_;
   std::list<std::shared_ptr<RasTracker>> trackers_;
   bluetooth::ras::RasClientCallbacks* callbacks_;
-  GattWriteCallbackData gatt_write_callback_data_{
-      CallbackDataType::VENDOR_SPECIFIC_REPLY};
+  GattWriteCallbackData gatt_write_callback_data_{CallbackDataType::VENDOR_SPECIFIC_REPLY};
 };
 
 }  // namespace

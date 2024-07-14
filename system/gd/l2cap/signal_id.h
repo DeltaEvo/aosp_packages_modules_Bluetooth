@@ -22,18 +22,14 @@ namespace bluetooth {
 namespace l2cap {
 
 struct SignalId {
- public:
+public:
   constexpr SignalId(uint8_t value) : value_(value) {}
   constexpr SignalId() : value_(1) {}
   ~SignalId() = default;
 
-  uint8_t Value() const {
-    return value_;
-  }
+  uint8_t Value() const { return value_; }
 
-  bool IsValid() const {
-    return value_ != 0;
-  }
+  bool IsValid() const { return value_ != 0; }
 
   friend bool operator==(const SignalId& lhs, const SignalId& rhs);
   friend bool operator!=(const SignalId& lhs, const SignalId& rhs);
@@ -43,7 +39,7 @@ struct SignalId {
   struct SignalId& operator--();    // Prefix decrement operator.
   struct SignalId operator--(int);  // Postfix decrement operator.
 
- private:
+private:
   uint8_t value_;
 };
 
@@ -54,13 +50,13 @@ inline bool operator==(const SignalId& lhs, const SignalId& rhs) {
   return lhs.value_ == rhs.value_;
 }
 
-inline bool operator!=(const SignalId& lhs, const SignalId& rhs) {
-  return !(lhs == rhs);
-}
+inline bool operator!=(const SignalId& lhs, const SignalId& rhs) { return !(lhs == rhs); }
 
 inline struct SignalId& SignalId::operator++() {
   value_++;
-  if (value_ == 0) value_++;
+  if (value_ == 0) {
+    value_++;
+  }
   return *this;
 }
 
@@ -72,7 +68,9 @@ inline struct SignalId SignalId::operator++(int) {
 
 inline struct SignalId& SignalId::operator--() {
   value_--;
-  if (value_ == 0) value_ = 0xff;
+  if (value_ == 0) {
+    value_ = 0xff;
+  }
   return *this;
 }
 

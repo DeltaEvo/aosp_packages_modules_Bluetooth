@@ -27,7 +27,7 @@ namespace security {
 namespace record {
 
 class SecurityRecordDatabase {
- public:
+public:
   SecurityRecordDatabase(record::SecurityRecordStorage security_record_storage)
       : security_record_storage_(security_record_storage) {}
 
@@ -36,7 +36,9 @@ class SecurityRecordDatabase {
   std::shared_ptr<SecurityRecord> FindOrCreate(hci::AddressWithType address) {
     auto it = Find(address);
     // Security record check
-    if (it != records_.end()) return *it;
+    if (it != records_.end()) {
+      return *it;
+    }
 
     // No security record, create one
     auto record_ptr = std::make_shared<SecurityRecord>(address);
@@ -48,7 +50,9 @@ class SecurityRecordDatabase {
     auto it = Find(address);
 
     // No record exists
-    if (it == records_.end()) return;
+    if (it == records_.end()) {
+      return;
+    }
 
     records_.erase(it);
     security_record_storage_.RemoveDevice(address);
@@ -57,20 +61,23 @@ class SecurityRecordDatabase {
   iterator Find(hci::AddressWithType address) {
     for (auto it = records_.begin(); it != records_.end(); ++it) {
       std::shared_ptr<SecurityRecord> record = *it;
-      if (record->identity_address_.has_value() && record->identity_address_.value() == address) return it;
-      if (record->GetPseudoAddress() == address) return it;
-      if (record->remote_irk.has_value() && address.IsRpaThatMatchesIrk(record->remote_irk.value())) return it;
+      if (record->identity_address_.has_value() && record->identity_address_.value() == address) {
+        return it;
+      }
+      if (record->GetPseudoAddress() == address) {
+        return it;
+      }
+      if (record->remote_irk.has_value() &&
+          address.IsRpaThatMatchesIrk(record->remote_irk.value())) {
+        return it;
+      }
     }
     return records_.end();
   }
 
-  void LoadRecordsFromStorage() {
-    security_record_storage_.LoadSecurityRecords(&records_);
-  }
+  void LoadRecordsFromStorage() { security_record_storage_.LoadSecurityRecords(&records_); }
 
-  void SaveRecordsToStorage() {
-    security_record_storage_.SaveSecurityRecords(&records_);
-  }
+  void SaveRecordsToStorage() { security_record_storage_.SaveSecurityRecords(&records_); }
 
   std::set<std::shared_ptr<SecurityRecord>> records_;
   record::SecurityRecordStorage security_record_storage_;

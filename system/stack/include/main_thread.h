@@ -29,10 +29,8 @@ using BtMainClosure = std::function<void()>;
 bluetooth::common::MessageLoopThread* get_main_thread();
 bluetooth::common::PostableContext* get_main();
 
-bt_status_t do_in_main_thread(const base::Location& from_here,
-                              base::OnceClosure task);
-bt_status_t do_in_main_thread_delayed(const base::Location& from_here,
-                                      base::OnceClosure task,
+bt_status_t do_in_main_thread(const base::Location& from_here, base::OnceClosure task);
+bt_status_t do_in_main_thread_delayed(const base::Location& from_here, base::OnceClosure task,
                                       std::chrono::microseconds delay);
 void post_on_bt_main(BtMainClosure closure);
 void main_thread_start_up();

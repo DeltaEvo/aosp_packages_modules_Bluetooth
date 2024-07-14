@@ -50,7 +50,7 @@ PacketView<kLittleEndian> GetPacketView(std::unique_ptr<packet::BasePacketBuilde
 }
 
 class MyDataController : public testing::MockDataController {
- public:
+public:
   std::unique_ptr<BasePacketBuilder> GetNextPacket() override {
     auto next = std::move(next_packets.front());
     next_packets.pop();
@@ -61,7 +61,7 @@ class MyDataController : public testing::MockDataController {
 };
 
 class L2capSchedulerFifoTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
     thread_ = new os::Thread("test_thread", os::Thread::Priority::NORMAL);
     queue_handler_ = new os::Handler(thread_);
@@ -81,7 +81,8 @@ class L2capSchedulerFifoTest : public ::testing::Test {
   os::Handler* queue_handler_ = nullptr;
   os::MockIQueueDequeue<Scheduler::LowerDequeue> dequeue_;
   os::MockIQueueEnqueue<Scheduler::LowerEnqueue> enqueue_;
-  common::BidiQueueEnd<Scheduler::LowerEnqueue, Scheduler::LowerDequeue> queue_end_{&enqueue_, &dequeue_};
+  common::BidiQueueEnd<Scheduler::LowerEnqueue, Scheduler::LowerDequeue> queue_end_{&enqueue_,
+                                                                                    &dequeue_};
   testing::MockDataPipelineManager* mock_data_pipeline_manager_ = nullptr;
   MyDataController data_controller_1_;
   MyDataController data_controller_2_;
@@ -91,7 +92,8 @@ class L2capSchedulerFifoTest : public ::testing::Test {
 TEST_F(L2capSchedulerFifoTest, send_packet) {
   auto frame = BasicFrameBuilder::Create(1, CreateSdu({'a', 'b', 'c'}));
   data_controller_1_.next_packets.push(std::move(frame));
-  EXPECT_CALL(*mock_data_pipeline_manager_, GetDataController(_)).WillOnce(Return(&data_controller_1_));
+  EXPECT_CALL(*mock_data_pipeline_manager_, GetDataController(_))
+          .WillOnce(Return(&data_controller_1_));
   EXPECT_CALL(*mock_data_pipeline_manager_, OnPacketSent(1));
   fifo_->OnPacketsReady(1, 1);
   enqueue_.run_enqueue();
@@ -111,8 +113,10 @@ TEST_F(L2capSchedulerFifoTest, prioritize_channel) {
   frame = BasicFrameBuilder::Create(2, CreateSdu({'d', 'e', 'f'}));
   data_controller_2_.next_packets.push(std::move(frame));
 
-  EXPECT_CALL(*mock_data_pipeline_manager_, GetDataController(1)).WillRepeatedly(Return(&data_controller_1_));
-  EXPECT_CALL(*mock_data_pipeline_manager_, GetDataController(2)).WillRepeatedly(Return(&data_controller_2_));
+  EXPECT_CALL(*mock_data_pipeline_manager_, GetDataController(1))
+          .WillRepeatedly(Return(&data_controller_1_));
+  EXPECT_CALL(*mock_data_pipeline_manager_, GetDataController(2))
+          .WillRepeatedly(Return(&data_controller_2_));
   EXPECT_CALL(*mock_data_pipeline_manager_, OnPacketSent(1));
   EXPECT_CALL(*mock_data_pipeline_manager_, OnPacketSent(2));
   fifo_->SetChannelTxPriority(1, true);
@@ -144,8 +148,10 @@ TEST_F(L2capSchedulerFifoTest, remove_channel) {
   frame = BasicFrameBuilder::Create(2, CreateSdu({'d', 'e', 'f'}));
   data_controller_2_.next_packets.push(std::move(frame));
 
-  EXPECT_CALL(*mock_data_pipeline_manager_, GetDataController(1)).WillRepeatedly(Return(&data_controller_1_));
-  EXPECT_CALL(*mock_data_pipeline_manager_, GetDataController(2)).WillRepeatedly(Return(&data_controller_2_));
+  EXPECT_CALL(*mock_data_pipeline_manager_, GetDataController(1))
+          .WillRepeatedly(Return(&data_controller_1_));
+  EXPECT_CALL(*mock_data_pipeline_manager_, GetDataController(2))
+          .WillRepeatedly(Return(&data_controller_2_));
   EXPECT_CALL(*mock_data_pipeline_manager_, OnPacketSent(2));
   fifo_->OnPacketsReady(1, 1);
   fifo_->OnPacketsReady(2, 1);

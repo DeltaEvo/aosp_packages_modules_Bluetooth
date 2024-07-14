@@ -3019,15 +3019,19 @@ public class LeAudioService extends ProfileService {
         mDialingOutTimeoutEvent = null;
     }
 
-    void notifyAudioFrameworkForCodecConfigUpdate(int groupId, LeAudioGroupDescriptor descriptor) {
-        Log.i(TAG, " notifyAudioFrameworkForCodecConfigUpdate groupId: " + groupId);
+    void notifyAudioFrameworkForCodecConfigUpdate(
+            int groupId,
+            LeAudioGroupDescriptor descriptor,
+            boolean outputCodecOrFreqChanged,
+            boolean inputCodecOrFreqChanged) {
+        Log.i(TAG, "notifyAudioFrameworkForCodecConfigUpdate groupId: " + groupId);
 
         if (!Flags.leaudioCodecConfigCallbackOrderFix()) {
-            Log.d(TAG, " leaudio_codec_config_callback_order_fix is not enabled");
+            Log.d(TAG, "leaudio_codec_config_callback_order_fix is not enabled");
             return;
         }
 
-        if (mActiveAudioOutDevice != null) {
+        if (mActiveAudioOutDevice != null && outputCodecOrFreqChanged) {
             int volume = getAudioDeviceGroupVolume(groupId);
 
             final BluetoothProfileConnectionInfo connectionInfo;
@@ -3042,12 +3046,113 @@ public class LeAudioService extends ProfileService {
                     mActiveAudioOutDevice, mActiveAudioOutDevice, connectionInfo);
         }
 
-        if (mActiveAudioInDevice != null) {
+        if (mActiveAudioInDevice != null && inputCodecOrFreqChanged) {
             mAudioManager.handleBluetoothActiveDeviceChanged(
-                    mActiveAudioOutDevice,
-                    mActiveAudioOutDevice,
+                    mActiveAudioInDevice,
+                    mActiveAudioInDevice,
                     BluetoothProfileConnectionInfo.createLeAudioInfo(false, false));
         }
+    }
+
+    boolean isOutputCodecOfSampleFrequencyChanged(
+            BluetoothLeAudioCodecStatus previous, BluetoothLeAudioCodecStatus next) {
+        if ((previous == null) && (next == null)) {
+            return false;
+        }
+
+        if ((previous == null) || (next == null)) {
+            Log.d(TAG, previous + " != " + next);
+            return true;
+        }
+
+        if ((previous.getOutputCodecConfig() == null) && (next.getOutputCodecConfig() == null)) {
+            /* Nothing changed here.*/
+            return false;
+        }
+
+        if ((previous.getOutputCodecConfig() == null || next.getOutputCodecConfig() == null)) {
+            Log.d(
+                    TAG,
+                    "New output codec: "
+                            + (previous.getOutputCodecConfig()
+                                    + " != "
+                                    + next.getOutputCodecConfig()));
+            return true;
+        }
+
+        if (previous.getOutputCodecConfig().getCodecType()
+                != next.getOutputCodecConfig().getCodecType()) {
+            Log.d(
+                    TAG,
+                    "Different output codec type: "
+                            + (previous.getOutputCodecConfig().getCodecType()
+                                    + " != "
+                                    + next.getOutputCodecConfig().getCodecType()));
+            return true;
+        }
+        if (previous.getOutputCodecConfig().getSampleRate()
+                != next.getOutputCodecConfig().getSampleRate()) {
+            Log.d(
+                    TAG,
+                    "Different output samplerate: "
+                            + (previous.getOutputCodecConfig().getSampleRate()
+                                    + " != "
+                                    + next.getOutputCodecConfig().getSampleRate()));
+            return true;
+        }
+
+        return false;
+    }
+
+    boolean isInputCodecOfSampleFrequencyChanged(
+            BluetoothLeAudioCodecStatus previous, BluetoothLeAudioCodecStatus next) {
+        if ((previous == null) && (next == null)) {
+            return false;
+        }
+
+        if ((previous == null) || (next == null)) {
+            Log.d(TAG, previous + " != " + next);
+            return true;
+        }
+
+        if ((previous.getInputCodecConfig() == null) && (next.getInputCodecConfig() == null)) {
+            /* Nothing changed here.*/
+            return false;
+        }
+
+        if ((previous.getInputCodecConfig() == null) || (next.getInputCodecConfig() == null)) {
+            Log.d(
+                    TAG,
+                    "New input codec: "
+                            + (previous.getInputCodecConfig()
+                                    + " != "
+                                    + next.getInputCodecConfig()));
+            return true;
+        }
+
+        if (previous.getInputCodecConfig().getCodecType()
+                != next.getInputCodecConfig().getCodecType()) {
+            Log.d(
+                    TAG,
+                    "Different input codec type: "
+                            + (previous.getInputCodecConfig().getCodecType()
+                                    + " != "
+                                    + next.getInputCodecConfig().getCodecType()));
+            return true;
+        }
+
+        if (previous.getInputCodecConfig().getSampleRate()
+                != next.getInputCodecConfig().getSampleRate()) {
+            Log.d(
+                    TAG,
+                    "Different input samplerate: "
+                            + (previous.getInputCodecConfig().getSampleRate()
+                                    + " != "
+                                    + next.getInputCodecConfig().getSampleRate()));
+            return true;
+        }
+
+        return false;
     }
 
     // Suppressed since this is part of a local process
@@ -3199,18 +3304,24 @@ public class LeAudioService extends ProfileService {
                             descriptor.mInputSelectableConfig,
                             descriptor.mOutputSelectableConfig);
 
-            if (descriptor.mCodecStatus != null) {
-                Log.d(TAG, " Replacing codec status for group: " + groupId);
-            } else {
-                Log.d(TAG, " New codec status for group: " + groupId);
-            }
+            boolean outputCodecOrFreqChanged =
+                    isOutputCodecOfSampleFrequencyChanged(descriptor.mCodecStatus, status);
+            boolean inputCodecOrFreqChanged =
+                    isInputCodecOfSampleFrequencyChanged(descriptor.mCodecStatus, status);
+
+            Log.d(
+                    TAG,
+                    ("Codec update for group:" + groupId)
+                            + (", outputCodecOrFreqChanged: " + outputCodecOrFreqChanged)
+                            + (", inputCodecOrFreqChanged: " + inputCodecOrFreqChanged));
 
             descriptor.mCodecStatus = status;
             mHandler.post(() -> notifyUnicastCodecConfigChanged(groupId, status));
 
-            if (descriptor.isActive()) {
+            if (descriptor.isActive() && (outputCodecOrFreqChanged || inputCodecOrFreqChanged)) {
                 // Audio framework needs to be notified so it get new codec config
-                notifyAudioFrameworkForCodecConfigUpdate(groupId, descriptor);
+                notifyAudioFrameworkForCodecConfigUpdate(
+                        groupId, descriptor, outputCodecOrFreqChanged, inputCodecOrFreqChanged);
             }
         } else if (stackEvent.type == LeAudioStackEvent.EVENT_TYPE_AUDIO_CONF_CHANGED) {
             int direction = stackEvent.valueInt1;
@@ -4105,6 +4216,13 @@ public class LeAudioService extends ProfileService {
         // Disallow setting CSIP to forbidden until characteristic reads are complete
         if (mCsipSetCoordinatorService != null) {
             mCsipSetCoordinatorService.setConnectionPolicy(device, connectionPolicy);
+        }
+
+        if (mBassClientService == null) {
+            mBassClientService = mServiceFactory.getBassClientService();
+        }
+        if (mBassClientService != null && mBassClientService.isEnabled()) {
+            mBassClientService.setConnectionPolicy(device, connectionPolicy);
         }
     }
 

@@ -27,3 +27,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "set_addressed_player"
+    namespace: "bluetooth"
+    description: "Implement SetAddressedPlayer"
+    bug: "352279986"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}

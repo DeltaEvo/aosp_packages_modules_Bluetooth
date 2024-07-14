@@ -49,28 +49,28 @@ tBTM_STATUS bluetooth::shim::BTM_ClearFilterAcceptList() {
 
 tBTM_STATUS bluetooth::shim::BTM_DisconnectAllAcls() {
   Stack::GetInstance()->GetAcl()->DisconnectAllForSuspend();
-//  Stack::GetInstance()->GetAcl()->Shutdown();
+  //  Stack::GetInstance()->GetAcl()->Shutdown();
   return BTM_SUCCESS;
 }
 
 tBTM_STATUS bluetooth::shim::BTM_SetEventFilterConnectionSetupAllDevices() {
   // Autoplumbed
   GetController()->SetEventFilterConnectionSetupAllDevices(
-      bluetooth::hci::AutoAcceptFlag::AUTO_ACCEPT_ON_ROLE_SWITCH_ENABLED);
+          bluetooth::hci::AutoAcceptFlag::AUTO_ACCEPT_ON_ROLE_SWITCH_ENABLED);
   return BTM_SUCCESS;
 }
 
 tBTM_STATUS bluetooth::shim::BTM_AllowWakeByHid(
-    std::vector<RawAddress> classic_hid_devices,
-    std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices) {
+        std::vector<RawAddress> classic_hid_devices,
+        std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices) {
   // First set ACL to suspended state.
   Stack::GetInstance()->GetAcl()->SetSystemSuspendState(/*suspended=*/true);
 
   // Allow classic HID wake.
   auto controller = GetController();
   for (auto device : classic_hid_devices) {
-    controller->SetEventFilterConnectionSetupAddress(
-        bluetooth::ToGdAddress(device), hci::AutoAcceptFlag::AUTO_ACCEPT_OFF);
+    controller->SetEventFilterConnectionSetupAddress(bluetooth::ToGdAddress(device),
+                                                     hci::AutoAcceptFlag::AUTO_ACCEPT_OFF);
   }
 
   // Allow BLE HID
@@ -79,9 +79,9 @@ tBTM_STATUS bluetooth::shim::BTM_AllowWakeByHid(
     auto accept_future = accept_promise.get_future();
 
     tBLE_BD_ADDR bdadr = BTM_Sec_GetAddressWithType(hid_address.first);
-    Stack::GetInstance()->GetAcl()->AcceptLeConnectionFrom(
-        ToAddressWithType(bdadr.bda, bdadr.type),
-        /*is_direct=*/false, std::move(accept_promise));
+    Stack::GetInstance()->GetAcl()->AcceptLeConnectionFrom(ToAddressWithType(bdadr.bda, bdadr.type),
+                                                           /*is_direct=*/false,
+                                                           std::move(accept_promise));
 
     accept_future.wait();
   }
@@ -90,7 +90,7 @@ tBTM_STATUS bluetooth::shim::BTM_AllowWakeByHid(
 }
 
 tBTM_STATUS bluetooth::shim::BTM_RestoreFilterAcceptList(
-    std::vector<std::pair<RawAddress, uint8_t>> le_devices) {
+        std::vector<std::pair<RawAddress, uint8_t>> le_devices) {
   // First, mark ACL as no longer suspended.
   Stack::GetInstance()->GetAcl()->SetSystemSuspendState(/*suspended=*/false);
 
@@ -101,9 +101,9 @@ tBTM_STATUS bluetooth::shim::BTM_RestoreFilterAcceptList(
     auto accept_future = accept_promise.get_future();
 
     tBLE_BD_ADDR bdadr = BTM_Sec_GetAddressWithType(address_pair.first);
-    Stack::GetInstance()->GetAcl()->AcceptLeConnectionFrom(
-        ToAddressWithType(bdadr.bda, bdadr.type),
-        /*is_direct=*/false, std::move(accept_promise));
+    Stack::GetInstance()->GetAcl()->AcceptLeConnectionFrom(ToAddressWithType(bdadr.bda, bdadr.type),
+                                                           /*is_direct=*/false,
+                                                           std::move(accept_promise));
 
     accept_future.wait();
   }
@@ -111,12 +111,9 @@ tBTM_STATUS bluetooth::shim::BTM_RestoreFilterAcceptList(
   return BTM_SUCCESS;
 }
 
-tBTM_STATUS bluetooth::shim::BTM_SetDefaultEventMaskExcept(uint64_t mask,
-                                                           uint64_t le_mask) {
-  uint64_t applied_mask =
-      bluetooth::hci::Controller::kDefaultEventMask & ~(mask);
-  uint64_t applied_le_mask =
-      bluetooth::hci::Controller::kDefaultLeEventMask & ~(le_mask);
+tBTM_STATUS bluetooth::shim::BTM_SetDefaultEventMaskExcept(uint64_t mask, uint64_t le_mask) {
+  uint64_t applied_mask = bluetooth::hci::Controller::kDefaultEventMask & ~(mask);
+  uint64_t applied_le_mask = bluetooth::hci::Controller::kDefaultLeEventMask & ~(le_mask);
   GetController()->SetEventMask(applied_mask);
   GetController()->LeSetEventMask(applied_le_mask);
   return BTM_SUCCESS;

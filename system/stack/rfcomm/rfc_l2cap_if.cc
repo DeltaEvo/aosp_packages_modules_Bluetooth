@@ -42,13 +42,11 @@ using namespace bluetooth;
 
 /*
  * Define Callback functions to be called by L2CAP
-*/
-static void RFCOMM_ConnectInd(const RawAddress& bd_addr, uint16_t lcid,
-                              uint16_t psm, uint8_t id);
+ */
+static void RFCOMM_ConnectInd(const RawAddress& bd_addr, uint16_t lcid, uint16_t psm, uint8_t id);
 static void RFCOMM_ConnectCnf(uint16_t lcid, uint16_t err);
 static void RFCOMM_ConfigInd(uint16_t lcid, tL2CAP_CFG_INFO* p_cfg);
-static void RFCOMM_ConfigCnf(uint16_t lcid, uint16_t result,
-                             tL2CAP_CFG_INFO* p_cfg);
+static void RFCOMM_ConfigCnf(uint16_t lcid, uint16_t result, tL2CAP_CFG_INFO* p_cfg);
 static void RFCOMM_DisconnectInd(uint16_t lcid, bool is_clear);
 static void RFCOMM_BufDataInd(uint16_t lcid, BT_HDR* p_buf);
 static void RFCOMM_CongestionStatusInd(uint16_t lcid, bool is_congested);
@@ -74,10 +72,9 @@ void rfcomm_l2cap_if_init(void) {
   p_l2c->pL2CA_TxComplete_Cb = NULL;
   p_l2c->pL2CA_Error_Cb = rfc_on_l2cap_error;
 
-  if (!L2CA_Register(BT_PSM_RFCOMM, rfc_cb.rfc.reg_info,
-                     true /* enable_snoop */, nullptr, L2CAP_MTU_SIZE, 0, 0)) {
-    log::error("Unable to register with L2CAP profile RFCOMM psm:{}",
-               BT_PSM_RFCOMM);
+  if (!L2CA_Register(BT_PSM_RFCOMM, rfc_cb.rfc.reg_info, true /* enable_snoop */, nullptr,
+                     L2CAP_MTU_SIZE, 0, 0)) {
+    log::error("Unable to register with L2CAP profile RFCOMM psm:{}", BT_PSM_RFCOMM);
   }
 }
 
@@ -90,8 +87,7 @@ void rfcomm_l2cap_if_init(void) {
  *                  block and dispatch the event to it.
  *
  ******************************************************************************/
-void RFCOMM_ConnectInd(const RawAddress& bd_addr, uint16_t lcid,
-                       uint16_t /* psm */, uint8_t id) {
+void RFCOMM_ConnectInd(const RawAddress& bd_addr, uint16_t lcid, uint16_t /* psm */, uint8_t id) {
   tRFC_MCB* p_mcb = rfc_alloc_multiplexer_channel(bd_addr, false);
 
   if ((p_mcb) && (p_mcb->state != RFC_MX_STATE_IDLE)) {
@@ -105,13 +101,11 @@ void RFCOMM_ConnectInd(const RawAddress& bd_addr, uint16_t lcid,
       /* if timeout, local device disconnects outgoing connection and continues
        * as acceptor */
       log::verbose(
-          "RFCOMM_ConnectInd start timer for collision, initiator's "
-          "LCID(0x{:x}), acceptor's LCID(0x{:x})",
-          p_mcb->lcid, p_mcb->pending_lcid);
+              "RFCOMM_ConnectInd start timer for collision, initiator's "
+              "LCID(0x{:x}), acceptor's LCID(0x{:x})",
+              p_mcb->lcid, p_mcb->pending_lcid);
 
-      rfc_timer_start(
-          p_mcb,
-          (uint16_t)(bluetooth::common::time_get_os_boottime_ms() % 10 + 2));
+      rfc_timer_start(p_mcb, (uint16_t)(bluetooth::common::time_get_os_boottime_ms() % 10 + 2));
       return;
     } else {
       /* we cannot accept connection request from peer at this state */
@@ -157,14 +151,13 @@ void RFCOMM_ConnectCnf(uint16_t lcid, uint16_t result) {
     if (result != L2CAP_CONN_OK) {
       return;
     } else {
-      log::verbose("RFCOMM_ConnectCnf peer gave up pending LCID(0x{:x})",
-                   p_mcb->pending_lcid);
+      log::verbose("RFCOMM_ConnectCnf peer gave up pending LCID(0x{:x})", p_mcb->pending_lcid);
 
       /* Peer gave up its connection request, make sure cleaning up L2CAP
        * channel */
       if (!L2CA_DisconnectReq(p_mcb->pending_lcid)) {
-        log::warn("Unable to send L2CAP disconnect request peer:{} cid:{}",
-                  p_mcb->bd_addr, p_mcb->lcid);
+        log::warn("Unable to send L2CAP disconnect request peer:{} cid:{}", p_mcb->bd_addr,
+                  p_mcb->lcid);
       }
 
       p_mcb->pending_lcid = 0;
@@ -219,8 +212,7 @@ void RFCOMM_ConfigInd(uint16_t lcid, tL2CAP_CFG_INFO* p_cfg) {
  *                  event to the FSM.
  *
  ******************************************************************************/
-void RFCOMM_ConfigCnf(uint16_t lcid, uint16_t /* initiator */,
-                      tL2CAP_CFG_INFO* p_cfg) {
+void RFCOMM_ConfigCnf(uint16_t lcid, uint16_t /* initiator */, tL2CAP_CFG_INFO* p_cfg) {
   RFCOMM_ConfigInd(lcid, p_cfg);
 
   tRFC_MCB* p_mcb = rfc_find_lcid_mcb(lcid);
@@ -274,15 +266,14 @@ void RFCOMM_BufDataInd(uint16_t lcid, BT_HDR* p_buf) {
 
   /* If the frame did not pass validation just ignore it */
   if (event == RFC_EVENT_BAD_FRAME) {
-    log::warn("Bad RFCOMM frame from lcid=0x{:x}, bd_addr={}, p_mcb={}", lcid,
-              p_mcb->bd_addr, fmt::ptr(p_mcb));
+    log::warn("Bad RFCOMM frame from lcid=0x{:x}, bd_addr={}, p_mcb={}", lcid, p_mcb->bd_addr,
+              fmt::ptr(p_mcb));
     osi_free(p_buf);
     return;
   }
 
   if (rfc_cb.rfc.rx_frame.dlci == RFCOMM_MX_DLCI) {
-    log::verbose("handle multiplexer event {}, p_mcb={}", event,
-                 fmt::ptr(p_mcb));
+    log::verbose("handle multiplexer event {}, p_mcb={}", event, fmt::ptr(p_mcb));
     /* Take special care of the Multiplexer Control Messages */
     if (event == RFC_EVENT_UIH) {
       rfc_process_mx_message(p_mcb, p_buf);
@@ -300,12 +291,12 @@ void RFCOMM_BufDataInd(uint16_t lcid, BT_HDR* p_buf) {
   if (p_port == nullptr || !p_port->rfc.p_mcb) {
     /* If this is a SABME on new port, check if any app is waiting for it */
     if (event != RFC_EVENT_SABME) {
-      log::warn("no for none-SABME event, lcid=0x{:x}, bd_addr={}, p_mcb={}",
-                lcid, p_mcb->bd_addr, fmt::ptr(p_mcb));
+      log::warn("no for none-SABME event, lcid=0x{:x}, bd_addr={}, p_mcb={}", lcid, p_mcb->bd_addr,
+                fmt::ptr(p_mcb));
       if ((p_mcb->is_initiator && !rfc_cb.rfc.rx_frame.cr) ||
           (!p_mcb->is_initiator && rfc_cb.rfc.rx_frame.cr)) {
-        log::error("Disconnecting RFCOMM, lcid=0x{:x}, bd_addr={}, p_mcb={}",
-                   lcid, p_mcb->bd_addr, fmt::ptr(p_mcb));
+        log::error("Disconnecting RFCOMM, lcid=0x{:x}, bd_addr={}, p_mcb={}", lcid, p_mcb->bd_addr,
+                   fmt::ptr(p_mcb));
         rfc_send_dm(p_mcb, rfc_cb.rfc.rx_frame.dlci, rfc_cb.rfc.rx_frame.pf);
       }
       osi_free(p_buf);
@@ -315,17 +306,15 @@ void RFCOMM_BufDataInd(uint16_t lcid, BT_HDR* p_buf) {
     p_port = port_find_dlci_port(rfc_cb.rfc.rx_frame.dlci);
     if (p_port == nullptr) {
       log::error(
-          "Disconnecting RFCOMM, no port for dlci {}, lcid=0x{:x}, bd_addr={}, "
-          "p_mcb={}",
-          rfc_cb.rfc.rx_frame.dlci, lcid, p_mcb->bd_addr, fmt::ptr(p_mcb));
+              "Disconnecting RFCOMM, no port for dlci {}, lcid=0x{:x}, bd_addr={}, "
+              "p_mcb={}",
+              rfc_cb.rfc.rx_frame.dlci, lcid, p_mcb->bd_addr, fmt::ptr(p_mcb));
       rfc_send_dm(p_mcb, rfc_cb.rfc.rx_frame.dlci, true);
       osi_free(p_buf);
       return;
     }
-    log::verbose("port_handles[dlci={}]:{}->{}, p_mcb={}",
-                 rfc_cb.rfc.rx_frame.dlci,
-                 p_mcb->port_handles[rfc_cb.rfc.rx_frame.dlci], p_port->handle,
-                 fmt::ptr(p_mcb));
+    log::verbose("port_handles[dlci={}]:{}->{}, p_mcb={}", rfc_cb.rfc.rx_frame.dlci,
+                 p_mcb->port_handles[rfc_cb.rfc.rx_frame.dlci], p_port->handle, fmt::ptr(p_mcb));
     p_mcb->port_handles[rfc_cb.rfc.rx_frame.dlci] = p_port->handle;
     p_port->rfc.p_mcb = p_mcb;
   }
@@ -380,8 +369,7 @@ tRFC_MCB* rfc_find_lcid_mcb(uint16_t lcid) {
   tRFC_MCB* p_mcb = rfc_lcid_mcb[lcid];
   if (p_mcb != nullptr) {
     if (p_mcb->lcid != lcid) {
-      log::warn("LCID reused lcid=:0x{:x}, current_lcid=0x{:x}", lcid,
-                p_mcb->lcid);
+      log::warn("LCID reused lcid=:0x{:x}, current_lcid=0x{:x}", lcid, p_mcb->lcid);
       return nullptr;
     }
   }

@@ -22,15 +22,14 @@ namespace bluetooth {
 namespace security {
 
 class FakeLinkSecurityInterface : public l2cap::classic::LinkSecurityInterface {
- public:
-  FakeLinkSecurityInterface(l2cap::classic::LinkSecurityInterfaceListener* listener, hci::Address address)
+public:
+  FakeLinkSecurityInterface(l2cap::classic::LinkSecurityInterfaceListener* listener,
+                            hci::Address address)
       : listener_(listener), address_(address) {}
 
-  hci::Address GetRemoteAddress() {
-    return address_;
-  }
+  hci::Address GetRemoteAddress() { return address_; }
   void Hold() override {}
-  void EnsureAuthenticated() override{};
+  void EnsureAuthenticated() override {}
 
   void EnsureEncrypted() override {}
 
@@ -38,29 +37,26 @@ class FakeLinkSecurityInterface : public l2cap::classic::LinkSecurityInterface {
     // TODO(optedoblivion): Simulate the delay
     listener_->OnLinkDisconnected(address_);
   }
-  void Disconnect() override {
-    listener_->OnLinkDisconnected(address_);
-  }
-  uint16_t GetAclHandle() override {
-    return 0;
-  }
+  void Disconnect() override { listener_->OnLinkDisconnected(address_); }
+  uint16_t GetAclHandle() override { return 0; }
 
- private:
+private:
   l2cap::classic::LinkSecurityInterfaceListener* listener_ = nullptr;
   hci::Address address_;
 };
 
 class FakeSecurityInterface : public l2cap::classic::SecurityInterface {
- public:
-  FakeSecurityInterface(os::Handler* handler, l2cap::classic::LinkSecurityInterfaceListener* listener)
+public:
+  FakeSecurityInterface(os::Handler* handler,
+                        l2cap::classic::LinkSecurityInterfaceListener* listener)
       : handler_(handler), listener_(listener) {}
   ~FakeSecurityInterface() {}
   void InitiateConnectionForSecurity(hci::Address remote) override {
     listener_->OnLinkConnected(std::make_unique<FakeLinkSecurityInterface>(listener_, remote));
-  };
+  }
   void Unregister() override {}
 
- private:
+private:
   os::Handler* handler_ __attribute__((unused));
   l2cap::classic::LinkSecurityInterfaceListener* listener_ __attribute__((unused));
 };

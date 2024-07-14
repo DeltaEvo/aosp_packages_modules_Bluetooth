@@ -25,7 +25,7 @@ namespace bluetooth {
 namespace hal {
 
 class SyscallWrapperInterface {
- public:
+public:
   virtual ~SyscallWrapperInterface() = default;
 
   /* Wrapper for  <sys/socket.h> socket() API */
@@ -77,8 +77,8 @@ class SyscallWrapperInterface {
   virtual void FDZero(fd_set* set) = 0;
 
   /* Wrapper for <sys/select.h> select() API */
-  virtual int Select(
-      int __nfds, fd_set* __readfds, fd_set* __writefds, fd_set* __exceptfds, struct timeval* __timeout) = 0;
+  virtual int Select(int __nfds, fd_set* __readfds, fd_set* __writefds, fd_set* __exceptfds,
+                     struct timeval* __timeout) = 0;
 };
 
 }  // namespace hal

@@ -29,8 +29,7 @@ Stack* Stack::GetInstance() { return testing::instance_; }
 
 void Stack::StartEverything() {}
 
-void Stack::StartModuleStack(const ModuleList* /* modules */,
-                             const os::Thread* /* thread */) {}
+void Stack::StartModuleStack(const ModuleList* /* modules */, const os::Thread* /* thread */) {}
 
 void Stack::Start(ModuleList* /* modules */) {}
 
@@ -48,9 +47,7 @@ os::Handler* Stack::GetHandler() { return stack_handler_; }
 
 bool Stack::IsDumpsysModuleStarted() const { return false; }
 
-bool Stack::LockForDumpsys(std::function<void()> /* dumpsys_callback */) {
-  return false;
-}
+bool Stack::LockForDumpsys(std::function<void()> /* dumpsys_callback */) { return false; }
 
 }  // namespace shim
 }  // namespace bluetooth

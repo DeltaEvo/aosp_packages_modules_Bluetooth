@@ -36,7 +36,7 @@ class Acl;
 
 // GD shim stack, having modes corresponding to legacy stack
 class Stack {
- public:
+public:
   static Stack* GetInstance();
 
   Stack();
@@ -76,7 +76,7 @@ class Stack {
 
   size_t NumModules() const { return num_modules_; }
 
- private:
+private:
   struct impl;
   std::shared_ptr<impl> pimpl_;
 

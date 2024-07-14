@@ -15,10 +15,10 @@
  */
 #pragma once
 
+#include <gmock/gmock.h>
+
 #include "l2cap/classic/internal/fixed_channel_impl.h"
 #include "l2cap/classic/internal/fixed_channel_service_manager_impl.h"
-
-#include <gmock/gmock.h>
 
 // Unit test interfaces
 namespace bluetooth {
@@ -28,14 +28,18 @@ namespace internal {
 namespace testing {
 
 class MockFixedChannelServiceManagerImpl : public FixedChannelServiceManagerImpl {
- public:
+public:
   MockFixedChannelServiceManagerImpl() : FixedChannelServiceManagerImpl(nullptr) {}
-  MOCK_METHOD(void, Register, (Cid cid, FixedChannelServiceImpl::PendingRegistration pending_registration), (override));
-  MOCK_METHOD(void, Unregister, (Cid cid, FixedChannelService::OnUnregisteredCallback callback, os::Handler* handler),
+  MOCK_METHOD(void, Register,
+              (Cid cid, FixedChannelServiceImpl::PendingRegistration pending_registration),
+              (override));
+  MOCK_METHOD(void, Unregister,
+              (Cid cid, FixedChannelService::OnUnregisteredCallback callback, os::Handler* handler),
               (override));
   MOCK_METHOD(bool, IsServiceRegistered, (Cid cid), (const, override));
   MOCK_METHOD(FixedChannelServiceImpl*, GetService, (Cid cid), (override));
-  MOCK_METHOD((std::vector<std::pair<Cid, FixedChannelServiceImpl*>>), GetRegisteredServices, (), (override));
+  MOCK_METHOD((std::vector<std::pair<Cid, FixedChannelServiceImpl*>>), GetRegisteredServices, (),
+              (override));
 };
 
 }  // namespace testing

@@ -79,11 +79,10 @@ enum {
   HID_HDEV_EVT_HANDSHAKE,
   HID_HDEV_EVT_VC_UNPLUG
 };
-typedef void(tHID_HOST_DEV_CALLBACK)(
-    uint8_t dev_handle, const RawAddress& addr,
-    uint8_t event,  /* Event from HID-DEVICE. */
-    uint32_t data,  /* Integer data corresponding to the event.*/
-    BT_HDR* p_buf); /* Pointer data corresponding to the event. */
+typedef void(tHID_HOST_DEV_CALLBACK)(uint8_t dev_handle, const RawAddress& addr,
+                                     uint8_t event,  /* Event from HID-DEVICE. */
+                                     uint32_t data,  /* Integer data corresponding to the event.*/
+                                     BT_HDR* p_buf); /* Pointer data corresponding to the event. */
 
 /*****************************************************************************
  *  External Function Declarations
@@ -98,8 +97,7 @@ typedef void(tHID_HOST_DEV_CALLBACK)(
  * Returns          tHID_STATUS
  *
  ******************************************************************************/
-tHID_STATUS HID_HostGetSDPRecord(const RawAddress& addr,
-                                 tSDP_DISCOVERY_DB* p_db, uint32_t db_len,
+tHID_STATUS HID_HostGetSDPRecord(const RawAddress& addr, tSDP_DISCOVERY_DB* p_db, uint32_t db_len,
                                  tHID_HOST_SDP_CALLBACK* sdp_cback);
 
 /*******************************************************************************
@@ -145,8 +143,7 @@ bool HID_HostSDPDisable(const RawAddress& addr);
  * Returns          tHID_STATUS
  *
  ******************************************************************************/
-tHID_STATUS HID_HostAddDev(const RawAddress& addr, uint16_t attr_mask,
-                           uint8_t* handle);
+tHID_STATUS HID_HostAddDev(const RawAddress& addr, uint16_t attr_mask, uint8_t* handle);
 
 /*******************************************************************************
  *
@@ -181,8 +178,8 @@ tHID_STATUS HID_HostOpenDev(uint8_t dev_handle);
  * Returns          void
  *
  ******************************************************************************/
-tHID_STATUS HID_HostWriteDev(uint8_t dev_handle, uint8_t t_type, uint8_t param,
-                             uint16_t data, uint8_t report_id, BT_HDR* pbuf);
+tHID_STATUS HID_HostWriteDev(uint8_t dev_handle, uint8_t t_type, uint8_t param, uint16_t data,
+                             uint8_t report_id, BT_HDR* pbuf);
 
 /*******************************************************************************
  *

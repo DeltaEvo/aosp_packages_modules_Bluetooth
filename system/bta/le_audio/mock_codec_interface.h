@@ -23,9 +23,8 @@
 #include "codec_interface.h"
 
 class MockCodecInterface {
- public:
-  static void RegisterMockInstanceHook(
-      std::function<void(MockCodecInterface*, bool)>);
+public:
+  static void RegisterMockInstanceHook(std::function<void(MockCodecInterface*, bool)>);
   static void ClearMockInstanceHookList();
 
   MockCodecInterface() = default;
@@ -34,19 +33,16 @@ class MockCodecInterface {
 
   virtual ~MockCodecInterface() = default;
 
-  MOCK_METHOD(
-      (bluetooth::le_audio::CodecInterface::Status), InitEncoder,
-      (const bluetooth::le_audio::LeAudioCodecConfiguration& pcm_config,
-       const bluetooth::le_audio::LeAudioCodecConfiguration& codec_config));
-  MOCK_METHOD(
-      bluetooth::le_audio::CodecInterface::Status, InitDecoder,
-      (const bluetooth::le_audio::LeAudioCodecConfiguration& codec_config,
-       const bluetooth::le_audio::LeAudioCodecConfiguration& pcm_config));
+  MOCK_METHOD((bluetooth::le_audio::CodecInterface::Status), InitEncoder,
+              (const bluetooth::le_audio::LeAudioCodecConfiguration& pcm_config,
+               const bluetooth::le_audio::LeAudioCodecConfiguration& codec_config));
+  MOCK_METHOD(bluetooth::le_audio::CodecInterface::Status, InitDecoder,
+              (const bluetooth::le_audio::LeAudioCodecConfiguration& codec_config,
+               const bluetooth::le_audio::LeAudioCodecConfiguration& pcm_config));
   MOCK_METHOD(bluetooth::le_audio::CodecInterface::Status, Encode,
-              (const uint8_t* data, int stride, uint16_t out_size,
-               std::vector<int16_t>* out_buffer, uint16_t out_offset));
-  MOCK_METHOD(bluetooth::le_audio::CodecInterface::Status, Decode,
-              (uint8_t * data, uint16_t size));
+              (const uint8_t* data, int stride, uint16_t out_size, std::vector<int16_t>* out_buffer,
+               uint16_t out_offset));
+  MOCK_METHOD(bluetooth::le_audio::CodecInterface::Status, Decode, (uint8_t* data, uint16_t size));
   MOCK_METHOD((void), Cleanup, ());
   MOCK_METHOD((bool), IsReady, ());
   MOCK_METHOD((uint16_t), GetNumOfSamplesPerChannel, ());

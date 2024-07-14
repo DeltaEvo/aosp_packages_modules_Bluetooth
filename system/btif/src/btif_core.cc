@@ -78,8 +78,7 @@ using namespace bluetooth;
 #if defined(TARGET_FLOSS)
 #define BTE_DID_CONF_FILE "/var/lib/bluetooth/bt_did.conf"
 #elif defined(__ANDROID__)
-#define BTE_DID_CONF_FILE \
-  "/apex/com.android.btservices/etc/bluetooth/bt_did.conf"
+#define BTE_DID_CONF_FILE "/apex/com.android.btservices/etc/bluetooth/bt_did.conf"
 #else  // !defined(__ANDROID__)
 #define BTE_DID_CONF_FILE "bt_did.conf"
 #endif  // defined(__ANDROID__)
@@ -136,13 +135,10 @@ bool btif_is_dut_mode() { return btif_dut_mode == 1; }
  ******************************************************************************/
 
 int btif_is_enabled(void) {
-  return ((!btif_is_dut_mode()) &&
-          (stack_manager_get_interface()->get_stack_is_running()));
+  return (!btif_is_dut_mode()) && (stack_manager_get_interface()->get_stack_is_running());
 }
 
-void btif_init_ok() {
-  btif_dm_load_ble_local_keys();
-}
+void btif_init_ok() { btif_dm_load_ble_local_keys(); }
 
 /*******************************************************************************
  *
@@ -175,33 +171,30 @@ bt_status_t btif_init_bluetooth() {
 
 void btif_enable_bluetooth_evt() {
   /* Fetch the local BD ADDR */
-  RawAddress local_bd_addr = bluetooth::ToRawAddress(
-      bluetooth::shim::GetController()->GetMacAddress());
+  RawAddress local_bd_addr =
+          bluetooth::ToRawAddress(bluetooth::shim::GetController()->GetMacAddress());
 
   std::string bdstr = local_bd_addr.ToString();
 
   // save bd addr to iot conf file
-  device_iot_config_set_str(IOT_CONF_KEY_SECTION_ADAPTER, IOT_CONF_KEY_ADDRESS,
-                            bdstr);
+  device_iot_config_set_str(IOT_CONF_KEY_SECTION_ADAPTER, IOT_CONF_KEY_ADDRESS, bdstr);
 
   char val[PROPERTY_VALUE_MAX] = "";
   int val_size = PROPERTY_VALUE_MAX;
-  if (!btif_config_get_str(BTIF_STORAGE_SECTION_ADAPTER,
-                           BTIF_STORAGE_KEY_ADDRESS, val, &val_size) ||
+  if (!btif_config_get_str(BTIF_STORAGE_SECTION_ADAPTER, BTIF_STORAGE_KEY_ADDRESS, val,
+                           &val_size) ||
       strcmp(bdstr.c_str(), val) != 0) {
     // We failed to get an address or the one in the config file does not match
     // the address given by the controller interface. Update the config cache
     log::info("Storing '{}' into the config file", local_bd_addr);
-    btif_config_set_str(BTIF_STORAGE_SECTION_ADAPTER, BTIF_STORAGE_KEY_ADDRESS,
-                        bdstr.c_str());
+    btif_config_set_str(BTIF_STORAGE_SECTION_ADAPTER, BTIF_STORAGE_KEY_ADDRESS, bdstr.c_str());
 
     // fire HAL callback for property change
     bt_property_t prop;
     prop.type = BT_PROPERTY_BDADDR;
     prop.val = (void*)&local_bd_addr;
     prop.len = sizeof(RawAddress);
-    GetInterfaceToProfiles()->events->invoke_adapter_properties_cb(
-        BT_STATUS_SUCCESS, 1, &prop);
+    GetInterfaceToProfiles()->events->invoke_adapter_properties_cb(BT_STATUS_SUCCESS, 1, &prop);
   }
 
   /* callback to HAL */
@@ -232,8 +225,7 @@ void btif_enable_bluetooth_evt() {
     uint32_t record_handle;
     tBTA_STATUS status = BTA_DmSetLocalDiRecord(&record, &record_handle);
     if (status != BTA_SUCCESS) {
-      log::error("unable to set device ID record error {}.",
-                 bta_status_text(status));
+      log::error("unable to set device ID record error {}.", bta_status_text(status));
     }
   }
 
@@ -296,8 +288,8 @@ void btif_dut_mode_configure(uint8_t enable) {
 void btif_dut_mode_send(uint16_t opcode, uint8_t* buf, uint8_t len) {
   log::verbose("");
   /* For now nothing to be done. */
-  get_btm_client_interface().vendor.BTM_VendorSpecificCommand(
-      opcode, len, buf, [](tBTM_VSC_CMPL*) {});
+  get_btm_client_interface().vendor.BTM_VendorSpecificCommand(opcode, len, buf,
+                                                              [](tBTM_VSC_CMPL*) {});
 }
 
 /*****************************************************************************
@@ -320,8 +312,7 @@ static bt_status_t btif_in_get_adapter_properties(void) {
   bt_status_t status;
 
   /* RawAddress */
-  BTIF_STORAGE_FILL_PROPERTY(&properties[num_props], BT_PROPERTY_BDADDR,
-                             sizeof(addr), &addr);
+  BTIF_STORAGE_FILL_PROPERTY(&properties[num_props], BT_PROPERTY_BDADDR, sizeof(addr), &addr);
   status = btif_storage_get_adapter_property(&properties[num_props]);
   // Add BT_PROPERTY_BDADDR property into list only when successful.
   // Otherwise, skip this property entry.
@@ -330,33 +321,30 @@ static bt_status_t btif_in_get_adapter_properties(void) {
   }
 
   /* BD_NAME */
-  BTIF_STORAGE_FILL_PROPERTY(&properties[num_props], BT_PROPERTY_BDNAME,
-                             sizeof(name), &name);
+  BTIF_STORAGE_FILL_PROPERTY(&properties[num_props], BT_PROPERTY_BDNAME, sizeof(name), &name);
   btif_storage_get_adapter_property(&properties[num_props]);
   num_props++;
 
   /* DISC_TIMEOUT */
-  BTIF_STORAGE_FILL_PROPERTY(&properties[num_props],
-                             BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT,
+  BTIF_STORAGE_FILL_PROPERTY(&properties[num_props], BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT,
                              sizeof(disc_timeout), &disc_timeout);
   btif_storage_get_adapter_property(&properties[num_props]);
   num_props++;
 
   /* BONDED_DEVICES */
-  BTIF_STORAGE_FILL_PROPERTY(&properties[num_props],
-                             BT_PROPERTY_ADAPTER_BONDED_DEVICES,
+  BTIF_STORAGE_FILL_PROPERTY(&properties[num_props], BT_PROPERTY_ADAPTER_BONDED_DEVICES,
                              sizeof(bonded_devices), bonded_devices);
   btif_storage_get_adapter_property(&properties[num_props]);
   num_props++;
 
   /* LOCAL UUIDs */
-  BTIF_STORAGE_FILL_PROPERTY(&properties[num_props], BT_PROPERTY_UUIDS,
-                             sizeof(local_uuids), local_uuids);
+  BTIF_STORAGE_FILL_PROPERTY(&properties[num_props], BT_PROPERTY_UUIDS, sizeof(local_uuids),
+                             local_uuids);
   btif_storage_get_adapter_property(&properties[num_props]);
   num_props++;
 
-  GetInterfaceToProfiles()->events->invoke_adapter_properties_cb(
-      BT_STATUS_SUCCESS, num_props, properties);
+  GetInterfaceToProfiles()->events->invoke_adapter_properties_cb(BT_STATUS_SUCCESS, num_props,
+                                                                 properties);
   return BT_STATUS_SUCCESS;
 }
 
@@ -369,61 +357,50 @@ static bt_status_t btif_in_get_remote_device_properties(RawAddress* bd_addr) {
   Uuid remote_uuids[BT_MAX_NUM_UUIDS];
 
   memset(remote_properties, 0, sizeof(remote_properties));
-  BTIF_STORAGE_FILL_PROPERTY(&remote_properties[num_props], BT_PROPERTY_BDNAME,
-                             sizeof(name), &name);
-  btif_storage_get_remote_device_property(bd_addr,
-                                          &remote_properties[num_props]);
+  BTIF_STORAGE_FILL_PROPERTY(&remote_properties[num_props], BT_PROPERTY_BDNAME, sizeof(name),
+                             &name);
+  btif_storage_get_remote_device_property(bd_addr, &remote_properties[num_props]);
   num_props++;
 
-  BTIF_STORAGE_FILL_PROPERTY(&remote_properties[num_props],
-                             BT_PROPERTY_REMOTE_FRIENDLY_NAME, sizeof(alias),
-                             &alias);
-  btif_storage_get_remote_device_property(bd_addr,
-                                          &remote_properties[num_props]);
+  BTIF_STORAGE_FILL_PROPERTY(&remote_properties[num_props], BT_PROPERTY_REMOTE_FRIENDLY_NAME,
+                             sizeof(alias), &alias);
+  btif_storage_get_remote_device_property(bd_addr, &remote_properties[num_props]);
   num_props++;
 
-  BTIF_STORAGE_FILL_PROPERTY(&remote_properties[num_props],
-                             BT_PROPERTY_CLASS_OF_DEVICE, sizeof(cod), &cod);
-  btif_storage_get_remote_device_property(bd_addr,
-                                          &remote_properties[num_props]);
+  BTIF_STORAGE_FILL_PROPERTY(&remote_properties[num_props], BT_PROPERTY_CLASS_OF_DEVICE,
+                             sizeof(cod), &cod);
+  btif_storage_get_remote_device_property(bd_addr, &remote_properties[num_props]);
   num_props++;
 
-  BTIF_STORAGE_FILL_PROPERTY(&remote_properties[num_props],
-                             BT_PROPERTY_TYPE_OF_DEVICE, sizeof(devtype),
-                             &devtype);
-  btif_storage_get_remote_device_property(bd_addr,
-                                          &remote_properties[num_props]);
+  BTIF_STORAGE_FILL_PROPERTY(&remote_properties[num_props], BT_PROPERTY_TYPE_OF_DEVICE,
+                             sizeof(devtype), &devtype);
+  btif_storage_get_remote_device_property(bd_addr, &remote_properties[num_props]);
   num_props++;
 
-  BTIF_STORAGE_FILL_PROPERTY(&remote_properties[num_props], BT_PROPERTY_UUIDS,
-                             sizeof(remote_uuids), remote_uuids);
-  btif_storage_get_remote_device_property(bd_addr,
-                                          &remote_properties[num_props]);
+  BTIF_STORAGE_FILL_PROPERTY(&remote_properties[num_props], BT_PROPERTY_UUIDS, sizeof(remote_uuids),
+                             remote_uuids);
+  btif_storage_get_remote_device_property(bd_addr, &remote_properties[num_props]);
   num_props++;
 
   GetInterfaceToProfiles()->events->invoke_remote_device_properties_cb(
-      BT_STATUS_SUCCESS, *bd_addr, num_props, remote_properties);
+          BT_STATUS_SUCCESS, *bd_addr, num_props, remote_properties);
 
   return BT_STATUS_SUCCESS;
 }
 
 static void btif_core_storage_adapter_write(bt_property_t* prop) {
-  log::verbose("type: {}, len {}, {}", prop->type, prop->len,
-               fmt::ptr(prop->val));
+  log::verbose("type: {}, len {}, {}", prop->type, prop->len, fmt::ptr(prop->val));
   bt_status_t status = btif_storage_set_adapter_property(prop);
-  GetInterfaceToProfiles()->events->invoke_adapter_properties_cb(status, 1,
-                                                                 prop);
+  GetInterfaceToProfiles()->events->invoke_adapter_properties_cb(status, 1, prop);
 }
 
-void btif_adapter_properties_evt(bt_status_t status, uint32_t num_props,
-                                 bt_property_t* p_props) {
-  GetInterfaceToProfiles()->events->invoke_adapter_properties_cb(
-      status, num_props, p_props);
+void btif_adapter_properties_evt(bt_status_t status, uint32_t num_props, bt_property_t* p_props) {
+  GetInterfaceToProfiles()->events->invoke_adapter_properties_cb(status, num_props, p_props);
 }
-void btif_remote_properties_evt(bt_status_t status, RawAddress* remote_addr,
-                                uint32_t num_props, bt_property_t* p_props) {
-  GetInterfaceToProfiles()->events->invoke_remote_device_properties_cb(
-      status, *remote_addr, num_props, p_props);
+void btif_remote_properties_evt(bt_status_t status, RawAddress* remote_addr, uint32_t num_props,
+                                bt_property_t* p_props) {
+  GetInterfaceToProfiles()->events->invoke_remote_device_properties_cb(status, *remote_addr,
+                                                                       num_props, p_props);
 }
 
 /*******************************************************************************
@@ -467,57 +444,48 @@ void btif_get_adapter_property(bt_property_type_t type) {
     local_le_features.local_privacy_enabled = BTM_BleLocalPrivacyEnabled();
 
     prop.len = sizeof(bt_local_le_features_t);
-    if (cmn_vsc_cb.filter_support == 1)
+    if (cmn_vsc_cb.filter_support == 1) {
       local_le_features.max_adv_filter_supported = cmn_vsc_cb.max_filter;
-    else
+    } else {
       local_le_features.max_adv_filter_supported = 0;
+    }
     local_le_features.max_adv_instance = cmn_vsc_cb.adv_inst_max;
     local_le_features.max_irk_list_size = cmn_vsc_cb.max_irk_list_sz;
     local_le_features.rpa_offload_supported = cmn_vsc_cb.rpa_offloading;
-    local_le_features.scan_result_storage_size =
-        cmn_vsc_cb.tot_scan_results_strg;
-    local_le_features.activity_energy_info_supported =
-        cmn_vsc_cb.energy_support;
+    local_le_features.scan_result_storage_size = cmn_vsc_cb.tot_scan_results_strg;
+    local_le_features.activity_energy_info_supported = cmn_vsc_cb.energy_support;
     local_le_features.version_supported = cmn_vsc_cb.version_supported;
-    local_le_features.total_trackable_advertisers =
-        cmn_vsc_cb.total_trackable_advertisers;
+    local_le_features.total_trackable_advertisers = cmn_vsc_cb.total_trackable_advertisers;
 
-    local_le_features.extended_scan_support =
-        cmn_vsc_cb.extended_scan_support > 0;
-    local_le_features.debug_logging_supported =
-        cmn_vsc_cb.debug_logging_supported > 0;
+    local_le_features.extended_scan_support = cmn_vsc_cb.extended_scan_support > 0;
+    local_le_features.debug_logging_supported = cmn_vsc_cb.debug_logging_supported > 0;
     auto controller = bluetooth::shim::GetController();
 
     if (controller->SupportsBleExtendedAdvertising()) {
-      local_le_features.max_adv_instance =
-          controller->GetLeNumberOfSupportedAdverisingSets();
+      local_le_features.max_adv_instance = controller->GetLeNumberOfSupportedAdverisingSets();
     }
     local_le_features.le_2m_phy_supported = controller->SupportsBle2mPhy();
-    local_le_features.le_coded_phy_supported =
-        controller->SupportsBleCodedPhy();
+    local_le_features.le_coded_phy_supported = controller->SupportsBleCodedPhy();
     local_le_features.le_extended_advertising_supported =
-        controller->SupportsBleExtendedAdvertising();
+            controller->SupportsBleExtendedAdvertising();
     local_le_features.le_periodic_advertising_supported =
-        controller->SupportsBlePeriodicAdvertising();
+            controller->SupportsBlePeriodicAdvertising();
     local_le_features.le_maximum_advertising_data_length =
-        controller->GetLeMaximumAdvertisingDataLength();
+            controller->GetLeMaximumAdvertisingDataLength();
 
-    local_le_features.dynamic_audio_buffer_supported =
-        cmn_vsc_cb.dynamic_audio_buffer_support;
+    local_le_features.dynamic_audio_buffer_supported = cmn_vsc_cb.dynamic_audio_buffer_support;
 
     local_le_features.le_periodic_advertising_sync_transfer_sender_supported =
-        controller->SupportsBlePeriodicAdvertisingSyncTransferSender();
+            controller->SupportsBlePeriodicAdvertisingSyncTransferSender();
     local_le_features.le_connected_isochronous_stream_central_supported =
-        controller->SupportsBleConnectedIsochronousStreamCentral();
+            controller->SupportsBleConnectedIsochronousStreamCentral();
     local_le_features.le_isochronous_broadcast_supported =
-        controller->SupportsBleIsochronousBroadcaster();
-    local_le_features
-        .le_periodic_advertising_sync_transfer_recipient_supported =
-        controller->SupportsBlePeriodicAdvertisingSyncTransferRecipient();
+            controller->SupportsBleIsochronousBroadcaster();
+    local_le_features.le_periodic_advertising_sync_transfer_recipient_supported =
+            controller->SupportsBlePeriodicAdvertisingSyncTransferRecipient();
     local_le_features.adv_filter_extended_features_mask =
-        cmn_vsc_cb.adv_filter_extended_features_mask;
-    local_le_features.le_channel_sounding_supported =
-        controller->SupportsBleChannelSounding();
+            cmn_vsc_cb.adv_filter_extended_features_mask;
+    local_le_features.le_channel_sounding_supported = controller->SupportsBleChannelSounding();
 
     memcpy(prop.val, &local_le_features, prop.len);
   } else if (prop.type == BT_PROPERTY_DYNAMIC_AUDIO_BUFFER) {
@@ -530,27 +498,22 @@ void btif_get_adapter_property(bt_property_type_t type) {
     if (GetInterfaceToProfiles()->config->isA2DPOffloadEnabled() == false) {
       log::verbose("Get buffer millis for A2DP software encoding");
       for (int i = 0; i < CODEC_TYPE_NUMBER; i++) {
-        dynamic_audio_buffer_item.dab_item[i] = {
-            .default_buffer_time = DEFAULT_BUFFER_TIME,
-            .maximum_buffer_time = MAXIMUM_BUFFER_TIME,
-            .minimum_buffer_time = MINIMUM_BUFFER_TIME};
+        dynamic_audio_buffer_item.dab_item[i] = {.default_buffer_time = DEFAULT_BUFFER_TIME,
+                                                 .maximum_buffer_time = MAXIMUM_BUFFER_TIME,
+                                                 .minimum_buffer_time = MINIMUM_BUFFER_TIME};
       }
       memcpy(prop.val, &dynamic_audio_buffer_item, prop.len);
     } else {
       if (cmn_vsc_cb.dynamic_audio_buffer_support != 0) {
         log::verbose("Get buffer millis for A2DP Offload");
-        tBTM_BT_DYNAMIC_AUDIO_BUFFER_CB
-            bt_dynamic_audio_buffer_cb[CODEC_TYPE_NUMBER];
+        tBTM_BT_DYNAMIC_AUDIO_BUFFER_CB bt_dynamic_audio_buffer_cb[CODEC_TYPE_NUMBER];
         BTM_BleGetDynamicAudioBuffer(bt_dynamic_audio_buffer_cb);
 
         for (int i = 0; i < CODEC_TYPE_NUMBER; i++) {
           dynamic_audio_buffer_item.dab_item[i] = {
-              .default_buffer_time =
-                  bt_dynamic_audio_buffer_cb[i].default_buffer_time,
-              .maximum_buffer_time =
-                  bt_dynamic_audio_buffer_cb[i].maximum_buffer_time,
-              .minimum_buffer_time =
-                  bt_dynamic_audio_buffer_cb[i].minimum_buffer_time};
+                  .default_buffer_time = bt_dynamic_audio_buffer_cb[i].default_buffer_time,
+                  .maximum_buffer_time = bt_dynamic_audio_buffer_cb[i].maximum_buffer_time,
+                  .minimum_buffer_time = bt_dynamic_audio_buffer_cb[i].minimum_buffer_time};
         }
         memcpy(prop.val, &dynamic_audio_buffer_item, prop.len);
       } else {
@@ -560,13 +523,11 @@ void btif_get_adapter_property(bt_property_type_t type) {
   } else {
     status = btif_storage_get_adapter_property(&prop);
   }
-  GetInterfaceToProfiles()->events->invoke_adapter_properties_cb(status, 1,
-                                                                 &prop);
+  GetInterfaceToProfiles()->events->invoke_adapter_properties_cb(status, 1, &prop);
 }
 
 bt_property_t* property_deep_copy(const bt_property_t* prop) {
-  bt_property_t* copy =
-      (bt_property_t*)osi_calloc(sizeof(bt_property_t) + prop->len);
+  bt_property_t* copy = (bt_property_t*)osi_calloc(sizeof(bt_property_t) + prop->len);
   copy->type = prop->type;
   copy->len = prop->len;
   copy->val = (uint8_t*)(copy + 1);
@@ -598,14 +559,13 @@ void btif_set_scan_mode(bt_scan_mode_t mode) {
  ******************************************************************************/
 
 void btif_set_adapter_property(bt_property_t* property) {
-  log::verbose("btif_set_adapter_property type: {}, len {}, {}", property->type,
-               property->len, fmt::ptr(property->val));
+  log::verbose("btif_set_adapter_property type: {}, len {}, {}", property->type, property->len,
+               fmt::ptr(property->val));
 
   switch (property->type) {
     case BT_PROPERTY_BDNAME: {
       char bd_name[BD_NAME_LEN + 1];
-      uint16_t name_len =
-          property->len > BD_NAME_LEN ? BD_NAME_LEN : property->len;
+      uint16_t name_len = property->len > BD_NAME_LEN ? BD_NAME_LEN : property->len;
       memcpy(bd_name, property->val, name_len);
       bd_name[name_len] = '\0';
 
@@ -634,18 +594,16 @@ void btif_set_adapter_property(bt_property_t* property) {
  * Description      Fetches the remote device property from the NVRAM
  *
  ******************************************************************************/
-void btif_get_remote_device_property(RawAddress remote_addr,
-                                     bt_property_type_t type) {
+void btif_get_remote_device_property(RawAddress remote_addr, bt_property_type_t type) {
   char buf[1024];
   bt_property_t prop;
   prop.type = type;
   prop.val = (void*)buf;
   prop.len = sizeof(buf);
 
-  bt_status_t status =
-      btif_storage_get_remote_device_property(&remote_addr, &prop);
-  GetInterfaceToProfiles()->events->invoke_remote_device_properties_cb(
-      status, remote_addr, 1, &prop);
+  bt_status_t status = btif_storage_get_remote_device_property(&remote_addr, &prop);
+  GetInterfaceToProfiles()->events->invoke_remote_device_properties_cb(status, remote_addr, 1,
+                                                                       &prop);
 }
 
 /*******************************************************************************
@@ -668,8 +626,7 @@ void btif_get_remote_device_properties(RawAddress remote_addr) {
  *                  remote device property that can be set
  *
  ******************************************************************************/
-void btif_set_remote_device_property(RawAddress* remote_addr,
-                                     bt_property_t* property) {
+void btif_set_remote_device_property(RawAddress* remote_addr, bt_property_t* property) {
   btif_storage_set_remote_device_property(remote_addr, property);
 }
 
@@ -683,9 +640,7 @@ void btif_set_remote_device_property(RawAddress* remote_addr,
  *
  ******************************************************************************/
 
-tBTA_SERVICE_MASK btif_get_enabled_services_mask(void) {
-  return btif_enabled_services;
-}
+tBTA_SERVICE_MASK btif_get_enabled_services_mask(void) { return btif_enabled_services; }
 
 /*******************************************************************************
  *
@@ -732,18 +687,15 @@ bt_status_t btif_set_dynamic_audio_buffer_size(int codec, int size) {
 
   if (!GetInterfaceToProfiles()->config->isA2DPOffloadEnabled()) {
     log::verbose("Set buffer size ({}) for A2DP software encoding", size);
-    GetInterfaceToProfiles()
-        ->profileSpecific_HACK->btif_av_set_dynamic_audio_buffer_size(
+    GetInterfaceToProfiles()->profileSpecific_HACK->btif_av_set_dynamic_audio_buffer_size(
             uint8_t(size));
   } else {
     if (cmn_vsc_cb.dynamic_audio_buffer_support != 0) {
       log::verbose("Set buffer size ({}) for A2DP offload", size);
       uint16_t firmware_tx_buffer_length_byte;
       firmware_tx_buffer_length_byte = static_cast<uint16_t>(size);
-      log::info("firmware_tx_buffer_length_byte: {}",
-                firmware_tx_buffer_length_byte);
-      bluetooth::shim::GetController()->SetDabAudioBufferTime(
-          firmware_tx_buffer_length_byte);
+      log::info("firmware_tx_buffer_length_byte: {}", firmware_tx_buffer_length_byte);
+      bluetooth::shim::GetController()->SetDabAudioBufferTime(firmware_tx_buffer_length_byte);
     }
   }
 

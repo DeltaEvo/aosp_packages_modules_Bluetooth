@@ -87,24 +87,26 @@ int ascii_2_hex(const char* p_ascii, int len, uint8_t* p_hex) {
   uint8_t c;
 
   for (x = 0; (x < len) && (*p_ascii); x++) {
-    if (ISDIGIT(*p_ascii))
+    if (ISDIGIT(*p_ascii)) {
       c = (*p_ascii - '0') << 4;
-    else
+    } else {
       c = (toupper(*p_ascii) - 'A' + 10) << 4;
+    }
 
     p_ascii++;
     if (*p_ascii) {
-      if (ISDIGIT(*p_ascii))
+      if (ISDIGIT(*p_ascii)) {
         c |= (*p_ascii - '0');
-      else
+      } else {
         c |= (toupper(*p_ascii) - 'A' + 10);
+      }
 
       p_ascii++;
     }
     *p_hex++ = c;
   }
 
-  return (x);
+  return x;
 }
 
 std::string dump_dm_search_event(uint16_t event) {

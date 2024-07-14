@@ -29,19 +29,21 @@ class Sender;
  * Common interface for internal channel implementation
  */
 class ChannelImpl {
- public:
+public:
   virtual ~ChannelImpl() = default;
 
   /**
    * Return the queue end for upper layer (L2CAP user)
    */
-  virtual common::BidiQueueEnd<packet::BasePacketBuilder, packet::PacketView<packet::kLittleEndian>>*
+  virtual common::BidiQueueEnd<packet::BasePacketBuilder,
+                               packet::PacketView<packet::kLittleEndian>>*
   GetQueueUpEnd() = 0;
 
   /**
    * Return the queue end for lower layer (sender and receiver)
    */
-  virtual common::BidiQueueEnd<packet::PacketView<packet::kLittleEndian>, packet::BasePacketBuilder>*
+  virtual common::BidiQueueEnd<packet::PacketView<packet::kLittleEndian>,
+                               packet::BasePacketBuilder>*
   GetQueueDownEnd() = 0;
 
   virtual Cid GetCid() const = 0;
