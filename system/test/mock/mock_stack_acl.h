@@ -506,24 +506,6 @@ struct BTM_ReadRemoteFeatures {
   uint8_t* operator()(const RawAddress& addr) { return body(addr); }
 };
 extern struct BTM_ReadRemoteFeatures BTM_ReadRemoteFeatures;
-// Name: ACL_RegisterClient
-// Params: struct acl_client_callback_s* callbacks
-// Returns: void
-struct ACL_RegisterClient {
-  std::function<void(struct acl_client_callback_s* callbacks)> body{
-          [](struct acl_client_callback_s* /* callbacks */) { ; }};
-  void operator()(struct acl_client_callback_s* callbacks) { body(callbacks); }
-};
-extern struct ACL_RegisterClient ACL_RegisterClient;
-// Name: ACL_UnregisterClient
-// Params: struct acl_client_callback_s* callbacks
-// Returns: void
-struct ACL_UnregisterClient {
-  std::function<void(struct acl_client_callback_s* callbacks)> body{
-          [](struct acl_client_callback_s* /* callbacks */) { ; }};
-  void operator()(struct acl_client_callback_s* callbacks) { body(callbacks); }
-};
-extern struct ACL_UnregisterClient ACL_UnregisterClient;
 // Name: BTM_ReadConnectionAddr
 // Params: const RawAddress& remote_bda, RawAddress& local_conn_addr, bool
 // ota_address tBLE_ADDR_TYPE* p_addr_type Returns: void

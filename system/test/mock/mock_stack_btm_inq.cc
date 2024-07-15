@@ -35,7 +35,6 @@ namespace mock {
 namespace stack_btm_inq {
 
 // Function state capture and return values, if needed
-struct BTM_AddEirService BTM_AddEirService;
 struct BTM_CancelInquiry BTM_CancelInquiry;
 struct BTM_CancelRemoteDeviceName BTM_CancelRemoteDeviceName;
 struct BTM_ClearInqDb BTM_ClearInqDb;
@@ -102,10 +101,6 @@ bool btm_inq_find_bdaddr::return_value = false;
 }  // namespace test
 
 // Mocked functions, if any
-void BTM_AddEirService(uint32_t* p_eir_uuid, uint16_t uuid16) {
-  inc_func_call_count(__func__);
-  test::mock::stack_btm_inq::BTM_AddEirService(p_eir_uuid, uuid16);
-}
 void BTM_CancelInquiry(void) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_inq::BTM_CancelInquiry();
