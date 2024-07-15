@@ -385,7 +385,7 @@ bool SDP_AddServiceClassIdList(uint32_t handle, uint16_t num_services, uint16_t*
  * Returns          Returns SDP_SUCCESS if record added successfully, else error
  *
  ******************************************************************************/
-uint16_t SDP_SetLocalDiRecord(const tSDP_DI_RECORD* device_info, uint32_t* p_handle);
+tSDP_STATUS SDP_SetLocalDiRecord(const tSDP_DI_RECORD* device_info, uint32_t* p_handle);
 
 /*******************************************************************************
  *

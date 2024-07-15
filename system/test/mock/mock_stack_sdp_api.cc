@@ -135,7 +135,7 @@ uint16_t SDP_GetDiRecord(uint8_t get_record_index, tSDP_DI_GET_RECORD* p_device_
   inc_func_call_count(__func__);
   return test::mock::stack_sdp_api::SDP_GetDiRecord(get_record_index, p_device_info, p_db);
 }
-uint16_t SDP_SetLocalDiRecord(const tSDP_DI_RECORD* p_device_info, uint32_t* p_handle) {
+tSDP_STATUS SDP_SetLocalDiRecord(const tSDP_DI_RECORD* p_device_info, uint32_t* p_handle) {
   inc_func_call_count(__func__);
   return test::mock::stack_sdp_api::SDP_SetLocalDiRecord(p_device_info, p_handle);
 }
