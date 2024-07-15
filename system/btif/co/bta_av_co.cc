@@ -45,7 +45,7 @@
 #include "internal_include/bt_trace.h"
 #include "osi/include/allocator.h"
 #include "stack/include/a2dp_codec_api.h"
-#include "stack/include/a2dp_error_codes.h"
+#include "stack/include/a2dp_constants.h"
 #include "stack/include/a2dp_ext.h"
 #include "stack/include/avdt_api.h"
 #include "stack/include/bt_hdr.h"
@@ -463,13 +463,13 @@ void BtaAvCo::ProcessSetConfig(tBTA_AV_HNDL bta_av_handle, const RawAddress& pee
     if (ContentProtectEnabled()) {
       if ((num_protect != 1) || !ContentProtectIsScmst(p_protect_info)) {
         log::error("wrong CP configuration for peer {}", p_peer->addr);
-        status = A2DP_BAD_CP_TYPE;
+        status = A2DP_INVALID_CP_TYPE;
         category = AVDT_ASC_PROTECT;
       }
     } else {
       // Do not support content protection for the time being
       log::error("wrong CP configuration for peer {}", p_peer->addr);
-      status = A2DP_BAD_CP_TYPE;
+      status = A2DP_INVALID_CP_TYPE;
       category = AVDT_ASC_PROTECT;
     }
   }
@@ -505,7 +505,7 @@ void BtaAvCo::ProcessSetConfig(tBTA_AV_HNDL bta_av_handle, const RawAddress& pee
     // Check if codec configuration is supported
     if (!codec_config_supported) {
       category = AVDT_ASC_CODEC;
-      status = A2DP_WRONG_CODEC;
+      status = AVDTP_UNSUPPORTED_CONFIGURATION;
     }
   }
 

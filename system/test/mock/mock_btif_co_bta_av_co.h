@@ -31,7 +31,7 @@
 #include "bta/include/bta_av_api.h"
 #include "include/hardware/bt_av.h"
 #include "stack/include/a2dp_codec_api.h"
-#include "stack/include/a2dp_error_codes.h"
+#include "stack/include/a2dp_constants.h"
 #include "stack/include/avdt_api.h"
 #include "stack/include/bt_hdr.h"
 #include "types/raw_address.h"
