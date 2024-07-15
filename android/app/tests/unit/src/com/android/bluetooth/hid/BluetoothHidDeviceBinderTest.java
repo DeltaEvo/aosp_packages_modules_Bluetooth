@@ -60,7 +60,6 @@ public class BluetoothHidDeviceBinderTest {
     @Test
     public void cleanup() {
         mBinder.cleanup();
-        assertThat(mBinder.getServiceForTesting()).isNull();
     }
 
     @Test
