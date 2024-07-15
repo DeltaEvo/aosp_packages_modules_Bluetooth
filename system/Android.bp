@@ -133,7 +133,7 @@ genrule {
     ],
     cmd: "mkdir -p $(genDir)/files && " +
         "$(location aprotoc) -Ipackages/modules/Bluetooth/system -Iexternal/protobuf/src --plugin=protoc-gen-grpc=$(location protoc-gen-grpc-python-plugin) $(locations :BlueberryFacadeProto) --grpc_out=$(genDir)/files --python_out=$(genDir)/files && " +
-        "find $(genDir)/files -type d -exec touch {}/__init__.py \\; &&" +
+        "for dir in `find $(genDir)/files -type d`; do touch $$dir/__init__.py; done &&" +
         "$(location soong_zip) -C $(genDir)/files -D $(genDir)/files -o $(out)",
     srcs: [
         ":BlueberryFacadeProto",
