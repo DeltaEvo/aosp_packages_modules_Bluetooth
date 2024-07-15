@@ -698,7 +698,6 @@ cc_test {
         ":TestMockMainShimDumpsys",
         ":TestMockMainShimEntry",
         ":TestMockStack",
-        ":TestMockStackSecurityClientInterface",
         ":TestMockUdrv",
         "test/btif_core_test.cc",
     ],
