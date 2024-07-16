@@ -19,13 +19,9 @@
 #include <android/hardware/bluetooth/1.1/IBluetoothHciCallbacks.h>
 #include <bluetooth/log.h>
 
-#include "common/init_flags.h"
 #include "common/stop_watch.h"
-#include "common/strings.h"
 #include "hal/hci_backend.h"
-#include "hal/hci_hal.h"
 #include "os/alarm.h"
-#include "os/log.h"
 #include "os/system_properties.h"
 
 using ::android::hardware::hidl_vec;

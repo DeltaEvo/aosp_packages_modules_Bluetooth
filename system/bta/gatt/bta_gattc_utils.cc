@@ -29,12 +29,10 @@
 #include <cstdint>
 
 #include "bta/gatt/bta_gattc_int.h"
-#include "common/init_flags.h"
 #include "hci/controller_interface.h"
 #include "internal_include/bt_target.h"
 #include "internal_include/bt_trace.h"
 #include "main/shim/entry.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "types/bt_transport.h"
 #include "types/hci_role.h"

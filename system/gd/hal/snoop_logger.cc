@@ -26,12 +26,10 @@
 #include <sstream>
 
 #include "common/circular_buffer.h"
-#include "common/init_flags.h"
 #include "common/strings.h"
 #include "hal/snoop_logger_common.h"
 #include "module_dumper_flatbuffer.h"
 #include "os/files.h"
-#include "os/log.h"
 #include "os/parameter_provider.h"
 #include "os/system_properties.h"
 
