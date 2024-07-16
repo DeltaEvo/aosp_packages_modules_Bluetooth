@@ -334,6 +334,19 @@ typedef void(tPORT_MGMT_CALLBACK)(const tPORT_RESULT code, uint16_t port_handle)
 
 /*******************************************************************************
  *
+ * Function         PORT_IsCollisionDetected
+ *
+ * Description      This function returns true if there is already an incoming
+ *                  RFCOMM connection in progress for this device
+ *
+ * Parameters:      true if any connection opening is found
+ *                  bd_addr    - bd_addr of the peer
+ *
+ ******************************************************************************/
+[[nodiscard]] bool PORT_IsCollisionDetected(RawAddress bd_addr);
+
+/*******************************************************************************
+ *
  * Function         PORT_SetState
  *
  * Description      This function configures connection according to the
