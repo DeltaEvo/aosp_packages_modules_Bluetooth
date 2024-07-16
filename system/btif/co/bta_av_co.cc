@@ -489,8 +489,8 @@ void BtaAvCo::ProcessSetConfig(tBTA_AV_HNDL bta_av_handle, const RawAddress& pee
     if (t_local_sep == AVDT_TSEP_SRC) {
       log::verbose("peer {} is A2DP SINK", p_peer->addr);
       if ((p_peer->GetCodecs() == nullptr) ||
-          !SetCodecOtaConfig(p_peer, p_codec_info, num_protect, p_protect_info,
-                             t_local_sep)) {
+          SetCodecOtaConfig(p_peer, p_codec_info, num_protect, p_protect_info, t_local_sep) !=
+                  A2DP_SUCCESS) {
         log::error("cannot set source codec {} for peer {}", A2DP_CodecName(p_codec_info),
                    p_peer->addr);
       } else {
@@ -1329,9 +1329,9 @@ BtaAvCoState* BtaAvCo::getStateFromPeer(const BtaAvCoPeer* p_peer) {
   }
 }
 
-bool BtaAvCo::SetCodecOtaConfig(BtaAvCoPeer* p_peer, const uint8_t* p_ota_codec_config,
-                                uint8_t num_protect, const uint8_t* p_protect_info,
-                                const uint8_t t_local_sep) {
+tA2DP_STATUS BtaAvCo::SetCodecOtaConfig(BtaAvCoPeer* p_peer, const uint8_t* p_ota_codec_config,
+                                        uint8_t num_protect, const uint8_t* p_protect_info,
+                                        const uint8_t t_local_sep) {
   uint8_t result_codec_config[AVDT_CODEC_SIZE];
   bool restart_input = false;
   bool restart_output = false;
@@ -1347,15 +1347,17 @@ bool BtaAvCo::SetCodecOtaConfig(BtaAvCoPeer* p_peer, const uint8_t* p_ota_codec_
     // We have all the information we need from the peer, so we can
     // proceed with the OTA codec configuration.
     log::error("peer {} : cannot find peer SEP to configure", p_peer->addr);
-    return false;
+    return AVDTP_UNSUPPORTED_CONFIGURATION;
   }
 
   tA2DP_ENCODER_INIT_PEER_PARAMS peer_params;
   GetPeerEncoderParameters(p_peer->addr, &peer_params);
-  if (!p_peer->GetCodecs()->setCodecOtaConfig(p_ota_codec_config, &peer_params, result_codec_config,
-                                              &restart_input, &restart_output, &config_updated)) {
-    log::error("peer {} : cannot set OTA config", p_peer->addr);
-    return false;
+  auto status = p_peer->GetCodecs()->setCodecOtaConfig(p_ota_codec_config, &peer_params,
+                                                       result_codec_config, &restart_input,
+                                                       &restart_output, &config_updated);
+  if (status != A2DP_SUCCESS) {
+    log::error("peer {} : cannot set OTA config, status: 0x{:x}", p_peer->addr, status);
+    return status;
   }
 
   if (restart_output) {
@@ -1371,7 +1373,7 @@ bool BtaAvCo::SetCodecOtaConfig(BtaAvCoPeer* p_peer, const uint8_t* p_ota_codec_
     ReportSourceCodecState(p_peer);
   }
 
-  return true;
+  return A2DP_SUCCESS;
 }
 
 void bta_av_co_init(const std::vector<btav_a2dp_codec_config_t>& codec_priorities,

@@ -330,12 +330,12 @@ bool A2dpCodecConfig::isCodecConfigEmpty(const btav_a2dp_codec_config_t& codec_c
          (codec_config.codec_specific_3 == 0) && (codec_config.codec_specific_4 == 0);
 }
 
-bool A2dpCodecConfig::setCodecUserConfig(const btav_a2dp_codec_config_t& codec_user_config,
-                                         const btav_a2dp_codec_config_t& codec_audio_config,
-                                         const tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_params,
-                                         const uint8_t* p_peer_codec_info, bool is_capability,
-                                         uint8_t* p_result_codec_config, bool* p_restart_input,
-                                         bool* p_restart_output, bool* p_config_updated) {
+tA2DP_STATUS A2dpCodecConfig::setCodecUserConfig(
+        const btav_a2dp_codec_config_t& codec_user_config,
+        const btav_a2dp_codec_config_t& codec_audio_config,
+        const tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_params, const uint8_t* p_peer_codec_info,
+        bool is_capability, uint8_t* p_result_codec_config, bool* p_restart_input,
+        bool* p_restart_output, bool* p_config_updated) {
   std::lock_guard<std::recursive_mutex> lock(codec_mutex_);
   *p_restart_input = false;
   *p_restart_output = false;
@@ -356,7 +356,7 @@ bool A2dpCodecConfig::setCodecUserConfig(const btav_a2dp_codec_config_t& codec_u
     // Restore the local copy of the user and audio config
     codec_user_config_ = saved_codec_user_config;
     codec_audio_config_ = saved_codec_audio_config;
-    return false;
+    return status;
   }
 
   //
@@ -381,7 +381,7 @@ bool A2dpCodecConfig::setCodecUserConfig(const btav_a2dp_codec_config_t& codec_u
     *p_config_updated = true;
   }
 
-  return true;
+  return A2DP_SUCCESS;
 }
 
 bool A2dpCodecConfig::codecConfigIsValid(const btav_a2dp_codec_config_t& codec_config) {
@@ -781,9 +781,10 @@ bool A2dpCodecs::setCodecUserConfig(const btav_a2dp_codec_config_t& codec_user_c
 
   // Reuse the existing codec audio config
   codec_audio_config = a2dp_codec_config->getCodecAudioConfig();
-  if (!a2dp_codec_config->setCodecUserConfig(codec_user_config, codec_audio_config, p_peer_params,
-                                             p_peer_sink_capabilities, true, p_result_codec_config,
-                                             p_restart_input, p_restart_output, p_config_updated)) {
+  if (a2dp_codec_config->setCodecUserConfig(codec_user_config, codec_audio_config, p_peer_params,
+                                            p_peer_sink_capabilities, true, p_result_codec_config,
+                                            p_restart_input, p_restart_output,
+                                            p_config_updated) != A2DP_SUCCESS) {
     goto fail;
   }
 
@@ -875,19 +876,20 @@ bool A2dpCodecs::setCodecAudioConfig(const btav_a2dp_codec_config_t& codec_audio
   // Reuse the existing codec user config
   codec_user_config = a2dp_codec_config->getCodecUserConfig();
   bool restart_input = false;  // Flag ignored - input was just restarted
-  if (!a2dp_codec_config->setCodecUserConfig(codec_user_config, codec_audio_config, p_peer_params,
-                                             p_peer_sink_capabilities, true, p_result_codec_config,
-                                             &restart_input, p_restart_output, p_config_updated)) {
+  if (a2dp_codec_config->setCodecUserConfig(codec_user_config, codec_audio_config, p_peer_params,
+                                            p_peer_sink_capabilities, true, p_result_codec_config,
+                                            &restart_input, p_restart_output,
+                                            p_config_updated) != A2DP_SUCCESS) {
     return false;
   }
 
   return true;
 }
 
-bool A2dpCodecs::setCodecOtaConfig(const uint8_t* p_ota_codec_config,
-                                   const tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_params,
-                                   uint8_t* p_result_codec_config, bool* p_restart_input,
-                                   bool* p_restart_output, bool* p_config_updated) {
+tA2DP_STATUS A2dpCodecs::setCodecOtaConfig(const uint8_t* p_ota_codec_config,
+                                           const tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_params,
+                                           uint8_t* p_result_codec_config, bool* p_restart_input,
+                                           bool* p_restart_output, bool* p_config_updated) {
   std::lock_guard<std::recursive_mutex> lock(codec_mutex_);
   btav_a2dp_codec_index_t codec_type;
   btav_a2dp_codec_config_t codec_user_config;
@@ -897,6 +899,7 @@ bool A2dpCodecs::setCodecOtaConfig(const uint8_t* p_ota_codec_config,
   *p_restart_input = false;
   *p_restart_output = false;
   *p_config_updated = false;
+  tA2DP_STATUS status = AVDTP_UNSUPPORTED_CONFIGURATION;
 
   // Check whether the current codec config is explicitly configured by
   // user configuration. If yes, then the OTA codec configuration is ignored.
@@ -923,11 +926,13 @@ bool A2dpCodecs::setCodecOtaConfig(const uint8_t* p_ota_codec_config,
     if (iter == indexed_codecs_.end()) {
       log::warn("cannot find codec configuration for peer OTA codec {}",
                 A2DP_CodecName(p_ota_codec_config));
+      status = A2DP_NOT_SUPPORTED_CODEC_TYPE;
       goto fail;
     }
     a2dp_codec_config = iter->second;
   }
   if (a2dp_codec_config == nullptr) {
+    status = A2DP_NOT_SUPPORTED_CODEC_TYPE;
     goto fail;
   }
   codec_user_config = a2dp_codec_config->getCodecUserConfig();
@@ -936,19 +941,22 @@ bool A2dpCodecs::setCodecOtaConfig(const uint8_t* p_ota_codec_config,
             "ignoring peer OTA configuration for codec {}: existing user "
             "configuration for same codec",
             A2DP_CodecName(p_ota_codec_config));
+    status = AVDTP_UNSUPPORTED_CONFIGURATION;
     goto fail;
   }
   current_codec_config_ = a2dp_codec_config;
 
   // Reuse the existing codec user config and codec audio config
   codec_audio_config = a2dp_codec_config->getCodecAudioConfig();
-  if (!a2dp_codec_config->setCodecUserConfig(codec_user_config, codec_audio_config, p_peer_params,
-                                             p_ota_codec_config, false, p_result_codec_config,
-                                             p_restart_input, p_restart_output, p_config_updated)) {
+  status = a2dp_codec_config->setCodecUserConfig(
+          codec_user_config, codec_audio_config, p_peer_params, p_ota_codec_config, false,
+          p_result_codec_config, p_restart_input, p_restart_output, p_config_updated);
+  if (status != A2DP_SUCCESS) {
     log::warn("cannot set codec configuration for peer OTA codec {}",
               A2DP_CodecName(p_ota_codec_config));
     goto fail;
   }
+
   log::assert_that(current_codec_config_ != nullptr,
                    "assert failed: current_codec_config_ != nullptr");
 
@@ -956,11 +964,11 @@ bool A2dpCodecs::setCodecOtaConfig(const uint8_t* p_ota_codec_config,
     *p_config_updated = true;
   }
 
-  return true;
+  return A2DP_SUCCESS;
 
 fail:
   current_codec_config_ = last_codec_config;
-  return false;
+  return status;
 }
 
 bool A2dpCodecs::setPeerSinkCodecCapabilities(const uint8_t* p_peer_codec_capabilities) {
