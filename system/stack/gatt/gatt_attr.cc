@@ -1011,9 +1011,7 @@ bool gatt_profile_get_eatt_support(const RawAddress& remote_bda) {
  * Returns          true if enabled in gd flag, otherwise false
  *
  ******************************************************************************/
-static bool gatt_sr_is_robust_caching_enabled() {
-  return bluetooth::common::init_flags::gatt_robust_caching_server_is_enabled();
-}
+static bool gatt_sr_is_robust_caching_enabled() { return false; }
 
 /*******************************************************************************
  *
