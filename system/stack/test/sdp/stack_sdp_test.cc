@@ -19,6 +19,7 @@
 #include <stdlib.h>
 
 #include <cstddef>
+#include <cstdint>
 
 #include "include/macros.h"
 #include "osi/include/allocator.h"
@@ -36,14 +37,11 @@
 #endif
 
 namespace {
+constexpr uint8_t kSDP_MAX_CONNECTIONS = static_cast<uint8_t>(SDP_MAX_CONNECTIONS);
 
-static int L2CA_ConnectReqWithSecurity_cid = 0x42;
-static RawAddress addr = RawAddress({0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6});
-static RawAddress addr2 = RawAddress({0xB1, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6});
-static RawAddress addr3 = RawAddress({0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6});
-static RawAddress addr4 = RawAddress({0xD1, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6});
-static RawAddress addr5 = RawAddress({0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6});
-static tSDP_DISCOVERY_DB* sdp_db = nullptr;
+RawAddress addr = RawAddress({0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6});
+int L2CA_ConnectReqWithSecurity_cid = 0x42;
+tSDP_DISCOVERY_DB* sdp_db = nullptr;
 
 class StackSdpWithMocksTest : public ::testing::Test {
 protected:
@@ -408,11 +406,12 @@ TEST_F(SDP_GetDiRecord_Tests, SDP_GetDiRecord_Regression_test0) {
 TEST_F(StackSdpInitTest, sdpu_dump_all_ccb) {
   sdpu_dump_all_ccb();
 
-  ASSERT_NE(nullptr, sdp_conn_originate(addr));
-  ASSERT_NE(nullptr, sdp_conn_originate(addr2));
-  ASSERT_NE(nullptr, sdp_conn_originate(addr3));
-  ASSERT_NE(nullptr, sdp_conn_originate(addr4));
-  ASSERT_EQ(nullptr, sdp_conn_originate(addr5));
+  for (uint8_t i = 0; i < kSDP_MAX_CONNECTIONS; i++) {
+    RawAddress bd_addr = RawAddress({0x11, 0x22, 0x33, 0x44, 0x55, i});
+    ASSERT_NE(nullptr, sdp_conn_originate(bd_addr));
+  }
+  RawAddress bd_addr_fail = RawAddress({0x11, 0x22, 0x33, 0x44, 0x55, 0xff});
+  ASSERT_EQ(nullptr, sdp_conn_originate(bd_addr_fail));
 
   sdpu_dump_all_ccb();
 }
@@ -420,10 +419,12 @@ TEST_F(StackSdpInitTest, sdpu_dump_all_ccb) {
 TEST_F(StackSdpInitTest, SDP_Dumpsys) { SDP_Dumpsys(1); }
 
 TEST_F(StackSdpInitTest, SDP_Dumpsys_ccb) {
-  ASSERT_NE(nullptr, sdp_conn_originate(addr));
-  ASSERT_NE(nullptr, sdp_conn_originate(addr2));
-  ASSERT_NE(nullptr, sdp_conn_originate(addr3));
-  ASSERT_NE(nullptr, sdp_conn_originate(addr4));
-  ASSERT_EQ(nullptr, sdp_conn_originate(addr5));
+  for (uint8_t i = 0; i < kSDP_MAX_CONNECTIONS; i++) {
+    RawAddress bd_addr = RawAddress({0x11, 0x22, 0x33, 0x44, 0x55, i});
+    ASSERT_NE(nullptr, sdp_conn_originate(bd_addr));
+  }
+  RawAddress bd_addr_fail = RawAddress({0x11, 0x22, 0x33, 0x44, 0x55, 0xff});
+  ASSERT_EQ(nullptr, sdp_conn_originate(bd_addr_fail));
+
   SDP_Dumpsys(1);
 }
