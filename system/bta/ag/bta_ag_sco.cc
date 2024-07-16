@@ -549,9 +549,9 @@ void bta_ag_create_sco(tBTA_AG_SCB* p_scb, bool is_orig) {
                 bluetooth::hci::OpCode::ENHANCED_SETUP_SYNCHRONOUS_CONNECTION))) {
       if (esco_codec == tBTA_AG_UUID_CODEC::UUID_CODEC_MSBC ||
           esco_codec == tBTA_AG_UUID_CODEC::UUID_CODEC_LC3) {
-        get_btm_client_interface().sco.BTM_WriteVoiceSettings(BTM_VOICE_SETTING_TRANS);
+        BTM_WriteVoiceSettings(BTM_VOICE_SETTING_TRANS);
       } else {
-        get_btm_client_interface().sco.BTM_WriteVoiceSettings(BTM_VOICE_SETTING_CVSD);
+        BTM_WriteVoiceSettings(BTM_VOICE_SETTING_CVSD);
       }
     }
 
