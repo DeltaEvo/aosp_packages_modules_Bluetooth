@@ -351,8 +351,8 @@ bool A2dpCodecConfig::setCodecUserConfig(const btav_a2dp_codec_config_t& codec_u
   codec_user_config_ = codec_user_config;
   btav_a2dp_codec_config_t saved_codec_audio_config = codec_audio_config_;
   codec_audio_config_ = codec_audio_config;
-  bool success = setCodecConfig(p_peer_codec_info, is_capability, p_result_codec_config);
-  if (!success) {
+  auto status = setCodecConfig(p_peer_codec_info, is_capability, p_result_codec_config);
+  if (status != A2DP_SUCCESS) {
     // Restore the local copy of the user and audio config
     codec_user_config_ = saved_codec_user_config;
     codec_audio_config_ = saved_codec_audio_config;
@@ -723,7 +723,8 @@ bool A2dpCodecs::setCodecConfig(const uint8_t* p_peer_codec_info, bool is_capabi
   if (a2dp_codec_config == nullptr) {
     return false;
   }
-  if (!a2dp_codec_config->setCodecConfig(p_peer_codec_info, is_capability, p_result_codec_config)) {
+  if (a2dp_codec_config->setCodecConfig(p_peer_codec_info, is_capability, p_result_codec_config) !=
+      A2DP_SUCCESS) {
     return false;
   }
   if (select_current_codec) {
@@ -739,7 +740,8 @@ bool A2dpCodecs::setSinkCodecConfig(const uint8_t* p_peer_codec_info, bool is_ca
   if (a2dp_codec_config == nullptr) {
     return false;
   }
-  if (!a2dp_codec_config->setCodecConfig(p_peer_codec_info, is_capability, p_result_codec_config)) {
+  if (a2dp_codec_config->setCodecConfig(p_peer_codec_info, is_capability, p_result_codec_config) !=
+      A2DP_SUCCESS) {
     return false;
   }
   if (select_current_codec) {

@@ -163,9 +163,9 @@ protected:
   // The result codec configuration is stored in |p_result_codec_config|.
   // See |A2dpCodecs.setCodecConfig| for detailed description of
   // the actual mechanism used to compute the configuration.
-  // Returns true on success, othewise false.
-  virtual bool setCodecConfig(const uint8_t* p_peer_codec_info, bool is_capability,
-                              uint8_t* p_result_codec_config) = 0;
+  // Returns A2DP_SUCCESS on success, a descriptive error code otherwise.
+  virtual tA2DP_STATUS setCodecConfig(const uint8_t* p_peer_codec_info, bool is_capability,
+                                      uint8_t* p_result_codec_config) = 0;
 
   // Sets the user prefered codec configuration.
   // |codec_user_config| contains the preferred codec user configuration.

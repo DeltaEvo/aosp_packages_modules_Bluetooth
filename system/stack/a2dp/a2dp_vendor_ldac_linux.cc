@@ -109,9 +109,10 @@ bool A2dpCodecConfigLdacSource::useRtpHeaderMarkerBit() const { return false; }
 
 void A2dpCodecConfigLdacSource::debug_codec_dump(int fd) {}
 
-bool A2dpCodecConfigLdacBase::setCodecConfig(const uint8_t* p_peer_codec_info, bool is_capability,
-                                             uint8_t* p_result_codec_config) {
-  return false;
+tA2DP_STATUS A2dpCodecConfigLdacBase::setCodecConfig(const uint8_t* p_peer_codec_info,
+                                                     bool is_capability,
+                                                     uint8_t* p_result_codec_config) {
+  return AVDTP_UNSUPPORTED_CONFIGURATION;
 }
 
 bool A2dpCodecConfigLdacBase::setPeerCodecCapabilities(const uint8_t* p_peer_codec_capabilities) {
