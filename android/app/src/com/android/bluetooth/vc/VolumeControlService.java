@@ -200,6 +200,11 @@ public class VolumeControlService extends ProfileService {
     private final Map<Integer, Boolean> mGroupMuteCache = new HashMap<>();
     private final Map<BluetoothDevice, Integer> mDeviceVolumeCache = new HashMap<>();
 
+    /* As defined by Volume Control Service 1.0.1, 3.3.1. Volume Flags behavior.
+     * User Set Volume Setting means that remote keeps volume in its cache.
+     */
+    @VisibleForTesting static final int VOLUME_FLAGS_PERSISTED_USER_SET_VOLUME_MASK = 0x01;
+
     @VisibleForTesting ServiceFactory mFactory = new ServiceFactory();
 
     public VolumeControlService(Context ctx) {
@@ -862,14 +867,22 @@ public class VolumeControlService extends ProfileService {
         }
     }
 
+    int getBleVolumeFromCurrentStream() {
+        int streamType = getBluetoothContextualVolumeStream();
+        int streamVolume = mAudioManager.getStreamVolume(streamType);
+        int streamMaxVolume = mAudioManager.getStreamMaxVolume(streamType);
+
+        /* leaudio expect volume value in range 0 to 255 */
+        return (int) Math.round((double) streamVolume * LE_AUDIO_MAX_VOL / streamMaxVolume);
+    }
+
     void handleVolumeControlChanged(
-            BluetoothDevice device, int groupId, int volume, boolean mute, boolean isAutonomous) {
-
-        if (isAutonomous && device != null) {
-            Log.e(TAG, "We expect only group notification for autonomous updates");
-            return;
-        }
-
+            BluetoothDevice device,
+            int groupId,
+            int volume,
+            int flags,
+            boolean mute,
+            boolean isAutonomous) {
         if (groupId == IBluetoothLeAudio.LE_AUDIO_GROUP_ID_INVALID) {
             LeAudioService leAudioService = mFactory.getLeAudioService();
             if (leAudioService == null) {
@@ -886,6 +899,34 @@ public class VolumeControlService extends ProfileService {
 
         int groupVolume = getGroupVolume(groupId);
         Boolean groupMute = getGroupMute(groupId);
+
+        if (isAutonomous && device != null) {
+            Log.i(
+                    TAG,
+                    ("Initial volume set after connect, volume: " + volume)
+                            + (", mute: " + mute)
+                            + (", flags: " + flags));
+            /* We are here, because system has just started and LeAudio device is connected. If
+             * remote device has User Persistent flag set or the volume != 0, Android sets the
+             * volume to local cache and to the audio system. If Reset Flag is set and remote has
+             * volume set to 0, then Android sets to remote devices either cached volume volume
+             * taken from audio manager. Note, to match BR/EDR behavior, don't show volume change in
+             * UI here
+             */
+            if ((flags & VOLUME_FLAGS_PERSISTED_USER_SET_VOLUME_MASK) == 0x01 || (volume != 0)) {
+                updateGroupCacheAndAudioSystem(groupId, volume, mute, false);
+            } else {
+                if (groupVolume != IBluetoothVolumeControl.VOLUME_CONTROL_UNKNOWN_VOLUME) {
+                    Log.i(TAG, "Setting volume: " + groupVolume + " to the group: " + groupId);
+                    setGroupVolume(groupId, groupVolume);
+                } else {
+                    int vol = getBleVolumeFromCurrentStream();
+                    Log.i(TAG, "Setting system volume: " + vol + " to the group: " + groupId);
+                    setGroupVolume(groupId, getBleVolumeFromCurrentStream());
+                }
+            }
+            return;
+        }
 
         if (Flags.leaudioBroadcastVolumeControlForConnectedDevices()) {
             Log.i(TAG, "handleVolumeControlChanged: " + device + "; volume: " + volume);
@@ -904,16 +945,6 @@ public class VolumeControlService extends ProfileService {
                 // notify device volume changed
                 notifyDevicesVolumeChanged(mCallbacks, Arrays.asList(device), Optional.of(volume));
             }
-        }
-
-        if (groupVolume == IBluetoothVolumeControl.VOLUME_CONTROL_UNKNOWN_VOLUME) {
-            /* We are here, because system was just started and LeAudio device just connected.
-             * In such case, we take Volume stored on remote device and apply it to our cache and
-             * audio system.
-             * Note, to match BR/EDR behavior, don't show volume change in UI here
-             */
-            updateGroupCacheAndAudioSystem(groupId, volume, mute, false);
-            return;
         }
 
         if (!isAutonomous) {
@@ -1119,6 +1150,7 @@ public class VolumeControlService extends ProfileService {
                     stackEvent.device,
                     stackEvent.valueInt1,
                     stackEvent.valueInt2,
+                    stackEvent.valueInt3,
                     stackEvent.valueBool1,
                     stackEvent.valueBool2);
             return;

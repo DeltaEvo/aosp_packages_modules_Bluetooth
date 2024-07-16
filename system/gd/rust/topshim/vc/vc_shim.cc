@@ -98,10 +98,10 @@ public:
     topshim::rust::internal::connection_state_cb(state, address);
   }
 
-  void OnVolumeStateChanged(const RawAddress& address, uint8_t volume, bool mute,
+  void OnVolumeStateChanged(const RawAddress& address, uint8_t volume, bool mute, uint8_t flags,
                             bool is_autonomous) override {
-    log::info("address={}, volume={}, mute={}, is_autonomous={}", ADDRESS_TO_LOGGABLE_CSTR(address),
-              volume, mute, is_autonomous);
+    log::info("address={}, volume={}, mute={}, flags={}, is_autonomous={}",
+              ADDRESS_TO_LOGGABLE_CSTR(address), volume, mute, flags, is_autonomous);
     topshim::rust::internal::volume_state_cb(address, volume, mute, is_autonomous);
   }
 
