@@ -577,3 +577,16 @@ struct tLegacyStackSdbCallback {
 }  // namespace stack
 }  // namespace legacy
 }  // namespace bluetooth
+
+/*******************************************************************************
+ *
+ * Function         SDP_Dumpsys
+ *
+ * Description      Dumps readable content of the module to the filedescriptor
+ *
+ * Parameters:      fd        - Valid file descriptor
+ *
+ * Returns          None
+ *
+ ******************************************************************************/
+void SDP_Dumpsys(int fd);

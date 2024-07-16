@@ -26,13 +26,14 @@
 
 #include "stack/include/sdp_api.h"
 
+#include <base/strings/stringprintf.h>
 #include <bluetooth/log.h>
 #include <string.h>
 
 #include <cstdint>
 
 #include "internal_include/bt_target.h"
-#include "os/log.h"
+#include "main/shim/dumpsys.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/sdp_api.h"
@@ -44,6 +45,11 @@
 
 using bluetooth::Uuid;
 using namespace bluetooth;
+
+namespace {
+constexpr unsigned kMaxSdpConnections = static_cast<unsigned>(SDP_MAX_CONNECTIONS);
+constexpr unsigned kMaxSdpRecords = static_cast<unsigned>(SDP_MAX_DISC_SERVER_RECS);
+}  // namespace
 
 /*******************************************************************************
  *
@@ -1106,3 +1112,45 @@ const bluetooth::legacy::stack::sdp::tSdpApi*
 bluetooth::legacy::stack::sdp::get_legacy_stack_sdp_api() {
   return &api_;
 }
+
+extern void BTA_SdpDumpsys(int fd);
+
+#define DUMPSYS_TAG "shim::legacy::sdp"
+
+namespace {
+
+void SDP_DumpConnectionControlBlock(int fd, const tCONN_CB& conn_cb) {
+  if (conn_cb.device_address == RawAddress::kEmpty) {
+    return;
+  }
+  LOG_DUMPSYS(fd, "peer:%s discovery_state:%s", fmt::format("{}", conn_cb.device_address).c_str(),
+              sdp_disc_wait_text(conn_cb.disc_state).c_str());
+  LOG_DUMPSYS(fd, "  connection_state:%s connection_flags:0x%02x mtu:%hu l2cap_cid:%hu",
+              sdp_state_text(conn_cb.con_state).c_str(), conn_cb.con_flags, conn_cb.rem_mtu_size,
+              conn_cb.connection_id);
+
+  const uint64_t remaining_ms = alarm_get_remaining_ms(conn_cb.sdp_conn_timer);
+  if (remaining_ms) {
+    LOG_DUMPSYS(fd, "  timer_set:%Lu ms", static_cast<long long>(remaining_ms));
+  }
+  if (conn_cb.num_handles >= kMaxSdpRecords) {
+    LOG_DUMPSYS(fd, "  WARNING - Number handles:%hu exceeds max handles:%u", conn_cb.num_handles,
+                kMaxSdpRecords);
+  } else {
+    for (int i = 0; i < conn_cb.num_handles; i++) {
+      LOG_DUMPSYS(fd, "  handle:%u", conn_cb.handles[i]);
+    }
+  }
+}
+
+}  // namespace
+
+void SDP_Dumpsys(int fd) {
+  LOG_DUMPSYS_TITLE(fd, DUMPSYS_TAG);
+  LOG_DUMPSYS(fd, "max_attribute_list_size:%hu max_records_per_search:%hu",
+              sdp_cb.max_attr_list_size, sdp_cb.max_recs_per_search);
+  for (unsigned i = 0; i < kMaxSdpConnections; i++) {
+    SDP_DumpConnectionControlBlock(fd, sdp_cb.ccb[i]);
+  }
+}
+#undef DUMPSYS_TAG
