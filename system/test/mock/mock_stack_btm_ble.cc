@@ -46,8 +46,6 @@ struct BTM_BlePasskeyReply BTM_BlePasskeyReply;
 struct BTM_BleReadPhy BTM_BleReadPhy;
 struct BTM_BleReceiverTest BTM_BleReceiverTest;
 struct BTM_BleSecureConnectionOobDataReply BTM_BleSecureConnectionOobDataReply;
-struct BTM_BleSetPhy BTM_BleSetPhy;
-struct BTM_BleSetPrefConnParams BTM_BleSetPrefConnParams;
 struct BTM_BleTestEnd BTM_BleTestEnd;
 struct BTM_BleTransmitterTest BTM_BleTransmitterTest;
 struct BTM_BleVerifySignature BTM_BleVerifySignature;
@@ -154,18 +152,6 @@ void BTM_BleReceiverTest(uint8_t rx_freq, tBTM_CMPL_CB* p_cmd_cmpl_cback) {
 void BTM_BleSecureConnectionOobDataReply(const RawAddress& bd_addr, uint8_t* p_c, uint8_t* p_r) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_ble::BTM_BleSecureConnectionOobDataReply(bd_addr, p_c, p_r);
-}
-void BTM_BleSetPhy(const RawAddress& bd_addr, uint8_t tx_phys, uint8_t rx_phys,
-                   uint16_t phy_options) {
-  inc_func_call_count(__func__);
-  test::mock::stack_btm_ble::BTM_BleSetPhy(bd_addr, tx_phys, rx_phys, phy_options);
-}
-void BTM_BleSetPrefConnParams(const RawAddress& bd_addr, uint16_t min_conn_int,
-                              uint16_t max_conn_int, uint16_t peripheral_latency,
-                              uint16_t supervision_tout) {
-  inc_func_call_count(__func__);
-  test::mock::stack_btm_ble::BTM_BleSetPrefConnParams(bd_addr, min_conn_int, max_conn_int,
-                                                      peripheral_latency, supervision_tout);
 }
 void BTM_BleTestEnd(tBTM_CMPL_CB* p_cmd_cmpl_cback) {
   inc_func_call_count(__func__);
