@@ -98,7 +98,7 @@ $(bluetooth_cert_src_and_bin_zip): PRIVATE_host_python_smp_packets_library := $(
 $(bluetooth_cert_src_and_bin_zip): PRIVATE_target_executables := $(LOCAL_target_executables)
 $(bluetooth_cert_src_and_bin_zip): PRIVATE_target_libraries := $(LOCAL_target_libraries)
 $(bluetooth_cert_src_and_bin_zip): $(SOONG_ZIP) $(LOCAL_cert_test_sources) \
-		$(LOCAL_host_executables) $(LOCAL_host_libraries) $(LOCAL_host_python_libraries) \
+		$(LOCAL_host_executables) $(LOCAL_host_libraries) \
 		$(LOCAL_host_python_hci_packets_library) \
 		$(LOCAL_host_python_smp_packets_library) \
 		$(LOCAL_target_executables) $(LOCAL_target_libraries)

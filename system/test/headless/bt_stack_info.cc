@@ -30,10 +30,8 @@ BtStackInfo::BtStackInfo() {
   {
     std::promise<pid_t> promise;
     auto future = promise.get_future();
-    do_in_main_thread(
-            FROM_HERE,
-            base::BindOnce([](std::promise<pid_t> promise) { promise.set_value(getpid()); },
-                           std::move(promise)));
+    do_in_main_thread(base::BindOnce(
+            [](std::promise<pid_t> promise) { promise.set_value(getpid()); }, std::move(promise)));
     main_pid_ = future.get();
   }
 

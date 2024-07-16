@@ -115,16 +115,13 @@ static const tA2DP_DECODER_INTERFACE a2dp_decoder_interface_sbc = {
 static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilitySbc(const tA2DP_SBC_CIE* p_cap,
                                                        const uint8_t* p_codec_info,
                                                        bool is_capability);
-static void A2DP_ParseMplHeaderSbc(uint8_t* p_src, bool* p_frag, bool* p_start, bool* p_last,
-                                   uint8_t* p_num);
 
 // Builds the SBC Media Codec Capabilities byte sequence beginning from the
 // LOSC octet. |media_type| is the media type |AVDT_MEDIA_TYPE_*|.
 // |p_ie| is a pointer to the SBC Codec Information Element information.
 // The result is stored in |p_result|. Returns A2DP_SUCCESS on success,
 // otherwise the corresponding A2DP error status code.
-static tA2DP_STATUS A2DP_BuildInfoSbc(uint8_t media_type, const tA2DP_SBC_CIE* p_ie,
-                                      uint8_t* p_result) {
+static bool A2DP_BuildInfoSbc(uint8_t media_type, const tA2DP_SBC_CIE* p_ie, uint8_t* p_result) {
   if (p_ie == NULL || p_result == NULL || (p_ie->samp_freq & ~A2DP_SBC_IE_SAMP_FREQ_MSK) ||
       (p_ie->ch_mode & ~A2DP_SBC_IE_CH_MD_MSK) || (p_ie->block_len & ~A2DP_SBC_IE_BLOCKS_MSK) ||
       (p_ie->num_subbands & ~A2DP_SBC_IE_SUBBAND_MSK) ||
@@ -134,7 +131,7 @@ static tA2DP_STATUS A2DP_BuildInfoSbc(uint8_t media_type, const tA2DP_SBC_CIE* p
       (p_ie->max_bitpool < A2DP_SBC_IE_MIN_BITPOOL) ||
       (p_ie->max_bitpool > A2DP_SBC_IE_MAX_BITPOOL)) {
     /* if any unused bit is set */
-    return A2DP_INVALID_PARAMS;
+    return false;
   }
 
   *p_result++ = A2DP_SBC_INFO_LEN;
@@ -149,7 +146,7 @@ static tA2DP_STATUS A2DP_BuildInfoSbc(uint8_t media_type, const tA2DP_SBC_CIE* p
   *p_result++ = p_ie->min_bitpool;
   *p_result = p_ie->max_bitpool;
 
-  return A2DP_SUCCESS;
+  return true;
 }
 
 // Parses the SBC Media Codec Capabilities byte sequence beginning from the
@@ -165,20 +162,20 @@ static tA2DP_STATUS A2DP_ParseInfoSbc(tA2DP_SBC_CIE* p_ie, const uint8_t* p_code
   tA2DP_CODEC_TYPE codec_type;
 
   if (p_ie == NULL || p_codec_info == NULL) {
-    return A2DP_INVALID_PARAMS;
+    return AVDTP_UNSUPPORTED_CONFIGURATION;
   }
 
   // Check the codec capability length
   losc = *p_codec_info++;
   if (losc != A2DP_SBC_INFO_LEN) {
-    return A2DP_WRONG_CODEC;
+    return AVDTP_UNSUPPORTED_CONFIGURATION;
   }
 
   media_type = (*p_codec_info++) >> 4;
-  codec_type = *p_codec_info++;
+  codec_type = static_cast<tA2DP_CODEC_TYPE>(*p_codec_info++);
   /* Check the Media Type and Media Codec Type */
   if (media_type != AVDT_MEDIA_TYPE_AUDIO || codec_type != A2DP_MEDIA_CT_SBC) {
-    return A2DP_WRONG_CODEC;
+    return AVDTP_UNSUPPORTED_CONFIGURATION;
   }
 
   p_ie->samp_freq = *p_codec_info & A2DP_SBC_IE_SAMP_FREQ_MSK;
@@ -191,50 +188,50 @@ static tA2DP_STATUS A2DP_ParseInfoSbc(tA2DP_SBC_CIE* p_ie, const uint8_t* p_code
   p_ie->min_bitpool = *p_codec_info++;
   p_ie->max_bitpool = *p_codec_info++;
   if (p_ie->min_bitpool < A2DP_SBC_IE_MIN_BITPOOL || p_ie->min_bitpool > A2DP_SBC_IE_MAX_BITPOOL) {
-    return A2DP_BAD_MIN_BITPOOL;
+    return A2DP_INVALID_MINIMUM_BITPOOL_VALUE;
   }
 
   if (p_ie->max_bitpool < A2DP_SBC_IE_MIN_BITPOOL || p_ie->max_bitpool > A2DP_SBC_IE_MAX_BITPOOL ||
       p_ie->max_bitpool < p_ie->min_bitpool) {
-    return A2DP_BAD_MAX_BITPOOL;
+    return A2DP_INVALID_MAXIMUM_BITPOOL_VALUE;
   }
 
   if (is_capability) {
     // NOTE: The checks here are very liberal. We should be using more
     // pedantic checks specific to the SRC or SNK as specified in the spec.
     if (A2DP_BitsSet(p_ie->samp_freq) == A2DP_SET_ZERO_BIT) {
-      return A2DP_BAD_SAMP_FREQ;
+      return A2DP_INVALID_SAMPLING_FREQUENCY;
     }
     if (A2DP_BitsSet(p_ie->ch_mode) == A2DP_SET_ZERO_BIT) {
-      return A2DP_BAD_CH_MODE;
+      return A2DP_INVALID_CHANNEL_MODE;
     }
     if (A2DP_BitsSet(p_ie->block_len) == A2DP_SET_ZERO_BIT) {
-      return A2DP_BAD_BLOCK_LEN;
+      return A2DP_INVALID_BLOCK_LENGTH;
     }
     if (A2DP_BitsSet(p_ie->num_subbands) == A2DP_SET_ZERO_BIT) {
-      return A2DP_BAD_SUBBANDS;
+      return A2DP_INVALID_SUBBANDS;
     }
     if (A2DP_BitsSet(p_ie->alloc_method) == A2DP_SET_ZERO_BIT) {
-      return A2DP_BAD_ALLOC_METHOD;
+      return A2DP_INVALID_ALLOCATION_METHOD;
     }
 
     return A2DP_SUCCESS;
   }
 
   if (A2DP_BitsSet(p_ie->samp_freq) != A2DP_SET_ONE_BIT) {
-    return A2DP_BAD_SAMP_FREQ;
+    return A2DP_INVALID_SAMPLING_FREQUENCY;
   }
   if (A2DP_BitsSet(p_ie->ch_mode) != A2DP_SET_ONE_BIT) {
-    return A2DP_BAD_CH_MODE;
+    return A2DP_INVALID_CHANNEL_MODE;
   }
   if (A2DP_BitsSet(p_ie->block_len) != A2DP_SET_ONE_BIT) {
-    return A2DP_BAD_BLOCK_LEN;
+    return A2DP_INVALID_BLOCK_LENGTH;
   }
   if (A2DP_BitsSet(p_ie->num_subbands) != A2DP_SET_ONE_BIT) {
-    return A2DP_BAD_SUBBANDS;
+    return A2DP_INVALID_SUBBANDS;
   }
   if (A2DP_BitsSet(p_ie->alloc_method) != A2DP_SET_ONE_BIT) {
-    return A2DP_BAD_ALLOC_METHOD;
+    return A2DP_INVALID_ALLOCATION_METHOD;
   }
 
   return A2DP_SUCCESS;
@@ -266,40 +263,6 @@ static void A2DP_BuildMediaPayloadHeaderSbc(uint8_t* p_dst, bool frag, bool star
   *p_dst |= (A2DP_SBC_HDR_NUM_MSK & num);
 }
 
-/******************************************************************************
- *
- * Function         A2DP_ParseMplHeaderSbc
- *
- * Description      This function is called by an application to parse
- *                  the SBC Media Payload header.
- *                  Input Parameters:
- *                      p_src:  the byte sequence to parse..
- *
- *                  Output Parameters:
- *                      frag:  1, if fragmented. 0, otherwise.
- *
- *                      start:  1, if the starting packet of a fragmented frame.
- *
- *                      last:  1, if the last packet of a fragmented frame.
- *
- *                      num:  If frag is 1, this is the number of remaining
- *                            fragments
- *                            (including this fragment) of this frame.
- *                            If frag is 0, this is the number of frames in
- *                            this packet.
- *
- * Returns          void.
- *****************************************************************************/
-UNUSED_ATTR static void A2DP_ParseMplHeaderSbc(uint8_t* p_src, bool* p_frag, bool* p_start,
-                                               bool* p_last, uint8_t* p_num) {
-  if (p_src && p_frag && p_start && p_last && p_num) {
-    *p_frag = (*p_src & A2DP_SBC_HDR_F_MSK) ? true : false;
-    *p_start = (*p_src & A2DP_SBC_HDR_S_MSK) ? true : false;
-    *p_last = (*p_src & A2DP_SBC_HDR_L_MSK) ? true : false;
-    *p_num = (*p_src & A2DP_SBC_HDR_NUM_MSK);
-  }
-}
-
 const char* A2DP_CodecNameSbc(const uint8_t* /* p_codec_info */) { return "SBC"; }
 
 bool A2DP_IsCodecValidSbc(const uint8_t* p_codec_info) {
@@ -315,16 +278,9 @@ bool A2DP_IsSinkCodecSupportedSbc(const uint8_t* p_codec_info) {
          A2DP_SUCCESS;
 }
 
-bool A2DP_IsPeerSourceCodecSupportedSbc(const uint8_t* p_codec_info) {
-  return A2DP_CodecInfoMatchesCapabilitySbc(&a2dp_sbc_sink_caps, p_codec_info, true) ==
-         A2DP_SUCCESS;
-}
-
 void A2DP_InitDefaultCodecSbc(uint8_t* p_codec_info) {
-  if (A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &a2dp_sbc_default_config, p_codec_info) !=
-      A2DP_SUCCESS) {
-    log::error("A2DP_BuildInfoSbc failed");
-  }
+  log::assert_that(A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &a2dp_sbc_default_config, p_codec_info),
+                   "Failed to build default media codec capabilities");
 }
 
 // Checks whether A2DP SBC codec configuration matches with a device's codec
@@ -362,37 +318,37 @@ static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilitySbc(const tA2DP_SBC_CIE* p_ca
 
   /* sampling frequency */
   if ((cfg_cie.samp_freq & p_cap->samp_freq) == 0) {
-    return A2DP_NS_SAMP_FREQ;
+    return A2DP_NOT_SUPPORTED_SAMPLING_FREQUENCY;
   }
 
   /* channel mode */
   if ((cfg_cie.ch_mode & p_cap->ch_mode) == 0) {
-    return A2DP_NS_CH_MODE;
+    return A2DP_NOT_SUPPORTED_CHANNEL_MODE;
   }
 
   /* block length */
   if ((cfg_cie.block_len & p_cap->block_len) == 0) {
-    return A2DP_BAD_BLOCK_LEN;
+    return A2DP_INVALID_BLOCK_LENGTH;
   }
 
   /* subbands */
   if ((cfg_cie.num_subbands & p_cap->num_subbands) == 0) {
-    return A2DP_NS_SUBBANDS;
+    return A2DP_NOT_SUPPORTED_SUBBANDS;
   }
 
   /* allocation method */
   if ((cfg_cie.alloc_method & p_cap->alloc_method) == 0) {
-    return A2DP_NS_ALLOC_METHOD;
+    return A2DP_NOT_SUPPORTED_ALLOCATION_METHOD;
   }
 
   /* min bitpool */
   if (cfg_cie.min_bitpool > p_cap->max_bitpool) {
-    return A2DP_NS_MIN_BITPOOL;
+    return A2DP_NOT_SUPPORTED_MINIMUM_BITPOOL_VALUE;
   }
 
   /* max bitpool */
   if (cfg_cie.max_bitpool < p_cap->min_bitpool) {
-    return A2DP_NS_MAX_BITPOOL;
+    return A2DP_NOT_SUPPORTED_MAXIMUM_BITPOOL_VALUE;
   }
 
   return A2DP_SUCCESS;
@@ -797,7 +753,7 @@ bool A2DP_AdjustCodecSbc(uint8_t* p_codec_info) {
     cfg_cie.max_bitpool = A2DP_SBC_MAX_BITPOOL;
   }
 
-  return A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &cfg_cie, p_codec_info) == A2DP_SUCCESS;
+  return A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &cfg_cie, p_codec_info);
 }
 
 btav_a2dp_codec_index_t A2DP_SourceCodecIndexSbc(const uint8_t* /* p_codec_info */) {
@@ -813,42 +769,11 @@ const char* A2DP_CodecIndexStrSbc(void) { return "SBC"; }
 const char* A2DP_CodecIndexStrSbcSink(void) { return "SBC SINK"; }
 
 bool A2DP_InitCodecConfigSbc(AvdtpSepConfig* p_cfg) {
-  if (A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &a2dp_sbc_source_caps, p_cfg->codec_info) !=
-      A2DP_SUCCESS) {
-    return false;
-  }
-
-  return true;
+  return A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &a2dp_sbc_source_caps, p_cfg->codec_info);
 }
 
 bool A2DP_InitCodecConfigSbcSink(AvdtpSepConfig* p_cfg) {
-  if (A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &a2dp_sbc_sink_caps, p_cfg->codec_info) !=
-      A2DP_SUCCESS) {
-    return false;
-  }
-
-  return true;
-}
-
-UNUSED_ATTR static void build_codec_config(const tA2DP_SBC_CIE& config_cie,
-                                           btav_a2dp_codec_config_t* result) {
-  if (config_cie.samp_freq & A2DP_SBC_IE_SAMP_FREQ_44) {
-    result->sample_rate |= BTAV_A2DP_CODEC_SAMPLE_RATE_44100;
-  }
-  if (config_cie.samp_freq & A2DP_SBC_IE_SAMP_FREQ_48) {
-    result->sample_rate |= BTAV_A2DP_CODEC_SAMPLE_RATE_48000;
-  }
-
-  result->bits_per_sample = config_cie.bits_per_sample;
-
-  if (config_cie.ch_mode & A2DP_SBC_IE_CH_MD_MONO) {
-    result->channel_mode |= BTAV_A2DP_CODEC_CHANNEL_MODE_MONO;
-  }
-
-  if (config_cie.ch_mode &
-      (A2DP_SBC_IE_CH_MD_STEREO | A2DP_SBC_IE_CH_MD_JOINT | A2DP_SBC_IE_CH_MD_DUAL)) {
-    result->channel_mode |= BTAV_A2DP_CODEC_CHANNEL_MODE_STEREO;
-  }
+  return A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &a2dp_sbc_sink_caps, p_cfg->codec_info);
 }
 
 A2dpCodecConfigSbcSource::A2dpCodecConfigSbcSource(btav_a2dp_codec_priority_t codec_priority)
@@ -879,16 +804,6 @@ A2dpCodecConfigSbcSource::A2dpCodecConfigSbcSource(btav_a2dp_codec_priority_t co
 A2dpCodecConfigSbcSource::~A2dpCodecConfigSbcSource() {}
 
 bool A2dpCodecConfigSbcSource::init() {
-  if (!isValid()) {
-    return false;
-  }
-
-  // Load the encoder
-  if (!A2DP_LoadEncoderSbc()) {
-    log::error("cannot load the encoder");
-    return false;
-  }
-
   return true;
 }
 
@@ -1082,19 +997,13 @@ bool A2dpCodecConfigSbcBase::setCodecConfig(const uint8_t* p_peer_codec_info, bo
     log::error("can't parse peer's capabilities: error = {}", status);
     goto fail;
   }
+
   // Try using the prefered peer codec config (if valid), instead of the peer
   // capability.
   if (is_capability) {
-    if (is_source_) {
-      if (A2DP_IsCodecValidSbc(ota_codec_peer_config_)) {
-        status =
-            A2DP_ParseInfoSbc(&peer_info_cie, ota_codec_peer_config_, false);
-      }
-    } else {
-      if (A2DP_IsCodecValidSbc(ota_codec_peer_config_)) {
-        status =
-            A2DP_ParseInfoSbc(&peer_info_cie, ota_codec_peer_config_, false);
-      }
+    if (A2DP_IsCodecValidSbc(ota_codec_peer_config_)) {
+      status =
+          A2DP_ParseInfoSbc(&peer_info_cie, ota_codec_peer_config_, false);
     }
     if (status != A2DP_SUCCESS) {
       // Use the peer codec capability
@@ -1394,8 +1303,7 @@ bool A2dpCodecConfigSbcBase::setCodecConfig(const uint8_t* p_peer_codec_info, bo
     goto fail;
   }
 
-  if (A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &result_config_cie, p_result_codec_config) !=
-      A2DP_SUCCESS) {
+  if (!A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &result_config_cie, p_result_codec_config)) {
     goto fail;
   }
 
@@ -1418,13 +1326,16 @@ bool A2dpCodecConfigSbcBase::setCodecConfig(const uint8_t* p_peer_codec_info, bo
   // Create a local copy of the peer codec capability/config, and the
   // result codec config.
   if (is_capability) {
-    status = A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &peer_info_cie, ota_codec_peer_capability_);
+    log::assert_that(
+            A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &peer_info_cie, ota_codec_peer_capability_),
+            "Failed to build media codec capabilities");
   } else {
-    status = A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &peer_info_cie, ota_codec_peer_config_);
+    log::assert_that(
+            A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &peer_info_cie, ota_codec_peer_config_),
+            "Failed to build media codec capabilities");
   }
-  log::assert_that(status == A2DP_SUCCESS, "assert failed: status == A2DP_SUCCESS");
-  status = A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &result_config_cie, ota_codec_config_);
-  log::assert_that(status == A2DP_SUCCESS, "assert failed: status == A2DP_SUCCESS");
+  log::assert_that(A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &result_config_cie, ota_codec_config_),
+                   "Failed to build media codec capabilities");
   return true;
 
 fail:
@@ -1487,8 +1398,9 @@ bool A2dpCodecConfigSbcBase::setPeerCodecCapabilities(const uint8_t* p_peer_code
     codec_selectable_capability_.channel_mode |= BTAV_A2DP_CODEC_CHANNEL_MODE_STEREO;
   }
 
-  status = A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &peer_info_cie, ota_codec_peer_capability_);
-  log::assert_that(status == A2DP_SUCCESS, "assert failed: status == A2DP_SUCCESS");
+  log::assert_that(
+          A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &peer_info_cie, ota_codec_peer_capability_),
+          "Failed to build media codec capabilities");
   return true;
 
 fail:
@@ -1506,16 +1418,6 @@ A2dpCodecConfigSbcSink::A2dpCodecConfigSbcSink(btav_a2dp_codec_priority_t codec_
 A2dpCodecConfigSbcSink::~A2dpCodecConfigSbcSink() {}
 
 bool A2dpCodecConfigSbcSink::init() {
-  if (!isValid()) {
-    return false;
-  }
-
-  // Load the decoder
-  if (!A2DP_LoadDecoderSbc()) {
-    log::error("cannot load the decoder");
-    return false;
-  }
-
   return true;
 }
 

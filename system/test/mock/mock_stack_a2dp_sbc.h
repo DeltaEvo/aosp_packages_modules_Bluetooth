@@ -338,17 +338,6 @@ struct A2DP_InitDefaultCodecSbc {
 };
 extern struct A2DP_InitDefaultCodecSbc A2DP_InitDefaultCodecSbc;
 
-// Name: A2DP_IsPeerSourceCodecSupportedSbc
-// Params: const uint8_t* p_codec_info
-// Return: bool
-struct A2DP_IsPeerSourceCodecSupportedSbc {
-  static bool return_value;
-  std::function<bool(const uint8_t* p_codec_info)> body{
-          [](const uint8_t* /* p_codec_info */) { return return_value; }};
-  bool operator()(const uint8_t* p_codec_info) { return body(p_codec_info); }
-};
-extern struct A2DP_IsPeerSourceCodecSupportedSbc A2DP_IsPeerSourceCodecSupportedSbc;
-
 // Name: A2DP_IsSinkCodecSupportedSbc
 // Params: const uint8_t* p_codec_info
 // Return: bool

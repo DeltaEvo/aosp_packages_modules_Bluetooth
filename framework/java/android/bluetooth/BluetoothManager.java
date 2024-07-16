@@ -16,6 +16,8 @@
 
 package android.bluetooth;
 
+import static com.android.modules.utils.build.SdkLevel.isAtLeastU;
+
 import android.annotation.RequiresFeature;
 import android.annotation.RequiresNoPermission;
 import android.annotation.RequiresPermission;
@@ -56,14 +58,20 @@ public final class BluetoothManager {
 
     /** @hide */
     public BluetoothManager(Context context) {
-        mAdapter = BluetoothAdapter.createAdapter(context.getAttributionSource());
-        mContext = context;
+        if (com.android.bluetooth.flags.Flags.overrideContextToSpecifyDeviceId() && isAtLeastU()) {
+            // Pin the context DeviceId prevent the associated attribution source to be obsolete
+            // TODO: b/343739429 -- pass the context to BluetoothAdapter constructor instead
+            mContext = context.createDeviceContext(Context.DEVICE_ID_DEFAULT);
+        } else {
+            mContext = context;
+        }
+        mAdapter = BluetoothAdapter.createAdapter(mContext.getAttributionSource());
     }
 
     /**
-     * Get the BLUETOOTH Adapter for this device.
+     * Get the BluetoothAdapter for this device.
      *
-     * @return the BLUETOOTH Adapter
+     * @return the BluetoothAdapter
      */
     @RequiresNoPermission
     public BluetoothAdapter getAdapter() {

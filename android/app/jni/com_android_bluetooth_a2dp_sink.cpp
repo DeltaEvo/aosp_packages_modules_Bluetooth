@@ -127,8 +127,6 @@ static void initNative(JNIEnv* env, jobject object, jint maxConnectedAudioDevice
     return;
   }
 
-  btif_av_sink_cleanup();
-
   if (mCallbacksObj != NULL) {
     log::warn("Cleaning up A2DP callback object");
     env->DeleteGlobalRef(mCallbacksObj);
@@ -202,11 +200,11 @@ static jboolean disconnectA2dpNative(JNIEnv* env, jobject /* object */, jbyteArr
 }
 
 static void informAudioFocusStateNative(JNIEnv* /* env */, jobject /* object */, jint focus_state) {
-  btif_av_sink_set_audio_focus_state((uint8_t)focus_state);
+  btif_av_sink_set_audio_focus_state(static_cast<uint8_t>(focus_state));
 }
 
 static void informAudioTrackGainNative(JNIEnv* /* env */, jobject /* object */, jfloat gain) {
-  btif_av_sink_set_audio_track_gain((float)gain);
+  btif_av_sink_set_audio_track_gain(static_cast<float>(gain));
 }
 
 static jboolean setActiveDeviceNative(JNIEnv* env, jobject /* object */, jbyteArray address) {
@@ -217,7 +215,7 @@ static jboolean setActiveDeviceNative(JNIEnv* env, jobject /* object */, jbyteAr
   }
 
   RawAddress rawAddress;
-  rawAddress.FromOctets((uint8_t*)addr);
+  rawAddress.FromOctets(reinterpret_cast<uint8_t*>(addr));
 
   log::info("{}", rawAddress);
   bt_status_t status = btif_av_sink_set_active_device(rawAddress);
@@ -231,13 +229,15 @@ static jboolean setActiveDeviceNative(JNIEnv* env, jobject /* object */, jbyteAr
 
 int register_com_android_bluetooth_a2dp_sink(JNIEnv* env) {
   const JNINativeMethod methods[] = {
-          {"initNative", "(I)V", (void*)initNative},
-          {"cleanupNative", "()V", (void*)cleanupNative},
-          {"connectA2dpNative", "([B)Z", (void*)connectA2dpNative},
-          {"disconnectA2dpNative", "([B)Z", (void*)disconnectA2dpNative},
-          {"informAudioFocusStateNative", "(I)V", (void*)informAudioFocusStateNative},
-          {"informAudioTrackGainNative", "(F)V", (void*)informAudioTrackGainNative},
-          {"setActiveDeviceNative", "([B)Z", (void*)setActiveDeviceNative},
+          {"initNative", "(I)V", reinterpret_cast<void*>(initNative)},
+          {"cleanupNative", "()V", reinterpret_cast<void*>(cleanupNative)},
+          {"connectA2dpNative", "([B)Z", reinterpret_cast<void*>(connectA2dpNative)},
+          {"disconnectA2dpNative", "([B)Z", reinterpret_cast<void*>(disconnectA2dpNative)},
+          {"informAudioFocusStateNative", "(I)V",
+           reinterpret_cast<void*>(informAudioFocusStateNative)},
+          {"informAudioTrackGainNative", "(F)V",
+           reinterpret_cast<void*>(informAudioTrackGainNative)},
+          {"setActiveDeviceNative", "([B)Z", reinterpret_cast<void*>(setActiveDeviceNative)},
   };
   const int result = REGISTER_NATIVE_METHODS(
           env, "com/android/bluetooth/a2dpsink/A2dpSinkNativeInterface", methods);

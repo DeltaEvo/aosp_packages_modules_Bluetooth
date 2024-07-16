@@ -742,7 +742,8 @@ struct LeAdvertisingManager::impl : public bluetooth::hci::LeAddressManagerCallb
   }
 
   void register_advertiser(
-          common::ContextualOnceCallback<void(uint8_t /* inst_id */, uint8_t /* status */)>
+          common::ContextualOnceCallback<void(uint8_t /* inst_id */,
+                                              AdvertisingCallback::AdvertisingStatus /* status */)>
                   callback) {
     AdvertiserId id = allocate_advertiser();
     if (id == kInvalidId) {
@@ -1753,7 +1754,8 @@ void LeAdvertisingManager::StartAdvertising(
 }
 
 void LeAdvertisingManager::RegisterAdvertiser(
-        common::ContextualOnceCallback<void(uint8_t /* inst_id */, uint8_t /* status */)>
+        common::ContextualOnceCallback<void(uint8_t /* inst_id */,
+                                            AdvertisingCallback::AdvertisingStatus /* status */)>
                 callback) {
   CallOn(pimpl_.get(), &impl::register_advertiser, std::move(callback));
 }

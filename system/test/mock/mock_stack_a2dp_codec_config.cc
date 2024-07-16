@@ -43,7 +43,7 @@ A2dpCodecConfig* A2dpCodecs::findSourceCodecConfig(btav_a2dp_codec_index_t /* co
   inc_func_call_count(__func__);
   return nullptr;
 }
-A2dpCodecConfig::A2dpCodecConfig(btav_a2dp_codec_index_t codec_index, uint64_t codec_id,
+A2dpCodecConfig::A2dpCodecConfig(btav_a2dp_codec_index_t codec_index, tA2DP_CODEC_ID codec_id,
                                  const std::string& name, btav_a2dp_codec_priority_t codec_priority)
     : codec_index_(codec_index),
       codec_id_(codec_id),
@@ -92,19 +92,11 @@ bool A2DP_IsPeerSinkCodecValid(const uint8_t* /* p_codec_info */) {
   inc_func_call_count(__func__);
   return false;
 }
-bool A2DP_IsPeerSourceCodecSupported(const uint8_t* /* p_codec_info */) {
-  inc_func_call_count(__func__);
-  return false;
-}
 bool A2DP_IsPeerSourceCodecValid(const uint8_t* /* p_codec_info */) {
   inc_func_call_count(__func__);
   return false;
 }
 bool A2DP_IsSinkCodecSupported(const uint8_t* /* p_codec_info */) {
-  inc_func_call_count(__func__);
-  return false;
-}
-bool A2DP_IsSinkCodecValid(const uint8_t* /* p_codec_info */) {
   inc_func_call_count(__func__);
   return false;
 }
@@ -129,10 +121,6 @@ bool A2dpCodecConfig::getCodecSpecificConfig(tBT_A2DP_OFFLOAD* /* p_a2dp_offload
   return false;
 }
 bool A2dpCodecConfig::isCodecConfigEmpty(const btav_a2dp_codec_config_t& /* codec_config */) {
-  inc_func_call_count(__func__);
-  return false;
-}
-bool A2dpCodecConfig::isValid() const {
   inc_func_call_count(__func__);
   return false;
 }
@@ -306,7 +294,7 @@ std::string A2dpCodecConfig::codecSampleRate2Str(
 }
 tA2DP_CODEC_TYPE A2DP_GetCodecType(const uint8_t* /* p_codec_info */) {
   inc_func_call_count(__func__);
-  return 0;
+  return A2DP_MEDIA_CT_SBC;
 }
 uint8_t A2DP_GetMediaType(const uint8_t* /* p_codec_info */) {
   inc_func_call_count(__func__);

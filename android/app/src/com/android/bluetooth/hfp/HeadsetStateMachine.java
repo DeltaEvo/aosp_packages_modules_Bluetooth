@@ -17,6 +17,7 @@
 package com.android.bluetooth.hfp;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
+import static android.Manifest.permission.MODIFY_PHONE_STATE;
 
 import static com.android.modules.utils.build.SdkLevel.isAtLeastU;
 
@@ -1918,7 +1919,6 @@ class HeadsetStateMachine extends StateMachine {
         return commandType;
     }
 
-    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     private void processDialCall(String number) {
         String dialNumber;
         if (mHeadsetService.hasDeviceInitiatedDialingOut()) {
@@ -1963,7 +1963,6 @@ class HeadsetStateMachine extends StateMachine {
         mNeedDialingOutReply = true;
     }
 
-    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     private void processVrEvent(int state) {
         if (state == HeadsetHalConstants.VR_STATE_STARTED) {
             if (!mHeadsetService.startVoiceRecognitionByHeadset(mDevice)) {
@@ -2079,7 +2078,7 @@ class HeadsetStateMachine extends StateMachine {
         log("processSWBEvent AptX SWB config: " + prevSwbAptx + " -> " + mHasSwbAptXEnabled);
     }
 
-    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    @RequiresPermission(MODIFY_PHONE_STATE)
     @VisibleForTesting
     void processAtChld(int chld, BluetoothDevice device) {
         if (mSystemInterface.processChld(chld)) {
@@ -2089,7 +2088,7 @@ class HeadsetStateMachine extends StateMachine {
         }
     }
 
-    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    @RequiresPermission(MODIFY_PHONE_STATE)
     @VisibleForTesting
     void processSubscriberNumberRequest(BluetoothDevice device) {
         String number = mSystemInterface.getSubscriberNumber();
@@ -2156,7 +2155,7 @@ class HeadsetStateMachine extends StateMachine {
                 phoneState.getCindBatteryCharge());
     }
 
-    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    @RequiresPermission(MODIFY_PHONE_STATE)
     @VisibleForTesting
     void processAtCops(BluetoothDevice device) {
         // Get operator name suggested by Telephony
@@ -2178,7 +2177,7 @@ class HeadsetStateMachine extends StateMachine {
         mNativeInterface.copsResponse(device, operatorName);
     }
 
-    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, MODIFY_PHONE_STATE})
     @VisibleForTesting
     void processAtClcc(BluetoothDevice device) {
         if (mHeadsetService.isVirtualCallStarted()) {
@@ -2580,7 +2579,7 @@ class HeadsetStateMachine extends StateMachine {
     }
 
     // HSP +CKPD command
-    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    @RequiresPermission(MODIFY_PHONE_STATE)
     private void processKeyPressed(BluetoothDevice device) {
         if (mSystemInterface.isRinging()) {
             mSystemInterface.answerCall(device);

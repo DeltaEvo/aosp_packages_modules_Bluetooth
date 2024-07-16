@@ -62,13 +62,20 @@ static void l2c_link_send_to_lower(tL2C_LCB* p_lcb, BT_HDR* p_buf, tL2C_TX_COMPL
 static BT_HDR* l2cu_get_next_buffer_to_send(tL2C_LCB* p_lcb, tL2C_TX_COMPLETE_CB_INFO* p_cbi);
 
 void l2c_link_hci_conn_comp(tHCI_STATUS status, uint16_t handle, const RawAddress& p_bda) {
-  tL2C_CONN_INFO ci;
   tL2C_LCB* p_lcb;
   tL2C_CCB* p_ccb;
 
   /* Save the parameters */
-  ci.status = status;
-  ci.bd_addr = p_bda;
+  tL2C_CONN_INFO ci = {
+          .bd_addr = p_bda,
+          .status = status,
+          .psm{},
+          .l2cap_result{},
+          .l2cap_status{},
+          .remote_cid{},
+          .lcids{},
+          .peer_mtu{},
+  };
 
   /* See if we have a link control block for the remote device */
   p_lcb = l2cu_find_lcb_by_bd_addr(ci.bd_addr, BT_TRANSPORT_BR_EDR);
@@ -180,22 +187,29 @@ void l2c_link_hci_conn_comp(tHCI_STATUS status, uint16_t handle, const RawAddres
  *
  ******************************************************************************/
 void l2c_link_sec_comp(RawAddress p_bda, tBT_TRANSPORT transport, void* p_ref_data,
-                       tBTM_STATUS status) {
-  tL2C_CONN_INFO ci;
+                       tBTM_STATUS btm_status) {
   tL2C_LCB* p_lcb;
   tL2C_CCB* p_ccb;
   tL2C_CCB* p_next_ccb;
 
-  log::debug("btm_status={}, BD_ADDR={}, transport={}", btm_status_text(status), p_bda,
+  log::debug("btm_status={}, BD_ADDR={}, transport={}", btm_status_text(btm_status), p_bda,
              bt_transport_text(transport));
 
-  if (status == BTM_SUCCESS_NO_SECURITY) {
-    status = BTM_SUCCESS;
+  if (btm_status == BTM_SUCCESS_NO_SECURITY) {
+    btm_status = BTM_SUCCESS;
   }
 
   /* Save the parameters */
-  ci.status = status;
-  ci.bd_addr = p_bda;
+  tL2C_CONN_INFO ci = {
+          .bd_addr = p_bda,
+          .status = static_cast<tHCI_STATUS>(btm_status),
+          .psm{},
+          .l2cap_result{},
+          .l2cap_status{},
+          .remote_cid{},
+          .lcids{},
+          .peer_mtu{},
+  };
 
   p_lcb = l2cu_find_lcb_by_bd_addr(p_bda, transport);
 
@@ -219,7 +233,7 @@ void l2c_link_sec_comp(RawAddress p_bda, tBT_TRANSPORT transport, void* p_ref_da
       return;
     }
 
-    switch (status) {
+    switch (btm_status) {
       case BTM_SUCCESS:
         l2c_csm_execute(p_ccb, L2CEVT_SEC_COMP, &ci);
         break;
@@ -241,7 +255,7 @@ void l2c_link_sec_comp(RawAddress p_bda, tBT_TRANSPORT transport, void* p_ref_da
       p_next_ccb = p_ccb->p_next_ccb;
 
       if (p_ccb == p_ref_data) {
-        switch (status) {
+        switch (btm_status) {
           case BTM_SUCCESS:
             l2c_csm_execute(p_ccb, L2CEVT_SEC_COMP, &ci);
             break;
@@ -508,7 +522,6 @@ void l2c_link_timeout(tL2C_LCB* p_lcb) {
 void l2c_info_resp_timer_timeout(void* data) {
   tL2C_LCB* p_lcb = (tL2C_LCB*)data;
   tL2C_CCB* p_ccb;
-  tL2C_CONN_INFO ci;
 
   /* If we timed out waiting for info response, just continue using basic if
    * allowed */
@@ -529,9 +542,16 @@ void l2c_info_resp_timer_timeout(void* data) {
     if ((p_lcb->link_state != LST_DISCONNECTED) && (p_lcb->link_state != LST_DISCONNECTING)) {
       /* Notify active channels that peer info is finished */
       if (p_lcb->ccb_queue.p_first_ccb) {
-        ci.status = HCI_SUCCESS;
-        ci.bd_addr = p_lcb->remote_bd_addr;
-
+        tL2C_CONN_INFO ci = {
+                .bd_addr = p_lcb->remote_bd_addr,
+                .status = HCI_SUCCESS,
+                .psm{},
+                .l2cap_result{},
+                .l2cap_status{},
+                .remote_cid{},
+                .lcids{},
+                .peer_mtu{},
+        };
         for (p_ccb = p_lcb->ccb_queue.p_first_ccb; p_ccb; p_ccb = p_ccb->p_next_ccb) {
           l2c_csm_execute(p_ccb, L2CEVT_L2CAP_INFO_RSP, &ci);
         }

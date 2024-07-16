@@ -549,8 +549,7 @@ void btif_storage_load_bonded_hearing_aids() {
     }
 
     // add extracted information to BTA Hearing Aid
-    do_in_main_thread(FROM_HERE,
-                      Bind(&HearingAid::AddFromStorage,
+    do_in_main_thread(Bind(&HearingAid::AddFromStorage,
                            HearingDevice(bd_addr, capabilities, codecs, audio_control_point_handle,
                                          audio_status_handle, audio_status_ccc_handle,
                                          service_changed_ccc_handle, volume_handle, read_psm_handle,
@@ -798,8 +797,7 @@ void btif_storage_load_bonded_leaudio() {
       btif_config_get_bin(name, BTIF_STORAGE_KEY_LEAUDIO_ASES_BIN, ases.data(), &buffer_size);
     }
 
-    do_in_main_thread(FROM_HERE,
-                      Bind(&LeAudioClient::AddFromStorage, bd_addr, autoconnect,
+    do_in_main_thread(Bind(&LeAudioClient::AddFromStorage, bd_addr, autoconnect,
                            sink_audio_location, source_audio_location, sink_supported_context_type,
                            source_supported_context_type, std::move(handles), std::move(sink_pacs),
                            std::move(source_pacs), std::move(ases)));
@@ -890,8 +888,8 @@ void btif_storage_load_bonded_leaudio_has_devices() {
       features = value;
     }
 
-    do_in_main_thread(FROM_HERE, Bind(&bluetooth::le_audio::has::HasClient::AddFromStorage, bd_addr,
-                                      features, is_acceptlisted));
+    do_in_main_thread(Bind(&bluetooth::le_audio::has::HasClient::AddFromStorage, bd_addr, features,
+                           is_acceptlisted));
 #else
     log::fatal("TODO - Fix LE audio build.");
 #endif
@@ -980,7 +978,7 @@ void btif_storage_load_bonded_groups(void) {
 
     std::vector<uint8_t> in(buffer_size);
     if (btif_config_get_bin(name, BTIF_STORAGE_KEY_DEVICE_GROUP_BIN, in.data(), &buffer_size)) {
-      do_in_main_thread(FROM_HERE, Bind(&DeviceGroups::AddFromStorage, bd_addr, std::move(in)));
+      do_in_main_thread(Bind(&DeviceGroups::AddFromStorage, bd_addr, std::move(in)));
     }
   }
 }
@@ -991,7 +989,7 @@ void btif_storage_load_bonded_volume_control_devices(void) {
     auto device = bd_addr.ToString();
     if (btif_device_supports_profile(device,
                                      Uuid::From16Bit(UUID_SERVCLASS_VOLUME_CONTROL_SERVER))) {
-      do_in_main_thread(FROM_HERE, Bind(&VolumeControl::AddFromStorage, bd_addr));
+      do_in_main_thread(Bind(&VolumeControl::AddFromStorage, bd_addr));
     }
   }
 }
@@ -1026,7 +1024,7 @@ void btif_storage_load_bonded_csis_devices(void) {
     }
 
     if (buffer_size != 0) {
-      do_in_main_thread(FROM_HERE, Bind(&CsisClient::AddFromStorage, bd_addr, std::move(in)));
+      do_in_main_thread(Bind(&CsisClient::AddFromStorage, bd_addr, std::move(in)));
     }
   }
 }

@@ -77,8 +77,6 @@ void btif_iot_update_remote_info(tBTA_DM_AUTH_CMPL* p_auth_cmpl, bool is_ble, bo
   uint8_t lmp_ver = 0;
   uint16_t lmp_subver = 0;
   uint16_t mfct_set = 0;
-  tBTM_STATUS btm_status;
-
   // save remote name to iot conf file
   if (strlen((const char*)p_auth_cmpl->bd_name)) {
     name_length = strlen((char*)p_auth_cmpl->bd_name) > BD_NAME_LEN
@@ -127,10 +125,10 @@ void btif_iot_update_remote_info(tBTA_DM_AUTH_CMPL* p_auth_cmpl, bool is_ble, bo
                                  (int)p_auth_cmpl->addr_type);
 
   // save remote versions to iot conf file
-  btm_status = get_btm_client_interface().peer.BTM_ReadRemoteVersion(p_auth_cmpl->bd_addr, &lmp_ver,
-                                                                     &mfct_set, &lmp_subver);
+  const bool status = get_btm_client_interface().peer.BTM_ReadRemoteVersion(
+          p_auth_cmpl->bd_addr, &lmp_ver, &mfct_set, &lmp_subver);
 
-  if (btm_status == BTM_SUCCESS) {
+  if (status) {
     DEVICE_IOT_CONFIG_ADDR_SET_INT(p_auth_cmpl->bd_addr, IOT_CONF_KEY_MANUFACTURER, mfct_set);
     DEVICE_IOT_CONFIG_ADDR_SET_INT(p_auth_cmpl->bd_addr, IOT_CONF_KEY_LMPVER, lmp_ver);
     DEVICE_IOT_CONFIG_ADDR_SET_INT(p_auth_cmpl->bd_addr, IOT_CONF_KEY_LMPSUBVER, lmp_subver);

@@ -102,3 +102,7 @@ int PORT_GetSecurityMask(uint16_t /* handle */, uint16_t* /* sec_mask */) {
   return 0;
 }
 void RFCOMM_Init(void) { inc_func_call_count(__func__); }
+bool PORT_IsCollisionDetected(RawAddress /* bd_addr */) {
+  inc_func_call_count(__func__);
+  return false;
+}

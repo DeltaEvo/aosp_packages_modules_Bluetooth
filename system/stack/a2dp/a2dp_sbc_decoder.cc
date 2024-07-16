@@ -40,13 +40,6 @@ typedef struct {
 
 static tA2DP_SBC_DECODER_CB a2dp_sbc_decoder_cb;
 
-bool A2DP_LoadDecoderSbc(void) {
-  // Nothing to do - the library is statically linked
-  return true;
-}
-
-void A2DP_UnloadDecoderSbc(void) { a2dp_sbc_decoder_cleanup(); }
-
 bool a2dp_sbc_decoder_init(decoded_data_callback_t decode_callback) {
   OI_STATUS status = OI_CODEC_SBC_DecoderReset(
           &a2dp_sbc_decoder_cb.decoder_context, a2dp_sbc_decoder_cb.context_data,

@@ -196,35 +196,31 @@ void bluetooth::shim::ACL_RemoteNameRequest(const RawAddress& addr, uint8_t page
                                                           : hci::ClockOffsetValid::INVALID),
           GetGdShimHandler()->BindOnce([](hci::ErrorCode status) {
             if (status != hci::ErrorCode::SUCCESS) {
-              do_in_main_thread(FROM_HERE, base::BindOnce(
-                                                   [](hci::ErrorCode status) {
-                                                     // NOTE: we intentionally don't supply the
-                                                     // address, to match the legacy behavior.
-                                                     // Callsites that want the address should use
-                                                     // StartRemoteNameRequest() directly, rather
-                                                     // than going through this shim.
-                                                     btm_process_remote_name(
-                                                             nullptr, nullptr, 0,
-                                                             static_cast<tHCI_STATUS>(status));
-                                                     btm_sec_rmt_name_request_complete(
-                                                             nullptr, nullptr,
-                                                             static_cast<tHCI_STATUS>(status));
-                                                   },
-                                                   status));
+              do_in_main_thread(base::BindOnce(
+                      [](hci::ErrorCode status) {
+                        // NOTE: we intentionally don't supply the
+                        // address, to match the legacy behavior.
+                        // Callsites that want the address should use
+                        // StartRemoteNameRequest() directly, rather
+                        // than going through this shim.
+                        btm_process_remote_name(nullptr, nullptr, 0,
+                                                static_cast<tHCI_STATUS>(status));
+                        btm_sec_rmt_name_request_complete(nullptr, nullptr,
+                                                          static_cast<tHCI_STATUS>(status));
+                      },
+                      status));
             }
           }),
           GetGdShimHandler()->BindOnce(
                   [](RawAddress addr, uint64_t features) {
                     static_assert(sizeof(features) == 8);
-                    do_in_main_thread(FROM_HERE,
-                                      base::BindOnce(btm_sec_rmt_host_support_feat_evt, addr,
+                    do_in_main_thread(base::BindOnce(btm_sec_rmt_host_support_feat_evt, addr,
                                                      static_cast<uint8_t>(features & 0xff)));
                   },
                   addr),
           GetGdShimHandler()->BindOnce(
                   [](RawAddress addr, hci::ErrorCode status, std::array<uint8_t, 248> name) {
                     do_in_main_thread(
-                            FROM_HERE,
                             base::BindOnce(
                                     [](RawAddress addr, hci::ErrorCode status,
                                        std::array<uint8_t, 248> name) {

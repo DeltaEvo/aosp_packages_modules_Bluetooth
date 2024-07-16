@@ -363,7 +363,7 @@ void btpan_set_flow_control(bool enable) {
   btpan_cb.flow = enable;
   if (enable) {
     btsock_thread_add_fd(pan_pth, btpan_cb.tap_fd, 0, SOCK_THREAD_FD_RD, 0);
-    do_in_main_thread(FROM_HERE, base::BindOnce(btu_exec_tap_fd_read, btpan_cb.tap_fd));
+    do_in_main_thread(base::BindOnce(btu_exec_tap_fd_read, btpan_cb.tap_fd));
   }
 }
 
@@ -770,6 +770,6 @@ static void btpan_tap_fd_signaled(int fd, int type, int flags, uint32_t user_id)
     btpan_tap_close(fd);
     btif_pan_close_all_conns();
   } else if (flags & SOCK_THREAD_FD_RD) {
-    do_in_main_thread(FROM_HERE, base::BindOnce(btu_exec_tap_fd_read, fd));
+    do_in_main_thread(base::BindOnce(btu_exec_tap_fd_read, fd));
   }
 }

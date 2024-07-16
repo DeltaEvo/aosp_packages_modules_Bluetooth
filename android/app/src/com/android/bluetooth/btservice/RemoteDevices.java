@@ -229,6 +229,14 @@ public class RemoteDevices {
         }
     }
 
+    String getName(BluetoothDevice device) {
+        DeviceProperties deviceProp = getDeviceProperties(device);
+        if (deviceProp == null) {
+            return null;
+        }
+        return deviceProp.getName();
+    }
+
     BluetoothDevice getDevice(byte[] address) {
         String addressString = Utils.getAddressStringFromByte(address);
         String deviceAddress = mDualDevicesMap.get(addressString);

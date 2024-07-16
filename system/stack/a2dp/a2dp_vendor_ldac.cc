@@ -108,10 +108,9 @@ static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilityLdac(const tA2DP_LDAC_CIE* p_
 // |p_ie| is a pointer to the LDAC Codec Information Element information.
 // The result is stored in |p_result|. Returns A2DP_SUCCESS on success,
 // otherwise the corresponding A2DP error status code.
-static tA2DP_STATUS A2DP_BuildInfoLdac(uint8_t media_type, const tA2DP_LDAC_CIE* p_ie,
-                                       uint8_t* p_result) {
+static bool A2DP_BuildInfoLdac(uint8_t media_type, const tA2DP_LDAC_CIE* p_ie, uint8_t* p_result) {
   if (p_ie == NULL || p_result == NULL) {
-    return A2DP_INVALID_PARAMS;
+    return false;
   }
 
   *p_result++ = A2DP_LDAC_CODEC_LEN;
@@ -129,17 +128,17 @@ static tA2DP_STATUS A2DP_BuildInfoLdac(uint8_t media_type, const tA2DP_LDAC_CIE*
   // Sampling Frequency
   *p_result = (uint8_t)(p_ie->sampleRate & A2DP_LDAC_SAMPLING_FREQ_MASK);
   if (*p_result == 0) {
-    return A2DP_INVALID_PARAMS;
+    return false;
   }
   p_result++;
 
   // Channel Mode
   *p_result = (uint8_t)(p_ie->channelMode & A2DP_LDAC_CHANNEL_MODE_MASK);
   if (*p_result == 0) {
-    return A2DP_INVALID_PARAMS;
+    return false;
   }
 
-  return A2DP_SUCCESS;
+  return true;
 }
 
 // Parses the LDAC Media Codec Capabilities byte sequence beginning from the
@@ -155,20 +154,20 @@ static tA2DP_STATUS A2DP_ParseInfoLdac(tA2DP_LDAC_CIE* p_ie, const uint8_t* p_co
   tA2DP_CODEC_TYPE codec_type;
 
   if (p_ie == NULL || p_codec_info == NULL) {
-    return A2DP_INVALID_PARAMS;
+    return AVDTP_UNSUPPORTED_CONFIGURATION;
   }
 
   // Check the codec capability length
   losc = *p_codec_info++;
   if (losc != A2DP_LDAC_CODEC_LEN) {
-    return A2DP_WRONG_CODEC;
+    return AVDTP_UNSUPPORTED_CONFIGURATION;
   }
 
   media_type = (*p_codec_info++) >> 4;
-  codec_type = *p_codec_info++;
+  codec_type = static_cast<tA2DP_CODEC_TYPE>(*p_codec_info++);
   /* Check the Media Type and Media Codec Type */
   if (media_type != AVDT_MEDIA_TYPE_AUDIO || codec_type != A2DP_MEDIA_CT_NON_A2DP) {
-    return A2DP_WRONG_CODEC;
+    return AVDTP_UNSUPPORTED_CONFIGURATION;
   }
 
   // Check the Vendor ID and Codec ID */
@@ -179,7 +178,7 @@ static tA2DP_STATUS A2DP_ParseInfoLdac(tA2DP_LDAC_CIE* p_ie, const uint8_t* p_co
   p_ie->codecId = (*p_codec_info & 0x00FF) | (*(p_codec_info + 1) << 8 & 0xFF00);
   p_codec_info += 2;
   if (p_ie->vendorId != A2DP_LDAC_VENDOR_ID || p_ie->codecId != A2DP_LDAC_CODEC_ID) {
-    return A2DP_WRONG_CODEC;
+    return AVDTP_UNSUPPORTED_CONFIGURATION;
   }
 
   p_ie->sampleRate = *p_codec_info++ & A2DP_LDAC_SAMPLING_FREQ_MASK;
@@ -189,20 +188,20 @@ static tA2DP_STATUS A2DP_ParseInfoLdac(tA2DP_LDAC_CIE* p_ie, const uint8_t* p_co
     // NOTE: The checks here are very liberal. We should be using more
     // pedantic checks specific to the SRC or SNK as specified in the spec.
     if (A2DP_BitsSet(p_ie->sampleRate) == A2DP_SET_ZERO_BIT) {
-      return A2DP_BAD_SAMP_FREQ;
+      return A2DP_INVALID_SAMPLING_FREQUENCY;
     }
     if (A2DP_BitsSet(p_ie->channelMode) == A2DP_SET_ZERO_BIT) {
-      return A2DP_BAD_CH_MODE;
+      return A2DP_INVALID_CHANNEL_MODE;
     }
 
     return A2DP_SUCCESS;
   }
 
   if (A2DP_BitsSet(p_ie->sampleRate) != A2DP_SET_ONE_BIT) {
-    return A2DP_BAD_SAMP_FREQ;
+    return A2DP_INVALID_SAMPLING_FREQUENCY;
   }
   if (A2DP_BitsSet(p_ie->channelMode) != A2DP_SET_ONE_BIT) {
-    return A2DP_BAD_CH_MODE;
+    return A2DP_INVALID_CHANNEL_MODE;
   }
 
   return A2DP_SUCCESS;
@@ -246,10 +245,6 @@ bool A2DP_IsVendorSinkCodecSupportedLdac(const uint8_t* p_codec_info) {
   return A2DP_CodecInfoMatchesCapabilityLdac(&a2dp_ldac_sink_caps, p_codec_info, false) ==
          A2DP_SUCCESS;
 }
-bool A2DP_IsPeerSourceCodecSupportedLdac(const uint8_t* p_codec_info) {
-  return A2DP_CodecInfoMatchesCapabilityLdac(&a2dp_ldac_sink_caps, p_codec_info, true) ==
-         A2DP_SUCCESS;
-}
 
 // Checks whether A2DP LDAC codec configuration matches with a device's codec
 // capabilities. |p_cap| is the LDAC codec configuration. |p_codec_info| is
@@ -280,12 +275,12 @@ static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilityLdac(const tA2DP_LDAC_CIE* p_
 
   /* sampling frequency */
   if ((cfg_cie.sampleRate & p_cap->sampleRate) == 0) {
-    return A2DP_NS_SAMP_FREQ;
+    return A2DP_NOT_SUPPORTED_SAMPLING_FREQUENCY;
   }
 
   /* channel mode */
   if ((cfg_cie.channelMode & p_cap->channelMode) == 0) {
-    return A2DP_NS_CH_MODE;
+    return A2DP_NOT_SUPPORTED_CHANNEL_MODE;
   }
 
   return A2DP_SUCCESS;
@@ -596,48 +591,11 @@ const char* A2DP_VendorCodecIndexStrLdac(void) { return "LDAC"; }
 const char* A2DP_VendorCodecIndexStrLdacSink(void) { return "LDAC SINK"; }
 
 bool A2DP_VendorInitCodecConfigLdac(AvdtpSepConfig* p_cfg) {
-  if (A2DP_BuildInfoLdac(AVDT_MEDIA_TYPE_AUDIO, &a2dp_ldac_source_caps, p_cfg->codec_info) !=
-      A2DP_SUCCESS) {
-    return false;
-  }
-
-  return true;
+  return A2DP_BuildInfoLdac(AVDT_MEDIA_TYPE_AUDIO, &a2dp_ldac_source_caps, p_cfg->codec_info);
 }
 
 bool A2DP_VendorInitCodecConfigLdacSink(AvdtpSepConfig* p_cfg) {
-  return A2DP_BuildInfoLdac(AVDT_MEDIA_TYPE_AUDIO, &a2dp_ldac_sink_caps, p_cfg->codec_info) ==
-         A2DP_SUCCESS;
-}
-
-UNUSED_ATTR static void build_codec_config(const tA2DP_LDAC_CIE& config_cie,
-                                           btav_a2dp_codec_config_t* result) {
-  if (config_cie.sampleRate & A2DP_LDAC_SAMPLING_FREQ_44100) {
-    result->sample_rate |= BTAV_A2DP_CODEC_SAMPLE_RATE_44100;
-  }
-  if (config_cie.sampleRate & A2DP_LDAC_SAMPLING_FREQ_48000) {
-    result->sample_rate |= BTAV_A2DP_CODEC_SAMPLE_RATE_48000;
-  }
-  if (config_cie.sampleRate & A2DP_LDAC_SAMPLING_FREQ_88200) {
-    result->sample_rate |= BTAV_A2DP_CODEC_SAMPLE_RATE_88200;
-  }
-  if (config_cie.sampleRate & A2DP_LDAC_SAMPLING_FREQ_96000) {
-    result->sample_rate |= BTAV_A2DP_CODEC_SAMPLE_RATE_96000;
-  }
-  if (config_cie.sampleRate & A2DP_LDAC_SAMPLING_FREQ_176400) {
-    result->sample_rate |= BTAV_A2DP_CODEC_SAMPLE_RATE_176400;
-  }
-  if (config_cie.sampleRate & A2DP_LDAC_SAMPLING_FREQ_192000) {
-    result->sample_rate |= BTAV_A2DP_CODEC_SAMPLE_RATE_192000;
-  }
-
-  result->bits_per_sample = config_cie.bits_per_sample;
-
-  if (config_cie.channelMode & A2DP_LDAC_CHANNEL_MODE_MONO) {
-    result->channel_mode |= BTAV_A2DP_CODEC_CHANNEL_MODE_MONO;
-  }
-  if (config_cie.channelMode & (A2DP_LDAC_CHANNEL_MODE_DUAL | A2DP_LDAC_CHANNEL_MODE_STEREO)) {
-    result->channel_mode |= BTAV_A2DP_CODEC_CHANNEL_MODE_STEREO;
-  }
+  return A2DP_BuildInfoLdac(AVDT_MEDIA_TYPE_AUDIO, &a2dp_ldac_sink_caps, p_cfg->codec_info);
 }
 
 A2dpCodecConfigLdacSource::A2dpCodecConfigLdacSource(btav_a2dp_codec_priority_t codec_priority)
@@ -677,10 +635,6 @@ A2dpCodecConfigLdacSource::A2dpCodecConfigLdacSource(btav_a2dp_codec_priority_t 
 A2dpCodecConfigLdacSource::~A2dpCodecConfigLdacSource() {}
 
 bool A2dpCodecConfigLdacSource::init() {
-  if (!isValid()) {
-    return false;
-  }
-
   // Load the encoder
   if (!A2DP_VendorLoadEncoderLdac()) {
     log::error("cannot load the encoder");
@@ -1236,8 +1190,7 @@ bool A2dpCodecConfigLdacBase::setCodecConfig(const uint8_t* p_peer_codec_info, b
     goto fail;
   }
 
-  if (A2DP_BuildInfoLdac(AVDT_MEDIA_TYPE_AUDIO, &result_config_cie, p_result_codec_config) !=
-      A2DP_SUCCESS) {
+  if (!A2DP_BuildInfoLdac(AVDT_MEDIA_TYPE_AUDIO, &result_config_cie, p_result_codec_config)) {
     goto fail;
   }
 
@@ -1260,13 +1213,16 @@ bool A2dpCodecConfigLdacBase::setCodecConfig(const uint8_t* p_peer_codec_info, b
   // Create a local copy of the peer codec capability, and the
   // result codec config.
   if (is_capability) {
-    status = A2DP_BuildInfoLdac(AVDT_MEDIA_TYPE_AUDIO, &peer_info_cie, ota_codec_peer_capability_);
+    log::assert_that(
+            A2DP_BuildInfoLdac(AVDT_MEDIA_TYPE_AUDIO, &peer_info_cie, ota_codec_peer_capability_),
+            "Failed to build media codec capabilities");
   } else {
-    status = A2DP_BuildInfoLdac(AVDT_MEDIA_TYPE_AUDIO, &peer_info_cie, ota_codec_peer_config_);
+    log::assert_that(
+            A2DP_BuildInfoLdac(AVDT_MEDIA_TYPE_AUDIO, &peer_info_cie, ota_codec_peer_config_),
+            "Failed to build media codec capabilities");
   }
-  log::assert_that(status == A2DP_SUCCESS, "assert failed: status == A2DP_SUCCESS");
-  status = A2DP_BuildInfoLdac(AVDT_MEDIA_TYPE_AUDIO, &result_config_cie, ota_codec_config_);
-  log::assert_that(status == A2DP_SUCCESS, "assert failed: status == A2DP_SUCCESS");
+  log::assert_that(A2DP_BuildInfoLdac(AVDT_MEDIA_TYPE_AUDIO, &result_config_cie, ota_codec_config_),
+                   "Failed to build media codec capabilities");
   return true;
 
 fail:
@@ -1339,8 +1295,9 @@ bool A2dpCodecConfigLdacBase::setPeerCodecCapabilities(const uint8_t* p_peer_cod
     codec_selectable_capability_.channel_mode |= BTAV_A2DP_CODEC_CHANNEL_MODE_STEREO;
   }
 
-  status = A2DP_BuildInfoLdac(AVDT_MEDIA_TYPE_AUDIO, &peer_info_cie, ota_codec_peer_capability_);
-  log::assert_that(status == A2DP_SUCCESS, "assert failed: status == A2DP_SUCCESS");
+  log::assert_that(
+          A2DP_BuildInfoLdac(AVDT_MEDIA_TYPE_AUDIO, &peer_info_cie, ota_codec_peer_capability_),
+          "Failed to build media codec capabilities");
   return true;
 
 fail:
@@ -1358,10 +1315,6 @@ A2dpCodecConfigLdacSink::A2dpCodecConfigLdacSink(btav_a2dp_codec_priority_t code
 A2dpCodecConfigLdacSink::~A2dpCodecConfigLdacSink() {}
 
 bool A2dpCodecConfigLdacSink::init() {
-  if (!isValid()) {
-    return false;
-  }
-
   // Load the decoder
   if (!A2DP_VendorLoadDecoderLdac()) {
     log::error("cannot load the decoder");

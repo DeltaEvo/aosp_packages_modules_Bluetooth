@@ -36,7 +36,7 @@
 #include "internal_include/bt_target.h"
 #include "macros.h"
 #include "osi/include/list.h"
-#include "stack/include/a2dp_error_codes.h"
+#include "stack/include/a2dp_constants.h"
 #include "stack/include/avdt_api.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/hci_error_code.h"
@@ -345,8 +345,6 @@ typedef struct {
   tBTA_AV_HNDL hndl;
   uint8_t err_code;
   uint8_t category;
-  uint8_t num_seid;
-  uint8_t* p_seid;
   bool recfg_needed;
   uint8_t avdt_handle; /* local sep type for which this stream will be set up */
 } tBTA_AV_CI_SETCONFIG;

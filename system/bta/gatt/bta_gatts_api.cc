@@ -172,8 +172,8 @@ void bta_gatts_add_service_impl(tGATT_IF server_if, std::vector<btgatt_db_elemen
  ******************************************************************************/
 void BTA_GATTS_AddService(tGATT_IF server_if, std::vector<btgatt_db_element_t> service,
                           BTA_GATTS_AddServiceCb cb) {
-  do_in_main_thread(FROM_HERE, base::BindOnce(&bta_gatts_add_service_impl, server_if,
-                                              std::move(service), std::move(cb)));
+  do_in_main_thread(base::BindOnce(&bta_gatts_add_service_impl, server_if, std::move(service),
+                                   std::move(cb)));
 }
 
 /*******************************************************************************

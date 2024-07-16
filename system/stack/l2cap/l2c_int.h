@@ -665,10 +665,6 @@ struct tL2C_TX_COMPLETE_CB_INFO {
   tL2CA_TX_COMPLETE_CB* cb;
 };
 
-/* The offset in a buffer that L2CAP will use when building commands.
- */
-#define L2CAP_SEND_CMD_OFFSET 0
-
 /* Number of ACL buffers to use for high priority channel
  */
 #define L2CAP_HIGH_PRI_MIN_XMIT_QUOTA_A (L2CAP_HIGH_PRI_MIN_XMIT_QUOTA)

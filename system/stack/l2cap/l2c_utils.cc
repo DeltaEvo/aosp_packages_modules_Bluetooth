@@ -50,6 +50,10 @@ using namespace bluetooth;
 
 tL2C_CCB* l2cu_get_next_channel_in_rr(tL2C_LCB* p_lcb);  // TODO Move
 
+/* The offset in a buffer that L2CAP will use when building commands.
+ */
+#define L2CAP_SEND_CMD_OFFSET 0
+
 /*******************************************************************************
  *
  * Function         l2cu_allocate_lcb
@@ -298,7 +302,7 @@ BT_HDR* l2cu_build_header(tL2C_LCB* p_lcb, uint16_t len, uint8_t cmd, uint8_t si
 
   p_buf->offset = L2CAP_SEND_CMD_OFFSET;
   p_buf->len = len + HCI_DATA_PREAMBLE_SIZE + L2CAP_PKT_OVERHEAD + L2CAP_CMD_OVERHEAD;
-  p = (uint8_t*)(p_buf + 1) + L2CAP_SEND_CMD_OFFSET;
+  p = (uint8_t*)(p_buf + 1) + p_buf->offset;
 
   /* Put in HCI header - handle + pkt boundary */
   if (p_lcb->transport == BT_TRANSPORT_LE) {
@@ -772,7 +776,7 @@ void l2cu_send_peer_config_rej(tL2C_CCB* p_ccb, uint8_t* p_data, uint16_t data_l
 
   BT_HDR* p_buf = (BT_HDR*)osi_malloc(len + rej_len);
   p_buf->offset = L2CAP_SEND_CMD_OFFSET;
-  p = (uint8_t*)(p_buf + 1) + L2CAP_SEND_CMD_OFFSET;
+  p = (uint8_t*)(p_buf + 1) + p_buf->offset;
 
   /* Put in HCI header - handle + pkt boundary */
   if (bluetooth::shim::GetController()->SupportsNonFlushablePb()) {

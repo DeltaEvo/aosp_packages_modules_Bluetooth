@@ -37,6 +37,7 @@ import android.media.BluetoothProfileConnectionInfo;
 import android.os.Looper;
 import android.os.ParcelUuid;
 import android.os.test.TestLooper;
+import android.platform.test.annotations.EnableFlags;
 import android.platform.test.flag.junit.FlagsParameterization;
 import android.platform.test.flag.junit.SetFlagsRule;
 
@@ -694,6 +695,7 @@ public class A2dpServiceTest {
      * if the device is unbond.
      */
     @Test
+    @EnableFlags(Flags.FLAG_A2DP_SERVICE_LOOPER)
     public void testDeleteStateMachineDisconnectEvents() {
         // Update the device priority so okToConnect() returns true
         when(mDatabaseManager.getProfileConnectionPolicy(sTestDevice, BluetoothProfile.A2DP))

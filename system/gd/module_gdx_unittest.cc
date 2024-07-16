@@ -441,12 +441,12 @@ TEST_F(ModuleGdxWithInstrumentedCallback, test_call_callback_on_handler) {
   // Enqueue something else on the main thread and verify that it hasn't run
   static auto second_task_promise = std::promise<void>();
   auto final_future = second_task_promise.get_future();
-  do_in_main_thread(FROM_HERE, common::BindOnce(
-                                       [](std::promise<void> promise) {
-                                         promise.set_value();
-                                         log::info("Finally");
-                                       },
-                                       std::move(second_task_promise)));
+  do_in_main_thread(common::BindOnce(
+          [](std::promise<void> promise) {
+            promise.set_value();
+            log::info("Finally");
+          },
+          std::move(second_task_promise)));
   ASSERT_EQ(std::future_status::timeout, final_future.wait_for(std::chrono::milliseconds(1)));
 
   // Let the callback start
@@ -473,12 +473,12 @@ TEST_F(ModuleGdxWithInstrumentedCallback, test_call_once_callback_on_handler) {
   // Enqueue something else on the main thread and verify that it hasn't run
   static auto second_task_promise = std::promise<void>();
   auto final_future = second_task_promise.get_future();
-  do_in_main_thread(FROM_HERE, common::BindOnce(
-                                       [](std::promise<void> promise) {
-                                         promise.set_value();
-                                         log::info("Finally");
-                                       },
-                                       std::move(second_task_promise)));
+  do_in_main_thread(common::BindOnce(
+          [](std::promise<void> promise) {
+            promise.set_value();
+            log::info("Finally");
+          },
+          std::move(second_task_promise)));
   ASSERT_EQ(std::future_status::timeout, final_future.wait_for(std::chrono::milliseconds(1)));
 
   // Let the callback start
@@ -505,12 +505,12 @@ TEST_F(ModuleGdxWithInstrumentedCallback, test_call_callback_on_main) {
   // Enqueue something else on the main thread and verify that it hasn't run
   static auto second_task_promise = std::promise<void>();
   auto final_future = second_task_promise.get_future();
-  do_in_main_thread(FROM_HERE, common::BindOnce(
-                                       [](std::promise<void> promise) {
-                                         promise.set_value();
-                                         log::info("Finally");
-                                       },
-                                       std::move(second_task_promise)));
+  do_in_main_thread(common::BindOnce(
+          [](std::promise<void> promise) {
+            promise.set_value();
+            log::info("Finally");
+          },
+          std::move(second_task_promise)));
   ASSERT_EQ(std::future_status::timeout, final_future.wait_for(std::chrono::milliseconds(1)));
 
   // Let the callback start
@@ -537,12 +537,12 @@ TEST_F(ModuleGdxWithInstrumentedCallback, test_call_once_callback_on_main) {
   // Enqueue something else on the main thread and verify that it hasn't run
   static auto second_task_promise = std::promise<void>();
   auto final_future = second_task_promise.get_future();
-  do_in_main_thread(FROM_HERE, common::BindOnce(
-                                       [](std::promise<void> promise) {
-                                         promise.set_value();
-                                         log::info("Finally");
-                                       },
-                                       std::move(second_task_promise)));
+  do_in_main_thread(common::BindOnce(
+          [](std::promise<void> promise) {
+            promise.set_value();
+            log::info("Finally");
+          },
+          std::move(second_task_promise)));
   ASSERT_EQ(std::future_status::timeout, final_future.wait_for(std::chrono::milliseconds(1)));
 
   // Let the callback start
@@ -569,12 +569,12 @@ TEST_F(ModuleGdxWithInstrumentedCallback, test_call_callback_on_jni) {
   // Enqueue something else on the main thread and verify that it hasn't run
   static auto second_task_promise = std::promise<void>();
   auto final_future = second_task_promise.get_future();
-  do_in_main_thread(FROM_HERE, common::BindOnce(
-                                       [](std::promise<void> promise) {
-                                         promise.set_value();
-                                         log::info("Finally");
-                                       },
-                                       std::move(second_task_promise)));
+  do_in_main_thread(common::BindOnce(
+          [](std::promise<void> promise) {
+            promise.set_value();
+            log::info("Finally");
+          },
+          std::move(second_task_promise)));
   ASSERT_EQ(std::future_status::timeout, final_future.wait_for(std::chrono::milliseconds(1)));
 
   // Let the callback start
@@ -601,12 +601,12 @@ TEST_F(ModuleGdxWithInstrumentedCallback, test_call_once_callback_on_jni) {
   // Enqueue something else on the main thread and verify that it hasn't run
   static auto second_task_promise = std::promise<void>();
   auto final_future = second_task_promise.get_future();
-  do_in_main_thread(FROM_HERE, common::BindOnce(
-                                       [](std::promise<void> promise) {
-                                         promise.set_value();
-                                         log::info("Finally");
-                                       },
-                                       std::move(second_task_promise)));
+  do_in_main_thread(common::BindOnce(
+          [](std::promise<void> promise) {
+            promise.set_value();
+            log::info("Finally");
+          },
+          std::move(second_task_promise)));
   ASSERT_EQ(std::future_status::timeout, final_future.wait_for(std::chrono::milliseconds(1)));
 
   // Let the callback start

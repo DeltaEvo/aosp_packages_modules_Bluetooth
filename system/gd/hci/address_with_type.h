@@ -119,7 +119,7 @@ public:
   }
 
   std::string ToRedactedStringForLogging() const override {
-    return address_.ToStringForLogging() + "[" + AddressTypeText(address_type_) + "]";
+    return address_.ToRedactedStringForLogging() + "[" + AddressTypeText(address_type_) + "]";
   }
 
 private:

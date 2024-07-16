@@ -83,8 +83,8 @@ static tBTA_DM_DEVICE_SEARCH_STATE bta_dm_search_get_state() {
 }
 
 static void post_search_evt(tBTA_DM_DEV_SEARCH_EVT event, std::unique_ptr<tBTA_DM_SEARCH_MSG> msg) {
-  if (do_in_main_thread(FROM_HERE, base::BindOnce(&bta_dm_search_sm_execute, event,
-                                                  std::move(msg))) != BT_STATUS_SUCCESS) {
+  if (do_in_main_thread(base::BindOnce(&bta_dm_search_sm_execute, event, std::move(msg))) !=
+      BT_STATUS_SUCCESS) {
     log::error("post_search_evt failed");
   }
 }

@@ -504,8 +504,8 @@ struct tSdpApi {
                        error
 
      ******************************************************************************/
-    [[nodiscard]] uint16_t (*SDP_SetLocalDiRecord)(const tSDP_DI_RECORD* device_info,
-                                                   uint32_t* p_handle);
+    [[nodiscard]] tSDP_STATUS (*SDP_SetLocalDiRecord)(const tSDP_DI_RECORD* device_info,
+                                                      uint32_t* p_handle);
 
     /*******************************************************************************
 
@@ -559,9 +559,9 @@ struct tSdpApi {
       Returns          SDP_SUCCESS if record retrieved, else error
 
      ******************************************************************************/
-    [[nodiscard]] uint16_t (*SDP_GetDiRecord)(uint8_t getRecordIndex,
-                                              tSDP_DI_GET_RECORD* device_info,
-                                              const tSDP_DISCOVERY_DB* p_db);
+    [[nodiscard]] tSDP_STATUS (*SDP_GetDiRecord)(uint8_t getRecordIndex,
+                                                 tSDP_DI_GET_RECORD* device_info,
+                                                 const tSDP_DISCOVERY_DB* p_db);
 
   } device_id;
 };
@@ -577,3 +577,16 @@ struct tLegacyStackSdbCallback {
 }  // namespace stack
 }  // namespace legacy
 }  // namespace bluetooth
+
+/*******************************************************************************
+ *
+ * Function         SDP_Dumpsys
+ *
+ * Description      Dumps readable content of the module to the filedescriptor
+ *
+ * Parameters:      fd        - Valid file descriptor
+ *
+ * Returns          None
+ *
+ ******************************************************************************/
+void SDP_Dumpsys(int fd);
