@@ -543,9 +543,7 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num, uint16
           sdpu_set_avrc_target_features(p_attr, &(p_ccb->device_address), avrc_sdp_version);
         }
       }
-      if (bluetooth::common::init_flags::hfp_dynamic_version_is_enabled()) {
-        is_hfp_fallback = sdp_dynamic_change_hfp_version(p_attr, p_ccb->device_address);
-      }
+      is_hfp_fallback = sdp_dynamic_change_hfp_version(p_attr, p_ccb->device_address);
       /* Check if attribute fits. Assume 3-byte value type/length */
       rem_len = max_list_len - (int16_t)(p_rsp - &p_ccb->rsp_list[0]);
 
@@ -914,9 +912,7 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
             sdpu_set_avrc_target_features(p_attr, &(p_ccb->device_address), avrc_sdp_version);
           }
         }
-        if (bluetooth::common::init_flags::hfp_dynamic_version_is_enabled()) {
-          is_hfp_fallback = sdp_dynamic_change_hfp_version(p_attr, p_ccb->device_address);
-        }
+        is_hfp_fallback = sdp_dynamic_change_hfp_version(p_attr, p_ccb->device_address);
         /* Check if attribute fits. Assume 3-byte value type/length */
         rem_len = max_list_len - (int16_t)(p_rsp - &p_ccb->rsp_list[0]);
 
