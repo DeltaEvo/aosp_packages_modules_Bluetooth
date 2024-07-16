@@ -503,6 +503,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                 case AUDIO_FOCUS_STATE_CHANGE:
                     int newState = msg.arg1;
                     debug("Connected: Audio focus changed -> " + newState);
+                    BluetoothMediaBrowserService.onAudioFocusStateChanged(newState);
                     switch (newState) {
                         case AudioManager.AUDIOFOCUS_GAIN:
                             // Begin playing audio again if we paused the remote
