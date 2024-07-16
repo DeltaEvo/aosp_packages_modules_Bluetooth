@@ -23,6 +23,7 @@
  ******************************************************************************/
 
 #include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 #include <string.h>
 
 #include <algorithm>
@@ -401,14 +402,26 @@ void gatt_process_exec_write_req(tGATT_TCB& tcb, uint16_t cid, uint8_t op_code, 
     trans_id = gatt_sr_enqueue_cmd(tcb, cid, op_code, 0);
     gatt_sr_copy_prep_cnt_to_cback_cnt(tcb);
 
-    for (i = 0; i < GATT_MAX_APPS; i++) {
-      if (tcb.prep_cnt[i]) {
-        gatt_if = (tGATT_IF)(i + 1);
+    if (com::android::bluetooth::flags::gatt_client_dynamic_allocation()) {
+      auto prep_cnt_it = tcb.prep_cnt_map.begin();
+      while (prep_cnt_it != tcb.prep_cnt_map.end()) {
+        gatt_if = i;
         conn_id = GATT_CREATE_CONN_ID(tcb.tcb_idx, gatt_if);
         tGATTS_DATA gatts_data;
         gatts_data.exec_write = flag;
         gatt_sr_send_req_callback(conn_id, trans_id, GATTS_REQ_TYPE_WRITE_EXEC, &gatts_data);
-        tcb.prep_cnt[i] = 0;
+        prep_cnt_it = tcb.prep_cnt_map.erase(prep_cnt_it);
+      }
+    } else {
+      for (i = 0; i < GATT_MAX_APPS; i++) {
+        if (tcb.prep_cnt[i]) {
+          gatt_if = (tGATT_IF)(i + 1);
+          conn_id = GATT_CREATE_CONN_ID(tcb.tcb_idx, gatt_if);
+          tGATTS_DATA gatts_data;
+          gatts_data.exec_write = flag;
+          gatt_sr_send_req_callback(conn_id, trans_id, GATTS_REQ_TYPE_WRITE_EXEC, &gatts_data);
+          tcb.prep_cnt[i] = 0;
+        }
       }
     }
   } else /* nothing needs to be executed , send response now */
