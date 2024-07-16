@@ -71,6 +71,16 @@ struct btm_client_interface_t default_btm_client_interface = {
                         [](const RawAddress& /* addr */, uint8_t* /* lmp_version */,
                            uint16_t* /* manufacturer */,
                            uint16_t* /* lmp_sub_version */) -> bool { return false; },
+
+                .BTM_GetPeerDeviceTypeFromFeatures = [](const RawAddress& /* bd_addr */)
+                        -> tBT_DEVICE_TYPE { return BT_DEVICE_TYPE_DUMO; },
+
+                .BTM_RequestPeerSCA = [](const RawAddress& /* remote_bda */,
+                                         tBT_TRANSPORT /* transport */) {},
+                .BTM_GetPeerSCA = [](const RawAddress& /* remote_bda */,
+                                     tBT_TRANSPORT /* transport */) -> uint8_t { return 0; },
+                .BTM_IsPhy2mSupported = [](const RawAddress& /* remote_bda */,
+                                           tBT_TRANSPORT /* transport */) -> bool { return true; },
                 .BTM_GetHCIConnHandle = [](const RawAddress& /* remote_bda */,
                                            tBT_TRANSPORT /* transport */) -> uint16_t { return 0; },
         },
@@ -179,6 +189,10 @@ struct btm_client_interface_t default_btm_client_interface = {
                            uint16_t /* max_conn_int */, uint16_t /* peripheral_latency */,
                            uint16_t /* supervision_tout */) {},
                 .BTM_UseLeLink = [](const RawAddress& /* bd_addr */) -> bool { return false; },
+                .BTM_IsRemoteVersionReceived = [](const RawAddress& /* remote_bda */) -> bool {
+                  return true;
+                },
+                .BTM_SetConsolidationCallback = [](BTM_CONSOLIDATION_CB* /* cb */) {},
         },
         .sco = {
                 .BTM_CreateSco = [](const RawAddress* /* remote_bda */, bool /* is_orig */,
@@ -196,6 +210,10 @@ struct btm_client_interface_t default_btm_client_interface = {
                 .BTM_GetNumScoLinks = []() -> uint8_t { return 0; },
                 .BTM_SetEScoMode = [](enh_esco_params_t* /* p_parms */) -> tBTM_STATUS {
                   return BTM_SUCCESS;
+                },
+                .BTM_GetScoDebugDump = []() -> tBTM_SCO_DEBUG_DUMP { return {}; },
+                .BTM_IsScoActiveByBdaddr = [](const RawAddress& /* remote_bda */) -> bool {
+                  return false;
                 },
         },
         .local = {
