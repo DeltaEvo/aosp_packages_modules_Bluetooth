@@ -17,6 +17,7 @@
 package com.android.bluetooth.hfp;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
+import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 import static android.Manifest.permission.MODIFY_PHONE_STATE;
 
 import android.annotation.RequiresPermission;
@@ -46,62 +47,54 @@ public class BluetoothHeadsetProxy {
         adapter.closeProfileProxy(BluetoothProfile.HEADSET, mBluetoothHeadset);
     }
 
-    /** call clccResponse in Framework */
     @RequiresPermission(allOf = {BLUETOOTH_CONNECT, MODIFY_PHONE_STATE})
     public void clccResponse(
             int index, int direction, int status, int mode, boolean mpty, String number, int type) {
-
         mBluetoothHeadset.clccResponse(index, direction, status, mode, mpty, number, type);
     }
 
-    /** call phoneStateChanged in Framework */
     @RequiresPermission(allOf = {BLUETOOTH_CONNECT, MODIFY_PHONE_STATE})
     public void phoneStateChanged(
             int numActive, int numHeld, int callState, String number, int type, String name) {
-
         mBluetoothHeadset.phoneStateChanged(numActive, numHeld, callState, number, type, name);
     }
 
+    @RequiresPermission(BLUETOOTH_CONNECT)
     public List<BluetoothDevice> getConnectedDevices() {
         return mBluetoothHeadset.getConnectedDevices();
     }
 
+    @RequiresPermission(BLUETOOTH_CONNECT)
     public int getConnectionState(BluetoothDevice device) {
         return mBluetoothHeadset.getConnectionState(device);
     }
 
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public int getAudioState(BluetoothDevice device) {
         return mBluetoothHeadset.getAudioState(device);
     }
 
-    /**
-     * Proxy function that calls {@link BluetoothHeadset#connectAudio()}.
-     *
-     * @return whether the connection request was successful
-     */
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public int connectAudio() {
         return mBluetoothHeadset.connectAudio();
     }
 
-    /** call setActiveDevice in Framework */
     @RequiresPermission(allOf = {BLUETOOTH_CONNECT, MODIFY_PHONE_STATE})
     public boolean setActiveDevice(BluetoothDevice device) {
         return mBluetoothHeadset.setActiveDevice(device);
     }
 
+    @RequiresPermission(BLUETOOTH_CONNECT)
     public BluetoothDevice getActiveDevice() {
         return mBluetoothHeadset.getActiveDevice();
     }
 
-    /**
-     * Proxy function that calls {@link BluetoothHeadset#disconnectAudio()}.
-     *
-     * @return whether the disconnection request was successful
-     */
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public int disconnectAudio() {
         return mBluetoothHeadset.disconnectAudio();
     }
 
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public boolean isInbandRingingEnabled() {
         return mBluetoothHeadset.isInbandRingingEnabled();
     }

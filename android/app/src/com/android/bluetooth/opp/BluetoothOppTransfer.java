@@ -34,6 +34,7 @@ package com.android.bluetooth.opp;
 
 import static java.util.Objects.requireNonNull;
 
+import android.annotation.SuppressLint;
 import android.app.NotificationManager;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -70,6 +71,7 @@ import java.io.IOException;
 
 /** This class run an actual Opp transfer session (from connect target device to disconnect) */
 // Next tag value for ContentProfileErrorReportUtils.report(): 24
+@SuppressLint("AndroidFrameworkRequiresPermission")
 public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatchListener {
     private static final String TAG = "BtOppTransfer";
 

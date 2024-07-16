@@ -397,7 +397,7 @@ public class TbsGatt {
 
     private void removeUuidFromMetadata(ParcelUuid charUuid, BluetoothDevice device) {
         List<ParcelUuid> uuidList;
-        byte[] gtbs_cccd = device.getMetadata(METADATA_GTBS_CCCD);
+        byte[] gtbs_cccd = mAdapterService.getMetadata(device, METADATA_GTBS_CCCD);
 
         if ((gtbs_cccd == null) || (gtbs_cccd.length == 0)) {
             uuidList = new ArrayList<ParcelUuid>();
@@ -405,25 +405,24 @@ public class TbsGatt {
             uuidList = new ArrayList<>(Arrays.asList(Utils.byteArrayToUuid(gtbs_cccd)));
 
             if (!uuidList.contains(charUuid)) {
-                Log.d(
-                        TAG,
-                        "Characteristic CCCD can't be removed (not cached): "
-                                + charUuid.toString());
+                Log.d(TAG, "Characteristic CCCD already removed: " + charUuid.toString());
                 return;
             }
         }
 
         uuidList.remove(charUuid);
 
-        if (!device.setMetadata(
-                METADATA_GTBS_CCCD, Utils.uuidsToByteArray(uuidList.toArray(new ParcelUuid[0])))) {
+        if (!mAdapterService.setMetadata(
+                device,
+                METADATA_GTBS_CCCD,
+                Utils.uuidsToByteArray(uuidList.toArray(new ParcelUuid[0])))) {
             Log.e(TAG, "Can't set CCCD for GTBS characteristic UUID: " + charUuid + ", (remove)");
         }
     }
 
     private void addUuidToMetadata(ParcelUuid charUuid, BluetoothDevice device) {
         List<ParcelUuid> uuidList;
-        byte[] gtbs_cccd = device.getMetadata(METADATA_GTBS_CCCD);
+        byte[] gtbs_cccd = mAdapterService.getMetadata(device, METADATA_GTBS_CCCD);
 
         if ((gtbs_cccd == null) || (gtbs_cccd.length == 0)) {
             uuidList = new ArrayList<ParcelUuid>();
@@ -431,15 +430,17 @@ public class TbsGatt {
             uuidList = new ArrayList<>(Arrays.asList(Utils.byteArrayToUuid(gtbs_cccd)));
 
             if (uuidList.contains(charUuid)) {
-                Log.d(TAG, "Characteristic CCCD already add: " + charUuid.toString());
+                Log.d(TAG, "Characteristic CCCD already added: " + charUuid.toString());
                 return;
             }
         }
 
         uuidList.add(charUuid);
 
-        if (!device.setMetadata(
-                METADATA_GTBS_CCCD, Utils.uuidsToByteArray(uuidList.toArray(new ParcelUuid[0])))) {
+        if (!mAdapterService.setMetadata(
+                device,
+                METADATA_GTBS_CCCD,
+                Utils.uuidsToByteArray(uuidList.toArray(new ParcelUuid[0])))) {
             Log.e(TAG, "Can't set CCCD for GTBS characteristic UUID: " + charUuid + ", (add)");
         }
     }
@@ -982,7 +983,7 @@ public class TbsGatt {
         BluetoothGattService gattService = mBluetoothGattServer.getService(UUID_GTBS);
 
         for (BluetoothDevice device : mAdapterService.getBondedDevices()) {
-            byte[] gtbs_cccd = device.getMetadata(METADATA_GTBS_CCCD);
+            byte[] gtbs_cccd = mAdapterService.getMetadata(device, METADATA_GTBS_CCCD);
 
             if ((gtbs_cccd == null) || (gtbs_cccd.length == 0)) {
                 return;

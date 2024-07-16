@@ -229,12 +229,44 @@ public class RemoteDevices {
         }
     }
 
+    int getBondState(BluetoothDevice device) {
+        DeviceProperties deviceProp = getDeviceProperties(device);
+        if (deviceProp == null) {
+            return BluetoothDevice.BOND_NONE;
+        }
+        return deviceProp.getBondState();
+    }
+
     String getName(BluetoothDevice device) {
         DeviceProperties deviceProp = getDeviceProperties(device);
         if (deviceProp == null) {
             return null;
         }
         return deviceProp.getName();
+    }
+
+    int getType(BluetoothDevice device) {
+        DeviceProperties deviceProp = getDeviceProperties(device);
+        if (deviceProp == null) {
+            return BluetoothDevice.DEVICE_TYPE_UNKNOWN;
+        }
+        return deviceProp.getDeviceType();
+    }
+
+    public ParcelUuid[] getUuids(BluetoothDevice device) {
+        DeviceProperties deviceProp = getDeviceProperties(device);
+        if (deviceProp == null) {
+            return null;
+        }
+        return deviceProp.getUuids();
+    }
+
+    public int getBluetoothClass(BluetoothDevice device) {
+        DeviceProperties deviceProp = getDeviceProperties(device);
+        if (deviceProp == null) {
+            return 0;
+        }
+        return deviceProp.getBluetoothClass();
     }
 
     BluetoothDevice getDevice(byte[] address) {
@@ -1117,11 +1149,6 @@ public class RemoteDevices {
         deviceProperties.mIdentityAddress = Utils.getAddressStringFromByte(secondaryAddress);
     }
 
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-            })
     void aclStateChangeCallback(
             int status,
             byte[] address,
@@ -1177,10 +1204,10 @@ public class RemoteDevices {
                             + device);
         } else {
             deviceProperties.setConnectionHandle(BluetoothDevice.ERROR, transportLinkType);
-            if (device.getBondState() == BluetoothDevice.BOND_BONDING) {
+            if (getBondState(device) == BluetoothDevice.BOND_BONDING) {
                 // Send PAIRING_CANCEL intent to dismiss any dialog requesting bonding.
                 sendPairingCancelIntent(device);
-            } else if (device.getBondState() == BluetoothDevice.BOND_NONE) {
+            } else if (getBondState(device) == BluetoothDevice.BOND_NONE) {
                 removeAddressMapping(Utils.getAddressStringFromByte(address));
             }
             if (state == BluetoothAdapter.STATE_ON || state == BluetoothAdapter.STATE_TURNING_OFF) {
@@ -1237,42 +1264,38 @@ public class RemoteDevices {
                 metricId,
                 transportLinkType);
 
-        BluetoothClass deviceClass = device.getBluetoothClass();
-        int classOfDevice = deviceClass == null ? 0 : deviceClass.getClassOfDevice();
         BluetoothStatsLog.write(
                 BluetoothStatsLog.BLUETOOTH_CLASS_OF_DEVICE_REPORTED,
                 mAdapterService.obfuscateAddress(device),
-                classOfDevice,
+                getBluetoothClass(device),
                 metricId);
 
-        if (intent != null) {
-            intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device)
-                    .addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT)
-                    .addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
-            mAdapterService.sendBroadcast(
-                    intent, BLUETOOTH_CONNECT, Utils.getTempBroadcastOptions().toBundle());
+        if (intent == null) {
+            Log.e(TAG, "aclStateChangeCallback intent is null. BondState: " + getBondState(device));
+            return;
+        }
 
-            synchronized (mAdapterService.getBluetoothConnectionCallbacks()) {
-                Set<IBluetoothConnectionCallback> bluetoothConnectionCallbacks =
-                        mAdapterService.getBluetoothConnectionCallbacks();
-                for (IBluetoothConnectionCallback callback : bluetoothConnectionCallbacks) {
-                    try {
-                        if (connectionState == BluetoothAdapter.STATE_CONNECTED) {
-                            callback.onDeviceConnected(device);
-                        } else {
-                            callback.onDeviceDisconnected(
-                                    device, AdapterService.hciToAndroidDisconnectReason(hciReason));
-                        }
-                    } catch (RemoteException ex) {
-                        Log.e(TAG, "RemoteException in calling IBluetoothConnectionCallback");
+        intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device)
+                .addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT)
+                .addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
+        mAdapterService.sendBroadcast(
+                intent, BLUETOOTH_CONNECT, Utils.getTempBroadcastOptions().toBundle());
+
+        synchronized (mAdapterService.getBluetoothConnectionCallbacks()) {
+            Set<IBluetoothConnectionCallback> bluetoothConnectionCallbacks =
+                    mAdapterService.getBluetoothConnectionCallbacks();
+            for (IBluetoothConnectionCallback callback : bluetoothConnectionCallbacks) {
+                try {
+                    if (connectionState == BluetoothAdapter.STATE_CONNECTED) {
+                        callback.onDeviceConnected(device);
+                    } else {
+                        callback.onDeviceDisconnected(
+                                device, AdapterService.hciToAndroidDisconnectReason(hciReason));
                     }
+                } catch (RemoteException ex) {
+                    Log.e(TAG, "RemoteException in calling IBluetoothConnectionCallback");
                 }
             }
-        } else {
-            Log.e(
-                    TAG,
-                    "aclStateChangeCallback intent is null. deviceBondState: "
-                            + device.getBondState());
         }
     }
 
@@ -1341,7 +1364,7 @@ public class RemoteDevices {
         }
         Log.i(TAG, "keyMissingCallback device: " + bluetoothDevice);
 
-        if (bluetoothDevice.getBondState() == BluetoothDevice.BOND_BONDED) {
+        if (getBondState(bluetoothDevice) == BluetoothDevice.BOND_BONDED) {
             if (!Flags.keyMissingBroadcast()) {
                 Log.d(TAG, "flag not set - don't send key missing broadcast");
                 return;

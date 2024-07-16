@@ -18,7 +18,6 @@ package com.android.bluetooth.btservice;
 
 import static com.android.bluetooth.Utils.isDualModeAudioEnabled;
 
-import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothCsipSetCoordinator;
 import android.bluetooth.BluetoothDevice;
@@ -300,7 +299,6 @@ public class PhonePolicy implements AdapterService.BluetoothStateCallback {
     }
 
     // Policy implementation, all functions MUST be private
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     private void processInitProfilePriorities(BluetoothDevice device, ParcelUuid[] uuids) {
         debugLog("processInitProfilePriorities() - device " + device);
         HidHostService hidService = mFactory.getHidHostService();
@@ -691,7 +689,6 @@ public class PhonePolicy implements AdapterService.BluetoothStateCallback {
         }
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     private void processProfileStateChanged(
             BluetoothDevice device, int profileId, int nextState, int prevState) {
         debugLog(
@@ -803,7 +800,6 @@ public class PhonePolicy implements AdapterService.BluetoothStateCallback {
         mDatabaseManager.setConnection(device);
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     private boolean handleAllProfilesDisconnected(BluetoothDevice device) {
         boolean atLeastOneProfileConnectedForDevice = false;
         boolean allProfilesEmpty = true;
@@ -811,7 +807,7 @@ public class PhonePolicy implements AdapterService.BluetoothStateCallback {
         A2dpService a2dpService = mFactory.getA2dpService();
         PanService panService = mFactory.getPanService();
         LeAudioService leAudioService = mFactory.getLeAudioService();
-        CsipSetCoordinatorService csipSetCooridnatorService =
+        CsipSetCoordinatorService csipSetCoordinatorService =
                 mFactory.getCsipSetCoordinatorService();
 
         if (hsService != null) {
@@ -824,8 +820,8 @@ public class PhonePolicy implements AdapterService.BluetoothStateCallback {
             allProfilesEmpty &= a2dpConnDevList.isEmpty();
             atLeastOneProfileConnectedForDevice |= a2dpConnDevList.contains(device);
         }
-        if (csipSetCooridnatorService != null) {
-            List<BluetoothDevice> csipConnDevList = csipSetCooridnatorService.getConnectedDevices();
+        if (csipSetCoordinatorService != null) {
+            List<BluetoothDevice> csipConnDevList = csipSetCoordinatorService.getConnectedDevices();
             allProfilesEmpty &= csipConnDevList.isEmpty();
             atLeastOneProfileConnectedForDevice |= csipConnDevList.contains(device);
         }
@@ -987,7 +983,6 @@ public class PhonePolicy implements AdapterService.BluetoothStateCallback {
     // profiles which are not already connected or in the process of connecting to attempt to
     // connect to the device that initiated the connection.  In the event that this function is
     // invoked and there are no current bluetooth connections no new profiles will be connected.
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     private void processConnectOtherProfiles(BluetoothDevice device) {
         debugLog("processConnectOtherProfiles, device=" + device);
         if (mAdapterService.getState() != BluetoothAdapter.STATE_ON) {
@@ -1011,7 +1006,7 @@ public class PhonePolicy implements AdapterService.BluetoothStateCallback {
         A2dpService a2dpService = mFactory.getA2dpService();
         PanService panService = mFactory.getPanService();
         LeAudioService leAudioService = mFactory.getLeAudioService();
-        CsipSetCoordinatorService csipSetCooridnatorService =
+        CsipSetCoordinatorService csipSetCoordinatorService =
                 mFactory.getCsipSetCoordinatorService();
         VolumeControlService volumeControlService = mFactory.getVolumeControlService();
         BatteryService batteryService = mFactory.getBatteryService();
@@ -1064,15 +1059,15 @@ public class PhonePolicy implements AdapterService.BluetoothStateCallback {
                 leAudioService.connect(device);
             }
         }
-        if (csipSetCooridnatorService != null) {
-            List<BluetoothDevice> csipConnDevList = csipSetCooridnatorService.getConnectedDevices();
+        if (csipSetCoordinatorService != null) {
+            List<BluetoothDevice> csipConnDevList = csipSetCoordinatorService.getConnectedDevices();
             if (!csipConnDevList.contains(device)
-                    && (csipSetCooridnatorService.getConnectionPolicy(device)
+                    && (csipSetCoordinatorService.getConnectionPolicy(device)
                             == BluetoothProfile.CONNECTION_POLICY_ALLOWED)
-                    && (csipSetCooridnatorService.getConnectionState(device)
+                    && (csipSetCoordinatorService.getConnectionState(device)
                             == BluetoothProfile.STATE_DISCONNECTED)) {
                 debugLog("Retrying connection to CSIP with device " + device);
-                csipSetCooridnatorService.connect(device);
+                csipSetCoordinatorService.connect(device);
             }
         }
         if (volumeControlService != null) {

@@ -30,6 +30,7 @@ import android.bluetooth.BluetoothCodecStatus;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUuid;
+import android.companion.CompanionDeviceManager;
 import android.content.Context;
 import android.content.Intent;
 import android.media.AudioManager;
@@ -96,6 +97,10 @@ public class A2dpServiceTest {
 
     private TestLooper mLooper;
     private A2dpService mA2dpService;
+    private CompanionDeviceManager mCompanionDeviceManager =
+            InstrumentationRegistry.getInstrumentation()
+                    .getContext()
+                    .getSystemService(CompanionDeviceManager.class);
 
     @Parameters(name = "{0}")
     public static List<FlagsParameterization> getParams() {
@@ -113,6 +118,11 @@ public class A2dpServiceTest {
 
         TestUtils.mockGetSystemService(
                 mAdapterService, Context.AUDIO_SERVICE, AudioManager.class, mAudioManager);
+        TestUtils.mockGetSystemService(
+                mAdapterService,
+                Context.COMPANION_DEVICE_SERVICE,
+                CompanionDeviceManager.class,
+                mCompanionDeviceManager);
         doReturn(InstrumentationRegistry.getInstrumentation().getTargetContext().getResources())
                 .when(mAdapterService)
                 .getResources();

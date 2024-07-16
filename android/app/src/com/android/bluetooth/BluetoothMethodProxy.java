@@ -18,6 +18,7 @@ package com.android.bluetooth;
 
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
+import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.le.PeriodicAdvertisingCallback;
@@ -55,6 +56,8 @@ import java.util.List;
 import java.util.Set;
 
 /** Proxy class for method calls to help with unit testing */
+// TODO: Remove this entire class, as it is abused and provide helper to call framework code which
+// should be avoided
 public class BluetoothMethodProxy {
     private static final String TAG = BluetoothMethodProxy.class.getSimpleName();
     private static final Object INSTANCE_LOCK = new Object();
@@ -226,6 +229,7 @@ public class BluetoothMethodProxy {
      * Proxies {@link PeriodicAdvertisingManager#registerSync(ScanResult, int, int,
      * PeriodicAdvertisingCallback, Handler)}.
      */
+    @SuppressLint("AndroidFrameworkRequiresPermission") // TODO: b/350563786
     public void periodicAdvertisingManagerRegisterSync(
             PeriodicAdvertisingManager manager,
             ScanResult scanResult,
@@ -237,6 +241,7 @@ public class BluetoothMethodProxy {
     }
 
     /** Proxies {@link PeriodicAdvertisingManager#unregisterSync(PeriodicAdvertisingCallback)}. */
+    @SuppressLint("AndroidFrameworkRequiresPermission") // TODO: b/350563786
     public void periodicAdvertisingManagerUnregisterSync(
             PeriodicAdvertisingManager manager, PeriodicAdvertisingCallback callback) {
         manager.unregisterSync(callback);
