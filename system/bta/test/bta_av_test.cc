@@ -20,7 +20,6 @@
 
 #include "bta/av/bta_av_int.h"
 #include "bta/hf_client/bta_hf_client_int.h"
-#include "common/init_flags.h"
 #include "test/common/mock_functions.h"
 #include "test/mock/mock_osi_alarm.h"
 #include "test/mock/mock_stack_acl.h"
@@ -40,10 +39,7 @@ struct alarm_t {
 
 class BtaAvTest : public testing::Test {
 protected:
-  void SetUp() override {
-    reset_mock_function_count_map();
-    bluetooth::common::InitFlags::SetAllForTesting();
-  }
+  void SetUp() override { reset_mock_function_count_map(); }
   void TearDown() override {}
 };
 

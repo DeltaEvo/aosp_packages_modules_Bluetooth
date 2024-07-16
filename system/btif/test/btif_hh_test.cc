@@ -26,7 +26,6 @@
 #include "bta/include/bta_ag_api.h"
 #include "bta/include/bta_hh_api.h"
 #include "btcore/include/module.h"
-#include "common/init_flags.h"
 #include "include/hardware/bt_hh.h"
 #include "test/common/core_interface.h"
 #include "test/common/mock_functions.h"
@@ -147,7 +146,6 @@ class BtifHhWithHalCallbacksTest : public BtifHhWithMockTest {
 protected:
   void SetUp() override {
     BtifHhWithMockTest::SetUp();
-    bluetooth::common::InitFlags::SetAllForTesting();
     g_thread_evt_promise = std::promise<bt_cb_thread_evt>();
     auto future = g_thread_evt_promise.get_future();
     bt_callbacks.thread_evt_cb = [](bt_cb_thread_evt evt) { g_thread_evt_promise.set_value(evt); };

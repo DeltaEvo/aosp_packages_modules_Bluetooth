@@ -18,11 +18,8 @@
 
 #include <gtest/gtest.h>
 
-#include "common/init_flags.h"
-#include "hci/hci_layer.h"
 #include "hci/hci_layer_fake.h"
 #include "hci/octets.h"
-#include "os/log.h"
 #include "packet/raw_builder.h"
 
 using ::bluetooth::hci::Octet16;
@@ -193,7 +190,6 @@ TEST_F(LeAddressManagerTest, DISABLED_rotator_address_for_multiple_clients) {
 class LeAddressManagerWithSingleClientTest : public LeAddressManagerTest {
 public:
   void SetUp() override {
-    bluetooth::common::InitFlags::SetAllForTesting();
     thread_ = new Thread("thread", Thread::Priority::NORMAL);
     handler_ = new Handler(thread_);
     hci_layer_ = new HciLayerFake();

@@ -151,7 +151,6 @@ PacketView<kLittleEndian> GetPacketView(std::unique_ptr<packet::BasePacketBuilde
 class ClassicImplTest : public ::testing::Test {
 protected:
   void SetUp() override {
-    bluetooth::common::InitFlags::SetAllForTesting();
     thread_ = new Thread("thread", Thread::Priority::NORMAL);
     handler_ = new Handler(thread_);
     hci_layer_ = new HciLayerFake();
