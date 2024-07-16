@@ -208,7 +208,6 @@ init_flags!(
     name: InitFlags
     flags: {
         classic_discovery_only,
-        dynamic_avrcp_version_enhancement = true,
         hci_adapter: i32,
         use_unified_connection_manager,
     }

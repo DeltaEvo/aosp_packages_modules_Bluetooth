@@ -35,7 +35,6 @@
 #include "btif/include/btif_config.h"
 #include "com_android_bluetooth_flags.h"
 #include "common/circular_buffer.h"
-#include "common/init_flags.h"
 #include "common/strings.h"
 #include "device/include/interop.h"
 #include "internal_include/bt_target.h"
@@ -674,8 +673,7 @@ static void bta_dm_sdp_result(tBTA_DM_SDP_RESULT& sdp_event) {
       }
     } while (p_sdp_rec);
 
-    if (bluetooth::common::init_flags::dynamic_avrcp_version_enhancement_is_enabled() &&
-        bta_dm_search_cb.services_to_search == 0) {
+    if (bta_dm_search_cb.services_to_search == 0) {
       bta_dm_store_audio_profiles_version();
     }
 

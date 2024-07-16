@@ -30,7 +30,6 @@
 #include <cstdint>
 
 #include "btif/include/btif_storage.h"
-#include "common/init_flags.h"
 #include "device/include/interop.h"
 #include "device/include/interop_config.h"
 #include "internal_include/bt_target.h"
@@ -417,8 +416,7 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num, uint16
     if (p_attr) {
       if (is_service_avrc_target) {
         sdpu_set_avrc_target_version(p_attr, &(p_ccb->device_address));
-        if (p_attr->id == ATTR_ID_SUPPORTED_FEATURES &&
-            bluetooth::common::init_flags::dynamic_avrcp_version_enhancement_is_enabled()) {
+        if (p_attr->id == ATTR_ID_SUPPORTED_FEATURES) {
           avrc_sdp_version = sdpu_is_avrcp_profile_description_list(p_attr_profile_desc_list_id);
           log::error("avrc_sdp_version in SDP records {:x}", avrc_sdp_version);
           sdpu_set_avrc_target_features(p_attr, &(p_ccb->device_address), avrc_sdp_version);
@@ -692,9 +690,7 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
       if (p_attr) {
         if (is_service_avrc_target) {
           sdpu_set_avrc_target_version(p_attr, &(p_ccb->device_address));
-          if (p_attr->id == ATTR_ID_SUPPORTED_FEATURES &&
-              bluetooth::common::init_flags::dynamic_avrcp_version_enhancement_is_enabled() &&
-              p_attr_profile_desc_list_id != nullptr) {
+          if (p_attr->id == ATTR_ID_SUPPORTED_FEATURES && p_attr_profile_desc_list_id != nullptr) {
             avrc_sdp_version = sdpu_is_avrcp_profile_description_list(p_attr_profile_desc_list_id);
             log::error("avrc_sdp_version in SDP records {:x}", avrc_sdp_version);
             sdpu_set_avrc_target_features(p_attr, &(p_ccb->device_address), avrc_sdp_version);
