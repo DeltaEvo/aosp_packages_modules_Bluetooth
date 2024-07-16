@@ -303,6 +303,15 @@ public final class BluetoothUuid {
             ParcelUuid.fromString("00001849-0000-1000-8000-00805F9B34FB");
 
     /**
+     * UUID corresponding to the Gaming Audio Profile (GMAP).
+     *
+     * @hide
+     */
+    @NonNull
+    public static final ParcelUuid GMAP =
+            ParcelUuid.fromString("00001858-0000-1000-8000-00805F9B34FB");
+
+    /**
      * UUID corresponding to the Media Control Service.
      *
      * @hide
