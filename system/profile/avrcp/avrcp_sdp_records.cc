@@ -77,13 +77,13 @@ uint16_t AvrcSdpRecordHelper::RemoveRecord(const uint16_t request_id) {
     return AVRC_FAIL;
   }
   const auto& sdp_record_request_pair = sdp_record_request_map_.find(request_id);
+  const auto service_uuid = sdp_record_request_pair->second.service_uuid;
   sdp_record_request_map_.erase(request_id);
   AvrcpSdpRecord merged_sdp_records;
   MergeSdpRecords(merged_sdp_records);
   const uint16_t categories = merged_sdp_records.categories;
-  const auto& deleted_sdp_record = sdp_record_request_pair->second;
   log::info("Categories after removing the request_id {} : 0x{:x} for service uuid 0x{:x}",
-            request_id, categories, deleted_sdp_record.service_uuid);
+            request_id, categories, service_uuid);
   if (sdp_record_handle_ != RECORD_NOT_ASSIGNED) {
     if (categories) {
       uint8_t temp[sizeof(uint16_t)], *p;
@@ -95,8 +95,8 @@ uint16_t AvrcSdpRecordHelper::RemoveRecord(const uint16_t request_id) {
                      ? AVRC_SUCCESS
                      : AVRC_FAIL;
     } else {
-      log::info("Removing the record for service uuid 0x{:x}", deleted_sdp_record.service_uuid);
-      bta_sys_remove_uuid(deleted_sdp_record.service_uuid);
+      log::info("Removing the record for service uuid 0x{:x}", service_uuid);
+      bta_sys_remove_uuid(service_uuid);
       sdp_record_handle_ = RECORD_NOT_ASSIGNED;
       return AVRC_RemoveRecord(sdp_record_handle_);
     }
