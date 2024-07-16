@@ -548,7 +548,7 @@ TEST(LeAudioClientParserTest, testParsePacsVendorCodecRecords) {
 }
 
 TEST(LeAudioClientParserTest, testParseAudioLocationsInvalidLength) {
-  types::AudioLocations locations = codec_spec_conf::kLeAudioLocationNotAllowed;
+  types::AudioLocations locations = codec_spec_conf::kLeAudioLocationMonoAudio;
   const uint8_t value1[] = {
           0x01,
           0x02,
@@ -563,7 +563,7 @@ TEST(LeAudioClientParserTest, testParseAudioLocationsInvalidLength) {
 }
 
 TEST(LeAudioClientParserTest, testParseAudioLocations) {
-  types::AudioLocations locations = codec_spec_conf::kLeAudioLocationNotAllowed;
+  types::AudioLocations locations = codec_spec_conf::kLeAudioLocationMonoAudio;
   const uint8_t value1[] = {0x01, 0x02, 0x03, 0x04};
   ParseAudioLocations(locations, sizeof(value1), value1);
   ASSERT_EQ(locations, 0x04030201u);

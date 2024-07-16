@@ -832,8 +832,8 @@ LeAudioDeviceGroup::GetAudioSetConfigurationRequirements(types::LeAudioContextTy
                                     ? device->snk_audio_locations_
                                     : device->src_audio_locations_;
       if (dev_locations.none()) {
-        log::warn("Device {} has no locations for direction: {}", device->address_, (int)direction);
-        continue;
+        log::warn("Device {} has no specified locations for direction: {}", device->address_,
+                  (int)direction);
       }
 
       has_location.get(direction) = true;
@@ -932,8 +932,8 @@ types::BidirectionalPair<AudioContexts> LeAudioDeviceGroup::GetLatestAvailableCo
 }
 
 bool LeAudioDeviceGroup::ReloadAudioLocations(void) {
-  AudioLocations updated_snk_audio_locations_ = codec_spec_conf::kLeAudioLocationNotAllowed;
-  AudioLocations updated_src_audio_locations_ = codec_spec_conf::kLeAudioLocationNotAllowed;
+  AudioLocations updated_snk_audio_locations_ = codec_spec_conf::kLeAudioLocationMonoAudio;
+  AudioLocations updated_src_audio_locations_ = codec_spec_conf::kLeAudioLocationMonoAudio;
 
   for (const auto& device : leAudioDevices_) {
     if (device.expired() ||
@@ -1048,7 +1048,8 @@ types::LeAudioConfigurationStrategy LeAudioDeviceGroup::GetGroupSinkStrategy() c
 
       log::debug("audio location 0x{:04x}", snk_audio_locations_.to_ulong());
       if (!(snk_audio_locations_.to_ulong() & codec_spec_conf::kLeAudioLocationAnyLeft) ||
-          !(snk_audio_locations_.to_ulong() & codec_spec_conf::kLeAudioLocationAnyRight)) {
+          !(snk_audio_locations_.to_ulong() & codec_spec_conf::kLeAudioLocationAnyRight) ||
+          snk_audio_locations_.none()) {
         return types::LeAudioConfigurationStrategy::MONO_ONE_CIS_PER_DEVICE;
       }
 
@@ -1341,7 +1342,7 @@ bool CheckIfStrategySupported(types::LeAudioConfigurationStrategy strategy,
 
   switch (strategy) {
     case types::LeAudioConfigurationStrategy::MONO_ONE_CIS_PER_DEVICE:
-      return audio_locations.any();
+      return true;
     case types::LeAudioConfigurationStrategy::STEREO_TWO_CISES_PER_DEVICE:
       if ((audio_locations.to_ulong() & codec_spec_conf::kLeAudioLocationAnyLeft) &&
           (audio_locations.to_ulong() & codec_spec_conf::kLeAudioLocationAnyRight)) {
