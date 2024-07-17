@@ -4028,6 +4028,24 @@ public class AdapterService extends Service {
         }
 
         @Override
+        public int isDualModeAudioEnabled(AttributionSource source) {
+            AdapterService service = getService();
+            if (service == null) {
+                return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
+            }
+            if (!Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
+                return BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION;
+            }
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
+
+            if (!Utils.isDualModeAudioEnabled()) {
+                return BluetoothStatusCodes.FEATURE_NOT_SUPPORTED;
+            }
+
+            return BluetoothStatusCodes.SUCCESS;
+        }
+
+        @Override
         public int registerPreferredAudioProfilesChangedCallback(
                 IBluetoothPreferredAudioProfilesCallback callback, AttributionSource source) {
             AdapterService service = getService();
@@ -4045,7 +4063,7 @@ public class AdapterService extends Service {
             service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             // If LE only mode is enabled, the dual mode audio feature is disabled
-            if (!isDualModeAudioEnabled()) {
+            if (!Utils.isDualModeAudioEnabled()) {
                 return BluetoothStatusCodes.FEATURE_NOT_SUPPORTED;
             }
 
