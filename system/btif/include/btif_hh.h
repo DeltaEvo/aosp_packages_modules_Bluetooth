@@ -84,18 +84,20 @@ inline std::string btif_hh_status_text(const BTIF_HH_STATUS& status) {
   }
 }
 
-/* Supposedly is exclusive to uhid thread, but now is still accessed by btif. */
-/* TODO: remove btif_hh_uhid_t from btif_hh_device_t. */
+/* Uhid thread has exclusive access to this block. */
 typedef struct {
-  int fd;
+  int fd;                // for interfacing with uhid
+  int internal_recv_fd;  // for receiving internal events in uhid thread
   uint8_t dev_handle;
   tAclLinkSpec link_spec;
-  uint8_t hh_keep_polling;
+  uint8_t hh_keep_polling;  // Deprecated with the aflags hid_report_queuing.
+                            // TODO: remove after launching the aflag.
   bool ready_for_data;
   fixed_queue_t* get_rpt_id_queue;
 #if ENABLE_UHID_SET_REPORT
   fixed_queue_t* set_rpt_id_queue;
 #endif  // ENABLE_UHID_SET_REPORT
+  fixed_queue_t* input_queue;  // to store the inputs before uhid is ready.
 } btif_hh_uhid_t;
 
 /* Control block to maintain properties of devices */
@@ -106,10 +108,12 @@ typedef struct {
   tBTA_HH_ATTR_MASK attr_mask;
   uint8_t sub_class;
   uint8_t app_id;
+  int internal_send_fd;  // for sending internal events from btif
   pthread_t hh_poll_thread_id;
   alarm_t* vup_timer;
   bool local_vup;  // Indicated locally initiated VUP
-  btif_hh_uhid_t uhid;
+  btif_hh_uhid_t uhid;  // Deprecated with the aflags hid_report_queuing.
+                        // TODO: remove after launching the aflag.
 } btif_hh_device_t;
 
 /* Control block to maintain properties of devices */
