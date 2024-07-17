@@ -28,11 +28,11 @@
 #include "bta/include/bta_ras_api.h"
 #include "btcore/include/module.h"
 #include "btcore/include/osi_module.h"
+#include "btif/include/btif_api.h"
+#include "btif/include/btif_common.h"
+#include "btif/include/core_callbacks.h"
 #include "btif/include/stack_manager_t.h"
-#include "btif_api.h"
-#include "btif_common.h"
 #include "common/message_loop_thread.h"
-#include "core_callbacks.h"
 #include "main/shim/shim.h"
 #include "os/log.h"
 #include "stack/include/acl_api.h"
@@ -41,8 +41,8 @@
 
 // Temp includes
 #include "bta/sys/bta_sys.h"
-#include "btif_config.h"
-#include "btif_profile_queue.h"
+#include "btif/include/btif_config.h"
+#include "btif/include/btif_profile_queue.h"
 #include "device/include/device_iot_config.h"
 #include "internal_include/bt_target.h"
 #include "stack/include/gatt_api.h"
@@ -106,7 +106,10 @@ void BTA_dm_on_hw_on();
 void BTA_dm_on_hw_off();
 
 using bluetooth::common::MessageLoopThread;
-using namespace bluetooth;
+using bluetooth::log::error;
+using bluetooth::log::fatal;
+using bluetooth::log::info;
+using bluetooth::log::warn;
 
 static MessageLoopThread management_thread("bt_stack_manager_thread");
 
@@ -174,7 +177,7 @@ static void clean_up_stack(ProfileStopCallback stopProfiles) {
   if (status == std::future_status::ready) {
     management_thread.ShutDown();
   } else {
-    log::error("cleanup could not be completed in time, abandon it");
+    error("cleanup could not be completed in time, abandon it");
   }
 }
 
@@ -223,7 +226,7 @@ inline const module_t* get_local_module(const char* name) {
     }
   }
 
-  log::fatal("Cannot find module {}, aborting", name);
+  fatal("Cannot find module {}, aborting", name);
   return nullptr;
 }
 
@@ -251,22 +254,22 @@ static void init_stack_internal(bluetooth::core::CoreInterface* interface) {
 // Synchronous function to initialize the stack
 static void event_init_stack(std::promise<void> promise,
                              bluetooth::core::CoreInterface* interface) {
-  log::info("is initializing the stack");
+  info("is initializing the stack");
 
   if (stack_is_initialized) {
-    log::info("found the stack already in initialized state");
+    info("found the stack already in initialized state");
   } else {
     init_stack_internal(interface);
   }
 
-  log::info("finished");
+  info("finished");
 
   promise.set_value();
 }
 
 static void ensure_stack_is_initialized(bluetooth::core::CoreInterface* interface) {
   if (!stack_is_initialized) {
-    log::warn("found the stack was uninitialized. Initializing now.");
+    warn("found the stack was uninitialized. Initializing now.");
     // No future needed since we are calling it directly
     init_stack_internal(interface);
   }
@@ -277,17 +280,17 @@ static void event_start_up_stack(bluetooth::core::CoreInterface* interface,
                                  ProfileStartCallback startProfiles,
                                  ProfileStopCallback stopProfiles) {
   if (stack_is_running) {
-    log::info("stack already brought up");
+    info("stack already brought up");
     return;
   }
 
   ensure_stack_is_initialized(interface);
 
-  log::info("is bringing up the stack");
+  info("is bringing up the stack");
   future_t* local_hack_future = future_new();
   hack_future = local_hack_future;
 
-  log::info("Gd shim module enabled");
+  info("Gd shim module enabled");
   get_btm_client_interface().lifecycle.btm_init();
   module_start_up(get_local_module(BTIF_CONFIG_MODULE));
 
@@ -314,7 +317,7 @@ static void event_start_up_stack(bluetooth::core::CoreInterface* interface,
   BTA_dm_on_hw_on();
 
   if (future_await(local_hack_future) != FUTURE_SUCCESS) {
-    log::error("failed to start up the stack");
+    error("failed to start up the stack");
     stack_is_running = true;  // So stack shutdown actually happens
     event_shut_down_stack(stopProfiles);
     return;
@@ -329,18 +332,18 @@ static void event_start_up_stack(bluetooth::core::CoreInterface* interface,
   }
 
   stack_is_running = true;
-  log::info("finished");
+  info("finished");
   do_in_jni_thread(base::BindOnce(event_signal_stack_up, nullptr));
 }
 
 // Synchronous function to shut down the stack
 static void event_shut_down_stack(ProfileStopCallback stopProfiles) {
   if (!stack_is_running) {
-    log::info("stack is already brought down");
+    info("stack is already brought down");
     return;
   }
 
-  log::info("is bringing down the stack");
+  info("is bringing down the stack");
   future_t* local_hack_future = future_new();
   hack_future = local_hack_future;
   stack_is_running = false;
@@ -380,24 +383,24 @@ static void event_shut_down_stack(ProfileStopCallback stopProfiles) {
   hack_future = future_new();
   do_in_jni_thread(base::BindOnce(event_signal_stack_down, nullptr));
   future_await(hack_future);
-  log::info("finished");
+  info("finished");
 }
 
 static void event_start_up_rust_module() {
-  log::info("is bringing up the Rust module");
+  info("is bringing up the Rust module");
   module_start_up(get_local_module(RUST_MODULE));
-  log::info("finished");
+  info("finished");
 }
 
 static void event_shut_down_rust_module() {
-  log::info("is bringing down the Rust module");
+  info("is bringing down the Rust module");
   module_shut_down(get_local_module(RUST_MODULE));
-  log::info("finished");
+  info("finished");
 }
 
 static void ensure_stack_is_not_running(ProfileStopCallback stopProfiles) {
   if (stack_is_running) {
-    log::warn("found the stack was still running. Bringing it down now.");
+    warn("found the stack was still running. Bringing it down now.");
     event_shut_down_stack(stopProfiles);
   }
 }
@@ -405,13 +408,13 @@ static void ensure_stack_is_not_running(ProfileStopCallback stopProfiles) {
 // Synchronous function to clean up the stack
 static void event_clean_up_stack(std::promise<void> promise, ProfileStopCallback stopProfiles) {
   if (!stack_is_initialized) {
-    log::info("found the stack already in a clean state");
+    info("found the stack already in a clean state");
     goto cleanup;
   }
 
   ensure_stack_is_not_running(stopProfiles);
 
-  log::info("is cleaning up the stack");
+  info("is cleaning up the stack");
   stack_is_initialized = false;
 
   btif_cleanup_bluetooth();
@@ -423,15 +426,15 @@ static void event_clean_up_stack(std::promise<void> promise, ProfileStopCallback
   module_clean_up(get_local_module(DEVICE_IOT_CONFIG_MODULE));
 
   module_clean_up(get_local_module(OSI_MODULE));
-  log::info("Gd shim module disabled");
+  info("Gd shim module disabled");
   module_shut_down(get_local_module(GD_SHIM_MODULE));
 
   main_thread_shut_down();
 
   module_management_stop();
-  log::info("finished");
+  info("finished");
 
-cleanup:;
+cleanup:
   promise.set_value();
 }
 
@@ -454,7 +457,7 @@ static void ensure_manager_initialized() {
 
   management_thread.StartUp();
   if (!management_thread.IsRunning()) {
-    log::error("unable to start stack management thread");
+    error("unable to start stack management thread");
     return;
   }
 }
