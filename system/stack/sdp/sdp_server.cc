@@ -22,7 +22,7 @@
  *  This is mainly dealing with client requests
  *
  ******************************************************************************/
-#define LOG_TAG "sdp_server"
+#define LOG_TAG "stack::sdp"
 
 #include <bluetooth/log.h>
 #include <string.h>  // memcpy

@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-#define LOG_TAG "sdp_api"
+#define LOG_TAG "stack::sdp"
 
 #include "stack/include/sdp_api.h"
 
