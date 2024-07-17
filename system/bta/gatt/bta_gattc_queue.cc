@@ -26,6 +26,7 @@
 #include "bta_gatt_queue.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
+#include "stack/eatt/eatt.h"
 
 using gatt_operation = BtaGattQueue::gatt_operation;
 using namespace bluetooth;
@@ -115,6 +116,18 @@ struct gatt_read_multi_op_data {
   void* cb_data;
 };
 
+#define MAX_ATT_MTU 0xffff
+
+struct gatt_read_multi_simulate_op_data {
+  GATT_READ_MULTI_OP_CB cb;
+  void* cb_data;
+
+  tBTA_GATTC_MULTI handles;
+  uint8_t read_index;
+  std::array<uint8_t, MAX_ATT_MTU> values;
+  uint16_t values_end;
+};
+
 void BtaGattQueue::gatt_read_multi_op_finished(uint16_t conn_id, tGATT_STATUS status,
                                                tBTA_GATTC_MULTI& handles, uint16_t len,
                                                uint8_t* value, void* data) {
@@ -130,6 +143,51 @@ void BtaGattQueue::gatt_read_multi_op_finished(uint16_t conn_id, tGATT_STATUS st
   if (tmp_cb) {
     tmp_cb(conn_id, status, handles, len, value, tmp_cb_data);
     return;
+  }
+}
+
+void BtaGattQueue::gatt_read_multi_op_simulate(uint16_t conn_id, tGATT_STATUS status,
+                                               uint16_t handle, uint16_t len, uint8_t* value,
+                                               void* data_read) {
+  gatt_read_multi_simulate_op_data* data = (gatt_read_multi_simulate_op_data*)data_read;
+
+  log::verbose("conn_id: 0x{:x} handle: 0x{:x} status: 0x{:x} len: {}", conn_id, handle, status,
+               len);
+  if (status == GATT_SUCCESS && ((data->values_end + 2 + len) < MAX_ATT_MTU)) {
+    data->values[data->values_end] = (len & 0x00ff);
+    data->values[data->values_end + 1] = (len & 0xff00) >> 8;
+    data->values_end += 2;
+
+    // concatenate all read values together
+    std::copy(value, value + len, data->values.data() + data->values_end);
+    data->values_end += len;
+
+    if (data->read_index < data->handles.num_attr - 1) {
+      // grab next handle and read it
+      data->read_index++;
+      uint16_t next_handle = data->handles.handles[data->read_index];
+
+      BTA_GATTC_ReadCharacteristic(conn_id, next_handle, GATT_AUTH_REQ_NONE,
+                                   gatt_read_multi_op_simulate, data_read);
+      return;
+    }
+  }
+
+  // all handles read, or bad status, or values too long
+  GATT_READ_MULTI_OP_CB tmp_cb = data->cb;
+  void* tmp_cb_data = data->cb_data;
+
+  std::array<uint8_t, MAX_ATT_MTU> value_copy = data->values;
+  uint16_t value_len = data->values_end;
+  auto handles = data->handles;
+
+  osi_free(data_read);
+
+  mark_as_not_executing(conn_id);
+  gatt_execute_next_op(conn_id);
+
+  if (tmp_cb) {
+    tmp_cb(conn_id, status, handles, value_len, value_copy.data(), tmp_cb_data);
   }
 }
 
@@ -191,12 +249,36 @@ void BtaGattQueue::gatt_execute_next_op(uint16_t conn_id) {
     BTA_GATTC_ConfigureMTU(conn_id, static_cast<uint16_t>(op.value[0] | (op.value[1] << 8)),
                            gatt_configure_mtu_op_finished, data);
   } else if (op.type == GATT_READ_MULTI) {
-    gatt_read_multi_op_data* data =
-            (gatt_read_multi_op_data*)osi_malloc(sizeof(gatt_read_multi_op_data));
-    data->cb = op.read_multi_cb;
-    data->cb_data = op.read_cb_data;
-    BTA_GATTC_ReadMultiple(conn_id, op.handles, op.variable_len, GATT_AUTH_REQ_NONE,
-                           gatt_read_multi_op_finished, data);
+    if (gatt_profile_get_eatt_support_by_conn_id(conn_id)) {
+      gatt_read_multi_op_data* data =
+              (gatt_read_multi_op_data*)osi_malloc(sizeof(gatt_read_multi_op_data));
+      data->cb = op.read_multi_cb;
+      data->cb_data = op.read_cb_data;
+      BTA_GATTC_ReadMultiple(conn_id, op.handles, true, GATT_AUTH_REQ_NONE,
+                             gatt_read_multi_op_finished, data);
+    } else {
+      /* This file contains just queue, and simulating reads should rather live in BTA or
+       * stack/gatt. However, placing this logic in layers below would be significantly harder.
+       * Having it here is a good balance - it's easy to add, and the API we expose to apps is same
+       * as if it was in layers below.
+       */
+      log::verbose("EATT not supported, simulating read multi. conn_id: 0x{:x} num_handles: {}",
+                   conn_id, op.handles.num_attr);
+      gatt_read_multi_simulate_op_data* data = (gatt_read_multi_simulate_op_data*)osi_malloc(
+              sizeof(gatt_read_multi_simulate_op_data));
+      data->cb = op.read_multi_cb;
+      data->cb_data = op.read_cb_data;
+
+      std::fill(data->values.begin(), data->values.end(), 0);
+      data->values_end = 0;
+
+      data->handles = op.handles;
+      data->read_index = 0;
+      uint16_t handle = data->handles.handles[data->read_index];
+
+      BTA_GATTC_ReadCharacteristic(conn_id, handle, GATT_AUTH_REQ_NONE, gatt_read_multi_op_simulate,
+                                   data);
+    }
   }
 
   gatt_ops.pop_front();
@@ -253,11 +335,9 @@ void BtaGattQueue::ConfigureMtu(uint16_t conn_id, uint16_t mtu) {
 }
 
 void BtaGattQueue::ReadMultiCharacteristic(uint16_t conn_id, tBTA_GATTC_MULTI& handles,
-                                           bool variable_len, GATT_READ_MULTI_OP_CB cb,
-                                           void* cb_data) {
+                                           GATT_READ_MULTI_OP_CB cb, void* cb_data) {
   gatt_op_queue[conn_id].push_back({.type = GATT_READ_MULTI,
                                     .handles = handles,
-                                    .variable_len = variable_len,
                                     .read_multi_cb = cb,
                                     .read_cb_data = cb_data});
   gatt_execute_next_op(conn_id);

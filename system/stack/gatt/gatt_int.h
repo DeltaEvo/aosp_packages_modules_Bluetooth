@@ -486,6 +486,7 @@ void gatt_add_a_bonded_dev_for_srv_chg(const RawAddress& bda);
 uint16_t gatt_profile_find_conn_id_by_bd_addr(const RawAddress& bda);
 
 bool gatt_profile_get_eatt_support(const RawAddress& remote_bda);
+bool gatt_profile_get_eatt_support_by_conn_id(uint16_t conn_id);
 void gatt_cl_init_sr_status(tGATT_TCB& tcb);
 bool gatt_cl_read_sr_supp_feat_req(const RawAddress& peer_bda,
                                    base::OnceCallback<void(const RawAddress&, uint8_t)> cb);
