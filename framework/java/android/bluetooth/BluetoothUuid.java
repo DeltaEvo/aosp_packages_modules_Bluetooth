@@ -330,8 +330,7 @@ public final class BluetoothUuid {
             ParcelUuid.fromString("00001853-0000-1000-8000-00805F9B34FB");
 
     /**
-     * UUID corresponding to the Broadcast Audio Scan Service (also known as LE Audio Broadcast
-     * Assistant).
+     * UUID corresponding to the Battery Service.
      *
      * @hide
      */
@@ -339,7 +338,12 @@ public final class BluetoothUuid {
     public static final ParcelUuid BATTERY =
             ParcelUuid.fromString("0000180F-0000-1000-8000-00805F9B34FB");
 
-    /** @hide */
+    /**
+     * UUID corresponding to the Broadcast Audio Scan Service (also known as LE Audio Broadcast
+     * Assistant).
+     *
+     * @hide
+     */
     @NonNull @SystemApi
     public static final ParcelUuid BASS =
             ParcelUuid.fromString("0000184F-0000-1000-8000-00805F9B34FB");
