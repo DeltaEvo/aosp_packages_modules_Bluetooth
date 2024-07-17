@@ -88,6 +88,8 @@ inline std::string btif_hh_status_text(const BTIF_HH_STATUS& status) {
 typedef struct {
   int fd;                // for interfacing with uhid
   int internal_recv_fd;  // for receiving internal events in uhid thread
+  int internal_send_fd;  // for passing to other threads so they can send
+                         // internal events
   uint8_t dev_handle;
   tAclLinkSpec link_spec;
   uint8_t hh_keep_polling;  // Deprecated with the aflags hid_report_queuing.
@@ -98,6 +100,7 @@ typedef struct {
   fixed_queue_t* set_rpt_id_queue;
 #endif  // ENABLE_UHID_SET_REPORT
   fixed_queue_t* input_queue;  // to store the inputs before uhid is ready.
+  alarm_t* ready_timer;
 } btif_hh_uhid_t;
 
 /* Control block to maintain properties of devices */
