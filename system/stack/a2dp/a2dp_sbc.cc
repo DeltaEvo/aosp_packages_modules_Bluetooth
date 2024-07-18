@@ -966,8 +966,9 @@ static bool select_audio_channel_mode(const btav_a2dp_codec_config_t* p_codec_au
   return false;
 }
 
-bool A2dpCodecConfigSbcBase::setCodecConfig(const uint8_t* p_peer_codec_info, bool is_capability,
-                                            uint8_t* p_result_codec_config) {
+tA2DP_STATUS A2dpCodecConfigSbcBase::setCodecConfig(const uint8_t* p_peer_codec_info,
+                                                    bool is_capability,
+                                                    uint8_t* p_result_codec_config) {
   std::lock_guard<std::recursive_mutex> lock(codec_mutex_);
   tA2DP_SBC_CIE peer_info_cie;
   tA2DP_SBC_CIE result_config_cie;
@@ -1336,7 +1337,7 @@ bool A2dpCodecConfigSbcBase::setCodecConfig(const uint8_t* p_peer_codec_info, bo
   }
   log::assert_that(A2DP_BuildInfoSbc(AVDT_MEDIA_TYPE_AUDIO, &result_config_cie, ota_codec_config_),
                    "Failed to build media codec capabilities");
-  return true;
+  return A2DP_SUCCESS;
 
 fail:
   // Restore the internal state
@@ -1349,7 +1350,7 @@ fail:
   memcpy(ota_codec_peer_capability_, saved_ota_codec_peer_capability,
          sizeof(ota_codec_peer_capability_));
   memcpy(ota_codec_peer_config_, saved_ota_codec_peer_config, sizeof(ota_codec_peer_config_));
-  return false;
+  return status;
 }
 
 bool A2dpCodecConfigSbcBase::setPeerCodecCapabilities(const uint8_t* p_peer_codec_capabilities) {

@@ -28,6 +28,7 @@
 
 #include <base/strings/stringprintf.h>
 #include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 
 #include <cstdint>
 #include <cstring>
@@ -1737,11 +1738,22 @@ void bta_av_getcap_results(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
  ******************************************************************************/
 void bta_av_setconfig_rej(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
   uint8_t avdt_handle = p_data->ci_setconfig.avdt_handle;
+  uint8_t err_code = p_data->ci_setconfig.err_code;
 
   bta_av_adjust_seps_idx(p_scb, avdt_handle);
-  log::info("sep_idx={} avdt_handle={} bta_handle=0x{:x}", p_scb->sep_idx,
-            p_scb->avdt_handle, p_scb->hndl);
-  AVDT_ConfigRsp(p_scb->avdt_handle, p_scb->avdt_label, AVDT_ERR_UNSUP_CFG, 0);
+
+  log::info("sep_idx={} avdt_handle={} bta_handle=0x{:x} err_code=0x{:x}", p_scb->sep_idx,
+            p_scb->avdt_handle, p_scb->hndl, err_code);
+
+  if (!com::android::bluetooth::flags::avdtp_error_codes()) {
+    err_code = AVDT_ERR_UNSUP_CFG;
+  }
+
+  // The error code must be set by the caller, otherwise
+  // AVDT_ConfigRsp will interpret the event as RSP instead of REJ.
+  log::assert_that(err_code != 0, "err_code != 0");
+
+  AVDT_ConfigRsp(p_scb->avdt_handle, p_scb->avdt_label, err_code, 0);
 
   tBTA_AV bta_av_data = {
       .reject =
