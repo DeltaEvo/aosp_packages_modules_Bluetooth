@@ -210,11 +210,8 @@ init_flags!(
         classic_discovery_only,
         dynamic_avrcp_version_enhancement = true,
         hci_adapter: i32,
-        subrating = true,
         use_unified_connection_manager,
-        sdp_return_classic_services_when_le_discovery_fails = true,
-        use_rsi_from_cached_inqiry_results = false,
-        att_mtu_default: i32 = 517,
+        encryption_in_busy_state = true,
     }
     extra_parsed_flags: {
         "--hci" => parse_hci_adapter(_, _),
