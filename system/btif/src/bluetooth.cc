@@ -898,10 +898,7 @@ static int get_remote_pbap_pce_version(const RawAddress* bd_addr) {
 }
 
 static bool pbap_pse_dynamic_version_upgrade_is_enabled() {
-  if (bluetooth::common::init_flags::pbap_pse_dynamic_version_upgrade_is_enabled()) {
-    return true;
-  }
-  log::warn("PBAP PSE dynamic version upgrade is not enabled");
+  log::info("PBAP PSE dynamic version upgrade is not enabled");
   return false;
 }
 
