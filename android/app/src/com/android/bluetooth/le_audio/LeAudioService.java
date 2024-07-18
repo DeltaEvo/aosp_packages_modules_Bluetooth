@@ -1701,7 +1701,8 @@ public class LeAudioService extends ProfileService {
         intent.addFlags(
                 Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
                         | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
-        sendBroadcast(intent, BLUETOOTH_CONNECT);
+        sendBroadcastWithMultiplePermissions(
+                intent, new String[] {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED});
     }
 
     void notifyVolumeControlServiceAboutActiveGroup(BluetoothDevice device) {

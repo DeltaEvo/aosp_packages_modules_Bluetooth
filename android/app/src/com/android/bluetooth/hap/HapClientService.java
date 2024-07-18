@@ -1071,7 +1071,6 @@ public class HapClientService extends ProfileService {
             return;
         }
 
-        Intent intent = null;
         BluetoothDevice device = stackEvent.device;
 
         switch (stackEvent.type) {
@@ -1082,9 +1081,12 @@ public class HapClientService extends ProfileService {
                     if (device != null) {
                         mDeviceFeaturesMap.put(device, features);
 
-                        intent = new Intent(BluetoothHapClient.ACTION_HAP_DEVICE_AVAILABLE);
-                        intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
-                        intent.putExtra(BluetoothHapClient.EXTRA_HAP_FEATURES, features);
+                        Intent intent =
+                                new Intent(BluetoothHapClient.ACTION_HAP_DEVICE_AVAILABLE)
+                                        .putExtra(BluetoothDevice.EXTRA_DEVICE, device)
+                                        .putExtra(BluetoothHapClient.EXTRA_HAP_FEATURES, features);
+                        sendBroadcastWithMultiplePermissions(
+                                intent, new String[] {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED});
                     }
                 }
                 break;
@@ -1180,9 +1182,6 @@ public class HapClientService extends ProfileService {
                 return;
         }
 
-        if (intent != null) {
-            sendBroadcast(intent, BLUETOOTH_PRIVILEGED);
-        }
     }
 
     private void resendToStateMachine(HapClientStackEvent stackEvent) {
