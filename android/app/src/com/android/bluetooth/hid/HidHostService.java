@@ -17,8 +17,7 @@
 package com.android.bluetooth.hid;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
-
-import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
+import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 
 import static java.util.Objects.requireNonNull;
 
@@ -198,7 +197,7 @@ public class HidHostService extends ProfileService {
     }
 
     private byte[] getByteAddress(BluetoothDevice device, int transport) {
-        ParcelUuid[] uuids = mAdapterService.getRemoteUuids(device);
+        final ParcelUuid[] uuids = mAdapterService.getRemoteUuids(device);
 
         if (!Flags.allowSwitchingHidAndHogp()) {
             boolean hogpSupported = Utils.arrayContains(uuids, BluetoothUuid.HOGP);
@@ -831,7 +830,7 @@ public class HidHostService extends ProfileService {
             if (service == null) {
                 return false;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.connect(device);
         }
 
@@ -841,7 +840,7 @@ public class HidHostService extends ProfileService {
             if (service == null) {
                 return false;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.disconnect(device);
         }
 
@@ -877,7 +876,7 @@ public class HidHostService extends ProfileService {
             if (service == null) {
                 return false;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.setConnectionPolicy(device, connectionPolicy);
         }
 
@@ -887,7 +886,7 @@ public class HidHostService extends ProfileService {
             if (service == null) {
                 return BluetoothProfile.CONNECTION_POLICY_UNKNOWN;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.getConnectionPolicy(device);
         }
 
@@ -898,7 +897,7 @@ public class HidHostService extends ProfileService {
             if (service == null) {
                 return false;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.setPreferredTransport(device, transport);
         }
 
@@ -908,7 +907,7 @@ public class HidHostService extends ProfileService {
             if (service == null) {
                 return BluetoothDevice.TRANSPORT_AUTO;
             }
-            enforceBluetoothPrivilegedPermission(service);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.getPreferredTransport(device);
         }
 
@@ -1114,7 +1113,7 @@ public class HidHostService extends ProfileService {
             return false;
         }
 
-        ParcelUuid[] uuids = mAdapterService.getRemoteUuids(device);
+        final ParcelUuid[] uuids = mAdapterService.getRemoteUuids(device);
         boolean hidSupported = Utils.arrayContains(uuids, BluetoothUuid.HID);
         boolean hogpSupported = Utils.arrayContains(uuids, BluetoothUuid.HOGP);
         boolean headtrackerSupported =

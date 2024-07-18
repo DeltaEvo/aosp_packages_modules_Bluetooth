@@ -37,6 +37,7 @@
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_log_history.h"
 #include "stack/include/l2c_api.h"  // L2CA_
 #include "stack/include/main_thread.h"
@@ -1395,8 +1396,8 @@ static void read_pref_conn_params_cb(uint16_t conn_id, tGATT_STATUS status, uint
     latency = 0;
   }
 
-  BTM_BleSetPrefConnParams(p_dev_cb->link_spec.addrt.bda, min_interval, max_interval, latency,
-                           timeout);
+  get_btm_client_interface().ble.BTM_BleSetPrefConnParams(
+          p_dev_cb->link_spec.addrt.bda, min_interval, max_interval, latency, timeout);
   if (!L2CA_UpdateBleConnParams(p_dev_cb->link_spec.addrt.bda, min_interval, max_interval, latency,
                                 timeout, 0, 0)) {
     log::warn("Unable to update L2CAP ble connection params peer:{}",

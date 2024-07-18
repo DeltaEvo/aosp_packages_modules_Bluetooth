@@ -209,10 +209,7 @@ init_flags!(
     flags: {
         classic_discovery_only,
         dynamic_avrcp_version_enhancement = true,
-        gatt_robust_caching_server,
         hci_adapter: i32,
-        hfp_dynamic_version = true,
-        irk_rotation,
         leaudio_targeted_announcement_reconnection_mode = true,
         pbap_pse_dynamic_version_upgrade = false,
         redact_log = true,
@@ -268,22 +265,6 @@ mod tests {
         load(raw_flags);
     }
 
-    #[test]
-    fn simple_flag() {
-        let _guard = ASYNC_LOCK.lock().unwrap();
-        test_load(vec!["INIT_gatt_robust_caching_server=true"]);
-        assert!(gatt_robust_caching_server_is_enabled());
-    }
-    #[test]
-    fn parsing_failure() {
-        let _guard = ASYNC_LOCK.lock().unwrap();
-        test_load(vec![
-            "foo=bar=?",                                // vec length
-            "foo=bar",                                  // flag not save
-            "INIT_gatt_robust_caching_server=not_true", // parse error
-        ]);
-        assert!(!gatt_robust_caching_server_is_enabled());
-    }
     #[test]
     fn int_flag() {
         let _guard = ASYNC_LOCK.lock().unwrap();

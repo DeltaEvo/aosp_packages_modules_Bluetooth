@@ -373,25 +373,19 @@ public class LeAudioBinderTest {
 
     @Test
     public void getMaximumNumberOfBroadcasts() {
-        AttributionSource source = new AttributionSource.Builder(0).build();
-
-        mBinder.getMaximumNumberOfBroadcasts(source);
+        mBinder.getMaximumNumberOfBroadcasts();
         verify(mLeAudioService).getMaximumNumberOfBroadcasts();
     }
 
     @Test
     public void getMaximumStreamsPerBroadcast() {
-        AttributionSource source = new AttributionSource.Builder(0).build();
-
-        mBinder.getMaximumStreamsPerBroadcast(source);
+        mBinder.getMaximumStreamsPerBroadcast();
         verify(mLeAudioService).getMaximumStreamsPerBroadcast();
     }
 
     @Test
     public void getMaximumSubgroupsPerBroadcast() {
-        AttributionSource source = new AttributionSource.Builder(0).build();
-
-        mBinder.getMaximumSubgroupsPerBroadcast(source);
+        mBinder.getMaximumSubgroupsPerBroadcast();
         verify(mLeAudioService).getMaximumSubgroupsPerBroadcast();
     }
 

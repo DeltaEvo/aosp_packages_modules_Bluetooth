@@ -40,7 +40,6 @@
 #include "hci/controller_interface.h"
 #include "internal_include/bt_trace.h"
 #include "main/shim/entry.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/properties.h"
 #include "stack/btm/btm_sec.h"
@@ -49,6 +48,7 @@
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/l2c_api.h"  // L2CAP_MIN_OFFSET
 #include "stack/include/main_thread.h"
 #include "types/bluetooth/uuid.h"
@@ -521,7 +521,7 @@ public:
 
     if (bluetooth::shim::GetController()->SupportsBle2mPhy()) {
       log::info("{} set preferred 2M PHY", address);
-      BTM_BleSetPhy(address, PHY_LE_2M, PHY_LE_2M, 0);
+      get_btm_client_interface().ble.BTM_BleSetPhy(address, PHY_LE_2M, PHY_LE_2M, 0);
     }
 
     // Set data length
@@ -711,7 +711,7 @@ public:
               "phy update successful with unexpected phys, retrying:"
               " bd_addr={} tx_phy=0x{:x} rx_phy=0x{:x}",
               hearingDevice->address, tx_phys, rx_phys);
-      BTM_BleSetPhy(hearingDevice->address, PHY_LE_2M, PHY_LE_2M, 0);
+      get_btm_client_interface().ble.BTM_BleSetPhy(hearingDevice->address, PHY_LE_2M, PHY_LE_2M, 0);
       hearingDevice->phy_update_retry_remain--;
     } else {
       log::warn(

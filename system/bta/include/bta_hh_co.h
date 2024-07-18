@@ -24,6 +24,8 @@
 #ifndef BTA_HH_CO_H
 #define BTA_HH_CO_H
 
+#include <linux/uhid.h>
+
 #include <cstdint>
 
 #include "bta/include/bta_hh_api.h"
@@ -36,6 +38,21 @@ typedef struct {
   uint8_t srvc_inst_id;
   uint16_t char_inst_id;
 } tBTA_HH_RPT_CACHE_ENTRY;
+
+typedef enum : uint8_t {
+  BTA_HH_UHID_INBOUND_INPUT_EVT,
+  BTA_HH_UHID_INBOUND_CLOSE_EVT,
+  BTA_HH_UHID_INBOUND_DSCP_EVT,
+  BTA_HH_UHID_INBOUND_GET_REPORT_EVT,
+  BTA_HH_UHID_INBOUND_SET_REPORT_EVT,
+} tBTA_HH_UHID_INBOUND_EVT_TYPE;
+
+typedef struct {
+  tBTA_HH_UHID_INBOUND_EVT_TYPE type;
+  union {
+    uhid_event uhid;
+  };
+} tBTA_HH_TO_UHID_EVT;
 
 /*******************************************************************************
  *

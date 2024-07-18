@@ -17,6 +17,7 @@
 package com.android.bluetooth.pan;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
+import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 import static android.Manifest.permission.TETHER_PRIVILEGED;
 
 import android.annotation.RequiresPermission;
@@ -328,6 +329,7 @@ public class PanService extends ProfileService {
                 return false;
             }
 
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
             return service.connect(device);
         }
 
@@ -349,6 +351,8 @@ public class PanService extends ProfileService {
                 return false;
             }
 
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
+
             return service.setConnectionPolicy(device, connectionPolicy);
         }
 
@@ -358,6 +362,8 @@ public class PanService extends ProfileService {
             if (service == null) {
                 return BluetoothPan.STATE_DISCONNECTED;
             }
+
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.getConnectionState(device);
         }
@@ -387,6 +393,10 @@ public class PanService extends ProfileService {
                             + (" value=" + value)
                             + (" pkgName= " + source.getPackageName())
                             + (" mTetherOn= " + service.mTetherOn));
+
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
+            service.enforceCallingOrSelfPermission(TETHER_PRIVILEGED, null);
+
             service.setBluetoothTethering(callback, id, source.getUid(), value);
         }
 
@@ -396,6 +406,8 @@ public class PanService extends ProfileService {
             if (service == null) {
                 return Collections.emptyList();
             }
+
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.getConnectedDevices();
         }
@@ -408,11 +420,12 @@ public class PanService extends ProfileService {
                 return Collections.emptyList();
             }
 
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
+
             return service.getDevicesMatchingConnectionStates(states);
         }
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public boolean connect(BluetoothDevice device) {
         if (mUserManager.isGuestUser()) {
             Log.w(TAG, "Guest user does not have the permission to change the WiFi network");
@@ -433,10 +446,7 @@ public class PanService extends ProfileService {
         return true;
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public int getConnectionState(BluetoothDevice device) {
-        enforceCallingOrSelfPermission(
-                BLUETOOTH_PRIVILEGED, "Need BLUETOOTH_PRIVILEGED permission");
         BluetoothPanDevice panDevice = mPanDevices.get(device);
         if (panDevice == null) {
             return BluetoothPan.STATE_DISCONNECTED;
@@ -449,17 +459,9 @@ public class PanService extends ProfileService {
         return mTetherOn;
     }
 
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-                android.Manifest.permission.TETHER_PRIVILEGED,
-            })
     void setBluetoothTethering(
             IBluetoothPanCallback callback, int id, int callerUid, boolean value) {
         Log.d(TAG, "setBluetoothTethering: " + value + ", mTetherOn: " + mTetherOn);
-        enforceCallingOrSelfPermission(
-                BLUETOOTH_PRIVILEGED, "Need BLUETOOTH_PRIVILEGED permission");
-        enforceCallingOrSelfPermission(TETHER_PRIVILEGED, "Need TETHER_PRIVILEGED permission");
 
         UserManager um = getSystemService(UserManager.class);
         if (um.hasUserRestriction(UserManager.DISALLOW_CONFIG_TETHERING) && value) {
@@ -513,10 +515,7 @@ public class PanService extends ProfileService {
      * @param connectionPolicy is the connection policy to set to for this profile
      * @return true if connectionPolicy is set, false on error
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public boolean setConnectionPolicy(BluetoothDevice device, int connectionPolicy) {
-        enforceCallingOrSelfPermission(
-                BLUETOOTH_PRIVILEGED, "Need BLUETOOTH_PRIVILEGED permission");
         Log.d(TAG, "Saved connectionPolicy " + device + " = " + connectionPolicy);
 
         if (!mDatabaseManager.setProfileConnectionPolicy(
@@ -545,16 +544,12 @@ public class PanService extends ProfileService {
         return mDatabaseManager.getProfileConnectionPolicy(device, BluetoothProfile.PAN);
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public List<BluetoothDevice> getConnectedDevices() {
-        enforceCallingOrSelfPermission(
-                BLUETOOTH_PRIVILEGED, "Need BLUETOOTH_PRIVILEGED permission");
         List<BluetoothDevice> devices =
                 getDevicesMatchingConnectionStates(new int[] {BluetoothProfile.STATE_CONNECTED});
         return devices;
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     List<BluetoothDevice> getDevicesMatchingConnectionStates(int[] states) {
         List<BluetoothDevice> panDevices = new ArrayList<BluetoothDevice>();
 

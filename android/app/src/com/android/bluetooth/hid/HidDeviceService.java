@@ -17,6 +17,7 @@
 package com.android.bluetooth.hid;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
+import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 
 import android.annotation.RequiresPermission;
 import android.app.ActivityManager;
@@ -302,14 +303,6 @@ public class HidDeviceService extends ProfileService {
             mService = service;
         }
 
-        @VisibleForTesting
-        HidDeviceService getServiceForTesting() {
-            if (mService != null && mService.isAvailable()) {
-                return mService;
-            }
-            return null;
-        }
-
         @Override
         public void cleanup() {
             mService = null;
@@ -317,15 +310,18 @@ public class HidDeviceService extends ProfileService {
 
         @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
         private HidDeviceService getService(AttributionSource source) {
+            // Cache mService because it can change while getService is called
+            HidDeviceService service = mService;
+
             if (Utils.isInstrumentationTestMode()) {
-                return mService;
+                return service;
             }
-            if (!Utils.checkServiceAvailable(mService, TAG)
-                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
-                    || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG)
+                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return null;
             }
-            return mService;
+            return service;
         }
 
         @Override

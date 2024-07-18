@@ -238,7 +238,7 @@ public class SilenceDeviceManager {
                 // Device is disconnected, resume all silenced profiles.
                 state = false;
             } else {
-                Log.d(TAG, "Deivce is not connected to any Bluetooth audio.");
+                Log.d(TAG, "Device is not connected to any Bluetooth audio.");
                 return;
             }
         }

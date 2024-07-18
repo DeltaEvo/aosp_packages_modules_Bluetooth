@@ -18,6 +18,8 @@ package com.android.bluetooth.hfp;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.MODIFY_PHONE_STATE;
+import static android.bluetooth.BluetoothDevice.ACCESS_ALLOWED;
+import static android.bluetooth.BluetoothDevice.ACCESS_REJECTED;
 
 import static com.android.modules.utils.build.SdkLevel.isAtLeastU;
 
@@ -2766,12 +2768,12 @@ class HeadsetStateMachine extends StateMachine {
                             BluetoothDevice.CONNECTION_ACCESS_NO)
                     == BluetoothDevice.CONNECTION_ACCESS_YES) {
                 if (intent.getBooleanExtra(BluetoothDevice.EXTRA_ALWAYS_ALLOWED, false)) {
-                    mDevice.setPhonebookAccessPermission(BluetoothDevice.ACCESS_ALLOWED);
+                    mAdapterService.setPhonebookAccessPermission(device, ACCESS_ALLOWED);
                 }
                 atCommandResult = mPhonebook.processCpbrCommand(device);
             } else {
                 if (intent.getBooleanExtra(BluetoothDevice.EXTRA_ALWAYS_ALLOWED, false)) {
-                    mDevice.setPhonebookAccessPermission(BluetoothDevice.ACCESS_REJECTED);
+                    mAdapterService.setPhonebookAccessPermission(device, ACCESS_REJECTED);
                 }
             }
         }

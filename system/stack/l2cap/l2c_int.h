@@ -640,7 +640,7 @@ struct tL2C_CB {
  */
 struct tL2C_CONN_INFO {
   RawAddress bd_addr;          /* Remote BD address */
-  uint8_t status;              /* Connection status */
+  tHCI_STATUS hci_status;      /* Connection status */
   uint16_t psm;                /* PSM of the connection */
   uint16_t l2cap_result;       /* L2CAP result */
   uint16_t l2cap_status;       /* L2CAP status */

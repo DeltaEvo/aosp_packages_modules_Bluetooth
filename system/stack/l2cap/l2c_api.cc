@@ -698,7 +698,7 @@ bool L2CA_ConnectCreditBasedRsp(const RawAddress& p_bd_addr, uint8_t id,
 
   tL2C_CONN_INFO conn_info = {
           .bd_addr = p_bd_addr,
-          .status{},
+          .hci_status{},
           .psm{},
           .l2cap_result = result,
           .l2cap_status{},
