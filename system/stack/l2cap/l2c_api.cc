@@ -188,14 +188,13 @@ uint16_t L2CA_Register(uint16_t psm, const tL2CAP_APPL_INFO& p_cb_info, bool ena
 void L2CA_Deregister(uint16_t psm) {
   tL2C_RCB* p_rcb;
   tL2C_CCB* p_ccb;
-  tL2C_LCB* p_lcb;
   int ii;
 
   log::verbose("L2CAP - L2CA_Deregister() called for PSM: 0x{:04x}", psm);
 
   p_rcb = l2cu_find_rcb_by_psm(psm);
   if (p_rcb != NULL) {
-    p_lcb = &l2cb.lcb_pool[0];
+    tL2C_LCB* p_lcb = &l2cb.lcb_pool[0];
     for (ii = 0; ii < MAX_L2CAP_LINKS; ii++, p_lcb++) {
       if (p_lcb->in_use) {
         p_ccb = p_lcb->ccb_queue.p_first_ccb;
@@ -971,10 +970,8 @@ bool L2CA_GetRemoteChannelId(uint16_t lcid, uint16_t* rcid) {
  ******************************************************************************/
 bool L2CA_SetIdleTimeoutByBdAddr(const RawAddress& bd_addr, uint16_t timeout,
                                  tBT_TRANSPORT transport) {
-  tL2C_LCB* p_lcb;
-
   if (RawAddress::kAny != bd_addr) {
-    p_lcb = l2cu_find_lcb_by_bd_addr(bd_addr, transport);
+    tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(bd_addr, transport);
     if ((p_lcb) && (p_lcb->in_use) && (p_lcb->link_state == LST_CONNECTED)) {
       p_lcb->idle_timeout = timeout;
 
@@ -1094,10 +1091,8 @@ bool L2CA_SetTxPriority(uint16_t cid, tL2CAP_CHNL_PRIORITY priority) {
  *
  ******************************************************************************/
 bool L2CA_GetPeerFeatures(const RawAddress& bd_addr, uint32_t* p_ext_feat, uint8_t* p_chnl_mask) {
-  tL2C_LCB* p_lcb;
-
   /* We must already have a link to the remote */
-  p_lcb = l2cu_find_lcb_by_bd_addr(bd_addr, BT_TRANSPORT_BR_EDR);
+  tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(bd_addr, BT_TRANSPORT_BR_EDR);
   if (p_lcb == NULL) {
     log::warn("No BDA: {}", bd_addr);
     return false;
@@ -1170,7 +1165,6 @@ bool L2CA_RegisterFixedChannel(uint16_t fixed_cid, tL2CAP_FIXED_CHNL_REG* p_freg
  *
  ******************************************************************************/
 bool L2CA_ConnectFixedChnl(uint16_t fixed_cid, const RawAddress& rem_bda) {
-  tL2C_LCB* p_lcb;
   tBT_TRANSPORT transport = BT_TRANSPORT_BR_EDR;
 
   log::debug("fixed_cid:0x{:04x}", fixed_cid);
@@ -1195,7 +1189,7 @@ bool L2CA_ConnectFixedChnl(uint16_t fixed_cid, const RawAddress& rem_bda) {
   tL2C_BLE_FIXED_CHNLS_MASK peer_channel_mask;
 
   // If we already have a link to the remote, check if it supports that CID
-  p_lcb = l2cu_find_lcb_by_bd_addr(rem_bda, transport);
+  tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(rem_bda, transport);
   if (p_lcb != NULL) {
     // Fixed channels are mandatory on LE transports so ignore the received
     // channel mask and use the locally cached LE channel mask.
@@ -1274,7 +1268,6 @@ bool L2CA_ConnectFixedChnl(uint16_t fixed_cid, const RawAddress& rem_bda) {
  ******************************************************************************/
 tL2CAP_DW_RESULT L2CA_SendFixedChnlData(uint16_t fixed_cid, const RawAddress& rem_bda,
                                         BT_HDR* p_buf) {
-  tL2C_LCB* p_lcb;
   tBT_TRANSPORT transport = BT_TRANSPORT_BR_EDR;
 
   if (fixed_cid >= L2CAP_ATT_CID && fixed_cid <= L2CAP_SMP_CID) {
@@ -1294,7 +1287,7 @@ tL2CAP_DW_RESULT L2CA_SendFixedChnlData(uint16_t fixed_cid, const RawAddress& re
     return tL2CAP_DW_RESULT::FAILED;
   }
 
-  p_lcb = l2cu_find_lcb_by_bd_addr(rem_bda, transport);
+  tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(rem_bda, transport);
   if (p_lcb == NULL || p_lcb->link_state == LST_DISCONNECTING) {
     /* if link is disconnecting, also report data sending failure */
     log::warn("Link is disconnecting or does not exist CID: 0x{:04x}", fixed_cid);
@@ -1373,7 +1366,6 @@ tL2CAP_DW_RESULT L2CA_SendFixedChnlData(uint16_t fixed_cid, const RawAddress& re
  *
  ******************************************************************************/
 bool L2CA_RemoveFixedChnl(uint16_t fixed_cid, const RawAddress& rem_bda) {
-  tL2C_LCB* p_lcb;
   tL2C_CCB* p_ccb;
   tBT_TRANSPORT transport = BT_TRANSPORT_BR_EDR;
 
@@ -1389,7 +1381,7 @@ bool L2CA_RemoveFixedChnl(uint16_t fixed_cid, const RawAddress& rem_bda) {
   }
 
   /* Is a fixed channel connected to the remote BDA ?*/
-  p_lcb = l2cu_find_lcb_by_bd_addr(rem_bda, transport);
+  tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(rem_bda, transport);
 
   if (((p_lcb) == NULL) || (!p_lcb->p_fixed_ccbs[fixed_cid - L2CAP_FIRST_FIXED_CHNL])) {
     log::warn("BDA: {} CID: 0x{:04x} not connected", rem_bda, fixed_cid);
@@ -1531,7 +1523,6 @@ bool L2CA_SetChnlFlushability(uint16_t cid, bool is_flushable) {
  ******************************************************************************/
 uint16_t L2CA_FlushChannel(uint16_t lcid, uint16_t num_to_flush) {
   tL2C_CCB* p_ccb;
-  tL2C_LCB* p_lcb;
   uint16_t num_left = 0, num_flushed1 = 0, num_flushed2 = 0;
 
   p_ccb = l2cu_find_ccb_by_cid(NULL, lcid);
@@ -1540,7 +1531,7 @@ uint16_t L2CA_FlushChannel(uint16_t lcid, uint16_t num_to_flush) {
     log::warn("L2CA_FlushChannel()  abnormally returning 0  CID: 0x{:04x}", lcid);
     return 0;
   }
-  p_lcb = p_ccb->p_lcb;
+  tL2C_LCB* p_lcb = p_ccb->p_lcb;
 
   if (num_to_flush != L2CAP_FLUSH_CHANS_GET) {
     log::verbose(
