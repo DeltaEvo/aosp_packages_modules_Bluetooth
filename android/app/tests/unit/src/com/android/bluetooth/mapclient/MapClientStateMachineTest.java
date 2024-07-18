@@ -193,7 +193,8 @@ public class MapClientStateMachineTest {
     @Parameters(name = "{0}")
     public static List<FlagsParameterization> getParams() {
         return FlagsParameterization.progressionOf(
-                Flags.FLAG_HANDLE_DELIVERY_SENDING_FAILURE_EVENTS);
+                Flags.FLAG_HANDLE_DELIVERY_SENDING_FAILURE_EVENTS,
+                Flags.FLAG_USE_ENTIRE_MESSAGE_HANDLE);
     }
 
     public MapClientStateMachineTest(FlagsParameterization flags) {

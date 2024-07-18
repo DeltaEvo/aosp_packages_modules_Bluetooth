@@ -88,8 +88,8 @@ static bool is_same_device(const RawAddress& a, const RawAddress& b) {
 
 static void bta_dm_disc_sm_execute(tBTA_DM_DISC_EVT event, std::unique_ptr<tBTA_DM_MSG> msg);
 static void post_disc_evt(tBTA_DM_DISC_EVT event, std::unique_ptr<tBTA_DM_MSG> msg) {
-  if (do_in_main_thread(FROM_HERE, base::BindOnce(&bta_dm_disc_sm_execute, event,
-                                                  std::move(msg))) != BT_STATUS_SUCCESS) {
+  if (do_in_main_thread(base::BindOnce(&bta_dm_disc_sm_execute, event, std::move(msg))) !=
+      BT_STATUS_SUCCESS) {
     log::error("post_disc_evt failed");
   }
 }
@@ -253,8 +253,8 @@ void bta_dm_sdp_callback(const RawAddress& /* bd_addr */, tSDP_STATUS sdp_status
     return;
   }
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(&bta_dm_sdp_result, sdp_status,
-                                              bta_dm_discovery_cb.sdp_state.get()));
+  do_in_main_thread(
+          base::BindOnce(&bta_dm_sdp_result, sdp_status, bta_dm_discovery_cb.sdp_state.get()));
 }
 
 /** Callback of peer's DIS reply. This is only called for floss */

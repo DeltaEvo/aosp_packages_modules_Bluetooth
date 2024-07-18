@@ -16,7 +16,6 @@
 
 package com.android.bluetooth.le_scan;
 
-import android.annotation.RequiresPermission;
 import android.app.ActivityManager;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
@@ -482,7 +481,6 @@ public class ScanManager {
             return atLeastOneValidFilter;
         }
 
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_SCAN)
         void handleStopScan(ScanClient client) {
             if (client == null) {
                 return;
@@ -508,7 +506,7 @@ public class ScanManager {
             }
             if (client.appDied) {
                 Log.d(TAG, "app died, unregister scanner - " + client.scannerId);
-                mScanHelper.unregisterScanner(client.scannerId, mContext.getAttributionSource());
+                mScanHelper.unregisterScannerInternal(client.scannerId);
             }
         }
 
@@ -595,7 +593,6 @@ public class ScanManager {
             mIsConnecting = false;
         }
 
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_SCAN)
         void handleSuspendScans() {
             for (ScanClient client : mRegularScanClients) {
                 if ((requiresScreenOn(client) && !mScreenOn)

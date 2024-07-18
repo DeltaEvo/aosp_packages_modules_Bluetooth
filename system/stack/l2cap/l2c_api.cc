@@ -558,8 +558,8 @@ uint16_t L2CA_ConnectLECocReq(uint16_t psm, const RawAddress& p_bd_addr, tL2CAP_
       log::verbose("LE Link is up");
       // post this asynchronously to avoid out-of-order callback invocation
       // should this operation fail
-      do_in_main_thread(FROM_HERE, base::BindOnce(&l2c_csm_execute, base::Unretained(p_ccb),
-                                                  L2CEVT_L2CA_CONNECT_REQ, nullptr));
+      do_in_main_thread(base::BindOnce(&l2c_csm_execute, base::Unretained(p_ccb),
+                                       L2CEVT_L2CA_CONNECT_REQ, nullptr));
     }
   }
 
@@ -696,10 +696,16 @@ bool L2CA_ConnectCreditBasedRsp(const RawAddress& p_bd_addr, uint8_t id,
     return false;
   }
 
-  tL2C_CONN_INFO conn_info;
-  conn_info.lcids = accepted_lcids;
-  conn_info.bd_addr = p_bd_addr;
-  conn_info.l2cap_result = result;
+  tL2C_CONN_INFO conn_info = {
+          .bd_addr = p_bd_addr,
+          .hci_status{},
+          .psm{},
+          .l2cap_result = result,
+          .l2cap_status{},
+          .remote_cid{},
+          .lcids = accepted_lcids,
+          .peer_mtu{},
+  };
 
   if (accepted_lcids.size() > 0) {
     l2c_csm_execute(p_ccb, L2CEVT_L2CA_CREDIT_BASED_CONNECT_RSP, &conn_info);

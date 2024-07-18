@@ -20,7 +20,7 @@
 #include <sstream>
 #include <vector>
 
-#include "a2dp_error_codes.h"
+#include "a2dp_constants.h"
 #include "avdt_api.h"
 #include "common/message_loop_thread.h"
 #include "hardware/bt_av.h"

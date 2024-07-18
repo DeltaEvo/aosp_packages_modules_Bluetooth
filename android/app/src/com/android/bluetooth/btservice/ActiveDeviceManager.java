@@ -18,7 +18,6 @@ package com.android.bluetooth.btservice;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
@@ -159,6 +158,9 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
 
     private BluetoothDevice mClassicDeviceToBeActivated = null;
     private BluetoothDevice mClassicDeviceNotToBeActivated = null;
+
+    // Timeout for state machine thread join, to prevent potential ANR.
+    private static final int SM_THREAD_JOIN_TIMEOUT_MS = 1000;
 
     @Override
     public void onBluetoothStateChange(int prevState, int newState) {
@@ -849,7 +851,12 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
         mAudioManager.unregisterAudioDeviceCallback(mAudioManagerAudioDeviceCallback);
         mAdapterService.unregisterBluetoothStateCallback(this);
         if (mHandlerThread != null) {
-            mHandlerThread.quit();
+            mHandlerThread.quitSafely();
+            try {
+                mHandlerThread.join(SM_THREAD_JOIN_TIMEOUT_MS);
+            } catch (InterruptedException e) {
+                // Do not rethrow as we are shutting down anyway
+            }
             mHandlerThread = null;
         }
         resetState();
@@ -909,7 +916,6 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
         return true;
     }
 
-    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     private boolean setHfpActiveDevice(BluetoothDevice device) {
         synchronized (mLock) {
             Log.d(TAG, "setHfpActiveDevice(" + device + ")");
@@ -1229,9 +1235,8 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
      */
     private boolean isWatch(BluetoothDevice device) {
         // Check CoD
-        BluetoothClass deviceClass = device.getBluetoothClass();
-        if (deviceClass != null
-                && deviceClass.getDeviceClass() == BluetoothClass.Device.WEARABLE_WRIST_WATCH) {
+        BluetoothClass deviceClass = new BluetoothClass(mAdapterService.getRemoteClass(device));
+        if (deviceClass.getDeviceClass() == BluetoothClass.Device.WEARABLE_WRIST_WATCH) {
             return true;
         }
 
@@ -1268,7 +1273,6 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
      * wired audio device is connected.
      */
     @VisibleForTesting
-    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     void wiredAudioDeviceConnected() {
         Log.d(TAG, "wiredAudioDeviceConnected");
         setA2dpActiveDevice(null, true);

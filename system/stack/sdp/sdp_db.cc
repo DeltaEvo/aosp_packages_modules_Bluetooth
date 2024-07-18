@@ -23,7 +23,7 @@
  *
  ******************************************************************************/
 
-#define LOG_TAG "sdp"
+#define LOG_TAG "stack::sdp"
 
 #include <bluetooth/log.h>
 #include <string.h>
@@ -31,7 +31,6 @@
 #include <cstdint>
 
 #include "internal_include/bt_target.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"

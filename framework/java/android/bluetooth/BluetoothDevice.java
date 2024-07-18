@@ -1775,7 +1775,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
      * android.companion.CompanionDeviceManager.Callback, Handler)}) and have the {@link
      * android.Manifest.permission#BLUETOOTH_CONNECT} permission. Alternatively, if the caller has
      * the {@link android.Manifest.permission#BLUETOOTH_PRIVILEGED} permission, they can bypass the
-     * Companion Device Manager association requirement as well as other permission requirements.
+     * Companion Device Manager association requirement.
      *
      * @param alias is the new locally modifiable name for the remote Bluetooth device which must be
      *     the empty string. If null, we clear the alias.
@@ -2164,7 +2164,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else {
             try {
-                return service.getPackageNameOfBondingApplication(this);
+                return service.getPackageNameOfBondingApplication(this, mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
             }

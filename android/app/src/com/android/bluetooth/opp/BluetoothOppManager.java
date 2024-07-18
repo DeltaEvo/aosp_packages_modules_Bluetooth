@@ -32,6 +32,7 @@
 
 package com.android.bluetooth.opp;
 
+import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
@@ -314,6 +315,7 @@ public class BluetoothOppManager {
     }
 
     /** Enable Bluetooth hardware. */
+    @SuppressLint("AndroidFrameworkRequiresPermission") // re-entrant call
     public void enableBluetooth() {
         if (mAdapter != null) {
             mAdapter.enable();
@@ -321,6 +323,7 @@ public class BluetoothOppManager {
     }
 
     /** Disable Bluetooth hardware. */
+    @SuppressLint("AndroidFrameworkRequiresPermission") // re-entrant call
     public void disableBluetooth() {
         if (mAdapter != null) {
             mAdapter.disable();
@@ -328,6 +331,7 @@ public class BluetoothOppManager {
     }
 
     /** Get device name per bluetooth address. */
+    @SuppressLint("AndroidFrameworkRequiresPermission") // re-entrant call
     public String getDeviceName(BluetoothDevice device) {
         String deviceName = null;
 
@@ -459,6 +463,7 @@ public class BluetoothOppManager {
         }
 
         /** Insert multiple sending sessions to db, only used by Opp application. */
+        @SuppressLint("AndroidFrameworkRequiresPermission") // re-entrant call
         private void insertMultipleShare() {
             int count = mUris.size();
             Long ts = System.currentTimeMillis();
@@ -502,6 +507,7 @@ public class BluetoothOppManager {
         }
 
         /** Insert single sending session to db, only used by Opp application. */
+        @SuppressLint("AndroidFrameworkRequiresPermission") // re-entrant call
         private void insertSingleShare() {
             ContentValues values = new ContentValues();
             values.put(BluetoothShare.URI, mUri);

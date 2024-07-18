@@ -50,15 +50,11 @@ typedef struct {
 
 typedef struct {
   tA2DP_FIND_CB find;    /* find service control block */
-  uint16_t avdt_sdp_ver; /* AVDTP version */
 } tA2DP_CB;
 
 /******************************************************************************
  * Main Control Block
  ******************************************************************************/
 extern tA2DP_CB a2dp_cb;
-
-/* Used only for conformance testing */
-void a2dp_set_avdt_sdp_ver(uint16_t avdt_sdp_ver);
 
 #endif /* A2DP_INT_H */

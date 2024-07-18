@@ -30,6 +30,7 @@ import android.bluetooth.BluetoothCodecStatus;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUuid;
+import android.companion.CompanionDeviceManager;
 import android.content.Context;
 import android.content.Intent;
 import android.media.AudioManager;
@@ -37,6 +38,7 @@ import android.media.BluetoothProfileConnectionInfo;
 import android.os.Looper;
 import android.os.ParcelUuid;
 import android.os.test.TestLooper;
+import android.platform.test.annotations.EnableFlags;
 import android.platform.test.flag.junit.FlagsParameterization;
 import android.platform.test.flag.junit.SetFlagsRule;
 
@@ -95,6 +97,10 @@ public class A2dpServiceTest {
 
     private TestLooper mLooper;
     private A2dpService mA2dpService;
+    private CompanionDeviceManager mCompanionDeviceManager =
+            InstrumentationRegistry.getInstrumentation()
+                    .getContext()
+                    .getSystemService(CompanionDeviceManager.class);
 
     @Parameters(name = "{0}")
     public static List<FlagsParameterization> getParams() {
@@ -112,6 +118,11 @@ public class A2dpServiceTest {
 
         TestUtils.mockGetSystemService(
                 mAdapterService, Context.AUDIO_SERVICE, AudioManager.class, mAudioManager);
+        TestUtils.mockGetSystemService(
+                mAdapterService,
+                Context.COMPANION_DEVICE_SERVICE,
+                CompanionDeviceManager.class,
+                mCompanionDeviceManager);
         doReturn(InstrumentationRegistry.getInstrumentation().getTargetContext().getResources())
                 .when(mAdapterService)
                 .getResources();
@@ -694,6 +705,7 @@ public class A2dpServiceTest {
      * if the device is unbond.
      */
     @Test
+    @EnableFlags(Flags.FLAG_A2DP_SERVICE_LOOPER)
     public void testDeleteStateMachineDisconnectEvents() {
         // Update the device priority so okToConnect() returns true
         when(mDatabaseManager.getProfileConnectionPolicy(sTestDevice, BluetoothProfile.A2DP))

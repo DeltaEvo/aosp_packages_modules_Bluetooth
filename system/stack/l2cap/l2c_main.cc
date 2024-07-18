@@ -221,7 +221,6 @@ void l2c_rcv_acl_data(BT_HDR* p_msg) {
  *
  ******************************************************************************/
 static void process_l2cap_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
-  tL2C_CONN_INFO con_info;
   tL2C_RCB* p_rcb;
 
   /* if l2cap command received in CID 1 on top of an LE link, ignore this
@@ -346,9 +345,16 @@ static void process_l2cap_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
           alarm_cancel(p_lcb->info_resp_timer);
 
           p_lcb->w4_info_rsp = false;
-          tL2C_CONN_INFO ci;
-          ci.status = HCI_SUCCESS;
-          ci.bd_addr = p_lcb->remote_bd_addr;
+          tL2C_CONN_INFO ci = {
+                  .bd_addr = p_lcb->remote_bd_addr,
+                  .hci_status = HCI_SUCCESS,
+                  .psm{},
+                  .l2cap_result{},
+                  .l2cap_status{},
+                  .remote_cid{},
+                  .lcids{},
+                  .peer_mtu{},
+          };
 
           /* For all channels, send the event through their FSMs */
           for (tL2C_CCB* p_ccb = p_lcb->ccb_queue.p_first_ccb; p_ccb; p_ccb = p_ccb->p_next_ccb) {
@@ -358,7 +364,8 @@ static void process_l2cap_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
         break;
 
       case L2CAP_CMD_CONN_REQ: {
-        uint16_t rcid;
+        tL2C_CONN_INFO con_info{};
+        uint16_t rcid{};
         if (p + 4 > p_next_cmd) {
           log::warn("Not enough data for L2CAP_CMD_CONN_REQ");
           return;
@@ -401,7 +408,8 @@ static void process_l2cap_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
       }
 
       case L2CAP_CMD_CONN_RSP: {
-        uint16_t lcid;
+        tL2C_CONN_INFO con_info{};
+        uint16_t lcid{};
         if (p + 8 > p_next_cmd) {
           log::warn("Not enough data for L2CAP_CMD_CONN_REQ");
           return;
@@ -702,7 +710,7 @@ static void process_l2cap_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
       }
 
       case L2CAP_CMD_DISC_REQ: {
-        uint16_t lcid, rcid;
+        uint16_t lcid{}, rcid{};
         if (p + 4 > p_next_cmd) {
           log::warn("Not enough data for L2CAP_CMD_DISC_REQ");
           return;
@@ -713,6 +721,7 @@ static void process_l2cap_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
         tL2C_CCB* p_ccb = l2cu_find_ccb_by_cid(p_lcb, lcid);
         if (p_ccb) {
           if (p_ccb->remote_cid == rcid) {
+            tL2C_CONN_INFO con_info{};
             p_ccb->remote_id = id;
             l2c_csm_execute(p_ccb, L2CEVT_L2CAP_DISCONNECT_REQ, &con_info);
           }
@@ -724,7 +733,7 @@ static void process_l2cap_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
       }
 
       case L2CAP_CMD_DISC_RSP: {
-        uint16_t lcid, rcid;
+        uint16_t lcid{}, rcid{};
         if (p + 4 > p_next_cmd) {
           log::warn("Not enough data for L2CAP_CMD_DISC_RSP");
           return;
@@ -735,6 +744,7 @@ static void process_l2cap_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
         tL2C_CCB* p_ccb = l2cu_find_ccb_by_cid(p_lcb, lcid);
         if (p_ccb) {
           if ((p_ccb->remote_cid == rcid) && (p_ccb->local_id == id)) {
+            tL2C_CONN_INFO con_info{};
             l2c_csm_execute(p_ccb, L2CEVT_L2CAP_DISCONNECT_RSP, &con_info);
           }
         }
@@ -798,9 +808,16 @@ static void process_l2cap_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
           l2cu_process_fixed_chnl_resp(p_lcb);
         }
         {
-          tL2C_CONN_INFO ci;
-          ci.status = HCI_SUCCESS;
-          ci.bd_addr = p_lcb->remote_bd_addr;
+          tL2C_CONN_INFO ci = {
+                  .bd_addr = p_lcb->remote_bd_addr,
+                  .hci_status = HCI_SUCCESS,
+                  .psm{},
+                  .l2cap_result{},
+                  .l2cap_status{},
+                  .remote_cid{},
+                  .lcids{},
+                  .peer_mtu{},
+          };
           for (tL2C_CCB* p_ccb = p_lcb->ccb_queue.p_first_ccb; p_ccb; p_ccb = p_ccb->p_next_ccb) {
             l2c_csm_execute(p_ccb, L2CEVT_L2CAP_INFO_RSP, &ci);
           }

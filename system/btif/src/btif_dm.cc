@@ -890,18 +890,17 @@ uint16_t btif_dm_get_connection_state_sync(const RawAddress& bd_addr) {
   std::promise<uint16_t> promise;
   std::future future = promise.get_future();
 
-  auto status = do_in_main_thread(
-          FROM_HERE, base::BindOnce(
-                             [](const RawAddress bd_addr, std::promise<uint16_t> promise) {
-                               // Experiment to try with maybe resolved address
-                               uint16_t state = btif_dm_get_resolved_connection_state({
-                                       .type = BLE_ADDR_RANDOM,
-                                       .bda = bd_addr,
-                               });
-                               state |= btif_dm_get_connection_state(bd_addr);
-                               promise.set_value(state);
-                             },
-                             bd_addr, std::move(promise)));
+  auto status = do_in_main_thread(base::BindOnce(
+          [](const RawAddress bd_addr, std::promise<uint16_t> promise) {
+            // Experiment to try with maybe resolved address
+            uint16_t state = btif_dm_get_resolved_connection_state({
+                    .type = BLE_ADDR_RANDOM,
+                    .bda = bd_addr,
+            });
+            state |= btif_dm_get_connection_state(bd_addr);
+            promise.set_value(state);
+          },
+          bd_addr, std::move(promise)));
   log::assert_that(BT_STATUS_SUCCESS == status, "assert failed: BT_STATUS_SUCCESS == status");
   return future.get();
 }
@@ -1753,8 +1752,7 @@ void btif_on_gatt_results(RawAddress bd_addr, BD_NAME bd_name,
         /* LE Audio profile should relax parameters when it connects. If
          * profile is not enabled, relax parameters after timeout. */
         log::debug("Scheduling conn params unlock for {}", bd_addr);
-        do_in_main_thread_delayed(FROM_HERE,
-                                  base::BindOnce(
+        do_in_main_thread_delayed(base::BindOnce(
                                           [](RawAddress bd_addr) {
                                             L2CA_LockBleConnParamsForProfileConnection(bd_addr,
                                                                                        false);
@@ -1995,7 +1993,7 @@ void BTIF_dm_enable() {
   BTA_DmBleConfigLocalPrivacy(ble_privacy_enabled);
 
   if (com::android::bluetooth::flags::separate_service_and_device_discovery()) {
-    BTM_SecAddRmtNameNotifyCallback(btif_on_name_read_from_btm);
+    get_security_client_interface().BTM_SecAddRmtNameNotifyCallback(btif_on_name_read_from_btm);
   }
 
   /* for each of the enabled services in the mask, trigger the profile
@@ -2023,7 +2021,7 @@ void BTIF_dm_enable() {
 
 void BTIF_dm_disable() {
   if (com::android::bluetooth::flags::separate_service_and_device_discovery()) {
-    BTM_SecDeleteRmtNameNotifyCallback(&btif_on_name_read_from_btm);
+    get_security_client_interface().BTM_SecDeleteRmtNameNotifyCallback(&btif_on_name_read_from_btm);
   }
 
   /* for each of the enabled services in the mask, trigger the profile
@@ -3065,9 +3063,10 @@ static void get_address_callback(tBT_TRANSPORT transport, bool is_valid, const O
 
 // Step Three: CallBack from Step Two, advertise and get address
 static void start_advertising_callback(uint8_t id, tBT_TRANSPORT transport, bool is_valid,
-                                       const Octet16& c, const Octet16& r, tBTM_STATUS status) {
-  if (status != 0) {
-    log::info("OOB get advertiser ID failed with status {}", status);
+                                       const Octet16& c, const Octet16& r,
+                                       uint8_t advertising_status) {
+  if (advertising_status != 0) {
+    log::info("OOB get advertiser ID failed with status {}", advertising_status);
     GetInterfaceToProfiles()->events->invoke_oob_data_request_cb(transport, false, c, r,
                                                                  RawAddress{}, 0x00);
     SMP_ClearLocScOobData();
@@ -3080,8 +3079,8 @@ static void start_advertising_callback(uint8_t id, tBT_TRANSPORT transport, bool
   advertiser->GetOwnAddress(id, base::Bind(&get_address_callback, transport, is_valid, c, r));
 }
 
-static void timeout_cb(uint8_t id, tBTM_STATUS status) {
-  log::info("OOB advertiser with id {} timed out with status {}", id, status);
+static void timeout_cb(uint8_t id, uint8_t advertising_status) {
+  log::info("OOB advertiser with id {} timed out with status {}", id, advertising_status);
   auto advertiser = bluetooth::shim::get_ble_advertiser_instance();
   advertiser->Unregister(id);
   SMP_ClearLocScOobData();
@@ -3091,9 +3090,9 @@ static void timeout_cb(uint8_t id, tBTM_STATUS status) {
 
 // Step Two: CallBack from Step One, advertise and get address
 static void id_status_callback(tBT_TRANSPORT transport, bool is_valid, const Octet16& c,
-                               const Octet16& r, uint8_t id, tBTM_STATUS status) {
-  if (status != 0) {
-    log::info("OOB get advertiser ID failed with status {}", status);
+                               const Octet16& r, uint8_t id, uint8_t advertising_status) {
+  if (advertising_status != 0) {
+    log::info("OOB get advertiser ID failed with status {}", advertising_status);
     GetInterfaceToProfiles()->events->invoke_oob_data_request_cb(transport, false, c, r,
                                                                  RawAddress{}, 0x00);
     SMP_ClearLocScOobData();
@@ -3106,7 +3105,7 @@ static void id_status_callback(tBT_TRANSPORT transport, bool is_valid, const Oct
   log::info("oob_advertiser_id: {}", id);
 
   auto advertiser = bluetooth::shim::get_ble_advertiser_instance();
-  AdvertiseParameters parameters{};
+  ::AdvertiseParameters parameters{};
   parameters.advertising_event_properties = 0x0045 /* connectable, discoverable, tx power */;
   parameters.min_interval = 0xa0;   // 100 ms
   parameters.max_interval = 0x500;  // 800 ms

@@ -365,11 +365,9 @@ TEST_F(StackA2dpTest, test_a2dp_is_codec_valid_sbc) {
   EXPECT_TRUE(A2DP_IsPeerSourceCodecValid(codec_info_sbc));
   EXPECT_TRUE(A2DP_IsPeerSourceCodecValid(codec_info_sbc_capability));
 
-  EXPECT_TRUE(A2DP_IsSinkCodecValid(codec_info_sbc_sink_capability));
   EXPECT_TRUE(A2DP_IsPeerSinkCodecValid(codec_info_sbc_sink_capability));
 
   EXPECT_FALSE(A2DP_IsSourceCodecValid(codec_info_non_a2dp));
-  EXPECT_FALSE(A2DP_IsSinkCodecValid(codec_info_non_a2dp));
   EXPECT_FALSE(A2DP_IsPeerSourceCodecValid(codec_info_non_a2dp));
   EXPECT_FALSE(A2DP_IsPeerSinkCodecValid(codec_info_non_a2dp));
 
@@ -377,21 +375,18 @@ TEST_F(StackA2dpTest, test_a2dp_is_codec_valid_sbc) {
   uint8_t codec_info_sbc_invalid[AVDT_CODEC_SIZE];
   memset(codec_info_sbc_invalid, 0, sizeof(codec_info_sbc_invalid));
   EXPECT_FALSE(A2DP_IsSourceCodecValid(codec_info_sbc_invalid));
-  EXPECT_FALSE(A2DP_IsSinkCodecValid(codec_info_sbc_invalid));
   EXPECT_FALSE(A2DP_IsPeerSourceCodecValid(codec_info_sbc_invalid));
   EXPECT_FALSE(A2DP_IsPeerSinkCodecValid(codec_info_sbc_invalid));
 
   memcpy(codec_info_sbc_invalid, codec_info_sbc, sizeof(codec_info_sbc));
   codec_info_sbc_invalid[0] = 0;  // Corrupt the Length field
   EXPECT_FALSE(A2DP_IsSourceCodecValid(codec_info_sbc_invalid));
-  EXPECT_FALSE(A2DP_IsSinkCodecValid(codec_info_sbc_invalid));
   EXPECT_FALSE(A2DP_IsPeerSourceCodecValid(codec_info_sbc_invalid));
   EXPECT_FALSE(A2DP_IsPeerSinkCodecValid(codec_info_sbc_invalid));
 
   memcpy(codec_info_sbc_invalid, codec_info_sbc, sizeof(codec_info_sbc));
   codec_info_sbc_invalid[1] = 0xff;  // Corrupt the Media Type field
   EXPECT_FALSE(A2DP_IsSourceCodecValid(codec_info_sbc_invalid));
-  EXPECT_FALSE(A2DP_IsSinkCodecValid(codec_info_sbc_invalid));
   EXPECT_FALSE(A2DP_IsPeerSourceCodecValid(codec_info_sbc_invalid));
   EXPECT_FALSE(A2DP_IsPeerSinkCodecValid(codec_info_sbc_invalid));
 }
@@ -406,7 +401,6 @@ TEST_F(StackA2dpTest, test_a2dp_is_codec_valid_aac) {
   EXPECT_TRUE(A2DP_IsPeerSourceCodecValid(codec_info_aac));
   EXPECT_TRUE(A2DP_IsPeerSourceCodecValid(codec_info_aac_capability));
 
-  EXPECT_TRUE(A2DP_IsSinkCodecValid(codec_info_aac_sink_capability));
   EXPECT_TRUE(A2DP_IsPeerSinkCodecValid(codec_info_aac_sink_capability));
 
   // Test with invalid AAC codecs
@@ -414,14 +408,12 @@ TEST_F(StackA2dpTest, test_a2dp_is_codec_valid_aac) {
   memcpy(codec_info_aac_invalid, codec_info_aac, sizeof(codec_info_aac));
   codec_info_aac_invalid[0] = 0;  // Corrupt the Length field
   EXPECT_FALSE(A2DP_IsSourceCodecValid(codec_info_aac_invalid));
-  EXPECT_FALSE(A2DP_IsSinkCodecValid(codec_info_aac_invalid));
   EXPECT_FALSE(A2DP_IsPeerSourceCodecValid(codec_info_aac_invalid));
   EXPECT_FALSE(A2DP_IsPeerSinkCodecValid(codec_info_aac_invalid));
 
   memcpy(codec_info_aac_invalid, codec_info_aac, sizeof(codec_info_aac));
   codec_info_aac_invalid[1] = 0xff;  // Corrupt the Media Type field
   EXPECT_FALSE(A2DP_IsSourceCodecValid(codec_info_aac_invalid));
-  EXPECT_FALSE(A2DP_IsSinkCodecValid(codec_info_aac_invalid));
   EXPECT_FALSE(A2DP_IsPeerSourceCodecValid(codec_info_aac_invalid));
   EXPECT_FALSE(A2DP_IsPeerSinkCodecValid(codec_info_aac_invalid));
 }
@@ -432,7 +424,6 @@ TEST_F(StackA2dpTest, test_a2dp_is_codec_valid_opus) {
   ASSERT_TRUE(A2DP_IsVendorPeerSourceCodecValid(codec_info_opus));
   ASSERT_TRUE(A2DP_IsVendorPeerSourceCodecValid(codec_info_opus_capability));
 
-  ASSERT_TRUE(A2DP_IsVendorSinkCodecValid(codec_info_opus_sink_capability));
   ASSERT_TRUE(A2DP_IsVendorPeerSinkCodecValid(codec_info_opus_sink_capability));
 
   // Test with invalid Opus configuration
@@ -440,14 +431,12 @@ TEST_F(StackA2dpTest, test_a2dp_is_codec_valid_opus) {
   memcpy(codec_info_opus_invalid, codec_info_opus, sizeof(codec_info_opus));
   codec_info_opus_invalid[0] = 0;  // Corrupt the Length field
   ASSERT_FALSE(A2DP_IsVendorSourceCodecValid(codec_info_opus_invalid));
-  ASSERT_FALSE(A2DP_IsVendorSinkCodecValid(codec_info_opus_invalid));
   ASSERT_FALSE(A2DP_IsVendorPeerSourceCodecValid(codec_info_opus_invalid));
   ASSERT_FALSE(A2DP_IsVendorPeerSinkCodecValid(codec_info_opus_invalid));
 
   memcpy(codec_info_opus_invalid, codec_info_opus, sizeof(codec_info_opus));
   codec_info_opus_invalid[1] = 0xff;  // Corrupt the Media Type field
   ASSERT_FALSE(A2DP_IsVendorSourceCodecValid(codec_info_opus_invalid));
-  ASSERT_FALSE(A2DP_IsVendorSinkCodecValid(codec_info_opus_invalid));
   ASSERT_FALSE(A2DP_IsVendorPeerSourceCodecValid(codec_info_opus_invalid));
   ASSERT_FALSE(A2DP_IsVendorPeerSinkCodecValid(codec_info_opus_invalid));
 }
@@ -479,18 +468,6 @@ TEST_F(StackA2dpTest, test_a2dp_is_sink_codec_supported) {
   EXPECT_FALSE(A2DP_IsSinkCodecSupported(codec_info_aac_sink_capability));
 
   EXPECT_FALSE(A2DP_IsSinkCodecSupported(codec_info_non_a2dp));
-}
-
-TEST_F(StackA2dpTest, test_a2dp_is_peer_source_codec_supported) {
-  EXPECT_TRUE(A2DP_IsPeerSourceCodecSupported(codec_info_sbc));
-  EXPECT_TRUE(A2DP_IsPeerSourceCodecSupported(codec_info_sbc_capability));
-  EXPECT_TRUE(A2DP_IsPeerSourceCodecSupported(codec_info_sbc_sink_capability));
-
-  EXPECT_TRUE(A2DP_IsPeerSourceCodecSupported(codec_info_aac));
-  EXPECT_TRUE(A2DP_IsPeerSourceCodecSupported(codec_info_aac_capability));
-  EXPECT_TRUE(A2DP_IsPeerSourceCodecSupported(codec_info_aac_sink_capability));
-
-  EXPECT_FALSE(A2DP_IsPeerSourceCodecSupported(codec_info_non_a2dp));
 }
 
 TEST_F(StackA2dpTest, test_init_default_codec) {

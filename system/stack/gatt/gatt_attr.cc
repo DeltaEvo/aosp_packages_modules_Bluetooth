@@ -996,6 +996,10 @@ bool gatt_profile_get_eatt_support(const RawAddress& remote_bda) {
     return false;
   }
 
+  return gatt_profile_get_eatt_support_by_conn_id(conn_id);
+}
+
+bool gatt_profile_get_eatt_support_by_conn_id(uint16_t conn_id) {
   /* Get tcb info */
   uint8_t tcb_idx = GATT_GET_TCB_IDX(conn_id);
   tGATT_TCB& tcb = gatt_cb.tcb[tcb_idx];
@@ -1011,9 +1015,7 @@ bool gatt_profile_get_eatt_support(const RawAddress& remote_bda) {
  * Returns          true if enabled in gd flag, otherwise false
  *
  ******************************************************************************/
-static bool gatt_sr_is_robust_caching_enabled() {
-  return bluetooth::common::init_flags::gatt_robust_caching_server_is_enabled();
-}
+static bool gatt_sr_is_robust_caching_enabled() { return false; }
 
 /*******************************************************************************
  *

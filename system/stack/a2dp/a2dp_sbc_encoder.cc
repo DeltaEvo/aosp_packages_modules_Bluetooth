@@ -114,15 +114,6 @@ static uint8_t calculate_max_frames_per_packet(void);
 static uint16_t a2dp_sbc_source_rate(bool is_peer_edr);
 static uint32_t a2dp_sbc_frame_length(void);
 
-bool A2DP_LoadEncoderSbc(void) {
-  // Nothing to do - the library is statically linked
-  return true;
-}
-
-void A2DP_UnloadEncoderSbc(void) {
-  // Nothing to do - the library is statically linked
-}
-
 void a2dp_sbc_encoder_init(const tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_params,
                            A2dpCodecConfig* a2dp_codec_config,
                            a2dp_source_read_callback_t read_callback,

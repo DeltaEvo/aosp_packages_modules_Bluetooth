@@ -60,7 +60,7 @@ static void init_btav_a2dp_codec_config(btav_a2dp_codec_config_t* codec_config,
   codec_config->codec_priority = codec_priority;
 }
 
-A2dpCodecConfig::A2dpCodecConfig(btav_a2dp_codec_index_t codec_index, uint64_t codec_id,
+A2dpCodecConfig::A2dpCodecConfig(btav_a2dp_codec_index_t codec_index, tA2DP_CODEC_ID codec_id,
                                  const std::string& name, btav_a2dp_codec_priority_t codec_priority)
     : codec_index_(codec_index),
       codec_id_(codec_id),
@@ -252,8 +252,6 @@ bool A2dpCodecConfig::getCodecSpecificConfig(tBT_A2DP_OFFLOAD* p_a2dp_offload) {
   }
   return true;
 }
-
-bool A2dpCodecConfig::isValid() const { return true; }
 
 bool A2dpCodecConfig::copyOutOtaCodecConfig(uint8_t* p_codec_info) {
   std::lock_guard<std::recursive_mutex> lock(codec_mutex_);
@@ -1072,25 +1070,6 @@ bool A2DP_IsSourceCodecValid(const uint8_t* p_codec_info) {
   return false;
 }
 
-bool A2DP_IsSinkCodecValid(const uint8_t* p_codec_info) {
-  tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
-
-  switch (codec_type) {
-    case A2DP_MEDIA_CT_SBC:
-      return A2DP_IsCodecValidSbc(p_codec_info);
-#if !defined(EXCLUDE_NONSTANDARD_CODECS)
-    case A2DP_MEDIA_CT_AAC:
-      return A2DP_IsCodecValidAac(p_codec_info);
-    case A2DP_MEDIA_CT_NON_A2DP:
-      return A2DP_IsVendorSinkCodecValid(p_codec_info);
-#endif
-    default:
-      break;
-  }
-
-  return false;
-}
-
 bool A2DP_IsPeerSourceCodecValid(const uint8_t* p_codec_info) {
   tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
 
@@ -1140,26 +1119,6 @@ bool A2DP_IsSinkCodecSupported(const uint8_t* p_codec_info) {
       return A2DP_IsSinkCodecSupportedAac(p_codec_info);
     case A2DP_MEDIA_CT_NON_A2DP:
       return A2DP_IsVendorSinkCodecSupported(p_codec_info);
-#endif
-    default:
-      break;
-  }
-
-  log::error("unsupported codec type 0x{:x}", codec_type);
-  return false;
-}
-
-bool A2DP_IsPeerSourceCodecSupported(const uint8_t* p_codec_info) {
-  tA2DP_CODEC_TYPE codec_type = A2DP_GetCodecType(p_codec_info);
-
-  switch (codec_type) {
-    case A2DP_MEDIA_CT_SBC:
-      return A2DP_IsPeerSourceCodecSupportedSbc(p_codec_info);
-#if !defined(EXCLUDE_NONSTANDARD_CODECS)
-    case A2DP_MEDIA_CT_AAC:
-      return A2DP_IsPeerSourceCodecSupportedAac(p_codec_info);
-    case A2DP_MEDIA_CT_NON_A2DP:
-      return A2DP_IsVendorPeerSourceCodecSupported(p_codec_info);
 #endif
     default:
       break;
@@ -1582,7 +1541,7 @@ std::string A2DP_CodecInfoString(const uint8_t* p_codec_info) {
       break;
   }
 
-  return "Unsupported codec type: " + loghex(codec_type);
+  return fmt::format("Unsupported codec type: {:x}", codec_type);
 }
 
 int A2DP_GetEecoderEffectiveFrameSize(const uint8_t* p_codec_info) {

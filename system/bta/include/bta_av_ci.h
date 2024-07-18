@@ -58,6 +58,6 @@ void bta_av_ci_src_data_ready(tBTA_AV_CHNL chnl);
  *
  ******************************************************************************/
 void bta_av_ci_setconfig(tBTA_AV_HNDL bta_av_handle, uint8_t err_code, uint8_t category,
-                         uint8_t num_seid, uint8_t* p_seid, bool recfg_needed, uint8_t avdt_handle);
+                         bool recfg_needed, uint8_t avdt_handle);
 
 #endif /* BTA_AV_CI_H */

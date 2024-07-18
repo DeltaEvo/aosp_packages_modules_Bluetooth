@@ -449,14 +449,11 @@ private:
    * capability, but the codec configuration that the peer would like to use.
    * @param num_protect is the number of content protection methods to use
    * @param p_protect_info contains the content protection information to use.
-   * @param p_restart_output if there is a change in the encoder configuration
-   * that requires restarting of the A2DP connection, flag |p_restart_output|
-   * is set to true.
    * @param t_local_sep the profile for which ota config needs to be set.
    * @return true on success, otherwise false
    */
   bool SetCodecOtaConfig(BtaAvCoPeer* p_peer, const uint8_t* p_ota_codec_config,
-                         uint8_t num_protect, const uint8_t* p_protect_info, bool* p_restart_output,
+                         uint8_t num_protect, const uint8_t* p_protect_info,
                          const uint8_t t_local_sep);
 
   /**

@@ -54,6 +54,7 @@ struct SDP_DiDiscover SDP_DiDiscover;
 struct SDP_GetDiRecord SDP_GetDiRecord;
 struct SDP_SetLocalDiRecord SDP_SetLocalDiRecord;
 struct SDP_GetNumDiRecords SDP_GetNumDiRecords;
+struct SDP_Dumpsys SDP_Dumpsys;
 
 }  // namespace stack_sdp_api
 }  // namespace mock
@@ -130,17 +131,21 @@ tSDP_STATUS SDP_DiDiscover(const RawAddress& remote_device, tSDP_DISCOVERY_DB* p
   inc_func_call_count(__func__);
   return test::mock::stack_sdp_api::SDP_DiDiscover(remote_device, p_db, len, p_cb);
 }
-uint16_t SDP_GetDiRecord(uint8_t get_record_index, tSDP_DI_GET_RECORD* p_device_info,
-                         const tSDP_DISCOVERY_DB* p_db) {
+tSDP_STATUS SDP_GetDiRecord(uint8_t get_record_index, tSDP_DI_GET_RECORD* p_device_info,
+                            const tSDP_DISCOVERY_DB* p_db) {
   inc_func_call_count(__func__);
   return test::mock::stack_sdp_api::SDP_GetDiRecord(get_record_index, p_device_info, p_db);
 }
-uint16_t SDP_SetLocalDiRecord(const tSDP_DI_RECORD* p_device_info, uint32_t* p_handle) {
+tSDP_STATUS SDP_SetLocalDiRecord(const tSDP_DI_RECORD* p_device_info, uint32_t* p_handle) {
   inc_func_call_count(__func__);
   return test::mock::stack_sdp_api::SDP_SetLocalDiRecord(p_device_info, p_handle);
 }
 uint8_t SDP_GetNumDiRecords(const tSDP_DISCOVERY_DB* p_db) {
   inc_func_call_count(__func__);
   return test::mock::stack_sdp_api::SDP_GetNumDiRecords(p_db);
+}
+void SDP_Dumpsys(int fd) {
+  inc_func_call_count(__func__);
+  return test::mock::stack_sdp_api::SDP_Dumpsys(fd);
 }
 // END mockcify generation

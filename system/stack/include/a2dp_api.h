@@ -28,7 +28,6 @@
 #include <cstdint>
 
 #include "stack/include/a2dp_constants.h"
-#include "stack/include/a2dp_error_codes.h"
 #include "stack/include/sdp_api.h"
 #include "types/raw_address.h"
 
@@ -116,13 +115,12 @@ using tA2DP_FIND_CBACK =
  *                  Output Parameters:
  *                      None.
  *
- * Returns          A2DP_SUCCESS if function execution succeeded,
- *                  A2DP_INVALID_PARAMS if bad parameters are given.
- *                  A2DP_FAIL if function execution failed.
+ * Returns          true if function execution succeeded,
+ *                  false if bad parameters are given or function execution failed.
  *
  *****************************************************************************/
-tA2DP_STATUS A2DP_AddRecord(uint16_t service_uuid, char* p_service_name, char* p_provider_name,
-                            uint16_t features, uint32_t sdp_handle);
+bool A2DP_AddRecord(uint16_t service_uuid, char* p_service_name, char* p_provider_name,
+                    uint16_t features, uint32_t sdp_handle);
 
 /******************************************************************************
  *
@@ -154,7 +152,6 @@ tA2DP_STATUS A2DP_AddRecord(uint16_t service_uuid, char* p_service_name, char* p
  *                      None.
  *
  * Returns          A2DP_SUCCESS if function execution succeeded,
- *                  A2DP_INVALID_PARAMS if bad parameters are given.
  *                  A2DP_BUSY if discovery is already in progress.
  *                  A2DP_FAIL if function execution failed.
  *

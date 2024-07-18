@@ -23,11 +23,13 @@
  ******************************************************************************/
 
 #include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 
 #include <cstdint>
 
 #include "bta/ar/bta_ar_int.h"
 #include "bta/sys/bta_sys.h"
+#include "profile/avrcp/avrcp_sdp_service.h"
 #include "stack/include/avct_api.h"
 #include "stack/include/avrc_api.h"
 #include "stack/include/bt_types.h"
@@ -36,6 +38,7 @@
 #include "types/raw_address.h"
 
 using namespace bluetooth::legacy::stack::sdp;
+using namespace bluetooth::avrcp;
 using namespace bluetooth;
 
 /* AV control block */
@@ -200,12 +203,31 @@ void bta_ar_dereg_avct() {
  *****************************************************************************/
 void bta_ar_reg_avrc(uint16_t service_uuid, const char* service_name, const char* provider_name,
                      uint16_t categories, bool browse_supported, uint16_t profile_version) {
-  uint8_t mask = BTA_AR_AV_MASK;
-  uint8_t temp[8], *p;
-
   if (!categories) {
     return;
   }
+
+  if (com::android::bluetooth::flags::avrcp_sdp_records()) {
+    const std::shared_ptr<AvrcpSdpService>& avrcp_sdp_service = AvrcpSdpService::Get();
+    AvrcpSdpRecord add_record_request = {service_uuid,
+                                         service_name,
+                                         provider_name,
+                                         categories,
+                                         browse_supported,
+                                         profile_version,
+                                         0};
+    if (service_uuid == UUID_SERVCLASS_AV_REM_CTRL_TARGET) {
+      avrcp_sdp_service->AddRecord(add_record_request, bta_ar_cb.sdp_tg_request_id);
+      log::debug("Assigned target request id {}", bta_ar_cb.sdp_tg_request_id);
+    } else if (service_uuid == UUID_SERVCLASS_AV_REMOTE_CONTROL ||
+               service_uuid == UUID_SERVCLASS_AV_REM_CTRL_CONTROL) {
+      avrcp_sdp_service->AddRecord(add_record_request, bta_ar_cb.sdp_ct_request_id);
+      log::debug("Assigned control request id {}", bta_ar_cb.sdp_ct_request_id);
+    }
+    return;
+  }
+  uint8_t mask = BTA_AR_AV_MASK;
+  uint8_t temp[8], *p;
 
   if (service_uuid == UUID_SERVCLASS_AV_REM_CTRL_TARGET) {
     if (bta_ar_cb.sdp_tg_handle == 0) {
@@ -251,6 +273,23 @@ void bta_ar_reg_avrc(uint16_t service_uuid, const char* service_name, const char
  *
  *****************************************************************************/
 void bta_ar_dereg_avrc(uint16_t service_uuid) {
+  log::verbose("Deregister AVRC 0x{:x}", service_uuid);
+  if (com::android::bluetooth::flags::avrcp_sdp_records()) {
+    const std::shared_ptr<AvrcpSdpService>& avrcp_sdp_service = AvrcpSdpService::Get();
+    if (service_uuid == UUID_SERVCLASS_AV_REM_CTRL_TARGET &&
+        bta_ar_cb.sdp_tg_request_id != UNASSIGNED_REQUEST_ID) {
+      avrcp_sdp_service->RemoveRecord(UUID_SERVCLASS_AV_REM_CTRL_TARGET,
+                                      bta_ar_cb.sdp_tg_request_id);
+      bta_ar_cb.sdp_tg_request_id = UNASSIGNED_REQUEST_ID;
+    } else if ((service_uuid == UUID_SERVCLASS_AV_REMOTE_CONTROL ||
+                service_uuid == UUID_SERVCLASS_AV_REM_CTRL_CONTROL) &&
+               bta_ar_cb.sdp_ct_request_id != UNASSIGNED_REQUEST_ID) {
+      avrcp_sdp_service->RemoveRecord(UUID_SERVCLASS_AV_REMOTE_CONTROL,
+                                      bta_ar_cb.sdp_ct_request_id);
+      bta_ar_cb.sdp_ct_request_id = UNASSIGNED_REQUEST_ID;
+    }
+    return;
+  }
   uint8_t mask = BTA_AR_AV_MASK;
   uint16_t categories = 0;
   uint8_t temp[8], *p;
@@ -300,6 +339,7 @@ void bta_ar_dereg_avrc(uint16_t service_uuid) {
  * Returns          void
  *
  *****************************************************************************/
+// TODO: b/341353017 - Remove it as part of flag cleanup
 void bta_ar_reg_avrc_for_src_sink_coexist(uint16_t service_uuid, const char* service_name,
                                           const char* provider_name, uint16_t categories,
                                           tBTA_SYS_ID sys_id, bool browse_supported,

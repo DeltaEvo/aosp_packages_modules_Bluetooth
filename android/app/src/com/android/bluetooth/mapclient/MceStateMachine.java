@@ -117,6 +117,9 @@ class MceStateMachine extends StateMachine {
     private static final boolean MESSAGE_SEEN = true;
     private static final boolean MESSAGE_NOT_SEEN = false;
 
+    // Do we download attachments, e.g., if a MMS contains an image.
+    private static final boolean DOWNLOAD_ATTACHMENTS = false;
+
     // Folder names as defined in Bluetooth.org MAP spec V10
     private static final String FOLDER_TELECOM = "telecom";
     private static final String FOLDER_MSG = "msg";
@@ -713,7 +716,9 @@ class MceStateMachine extends StateMachine {
                 case MSG_INBOUND_MESSAGE:
                     mMasClient.makeRequest(
                             new RequestGetMessage(
-                                    (String) message.obj, MasClient.CharsetType.UTF_8, false));
+                                    (String) message.obj,
+                                    MasClient.CharsetType.UTF_8,
+                                    DOWNLOAD_ATTACHMENTS));
                     break;
 
                 case MSG_NOTIFICATION:
@@ -770,19 +775,34 @@ class MceStateMachine extends StateMachine {
                                 Utils.getLoggableAddress(mDevice)
                                         + " [Connected]: Message Sent, handle="
                                         + messageHandle);
-                        // ignore the top-order byte (converted to string) in the handle for now
-                        // some test devices don't populate messageHandle field.
-                        // in such cases, no need to wait up for response for such messages.
-                        if (messageHandle != null && messageHandle.length() > 2) {
-                            if (SAVE_OUTBOUND_MESSAGES) {
-                                mDatabase.storeMessage(
-                                        requestPushMessage.getBMsg(),
-                                        messageHandle,
-                                        System.currentTimeMillis(),
-                                        MESSAGE_SEEN);
+                        if (Flags.useEntireMessageHandle()) {
+                            // some test devices don't populate messageHandle field.
+                            // in such cases, no need to wait up for response for such messages.
+                            if (messageHandle != null) {
+                                if (SAVE_OUTBOUND_MESSAGES) {
+                                    mDatabase.storeMessage(
+                                            requestPushMessage.getBMsg(),
+                                            messageHandle,
+                                            System.currentTimeMillis(),
+                                            MESSAGE_SEEN);
+                                }
+                                mSentMessageLog.put(messageHandle, requestPushMessage.getBMsg());
                             }
-                            mSentMessageLog.put(
-                                    messageHandle.substring(2), requestPushMessage.getBMsg());
+                        } else {
+                            // ignore the top-order byte (converted to string) in the handle for now
+                            // some test devices don't populate messageHandle field.
+                            // in such cases, no need to wait up for response for such messages.
+                            if (messageHandle != null && messageHandle.length() > 2) {
+                                if (SAVE_OUTBOUND_MESSAGES) {
+                                    mDatabase.storeMessage(
+                                            requestPushMessage.getBMsg(),
+                                            messageHandle,
+                                            System.currentTimeMillis(),
+                                            MESSAGE_SEEN);
+                                }
+                                mSentMessageLog.put(
+                                        messageHandle.substring(2), requestPushMessage.getBMsg());
+                            }
                         }
                     } else if (message.obj instanceof RequestGetMessagesListing) {
                         processMessageListing((RequestGetMessagesListing) message.obj);
@@ -879,7 +899,9 @@ class MceStateMachine extends StateMachine {
                     }
                     mMasClient.makeRequest(
                             new RequestGetMessage(
-                                    event.getHandle(), MasClient.CharsetType.UTF_8, false));
+                                    event.getHandle(),
+                                    MasClient.CharsetType.UTF_8,
+                                    DOWNLOAD_ATTACHMENTS));
                     break;
                 case DELIVERY_FAILURE:
                     // fall through
@@ -1177,16 +1199,31 @@ class MceStateMachine extends StateMachine {
             Log.d(TAG, "got a status for " + handle + " Status = " + status);
             // some test devices don't populate messageHandle field.
             // in such cases, ignore such messages.
-            if (handle == null || handle.length() <= 2) return;
+            if (Flags.useEntireMessageHandle()) {
+                if (handle == null) return;
+            } else {
+                if (handle == null || handle.length() <= 2) return;
+            }
             PendingIntent intentToSend = null;
-            // ignore the top-order byte (converted to string) in the handle for now
-            String shortHandle = handle.substring(2);
-            if (status == EventReport.Type.SENDING_FAILURE
-                    || status == EventReport.Type.SENDING_SUCCESS) {
-                intentToSend = mSentReceiptRequested.remove(mSentMessageLog.get(shortHandle));
-            } else if (status == EventReport.Type.DELIVERY_SUCCESS
-                    || status == EventReport.Type.DELIVERY_FAILURE) {
-                intentToSend = mDeliveryReceiptRequested.remove(mSentMessageLog.get(shortHandle));
+            if (Flags.useEntireMessageHandle()) {
+                if (status == EventReport.Type.SENDING_FAILURE
+                        || status == EventReport.Type.SENDING_SUCCESS) {
+                    intentToSend = mSentReceiptRequested.remove(mSentMessageLog.get(handle));
+                } else if (status == EventReport.Type.DELIVERY_SUCCESS
+                        || status == EventReport.Type.DELIVERY_FAILURE) {
+                    intentToSend = mDeliveryReceiptRequested.remove(mSentMessageLog.get(handle));
+                }
+            } else {
+                // ignore the top-order byte (converted to string) in the handle for now
+                String shortHandle = handle.substring(2);
+                if (status == EventReport.Type.SENDING_FAILURE
+                        || status == EventReport.Type.SENDING_SUCCESS) {
+                    intentToSend = mSentReceiptRequested.remove(mSentMessageLog.get(shortHandle));
+                } else if (status == EventReport.Type.DELIVERY_SUCCESS
+                        || status == EventReport.Type.DELIVERY_FAILURE) {
+                    intentToSend =
+                            mDeliveryReceiptRequested.remove(mSentMessageLog.get(shortHandle));
+                }
             }
 
             if (intentToSend != null) {

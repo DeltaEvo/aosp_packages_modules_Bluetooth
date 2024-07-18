@@ -303,6 +303,7 @@ cc_test {
         "android.hardware.bluetooth.audio@2.1",
         "android.hardware.common-V2-ndk",
         "android.hardware.common.fmq-V1-ndk",
+        "avrcp-target-service",
         "bluetooth_flags_c_lib",
         "libbase",
         "libbluetooth-types",

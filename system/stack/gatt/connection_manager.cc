@@ -179,7 +179,7 @@ static void target_announcement_observe_results_cb(tBTM_INQ_RESULTS* p_inq, cons
   auto app_id = *(it->second.doing_targeted_announcements_conn.begin());
 
   /* If scan is ongoing lets stop it */
-  do_in_main_thread(FROM_HERE, base::BindOnce(schedule_direct_connect_add, app_id, addr));
+  do_in_main_thread(base::BindOnce(schedule_direct_connect_add, app_id, addr));
 }
 
 void target_announcements_filtering_set(bool enable) {

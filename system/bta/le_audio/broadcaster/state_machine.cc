@@ -228,7 +228,7 @@ public:
   }
 
   static IBroadcastStateMachineCallbacks* callbacks_;
-  static BleAdvertiserInterface* advertiser_if_;
+  static ::BleAdvertiserInterface* advertiser_if_;
 
 private:
   std::optional<BigConfig> active_config_;
@@ -326,8 +326,8 @@ private:
     log::info("is_public={}, broadcast_name={}, public_features={}",
               is_public ? "public" : "non-public", broadcast_name, public_announcement.features);
     if (advertiser_if_ != nullptr) {
-      AdvertiseParameters adv_params;
-      PeriodicAdvertisingParameters periodic_params;
+      ::AdvertiseParameters adv_params;
+      ::PeriodicAdvertisingParameters periodic_params;
       std::vector<uint8_t> adv_data;
       std::vector<uint8_t> periodic_data;
 
@@ -569,7 +569,7 @@ private:
 };
 
 IBroadcastStateMachineCallbacks* BroadcastStateMachineImpl::callbacks_ = nullptr;
-BleAdvertiserInterface* BroadcastStateMachineImpl::advertiser_if_ = nullptr;
+::BleAdvertiserInterface* BroadcastStateMachineImpl::advertiser_if_ = nullptr;
 } /* namespace */
 
 std::unique_ptr<BroadcastStateMachine> BroadcastStateMachine::CreateInstance(
