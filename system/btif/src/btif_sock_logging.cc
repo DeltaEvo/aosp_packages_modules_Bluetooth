@@ -25,7 +25,7 @@
 
 #include "btif/include/btif_metrics_logging.h"
 #include "btif/include/btif_sock.h"
-#include "os/log.h"
+#include "os/logging/log_adapter.h"
 #include "types/raw_address.h"
 
 #define SOCK_LOGGER_SIZE_MAX 16

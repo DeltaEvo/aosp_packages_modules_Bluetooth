@@ -34,7 +34,6 @@
 #include "btif_hf.h"
 #include "btif_util.h"
 #include "internal_include/bt_trace.h"
-#include "os/log.h"
 #include "types/raw_address.h"
 
 using namespace bluetooth;

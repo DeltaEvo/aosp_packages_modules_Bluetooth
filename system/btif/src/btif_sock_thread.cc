@@ -47,7 +47,6 @@
 #include <mutex>
 #include <optional>
 
-#include "os/log.h"
 #include "osi/include/osi.h"  // OSI_NO_INTR
 
 #define asrt(s)                                 \

@@ -43,7 +43,6 @@
 #include "btif/include/btif_util.h"
 #include "include/hardware/bt_hh.h"
 #include "main/shim/dumpsys.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"

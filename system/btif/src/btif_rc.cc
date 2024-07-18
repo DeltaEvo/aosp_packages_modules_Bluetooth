@@ -38,14 +38,12 @@
 #include <cstdio>
 #include <mutex>
 
-#include "bta/include/bta_api.h"
 #include "bta/include/bta_av_api.h"
 #include "btif/avrcp/avrcp_service.h"
 #include "btif_av.h"
 #include "btif_common.h"
 #include "btif_util.h"
 #include "device/include/interop.h"
-#include "os/log.h"
 #include "osi/include/alarm.h"
 #include "osi/include/allocator.h"
 #include "osi/include/list.h"

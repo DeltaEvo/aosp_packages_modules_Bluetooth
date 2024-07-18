@@ -679,7 +679,7 @@ void btif_disable_service(tBTA_SERVICE_ID service_id) {
   }
 }
 
-bt_status_t btif_set_dynamic_audio_buffer_size(int codec, int size) {
+bt_status_t btif_set_dynamic_audio_buffer_size(int /* codec */, int size) {
   log::verbose("");
 
   tBTM_BLE_VSC_CB cmn_vsc_cb;

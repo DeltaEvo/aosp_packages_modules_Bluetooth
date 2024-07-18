@@ -40,7 +40,6 @@
 #include <hardware/bt_hearing_aid.h>
 #include <hardware/bt_le_audio.h>
 #include <hardware/bt_vc.h>
-#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -62,7 +61,6 @@
 #include "btif_config.h"
 #include "btif_dm.h"
 #include "btif_metrics_logging.h"
-#include "btif_profile_storage.h"
 #include "btif_storage.h"
 #include "btif_util.h"
 #include "common/lru_cache.h"
@@ -97,7 +95,6 @@
 #include "stack/include/btm_sec_api_types.h"
 #include "stack/include/smp_api.h"
 #include "stack/include/srvc_api.h"  // tDIS_VALUE
-#include "stack/sdp/sdpint.h"
 #include "storage/config_keys.h"
 #include "types/raw_address.h"
 
@@ -776,7 +773,6 @@ bool is_le_audio_capable_during_service_discovery(const RawAddress& bd_addr) {
  *
  ******************************************************************************/
 static void btif_dm_cb_create_bond(const RawAddress bd_addr, tBT_TRANSPORT transport) {
-  bool is_hid = check_cod_hid_major(bd_addr, COD_HID_POINTING);
   bond_state_changed(BT_STATUS_SUCCESS, bd_addr, BT_BOND_STATE_BONDING);
 
   if (transport == BT_TRANSPORT_AUTO && is_device_le_audio_capable(bd_addr)) {
@@ -1359,7 +1355,6 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event, tBTA_DM_SEARCH*
       {
         std::vector<bt_property_t> bt_properties;
         uint32_t dev_type;
-        uint32_t num_properties = 0;
         bt_status_t status;
         tBLE_ADDR_TYPE addr_type = BLE_ADDR_PUBLIC;
 
@@ -1546,7 +1541,7 @@ static bool btif_is_interesting_le_service(bluetooth::Uuid uuid) {
 
 static bt_status_t btif_get_existing_uuids(RawAddress* bd_addr, Uuid* existing_uuids) {
   bt_property_t tmp_prop;
-  BTIF_STORAGE_FILL_PROPERTY(&tmp_prop, BT_PROPERTY_UUIDS, sizeof(existing_uuids), existing_uuids);
+  BTIF_STORAGE_FILL_PROPERTY(&tmp_prop, BT_PROPERTY_UUIDS, sizeof(*existing_uuids), existing_uuids);
 
   return btif_storage_get_remote_device_property(bd_addr, &tmp_prop);
 }
