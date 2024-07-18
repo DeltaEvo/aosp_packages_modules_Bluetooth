@@ -23,7 +23,6 @@
 #include <future>
 #include <string>
 
-#include "common/init_flags.h"
 #include "common/time_util.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
@@ -67,7 +66,6 @@ static std::promise<void> promise;
 class A2dpSbcTest : public ::testing::Test {
 protected:
   void SetUp() override {
-    common::InitFlags::SetAllForTesting();
     SetCodecConfig();
     encoder_iface_ = const_cast<tA2DP_ENCODER_INTERFACE*>(
             A2DP_GetEncoderInterfaceSbc(kCodecInfoSbcCapability));

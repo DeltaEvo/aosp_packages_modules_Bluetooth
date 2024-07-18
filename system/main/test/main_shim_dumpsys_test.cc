@@ -20,14 +20,12 @@
 
 #include <future>
 
-#include "common/init_flags.h"
 #include "module.h"
 #include "os/handler.h"
 #include "os/system_properties.h"
 #include "os/thread.h"
 #include "shim/dumpsys.h"
 #include "stack_manager.h"
-#include "storage/storage_module.h"
 
 using namespace bluetooth;
 using namespace testing;
@@ -44,8 +42,6 @@ class MainShimDumpsysTest : public testing::Test {
 public:
 protected:
   void SetUp() override {
-    bluetooth::common::InitFlags::SetAllForTesting();
-
     ModuleList modules;
     modules.add<shim::Dumpsys>();
 

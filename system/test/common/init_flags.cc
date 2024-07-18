@@ -12,7 +12,6 @@ bool InitFlags::logging_debug_enabled_for_all = false;
 std::unordered_map<std::string, bool> InitFlags::logging_debug_explicit_tag_settings = {};
 void InitFlags::Load(const char** flags) {}
 void InitFlags::SetAll(bool value) { InitFlags::logging_debug_enabled_for_all = value; }
-void InitFlags::SetAllForTesting() { InitFlags::logging_debug_enabled_for_all = true; }
 
 }  // namespace common
 }  // namespace bluetooth
