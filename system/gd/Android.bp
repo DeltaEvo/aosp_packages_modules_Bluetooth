@@ -295,7 +295,6 @@ cc_binary {
         ":BluetoothFacade_hci_layer",
         ":BluetoothFacade_l2cap_layer",
         ":BluetoothFacade_neighbor",
-        ":BluetoothFacade_security_layer",
         ":TestMockMainShimStack",
         "facade/facade_main.cc",
         "facade/grpc_root_server.cc",
