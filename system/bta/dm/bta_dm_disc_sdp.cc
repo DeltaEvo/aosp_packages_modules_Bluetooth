@@ -29,7 +29,6 @@
 #include "bta/include/bta_sdp_api.h"
 #include "btif/include/btif_config.h"
 #include "com_android_bluetooth_flags.h"
-#include "common/init_flags.h"
 #include "common/strings.h"
 #include "internal_include/bt_target.h"
 #include "stack/include/bt_uuid16.h"
@@ -235,8 +234,7 @@ void bta_dm_sdp_result(tSDP_STATUS sdp_result, tBTA_DM_SDP_STATE* sdp_state) {
       }
     } while (p_sdp_rec);
 
-    if (bluetooth::common::init_flags::dynamic_avrcp_version_enhancement_is_enabled() &&
-        sdp_state->services_to_search == 0) {
+    if (sdp_state->services_to_search == 0) {
       bta_dm_store_audio_profiles_version(p_sdp_db);
     }
 
