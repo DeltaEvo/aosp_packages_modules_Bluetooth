@@ -379,8 +379,8 @@ static void bta_ag_esco_connreq_cback(tBTM_ESCO_EVT event, tBTM_ESCO_EVT_DATA* p
       log::warn("reject incoming SCO connection, remote_bda={}, active_bda={}, current_bda={}",
                 remote_bda ? *remote_bda : RawAddress::kEmpty, active_device_addr,
                 p_scb ? p_scb->peer_addr : RawAddress::kEmpty);
-      BTM_EScoConnRsp(p_data->conn_evt.sco_inx, HCI_ERR_HOST_REJECT_RESOURCES,
-                      (enh_esco_params_t*)nullptr);
+      get_btm_client_interface().sco.BTM_EScoConnRsp(
+              p_data->conn_evt.sco_inx, HCI_ERR_HOST_REJECT_RESOURCES, (enh_esco_params_t*)nullptr);
     }
   }
 }
@@ -552,8 +552,9 @@ void bta_ag_create_sco(tBTA_AG_SCB* p_scb, bool is_orig) {
       }
     }
 
-    if (BTM_CreateSco(&p_scb->peer_addr, true, params.packet_types, &p_scb->sco_idx,
-                      bta_ag_sco_conn_cback, bta_ag_sco_disc_cback) == BTM_CMD_STARTED) {
+    if (get_btm_client_interface().sco.BTM_CreateSco(&p_scb->peer_addr, true, params.packet_types,
+                                                     &p_scb->sco_idx, bta_ag_sco_conn_cback,
+                                                     bta_ag_sco_disc_cback) == BTM_CMD_STARTED) {
       /* Initiating the connection, set the current sco handle */
       bta_ag_cb.sco.cur_idx = p_scb->sco_idx;
       /* Configure input/output data. */
@@ -565,9 +566,9 @@ void bta_ag_create_sco(tBTA_AG_SCB* p_scb, bool is_orig) {
                params.packet_types);
   } else {
     /* Not initiating, go to listen mode */
-    tBTM_STATUS btm_status =
-            BTM_CreateSco(&p_scb->peer_addr, false, params.packet_types, &p_scb->sco_idx,
-                          bta_ag_sco_conn_cback, bta_ag_sco_disc_cback);
+    tBTM_STATUS btm_status = get_btm_client_interface().sco.BTM_CreateSco(
+            &p_scb->peer_addr, false, params.packet_types, &p_scb->sco_idx, bta_ag_sco_conn_cback,
+            bta_ag_sco_disc_cback);
     if (btm_status == BTM_CMD_STARTED) {
       if (get_btm_client_interface().sco.BTM_RegForEScoEvts(
                   p_scb->sco_idx, bta_ag_esco_connreq_cback) != BTM_SUCCESS) {
@@ -1520,7 +1521,7 @@ void bta_ag_sco_conn_rsp(tBTA_AG_SCB* p_scb, tBTM_ESCO_CONN_REQ_EVT_DATA* p_data
     params = esco_parameters_for_codec(SCO_CODEC_CVSD_D1, offload);
   }
 
-  BTM_EScoConnRsp(p_scb->sco_idx, HCI_SUCCESS, &params);
+  get_btm_client_interface().sco.BTM_EScoConnRsp(p_scb->sco_idx, HCI_SUCCESS, &params);
   log::verbose("listening for SCO connection");
 }
 

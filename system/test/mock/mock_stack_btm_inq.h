@@ -57,27 +57,6 @@ struct BTM_CancelInquiry {
 };
 extern struct BTM_CancelInquiry BTM_CancelInquiry;
 
-// Name: BTM_CancelRemoteDeviceName
-// Params: void
-// Return: tBTM_STATUS
-struct BTM_CancelRemoteDeviceName {
-  static tBTM_STATUS return_value;
-  std::function<tBTM_STATUS(void)> body{[](void) { return return_value; }};
-  tBTM_STATUS operator()(void) { return body(); }
-};
-extern struct BTM_CancelRemoteDeviceName BTM_CancelRemoteDeviceName;
-
-// Name: BTM_ClearInqDb
-// Params: const RawAddress* p_bda
-// Return: tBTM_STATUS
-struct BTM_ClearInqDb {
-  static tBTM_STATUS return_value;
-  std::function<tBTM_STATUS(const RawAddress* p_bda)> body{
-          [](const RawAddress* /* p_bda */) { return return_value; }};
-  tBTM_STATUS operator()(const RawAddress* p_bda) { return body(p_bda); }
-};
-extern struct BTM_ClearInqDb BTM_ClearInqDb;
-
 // Name: BTM_EnableInterlacedInquiryScan
 // Params:
 // Return: void

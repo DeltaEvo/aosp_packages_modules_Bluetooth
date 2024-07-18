@@ -538,14 +538,6 @@ struct BTM_acl_after_controller_started {
   void operator()() { body(); }
 };
 extern struct BTM_acl_after_controller_started BTM_acl_after_controller_started;
-// Name: BTM_default_unblock_role_switch
-// Params:
-// Returns: void
-struct BTM_default_unblock_role_switch {
-  std::function<void()> body{[]() { ; }};
-  void operator()() { body(); }
-};
-extern struct BTM_default_unblock_role_switch BTM_default_unblock_role_switch;
 // Name: BTM_unblock_role_switch_for
 // Params: const RawAddress& peer_addr
 // Returns: void
