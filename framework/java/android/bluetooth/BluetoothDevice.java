@@ -1397,9 +1397,6 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     private final String mAddress;
     @AddressType private final int mAddressType;
 
-    private static boolean sIsLogRedactionFlagSynced = false;
-    private static boolean sIsLogRedactionEnabled = true;
-
     private AttributionSource mAttributionSource;
 
     static IBluetooth getService() {
@@ -1429,7 +1426,8 @@ public final class BluetoothDevice implements Parcelable, Attributable {
 
         if (addressType == ADDRESS_TYPE_ANONYMOUS && !NULL_MAC_ADDRESS.equals(address)) {
             throw new IllegalArgumentException(
-                    "Invalid address for anonymous address type: " + getAnonymizedAddress());
+                    "Invalid address for anonymous address type: "
+                            + BluetoothUtils.toAnonymizedAddress(address));
         }
 
         mAddress = address;
@@ -1516,44 +1514,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
         if (!CompatChanges.isChangeEnabled(CHANGE_TO_STRING_REDACTED)) {
             return mAddress;
         }
-        return toStringForLogging();
-    }
-
-    private static boolean shouldLogBeRedacted() {
-        // by default, set to true
-        final boolean defaultValue = true;
-        if (!sIsLogRedactionFlagSynced) {
-            BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-            if (adapter == null || !adapter.isEnabled()) {
-                return defaultValue;
-            }
-            IBluetooth service = adapter.getBluetoothService();
-
-            if (service == null) {
-                Log.e(TAG, "Bluetooth service is not enabled");
-                return defaultValue;
-            }
-
-            try {
-                sIsLogRedactionEnabled = service.isLogRedactionEnabled();
-                sIsLogRedactionFlagSynced = true;
-            } catch (RemoteException e) {
-                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
-                return defaultValue;
-            }
-        }
-        return sIsLogRedactionEnabled;
-    }
-
-    /**
-     * Returns a string representation of this BluetoothDevice for logging. So far, this function
-     * only returns hardware address. If more information is needed, add it here
-     *
-     * @return string representation of this BluetoothDevice used for logging
-     * @hide
-     */
-    public String toStringForLogging() {
-        return getAddressForLogging();
+        return getAnonymizedAddress();
     }
 
     @Override
@@ -1586,7 +1547,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
      * @return Bluetooth hardware address as string
      */
     public String getAddress() {
-        if (DBG) Log.d(TAG, "getAddress: mAddress=" + getAddressForLogging());
+        if (DBG) Log.d(TAG, "getAddress: mAddress=" + this);
         return mAddress;
     }
 
@@ -1616,25 +1577,6 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public String getAnonymizedAddress() {
         return BluetoothUtils.toAnonymizedAddress(mAddress);
-    }
-
-    /**
-     * Returns string representation of the hardware address of this BluetoothDevice for logging
-     * purpose. Depending on the build type and device config, this function returns either full
-     * address string (returned by getAddress), or a redacted string with the leftmost 4 bytes shown
-     * as 'xx',
-     *
-     * <p>For example, "xx:xx:xx:xx:aa:bb". This function is intended to avoid leaking full address
-     * in logs.
-     *
-     * @return string representation of the hardware address for logging
-     * @hide
-     */
-    public String getAddressForLogging() {
-        if (shouldLogBeRedacted()) {
-            return getAnonymizedAddress();
-        }
-        return mAddress;
     }
 
     /**
@@ -1971,12 +1913,10 @@ public final class BluetoothDevice implements Parcelable, Attributable {
         } else {
             Log.i(
                     TAG,
-                    "cancelBondProcess() for device "
-                            + toStringForLogging()
-                            + " called by pid: "
-                            + Process.myPid()
-                            + " tid: "
-                            + Process.myTid());
+                    "cancelBondProcess() for"
+                            + (" device " + this)
+                            + (" called by pid: " + Process.myPid())
+                            + (" tid: " + Process.myTid()));
             try {
                 return service.cancelBondProcess(this, mAttributionSource);
             } catch (RemoteException e) {
@@ -2006,12 +1946,10 @@ public final class BluetoothDevice implements Parcelable, Attributable {
         } else {
             Log.i(
                     TAG,
-                    "removeBond() for device "
-                            + toStringForLogging()
-                            + " called by pid: "
-                            + Process.myPid()
-                            + " tid: "
-                            + Process.myTid());
+                    "removeBond() for"
+                            + (" device " + this)
+                            + (" called by pid: " + Process.myPid())
+                            + (" tid: " + Process.myTid()));
             try {
                 return service.removeBond(this, mAttributionSource);
             } catch (RemoteException e) {
@@ -2056,7 +1994,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
                             AttributionSource source = pairQuery.second.first;
                             BluetoothDevice device = pairQuery.second.second;
                             if (DBG) {
-                                log("getBondState(" + device.toStringForLogging() + ") uncached");
+                                log("getBondState(" + device + ") uncached");
                             }
                             try {
                                 return service.getBondState(device, source);
@@ -2094,7 +2032,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public int getBondState() {
-        if (DBG) log("getBondState(" + toStringForLogging() + ")");
+        if (DBG) log("getBondState(" + this + ")");
         final IBluetooth service = getService();
         if (service == null) {
             Log.e(TAG, "BT not enabled. Cannot get bond state");
@@ -2127,7 +2065,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
                 android.Manifest.permission.BLUETOOTH_PRIVILEGED,
             })
     public boolean canBondWithoutDialog() {
-        if (DBG) log("canBondWithoutDialog, device: " + toStringForLogging());
+        if (DBG) log("canBondWithoutDialog, device: " + this);
         final IBluetooth service = getService();
         if (service == null || !isBluetoothEnabled()) {
             Log.e(TAG, "BT not enabled. Cannot check if we can skip pairing dialog");

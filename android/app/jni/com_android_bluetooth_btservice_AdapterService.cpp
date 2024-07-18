@@ -1898,11 +1898,6 @@ static void metadataChangedNative(JNIEnv* env, jobject /* obj */, jbyteArray add
   return;
 }
 
-static jboolean isLogRedactionEnabledNative(JNIEnv* /* env */, jobject /* obj */) {
-  log::verbose("");
-  return bluetooth::os::should_log_be_redacted();
-}
-
 static jboolean interopMatchAddrNative(JNIEnv* env, jclass /* clazz */, jstring feature_name,
                                        jstring address) {
   log::verbose("");
@@ -2180,8 +2175,6 @@ int register_com_android_bluetooth_btservice_AdapterService(JNIEnv* env) {
           {"allowLowLatencyAudioNative", "(Z[B)Z",
            reinterpret_cast<void*>(allowLowLatencyAudioNative)},
           {"metadataChangedNative", "([BI[B)V", reinterpret_cast<void*>(metadataChangedNative)},
-          {"isLogRedactionEnabledNative", "()Z",
-           reinterpret_cast<void*>(isLogRedactionEnabledNative)},
           {"interopMatchAddrNative", "(Ljava/lang/String;Ljava/lang/String;)Z",
            reinterpret_cast<void*>(interopMatchAddrNative)},
           {"interopMatchNameNative", "(Ljava/lang/String;Ljava/lang/String;)Z",
