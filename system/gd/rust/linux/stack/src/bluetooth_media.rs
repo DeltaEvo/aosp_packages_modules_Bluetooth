@@ -579,6 +579,10 @@ impl BluetoothMedia {
         false
     }
 
+    pub fn get_connected_profiles(&self, device: &BluetoothDevice) -> HashSet<Profile> {
+        self.connected_profiles.get(&device.address).unwrap_or(&HashSet::new()).clone()
+    }
+
     fn add_connected_profile(&mut self, addr: RawAddress, profile: Profile) {
         if self.is_profile_connected(&addr, &profile) {
             warn!("[{}]: profile is already connected", DisplayAddress(&addr));
