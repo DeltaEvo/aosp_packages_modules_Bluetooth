@@ -1770,12 +1770,19 @@ void LeAudioDeviceGroup::RemoveCisFromStreamIfNeeded(LeAudioDevice* leAudioDevic
 }
 
 bool LeAudioDeviceGroup::IsPendingConfiguration(void) const {
+  log::verbose("group {}, is pending: {} ", group_id_, stream_conf.pending_configuration);
   return stream_conf.pending_configuration;
 }
 
-void LeAudioDeviceGroup::SetPendingConfiguration(void) { stream_conf.pending_configuration = true; }
+void LeAudioDeviceGroup::SetPendingConfiguration(void) {
+  log::verbose("group {}, is pending from {} to true", group_id_,
+               stream_conf.pending_configuration);
+  stream_conf.pending_configuration = true;
+}
 
 void LeAudioDeviceGroup::ClearPendingConfiguration(void) {
+  log::verbose("group {}, is pending from {} to false", group_id_,
+               stream_conf.pending_configuration);
   stream_conf.pending_configuration = false;
 }
 
