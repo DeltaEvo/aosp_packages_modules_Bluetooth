@@ -29,7 +29,6 @@
 #include "bta_gatt_queue_mock.h"
 #include "btm_api_mock.h"
 #include "client_parser.h"
-#include "common/init_flags.h"
 #include "fake_osi.h"
 #include "hci/controller_interface_mock.h"
 #include "internal_include/stack_config.h"

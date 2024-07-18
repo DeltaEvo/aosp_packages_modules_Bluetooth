@@ -253,13 +253,8 @@ public:
     LeAudioGroupStateMachine::Initialize(state_machine_callbacks_);
     groupStateMachine_ = LeAudioGroupStateMachine::Get();
 
-    if (bluetooth::common::InitFlags::IsTargetedAnnouncementReconnectionMode()) {
-      log::info("Reconnection mode: TARGETED_ANNOUNCEMENTS");
-      reconnection_mode_ = BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS;
-    } else {
-      log::info("Reconnection mode: ALLOW_LIST");
-      reconnection_mode_ = BTM_BLE_BKG_CONNECT_ALLOW_LIST;
-    }
+    log::info("Reconnection mode: TARGETED_ANNOUNCEMENTS");
+    reconnection_mode_ = BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS;
 
     log::info("Loading health status module");
     leAudioHealthStatus_ = LeAudioHealthStatus::Get();
