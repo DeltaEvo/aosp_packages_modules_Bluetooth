@@ -77,6 +77,7 @@ java_library {
     srcs: [
         ":statslog-bluetooth-java-gen",
         "src/**/*.java",
+        "src/ActiveLog.kt",
         "src/AdapterBinder.kt",
         "src/AdapterState.kt",
         "src/AutoOnFeature.kt",
@@ -188,6 +189,8 @@ android_robolectric_test {
 
     srcs: [
         ":statslog-bluetooth-java-gen",
+        "src/ActiveLog.kt",
+        "src/ActiveLogTest.kt",
         "src/AdapterState.kt",
         "src/AdapterStateTest.kt",
         "src/AutoOnFeature.kt",
@@ -209,6 +212,9 @@ android_robolectric_test {
     static_libs: [
         "androidx.test.core",
         "androidx.test.ext.truth",
+        "bluetooth-manager-service-proto-java-gen",
+        "bluetooth-nano-protos",
+        "bluetooth-proto-enums-java-gen",
         "bluetooth_flags_java_lib",
         "flag-junit",
         "kotlin-test",

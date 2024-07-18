@@ -20,7 +20,6 @@ import android.bluetooth.IBluetoothCallback
 import android.content.AttributionSource
 import android.os.IBinder
 import android.os.RemoteException
-import com.android.server.bluetooth.BluetoothManagerService.timeToLog
 
 class AdapterBinder(rawBinder: IBinder) {
     private val TAG = "AdapterBinder"
@@ -28,7 +27,11 @@ class AdapterBinder(rawBinder: IBinder) {
     private val createdAt = System.currentTimeMillis()
 
     override fun toString(): String =
-        "[Binder=" + adapterBinder.hashCode() + ", createdAt=" + timeToLog(createdAt) + "]"
+        "[Binder=" +
+            adapterBinder.hashCode() +
+            ", createdAt=" +
+            Log.timeToStringWithZone(createdAt) +
+            "]"
 
     @Throws(RemoteException::class)
     fun disable(source: AttributionSource) {
