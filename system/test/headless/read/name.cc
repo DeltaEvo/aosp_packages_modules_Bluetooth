@@ -59,7 +59,7 @@ int bluetooth::test::headless::Name::Run() {
     }
 
     tBTM_REMOTE_DEV_NAME name_packet = future.get();
-    switch (name_packet.status) {
+    switch (name_packet.btm_status) {
       case tBTM_STATUS::BTM_SUCCESS: {
         char buf[BD_NAME_LEN];
         memcpy(buf, name_packet.remote_bd_name, BD_NAME_LEN);
@@ -71,7 +71,8 @@ int bluetooth::test::headless::Name::Run() {
         fprintf(stdout, "Name Timeout or other failure");
         return -2;
       default:
-        fprintf(stdout, "Unexpected remote name request failure status:%hd", name_packet.status);
+        fprintf(stdout, "Unexpected remote name request failure status:%hd",
+                name_packet.btm_status);
         return -2;
     }
     return 0;

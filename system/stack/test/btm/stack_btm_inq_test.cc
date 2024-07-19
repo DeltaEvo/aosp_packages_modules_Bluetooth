@@ -118,7 +118,7 @@ TEST_F(BtmInqActiveTest, btm_process_remote_name__typical) {
   ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 
   ASSERT_TRUE(gBTM_REMOTE_DEV_NAME_sent);
-  ASSERT_EQ(tBTM_STATUS::BTM_SUCCESS, gBTM_REMOTE_DEV_NAME.status);
+  ASSERT_EQ(tBTM_STATUS::BTM_SUCCESS, gBTM_REMOTE_DEV_NAME.btm_status);
   ASSERT_EQ(HCI_SUCCESS, gBTM_REMOTE_DEV_NAME.hci_status);
   ASSERT_EQ(kRawAddress, gBTM_REMOTE_DEV_NAME.bd_addr);
   ASSERT_STREQ((char*)kBdName, (char*)gBTM_REMOTE_DEV_NAME.remote_bd_name);
@@ -133,7 +133,7 @@ TEST_F(BtmInqActiveTest, btm_process_remote_name__no_name) {
   ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 
   ASSERT_TRUE(gBTM_REMOTE_DEV_NAME_sent);
-  ASSERT_EQ(tBTM_STATUS::BTM_SUCCESS, gBTM_REMOTE_DEV_NAME.status);
+  ASSERT_EQ(tBTM_STATUS::BTM_SUCCESS, gBTM_REMOTE_DEV_NAME.btm_status);
   ASSERT_EQ(HCI_SUCCESS, gBTM_REMOTE_DEV_NAME.hci_status);
   ASSERT_EQ(kRawAddress, gBTM_REMOTE_DEV_NAME.bd_addr);
   ASSERT_STREQ((char*)kEmptyName, (char*)gBTM_REMOTE_DEV_NAME.remote_bd_name);
@@ -148,7 +148,7 @@ TEST_F(BtmInqActiveTest, btm_process_remote_name__bad_status) {
   ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 
   ASSERT_TRUE(gBTM_REMOTE_DEV_NAME_sent);
-  ASSERT_EQ(tBTM_STATUS::BTM_BAD_VALUE_RET, gBTM_REMOTE_DEV_NAME.status);
+  ASSERT_EQ(tBTM_STATUS::BTM_BAD_VALUE_RET, gBTM_REMOTE_DEV_NAME.btm_status);
   ASSERT_EQ(HCI_ERR_PAGE_TIMEOUT, gBTM_REMOTE_DEV_NAME.hci_status);
   ASSERT_EQ(kRawAddress, gBTM_REMOTE_DEV_NAME.bd_addr);
   ASSERT_STREQ((char*)kEmptyName, (char*)gBTM_REMOTE_DEV_NAME.remote_bd_name);
@@ -163,7 +163,7 @@ TEST_F(BtmInqActiveTest, btm_process_remote_name__no_address) {
   ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 
   ASSERT_TRUE(gBTM_REMOTE_DEV_NAME_sent);
-  ASSERT_EQ(tBTM_STATUS::BTM_SUCCESS, gBTM_REMOTE_DEV_NAME.status);
+  ASSERT_EQ(tBTM_STATUS::BTM_SUCCESS, gBTM_REMOTE_DEV_NAME.btm_status);
   ASSERT_EQ(HCI_SUCCESS, gBTM_REMOTE_DEV_NAME.hci_status);
   ASSERT_EQ(RawAddress::kEmpty, gBTM_REMOTE_DEV_NAME.bd_addr);
   ASSERT_STREQ((char*)kBdName, (char*)gBTM_REMOTE_DEV_NAME.remote_bd_name);

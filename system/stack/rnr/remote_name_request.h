@@ -25,7 +25,7 @@
 
 /* Structure returned with remote name  request */
 struct tBTM_REMOTE_DEV_NAME {
-  tBTM_STATUS status;
+  tBTM_STATUS btm_status;
   RawAddress bd_addr;
   BD_NAME remote_bd_name;
   tHCI_STATUS hci_status;

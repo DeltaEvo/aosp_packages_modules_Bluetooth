@@ -1384,7 +1384,7 @@ static void bta_dm_service_search_remname_cback(const RawAddress& bd_addr, DEV_C
   if (bta_dm_search_cb.peer_bdaddr == bd_addr) {
     rem_name.bd_addr = bd_addr;
     bd_name_copy(rem_name.remote_bd_name, bd_name);
-    rem_name.status = tBTM_STATUS::BTM_SUCCESS;
+    rem_name.btm_status = tBTM_STATUS::BTM_SUCCESS;
     rem_name.hci_status = HCI_SUCCESS;
     bta_dm_remname_cback(&rem_name);
   } else {
@@ -1402,7 +1402,7 @@ static void bta_dm_service_search_remname_cback(const RawAddress& bd_addr, DEV_C
       // actual peer_bdaddr
       rem_name.bd_addr = bta_dm_search_cb.peer_bdaddr;
       rem_name.remote_bd_name[0] = 0;
-      rem_name.status = btm_status;
+      rem_name.btm_status = btm_status;
       rem_name.hci_status = HCI_SUCCESS;
       bta_dm_remname_cback(&rem_name);
     }
@@ -1423,7 +1423,7 @@ static void bta_dm_remname_cback(const tBTM_REMOTE_DEV_NAME* p_remote_name) {
 
   log::info(
           "Remote name request complete peer:{} btm_status:{} hci_status:{} name[0]:{:c} length:{}",
-          p_remote_name->bd_addr, btm_status_text(p_remote_name->status),
+          p_remote_name->bd_addr, btm_status_text(p_remote_name->btm_status),
           hci_error_code_text(p_remote_name->hci_status), p_remote_name->remote_bd_name[0],
           strnlen((const char*)p_remote_name->remote_bd_name, BD_NAME_LEN));
 
