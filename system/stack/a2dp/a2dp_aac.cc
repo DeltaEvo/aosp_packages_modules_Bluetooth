@@ -260,9 +260,8 @@ bool A2DP_IsCodecValidAac(const uint8_t* p_codec_info) {
          (A2DP_ParseInfoAac(&cfg_cie, p_codec_info, true) == A2DP_SUCCESS);
 }
 
-bool A2DP_IsSinkCodecSupportedAac(const uint8_t* p_codec_info) {
-  return A2DP_CodecInfoMatchesCapabilityAac(&a2dp_aac_sink_caps, p_codec_info, false) ==
-         A2DP_SUCCESS;
+tA2DP_STATUS A2DP_IsSinkCodecSupportedAac(const uint8_t* p_codec_info) {
+  return A2DP_CodecInfoMatchesCapabilityAac(&a2dp_aac_sink_caps, p_codec_info, false);
 }
 
 // Checks whether A2DP AAC codec configuration matches with a device's codec
@@ -297,12 +296,12 @@ static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilityAac(const tA2DP_AAC_CIE* p_ca
 
   /* Object Type */
   if ((cfg_cie.objectType & p_cap->objectType) == 0) {
-    return A2DP_INVALID_OBJECT_TYPE;
+    return A2DP_NOT_SUPPORTED_OBJECT_TYPE;
   }
 
   /* Sample Rate */
   if ((cfg_cie.sampleRate & p_cap->sampleRate) == 0) {
-    return A2DP_INVALID_SAMPLING_FREQUENCY;
+    return A2DP_NOT_SUPPORTED_SAMPLING_FREQUENCY;
   }
 
   /* Channel Mode */

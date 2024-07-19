@@ -76,7 +76,7 @@ bool A2DP_IsCodecValidSbc(const uint8_t* p_codec_info);
 // Checks whether A2DP SBC Sink codec is supported.
 // |p_codec_info| contains information about the codec capabilities.
 // Returns true if the A2DP SBC Sink codec is supported, otherwise false.
-bool A2DP_IsSinkCodecSupportedSbc(const uint8_t* p_codec_info);
+tA2DP_STATUS A2DP_IsSinkCodecSupportedSbc(const uint8_t* p_codec_info);
 
 // Initialize state with the default A2DP SBC codec.
 // The initialized state with the codec capabilities is stored in

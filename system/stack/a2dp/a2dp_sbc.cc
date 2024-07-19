@@ -273,9 +273,8 @@ bool A2DP_IsCodecValidSbc(const uint8_t* p_codec_info) {
          (A2DP_ParseInfoSbc(&cfg_cie, p_codec_info, true) == A2DP_SUCCESS);
 }
 
-bool A2DP_IsSinkCodecSupportedSbc(const uint8_t* p_codec_info) {
-  return A2DP_CodecInfoMatchesCapabilitySbc(&a2dp_sbc_sink_caps, p_codec_info, false) ==
-         A2DP_SUCCESS;
+tA2DP_STATUS A2DP_IsSinkCodecSupportedSbc(const uint8_t* p_codec_info) {
+  return A2DP_CodecInfoMatchesCapabilitySbc(&a2dp_sbc_sink_caps, p_codec_info, false);
 }
 
 void A2DP_InitDefaultCodecSbc(uint8_t* p_codec_info) {
