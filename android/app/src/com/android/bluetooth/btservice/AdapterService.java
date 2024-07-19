@@ -4780,6 +4780,11 @@ public class AdapterService extends Service {
             return deviceProp.getBondState() == BluetoothDevice.BOND_BONDING;
         }
 
+        if (!isEnabled()) {
+            Log.e(TAG, "Impossible to call createBond when Bluetooth is not enabled");
+            return false;
+        }
+
         if (!isPackageNameAccurate(this, callingPackage, Binder.getCallingUid())) {
             return false;
         }
@@ -5015,6 +5020,10 @@ public class AdapterService extends Service {
      * @return false if profiles value is not one of the constants we accept, true otherwise
      */
     public boolean setActiveDevice(BluetoothDevice device, @ActiveDeviceUse int profiles) {
+        if (getState() != BluetoothAdapter.STATE_ON) {
+            Log.e(TAG, "setActiveDevice: Bluetooth is not enabled");
+            return false;
+        }
         boolean setA2dp = false;
         boolean setHeadset = false;
 

@@ -18,16 +18,30 @@
 
 #include <base/functional/bind.h>
 #include <base/functional/callback.h>
+#include <include/hardware/avrcp/avrcp.h>
 
 #include <map>
 #include <mutex>
 #include <shared_mutex>
 #include <vector>
 
-#include "avrcp.h"
-#include "com_android_bluetooth.h"
+#include "./com_android_bluetooth.h"
 
-using namespace bluetooth::avrcp;
+using bluetooth::avrcp::Attribute;
+using bluetooth::avrcp::AttributeEntry;
+using bluetooth::avrcp::FolderInfo;
+using bluetooth::avrcp::KeyState;
+using bluetooth::avrcp::ListItem;
+using bluetooth::avrcp::MediaCallbacks;
+using bluetooth::avrcp::MediaInterface;
+using bluetooth::avrcp::MediaPlayerInfo;
+using bluetooth::avrcp::PlayerAttribute;
+using bluetooth::avrcp::PlayerSettingsInterface;
+using bluetooth::avrcp::PlayState;
+using bluetooth::avrcp::PlayStatus;
+using bluetooth::avrcp::ServiceInterface;
+using bluetooth::avrcp::SongInfo;
+using bluetooth::avrcp::VolumeInterface;
 
 namespace android {
 
@@ -76,7 +90,7 @@ static void setPlayerSettings(std::vector<PlayerAttribute> attributes, std::vect
 SetPlayerSettingValueCb set_player_setting_value_cb;
 
 // Local Variables
-// TODO (apanicke): Use a map here to store the callback in order to
+// TODO(apanicke): Use a map here to store the callback in order to
 // support multi-browsing
 SetBrowsedPlayerCb set_browsed_player_cb;
 using map_entry = std::pair<std::string, GetFolderItemsCb>;
@@ -84,19 +98,21 @@ std::map<std::string, GetFolderItemsCb> get_folder_items_cb_map;
 std::map<RawAddress, ::bluetooth::avrcp::VolumeInterface::VolumeChangedCb> volumeCallbackMap;
 
 template <typename T>
-void copyJavaArraytoCppVector(JNIEnv* env, const jbyteArray& jArray, std::vector<T>& cVec) {
-  size_t len = (size_t)env->GetArrayLength(jArray);
+void copyJavaArraytoCppVector(JNIEnv* env, const jbyteArray& jArray, std::vector<T>* cVec) {
+  log::assert_that(cVec != nullptr, "cVec is never null");
+
+  size_t len = static_cast<size_t>(env->GetArrayLength(jArray));
   if (len == 0) {
     return;
   }
   jbyte* elements = env->GetByteArrayElements(jArray, nullptr);
   T* array = reinterpret_cast<T*>(elements);
-  cVec.reserve(len);
-  std::copy(array, array + len, std::back_inserter(cVec));
+  cVec->reserve(len);
+  std::copy(array, array + len, std::back_inserter(*cVec));
   env->ReleaseByteArrayElements(jArray, elements, 0);
 }
 
-// TODO (apanicke): In the future, this interface should guarantee that
+// TODO(apanicke): In the future, this interface should guarantee that
 // all calls happen on the JNI Thread. Right now this is very difficult
 // as it is hard to get a handle on the JNI thread from here.
 class AvrcpMediaInterfaceImpl : public MediaInterface {
@@ -135,7 +151,7 @@ public:
   }
 
   void RegisterUpdateCallback(MediaCallbacks* callback) override {
-    // TODO (apanicke): Allow multiple registrations in the future
+    // TODO(apanicke): Allow multiple registrations in the future
     mServiceCallbacks = callback;
   }
 
@@ -221,13 +237,13 @@ static void initNative(JNIEnv* env, jobject object) {
 }
 
 static void registerBipServerNative(JNIEnv* /* env */, jobject /* object */, jint l2cap_psm) {
-  log::debug("l2cap_psm={}", (int)l2cap_psm);
+  log::debug("l2cap_psm={}", l2cap_psm);
   std::unique_lock<std::shared_timed_mutex> interface_lock(interface_mutex);
   if (sServiceInterface == nullptr) {
     log::warn("Service not loaded.");
     return;
   }
-  sServiceInterface->RegisterBipServer((int)l2cap_psm);
+  sServiceInterface->RegisterBipServer(static_cast<int>(l2cap_psm));
 }
 
 static void unregisterBipServerNative(JNIEnv* /* env */, jobject /* object */) {
@@ -354,10 +370,9 @@ static std::string getImageHandleFromJavaObj(JNIEnv* env, jobject image) {
 }
 
 static SongInfo getSongInfoFromJavaObj(JNIEnv* env, jobject metadata) {
-  SongInfo info;
-
   if (metadata == nullptr) {
-    return info;
+    log::error("Got a null metadata");
+    return SongInfo();
   }
 
   jclass class_metadata = env->GetObjectClass(metadata);
@@ -371,6 +386,8 @@ static SongInfo getSongInfoFromJavaObj(JNIEnv* env, jobject metadata) {
   jfieldID field_playingTime = env->GetFieldID(class_metadata, "duration", "Ljava/lang/String;");
   jfieldID field_image =
           env->GetFieldID(class_metadata, "image", "Lcom/android/bluetooth/audio_util/Image;");
+
+  SongInfo info;
 
   jstring jstr = (jstring)env->GetObjectField(metadata, field_mediaId);
   if (jstr != nullptr) {
@@ -499,12 +516,11 @@ static PlayStatus getCurrentPlayStatus() {
     return PlayStatus();
   }
 
-  PlayStatus status;
   jobject playStatus = sCallbackEnv->CallObjectMethod(mJavaInterface, method_getPlaybackStatus);
 
   if (playStatus == nullptr) {
     log::error("Got a null play status");
-    return status;
+    return PlayStatus();
   }
 
   jclass class_playStatus = sCallbackEnv->GetObjectClass(playStatus);
@@ -512,9 +528,11 @@ static PlayStatus getCurrentPlayStatus() {
   jfieldID field_duration = sCallbackEnv->GetFieldID(class_playStatus, "duration", "J");
   jfieldID field_state = sCallbackEnv->GetFieldID(class_playStatus, "state", "B");
 
-  status.position = sCallbackEnv->GetLongField(playStatus, field_position);
-  status.duration = sCallbackEnv->GetLongField(playStatus, field_duration);
-  status.state = (PlayState)sCallbackEnv->GetByteField(playStatus, field_state);
+  PlayStatus status = {
+          .position = static_cast<uint32_t>(sCallbackEnv->GetLongField(playStatus, field_position)),
+          .duration = static_cast<uint32_t>(sCallbackEnv->GetLongField(playStatus, field_duration)),
+          .state = (PlayState)sCallbackEnv->GetByteField(playStatus, field_state),
+  };
 
   sCallbackEnv->DeleteLocalRef(playStatus);
 
@@ -688,7 +706,7 @@ static void getFolderItemsResponseNative(JNIEnv* env, jobject /* object */, jstr
     env->ReleaseStringUTFChars(parent_id, value);
   }
 
-  // TODO (apanicke): Right now browsing will fail on a second device if two
+  // TODO(apanicke): Right now browsing will fail on a second device if two
   // devices browse the same folder. Use a MultiMap to fix this behavior so
   // that both callbacks can be handled with one lookup if a request comes
   // for a folder that is already trying to be looked at.
@@ -757,7 +775,7 @@ static void getFolderItems(uint16_t player_id, std::string media_id, GetFolderIt
     return;
   }
 
-  // TODO (apanicke): Fix a potential media_id collision if two media players
+  // TODO(apanicke): Fix a potential media_id collision if two media players
   // use the same media_id scheme or two devices browse the same content.
   get_folder_items_cb_map.insert(map_entry(media_id, cb));
 
@@ -843,6 +861,7 @@ static void sendVolumeChangedNative(JNIEnv* env, jobject /* object */, jstring a
   }
 
   log::debug("");
+  std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   if (volumeCallbackMap.find(bdaddr) != volumeCallbackMap.end()) {
     volumeCallbackMap.find(bdaddr)->second.Run(volume & 0x7F);
   }
@@ -898,7 +917,7 @@ static void listPlayerSettingsResponseNative(JNIEnv* env, jobject /* object */,
   log::debug("");
 
   std::vector<PlayerAttribute> attributes_vector;
-  copyJavaArraytoCppVector(env, attributes, attributes_vector);
+  copyJavaArraytoCppVector(env, attributes, &attributes_vector);
 
   list_player_settings_cb.Run(std::move(attributes_vector));
 }
@@ -921,7 +940,7 @@ static void listPlayerSettingValuesResponseNative(JNIEnv* env, jobject /* object
   log::debug("");
   PlayerAttribute player_attribute = static_cast<PlayerAttribute>(attribute);
   std::vector<uint8_t> values_vector;
-  copyJavaArraytoCppVector(env, values, values_vector);
+  copyJavaArraytoCppVector(env, values, &values_vector);
   list_player_setting_values_cb.Run(player_attribute, std::move(values_vector));
 }
 
@@ -948,8 +967,8 @@ static void getPlayerSettingsResponseNative(JNIEnv* env, jobject /* object */,
   log::debug("");
   std::vector<PlayerAttribute> attributes_vector;
   std::vector<uint8_t> values_vector;
-  copyJavaArraytoCppVector(env, attributes, attributes_vector);
-  copyJavaArraytoCppVector(env, values, values_vector);
+  copyJavaArraytoCppVector(env, attributes, &attributes_vector);
+  copyJavaArraytoCppVector(env, values, &values_vector);
   get_current_player_setting_value_cb.Run(std::move(attributes_vector), std::move(values_vector));
 }
 
@@ -993,33 +1012,41 @@ static void sendPlayerSettingsNative(JNIEnv* env, jobject /* object */, jbyteArr
   }
   std::vector<PlayerAttribute> attributes_vector;
   std::vector<uint8_t> values_vector;
-  copyJavaArraytoCppVector(env, attributes, attributes_vector);
-  copyJavaArraytoCppVector(env, values, values_vector);
+  copyJavaArraytoCppVector(env, attributes, &attributes_vector);
+  copyJavaArraytoCppVector(env, values, &values_vector);
   mServiceCallbacks->SendPlayerSettingsChanged(attributes_vector, values_vector);
 }
 
 int register_com_android_bluetooth_avrcp_target(JNIEnv* env) {
   const JNINativeMethod methods[] = {
-          {"initNative", "()V", (void*)initNative},
-          {"registerBipServerNative", "(I)V", (void*)registerBipServerNative},
-          {"unregisterBipServerNative", "()V", (void*)unregisterBipServerNative},
-          {"sendMediaUpdateNative", "(ZZZ)V", (void*)sendMediaUpdateNative},
-          {"sendFolderUpdateNative", "(ZZZ)V", (void*)sendFolderUpdateNative},
+          {"initNative", "()V", reinterpret_cast<void*>(initNative)},
+          {"registerBipServerNative", "(I)V", reinterpret_cast<void*>(registerBipServerNative)},
+          {"unregisterBipServerNative", "()V", reinterpret_cast<void*>(unregisterBipServerNative)},
+          {"sendMediaUpdateNative", "(ZZZ)V", reinterpret_cast<void*>(sendMediaUpdateNative)},
+          {"sendFolderUpdateNative", "(ZZZ)V", reinterpret_cast<void*>(sendFolderUpdateNative)},
           {"setBrowsedPlayerResponseNative", "(IZLjava/lang/String;I)V",
-           (void*)setBrowsedPlayerResponseNative},
+           reinterpret_cast<void*>(setBrowsedPlayerResponseNative)},
           {"getFolderItemsResponseNative", "(Ljava/lang/String;Ljava/util/List;)V",
-           (void*)getFolderItemsResponseNative},
-          {"cleanupNative", "()V", (void*)cleanupNative},
-          {"connectDeviceNative", "(Ljava/lang/String;)Z", (void*)connectDeviceNative},
-          {"disconnectDeviceNative", "(Ljava/lang/String;)Z", (void*)disconnectDeviceNative},
-          {"sendVolumeChangedNative", "(Ljava/lang/String;I)V", (void*)sendVolumeChangedNative},
-          {"setBipClientStatusNative", "(Ljava/lang/String;Z)V", (void*)setBipClientStatusNative},
-          {"listPlayerSettingsResponseNative", "([B)V", (void*)listPlayerSettingsResponseNative},
+           reinterpret_cast<void*>(getFolderItemsResponseNative)},
+          {"cleanupNative", "()V", reinterpret_cast<void*>(cleanupNative)},
+          {"connectDeviceNative", "(Ljava/lang/String;)Z",
+           reinterpret_cast<void*>(connectDeviceNative)},
+          {"disconnectDeviceNative", "(Ljava/lang/String;)Z",
+           reinterpret_cast<void*>(disconnectDeviceNative)},
+          {"sendVolumeChangedNative", "(Ljava/lang/String;I)V",
+           reinterpret_cast<void*>(sendVolumeChangedNative)},
+          {"setBipClientStatusNative", "(Ljava/lang/String;Z)V",
+           reinterpret_cast<void*>(setBipClientStatusNative)},
+          {"listPlayerSettingsResponseNative", "([B)V",
+           reinterpret_cast<void*>(listPlayerSettingsResponseNative)},
           {"listPlayerSettingValuesResponseNative", "(B[B)V",
-           (void*)listPlayerSettingValuesResponseNative},
-          {"getPlayerSettingsResponseNative", "([B[B)V", (void*)getPlayerSettingsResponseNative},
-          {"setPlayerSettingsResponseNative", "(Z)V", (void*)setPlayerSettingsResponseNative},
-          {"sendPlayerSettingsNative", "([B[B)V", (void*)sendPlayerSettingsNative},
+           reinterpret_cast<void*>(listPlayerSettingValuesResponseNative)},
+          {"getPlayerSettingsResponseNative", "([B[B)V",
+           reinterpret_cast<void*>(getPlayerSettingsResponseNative)},
+          {"setPlayerSettingsResponseNative", "(Z)V",
+           reinterpret_cast<void*>(setPlayerSettingsResponseNative)},
+          {"sendPlayerSettingsNative", "([B[B)V",
+           reinterpret_cast<void*>(sendPlayerSettingsNative)},
   };
   const int result =
           REGISTER_NATIVE_METHODS(env, "com/android/bluetooth/avrcp/AvrcpNativeInterface", methods);
