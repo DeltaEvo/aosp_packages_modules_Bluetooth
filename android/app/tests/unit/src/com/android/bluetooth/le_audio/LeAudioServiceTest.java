@@ -2618,7 +2618,10 @@ public class LeAudioServiceTest {
     @Test
     public void testSetVolumeForBroadcastSinks() {
         mSetFlagsRule.enableFlags(Flags.FLAG_LEAUDIO_BROADCAST_VOLUME_CONTROL_WITH_SET_VOLUME);
+        mSetFlagsRule.enableFlags(Flags.FLAG_LEAUDIO_BROADCAST_VOLUME_CONTROL_PRIMARY_GROUP_ONLY);
+
         int groupId = 1;
+        int groupId2 = 2;
         int volume = 100;
         int newVolume = 120;
         /* AUDIO_DIRECTION_OUTPUT_BIT = 0x01 */
@@ -2630,6 +2633,8 @@ public class LeAudioServiceTest {
         connectTestDevice(mRightDevice, groupId);
         assertThat(mService.setActiveDevice(mLeftDevice)).isFalse();
 
+        connectTestDevice(mSingleDevice, groupId2);
+
         ArgumentCaptor<BluetoothProfileConnectionInfo> profileInfo =
                 ArgumentCaptor.forClass(BluetoothProfileConnectionInfo.class);
 
@@ -2639,6 +2644,7 @@ public class LeAudioServiceTest {
         TestUtils.waitForLooperToFinishScheduledTask(mService.getMainLooper());
 
         doReturn(volume).when(mVolumeControlService).getAudioDeviceGroupVolume(groupId);
+        doReturn(volume).when(mVolumeControlService).getAudioDeviceGroupVolume(groupId2);
         // Set group and device as active.
         injectGroupStatusChange(groupId, LeAudioStackEvent.GROUP_STATUS_ACTIVE);
 
@@ -2648,6 +2654,7 @@ public class LeAudioServiceTest {
 
         // Set group to inactive, only keep them connected as broadcast sink devices.
         injectGroupStatusChange(groupId, LeAudioStackEvent.GROUP_STATUS_INACTIVE);
+        injectGroupStatusChange(groupId2, LeAudioStackEvent.GROUP_STATUS_INACTIVE);
 
         verify(mAudioManager, times(1))
                 .handleBluetoothActiveDeviceChanged(
@@ -2657,14 +2664,18 @@ public class LeAudioServiceTest {
         // Verify setGroupVolume will not be called if no active sinks
         doReturn(new ArrayList<>()).when(mBassClientService).getActiveBroadcastSinks();
         mService.setVolume(newVolume);
-        verify(mVolumeControlService, times(0)).setGroupVolume(groupId, newVolume);
+        verify(mVolumeControlService, never()).setGroupVolume(groupId, newVolume);
 
+        mService.mUnicastGroupIdDeactivatedForBroadcastTransition = groupId;
         // Verify setGroupVolume will be called if active sinks
-        doReturn(List.of(mLeftDevice, mRightDevice))
+        doReturn(List.of(mLeftDevice, mRightDevice, mSingleDevice))
                 .when(mBassClientService)
                 .getActiveBroadcastSinks();
         mService.setVolume(newVolume);
+
+        // Verify set volume only on primary group
         verify(mVolumeControlService, times(1)).setGroupVolume(groupId, newVolume);
+        verify(mVolumeControlService, never()).setGroupVolume(groupId2, newVolume);
     }
 
     @Test
