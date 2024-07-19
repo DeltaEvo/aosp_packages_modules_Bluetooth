@@ -296,12 +296,12 @@ static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilityAac(const tA2DP_AAC_CIE* p_ca
 
   /* Object Type */
   if ((cfg_cie.objectType & p_cap->objectType) == 0) {
-    return A2DP_INVALID_OBJECT_TYPE;
+    return A2DP_NOT_SUPPORTED_OBJECT_TYPE;
   }
 
   /* Sample Rate */
   if ((cfg_cie.sampleRate & p_cap->sampleRate) == 0) {
-    return A2DP_INVALID_SAMPLING_FREQUENCY;
+    return A2DP_NOT_SUPPORTED_SAMPLING_FREQUENCY;
   }
 
   /* Channel Mode */
