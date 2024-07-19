@@ -170,7 +170,7 @@ bool bta_hf_client_add_record(const char* p_service_name, uint8_t scn, tBTA_HF_C
 
   /* Support swb */
   if (features & BTA_HF_CLIENT_FEAT_SWB) {
-    features |= BTA_HF_CLIENT_FEAT_SWB_SUPPORT;
+    sdp_features |= BTA_HF_CLIENT_FEAT_SWB_SUPPORT;
   }
 
   UINT16_TO_BE_FIELD(buf, sdp_features);
