@@ -24,12 +24,12 @@
 #include "types/raw_address.h"
 
 /* Structure returned with remote name  request */
-typedef struct {
+struct tBTM_REMOTE_DEV_NAME {
   tBTM_STATUS status;
   RawAddress bd_addr;
   BD_NAME remote_bd_name;
   tHCI_STATUS hci_status;
-} tBTM_REMOTE_DEV_NAME;
+};
 
 typedef void(tBTM_NAME_CMPL_CB)(const tBTM_REMOTE_DEV_NAME*);
 
