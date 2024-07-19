@@ -684,7 +684,6 @@ static void bta_dm_acl_up(const RawAddress& bd_addr, tBT_TRANSPORT transport, ui
   }
   log::info("Acl connected peer:{} transport:{} handle:{}", bd_addr, bt_transport_text(transport),
             acl_handle);
-  device->conn_state = tBTA_DM_CONN_STATE::BTA_DM_CONNECTED;
   device->pref_role = BTA_ANY_ROLE;
   device->reset_device_info();
   device->transport = transport;
@@ -831,8 +830,8 @@ static void bta_dm_check_av() {
     log::info("av_count:{}", bta_dm_cb.cur_av_count);
     for (i = 0; i < bta_dm_cb.device_list.count; i++) {
       p_dev = &bta_dm_cb.device_list.peer_device[i];
-      log::warn("[{}]: state:{}, info:{}", i, p_dev->conn_state, p_dev->info_text());
-      if ((p_dev->conn_state == tBTA_DM_CONN_STATE::BTA_DM_CONNECTED) && p_dev->is_av_active()) {
+      log::warn("[{}]: info:{}, pending removal:{}", i, p_dev->info_text(), p_dev->is_connected());
+      if (p_dev->is_connected() && p_dev->is_av_active()) {
         /* make central and take away the role switch policy */
         const tBTM_STATUS status =
                 get_btm_client_interface().link_policy.BTM_SwitchRoleToCentral(p_dev->peer_bdaddr);
@@ -896,16 +895,6 @@ static void bta_dm_rm_cback(tBTA_SYS_CONN_STATUS status, tBTA_SYS_ID id, uint8_t
   p_dev = bta_dm_find_peer_device(peer_addr);
   if (status == BTA_SYS_CONN_OPEN) {
     if (p_dev) {
-      /* Do not set to connected if we are in the middle of unpairing. When AV
-       * stream is
-       * started it fakes out a SYS_CONN_OPEN to potentially trigger a role
-       * switch command.
-       * But this should not be done if we are in the middle of unpairing.
-       */
-      if (p_dev->conn_state != tBTA_DM_CONN_STATE::BTA_DM_UNPAIRING) {
-        p_dev->conn_state = tBTA_DM_CONN_STATE::BTA_DM_CONNECTED;
-      }
-
       for (j = 1; j <= p_bta_dm_rm_cfg[0].app_id; j++) {
         if (((p_bta_dm_rm_cfg[j].app_id == app_id) ||
              (p_bta_dm_rm_cfg[j].app_id == BTA_ALL_APP_ID)) &&
@@ -981,7 +970,7 @@ static void bta_dm_adjust_roles(bool delay_role_switch) {
   uint8_t link_count = bta_dm_cb.device_list.count;
   if (link_count) {
     for (i = 0; i < bta_dm_cb.device_list.count; i++) {
-      if (bta_dm_cb.device_list.peer_device[i].conn_state == tBTA_DM_CONN_STATE::BTA_DM_CONNECTED &&
+      if (bta_dm_cb.device_list.peer_device[i].is_connected() &&
           bta_dm_cb.device_list.peer_device[i].transport == BT_TRANSPORT_BR_EDR) {
         if ((bta_dm_cb.device_list.peer_device[i].pref_role == BTA_CENTRAL_ROLE_ONLY) ||
             (link_count > 1)) {
@@ -1378,7 +1367,7 @@ tBTA_DM_PEER_DEVICE* find_connected_device(const RawAddress& bd_addr,
                                            tBT_TRANSPORT /* transport */) {
   for (uint8_t i = 0; i < bta_dm_cb.device_list.count; i++) {
     if (bta_dm_cb.device_list.peer_device[i].peer_bdaddr == bd_addr &&
-        bta_dm_cb.device_list.peer_device[i].conn_state == tBTA_DM_CONN_STATE::BTA_DM_CONNECTED) {
+        bta_dm_cb.device_list.peer_device[i].is_connected()) {
       return &bta_dm_cb.device_list.peer_device[i];
     }
   }
@@ -1447,7 +1436,7 @@ static tBTM_CONTRL_STATE bta_dm_obtain_system_context() {
 
   for (int i = 0; i < bta_dm_cb.device_list.count; i++) {
     tBTA_DM_PEER_DEVICE* p_dev = &bta_dm_cb.device_list.peer_device[i];
-    if (p_dev->conn_state == tBTA_DM_CONN_STATE::BTA_DM_CONNECTED && p_dev->is_av_active()) {
+    if (p_dev->is_connected() && p_dev->is_av_active()) {
       is_av_active = true;
       break;
     }

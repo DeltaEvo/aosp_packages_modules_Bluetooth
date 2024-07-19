@@ -45,15 +45,15 @@
 
 #define BTA_DM_NUM_PEER_DEVICE 7
 
+// TODO: Remove when flag wait_for_disconnect_before_unbond is shipped
 enum class tBTA_DM_CONN_STATE : uint8_t {
-  BTA_DM_NOT_CONNECTED = 0,
-  BTA_DM_CONNECTED = 1,
-  BTA_DM_UNPAIRING = 2,
+  BTA_DM_CONNECTED = 0,
+  BTA_DM_UNPAIRING = 1,
 };
 
+// TODO: Remove when flag wait_for_disconnect_before_unbond is shipped
 inline std::string bta_conn_state_text(tBTA_DM_CONN_STATE state) {
   switch (state) {
-    CASE_RETURN_STRING(tBTA_DM_CONN_STATE::BTA_DM_NOT_CONNECTED);
     CASE_RETURN_STRING(tBTA_DM_CONN_STATE::BTA_DM_CONNECTED);
     CASE_RETURN_STRING(tBTA_DM_CONN_STATE::BTA_DM_UNPAIRING);
   }
@@ -97,7 +97,7 @@ typedef uint8_t tBTA_DM_PM_REQ;
 
 struct tBTA_DM_PEER_DEVICE {
   RawAddress peer_bdaddr;
-  tBTA_DM_CONN_STATE conn_state{tBTA_DM_CONN_STATE::BTA_DM_NOT_CONNECTED};
+  tBTA_DM_CONN_STATE conn_state{tBTA_DM_CONN_STATE::BTA_DM_CONNECTED};
   tBTA_PREF_ROLES pref_role;
   bool in_use;
 
@@ -133,6 +133,10 @@ public:
   void set_ssr_active() { info |= BTA_DM_DI_USE_SSR; }
   void reset_ssr_active() { info &= ~BTA_DM_DI_USE_SSR; }
   bool is_ssr_active() const { return info & BTA_DM_DI_USE_SSR; }
+
+  bool is_connected() const {
+    return (conn_state == tBTA_DM_CONN_STATE::BTA_DM_CONNECTED);
+  }
 
   tBTA_DM_ENCRYPT_CBACK* p_encrypt_cback;
   tBTM_PM_STATUS prev_low; /* previous low power mode used */
