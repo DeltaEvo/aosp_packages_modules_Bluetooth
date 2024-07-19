@@ -1642,20 +1642,7 @@ LeAudioDeviceGroup::GetConfiguration(LeAudioContextType context_type) const {
 
 LeAudioCodecConfiguration LeAudioDeviceGroup::GetAudioSessionCodecConfigForDirection(
         LeAudioContextType context_type, uint8_t direction) const {
-  const set_configurations::AudioSetConfiguration* conf = nullptr;
-  bool is_valid = false;
-
-  /* Refresh the cache if there is no valid configuration */
-  if (context_to_configuration_cache_map.count(context_type) != 0) {
-    auto& valid_config_pair = context_to_configuration_cache_map.at(context_type);
-    is_valid = valid_config_pair.first;
-    conf = valid_config_pair.second.get();
-  }
-  if (!is_valid || (conf == nullptr)) {
-    UpdateAudioSetConfigurationCache(context_type);
-  }
-
-  auto audio_set_conf = GetCachedConfiguration(context_type);
+  auto audio_set_conf = GetConfiguration(context_type);
   if (!audio_set_conf) {
     return {0, 0, 0, 0};
   }
