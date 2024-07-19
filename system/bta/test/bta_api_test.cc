@@ -24,7 +24,6 @@
 #include <utility>
 #include <vector>
 
-#include "common/init_flags.h"
 #include "test/common/mock_functions.h"
 
 using namespace std::chrono_literals;

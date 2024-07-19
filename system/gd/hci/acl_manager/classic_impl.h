@@ -21,7 +21,6 @@
 #include <memory>
 
 #include "common/bind.h"
-#include "common/init_flags.h"
 #include "hci/acl_manager/acl_scheduler.h"
 #include "hci/acl_manager/assembler.h"
 #include "hci/acl_manager/connection_callbacks.h"

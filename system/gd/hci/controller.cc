@@ -24,13 +24,11 @@
 #include <string>
 #include <utility>
 
-#include "common/init_flags.h"
 #include "dumpsys_data_generated.h"
 #include "hci/controller_interface.h"
 #include "hci/event_checkers.h"
 #include "hci/hci_layer.h"
 #include "hci_controller_generated.h"
-#include "os/log.h"
 #include "os/metrics.h"
 #include "os/system_properties.h"
 #if TARGET_FLOSS

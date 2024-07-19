@@ -32,6 +32,7 @@
 #include <unordered_set>
 
 #include "common/bind.h"
+#include "common/init_flags.h"
 #include "common/interfaces/ILoggable.h"
 #include "common/strings.h"
 #include "common/sync_map_count.h"

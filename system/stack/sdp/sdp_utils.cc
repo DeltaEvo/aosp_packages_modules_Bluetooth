@@ -36,7 +36,6 @@
 
 #include "btif/include/btif_config.h"
 #include "btif/include/stack_manager_t.h"
-#include "common/init_flags.h"
 #include "device/include/interop.h"
 #include "internal_include/bt_target.h"
 #include "internal_include/bt_trace.h"

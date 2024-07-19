@@ -19,7 +19,6 @@
 
 #include <vector>
 
-#include "common/init_flags.h"
 #include "hci/address_with_type.h"
 #include "hci/class_of_device.h"
 #include "osi/include/allocator.h"
