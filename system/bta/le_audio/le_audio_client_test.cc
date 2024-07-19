@@ -3791,6 +3791,115 @@ TEST_F(UnicastTestNoInit, LoadStoredEarbudsCsisGrouped) {
   DisconnectLeAudioWithAclClose(test_address1, 2);
 }
 
+TEST_F(UnicastTest, LoadStoredBandedHeadphones) {
+  const RawAddress test_address0 = GetTestAddress(0);
+  uint16_t conn_id = 1;
+
+  SetSampleDatabaseEarbudsValid(
+          conn_id, test_address0,
+          codec_spec_conf::kLeAudioLocationFrontLeft | codec_spec_conf::kLeAudioLocationFrontRight,
+          codec_spec_conf::kLeAudioLocationMonoAudio, 2, 1, 0x0004,
+          /* source sample freq 16khz */ false, /*add_csis*/
+          true,                                 /*add_cas*/
+          true,                                 /*add_pacs*/
+          true,                                 /*add_ascs*/
+          0, 0);
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnConnectionState(ConnectionState::CONNECTED, test_address0))
+          .Times(1);
+
+  /* Connect and fill the device storage */
+  ConnectLeAudio(test_address0);
+
+  std::vector<uint8_t> handles;
+  LeAudioClient::GetHandlesForStorage(test_address0, handles);
+
+  std::vector<uint8_t> ases;
+  LeAudioClient::GetAsesForStorage(test_address0, ases);
+
+  std::vector<uint8_t> src_pacs;
+  LeAudioClient::GetSourcePacsForStorage(test_address0, src_pacs);
+
+  std::vector<uint8_t> snk_pacs;
+  LeAudioClient::GetSinkPacsForStorage(test_address0, snk_pacs);
+
+  /* Disconnect & Cleanup */
+  DisconnectLeAudioWithAclClose(test_address0, conn_id);
+  if (LeAudioClient::IsLeAudioClientRunning()) {
+    LeAudioClient::Cleanup();
+    ASSERT_FALSE(LeAudioClient::IsLeAudioClientRunning());
+  }
+
+  Mock::VerifyAndClearExpectations(&mock_hal_2_1_verifier);
+  Mock::VerifyAndClearExpectations(&mock_storage_load);
+
+  // Load devices from the storage when storage API is called
+  bool autoconnect = true;
+  EXPECT_CALL(mock_storage_load, Call()).WillOnce([&]() {
+    do_in_main_thread(base::BindOnce(&LeAudioClient::AddFromStorage, test_address0, autoconnect,
+                                     codec_spec_conf::kLeAudioLocationFrontLeft |
+                                             codec_spec_conf::kLeAudioLocationFrontRight,
+                                     codec_spec_conf::kLeAudioLocationMonoAudio, 0xff, 0xff,
+                                     std::move(handles), std::move(snk_pacs), std::move(src_pacs),
+                                     std::move(ases)));
+    SyncOnMainLoop();
+  });
+
+  /* Prepare  mock to not inject connect event so the device can stay in
+   * CONNECTING state*/
+  ON_CALL(mock_gatt_interface_, Open(_, _, BTM_BLE_DIRECT_CONNECTION, false))
+          .WillByDefault(DoAll(Return()));
+
+  // Re-Initialize & load from storage
+  BtaAppRegisterCallback app_register_callback;
+  ON_CALL(mock_gatt_interface_, AppRegister(_, _, _))
+          .WillByDefault(DoAll(SaveArg<0>(&gatt_callback), SaveArg<1>(&app_register_callback)));
+  std::vector<::bluetooth::le_audio::btle_audio_codec_config_t> framework_encode_preference;
+  LeAudioClient::Initialize(
+          &mock_audio_hal_client_callbacks_,
+          base::Bind([](MockFunction<void()>* foo) { foo->Call(); }, &mock_storage_load),
+          base::Bind([](MockFunction<bool()>* foo) { return foo->Call(); }, &mock_hal_2_1_verifier),
+          framework_encode_preference);
+  if (app_register_callback) {
+    app_register_callback.Run(gatt_if, GATT_SUCCESS);
+  }
+
+  InjectConnectedEvent(test_address0, conn_id);
+  SyncOnMainLoop();
+  Mock::VerifyAndClearExpectations(&mock_gatt_interface_);
+
+  // Verify if all went well and we got the proper group
+  auto group_id = MockDeviceGroups::DeviceGroups::Get()->GetGroupId(test_address0);
+  std::vector<RawAddress> devs = LeAudioClient::Get()->GetGroupDevices(group_id);
+  ASSERT_NE(std::find(devs.begin(), devs.end(), test_address0), devs.end());
+
+  SetUpMockCodecManager(::bluetooth::le_audio::types::CodecLocation::HOST);
+
+  // Start streaming
+  LeAudioClient::Get()->GroupSetActive(group_id);
+  SyncOnMainLoop();
+
+  EXPECT_CALL(mock_state_machine_, StartStream(_, _, _, _)).Times(1);
+  EXPECT_CALL(mock_audio_hal_client_callbacks_, OnAudioGroupCurrentCodecConf(group_id, _, _))
+          .Times(1);
+  StartStreaming(AUDIO_USAGE_MEDIA, AUDIO_CONTENT_TYPE_MUSIC, group_id);
+
+  SyncOnMainLoop();
+  Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
+  Mock::VerifyAndClearExpectations(&mock_state_machine_);
+
+  ASSERT_NE(0lu, streaming_groups.count(group_id));
+  auto group = streaming_groups.at(group_id);
+  ASSERT_NE(group, nullptr);
+
+  auto device = group->GetFirstDevice();
+  ASSERT_NE(device, nullptr);
+  ASSERT_EQ(device->audio_directions_, bluetooth::le_audio::types::kLeAudioDirectionSink |
+                                               bluetooth::le_audio::types::kLeAudioDirectionSource);
+
+  DisconnectLeAudioWithAclClose(test_address0, conn_id);
+}
+
 TEST_F(UnicastTestNoInit, ServiceChangedBeforeServiceIsConnected) {
   // Prepare two devices
   uint8_t group_size = 2;

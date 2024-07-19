@@ -1467,18 +1467,10 @@ public:
       group_add_node(group_id, address);
     }
 
+    leAudioDevice->src_audio_locations_ = source_audio_location;
     leAudioDevice->snk_audio_locations_ = sink_audio_location;
-    if (sink_audio_location != 0) {
-      leAudioDevice->audio_directions_ |= bluetooth::le_audio::types::kLeAudioDirectionSink;
-    }
-
     callbacks_->OnSinkAudioLocationAvailable(leAudioDevice->address_,
                                              leAudioDevice->snk_audio_locations_.to_ulong());
-
-    leAudioDevice->src_audio_locations_ = source_audio_location;
-    if (source_audio_location != 0) {
-      leAudioDevice->audio_directions_ |= bluetooth::le_audio::types::kLeAudioDirectionSource;
-    }
 
     BidirectionalPair<AudioContexts> supported_contexts = {
             .sink = AudioContexts(sink_supported_context_types),
@@ -1492,6 +1484,14 @@ public:
 
     if (!DeserializeHandles(leAudioDevice, handles)) {
       log::warn("Could not load Handles");
+    }
+
+    /* Presence of PAC characteristic for a direction means support for that direction */
+    if (leAudioDevice->src_audio_locations_hdls_.val_hdl != 0) {
+      leAudioDevice->audio_directions_ |= bluetooth::le_audio::types::kLeAudioDirectionSource;
+    }
+    if (leAudioDevice->snk_audio_locations_hdls_.val_hdl != 0) {
+      leAudioDevice->audio_directions_ |= bluetooth::le_audio::types::kLeAudioDirectionSink;
     }
 
     if (!DeserializeSinkPacs(leAudioDevice, sink_pacs)) {
