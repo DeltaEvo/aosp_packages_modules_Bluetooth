@@ -479,7 +479,7 @@ void BtaAvCo::ProcessSetConfig(tBTA_AV_HNDL bta_av_handle, const RawAddress& pee
 
     if (t_local_sep == AVDT_TSEP_SNK) {
       log::verbose("peer {} is A2DP Source", p_peer->addr);
-      status = A2DP_IsSinkCodecSupported(p_codec_info) ? A2DP_SUCCESS : A2DP_INVALID_CODEC_TYPE;
+      status = A2DP_IsSinkCodecSupported(p_codec_info);
 
       if (status == A2DP_SUCCESS) {
         // If Peer is Source, and our config subset matches with what is

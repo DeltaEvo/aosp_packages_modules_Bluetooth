@@ -100,7 +100,7 @@ int A2DP_GetTrackChannelCountSbc::return_value = 0;
 int A2DP_GetTrackSampleRateSbc::return_value = 0;
 bool A2DP_InitCodecConfigSbc::return_value = false;
 bool A2DP_InitCodecConfigSbcSink::return_value = false;
-bool A2DP_IsSinkCodecSupportedSbc::return_value = false;
+tA2DP_STATUS A2DP_IsSinkCodecSupportedSbc::return_value = A2DP_NOT_SUPPORTED_CODEC_TYPE;
 btav_a2dp_codec_index_t A2DP_SinkCodecIndexSbc::return_value =
     BTAV_A2DP_CODEC_INDEX_SOURCE_MIN;
 btav_a2dp_codec_index_t A2DP_SourceCodecIndexSbc::return_value =
@@ -218,7 +218,7 @@ void A2DP_InitDefaultCodecSbc(uint8_t* p_codec_info) {
   inc_func_call_count(__func__);
   test::mock::stack_a2dp_sbc::A2DP_InitDefaultCodecSbc(p_codec_info);
 }
-bool A2DP_IsSinkCodecSupportedSbc(const uint8_t* p_codec_info) {
+tA2DP_STATUS A2DP_IsSinkCodecSupportedSbc(const uint8_t* p_codec_info) {
   inc_func_call_count(__func__);
   return test::mock::stack_a2dp_sbc::A2DP_IsSinkCodecSupportedSbc(p_codec_info);
 }

@@ -80,7 +80,7 @@ bool A2DP_IsCodecValidOpus(const uint8_t* p_codec_info);
 // Checks whether A2DP Opus Sink codec is supported.
 // |p_codec_info| contains information about the codec capabilities.
 // Returns true if the A2DP Opus Sink codec is supported, otherwise false.
-bool A2DP_IsVendorSinkCodecSupportedOpus(const uint8_t* p_codec_info);
+tA2DP_STATUS A2DP_IsVendorSinkCodecSupportedOpus(const uint8_t* p_codec_info);
 
 // Checks whether the A2DP data packets should contain RTP header.
 // |content_protection_enabled| is true if Content Protection is
