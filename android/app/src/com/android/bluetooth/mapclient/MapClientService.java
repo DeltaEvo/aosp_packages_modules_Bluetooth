@@ -16,6 +16,7 @@
 
 package com.android.bluetooth.mapclient;
 
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 
 import android.Manifest;
@@ -429,7 +430,7 @@ public class MapClientService extends ProfileService {
             mService = service;
         }
 
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+        @RequiresPermission(BLUETOOTH_CONNECT)
         private MapClientService getService(AttributionSource source) {
             if (Utils.isInstrumentationTestMode()) {
                 return mService;

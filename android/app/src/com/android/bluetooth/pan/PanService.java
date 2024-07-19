@@ -309,7 +309,7 @@ public class PanService extends ProfileService {
             mService = null;
         }
 
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+        @RequiresPermission(BLUETOOTH_CONNECT)
         private PanService getService(AttributionSource source) {
             if (Utils.isInstrumentationTestMode()) {
                 return mService;

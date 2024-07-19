@@ -16,6 +16,9 @@
 
 package android.bluetooth.le;
 
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
+import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
+
 import android.annotation.FlaggedApi;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -83,8 +86,8 @@ public final class DistanceMeasurementManager {
     @SystemApi
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public @NonNull List<DistanceMeasurementMethod> getSupportedMethods() {
         final List<DistanceMeasurementMethod> supportedMethods = new ArrayList<>();
@@ -125,8 +128,8 @@ public final class DistanceMeasurementManager {
     @Nullable
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public CancellationSignal startMeasurementSession(
             @NonNull DistanceMeasurementParams params,
@@ -176,8 +179,8 @@ public final class DistanceMeasurementManager {
     @CsSecurityLevel
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public int getChannelSoundingMaxSupportedSecurityLevel(@NonNull BluetoothDevice remoteDevice) {
         Objects.requireNonNull(remoteDevice, "remote device is null");
@@ -210,8 +213,8 @@ public final class DistanceMeasurementManager {
     @CsSecurityLevel
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public int getLocalChannelSoundingMaxSupportedSecurityLevel() {
         final int defaultValue = ChannelSoundingParams.CS_SECURITY_LEVEL_UNKNOWN;

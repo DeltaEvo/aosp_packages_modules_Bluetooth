@@ -20,6 +20,7 @@ package com.android.bluetooth.btservice;
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 import static android.Manifest.permission.BLUETOOTH_SCAN;
+import static android.Manifest.permission.DUMP;
 import static android.Manifest.permission.LOCAL_MAC_ADDRESS;
 import static android.Manifest.permission.MODIFY_PHONE_STATE;
 import static android.bluetooth.BluetoothAdapter.SCAN_MODE_CONNECTABLE;
@@ -3866,7 +3867,7 @@ public class AdapterService extends Service {
                 return;
             }
 
-            service.enforceCallingOrSelfPermission(android.Manifest.permission.DUMP, null);
+            service.enforceCallingOrSelfPermission(DUMP, null);
 
             service.dump(fd, writer, args);
             writer.close();
