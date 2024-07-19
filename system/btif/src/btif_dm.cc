@@ -2365,7 +2365,7 @@ bool btif_dm_pairing_is_busy() { return pairing_cb.state != BT_BOND_STATE_NONE; 
  * Description      Initiate bonding with the specified device
  *
  ******************************************************************************/
-void btif_dm_create_bond(const RawAddress bd_addr, int transport) {
+void btif_dm_create_bond(const RawAddress bd_addr, tBT_TRANSPORT transport) {
   log::verbose("bd_addr={}, transport={}", bd_addr, transport);
 
   BTM_LogHistory(kBtmLogTag, bd_addr, "Create bond",
@@ -2823,7 +2823,7 @@ static void btif_on_name_read_legacy(RawAddress bd_addr, tHCI_ERROR_CODE hci_sta
  * Returns          bt_status_t
  *
  ******************************************************************************/
-void btif_dm_get_remote_services(RawAddress remote_addr, const int transport) {
+void btif_dm_get_remote_services(RawAddress remote_addr, const tBT_TRANSPORT transport) {
   log::verbose("transport={}, remote_addr={}", bt_transport_text(transport), remote_addr);
 
   BTM_LogHistory(kBtmLogTag, remote_addr, "Service discovery",

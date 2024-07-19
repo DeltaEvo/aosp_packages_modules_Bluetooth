@@ -229,7 +229,7 @@ bool btif_dm_pairing_is_busy();
  * Description      Initiate bonding with the specified device
  *
  ******************************************************************************/
-void btif_dm_create_bond(const RawAddress bd_addr, int transport);
+void btif_dm_create_bond(const RawAddress bd_addr, tBT_TRANSPORT transport);
 
 /*******************************************************************************
  *
@@ -345,7 +345,7 @@ bt_status_t btif_dm_get_adapter_property(bt_property_t* prop);
  * Returns          bt_status_t
  *
  ******************************************************************************/
-void btif_dm_get_remote_services(const RawAddress remote_addr, int transport);
+void btif_dm_get_remote_services(const RawAddress remote_addr, tBT_TRANSPORT transport);
 
 /*******************************************************************************
  *
