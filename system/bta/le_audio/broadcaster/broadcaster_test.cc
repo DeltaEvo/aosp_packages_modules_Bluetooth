@@ -494,6 +494,28 @@ TEST_F(BroadcasterTest, CreateAudioBroadcast) {
   // Note: There shall be a separate test to verify audio parameters
 }
 
+TEST_F(BroadcasterTest, CreateAudioBroadcastInvalidBroadcastCode) {
+  std::optional<bluetooth::le_audio::BroadcastCode> invalid_broadcast_code =
+          bluetooth::le_audio::BroadcastCode({0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                                              0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF});
+
+  std::vector<std::vector<uint8_t>> metadata_array;
+  for (uint8_t i = 0; i < default_subgroup_qualities.size(); i++) {
+    // use the same default_metadata for each subgroup
+    metadata_array.push_back(default_metadata);
+  }
+
+  EXPECT_CALL(mock_broadcaster_callbacks_,
+              OnBroadcastCreated(bluetooth::le_audio::kBroadcastIdInvalid, false))
+          .Times(1);
+  // Add multiple subgroup settings with the same content
+  LeAudioBroadcaster::Get()->CreateAudioBroadcast(true, test_broadcast_name, invalid_broadcast_code,
+                                                  default_public_metadata,
+                                                  default_subgroup_qualities, metadata_array);
+
+  Mock::VerifyAndClearExpectations(&mock_broadcaster_callbacks_);
+}
+
 TEST_F(BroadcasterTest, CreateAudioBroadcastMultiGroups) {
   // Test with two subgroups
   auto broadcast_id = InstantiateBroadcast(
