@@ -3,6 +3,18 @@
     "A2DP/SNK/AS/BV-01-I",
     "A2DP/SNK/AS/BV-03-I",
     "A2DP/SNK/AS/BV-04-I",
+    "A2DP/SNK/AVP/BI-01-C",
+    "A2DP/SNK/AVP/BI-02-C",
+    "A2DP/SNK/AVP/BI-03-C",
+    "A2DP/SNK/AVP/BI-06-C",
+    "A2DP/SNK/AVP/BI-08-C",
+    "A2DP/SNK/AVP/BI-10-C",
+    "A2DP/SNK/AVP/BI-11-C",
+    "A2DP/SNK/AVP/BI-12-C",
+    "A2DP/SNK/AVP/BI-13-C",
+    "A2DP/SNK/AVP/BI-14-C",
+    "A2DP/SNK/AVP/BI-15-C",
+    "A2DP/SNK/AVP/BI-16-C",
     "A2DP/SNK/AVP/BI-20-C",
     "A2DP/SNK/CC/BV-01-I",
     "A2DP/SNK/CC/BV-02-I",
@@ -683,19 +695,7 @@
     "PAN/NAP/MISC/UUID/BV-02-C"
   ],
   "skip": [
-    "A2DP/SNK/AVP/BI-01-C",
-    "A2DP/SNK/AVP/BI-02-C",
-    "A2DP/SNK/AVP/BI-03-C",
-    "A2DP/SNK/AVP/BI-06-C",
     "A2DP/SNK/AVP/BI-07-C",
-    "A2DP/SNK/AVP/BI-08-C",
-    "A2DP/SNK/AVP/BI-10-C",
-    "A2DP/SNK/AVP/BI-11-C",
-    "A2DP/SNK/AVP/BI-12-C",
-    "A2DP/SNK/AVP/BI-13-C",
-    "A2DP/SNK/AVP/BI-14-C",
-    "A2DP/SNK/AVP/BI-15-C",
-    "A2DP/SNK/AVP/BI-16-C",
     "A2DP/SNK/SET/BV-04-I",
     "A2DP/SNK/SET/BV-06-I",
     "A2DP/SNK/SUS/BV-02-I",
@@ -3130,6 +3130,7 @@
   },
   "flags": {
     "avdtp_error_codes": [
+      "A2DP/SNK/AVP",
       "A2DP/SRC/AVP"
     ]
   }
