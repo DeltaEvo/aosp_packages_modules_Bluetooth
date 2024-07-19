@@ -110,6 +110,7 @@
 #include "stack/include/pan_api.h"
 #include "stack/include/sdp_api.h"
 #include "storage/config_keys.h"
+#include "types/bt_transport.h"
 #include "types/raw_address.h"
 
 using bluetooth::csis::CsisClientInterface;
