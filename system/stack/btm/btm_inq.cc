@@ -1860,11 +1860,13 @@ tBTM_STATUS btm_initiate_rem_name(const RawAddress& remote_bda, uint64_t timeout
     return BTM_BUSY;
   }
 
+  uint16_t clock_offset = get_clock_offset_from_storage(remote_bda);
+
   /* If the database entry exists for the device, use its clock offset */
   tINQ_DB_ENT* p_i = btm_inq_db_find(remote_bda);
   if (p_i && (p_i->inq_info.results.inq_result_type & BT_DEVICE_TYPE_BREDR)) {
     tBTM_INQ_INFO* p_cur = &p_i->inq_info;
-    uint16_t clock_offset = p_cur->results.clock_offset | BTM_CLOCK_OFFSET_VALID;
+    clock_offset = p_cur->results.clock_offset | BTM_CLOCK_OFFSET_VALID;
     if (0 == (p_cur->results.clock_offset & BTM_CLOCK_OFFSET_VALID)) {
       clock_offset = get_clock_offset_from_storage(remote_bda);
     }
@@ -1880,7 +1882,6 @@ tBTM_STATUS btm_initiate_rem_name(const RawAddress& remote_bda, uint64_t timeout
     bluetooth::shim::ACL_RemoteNameRequest(remote_bda, page_scan_rep_mode,
                                            p_cur->results.page_scan_mode, clock_offset);
   } else {
-    uint16_t clock_offset = get_clock_offset_from_storage(remote_bda);
     bluetooth::shim::ACL_RemoteNameRequest(remote_bda, HCI_PAGE_SCAN_REP_MODE_R1,
                                            HCI_MANDATARY_PAGE_SCAN_MODE, clock_offset);
   }
