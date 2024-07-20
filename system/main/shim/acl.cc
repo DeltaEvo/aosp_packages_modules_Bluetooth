@@ -976,9 +976,12 @@ struct shim::legacy::Acl::impl {
 
   void LeSubrateRequest(HciHandle handle, uint16_t subrate_min, uint16_t subrate_max,
                         uint16_t max_latency, uint16_t cont_num, uint16_t sup_tout) {
-    log::assert_that(IsLeAcl(handle), "handle {} is not a LE connection", handle);
-    handle_to_le_connection_map_[handle]->LeSubrateRequest(subrate_min, subrate_max, max_latency,
-                                                           cont_num, sup_tout);
+    if (IsLeAcl(handle)) {
+      handle_to_le_connection_map_[handle]->LeSubrateRequest(subrate_min, subrate_max, max_latency,
+                                                             cont_num, sup_tout);
+    } else {
+      log::info("handle {} is not a LE connection", handle);
+    }
   }
 
   void SetConnectionEncryption(HciHandle handle, hci::Enable enable) {
