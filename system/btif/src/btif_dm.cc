@@ -1330,7 +1330,7 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event, tBTA_DM_SEARCH*
     case BTA_DM_INQ_RES_EVT: {
       /* inquiry result */
       bt_bdname_t bdname;
-      uint8_t remote_name_len;
+      uint8_t remote_name_len = 0;
       uint8_t num_uuids = 0, max_num_uuid = 32;
       uint8_t uuid_list[32 * Uuid::kNumBytes16];
 
