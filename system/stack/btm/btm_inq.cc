@@ -1851,49 +1851,49 @@ tBTM_STATUS btm_initiate_rem_name(const RawAddress& remote_bda, uint64_t timeout
   }
   if (btm_cb.rnr.remname_active) {
     return BTM_BUSY;
-  } else {
-    /* If the database entry exists for the device, use its clock offset */
-    tINQ_DB_ENT* p_i = btm_inq_db_find(remote_bda);
-    if (p_i && (p_i->inq_info.results.inq_result_type & BT_DEVICE_TYPE_BREDR)) {
-      tBTM_INQ_INFO* p_cur = &p_i->inq_info;
-      uint16_t clock_offset = p_cur->results.clock_offset | BTM_CLOCK_OFFSET_VALID;
-      int clock_offset_in_cfg = 0;
-      if (0 == (p_cur->results.clock_offset & BTM_CLOCK_OFFSET_VALID)) {
-        if (btif_get_device_clockoffset(remote_bda, &clock_offset_in_cfg)) {
-          clock_offset = clock_offset_in_cfg;
-        }
-      }
-      uint8_t page_scan_rep_mode = p_cur->results.page_scan_rep_mode;
-      if (com::android::bluetooth::flags::rnr_validate_page_scan_repetition_mode() &&
-          page_scan_rep_mode >= HCI_PAGE_SCAN_REP_MODE_RESERVED_START) {
-        log::info(
-                "Invalid page scan repetition mode {} from remote_bda:{}, "
-                "fallback to R1",
-                page_scan_rep_mode, remote_bda);
-        page_scan_rep_mode = HCI_PAGE_SCAN_REP_MODE_R1;
-      }
-      bluetooth::shim::ACL_RemoteNameRequest(remote_bda, page_scan_rep_mode,
-                                             p_cur->results.page_scan_mode, clock_offset);
-    } else {
-      uint16_t clock_offset = 0;
-      int clock_offset_in_cfg = 0;
+  }
+
+  /* If the database entry exists for the device, use its clock offset */
+  tINQ_DB_ENT* p_i = btm_inq_db_find(remote_bda);
+  if (p_i && (p_i->inq_info.results.inq_result_type & BT_DEVICE_TYPE_BREDR)) {
+    tBTM_INQ_INFO* p_cur = &p_i->inq_info;
+    uint16_t clock_offset = p_cur->results.clock_offset | BTM_CLOCK_OFFSET_VALID;
+    int clock_offset_in_cfg = 0;
+    if (0 == (p_cur->results.clock_offset & BTM_CLOCK_OFFSET_VALID)) {
       if (btif_get_device_clockoffset(remote_bda, &clock_offset_in_cfg)) {
         clock_offset = clock_offset_in_cfg;
       }
-      bluetooth::shim::ACL_RemoteNameRequest(remote_bda, HCI_PAGE_SCAN_REP_MODE_R1,
-                                             HCI_MANDATARY_PAGE_SCAN_MODE, clock_offset);
     }
-
-    btm_cb.rnr.p_remname_cmpl_cb = p_cb;
-    btm_cb.rnr.remname_bda = remote_bda;
-    btm_cb.rnr.remname_dev_type = BT_DEVICE_TYPE_BREDR;
-    btm_cb.rnr.remname_active = true;
-
-    alarm_set_on_mloop(btm_cb.rnr.remote_name_timer, timeout_ms, btm_inq_remote_name_timer_timeout,
-                       NULL);
-
-    return BTM_CMD_STARTED;
+    uint8_t page_scan_rep_mode = p_cur->results.page_scan_rep_mode;
+    if (com::android::bluetooth::flags::rnr_validate_page_scan_repetition_mode() &&
+        page_scan_rep_mode >= HCI_PAGE_SCAN_REP_MODE_RESERVED_START) {
+      log::info(
+              "Invalid page scan repetition mode {} from remote_bda:{}, "
+              "fallback to R1",
+              page_scan_rep_mode, remote_bda);
+      page_scan_rep_mode = HCI_PAGE_SCAN_REP_MODE_R1;
+    }
+    bluetooth::shim::ACL_RemoteNameRequest(remote_bda, page_scan_rep_mode,
+                                           p_cur->results.page_scan_mode, clock_offset);
+  } else {
+    uint16_t clock_offset = 0;
+    int clock_offset_in_cfg = 0;
+    if (btif_get_device_clockoffset(remote_bda, &clock_offset_in_cfg)) {
+      clock_offset = clock_offset_in_cfg;
+    }
+    bluetooth::shim::ACL_RemoteNameRequest(remote_bda, HCI_PAGE_SCAN_REP_MODE_R1,
+                                           HCI_MANDATARY_PAGE_SCAN_MODE, clock_offset);
   }
+
+  btm_cb.rnr.p_remname_cmpl_cb = p_cb;
+  btm_cb.rnr.remname_bda = remote_bda;
+  btm_cb.rnr.remname_dev_type = BT_DEVICE_TYPE_BREDR;
+  btm_cb.rnr.remname_active = true;
+
+  alarm_set_on_mloop(btm_cb.rnr.remote_name_timer, timeout_ms, btm_inq_remote_name_timer_timeout,
+                     NULL);
+
+  return BTM_CMD_STARTED;
 }
 
 /*******************************************************************************
