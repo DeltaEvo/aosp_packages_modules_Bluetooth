@@ -23,13 +23,17 @@
 
 #include <chrono>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <future>
 #include <map>
 #include <memory>
 #include <optional>
+#include <queue>
 #include <string>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
 #include "common/bind.h"
 #include "common/interfaces/ILoggable.h"
@@ -160,7 +164,8 @@ inline bool IsRpa(const hci::AddressWithType address_with_type) {
 
 class ShadowAcceptlist {
 public:
-  ShadowAcceptlist(uint8_t max_acceptlist_size) : max_acceptlist_size_(max_acceptlist_size) {}
+  explicit ShadowAcceptlist(uint8_t max_acceptlist_size)
+      : max_acceptlist_size_(max_acceptlist_size) {}
 
   bool Add(const hci::AddressWithType& address_with_type) {
     if (acceptlist_set_.size() == max_acceptlist_size_) {
@@ -200,7 +205,7 @@ private:
 
 class ShadowAddressResolutionList {
 public:
-  ShadowAddressResolutionList(uint8_t max_address_resolution_size)
+  explicit ShadowAddressResolutionList(uint8_t max_address_resolution_size)
       : max_address_resolution_size_(max_address_resolution_size) {}
 
   bool Add(const hci::AddressWithType& address_with_type) {
