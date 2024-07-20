@@ -26,7 +26,6 @@
 #include <map>
 #include <string>
 
-#include "os/log.h"
 #include "osi/include/alarm.h"
 #include "osi/include/allocator.h"
 #include "osi/include/config.h"
