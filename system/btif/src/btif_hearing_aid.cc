@@ -51,8 +51,7 @@ class HearingAidInterfaceImpl : public bluetooth::hearing_aid::HearingAidInterfa
 
   void Init(HearingAidCallbacks* callbacks) override {
     this->callbacks = callbacks;
-    do_in_main_thread(FROM_HERE,
-                      Bind(&HearingAid::Initialize, this,
+    do_in_main_thread(Bind(&HearingAid::Initialize, this,
                            jni_thread_wrapper(Bind(&btif_storage_load_bonded_hearing_aids))));
   }
 
@@ -68,33 +67,33 @@ class HearingAidInterfaceImpl : public bluetooth::hearing_aid::HearingAidInterfa
   }
 
   void Connect(const RawAddress& address) override {
-    do_in_main_thread(FROM_HERE, Bind(&HearingAid::Connect, address));
+    do_in_main_thread(Bind(&HearingAid::Connect, address));
   }
 
   void Disconnect(const RawAddress& address) override {
-    do_in_main_thread(FROM_HERE, Bind(&HearingAid::Disconnect, address));
+    do_in_main_thread(Bind(&HearingAid::Disconnect, address));
     do_in_jni_thread(Bind(&btif_storage_set_hearing_aid_acceptlist, address, false));
   }
 
   void AddToAcceptlist(const RawAddress& address) override {
-    do_in_main_thread(FROM_HERE, Bind(&HearingAid::AddToAcceptlist, address));
+    do_in_main_thread(Bind(&HearingAid::AddToAcceptlist, address));
     do_in_jni_thread(Bind(&btif_storage_set_hearing_aid_acceptlist, address, true));
   }
 
   void SetVolume(int8_t volume) override {
-    do_in_main_thread(FROM_HERE, Bind(&HearingAid::SetVolume, volume));
+    do_in_main_thread(Bind(&HearingAid::SetVolume, volume));
   }
 
   void RemoveDevice(const RawAddress& address) override {
     // RemoveDevice can be called on devices that don't have HA enabled
     if (HearingAid::IsHearingAidRunning()) {
-      do_in_main_thread(FROM_HERE, Bind(&HearingAid::Disconnect, address));
+      do_in_main_thread(Bind(&HearingAid::Disconnect, address));
     }
 
     do_in_jni_thread(Bind(&btif_storage_remove_hearing_aid, address));
   }
 
-  void Cleanup(void) override { do_in_main_thread(FROM_HERE, Bind(&HearingAid::CleanUp)); }
+  void Cleanup(void) override { do_in_main_thread(Bind(&HearingAid::CleanUp)); }
 
 private:
   HearingAidCallbacks* callbacks;

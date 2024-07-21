@@ -144,7 +144,8 @@ public:
   void GetOwnAddress(uint8_t advertiser_id);
 
   void RegisterAdvertiser(
-          common::ContextualOnceCallback<void(uint8_t /* inst_id */, uint8_t /* status */)>
+          common::ContextualOnceCallback<void(uint8_t /* inst_id */,
+                                              AdvertisingCallback::AdvertisingStatus /* status */)>
                   callback);
 
   void SetParameters(AdvertiserId advertiser_id, AdvertisingConfig config);

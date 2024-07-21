@@ -234,7 +234,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
   uint8_t cmd_code, id;
   uint16_t cmd_len;
   uint16_t min_interval, max_interval, latency, timeout;
-  tL2C_CONN_INFO con_info;
   uint16_t lcid = 0, rcid = 0, mtu = 0, mps = 0, initial_credit = 0;
   tL2C_CCB *p_ccb = NULL, *temp_p_ccb = NULL;
   tL2C_RCB* p_rcb;
@@ -261,8 +260,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
   switch (cmd_code) {
     case L2CAP_CMD_REJECT: {
-      uint16_t reason;
-
       if (p + 2 > p_pkt_end) {
         log::error(
                 "invalid L2CAP_CMD_REJECT packet, not containing enough data for "
@@ -270,10 +267,20 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
         return;
       }
 
+      uint16_t reason{};
       STREAM_TO_UINT16(reason, p);
 
       if (reason == L2CAP_CMD_REJ_NOT_UNDERSTOOD && p_lcb->pending_ecoc_conn_cnt > 0) {
-        con_info.l2cap_result = L2CAP_LE_RESULT_NO_PSM;
+        tL2C_CONN_INFO con_info = {
+                .bd_addr{},
+                .hci_status{},
+                .psm{},
+                .l2cap_result = L2CAP_LE_RESULT_NO_PSM,
+                .l2cap_status{},
+                .remote_cid{},
+                .lcids{},
+                .peer_mtu{},
+        };
         l2cble_handle_connect_rsp_neg(p_lcb, &con_info);
       }
     } break;
@@ -336,6 +343,7 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
         return;
       }
 
+      tL2C_CONN_INFO con_info{};
       STREAM_TO_UINT16(con_info.psm, p);
       STREAM_TO_UINT16(mtu, p);
       STREAM_TO_UINT16(mps, p);
@@ -448,7 +456,7 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
       l2c_csm_execute(p_ccb, L2CEVT_L2CAP_CREDIT_BASED_CONNECT_REQ, NULL);
       break;
     }
-    case L2CAP_CMD_CREDIT_BASED_CONN_RES:
+    case L2CAP_CMD_CREDIT_BASED_CONN_RES: {
       if (p + 8 > p_pkt_end) {
         log::error("invalid L2CAP_CMD_CREDIT_BASED_CONN_RES len");
         return;
@@ -465,12 +473,14 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
       }
 
       if (!p_ccb) {
+        tL2C_CONN_INFO con_info{};
         log::verbose("Cannot find matching connection req");
         con_info.l2cap_result = L2CAP_LE_RESULT_INVALID_SOURCE_CID;
         l2c_csm_execute(p_ccb, L2CEVT_L2CAP_CONNECT_RSP_NEG, &con_info);
         return;
       }
 
+      tL2C_CONN_INFO con_info{};
       STREAM_TO_UINT16(mtu, p);
       STREAM_TO_UINT16(mps, p);
       STREAM_TO_UINT16(initial_credit, p);
@@ -571,8 +581,7 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
           l2c_csm_execute(temp_p_ccb, L2CEVT_L2CAP_CREDIT_BASED_CONNECT_RSP, &con_info);
         }
       }
-
-      break;
+    } break;
     case L2CAP_CMD_CREDIT_BASED_RECONFIG_REQ: {
       if (p + 6 > p_pkt_end) {
         l2cu_send_ble_reconfig_rsp(p_lcb, id, L2CAP_RECONFIG_UNACCAPTED_PARAM);
@@ -675,7 +684,8 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
       break;
     }
 
-    case L2CAP_CMD_BLE_CREDIT_BASED_CONN_REQ:
+    case L2CAP_CMD_BLE_CREDIT_BASED_CONN_REQ: {
+      tL2C_CONN_INFO con_info{};
       if (p + 10 > p_pkt_end) {
         log::error("invalid read");
         return;
@@ -750,9 +760,10 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
       p_ccb->connection_initiator = L2CAP_INITIATOR_REMOTE;
 
       l2c_csm_execute(p_ccb, L2CEVT_L2CAP_CONNECT_REQ, &con_info);
-      break;
+    } break;
 
-    case L2CAP_CMD_BLE_CREDIT_BASED_CONN_RES:
+    case L2CAP_CMD_BLE_CREDIT_BASED_CONN_RES: {
+      tL2C_CONN_INFO con_info{};
       log::verbose("Recv L2CAP_CMD_BLE_CREDIT_BASED_CONN_RES");
       /* For all channels, see whose identifier matches this id */
       for (temp_p_ccb = p_lcb->ccb_queue.p_first_ccb; temp_p_ccb;
@@ -808,7 +819,7 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
         con_info.l2cap_result = L2CAP_LE_RESULT_INVALID_SOURCE_CID;
         l2c_csm_execute(p_ccb, L2CEVT_L2CAP_CONNECT_RSP_NEG, &con_info);
       }
-      break;
+    } break;
 
     case L2CAP_CMD_BLE_FLOW_CTRL_CREDIT:
       if (p + 4 > p_pkt_end) {

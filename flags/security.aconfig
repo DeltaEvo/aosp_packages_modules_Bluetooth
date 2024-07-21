@@ -9,16 +9,6 @@ flag {
 }
 
 flag {
-    name: "split_sec_state"
-    namespace: "bluetooth"
-    description: "Splic sec_state into separate link specific variables"
-    bug: "351136926"
-    metadata {
-      purpose: PURPOSE_BUGFIX
-    }
-}
-
-flag {
     name: "key_missing_as_ordered_broadcast"
     namespace: "bluetooth"
     description: "Key missing broadcast would be send as ordered broadcast"

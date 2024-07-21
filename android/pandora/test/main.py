@@ -23,7 +23,7 @@ import avatar.cases.le_security_test
 import avatar.cases.security_test
 import gatt_test
 import hfpclient_test
-import pairing.smp_test as smp_test
+from pairing import _test_class_list as _pairing_test_class_list
 import sdp_test
 
 _TEST_CLASSES_LIST = [
@@ -33,11 +33,10 @@ _TEST_CLASSES_LIST = [
     avatar.cases.le_security_test.LeSecurityTest,
     a2dp_test.A2dpTest,
     sdp_test.SdpTest,
-    smp_test.SmpTest,
     gatt_test.GattTest,
     asha_test.AshaTest,
     hfpclient_test.HfpClientTest,
-]
+] + _pairing_test_class_list
 
 
 def _parse_cli_args() -> Tuple[Namespace, List[str]]:

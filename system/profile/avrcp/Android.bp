@@ -20,6 +20,8 @@ cc_library_static {
     ],
     export_include_dirs: ["./"],
     srcs: [
+        "avrcp_sdp_records.cc",
+        "avrcp_sdp_service.cc",
         "connection_handler.cc",
         "device.cc",
     ],

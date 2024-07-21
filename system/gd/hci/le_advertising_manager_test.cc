@@ -1620,10 +1620,10 @@ TEST_F(LeExtendedAdvertisingAPITest, trigger_advertiser_callbacks_if_started_whi
   auto test_le_address_manager = (TestLeAddressManager*)test_acl_manager_->GetLeAddressManager();
   auto id_promise = std::promise<uint8_t>{};
   auto id_future = id_promise.get_future();
-  le_advertising_manager_->RegisterAdvertiser(
-          client_handler_->BindOnce([](std::promise<uint8_t> promise, uint8_t id,
-                                       uint8_t /* _status */) { promise.set_value(id); },
-                                    std::move(id_promise)));
+  le_advertising_manager_->RegisterAdvertiser(client_handler_->BindOnce(
+          [](std::promise<uint8_t> promise, uint8_t id,
+             AdvertisingCallback::AdvertisingStatus /* _status */) { promise.set_value(id); },
+          std::move(id_promise)));
   sync_client_handler();
   auto set_id = id_future.get();
 

@@ -87,13 +87,9 @@ struct BTM_GetPeerSCA BTM_GetPeerSCA;
 struct acl_link_role_from_handle acl_link_role_from_handle;
 struct btm_handle_to_acl_index btm_handle_to_acl_index;
 struct BTM_ReadRemoteFeatures BTM_ReadRemoteFeatures;
-struct ACL_RegisterClient ACL_RegisterClient;
-struct ACL_UnregisterClient ACL_UnregisterClient;
 struct BTM_ReadConnectionAddr BTM_ReadConnectionAddr;
 struct BTM_RequestPeerSCA BTM_RequestPeerSCA;
 struct BTM_acl_after_controller_started BTM_acl_after_controller_started;
-struct BTM_block_role_switch_for BTM_block_role_switch_for;
-struct BTM_block_sniff_mode_for BTM_block_sniff_mode_for;
 struct btm_connection_request btm_connection_request;
 struct BTM_default_unblock_role_switch BTM_default_unblock_role_switch;
 struct BTM_unblock_role_switch_for BTM_unblock_role_switch_for;
@@ -341,14 +337,6 @@ uint8_t* BTM_ReadRemoteFeatures(const RawAddress& addr) {
   inc_func_call_count(__func__);
   return test::mock::stack_acl::BTM_ReadRemoteFeatures(addr);
 }
-void ACL_RegisterClient(struct acl_client_callback_s* callbacks) {
-  inc_func_call_count(__func__);
-  test::mock::stack_acl::ACL_RegisterClient(callbacks);
-}
-void ACL_UnregisterClient(struct acl_client_callback_s* callbacks) {
-  inc_func_call_count(__func__);
-  test::mock::stack_acl::ACL_UnregisterClient(callbacks);
-}
 void BTM_ReadConnectionAddr(const RawAddress& remote_bda, RawAddress& local_conn_addr,
                             tBLE_ADDR_TYPE* p_addr_type, bool ota_address) {
   inc_func_call_count(__func__);
@@ -362,14 +350,6 @@ void BTM_RequestPeerSCA(const RawAddress& remote_bda, tBT_TRANSPORT transport) {
 void BTM_acl_after_controller_started() {
   inc_func_call_count(__func__);
   test::mock::stack_acl::BTM_acl_after_controller_started();
-}
-void BTM_block_role_switch_for(const RawAddress& peer_addr) {
-  inc_func_call_count(__func__);
-  test::mock::stack_acl::BTM_block_role_switch_for(peer_addr);
-}
-void BTM_block_sniff_mode_for(const RawAddress& peer_addr) {
-  inc_func_call_count(__func__);
-  test::mock::stack_acl::BTM_block_sniff_mode_for(peer_addr);
 }
 void BTM_default_unblock_role_switch() {
   inc_func_call_count(__func__);

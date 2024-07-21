@@ -596,6 +596,14 @@ protected:
           bit_pos++;
         }
 
+        if (split_allocations.empty()) {
+          // Add a single ASE mono configuration
+          endpoint_cfg.codec.params.Add(codec_spec_conf::kLeAudioLtvTypeAudioChannelAllocation,
+                                        (uint32_t)codec_spec_conf::kLeAudioLocationMonoAudio);
+          ase_confs.push_back(endpoint_cfg);
+          continue;
+        }
+
         // Pick a number of allocations from the list (depending on supported
         // channel counts per ASE) and create an ASE configuration.
         while (split_allocations.size()) {
@@ -1594,6 +1602,16 @@ TEST_P(LeAudioAseConfigurationTest, test_banded_headset_ringtone_mono_microphone
   banded_headset->src_audio_locations_ =
           ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft;
   group_->ReloadAudioLocations();
+
+  TestGroupAseConfiguration(LeAudioContextType::RINGTONE, &data, 1);
+}
+
+TEST_P(LeAudioAseConfigurationTest, test_banded_headset_ringtone_mono_microphone_loc0) {
+  LeAudioDevice* banded_headset =
+          AddTestDevice(2, 1, 0, 0, false, false, codec_spec_conf::kLeAudioLocationStereo,
+                        codec_spec_conf::kLeAudioLocationMonoAudio);
+  TestGroupAseConfigurationData data({banded_headset, kLeAudioCodecChannelCountTwoChannel,
+                                      kLeAudioCodecChannelCountSingleChannel, 2, 1});
 
   TestGroupAseConfiguration(LeAudioContextType::RINGTONE, &data, 1);
 }

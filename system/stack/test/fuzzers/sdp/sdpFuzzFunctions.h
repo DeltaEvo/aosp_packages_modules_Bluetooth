@@ -306,7 +306,7 @@ static const std::vector<std::function<void(FuzzedDataProvider*)>> sdp_operation
         // ::SDP_GetDiRecord
         [](FuzzedDataProvider* fdp) -> void {
           tSDP_DI_GET_RECORD device_info;  // Output var
-          [[maybe_unused]] bool rc = get_legacy_stack_sdp_api()->device_id.SDP_GetDiRecord(
+          [[maybe_unused]] tSDP_STATUS rc = get_legacy_stack_sdp_api()->device_id.SDP_GetDiRecord(
                   fdp->ConsumeIntegral<uint8_t>(), &device_info,
                   getArbitraryVectorElement(fdp, sdp_db_vect, true).get());
         },

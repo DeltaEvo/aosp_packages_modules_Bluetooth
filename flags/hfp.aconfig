@@ -135,3 +135,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "update_active_device_in_band_ringtone"
+    namespace: "bluetooth"
+    description: "Active device update the in band ringtone, but how ringtone is played is still decided by the headset"
+    bug: "349318724"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}

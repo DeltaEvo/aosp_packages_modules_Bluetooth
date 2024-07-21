@@ -68,12 +68,6 @@ bool btm_ble_topology_check(tBTM_BLE_STATE_MASK /* request_state_mask */) {
   inc_func_call_count(__func__);
   return false;
 }
-tBTM_STATUS BTM_BleObserve(bool /* start */, uint8_t /* duration */,
-                           tBTM_INQ_RESULTS_CB* /* p_results_cb */, tBTM_CMPL_CB* /* p_cmpl_cb */,
-                           bool /* low_latency_scan */) {
-  inc_func_call_count(__func__);
-  return BTM_SUCCESS;
-}
 void BTM_BleOpportunisticObserve(bool /* enable */, tBTM_INQ_RESULTS_CB* /* p_results_cb */) {
   inc_func_call_count(__func__);
 }
@@ -110,7 +104,6 @@ void BTM_BleSetScanParams(uint32_t /* scan_interval */, uint32_t /* scan_window 
 void btm_ble_decrement_link_topology_mask(uint8_t /* link_role */) {
   inc_func_call_count(__func__);
 }
-void btm_ble_free() { inc_func_call_count(__func__); }
 void btm_ble_increment_link_topology_mask(uint8_t /* link_role */) {
   inc_func_call_count(__func__);
 }

@@ -55,6 +55,8 @@ static android::bluetooth::SocketRoleEnum toSocketRoleEnum(int role);
 void btif_sock_connection_logger(const RawAddress& address, int port, int type, int state, int role,
                                  int uid, int server_port, int64_t tx_bytes, int64_t rx_bytes,
                                  const char* server_name) {
+  log::verbose("bd_addr: {}, port: {}, role: {}, state: {}", address, port, role, state);
+
   uint8_t index = logger_index++ % SOCK_LOGGER_SIZE_MAX;
 
   connection_logger[index] = {

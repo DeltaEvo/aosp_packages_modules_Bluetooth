@@ -28,10 +28,12 @@
 #include <cstdint>
 
 #include "bta/include/bta_av_api.h"
+#include "profile/avrcp/avrcp_sdp_records.h"
 #include "stack/include/avdt_api.h"
 
 #define BTA_AR_AV_MASK 0x01
 #define BTA_AR_AVK_MASK 0x02
+using namespace bluetooth::avrcp;
 
 /* data associated with BTA_AR */
 typedef struct {
@@ -42,6 +44,8 @@ typedef struct {
   uint32_t sdp_ct_handle;
   uint16_t ct_categories[2];
   uint8_t tg_registered;
+  uint16_t sdp_tg_request_id = UNASSIGNED_REQUEST_ID;
+  uint16_t sdp_ct_request_id = UNASSIGNED_REQUEST_ID;
   tBTA_AV_HNDL hndl; /* Handle associated with the stream that rejected the
                         connection. */
   uint16_t ct_ver;

@@ -222,12 +222,12 @@ extern struct SDP_DiDiscover SDP_DiDiscover;
 // Params: uint8_t get_record_index, tSDP_DI_GET_RECORD* p_device_info,
 // tSDP_DISCOVERY_DB* p_db Returns: uint16_t
 struct SDP_GetDiRecord {
-  std::function<uint16_t(uint8_t get_record_index, tSDP_DI_GET_RECORD* p_device_info,
-                         const tSDP_DISCOVERY_DB* p_db)>
+  std::function<tSDP_STATUS(uint8_t get_record_index, tSDP_DI_GET_RECORD* p_device_info,
+                            const tSDP_DISCOVERY_DB* p_db)>
           body{[](uint8_t /* get_record_index */, tSDP_DI_GET_RECORD* /* p_device_info */,
-                  const tSDP_DISCOVERY_DB* /* p_db */) { return 0; }};
-  uint16_t operator()(uint8_t get_record_index, tSDP_DI_GET_RECORD* p_device_info,
-                      const tSDP_DISCOVERY_DB* p_db) {
+                  const tSDP_DISCOVERY_DB* /* p_db */) { return SDP_SUCCESS; }};
+  tSDP_STATUS operator()(uint8_t get_record_index, tSDP_DI_GET_RECORD* p_device_info,
+                         const tSDP_DISCOVERY_DB* p_db) {
     return body(get_record_index, p_device_info, p_db);
   }
 };
@@ -236,9 +236,11 @@ extern struct SDP_GetDiRecord SDP_GetDiRecord;
 // Params: tSDP_DI_RECORD* p_device_info, uint32_t* p_handle
 // Returns: uint16_t
 struct SDP_SetLocalDiRecord {
-  std::function<uint16_t(const tSDP_DI_RECORD* p_device_info, uint32_t* p_handle)> body{
-          [](const tSDP_DI_RECORD* /* p_device_info */, uint32_t* /* p_handle */) { return 0; }};
-  uint16_t operator()(const tSDP_DI_RECORD* p_device_info, uint32_t* p_handle) {
+  std::function<tSDP_STATUS(const tSDP_DI_RECORD* p_device_info, uint32_t* p_handle)> body{
+          [](const tSDP_DI_RECORD* /* p_device_info */, uint32_t* /* p_handle */) {
+            return SDP_SUCCESS;
+          }};
+  tSDP_STATUS operator()(const tSDP_DI_RECORD* p_device_info, uint32_t* p_handle) {
     return body(p_device_info, p_handle);
   }
 };
@@ -252,6 +254,15 @@ struct SDP_GetNumDiRecords {
   uint8_t operator()(const tSDP_DISCOVERY_DB* p_db) { return body(p_db); }
 };
 extern struct SDP_GetNumDiRecords SDP_GetNumDiRecords;
+
+// Name:SDP_Dumpsys
+// Params: int fd
+// Returns: void
+struct SDP_Dumpsys {
+  std::function<void(int fd)> body{[](int /* fd */) {}};
+  void operator()(int fd) { body(fd); }
+};
+extern struct SDP_Dumpsys SDP_Dumpsys;
 
 }  // namespace stack_sdp_api
 }  // namespace mock

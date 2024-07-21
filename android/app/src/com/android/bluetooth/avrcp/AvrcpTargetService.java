@@ -20,7 +20,6 @@ import android.annotation.NonNull;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUtils;
-import android.bluetooth.IBluetoothAvrcpTarget;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -36,7 +35,6 @@ import android.view.KeyEvent;
 import com.android.bluetooth.BluetoothEventLogger;
 import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.R;
-import com.android.bluetooth.Utils;
 import com.android.bluetooth.a2dp.A2dpService;
 import com.android.bluetooth.audio_util.MediaData;
 import com.android.bluetooth.audio_util.MediaPlayerList;
@@ -45,6 +43,7 @@ import com.android.bluetooth.audio_util.Metadata;
 import com.android.bluetooth.audio_util.PlayStatus;
 import com.android.bluetooth.audio_util.PlayerInfo;
 import com.android.bluetooth.audio_util.PlayerSettingsManager;
+import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.btservice.ServiceFactory;
@@ -97,9 +96,11 @@ public class AvrcpTargetService extends ProfileService {
     private AvrcpCoverArtService mAvrcpCoverArtService = null;
 
     private static AvrcpTargetService sInstance = null;
+    private final AdapterService mAdapterService;
 
-    public AvrcpTargetService(Context ctx) {
-        super(ctx);
+    public AvrcpTargetService(AdapterService adapterService) {
+        super(adapterService);
+        mAdapterService = adapterService;
     }
 
     /** Checks for profile enabled state in Bluetooth sysprops. */
@@ -188,7 +189,7 @@ public class AvrcpTargetService extends ProfileService {
 
     @Override
     protected IProfileServiceBinder initBinder() {
-        return new AvrcpTargetBinder(this);
+        return null;
     }
 
     @Override
@@ -216,7 +217,7 @@ public class AvrcpTargetService extends ProfileService {
 
         mAvrcpVersion = AvrcpVersion.getCurrentSystemPropertiesValue();
 
-        mVolumeManager = new AvrcpVolumeManager(this, mAudioManager, mNativeInterface);
+        mVolumeManager = new AvrcpVolumeManager(mAdapterService, mAudioManager, mNativeInterface);
 
         UserManager userManager = getApplicationContext().getSystemService(UserManager.class);
         if (userManager.isUserUnlocked()) {
@@ -588,29 +589,5 @@ public class AvrcpTargetService extends ProfileService {
 
         // Tab everything over by two spaces
         sb.append(tempBuilder.toString().replaceAll("(?m)^", "  "));
-    }
-
-    private static class AvrcpTargetBinder extends IBluetoothAvrcpTarget.Stub
-            implements IProfileServiceBinder {
-        private AvrcpTargetService mService;
-
-        AvrcpTargetBinder(AvrcpTargetService service) {
-            mService = service;
-        }
-
-        @Override
-        public void cleanup() {
-            mService = null;
-        }
-
-        @Override
-        public void sendVolumeChanged(int volume) {
-            if (mService == null
-                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)) {
-                return;
-            }
-
-            mService.sendVolumeChanged(volume);
-        }
     }
 }

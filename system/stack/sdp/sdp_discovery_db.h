@@ -32,35 +32,37 @@
 #define SDP_MAX_LIST_ELEMS 3
 
 /* Define a structure to hold the discovered service information. */
-typedef struct {
+struct tSDP_DISC_ATVAL {
   union {
     uint8_t u8;                         /* 8-bit integer            */
     uint16_t u16;                       /* 16-bit integer           */
     uint32_t u32;                       /* 32-bit integer           */
-    struct t_sdp_disc_attr* p_sub_attr; /* Addr of first sub-attr (list)*/
+    struct tSDP_DISC_ATTR* p_sub_attr;  /* Addr of first sub-attr (list)*/
     uint8_t array[];                    /* Variable length field    */
                                         /* flexible array member    */
                                         /* requiring backing store  */
                                         /* from SDP DB    */
   } v;
+};
 
-} tSDP_DISC_ATVAL;
-
-typedef struct t_sdp_disc_attr {
-  struct t_sdp_disc_attr* p_next_attr; /* Addr of next linked attr     */
+struct tSDP_DISC_ATTR {
+  struct tSDP_DISC_ATTR* p_next_attr;  /* Addr of next linked attr     */
   uint16_t attr_id;                    /* Attribute ID                 */
   uint16_t attr_len_type;              /* Length and type fields       */
   tSDP_DISC_ATVAL attr_value;          /* Variable length entry data   */
-} tSDP_DISC_ATTR;
+};
 
-typedef struct t_sdp_disc_rec {
+struct tSDP_DISC_REC {
   tSDP_DISC_ATTR* p_first_attr;      /* First attribute of record    */
-  struct t_sdp_disc_rec* p_next_rec; /* Addr of next linked record   */
+  struct tSDP_DISC_REC* p_next_rec;  /* Addr of next linked record   */
   uint32_t time_read;                /* The time the record was read */
   RawAddress remote_bd_addr;         /* Remote BD address            */
-} tSDP_DISC_REC;
+};
 
-typedef struct {
+// Typedef alias used by profiles
+typedef tSDP_DISC_REC t_sdp_disc_rec;
+
+struct tSDP_DISCOVERY_DB {
   uint32_t mem_size;                                  /* Memory size of the DB        */
   uint32_t mem_free;                                  /* Memory still available       */
   tSDP_DISC_REC* p_first_rec;                         /* Addr of first record in DB   */
@@ -72,16 +74,16 @@ typedef struct {
   uint8_t* raw_data; /* Received record from server. allocated/released by client  */
   uint32_t raw_size; /* size of raw_data */
   uint32_t raw_used; /* length of raw_data used */
-} tSDP_DISCOVERY_DB;
+};
 
 /* This structure is used to add protocol lists and find protocol elements */
-typedef struct {
+struct tSDP_PROTOCOL_ELEM {
   uint16_t protocol_uuid;
   uint16_t num_params;
   uint16_t params[SDP_MAX_PROTOCOL_PARAMS];
-} tSDP_PROTOCOL_ELEM;
+};
 
-typedef struct {
+struct tSDP_PROTO_LIST_ELEM {
   uint16_t num_elems;
   tSDP_PROTOCOL_ELEM list_elem[SDP_MAX_LIST_ELEMS];
-} tSDP_PROTO_LIST_ELEM;
+};

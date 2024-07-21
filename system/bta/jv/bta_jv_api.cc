@@ -79,7 +79,7 @@ tBTA_JV_STATUS BTA_JvEnable(tBTA_JV_DM_CBACK* p_cback) {
 
   bta_jv_enabled = true;
 
-  do_in_main_thread(FROM_HERE, Bind(&bta_jv_enable, p_cback));
+  do_in_main_thread(Bind(&bta_jv_enable, p_cback));
   return tBTA_JV_STATUS::SUCCESS;
 }
 
@@ -89,7 +89,7 @@ void BTA_JvDisable(void) {
 
   bta_jv_enabled = false;
 
-  do_in_main_thread(FROM_HERE, Bind(&bta_jv_disable));
+  do_in_main_thread(Bind(&bta_jv_disable));
 }
 
 /*******************************************************************************
@@ -117,7 +117,7 @@ void BTA_JvDisable(void) {
 void BTA_JvGetChannelId(tBTA_JV_CONN_TYPE conn_type, uint32_t id, int32_t channel) {
   log::verbose("conn_type:{}, id:{}, channel:{}", bta_jv_conn_type_text(conn_type), id, channel);
 
-  do_in_main_thread(FROM_HERE, Bind(&bta_jv_get_channel_id, conn_type, channel, id, id));
+  do_in_main_thread(Bind(&bta_jv_get_channel_id, conn_type, channel, id, id));
 }
 
 /*******************************************************************************
@@ -137,7 +137,7 @@ void BTA_JvGetChannelId(tBTA_JV_CONN_TYPE conn_type, uint32_t id, int32_t channe
 tBTA_JV_STATUS BTA_JvFreeChannel(uint16_t channel, tBTA_JV_CONN_TYPE conn_type) {
   log::verbose("channel:{}, conn_type:{}", channel, bta_jv_conn_type_text(conn_type));
 
-  do_in_main_thread(FROM_HERE, Bind(&bta_jv_free_scn, conn_type, channel));
+  do_in_main_thread(Bind(&bta_jv_free_scn, conn_type, channel));
   return tBTA_JV_STATUS::SUCCESS;
 }
 
@@ -161,8 +161,8 @@ tBTA_JV_STATUS BTA_JvStartDiscovery(const RawAddress& bd_addr, uint16_t num_uuid
   Uuid* uuid_list_copy = new Uuid[num_uuid];
   memcpy(uuid_list_copy, p_uuid_list, num_uuid * sizeof(Uuid));
 
-  do_in_main_thread(FROM_HERE, Bind(&bta_jv_start_discovery, bd_addr, num_uuid,
-                                    base::Owned(uuid_list_copy), rfcomm_slot_id));
+  do_in_main_thread(Bind(&bta_jv_start_discovery, bd_addr, num_uuid, base::Owned(uuid_list_copy),
+                         rfcomm_slot_id));
   return tBTA_JV_STATUS::SUCCESS;
 }
 
@@ -181,7 +181,7 @@ tBTA_JV_STATUS BTA_JvStartDiscovery(const RawAddress& bd_addr, uint16_t num_uuid
 tBTA_JV_STATUS BTA_JvCreateRecordByUser(uint32_t rfcomm_slot_id) {
   log::verbose("rfcomm_slot_id: {}", rfcomm_slot_id);
 
-  do_in_main_thread(FROM_HERE, Bind(&bta_jv_create_record, rfcomm_slot_id));
+  do_in_main_thread(Bind(&bta_jv_create_record, rfcomm_slot_id));
   return tBTA_JV_STATUS::SUCCESS;
 }
 
@@ -198,7 +198,7 @@ tBTA_JV_STATUS BTA_JvCreateRecordByUser(uint32_t rfcomm_slot_id) {
 tBTA_JV_STATUS BTA_JvDeleteRecord(uint32_t handle) {
   log::verbose("handle:{}", handle);
 
-  do_in_main_thread(FROM_HERE, Bind(&bta_jv_delete_record, handle));
+  do_in_main_thread(Bind(&bta_jv_delete_record, handle));
   return tBTA_JV_STATUS::SUCCESS;
 }
 
@@ -223,9 +223,9 @@ void BTA_JvL2capConnect(tBTA_JV_CONN_TYPE conn_type, tBTA_SEC sec_mask,
                bta_jv_conn_type_text(conn_type), remote_psm, peer_bd_addr, l2cap_socket_id);
   log::assert_that(p_cback != nullptr, "assert failed: p_cback != nullptr");
 
-  do_in_main_thread(FROM_HERE, Bind(&bta_jv_l2cap_connect, conn_type, sec_mask, remote_psm, rx_mtu,
-                                    peer_bd_addr, base::Passed(&cfg), base::Passed(&ertm_info),
-                                    p_cback, l2cap_socket_id));
+  do_in_main_thread(Bind(&bta_jv_l2cap_connect, conn_type, sec_mask, remote_psm, rx_mtu,
+                         peer_bd_addr, base::Passed(&cfg), base::Passed(&ertm_info), p_cback,
+                         l2cap_socket_id));
 }
 
 /*******************************************************************************
@@ -245,7 +245,7 @@ tBTA_JV_STATUS BTA_JvL2capClose(uint32_t handle) {
     return tBTA_JV_STATUS::FAILURE;
   }
 
-  do_in_main_thread(FROM_HERE, Bind(&bta_jv_l2cap_close, handle, &bta_jv_cb.l2c_cb[handle]));
+  do_in_main_thread(Bind(&bta_jv_l2cap_close, handle, &bta_jv_cb.l2c_cb[handle]));
   return tBTA_JV_STATUS::SUCCESS;
 }
 
@@ -271,8 +271,7 @@ void BTA_JvL2capStartServer(tBTA_JV_CONN_TYPE conn_type, tBTA_SEC sec_mask,
                local_psm, l2cap_socket_id);
   CHECK(p_cback);
 
-  do_in_main_thread(FROM_HERE,
-                    Bind(&bta_jv_l2cap_start_server, conn_type, sec_mask, local_psm, rx_mtu,
+  do_in_main_thread(Bind(&bta_jv_l2cap_start_server, conn_type, sec_mask, local_psm, rx_mtu,
                          base::Passed(&cfg), base::Passed(&ertm_info), p_cback, l2cap_socket_id));
 }
 
@@ -290,7 +289,7 @@ void BTA_JvL2capStartServer(tBTA_JV_CONN_TYPE conn_type, tBTA_SEC sec_mask,
 tBTA_JV_STATUS BTA_JvL2capStopServer(uint16_t local_psm, uint32_t l2cap_socket_id) {
   log::verbose("local_psm:{}, l2cap_socket_id:{}", local_psm, l2cap_socket_id);
 
-  do_in_main_thread(FROM_HERE, Bind(&bta_jv_l2cap_stop_server, local_psm, l2cap_socket_id));
+  do_in_main_thread(Bind(&bta_jv_l2cap_stop_server, local_psm, l2cap_socket_id));
   return tBTA_JV_STATUS::SUCCESS;
 }
 
@@ -377,8 +376,8 @@ tBTA_JV_STATUS BTA_JvL2capWrite(uint32_t handle, uint32_t req_id, BT_HDR* msg, u
     return tBTA_JV_STATUS::FAILURE;
   }
 
-  do_in_main_thread(FROM_HERE, Bind(&bta_jv_l2cap_write, handle, req_id, msg, user_id,
-                                    &bta_jv_cb.l2c_cb[handle]));
+  do_in_main_thread(
+          Bind(&bta_jv_l2cap_write, handle, req_id, msg, user_id, &bta_jv_cb.l2c_cb[handle]));
   return tBTA_JV_STATUS::SUCCESS;
 }
 
@@ -408,8 +407,8 @@ tBTA_JV_STATUS BTA_JvRfcommConnect(tBTA_SEC sec_mask, uint8_t remote_scn,
     return tBTA_JV_STATUS::FAILURE; /* Nothing to do */
   }
 
-  do_in_main_thread(FROM_HERE, Bind(&bta_jv_rfcomm_connect, sec_mask, remote_scn, peer_bd_addr,
-                                    p_cback, rfcomm_slot_id));
+  do_in_main_thread(Bind(&bta_jv_rfcomm_connect, sec_mask, remote_scn, peer_bd_addr, p_cback,
+                         rfcomm_slot_id));
   return tBTA_JV_STATUS::SUCCESS;
 }
 
@@ -434,7 +433,7 @@ tBTA_JV_STATUS BTA_JvRfcommClose(uint32_t handle, uint32_t rfcomm_slot_id) {
     return tBTA_JV_STATUS::FAILURE;
   }
 
-  do_in_main_thread(FROM_HERE, Bind(&bta_jv_rfcomm_close, handle, rfcomm_slot_id));
+  do_in_main_thread(Bind(&bta_jv_rfcomm_close, handle, rfcomm_slot_id));
   return tBTA_JV_STATUS::SUCCESS;
 }
 
@@ -469,8 +468,8 @@ tBTA_JV_STATUS BTA_JvRfcommStartServer(tBTA_SEC sec_mask, uint8_t local_scn, uin
     max_session = BTA_JV_MAX_RFC_SR_SESSION;
   }
 
-  do_in_main_thread(FROM_HERE, Bind(&bta_jv_rfcomm_start_server, sec_mask, local_scn, max_session,
-                                    p_cback, rfcomm_slot_id));
+  do_in_main_thread(Bind(&bta_jv_rfcomm_start_server, sec_mask, local_scn, max_session, p_cback,
+                         rfcomm_slot_id));
   return tBTA_JV_STATUS::SUCCESS;
 }
 
@@ -488,7 +487,7 @@ tBTA_JV_STATUS BTA_JvRfcommStartServer(tBTA_SEC sec_mask, uint8_t local_scn, uin
 tBTA_JV_STATUS BTA_JvRfcommStopServer(uint32_t handle, uint32_t rfcomm_slot_id) {
   log::verbose("handle:{}, rfcomm_slot_id:{}", handle, rfcomm_slot_id);
 
-  do_in_main_thread(FROM_HERE, Bind(&bta_jv_rfcomm_stop_server, handle, rfcomm_slot_id));
+  do_in_main_thread(Bind(&bta_jv_rfcomm_stop_server, handle, rfcomm_slot_id));
   return tBTA_JV_STATUS::SUCCESS;
 }
 
@@ -536,8 +535,8 @@ tBTA_JV_STATUS BTA_JvRfcommWrite(uint32_t handle, uint32_t req_id) {
   log::verbose("write ok");
 
   tBTA_JV_RFC_CB* p_cb = &bta_jv_cb.rfc_cb[hi];
-  do_in_main_thread(FROM_HERE, Bind(&bta_jv_rfcomm_write, handle, req_id, p_cb,
-                                    &bta_jv_cb.port_cb[p_cb->rfc_hdl[si] - 1]));
+  do_in_main_thread(Bind(&bta_jv_rfcomm_write, handle, req_id, p_cb,
+                         &bta_jv_cb.port_cb[p_cb->rfc_hdl[si] - 1]));
   return tBTA_JV_STATUS::SUCCESS;
 }
 
@@ -568,6 +567,6 @@ tBTA_JV_STATUS BTA_JvSetPmProfile(uint32_t handle, tBTA_JV_PM_ID app_id,
                                   tBTA_JV_CONN_STATE init_st) {
   log::verbose("handle:{}, app_id:{}, init_st:{}", handle, app_id, handle);
 
-  do_in_main_thread(FROM_HERE, Bind(&bta_jv_set_pm_profile, handle, app_id, init_st));
+  do_in_main_thread(Bind(&bta_jv_set_pm_profile, handle, app_id, init_st));
   return tBTA_JV_STATUS::SUCCESS;
 }

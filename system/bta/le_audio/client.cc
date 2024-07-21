@@ -2009,7 +2009,7 @@ public:
 
     if (bluetooth::shim::GetController()->SupportsBle2mPhy()) {
       log::info("{} set preferred PHY to 2M", address);
-      BTM_BleSetPhy(address, PHY_LE_2M, PHY_LE_2M, 0);
+      get_btm_client_interface().ble.BTM_BleSetPhy(address, PHY_LE_2M, PHY_LE_2M, 0);
     }
 
     get_btm_client_interface().peer.BTM_RequestPeerSCA(leAudioDevice->address_, transport);
@@ -2149,7 +2149,7 @@ public:
     if (!leAudioDevice->acl_phy_update_done_ &&
         bluetooth::shim::GetController()->SupportsBle2mPhy()) {
       log::info("{} set preferred PHY to 2M", leAudioDevice->address_);
-      BTM_BleSetPhy(address, PHY_LE_2M, PHY_LE_2M, 0);
+      get_btm_client_interface().ble.BTM_BleSetPhy(address, PHY_LE_2M, PHY_LE_2M, 0);
     }
 
     changeMtuIfPossible(leAudioDevice);
@@ -2216,7 +2216,6 @@ public:
   void scheduleGroupConnectedCheck(int group_id) {
     log::info("Schedule group_id {} connected check.", group_id);
     do_in_main_thread_delayed(
-            FROM_HERE,
             base::BindOnce(&LeAudioClientImpl::checkGroupConnectionStateAfterMemberDisconnect,
                            weak_factory_.GetWeakPtr(), group_id),
             std::chrono::milliseconds(kGroupConnectedWatchDelayMs));
@@ -2235,7 +2234,6 @@ public:
   void scheduleAutoConnect(RawAddress& address) {
     log::info("Schedule auto connect {}", address);
     do_in_main_thread_delayed(
-            FROM_HERE,
             base::BindOnce(&LeAudioClientImpl::autoConnect, weak_factory_.GetWeakPtr(), address),
             std::chrono::milliseconds(kAutoConnectAfterOwnDisconnectDelayMs));
   }
@@ -2262,8 +2260,7 @@ public:
 
   void scheduleRecoveryReconnect(RawAddress& address) {
     log::info("Schedule reconnecting to {} after timeout on state machine.", address);
-    do_in_main_thread_delayed(FROM_HERE,
-                              base::BindOnce(&LeAudioClientImpl::recoveryReconnect,
+    do_in_main_thread_delayed(base::BindOnce(&LeAudioClientImpl::recoveryReconnect,
                                              weak_factory_.GetWeakPtr(), address),
                               std::chrono::milliseconds(kRecoveryReconnectDelayMs));
   }
@@ -2293,8 +2290,7 @@ public:
    */
   void scheduleGuardForCsisAdd(RawAddress& address) {
     log::info("Schedule reconnecting to {} after timeout on state machine.", address);
-    do_in_main_thread_delayed(FROM_HERE,
-                              base::BindOnce(&LeAudioClientImpl::checkIfGroupMember,
+    do_in_main_thread_delayed(base::BindOnce(&LeAudioClientImpl::checkIfGroupMember,
                                              weak_factory_.GetWeakPtr(), address),
                               std::chrono::milliseconds(kCsisGroupMemberDelayMs));
   }
@@ -3047,8 +3043,7 @@ public:
 
   void scheduleAttachDeviceToTheStream(const RawAddress& addr) {
     log::info("Device {} scheduler for stream", addr);
-    do_in_main_thread_delayed(FROM_HERE,
-                              base::BindOnce(&LeAudioClientImpl::restartAttachToTheStream,
+    do_in_main_thread_delayed(base::BindOnce(&LeAudioClientImpl::restartAttachToTheStream,
                                              weak_factory_.GetWeakPtr(), addr),
                               std::chrono::milliseconds(kDeviceAttachDelayMs));
   }
@@ -5628,7 +5623,8 @@ private:
       }
 
       log::info("SetAsymmetricBlePhy: {} for {}", asymmetric, tmpDevice->address_);
-      BTM_BleSetPhy(tmpDevice->address_, PHY_LE_2M, asymmetric ? PHY_LE_1M : PHY_LE_2M, 0);
+      get_btm_client_interface().ble.BTM_BleSetPhy(tmpDevice->address_, PHY_LE_2M,
+                                                   asymmetric ? PHY_LE_1M : PHY_LE_2M, 0);
       tmpDevice->acl_asymmetric_ = asymmetric;
     }
   }

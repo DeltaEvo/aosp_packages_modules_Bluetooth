@@ -176,7 +176,6 @@ public class HeadsetClientStateMachine extends StateMachine {
     @VisibleForTesting boolean mAudioSWB;
 
     private int mVoiceRecognitionActive;
-    private final BluetoothAdapter mAdapter;
 
     // currently connected device
     @VisibleForTesting BluetoothDevice mCurrentDevice = null;
@@ -891,7 +890,6 @@ public class HeadsetClientStateMachine extends StateMachine {
 
         mVendorProcessor = new VendorCommandResponseProcessor(mService, mNativeInterface);
 
-        mAdapter = BluetoothAdapter.getDefaultAdapter();
         mAudioState = BluetoothHeadsetClient.STATE_AUDIO_DISCONNECTED;
         mAudioWbs = false;
         mAudioSWB = false;
@@ -1164,7 +1162,7 @@ public class HeadsetClientStateMachine extends StateMachine {
                                 "Incoming AG rejected. connectionPolicy="
                                         + mService.getConnectionPolicy(device)
                                         + " bondState="
-                                        + device.getBondState());
+                                        + AdapterService.getAdapterService().getBondState(device));
                         // reject the connection and stay in Disconnected state
                         // itself
                         mNativeInterface.disconnect(device);
@@ -2267,11 +2265,15 @@ public class HeadsetClientStateMachine extends StateMachine {
 
     List<BluetoothDevice> getDevicesMatchingConnectionStates(int[] states) {
         List<BluetoothDevice> deviceList = new ArrayList<BluetoothDevice>();
-        Set<BluetoothDevice> bondedDevices = mAdapter.getBondedDevices();
+        AdapterService adapterService = AdapterService.getAdapterService();
+        final BluetoothDevice[] bondedDevices = adapterService.getBondedDevices();
+        if (bondedDevices == null) {
+            return deviceList;
+        }
         int connectionState;
         synchronized (this) {
             for (BluetoothDevice device : bondedDevices) {
-                ParcelUuid[] featureUuids = device.getUuids();
+                final ParcelUuid[] featureUuids = adapterService.getRemoteUuids(device);
                 if (!Utils.arrayContains(featureUuids, BluetoothUuid.HFP_AG)) {
                     continue;
                 }
@@ -2296,7 +2298,8 @@ public class HeadsetClientStateMachine extends StateMachine {
         // connection. Allow this connection, provided the device is bonded
         if ((BluetoothProfile.CONNECTION_POLICY_FORBIDDEN < connectionPolicy)
                 || ((BluetoothProfile.CONNECTION_POLICY_UNKNOWN == connectionPolicy)
-                        && (device.getBondState() != BluetoothDevice.BOND_NONE))) {
+                        && (AdapterService.getAdapterService().getBondState(device)
+                                != BluetoothDevice.BOND_NONE))) {
             ret = true;
         }
         return ret;

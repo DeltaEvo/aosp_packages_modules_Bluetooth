@@ -84,11 +84,9 @@ protected:
     if (encoder_iface_ != nullptr) {
       encoder_iface_->encoder_cleanup();
     }
-    A2DP_UnloadEncoderSbc();
     if (decoder_iface_ != nullptr) {
       decoder_iface_->decoder_cleanup();
     }
-    A2DP_UnloadDecoderSbc();
   }
 
   void SetCodecConfig() {

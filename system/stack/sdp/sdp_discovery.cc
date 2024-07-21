@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-#define LOG_TAG "sdp_discovery"
+#define LOG_TAG "stack::sdp"
 
 #include <bluetooth/log.h>
 

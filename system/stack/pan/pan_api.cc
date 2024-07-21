@@ -185,10 +185,8 @@ tPAN_RESULT PAN_SetRole(uint8_t role, std::string p_user_name, std::string p_nap
             pan_register_with_sdp(UUID_SERVCLASS_NAP, p_nap_name.c_str(), p_desc);
     bta_sys_add_uuid(UUID_SERVCLASS_NAP);
     nap_service_name = p_nap_name;
-  }
-  /* If the NAP role is already active and now being cleared delete the record
-   */
-  else if (pan_cb.role & PAN_ROLE_NAP_SERVER) {
+  } else if (pan_cb.role & PAN_ROLE_NAP_SERVER) {
+    /* If the NAP role is already active and now being cleared delete the record */
     if (pan_cb.pan_nap_sdp_handle != 0) {
       if (!get_legacy_stack_sdp_api()->handle.SDP_DeleteRecord(pan_cb.pan_nap_sdp_handle)) {
         log::warn("Unable to delete SDP record handle:{}", pan_cb.pan_nap_sdp_handle);
@@ -217,10 +215,8 @@ tPAN_RESULT PAN_SetRole(uint8_t role, std::string p_user_name, std::string p_nap
             pan_register_with_sdp(UUID_SERVCLASS_PANU, p_user_name.c_str(), p_desc);
     bta_sys_add_uuid(UUID_SERVCLASS_PANU);
     user_service_name = p_user_name;
-  }
-  /* If the PANU role is already active and now being cleared delete the record
-   */
-  else if (pan_cb.role & PAN_ROLE_CLIENT) {
+  } else if (pan_cb.role & PAN_ROLE_CLIENT) {
+    /* If the PANU role is already active and now being cleared delete the record */
     if (pan_cb.pan_user_sdp_handle != 0) {
       if (get_legacy_stack_sdp_api()->handle.SDP_DeleteRecord(pan_cb.pan_user_sdp_handle)) {
         log::warn("Unable to delete SDP record handle:{}", pan_cb.pan_user_sdp_handle);
@@ -255,7 +251,7 @@ tPAN_RESULT PAN_SetRole(uint8_t role, std::string p_user_name, std::string p_nap
  *
  * Returns          PAN_SUCCESS      - if the connection is initiated
  *                                     successfully
- *                  PAN_NO_RESOURCES - resources are not sufficent
+ *                  PAN_NO_RESOURCES - resources are not sufficient
  *                  PAN_FAILURE      - if the connection cannot be initiated
  *                                     this can be because of the combination of
  *                                     src and dst roles may not be valid or
@@ -297,9 +293,7 @@ tPAN_RESULT PAN_Connect(const RawAddress& rem_bda, tPAN_ROLE src_role, tPAN_ROLE
       ** because if there is already a connection we cannot accept
       ** another connection in PANU role
       */
-      log::error(
-              "Cannot make PANU connections when there are more than one "
-              "connection");
+      log::error("Cannot make PANU connections when there are more than one connection");
       return PAN_INVALID_SRC_ROLE;
     }
 
@@ -310,9 +304,8 @@ tPAN_RESULT PAN_Connect(const RawAddress& rem_bda, tPAN_ROLE src_role, tPAN_ROLE
       dst_uuid = UUID_SERVCLASS_NAP;
     }
     mx_chan_id = dst_uuid;
-  }
-  /* If destination is PANU role validate source role */
-  else if (dst_role == PAN_ROLE_CLIENT) {
+  } else if (dst_role == PAN_ROLE_CLIENT) {
+    /* If destination is PANU role validate source role */
     if (pan_cb.num_conns && pan_cb.active_role == PAN_ROLE_CLIENT && !pcb) {
       log::error("Device already have a connection in PANU role");
       return PAN_INVALID_SRC_ROLE;
@@ -321,9 +314,8 @@ tPAN_RESULT PAN_Connect(const RawAddress& rem_bda, tPAN_ROLE src_role, tPAN_ROLE
     dst_uuid = UUID_SERVCLASS_PANU;
     src_uuid = UUID_SERVCLASS_NAP;
     mx_chan_id = src_uuid;
-  }
-  /* The role combination is not valid */
-  else {
+  } else {
+    /* The role combination is not valid */
     log::error("Source {} and Destination roles {} are not valid combination", src_role, dst_role);
     return PAN_FAILURE;
   }
@@ -459,10 +451,10 @@ tPAN_RESULT PAN_Write(uint16_t handle, const RawAddress& dst, const RawAddress& 
     return PAN_SUCCESS;
   }
 
-  BT_HDR* buffer = (BT_HDR*)osi_malloc(PAN_BUF_SIZE);
+  BT_HDR* buffer = reinterpret_cast<BT_HDR*>(osi_malloc(PAN_BUF_SIZE));
   buffer->len = len;
   buffer->offset = PAN_MINIMUM_OFFSET;
-  memcpy((uint8_t*)buffer + sizeof(BT_HDR) + buffer->offset, p_data, buffer->len);
+  memcpy(reinterpret_cast<uint8_t*>(buffer) + sizeof(BT_HDR) + buffer->offset, p_data, buffer->len);
 
   return PAN_WriteBuf(handle, dst, src, protocol, buffer, ext);
 }
@@ -504,7 +496,7 @@ tPAN_RESULT PAN_WriteBuf(uint16_t handle, const RawAddress& dst, const RawAddres
 
   /* Check if it is broadcast or multicast packet */
   if (dst.address[0] & 0x01) {
-    uint8_t* data = (uint8_t*)p_buf + sizeof(BT_HDR) + p_buf->offset;
+    uint8_t* data = reinterpret_cast<uint8_t*>(p_buf) + sizeof(BT_HDR) + p_buf->offset;
     for (i = 0; i < MAX_PAN_CONNS; ++i) {
       if (pan_cb.pcb[i].con_state == PAN_STATE_CONNECTED) {
         BNEP_Write(pan_cb.pcb[i].handle, dst, data, p_buf->len, protocol, src, ext);
@@ -530,6 +522,7 @@ tPAN_RESULT PAN_WriteBuf(uint16_t handle, const RawAddress& dst, const RawAddres
       return PAN_FAILURE;
     }
 
+    uint16_t len = p_buf->len;
     result = BNEP_WriteBuf(pan_cb.pcb[i].handle, dst, p_buf, protocol, src, ext);
     if (result == BNEP_IGNORE_CMD) {
       log::verbose("PAN ignored data write for PANU connection");
@@ -539,7 +532,7 @@ tPAN_RESULT PAN_WriteBuf(uint16_t handle, const RawAddress& dst, const RawAddres
       return (tPAN_RESULT)result;
     }
 
-    pan_cb.pcb[i].write.octets += p_buf->len;
+    pan_cb.pcb[i].write.octets += len;
     pan_cb.pcb[i].write.packets++;
 
     log::verbose("PAN successfully wrote data for the PANU connection");

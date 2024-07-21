@@ -21,7 +21,6 @@ import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_SCAN;
 
 import android.annotation.NonNull;
-import android.annotation.RequiresPermission;
 import android.app.BroadcastOptions;
 import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothA2dpSink;
@@ -706,21 +705,21 @@ class AdapterProperties {
         return mDiscovering;
     }
 
-    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS)
     private void logConnectionStateChanges(int profile, Intent connIntent) {
         BluetoothDevice device = connIntent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
         int state = connIntent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1);
         int metricId = mService.getMetricId(device);
         byte[] remoteDeviceInfoBytes = MetricsLogger.getInstance().getRemoteDeviceInfoProto(device);
         if (state == BluetoothProfile.STATE_CONNECTING) {
+            String deviceName = mRemoteDevices.getName(device);
             BluetoothStatsLog.write(
-                    BluetoothStatsLog.BLUETOOTH_DEVICE_NAME_REPORTED, metricId, device.getName());
+                    BluetoothStatsLog.BLUETOOTH_DEVICE_NAME_REPORTED, metricId, deviceName);
             BluetoothStatsLog.write(
                     BluetoothStatsLog.REMOTE_DEVICE_INFORMATION_WITH_METRIC_ID,
                     metricId,
                     remoteDeviceInfoBytes);
-            MetricsLogger.getInstance()
-                    .logAllowlistedDeviceNameHash(metricId, device.getName(), true);
+
+            MetricsLogger.getInstance().logAllowlistedDeviceNameHash(metricId, deviceName, true);
         }
         BluetoothStatsLog.write(
                 BluetoothStatsLog.BLUETOOTH_CONNECTION_STATE_CHANGED,
@@ -733,7 +732,6 @@ class AdapterProperties {
                 -1);
     }
 
-    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS)
     void updateOnProfileConnectionChanged(
             BluetoothDevice device, int profile, int newState, int prevState) {
         String logInfo =
@@ -931,7 +929,6 @@ class AdapterProperties {
         }
     }
 
-    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS)
     void adapterPropertyChangedCallback(int[] types, byte[][] values) {
         Intent intent;
         int type;
@@ -1173,7 +1170,6 @@ class AdapterProperties {
         return options.toBundle();
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     protected void dump(FileDescriptor fd, PrintWriter writer, String[] args) {
         writer.println(TAG);
         writer.println("  " + "Name: " + getName());
@@ -1189,8 +1185,6 @@ class AdapterProperties {
         StringBuilder sb = new StringBuilder();
         for (BluetoothDevice device : mBondedDevices) {
             String address = device.getAddress();
-            BluetoothClass cod = device.getBluetoothClass();
-            int codInt = cod != null ? cod.getClassOfDevice() : 0;
             String brEdrAddress =
                     Flags.identityAddressNullIfUnknown()
                             ? Utils.getBrEdrAddress(device)
@@ -1200,9 +1194,9 @@ class AdapterProperties {
                         "    "
                                 + address
                                 + " ["
-                                + dumpDeviceType(device.getType())
+                                + dumpDeviceType(mRemoteDevices.getType(device))
                                 + "][ 0x"
-                                + String.format("%06X", codInt)
+                                + String.format("%06X", mRemoteDevices.getBluetoothClass(device))
                                 + " ] "
                                 + Utils.getName(device));
             } else {
@@ -1212,9 +1206,9 @@ class AdapterProperties {
                                 + " => "
                                 + brEdrAddress
                                 + " ["
-                                + dumpDeviceType(device.getType())
+                                + dumpDeviceType(mRemoteDevices.getType(device))
                                 + "][ 0x"
-                                + String.format("%06X", codInt)
+                                + String.format("%06X", mRemoteDevices.getBluetoothClass(device))
                                 + " ] "
                                 + Utils.getName(device)
                                 + "\n");

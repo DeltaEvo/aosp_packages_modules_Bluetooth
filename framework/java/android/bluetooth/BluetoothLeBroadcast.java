@@ -754,7 +754,7 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled()) {
             try {
-                return service.getMaximumNumberOfBroadcasts(mAttributionSource);
+                return service.getMaximumNumberOfBroadcasts();
             } catch (RemoteException e) {
                 throw e.rethrowAsRuntimeException();
             }
@@ -777,7 +777,7 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled()) {
             try {
-                return service.getMaximumStreamsPerBroadcast(mAttributionSource);
+                return service.getMaximumStreamsPerBroadcast();
             } catch (RemoteException e) {
                 throw e.rethrowAsRuntimeException();
             }
@@ -803,7 +803,7 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled()) {
             try {
-                return service.getMaximumSubgroupsPerBroadcast(mAttributionSource);
+                return service.getMaximumSubgroupsPerBroadcast();
             } catch (RemoteException e) {
                 throw e.rethrowAsRuntimeException();
             }

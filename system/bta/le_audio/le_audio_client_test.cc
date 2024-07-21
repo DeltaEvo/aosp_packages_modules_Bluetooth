@@ -123,7 +123,7 @@ static base::MessageLoop* message_loop_;
 bluetooth::common::MessageLoopThread message_loop_thread("test message loop");
 bluetooth::common::MessageLoopThread* get_main_thread() { return &message_loop_thread; }
 
-bt_status_t do_in_main_thread(const base::Location& from_here, base::OnceClosure task) {
+bt_status_t do_in_main_thread(base::OnceClosure task) {
   if (!message_loop_) {
     return BT_STATUS_FAIL;
   }
@@ -131,23 +131,22 @@ bt_status_t do_in_main_thread(const base::Location& from_here, base::OnceClosure
   // Wrap the task with task counter so we could later know if there are
   // any callbacks scheduled and we should wait before performing some actions
   if (!message_loop_thread.DoInThread(
-              from_here, base::BindOnce(
+              FROM_HERE, base::BindOnce(
                                  [](base::OnceClosure task, std::atomic<int>& num_async_tasks) {
                                    std::move(task).Run();
                                    num_async_tasks--;
                                  },
                                  std::move(task), std::ref(num_async_tasks)))) {
-    bluetooth::log::error("failed from {}", from_here.ToString());
+    bluetooth::log::error("failed to post task to task runner!");
     return BT_STATUS_FAIL;
   }
   num_async_tasks++;
   return BT_STATUS_SUCCESS;
 }
 
-bt_status_t do_in_main_thread_delayed(const base::Location& from_here, base::OnceClosure task,
-                                      std::chrono::microseconds delay) {
+bt_status_t do_in_main_thread_delayed(base::OnceClosure task, std::chrono::microseconds delay) {
   /* For testing purpose it is ok to just skip delay */
-  return do_in_main_thread(from_here, std::move(task));
+  return do_in_main_thread(std::move(task));
 }
 
 base::MessageLoop* get_main_message_loop() { return message_loop_; }
@@ -451,31 +450,26 @@ protected:
     }
 
     bool first_device = (group_members_num == 1);
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(
-                              [](const RawAddress& addr, int group_id, bluetooth::Uuid uuid,
-                                 bluetooth::groups::DeviceGroupsCallbacks* group_callbacks,
-                                 bool first_device) {
-                                if (first_device) {
-                                  group_callbacks->OnGroupAdded(addr, uuid, group_id);
-                                } else {
-                                  group_callbacks->OnGroupMemberAdded(addr, group_id);
-                                }
-                              },
-                              address, group_id, uuid, base::Unretained(this->group_callbacks_),
-                              first_device));
+    do_in_main_thread(base::BindOnce(
+            [](const RawAddress& addr, int group_id, bluetooth::Uuid uuid,
+               bluetooth::groups::DeviceGroupsCallbacks* group_callbacks, bool first_device) {
+              if (first_device) {
+                group_callbacks->OnGroupAdded(addr, uuid, group_id);
+              } else {
+                group_callbacks->OnGroupMemberAdded(addr, group_id);
+              }
+            },
+            address, group_id, uuid, base::Unretained(this->group_callbacks_), first_device));
   }
 
   void InjectServiceChangedEvent(const RawAddress& address, uint16_t conn_id) {
     tBTA_GATTC_SERVICE_CHANGED event_data = {.remote_bda = address, .conn_id = conn_id};
 
-    do_in_main_thread(
-            FROM_HERE,
-            base::BindOnce(
-                    [](tBTA_GATTC_CBACK* gatt_callback, tBTA_GATTC_SERVICE_CHANGED event_data) {
-                      gatt_callback(BTA_GATTC_SRVC_CHG_EVT, (tBTA_GATTC*)&event_data);
-                    },
-                    base::Unretained(this->gatt_callback), event_data));
+    do_in_main_thread(base::BindOnce(
+            [](tBTA_GATTC_CBACK* gatt_callback, tBTA_GATTC_SERVICE_CHANGED event_data) {
+              gatt_callback(BTA_GATTC_SRVC_CHG_EVT, (tBTA_GATTC*)&event_data);
+            },
+            base::Unretained(this->gatt_callback), event_data));
   }
 
   void InjectConnectedEvent(const RawAddress& address, uint16_t conn_id,
@@ -495,12 +489,11 @@ protected:
       peer_devices.at(conn_id)->connected = true;
     }
 
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(
-                              [](tBTA_GATTC_CBACK* gatt_callback, tBTA_GATTC_OPEN event_data) {
-                                gatt_callback(BTA_GATTC_OPEN_EVT, (tBTA_GATTC*)&event_data);
-                              },
-                              base::Unretained(this->gatt_callback), event_data));
+    do_in_main_thread(base::BindOnce(
+            [](tBTA_GATTC_CBACK* gatt_callback, tBTA_GATTC_OPEN event_data) {
+              gatt_callback(BTA_GATTC_OPEN_EVT, (tBTA_GATTC*)&event_data);
+            },
+            base::Unretained(this->gatt_callback), event_data));
   }
 
   void InjectEncryptionChangedEvent(const RawAddress& address) {
@@ -509,13 +502,11 @@ protected:
             .remote_bda = address,
     };
 
-    do_in_main_thread(
-            FROM_HERE,
-            base::BindOnce(
-                    [](tBTA_GATTC_CBACK* gatt_callback, tBTA_GATTC_ENC_CMPL_CB event_data) {
-                      gatt_callback(BTA_GATTC_ENC_CMPL_CB_EVT, (tBTA_GATTC*)&event_data);
-                    },
-                    base::Unretained(this->gatt_callback), event_data));
+    do_in_main_thread(base::BindOnce(
+            [](tBTA_GATTC_CBACK* gatt_callback, tBTA_GATTC_ENC_CMPL_CB event_data) {
+              gatt_callback(BTA_GATTC_ENC_CMPL_CB_EVT, (tBTA_GATTC*)&event_data);
+            },
+            base::Unretained(this->gatt_callback), event_data));
   }
 
   void InjectDisconnectedEvent(uint16_t conn_id,
@@ -532,12 +523,11 @@ protected:
     };
 
     peer_devices.at(conn_id)->connected = false;
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(
-                              [](tBTA_GATTC_CBACK* gatt_callback, tBTA_GATTC_CLOSE event_data) {
-                                gatt_callback(BTA_GATTC_CLOSE_EVT, (tBTA_GATTC*)&event_data);
-                              },
-                              base::Unretained(this->gatt_callback), event_data));
+    do_in_main_thread(base::BindOnce(
+            [](tBTA_GATTC_CBACK* gatt_callback, tBTA_GATTC_CLOSE event_data) {
+              gatt_callback(BTA_GATTC_CLOSE_EVT, (tBTA_GATTC*)&event_data);
+            },
+            base::Unretained(this->gatt_callback), event_data));
   }
 
   void InjectPhyChangedEvent(uint16_t conn_id, uint8_t tx_phy, uint8_t rx_phy,
@@ -550,13 +540,11 @@ protected:
             .status = status,
     };
 
-    do_in_main_thread(
-            FROM_HERE,
-            base::BindOnce(
-                    [](tBTA_GATTC_CBACK* gatt_callback, tBTA_GATTC_PHY_UPDATE event_data) {
-                      gatt_callback(BTA_GATTC_PHY_UPDATE_EVT, (tBTA_GATTC*)&event_data);
-                    },
-                    base::Unretained(this->gatt_callback), event_data));
+    do_in_main_thread(base::BindOnce(
+            [](tBTA_GATTC_CBACK* gatt_callback, tBTA_GATTC_PHY_UPDATE event_data) {
+              gatt_callback(BTA_GATTC_PHY_UPDATE_EVT, (tBTA_GATTC*)&event_data);
+            },
+            base::Unretained(this->gatt_callback), event_data));
   }
 
   void InjectSearchCompleteEvent(uint16_t conn_id) {
@@ -566,13 +554,11 @@ protected:
             .status = GATT_SUCCESS,
     };
 
-    do_in_main_thread(
-            FROM_HERE,
-            base::BindOnce(
-                    [](tBTA_GATTC_CBACK* gatt_callback, tBTA_GATTC_SEARCH_CMPL event_data) {
-                      gatt_callback(BTA_GATTC_SEARCH_CMPL_EVT, (tBTA_GATTC*)&event_data);
-                    },
-                    base::Unretained(this->gatt_callback), event_data));
+    do_in_main_thread(base::BindOnce(
+            [](tBTA_GATTC_CBACK* gatt_callback, tBTA_GATTC_SEARCH_CMPL event_data) {
+              gatt_callback(BTA_GATTC_SEARCH_CMPL_EVT, (tBTA_GATTC*)&event_data);
+            },
+            base::Unretained(this->gatt_callback), event_data));
   }
 
   void InjectNotificationEvent(const RawAddress& test_address, uint16_t conn_id, uint16_t handle,
@@ -587,12 +573,11 @@ protected:
     };
 
     std::copy(value.begin(), value.end(), event_data.value);
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(
-                              [](tBTA_GATTC_CBACK* gatt_callback, tBTA_GATTC_NOTIFY event_data) {
-                                gatt_callback(BTA_GATTC_NOTIF_EVT, (tBTA_GATTC*)&event_data);
-                              },
-                              base::Unretained(this->gatt_callback), event_data));
+    do_in_main_thread(base::BindOnce(
+            [](tBTA_GATTC_CBACK* gatt_callback, tBTA_GATTC_NOTIFY event_data) {
+              gatt_callback(BTA_GATTC_NOTIF_EVT, (tBTA_GATTC*)&event_data);
+            },
+            base::Unretained(this->gatt_callback), event_data));
   }
 
   void InjectContextTypes(const RawAddress& test_address, uint16_t conn_id, uint16_t handle,
@@ -694,14 +679,12 @@ protected:
               }
 
               if (cb) {
-                do_in_main_thread(
-                        FROM_HERE,
-                        base::BindOnce(
-                                [](GATT_WRITE_OP_CB cb, uint16_t conn_id, uint16_t handle,
-                                   uint16_t len, uint8_t* value, void* cb_data) {
-                                  cb(conn_id, GATT_SUCCESS, handle, len, value, cb_data);
-                                },
-                                cb, conn_id, handle, value.size(), value.data(), cb_data));
+                do_in_main_thread(base::BindOnce(
+                        [](GATT_WRITE_OP_CB cb, uint16_t conn_id, uint16_t handle, uint16_t len,
+                           uint8_t* value, void* cb_data) {
+                          cb(conn_id, GATT_SUCCESS, handle, len, value, cb_data);
+                        },
+                        cb, conn_id, handle, value.size(), value.data(), cb_data));
               }
             }));
 
@@ -719,11 +702,9 @@ protected:
 
     // default Characteristic read handler dispatches requests to service mocks
     ON_CALL(mock_gatt_queue_, ReadCharacteristic(_, _, _, _))
-            .WillByDefault(Invoke([&](uint16_t conn_id, uint16_t handle, GATT_READ_OP_CB cb,
-                                      void* cb_data) {
-              do_in_main_thread(
-                      FROM_HERE,
-                      base::BindOnce(
+            .WillByDefault(Invoke(
+                    [&](uint16_t conn_id, uint16_t handle, GATT_READ_OP_CB cb, void* cb_data) {
+                      do_in_main_thread(base::BindOnce(
                               [](std::map<uint16_t, std::unique_ptr<NiceMock<MockDeviceWrapper>>>*
                                          peer_devices,
                                  uint16_t conn_id, uint16_t handle, GATT_READ_OP_CB cb,
@@ -753,7 +734,7 @@ protected:
                                 }
                               },
                               &peer_devices, conn_id, handle, cb, cb_data));
-            }));
+                    }));
   }
 
   void SetUpMockGroups() {
@@ -786,14 +767,12 @@ protected:
                 return;
               }
 
-              do_in_main_thread(
-                      FROM_HERE,
-                      base::BindOnce(
-                              [](const RawAddress& address, int group_id,
-                                 bluetooth::groups::DeviceGroupsCallbacks* group_callbacks) {
-                                group_callbacks->OnGroupMemberRemoved(address, group_id);
-                              },
-                              addr, group_id, base::Unretained(group_callbacks_)));
+              do_in_main_thread(base::BindOnce(
+                      [](const RawAddress& address, int group_id,
+                         bluetooth::groups::DeviceGroupsCallbacks* group_callbacks) {
+                        group_callbacks->OnGroupMemberRemoved(address, group_id);
+                      },
+                      addr, group_id, base::Unretained(group_callbacks_)));
             });
 
     // Our test devices have unique LSB - use it for unique grouping when
@@ -864,17 +843,14 @@ protected:
                               types::AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED);
                       group->SetState(group->GetTargetState());
                       group->ClearPendingConfiguration();
-                      do_in_main_thread(
-                              FROM_HERE,
-                              base::BindOnce(
-                                      [](int group_id,
-                                         bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks*
-                                                 state_machine_callbacks) {
-                                        state_machine_callbacks->StatusReportCb(
-                                                group_id, GroupStreamStatus::CONFIGURED_BY_USER);
-                                      },
-                                      group->group_id_,
-                                      base::Unretained(this->state_machine_callbacks_)));
+                      do_in_main_thread(base::BindOnce(
+                              [](int group_id,
+                                 bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks*
+                                         state_machine_callbacks) {
+                                state_machine_callbacks->StatusReportCb(
+                                        group_id, GroupStreamStatus::CONFIGURED_BY_USER);
+                              },
+                              group->group_id_, base::Unretained(this->state_machine_callbacks_)));
                       return true;
                     });
 
@@ -1167,16 +1143,13 @@ protected:
               }
 
               group->SetState(types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
-              do_in_main_thread(
-                      FROM_HERE,
-                      base::BindOnce(
-                              [](int group_id,
-                                 bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks*
-                                         state_machine_callbacks) {
-                                state_machine_callbacks->StatusReportCb(
-                                        group_id, GroupStreamStatus::STREAMING);
-                              },
-                              group->group_id_, base::Unretained(this->state_machine_callbacks_)));
+              do_in_main_thread(base::BindOnce(
+                      [](int group_id, bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks*
+                                               state_machine_callbacks) {
+                        state_machine_callbacks->StatusReportCb(group_id,
+                                                                GroupStreamStatus::STREAMING);
+                      },
+                      group->group_id_, base::Unretained(this->state_machine_callbacks_)));
               return true;
             });
 
@@ -1361,12 +1334,11 @@ protected:
       group->SetState(group->GetTargetState());
       state_machine_callbacks_->StatusReportCb(group->group_id_, GroupStreamStatus::RELEASING);
 
-      do_in_main_thread(
-              FROM_HERE,
-              base::BindOnce(
-                      [](bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks* cb,
-                         int group_id) { cb->StatusReportCb(group_id, GroupStreamStatus::IDLE); },
-                      state_machine_callbacks_, group->group_id_));
+      do_in_main_thread(base::BindOnce(
+              [](bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks* cb, int group_id) {
+                cb->StatusReportCb(group_id, GroupStreamStatus::IDLE);
+              },
+              state_machine_callbacks_, group->group_id_));
     });
   }
 
@@ -1646,8 +1618,8 @@ protected:
               .Times(1);
     }
 
-    do_in_main_thread(FROM_HERE, base::BindOnce(&LeAudioClient::Connect,
-                                                base::Unretained(LeAudioClient::Get()), address));
+    do_in_main_thread(base::BindOnce(&LeAudioClient::Connect,
+                                     base::Unretained(LeAudioClient::Get()), address));
 
     SyncOnMainLoop();
     Mock::VerifyAndClearExpectations(&mock_btm_interface_);
@@ -1670,8 +1642,8 @@ protected:
     EXPECT_CALL(mock_btm_interface_, AclDisconnectFromHandle(conn_id, _)).Times(0);
     EXPECT_CALL(mock_gatt_interface_, Close(conn_id)).Times(1);
 
-    do_in_main_thread(FROM_HERE, base::Bind(&LeAudioClient::Disconnect,
-                                            base::Unretained(LeAudioClient::Get()), address));
+    do_in_main_thread(base::Bind(&LeAudioClient::Disconnect, base::Unretained(LeAudioClient::Get()),
+                                 address));
     SyncOnMainLoop();
     Mock::VerifyAndClearExpectations(&mock_btm_interface_);
     Mock::VerifyAndClearExpectations(&mock_gatt_interface_);
@@ -1695,8 +1667,8 @@ protected:
             });
     EXPECT_CALL(mock_gatt_interface_, Close(conn_id)).Times(0);
 
-    do_in_main_thread(FROM_HERE, base::Bind(&LeAudioClient::Disconnect,
-                                            base::Unretained(LeAudioClient::Get()), address));
+    do_in_main_thread(base::Bind(&LeAudioClient::Disconnect, base::Unretained(LeAudioClient::Get()),
+                                 address));
     SyncOnMainLoop();
     Mock::VerifyAndClearExpectations(&mock_btm_interface_);
     Mock::VerifyAndClearExpectations(&mock_gatt_interface_);
@@ -1706,8 +1678,8 @@ protected:
   void DisconnectLeAudioNoDisconnectedEvtExpected(const RawAddress& address, uint16_t conn_id) {
     EXPECT_CALL(mock_gatt_interface_, Close(conn_id)).Times(0);
     EXPECT_CALL(mock_btm_interface_, AclDisconnectFromHandle(conn_id, _)).Times(1);
-    do_in_main_thread(FROM_HERE, base::BindOnce(&LeAudioClient::Disconnect,
-                                                base::Unretained(LeAudioClient::Get()), address));
+    do_in_main_thread(base::BindOnce(&LeAudioClient::Disconnect,
+                                     base::Unretained(LeAudioClient::Get()), address));
     SyncOnMainLoop();
     Mock::VerifyAndClearExpectations(&mock_gatt_interface_);
     Mock::VerifyAndClearExpectations(&mock_btm_interface_);
@@ -1736,8 +1708,7 @@ protected:
 
     if (connect_through_csis) {
       // Add it the way CSIS would do: add to group and then connect
-      do_in_main_thread(FROM_HERE,
-                        base::BindOnce(&LeAudioClient::GroupAddNode,
+      do_in_main_thread(base::BindOnce(&LeAudioClient::GroupAddNode,
                                        base::Unretained(LeAudioClient::Get()), group_id, addr));
       ConnectLeAudio(addr);
     } else {
@@ -1858,13 +1829,13 @@ protected:
       EXPECT_CALL(*mock_le_audio_source_hal_client_, CancelStreamingRequest()).Times(1);
     }
 
-    do_in_main_thread(FROM_HERE, base::BindOnce(
-                                         [](LeAudioSourceAudioHalClient::Callbacks* cb) {
-                                           if (cb) {
-                                             cb->OnAudioResume();
-                                           }
-                                         },
-                                         unicast_source_hal_cb_));
+    do_in_main_thread(base::BindOnce(
+            [](LeAudioSourceAudioHalClient::Callbacks* cb) {
+              if (cb) {
+                cb->OnAudioResume();
+              }
+            },
+            unicast_source_hal_cb_));
 
     SyncOnMainLoop();
     Mock::VerifyAndClearExpectations(&*mock_le_audio_source_hal_client_);
@@ -1879,7 +1850,6 @@ protected:
   void LocalAudioSinkResume(void) {
     ASSERT_NE(unicast_sink_hal_cb_, nullptr);
     do_in_main_thread(
-            FROM_HERE,
             base::BindOnce([](LeAudioSinkAudioHalClient::Callbacks* cb) { cb->OnAudioResume(); },
                            unicast_sink_hal_cb_));
 
@@ -1910,7 +1880,6 @@ protected:
     if (usage == AUDIO_USAGE_VOICE_COMMUNICATION || audio_source != AUDIO_SOURCE_INVALID) {
       ASSERT_NE(unicast_sink_hal_cb_, nullptr);
       do_in_main_thread(
-              FROM_HERE,
               base::BindOnce([](LeAudioSinkAudioHalClient::Callbacks* cb) { cb->OnAudioResume(); },
                              unicast_sink_hal_cb_));
     }
@@ -3227,8 +3196,7 @@ TEST_F(UnicastTest, DisconnectWhenLinkKeyIsGone) {
           .WillByDefault(Return(BTM_ERR_KEY_MISSING));
 
   EXPECT_CALL(mock_gatt_interface_, Close(conn_id)).Times(1);
-  do_in_main_thread(FROM_HERE,
-                    base::BindOnce(&LeAudioClient::Connect, base::Unretained(LeAudioClient::Get()),
+  do_in_main_thread(base::BindOnce(&LeAudioClient::Connect, base::Unretained(LeAudioClient::Get()),
                                    test_address0));
 
   SyncOnMainLoop();
@@ -3433,17 +3401,16 @@ TEST_F(UnicastTestNoInit, ConnectFailedDueToInvalidParameters) {
   LeAudioClient::GetSinkPacsForStorage(test_address0, snk_pacs);
 
   EXPECT_CALL(mock_storage_load, Call()).WillOnce([&]() {
-    do_in_main_thread(FROM_HERE, base::Bind(&LeAudioClient::AddFromStorage, test_address0,
-                                            autoconnect, codec_spec_conf::kLeAudioLocationFrontLeft,
-                                            codec_spec_conf::kLeAudioLocationFrontLeft, 0xff, 0xff,
-                                            std::move(handles), std::move(snk_pacs),
-                                            std::move(src_pacs), std::move(ases)));
-    do_in_main_thread(
-            FROM_HERE,
-            base::Bind(&LeAudioClient::AddFromStorage, test_address1, autoconnect,
-                       codec_spec_conf::kLeAudioLocationFrontRight,
-                       codec_spec_conf::kLeAudioLocationFrontRight, 0xff, 0xff, std::move(handles),
-                       std::move(snk_pacs), std::move(src_pacs), std::move(ases)));
+    do_in_main_thread(base::Bind(&LeAudioClient::AddFromStorage, test_address0, autoconnect,
+                                 codec_spec_conf::kLeAudioLocationFrontLeft,
+                                 codec_spec_conf::kLeAudioLocationFrontLeft, 0xff, 0xff,
+                                 std::move(handles), std::move(snk_pacs), std::move(src_pacs),
+                                 std::move(ases)));
+    do_in_main_thread(base::Bind(&LeAudioClient::AddFromStorage, test_address1, autoconnect,
+                                 codec_spec_conf::kLeAudioLocationFrontRight,
+                                 codec_spec_conf::kLeAudioLocationFrontRight, 0xff, 0xff,
+                                 std::move(handles), std::move(snk_pacs), std::move(src_pacs),
+                                 std::move(ases)));
   });
 
   // Expect stored device0 to connect automatically (first directed connection )
@@ -3540,14 +3507,12 @@ TEST_F(UnicastTestNoInit, LoadStoredEarbudsBroakenStorage) {
   std::vector<uint8_t> empty_buf;
 
   EXPECT_CALL(mock_storage_load, Call()).WillOnce([&]() {
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(&LeAudioClient::AddFromStorage, test_address0, autoconnect,
+    do_in_main_thread(base::BindOnce(&LeAudioClient::AddFromStorage, test_address0, autoconnect,
                                      codec_spec_conf::kLeAudioLocationFrontLeft,
                                      codec_spec_conf::kLeAudioLocationFrontLeft, 0xff, 0xff,
                                      std::move(empty_buf), std::move(empty_buf),
                                      std::move(empty_buf), std::move(empty_buf)));
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(&LeAudioClient::AddFromStorage, test_address1, autoconnect,
+    do_in_main_thread(base::BindOnce(&LeAudioClient::AddFromStorage, test_address1, autoconnect,
                                      codec_spec_conf::kLeAudioLocationFrontRight,
                                      codec_spec_conf::kLeAudioLocationFrontRight, 0xff, 0xff,
                                      std::move(empty_buf), std::move(empty_buf),
@@ -3683,14 +3648,12 @@ TEST_F(UnicastTestNoInit, LoadStoredEarbudsCsisGrouped) {
   LeAudioClient::GetSinkPacsForStorage(test_address0, snk_pacs);
 
   EXPECT_CALL(mock_storage_load, Call()).WillOnce([&]() {
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(&LeAudioClient::AddFromStorage, test_address0, autoconnect,
+    do_in_main_thread(base::BindOnce(&LeAudioClient::AddFromStorage, test_address0, autoconnect,
                                      codec_spec_conf::kLeAudioLocationFrontLeft,
                                      codec_spec_conf::kLeAudioLocationFrontLeft, 0xff, 0xff,
                                      std::move(handles), std::move(snk_pacs), std::move(src_pacs),
                                      std::move(ases)));
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(&LeAudioClient::AddFromStorage, test_address1, autoconnect,
+    do_in_main_thread(base::BindOnce(&LeAudioClient::AddFromStorage, test_address1, autoconnect,
                                      codec_spec_conf::kLeAudioLocationFrontRight,
                                      codec_spec_conf::kLeAudioLocationFrontRight, 0xff, 0xff,
                                      std::move(handles), std::move(snk_pacs), std::move(src_pacs),
@@ -3822,14 +3785,12 @@ TEST_F(UnicastTestNoInit, ServiceChangedBeforeServiceIsConnected) {
   LeAudioClient::GetSinkPacsForStorage(test_address0, snk_pacs);
 
   EXPECT_CALL(mock_storage_load, Call()).WillOnce([&]() {
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(&LeAudioClient::AddFromStorage, test_address0, autoconnect,
+    do_in_main_thread(base::BindOnce(&LeAudioClient::AddFromStorage, test_address0, autoconnect,
                                      codec_spec_conf::kLeAudioLocationFrontLeft,
                                      codec_spec_conf::kLeAudioLocationFrontLeft, 0xff, 0xff,
                                      std::move(handles), std::move(snk_pacs), std::move(src_pacs),
                                      std::move(ases)));
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(&LeAudioClient::AddFromStorage, test_address1, autoconnect,
+    do_in_main_thread(base::BindOnce(&LeAudioClient::AddFromStorage, test_address1, autoconnect,
                                      codec_spec_conf::kLeAudioLocationFrontRight,
                                      codec_spec_conf::kLeAudioLocationFrontRight, 0xff, 0xff,
                                      std::move(handles), std::move(snk_pacs), std::move(src_pacs),
@@ -3951,14 +3912,12 @@ TEST_F(UnicastTestNoInit, LoadStoredEarbudsCsisGroupedDifferently) {
 
   // Load devices from the storage when storage API is called
   EXPECT_CALL(mock_storage_load, Call()).WillOnce([&]() {
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(&LeAudioClient::AddFromStorage, test_address0, autoconnect0,
+    do_in_main_thread(base::BindOnce(&LeAudioClient::AddFromStorage, test_address0, autoconnect0,
                                      codec_spec_conf::kLeAudioLocationFrontLeft,
                                      codec_spec_conf::kLeAudioLocationFrontLeft, 0xff, 0xff,
                                      std::move(handles), std::move(snk_pacs), std::move(src_pacs),
                                      std::move(ases)));
-    do_in_main_thread(FROM_HERE,
-                      base::BindOnce(&LeAudioClient::AddFromStorage, test_address1, autoconnect1,
+    do_in_main_thread(base::BindOnce(&LeAudioClient::AddFromStorage, test_address1, autoconnect1,
                                      codec_spec_conf::kLeAudioLocationFrontRight,
                                      codec_spec_conf::kLeAudioLocationFrontRight, 0xff, 0xff,
                                      std::move(handles), std::move(snk_pacs), std::move(src_pacs),
@@ -4165,14 +4124,12 @@ TEST_F(UnicastTest, DoubleResumeFromAF) {
 
   EXPECT_CALL(mock_state_machine_, StopStream(_)).Times(0);
 
-  do_in_main_thread(
-          FROM_HERE,
-          base::BindOnce(
-                  [](int group_id, bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks*
-                                           state_machine_callbacks) {
-                    state_machine_callbacks->StatusReportCb(group_id, GroupStreamStatus::STREAMING);
-                  },
-                  group_id, base::Unretained(state_machine_callbacks_)));
+  do_in_main_thread(base::BindOnce(
+          [](int group_id,
+             bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks* state_machine_callbacks) {
+            state_machine_callbacks->StatusReportCb(group_id, GroupStreamStatus::STREAMING);
+          },
+          group_id, base::Unretained(state_machine_callbacks_)));
   SyncOnMainLoop();
   Mock::VerifyAndClearExpectations(&mock_state_machine_);
 
@@ -4227,14 +4184,12 @@ TEST_F(UnicastTest, DoubleResumeFromAFOnLocalSink) {
 
   EXPECT_CALL(mock_state_machine_, StopStream(_)).Times(0);
 
-  do_in_main_thread(
-          FROM_HERE,
-          base::BindOnce(
-                  [](int group_id, bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks*
-                                           state_machine_callbacks) {
-                    state_machine_callbacks->StatusReportCb(group_id, GroupStreamStatus::STREAMING);
-                  },
-                  group_id, base::Unretained(state_machine_callbacks_)));
+  do_in_main_thread(base::BindOnce(
+          [](int group_id,
+             bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks* state_machine_callbacks) {
+            state_machine_callbacks->StatusReportCb(group_id, GroupStreamStatus::STREAMING);
+          },
+          group_id, base::Unretained(state_machine_callbacks_)));
   SyncOnMainLoop();
   Mock::VerifyAndClearExpectations(&mock_state_machine_);
 
@@ -4670,16 +4625,13 @@ TEST_F(UnicastTest, TestUpdateConfigurationCallbackWhileStreaming) {
 
   // Inject STREAMING Status from state machine.
   auto group = streaming_groups.at(group_id);
-  do_in_main_thread(
-          FROM_HERE,
-          base::BindOnce(
-                  [](int group_id,
-                     bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks*
-                             state_machine_callbacks,
-                     LeAudioDeviceGroup* group) {
-                    state_machine_callbacks->StatusReportCb(group_id, GroupStreamStatus::STREAMING);
-                  },
-                  group_id, base::Unretained(this->state_machine_callbacks_), std::move(group)));
+  do_in_main_thread(base::BindOnce(
+          [](int group_id,
+             bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks* state_machine_callbacks,
+             LeAudioDeviceGroup* group) {
+            state_machine_callbacks->StatusReportCb(group_id, GroupStreamStatus::STREAMING);
+          },
+          group_id, base::Unretained(this->state_machine_callbacks_), std::move(group)));
 
   SyncOnMainLoop();
   Mock::VerifyAndClearExpectations(&mock_state_machine_);
@@ -4712,16 +4664,13 @@ TEST_F(UnicastTest, TestDeactivateWhileStartingStream) {
 
   // Inject STREAMING Status from state machine.
   auto group = streaming_groups.at(group_id);
-  do_in_main_thread(
-          FROM_HERE,
-          base::BindOnce(
-                  [](int group_id,
-                     bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks*
-                             state_machine_callbacks,
-                     LeAudioDeviceGroup* group) {
-                    state_machine_callbacks->StatusReportCb(group_id, GroupStreamStatus::STREAMING);
-                  },
-                  group_id, base::Unretained(this->state_machine_callbacks_), std::move(group)));
+  do_in_main_thread(base::BindOnce(
+          [](int group_id,
+             bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks* state_machine_callbacks,
+             LeAudioDeviceGroup* group) {
+            state_machine_callbacks->StatusReportCb(group_id, GroupStreamStatus::STREAMING);
+          },
+          group_id, base::Unretained(this->state_machine_callbacks_), std::move(group)));
   SyncOnMainLoop();
 }
 
@@ -5005,8 +4954,8 @@ TEST_F(UnicastTest, RemoveTwoEarbudsCsisGrouped) {
   EXPECT_CALL(mock_btm_interface_, AclDisconnectFromHandle(3, _)).Times(0);
   EXPECT_CALL(mock_btm_interface_, AclDisconnectFromHandle(4, _)).Times(0);
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(&LeAudioClient::GroupDestroy,
-                                              base::Unretained(LeAudioClient::Get()), group_id0));
+  do_in_main_thread(base::BindOnce(&LeAudioClient::GroupDestroy,
+                                   base::Unretained(LeAudioClient::Get()), group_id0));
 
   SyncOnMainLoop();
   Mock::VerifyAndClearExpectations(&mock_btif_storage_);
@@ -5028,17 +4977,16 @@ TEST_F(UnicastTest, ConnectAfterRemove) {
           .Times(1);
 
   /* RemoveDevice */
-  do_in_main_thread(FROM_HERE, base::BindOnce(
-                                       [](LeAudioClient* client, const RawAddress& test_address0) {
-                                         client->RemoveDevice(test_address0);
-                                       },
-                                       LeAudioClient::Get(), test_address0));
+  do_in_main_thread(base::BindOnce(
+          [](LeAudioClient* client, const RawAddress& test_address0) {
+            client->RemoveDevice(test_address0);
+          },
+          LeAudioClient::Get(), test_address0));
   SyncOnMainLoop();
 
   ON_CALL(mock_btm_interface_, IsLinkKeyKnown(_, _)).WillByDefault(DoAll(Return(false)));
 
-  do_in_main_thread(FROM_HERE,
-                    base::BindOnce(&LeAudioClient::Connect, base::Unretained(LeAudioClient::Get()),
+  do_in_main_thread(base::BindOnce(&LeAudioClient::Connect, base::Unretained(LeAudioClient::Get()),
                                    test_address0));
   SyncOnMainLoop();
 
@@ -5079,11 +5027,11 @@ TEST_F(UnicastTest, RemoveDeviceWhenConnected) {
    * of operations and to avoid races we put the test command on main_loop as
    * well.
    */
-  do_in_main_thread(FROM_HERE, base::BindOnce(
-                                       [](LeAudioClient* client, const RawAddress& test_address0) {
-                                         client->RemoveDevice(test_address0);
-                                       },
-                                       LeAudioClient::Get(), test_address0));
+  do_in_main_thread(base::BindOnce(
+          [](LeAudioClient* client, const RawAddress& test_address0) {
+            client->RemoveDevice(test_address0);
+          },
+          LeAudioClient::Get(), test_address0));
   SyncOnMainLoop();
 
   Mock::VerifyAndClearExpectations(&mock_btif_storage_);
@@ -5121,11 +5069,11 @@ TEST_F(UnicastTest, RemoveDeviceWhenConnecting) {
    * of operations and to avoid races we put the test command on main_loop as
    * well.
    */
-  do_in_main_thread(FROM_HERE, base::BindOnce(
-                                       [](LeAudioClient* client, const RawAddress& test_address0) {
-                                         client->RemoveDevice(test_address0);
-                                       },
-                                       LeAudioClient::Get(), test_address0));
+  do_in_main_thread(base::BindOnce(
+          [](LeAudioClient* client, const RawAddress& test_address0) {
+            client->RemoveDevice(test_address0);
+          },
+          LeAudioClient::Get(), test_address0));
 
   SyncOnMainLoop();
 
@@ -5165,11 +5113,11 @@ TEST_F(UnicastTest, RemoveDeviceWhenGettingConnectionReady) {
    * of operations and to avoid races we put the test command on main_loop as
    * well.
    */
-  do_in_main_thread(FROM_HERE, base::BindOnce(
-                                       [](LeAudioClient* client, const RawAddress& test_address0) {
-                                         client->RemoveDevice(test_address0);
-                                       },
-                                       LeAudioClient::Get(), test_address0));
+  do_in_main_thread(base::BindOnce(
+          [](LeAudioClient* client, const RawAddress& test_address0) {
+            client->RemoveDevice(test_address0);
+          },
+          LeAudioClient::Get(), test_address0));
 
   SyncOnMainLoop();
 
@@ -5347,11 +5295,11 @@ TEST_F(UnicastTest, RemoveWhileStreaming) {
    * of operations and to avoid races we put the test command on main_loop as
    * well.
    */
-  do_in_main_thread(FROM_HERE, base::BindOnce(
-                                       [](LeAudioClient* client, const RawAddress& test_address0) {
-                                         client->RemoveDevice(test_address0);
-                                       },
-                                       LeAudioClient::Get(), test_address0));
+  do_in_main_thread(base::BindOnce(
+          [](LeAudioClient* client, const RawAddress& test_address0) {
+            client->RemoveDevice(test_address0);
+          },
+          LeAudioClient::Get(), test_address0));
 
   SyncOnMainLoop();
   Mock::VerifyAndClearExpectations(&mock_groups_module_);
@@ -5427,11 +5375,10 @@ TEST_F(UnicastTest, DisconnecteWhileAlmostStreaming) {
    * of operations and to avoid races we put the test command on main_loop as
    * well.
    */
-  do_in_main_thread(FROM_HERE, base::BindOnce(
-                                       [](LeAudioClient* client, const RawAddress& test_address0) {
-                                         client->Disconnect(test_address0);
-                                       },
-                                       LeAudioClient::Get(), test_address0));
+  do_in_main_thread(
+          base::BindOnce([](LeAudioClient* client,
+                            const RawAddress& test_address0) { client->Disconnect(test_address0); },
+                         LeAudioClient::Get(), test_address0));
 
   SyncOnMainLoop();
   Mock::VerifyAndClearExpectations(&mock_groups_module_);
@@ -6699,18 +6646,15 @@ TEST_F(UnicastTest, LateStreamConnectBasedOnContextType) {
 
   // Now simulate group is finally streaming
   auto group = streaming_groups.at(group_id);
-  do_in_main_thread(
-          FROM_HERE,
-          base::BindOnce(
-                  [](int group_id,
-                     bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks*
-                             state_machine_callbacks,
-                     LeAudioDeviceGroup* group) {
-                    group->SetState(types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
+  do_in_main_thread(base::BindOnce(
+          [](int group_id,
+             bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks* state_machine_callbacks,
+             LeAudioDeviceGroup* group) {
+            group->SetState(types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
 
-                    state_machine_callbacks->StatusReportCb(group_id, GroupStreamStatus::STREAMING);
-                  },
-                  group_id, base::Unretained(this->state_machine_callbacks_), std::move(group)));
+            state_machine_callbacks->StatusReportCb(group_id, GroupStreamStatus::STREAMING);
+          },
+          group_id, base::Unretained(this->state_machine_callbacks_), std::move(group)));
 
   SyncOnMainLoop();
 
@@ -6776,18 +6720,15 @@ TEST_F(UnicastTest, CheckDeviceIsNotAttachedToStreamWhenNotNeeded) {
 
   // Now simulate group is finally streaming
   auto group = streaming_groups.at(group_id);
-  do_in_main_thread(
-          FROM_HERE,
-          base::BindOnce(
-                  [](int group_id,
-                     bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks*
-                             state_machine_callbacks,
-                     LeAudioDeviceGroup* group) {
-                    group->SetState(types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
+  do_in_main_thread(base::BindOnce(
+          [](int group_id,
+             bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks* state_machine_callbacks,
+             LeAudioDeviceGroup* group) {
+            group->SetState(types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
 
-                    state_machine_callbacks->StatusReportCb(group_id, GroupStreamStatus::STREAMING);
-                  },
-                  group_id, base::Unretained(this->state_machine_callbacks_), std::move(group)));
+            state_machine_callbacks->StatusReportCb(group_id, GroupStreamStatus::STREAMING);
+          },
+          group_id, base::Unretained(this->state_machine_callbacks_), std::move(group)));
 
   SyncOnMainLoop();
 
@@ -7610,10 +7551,10 @@ TEST_F(UnicastTest, TwoEarbudsStreamingProfileDisconnectStreamStopTimeout) {
   EXPECT_CALL(mock_gatt_interface_, Close(_)).Times(0);
   EXPECT_CALL(mock_btm_interface_, AclDisconnectFromHandle(_, _)).Times(0);
 
-  do_in_main_thread(FROM_HERE, base::Bind(&LeAudioClient::Disconnect,
-                                          base::Unretained(LeAudioClient::Get()), test_address0));
-  do_in_main_thread(FROM_HERE, base::Bind(&LeAudioClient::Disconnect,
-                                          base::Unretained(LeAudioClient::Get()), test_address1));
+  do_in_main_thread(base::Bind(&LeAudioClient::Disconnect, base::Unretained(LeAudioClient::Get()),
+                               test_address0));
+  do_in_main_thread(base::Bind(&LeAudioClient::Disconnect, base::Unretained(LeAudioClient::Get()),
+                               test_address1));
 
   SyncOnMainLoop();
   Mock::VerifyAndClearExpectations(&mock_gatt_interface_);
@@ -7760,7 +7701,6 @@ TEST_F(UnicastTest, MicrophoneAttachToCurrentMediaScenario) {
   // Resume on local audio sink
   ASSERT_NE(unicast_sink_hal_cb_, nullptr);
   do_in_main_thread(
-          FROM_HERE,
           base::BindOnce([](LeAudioSinkAudioHalClient::Callbacks* cb) { cb->OnAudioResume(); },
                          unicast_sink_hal_cb_));
 
@@ -7773,7 +7713,6 @@ TEST_F(UnicastTest, MicrophoneAttachToCurrentMediaScenario) {
 
   LocalAudioSourceResume();
   do_in_main_thread(
-          FROM_HERE,
           base::BindOnce([](LeAudioSinkAudioHalClient::Callbacks* cb) { cb->OnAudioResume(); },
                          unicast_sink_hal_cb_));
   SyncOnMainLoop();
@@ -7791,11 +7730,9 @@ TEST_F(UnicastTest, MicrophoneAttachToCurrentMediaScenario) {
   EXPECT_CALL(*mock_le_audio_source_hal_client_, Stop()).Times(1);
   EXPECT_CALL(*mock_le_audio_source_hal_client_, OnDestroyed()).Times(1);
   EXPECT_CALL(*mock_le_audio_sink_hal_client_, OnDestroyed()).Times(1);
-  do_in_main_thread(FROM_HERE, base::BindOnce(
-                                       [](LeAudioClient* client) {
-                                         client->GroupSetActive(bluetooth::groups::kGroupUnknown);
-                                       },
-                                       LeAudioClient::Get()));
+  do_in_main_thread(base::BindOnce(
+          [](LeAudioClient* client) { client->GroupSetActive(bluetooth::groups::kGroupUnknown); },
+          LeAudioClient::Get()));
   SyncOnMainLoop();
 
   Mock::VerifyAndClearExpectations(mock_le_audio_source_hal_client_);
@@ -8007,11 +7944,9 @@ TEST_F(UnicastTest, UpdateMultipleBidirContextTypes) {
   EXPECT_CALL(*mock_le_audio_source_hal_client_, Stop()).Times(1);
   EXPECT_CALL(*mock_le_audio_source_hal_client_, OnDestroyed()).Times(1);
   EXPECT_CALL(*mock_le_audio_sink_hal_client_, OnDestroyed()).Times(1);
-  do_in_main_thread(FROM_HERE, base::BindOnce(
-                                       [](LeAudioClient* client) {
-                                         client->GroupSetActive(bluetooth::groups::kGroupUnknown);
-                                       },
-                                       LeAudioClient::Get()));
+  do_in_main_thread(base::BindOnce(
+          [](LeAudioClient* client) { client->GroupSetActive(bluetooth::groups::kGroupUnknown); },
+          LeAudioClient::Get()));
   SyncOnMainLoop();
 }
 
@@ -8221,11 +8156,9 @@ TEST_F(UnicastTest, MusicDuringCallContextTypes) {
   EXPECT_CALL(*mock_le_audio_source_hal_client_, Stop()).Times(1);
   EXPECT_CALL(*mock_le_audio_source_hal_client_, OnDestroyed()).Times(1);
   EXPECT_CALL(*mock_le_audio_sink_hal_client_, OnDestroyed()).Times(1);
-  do_in_main_thread(FROM_HERE, base::BindOnce(
-                                       [](LeAudioClient* client) {
-                                         client->GroupSetActive(bluetooth::groups::kGroupUnknown);
-                                       },
-                                       LeAudioClient::Get()));
+  do_in_main_thread(base::BindOnce(
+          [](LeAudioClient* client) { client->GroupSetActive(bluetooth::groups::kGroupUnknown); },
+          LeAudioClient::Get()));
   SyncOnMainLoop();
 }
 
@@ -8454,11 +8387,9 @@ TEST_F(UnicastTest, NotifyAboutGroupTunrnedIdleEnabled) {
   EXPECT_CALL(*mock_le_audio_source_hal_client_, OnDestroyed()).Times(1);
   EXPECT_CALL(*mock_le_audio_sink_hal_client_, OnDestroyed()).Times(1);
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(
-                                       [](LeAudioClient* client) {
-                                         client->GroupSetActive(bluetooth::groups::kGroupUnknown);
-                                       },
-                                       LeAudioClient::Get()));
+  do_in_main_thread(base::BindOnce(
+          [](LeAudioClient* client) { client->GroupSetActive(bluetooth::groups::kGroupUnknown); },
+          LeAudioClient::Get()));
 
   SyncOnMainLoop();
   Mock::VerifyAndClearExpectations(mock_le_audio_source_hal_client_);
@@ -8518,11 +8449,9 @@ TEST_F(UnicastTest, NotifyAboutGroupTunrnedIdleDisabled) {
   EXPECT_CALL(*mock_le_audio_source_hal_client_, OnDestroyed()).Times(1);
   EXPECT_CALL(*mock_le_audio_sink_hal_client_, OnDestroyed()).Times(1);
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(
-                                       [](LeAudioClient* client) {
-                                         client->GroupSetActive(bluetooth::groups::kGroupUnknown);
-                                       },
-                                       LeAudioClient::Get()));
+  do_in_main_thread(base::BindOnce(
+          [](LeAudioClient* client) { client->GroupSetActive(bluetooth::groups::kGroupUnknown); },
+          LeAudioClient::Get()));
 
   SyncOnMainLoop();
   Mock::VerifyAndClearExpectations(mock_le_audio_source_hal_client_);
@@ -8882,8 +8811,7 @@ TEST_F(UnicastTest, DisconnectAclBeforeGettingReadResponses) {
               Open(gatt_if, test_address0, BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS, _))
           .Times(1);
 
-  do_in_main_thread(FROM_HERE,
-                    base::BindOnce(&LeAudioClient::Connect, base::Unretained(LeAudioClient::Get()),
+  do_in_main_thread(base::BindOnce(&LeAudioClient::Connect, base::Unretained(LeAudioClient::Get()),
                                    test_address0));
 
   SyncOnMainLoop();
@@ -9173,11 +9101,11 @@ TEST_F_WITH_FLAGS(UnicastTest, GroupStreamStatusResendAfterRemove,
    * of operations and to avoid races we put the test command on main_loop as
    * well.
    */
-  do_in_main_thread(FROM_HERE, base::BindOnce(
-                                       [](LeAudioClient* client, const RawAddress& test_address0) {
-                                         client->RemoveDevice(test_address0);
-                                       },
-                                       LeAudioClient::Get(), test_address0));
+  do_in_main_thread(base::BindOnce(
+          [](LeAudioClient* client, const RawAddress& test_address0) {
+            client->RemoveDevice(test_address0);
+          },
+          LeAudioClient::Get(), test_address0));
   SyncOnMainLoop();
   EXPECT_CALL(mock_audio_hal_client_callbacks_,
               OnGroupStreamStatus(group_id, GroupStreamStatus::IDLE))
@@ -9191,11 +9119,11 @@ TEST_F_WITH_FLAGS(UnicastTest, GroupStreamStatusResendAfterRemove,
    * of operations and to avoid races we put the test command on main_loop as
    * well.
    */
-  do_in_main_thread(FROM_HERE, base::BindOnce(
-                                       [](LeAudioClient* client, const RawAddress& test_address1) {
-                                         client->RemoveDevice(test_address1);
-                                       },
-                                       LeAudioClient::Get(), test_address1));
+  do_in_main_thread(base::BindOnce(
+          [](LeAudioClient* client, const RawAddress& test_address1) {
+            client->RemoveDevice(test_address1);
+          },
+          LeAudioClient::Get(), test_address1));
   SyncOnMainLoop();
   EXPECT_CALL(mock_audio_hal_client_callbacks_,
               OnGroupStreamStatus(group_id, GroupStreamStatus::IDLE))
@@ -9249,10 +9177,9 @@ TEST_F_WITH_FLAGS(UnicastTestHandoverMode, SetSinkMonitorModeWhileUnicastIsActiv
   TestAudioDataTransfer(group_id, cis_count_out, cis_count_in, 1920, 40);
 
   // Imitate activation of monitor mode
-  do_in_main_thread(FROM_HERE, base::BindOnce(&LeAudioClient::SetUnicastMonitorMode,
-                                              base::Unretained(LeAudioClient::Get()),
-                                              bluetooth::le_audio::types::kLeAudioDirectionSink,
-                                              true /* enable */));
+  do_in_main_thread(base::BindOnce(
+          &LeAudioClient::SetUnicastMonitorMode, base::Unretained(LeAudioClient::Get()),
+          bluetooth::le_audio::types::kLeAudioDirectionSink, true /* enable */));
 
   ASSERT_NE(0lu, streaming_groups.count(group_id));
   auto group = streaming_groups.at(group_id);
@@ -9341,10 +9268,9 @@ TEST_F_WITH_FLAGS(UnicastTestHandoverMode, SetSinkMonitorModeWhileUnicastIsActiv
   // De-activate monitoring mode
   EXPECT_CALL(*mock_le_audio_sink_hal_client_, Stop()).Times(1);
   EXPECT_CALL(*mock_le_audio_sink_hal_client_, OnDestroyed()).Times(1);
-  do_in_main_thread(FROM_HERE, base::BindOnce(&LeAudioClient::SetUnicastMonitorMode,
-                                              base::Unretained(LeAudioClient::Get()),
-                                              bluetooth::le_audio::types::kLeAudioDirectionSink,
-                                              false /* enable */));
+  do_in_main_thread(base::BindOnce(
+          &LeAudioClient::SetUnicastMonitorMode, base::Unretained(LeAudioClient::Get()),
+          bluetooth::le_audio::types::kLeAudioDirectionSink, false /* enable */));
   SyncOnMainLoop();
   Mock::VerifyAndClearExpectations(mock_le_audio_sink_hal_client_);
 }
@@ -9356,10 +9282,9 @@ TEST_F_WITH_FLAGS(UnicastTestHandoverMode, SetSinkMonitorModeWhileUnicastIsInact
   int group_id = 2;
 
   // Imitate activation of monitor mode
-  do_in_main_thread(FROM_HERE, base::BindOnce(&LeAudioClient::SetUnicastMonitorMode,
-                                              base::Unretained(LeAudioClient::Get()),
-                                              bluetooth::le_audio::types::kLeAudioDirectionSink,
-                                              true /* enable */));
+  do_in_main_thread(base::BindOnce(
+          &LeAudioClient::SetUnicastMonitorMode, base::Unretained(LeAudioClient::Get()),
+          bluetooth::le_audio::types::kLeAudioDirectionSink, true /* enable */));
 
   // Report working CSIS
   ON_CALL(mock_csis_client_module_, IsCsisClientRunning()).WillByDefault(Return(true));
@@ -9453,10 +9378,9 @@ TEST_F_WITH_FLAGS(UnicastTestHandoverMode, ClearSinkMonitorModeWhileUnicastIsAct
   int group_id = 2;
 
   // Imitate activation of monitor mode
-  do_in_main_thread(FROM_HERE, base::BindOnce(&LeAudioClient::SetUnicastMonitorMode,
-                                              base::Unretained(LeAudioClient::Get()),
-                                              bluetooth::le_audio::types::kLeAudioDirectionSink,
-                                              true /* enable */));
+  do_in_main_thread(base::BindOnce(
+          &LeAudioClient::SetUnicastMonitorMode, base::Unretained(LeAudioClient::Get()),
+          bluetooth::le_audio::types::kLeAudioDirectionSink, true /* enable */));
 
   // Report working CSIS
   ON_CALL(mock_csis_client_module_, IsCsisClientRunning()).WillByDefault(Return(true));
@@ -9506,10 +9430,9 @@ TEST_F_WITH_FLAGS(UnicastTestHandoverMode, ClearSinkMonitorModeWhileUnicastIsAct
   auto group = streaming_groups.at(group_id);
 
   // De-activate monitoring mode
-  do_in_main_thread(FROM_HERE, base::BindOnce(&LeAudioClient::SetUnicastMonitorMode,
-                                              base::Unretained(LeAudioClient::Get()),
-                                              bluetooth::le_audio::types::kLeAudioDirectionSink,
-                                              false /* enable */));
+  do_in_main_thread(base::BindOnce(
+          &LeAudioClient::SetUnicastMonitorMode, base::Unretained(LeAudioClient::Get()),
+          bluetooth::le_audio::types::kLeAudioDirectionSink, false /* enable */));
 
   // Stop
   StopStreaming(group_id, true);
@@ -9554,14 +9477,12 @@ TEST_F_WITH_FLAGS(UnicastTestHandoverMode, SetAndClearSinkMonitorModeWhileUnicas
   EXPECT_CALL(*mock_le_audio_sink_hal_client_, OnDestroyed()).Times(0);
 
   // Imitate activation of monitor mode
-  do_in_main_thread(FROM_HERE, base::BindOnce(&LeAudioClient::SetUnicastMonitorMode,
-                                              base::Unretained(LeAudioClient::Get()),
-                                              bluetooth::le_audio::types::kLeAudioDirectionSink,
-                                              true /* enable */));
-  do_in_main_thread(FROM_HERE, base::BindOnce(&LeAudioClient::SetUnicastMonitorMode,
-                                              base::Unretained(LeAudioClient::Get()),
-                                              bluetooth::le_audio::types::kLeAudioDirectionSink,
-                                              false /* enable */));
+  do_in_main_thread(base::BindOnce(
+          &LeAudioClient::SetUnicastMonitorMode, base::Unretained(LeAudioClient::Get()),
+          bluetooth::le_audio::types::kLeAudioDirectionSink, true /* enable */));
+  do_in_main_thread(base::BindOnce(
+          &LeAudioClient::SetUnicastMonitorMode, base::Unretained(LeAudioClient::Get()),
+          bluetooth::le_audio::types::kLeAudioDirectionSink, false /* enable */));
 
   SyncOnMainLoop();
 
@@ -9581,10 +9502,9 @@ TEST_F_WITH_FLAGS(UnicastTestHandoverMode, SetSourceMonitorModeWhileUnicastIsIna
           .Times(1);
 
   // Imitate activation of monitor mode
-  do_in_main_thread(FROM_HERE, base::BindOnce(&LeAudioClient::SetUnicastMonitorMode,
-                                              base::Unretained(LeAudioClient::Get()),
-                                              bluetooth::le_audio::types::kLeAudioDirectionSource,
-                                              true /* enable */));
+  do_in_main_thread(base::BindOnce(
+          &LeAudioClient::SetUnicastMonitorMode, base::Unretained(LeAudioClient::Get()),
+          bluetooth::le_audio::types::kLeAudioDirectionSource, true /* enable */));
   SyncOnMainLoop();
   Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
 }
@@ -9605,10 +9525,9 @@ TEST_F_WITH_FLAGS(UnicastTestHandoverMode, SetSourceMonitorModeWhileUnicastIsNot
           .Times(1);
 
   // Imitate activation of monitor mode
-  do_in_main_thread(FROM_HERE, base::BindOnce(&LeAudioClient::SetUnicastMonitorMode,
-                                              base::Unretained(LeAudioClient::Get()),
-                                              bluetooth::le_audio::types::kLeAudioDirectionSource,
-                                              true /* enable */));
+  do_in_main_thread(base::BindOnce(
+          &LeAudioClient::SetUnicastMonitorMode, base::Unretained(LeAudioClient::Get()),
+          bluetooth::le_audio::types::kLeAudioDirectionSource, true /* enable */));
   SyncOnMainLoop();
   Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
 }
@@ -9664,10 +9583,9 @@ TEST_F_WITH_FLAGS(UnicastTestHandoverMode, SetSourceMonitorModeWhileUnicastIsAct
           .Times(1);
 
   // Imitate activation of monitor mode
-  do_in_main_thread(FROM_HERE, base::BindOnce(&LeAudioClient::SetUnicastMonitorMode,
-                                              base::Unretained(LeAudioClient::Get()),
-                                              bluetooth::le_audio::types::kLeAudioDirectionSource,
-                                              true /* enable */));
+  do_in_main_thread(base::BindOnce(
+          &LeAudioClient::SetUnicastMonitorMode, base::Unretained(LeAudioClient::Get()),
+          bluetooth::le_audio::types::kLeAudioDirectionSource, true /* enable */));
   SyncOnMainLoop();
   Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
 
@@ -9759,10 +9677,9 @@ TEST_F_WITH_FLAGS(UnicastTestHandoverMode, SetSourceMonitorModeWhileUnicastIsAct
                                          UnicastMonitorModeStatus::STREAMING_SUSPENDED))
           .Times(0);
 
-  do_in_main_thread(FROM_HERE, base::BindOnce(&LeAudioClient::SetUnicastMonitorMode,
-                                              base::Unretained(LeAudioClient::Get()),
-                                              bluetooth::le_audio::types::kLeAudioDirectionSink,
-                                              false /* enable */));
+  do_in_main_thread(base::BindOnce(
+          &LeAudioClient::SetUnicastMonitorMode, base::Unretained(LeAudioClient::Get()),
+          bluetooth::le_audio::types::kLeAudioDirectionSink, false /* enable */));
 }
 
 TEST_F(UnicastTestHandoverMode, SetAllowedContextMask) {
@@ -9861,10 +9778,9 @@ TEST_F_WITH_FLAGS(UnicastTest, NoContextvalidateStreamingRequest,
   LeAudioClient::Get()->GroupSetActive(group_id);
 
   // Imitate activation of monitor mode
-  do_in_main_thread(FROM_HERE, base::BindOnce(&LeAudioClient::SetUnicastMonitorMode,
-                                              base::Unretained(LeAudioClient::Get()),
-                                              bluetooth::le_audio::types::kLeAudioDirectionSource,
-                                              true /* enable */));
+  do_in_main_thread(base::BindOnce(
+          &LeAudioClient::SetUnicastMonitorMode, base::Unretained(LeAudioClient::Get()),
+          bluetooth::le_audio::types::kLeAudioDirectionSource, true /* enable */));
   Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
   SyncOnMainLoop();
 
@@ -10030,14 +9946,12 @@ TEST_F(UnicastTest, CodecFrameBlocks2) {
             remote_params.max_supported_codec_frames_per_sdu);
 
   EXPECT_CALL(mock_state_machine_, StopStream(_)).Times(0);
-  do_in_main_thread(
-          FROM_HERE,
-          base::BindOnce(
-                  [](int group_id, bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks*
-                                           state_machine_callbacks) {
-                    state_machine_callbacks->StatusReportCb(group_id, GroupStreamStatus::STREAMING);
-                  },
-                  group_id, base::Unretained(state_machine_callbacks_)));
+  do_in_main_thread(base::BindOnce(
+          [](int group_id,
+             bluetooth::le_audio::LeAudioGroupStateMachine::Callbacks* state_machine_callbacks) {
+            state_machine_callbacks->StatusReportCb(group_id, GroupStreamStatus::STREAMING);
+          },
+          group_id, base::Unretained(state_machine_callbacks_)));
   SyncOnMainLoop();
   Mock::VerifyAndClearExpectations(&mock_state_machine_);
 

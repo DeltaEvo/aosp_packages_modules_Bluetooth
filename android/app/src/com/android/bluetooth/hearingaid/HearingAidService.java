@@ -17,9 +17,7 @@
 package com.android.bluetooth.hearingaid;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
-
-import static com.android.bluetooth.Utils.callerIsSystemOrActiveOrManagedUser;
-import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
+import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 
 import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothDevice;
@@ -233,10 +231,7 @@ public class HearingAidService extends ProfileService {
      * @param device is the device with which we will connect the hearing aid profile
      * @return true if hearing aid profile successfully connected, false otherwise
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public boolean connect(BluetoothDevice device) {
-        enforceCallingOrSelfPermission(
-                BLUETOOTH_PRIVILEGED, "Need BLUETOOTH_PRIVILEGED permission");
         Log.d(TAG, "connect(): " + device);
         if (device == null) {
             return false;
@@ -245,7 +240,7 @@ public class HearingAidService extends ProfileService {
         if (getConnectionPolicy(device) == BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
             return false;
         }
-        ParcelUuid[] featureUuids = mAdapterService.getRemoteUuids(device);
+        final ParcelUuid[] featureUuids = mAdapterService.getRemoteUuids(device);
         if (!Utils.arrayContains(featureUuids, BluetoothUuid.HEARING_AID)) {
             Log.e(TAG, "Cannot connect to " + device + " : Remote does not have Hearing Aid UUID");
             return false;
@@ -300,10 +295,7 @@ public class HearingAidService extends ProfileService {
      * @param device is the device with which we want to disconnected the hearing aid profile
      * @return true if hearing aid profile successfully disconnected, false otherwise
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public boolean disconnect(BluetoothDevice device) {
-        enforceCallingOrSelfPermission(
-                BLUETOOTH_PRIVILEGED, "Need BLUETOOTH_PRIVILEGED permission");
         Log.d(TAG, "disconnect(): " + device);
         if (device == null) {
             return false;
@@ -352,7 +344,6 @@ public class HearingAidService extends ProfileService {
      * @param device the peer device to connect to
      * @return true if there are any peer device connected.
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public boolean isConnectedPeerDevices(BluetoothDevice device) {
         long hiSyncId = getHiSyncId(device);
         if (getConnectedPeerDevices(hiSyncId).isEmpty()) {
@@ -369,7 +360,6 @@ public class HearingAidService extends ProfileService {
      * @return true if connection is allowed, otherwise false
      */
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public boolean okToConnect(BluetoothDevice device) {
         // Check if this is an incoming connection in Quiet mode.
         if (mAdapterService.isQuietModeEnabled()) {
@@ -404,7 +394,7 @@ public class HearingAidService extends ProfileService {
         }
         synchronized (mStateMachines) {
             for (BluetoothDevice device : bondedDevices) {
-                final ParcelUuid[] featureUuids = device.getUuids();
+                final ParcelUuid[] featureUuids = mAdapterService.getRemoteUuids(device);
                 if (!Utils.arrayContains(featureUuids, BluetoothUuid.HEARING_AID)) {
                     continue;
                 }
@@ -483,10 +473,7 @@ public class HearingAidService extends ProfileService {
      * @param connectionPolicy is the connection policy to set to for this profile
      * @return true if connectionPolicy is set, false on error
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public boolean setConnectionPolicy(BluetoothDevice device, int connectionPolicy) {
-        enforceCallingOrSelfPermission(
-                BLUETOOTH_PRIVILEGED, "Need BLUETOOTH_PRIVILEGED permission");
         Log.d(TAG, "Saved connectionPolicy " + device + " = " + connectionPolicy);
 
         if (!mDatabaseManager.setProfileConnectionPolicy(
@@ -511,24 +498,15 @@ public class HearingAidService extends ProfileService {
      * @param device Bluetooth device
      * @return connection policy of the device
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public int getConnectionPolicy(BluetoothDevice device) {
-        enforceCallingOrSelfPermission(
-                BLUETOOTH_PRIVILEGED, "Need BLUETOOTH_PRIVILEGED permission");
         return mDatabaseManager.getProfileConnectionPolicy(device, BluetoothProfile.HEARING_AID);
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     void setVolume(int volume) {
-        enforceCallingOrSelfPermission(
-                BLUETOOTH_PRIVILEGED, "Need BLUETOOTH_PRIVILEGED permission");
         mHearingAidNativeInterface.setVolume(volume);
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public long getHiSyncId(BluetoothDevice device) {
-        enforceCallingOrSelfPermission(
-                BLUETOOTH_PRIVILEGED, "Need BLUETOOTH_PRIVILEGED permission");
         if (device == null) {
             return BluetoothHearingAid.HI_SYNC_ID_INVALID;
         }
@@ -539,23 +517,9 @@ public class HearingAidService extends ProfileService {
         return mDeviceCapabilitiesMap.getOrDefault(device, -1);
     }
 
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_SCAN,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-            })
-    private AdvertisementServiceData getAdvertisementServiceData(
-            BluetoothDevice device, AttributionSource attributionSource) {
-        AdapterService service = mAdapterService;
-        if (service == null
-                || !callerIsSystemOrActiveOrManagedUser(service, TAG, "getAdvertisementServiceData")
-                || !Utils.checkScanPermissionForDataDelivery(service, attributionSource, TAG)) {
-            return null;
-        }
-        enforceBluetoothPrivilegedPermission(service);
-
-        int capability = service.getAshaCapability(device);
-        int id = service.getAshaTruncatedHiSyncId(device);
+    private AdvertisementServiceData getAdvertisementServiceData(BluetoothDevice device) {
+        int capability = mAdapterService.getAshaCapability(device);
+        int id = mAdapterService.getAshaTruncatedHiSyncId(device);
         if (capability < 0) {
             Log.i(TAG, "device does not have AdvertisementServiceData");
             return null;
@@ -874,7 +838,6 @@ public class HearingAidService extends ProfileService {
         }
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public List<BluetoothDevice> getConnectedPeerDevices(long hiSyncId) {
         List<BluetoothDevice> result = new ArrayList<>();
         for (BluetoothDevice peerDevice : getConnectedDevices()) {
@@ -972,6 +935,8 @@ public class HearingAidService extends ProfileService {
                 return false;
             }
 
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
+
             return service.connect(device);
         }
 
@@ -981,6 +946,8 @@ public class HearingAidService extends ProfileService {
             if (service == null) {
                 return false;
             }
+
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.disconnect(device);
         }
@@ -1053,6 +1020,8 @@ public class HearingAidService extends ProfileService {
                 return false;
             }
 
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
+
             return service.setConnectionPolicy(device, connectionPolicy);
         }
 
@@ -1062,6 +1031,8 @@ public class HearingAidService extends ProfileService {
             if (service == null) {
                 return BluetoothProfile.CONNECTION_POLICY_UNKNOWN;
             }
+
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.getConnectionPolicy(device);
         }
@@ -1073,6 +1044,8 @@ public class HearingAidService extends ProfileService {
                 return;
             }
 
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
+
             service.setVolume(volume);
         }
 
@@ -1082,6 +1055,8 @@ public class HearingAidService extends ProfileService {
             if (service == null) {
                 return BluetoothHearingAid.HI_SYNC_ID_INVALID;
             }
+
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.getHiSyncId(device);
         }
@@ -1119,13 +1094,17 @@ public class HearingAidService extends ProfileService {
         @Override
         public AdvertisementServiceData getAdvertisementServiceData(
                 BluetoothDevice device, AttributionSource source) {
-            if (!Utils.checkServiceAvailable(mService, TAG)
-                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
-                    || !Utils.checkScanPermissionForDataDelivery(mService, source, TAG)) {
+            HearingAidService service = mService;
+
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG)
+                    || !Utils.checkScanPermissionForDataDelivery(service, source, TAG)) {
                 return null;
             }
 
-            return mService.getAdvertisementServiceData(device, source);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
+
+            return service.getAdvertisementServiceData(device);
         }
     }
 

@@ -24,10 +24,6 @@ bool A2DP_IsVendorSinkCodecSupportedLdac(const uint8_t* p_codec_info) {
   return false;
 }
 
-bool A2DP_IsPeerSourceCodecSupportedLdac(const uint8_t* p_codec_info) {
-  return false;
-}
-
 bool A2DP_VendorUsesRtpHeaderLdac(bool content_protection_enabled,
                                   const uint8_t* p_codec_info) {
   return false;

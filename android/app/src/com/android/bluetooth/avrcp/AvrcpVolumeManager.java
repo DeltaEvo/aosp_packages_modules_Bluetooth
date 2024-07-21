@@ -30,6 +30,7 @@ import android.util.Log;
 
 import com.android.bluetooth.BluetoothEventLogger;
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.btservice.AdapterService;
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.HashMap;
@@ -67,7 +68,7 @@ class AvrcpVolumeManager extends AudioDeviceCallback {
     private final BluetoothEventLogger mVolumeEventLogger =
             new BluetoothEventLogger(VOLUME_CHANGE_LOGGER_SIZE, VOLUME_CHANGE_LOG_TITLE);
 
-    Context mContext;
+    AdapterService mAdapterService;
     AudioManager mAudioManager;
     AvrcpNativeInterface mNativeInterface;
 
@@ -111,7 +112,7 @@ class AvrcpVolumeManager extends AudioDeviceCallback {
      * <p>The map is written each time a volume update occurs from or to the remote device.
      */
     private SharedPreferences getVolumeMap() {
-        return mContext.getSharedPreferences(VOLUME_MAP, Context.MODE_PRIVATE);
+        return ((Context) mAdapterService).getSharedPreferences(VOLUME_MAP, Context.MODE_PRIVATE);
     }
 
     /**
@@ -168,8 +169,10 @@ class AvrcpVolumeManager extends AudioDeviceCallback {
      * devices if necessary.
      */
     AvrcpVolumeManager(
-            Context context, AudioManager audioManager, AvrcpNativeInterface nativeInterface) {
-        mContext = context;
+            AdapterService adapterService,
+            AudioManager audioManager,
+            AvrcpNativeInterface nativeInterface) {
+        mAdapterService = adapterService;
         mAudioManager = audioManager;
         mNativeInterface = nativeInterface;
         sDeviceMaxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
@@ -187,7 +190,8 @@ class AvrcpVolumeManager extends AudioDeviceCallback {
             Object value = entry.getValue();
             BluetoothDevice d = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(key);
 
-            if (value instanceof Integer && d.getBondState() == BluetoothDevice.BOND_BONDED) {
+            if (value instanceof Integer
+                    && mAdapterService.getBondState(d) == BluetoothDevice.BOND_BONDED) {
                 mVolumeMap.put(d, (Integer) value);
             } else {
                 d("Removing " + key + " from the volume map");
@@ -202,7 +206,7 @@ class AvrcpVolumeManager extends AudioDeviceCallback {
      * writes the map in the {@link SharedPreferences}.
      */
     synchronized void storeVolumeForDevice(@NonNull BluetoothDevice device, int storeVolume) {
-        if (device.getBondState() != BluetoothDevice.BOND_BONDED) {
+        if (mAdapterService.getBondState(device) != BluetoothDevice.BOND_BONDED) {
             return;
         }
         SharedPreferences.Editor pref = getVolumeMap().edit();
@@ -233,7 +237,7 @@ class AvrcpVolumeManager extends AudioDeviceCallback {
      * {@link SharedPreferences}.
      */
     synchronized void removeStoredVolumeForDevice(@NonNull BluetoothDevice device) {
-        if (device.getBondState() != BluetoothDevice.BOND_NONE) {
+        if (mAdapterService.getBondState(device) != BluetoothDevice.BOND_NONE) {
             return;
         }
         SharedPreferences.Editor pref = getVolumeMap().edit();
@@ -430,7 +434,7 @@ class AvrcpVolumeManager extends AudioDeviceCallback {
             BluetoothDevice d =
                     BluetoothAdapter.getDefaultAdapter().getRemoteDevice(entry.getKey());
 
-            String deviceName = d.getName();
+            String deviceName = mAdapterService.getRemoteName(d);
             if (deviceName == null) {
                 deviceName = "";
             } else if (deviceName.length() > 14) {

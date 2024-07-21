@@ -907,7 +907,6 @@ public class BassClientStateMachineTest {
         verify(callbacks)
                 .notifyReceiveStateChanged(any(), eq(sourceId), receiveStateCaptor.capture());
         Assert.assertEquals(receiveStateCaptor.getValue().getSourceDevice(), mEmptyTestDevice);
-        assertThat(mBassClientStateMachine.mPendingSourceToSwitch).isEqualTo(null);
     }
 
     @Test
@@ -1364,6 +1363,9 @@ public class BassClientStateMachineTest {
 
     @Test
     public void sendAddBcastSourceMessage_inConnectedState() {
+        mSetFlagsRule.enableFlags(
+                Flags.FLAG_LEAUDIO_BROADCAST_EXTRACT_PERIODIC_SCANNER_FROM_STATE_MACHINE);
+
         initToConnectedState();
 
         BassClientService.Callbacks callbacks = Mockito.mock(BassClientService.Callbacks.class);
@@ -1386,11 +1388,13 @@ public class BassClientStateMachineTest {
                 Mockito.mock(BluetoothGattCharacteristic.class);
         mBassClientStateMachine.mBroadcastScanControlPoint = scanControlPoint;
 
+        mBassClientStateMachine.mPendingSourceToSwitch = metadata;
         sendMessageAndVerifyTransition(
                 mBassClientStateMachine.obtainMessage(ADD_BCAST_SOURCE, metadata),
                 BassClientStateMachine.ConnectedProcessing.class);
         verify(scanControlPoint).setValue(any(byte[].class));
         verify(btGatt).writeCharacteristic(any());
+        assertThat(mBassClientStateMachine.mPendingSourceToSwitch).isEqualTo(null);
     }
 
     @Test

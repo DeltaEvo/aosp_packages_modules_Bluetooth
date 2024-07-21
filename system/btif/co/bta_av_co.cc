@@ -45,7 +45,7 @@
 #include "internal_include/bt_trace.h"
 #include "osi/include/allocator.h"
 #include "stack/include/a2dp_codec_api.h"
-#include "stack/include/a2dp_error_codes.h"
+#include "stack/include/a2dp_constants.h"
 #include "stack/include/a2dp_ext.h"
 #include "stack/include/avdt_api.h"
 #include "stack/include/bt_hdr.h"
@@ -447,7 +447,7 @@ void BtaAvCo::ProcessSetConfig(tBTA_AV_HNDL bta_av_handle, const RawAddress& pee
     log::error("could not find peer entry for bta_av_handle 0x{:x} peer {}", bta_av_handle,
                peer_address);
     // Call call-in rejecting the configuration
-    bta_av_ci_setconfig(bta_av_handle, A2DP_BUSY, AVDT_ASC_CODEC, 0, nullptr, false, avdt_handle);
+    bta_av_ci_setconfig(bta_av_handle, A2DP_BUSY, AVDT_ASC_CODEC, false, avdt_handle);
     return;
   }
 
@@ -463,13 +463,13 @@ void BtaAvCo::ProcessSetConfig(tBTA_AV_HNDL bta_av_handle, const RawAddress& pee
     if (ContentProtectEnabled()) {
       if ((num_protect != 1) || !ContentProtectIsScmst(p_protect_info)) {
         log::error("wrong CP configuration for peer {}", p_peer->addr);
-        status = A2DP_BAD_CP_TYPE;
+        status = A2DP_INVALID_CP_TYPE;
         category = AVDT_ASC_PROTECT;
       }
     } else {
       // Do not support content protection for the time being
       log::error("wrong CP configuration for peer {}", p_peer->addr);
-      status = A2DP_BAD_CP_TYPE;
+      status = A2DP_INVALID_CP_TYPE;
       category = AVDT_ASC_PROTECT;
     }
   }
@@ -488,12 +488,9 @@ void BtaAvCo::ProcessSetConfig(tBTA_AV_HNDL bta_av_handle, const RawAddress& pee
     }
     if (t_local_sep == AVDT_TSEP_SRC) {
       log::verbose("peer {} is A2DP SINK", p_peer->addr);
-      // Ignore the restart_output flag: accepting the remote device's
-      // codec selection should not trigger codec reconfiguration.
-      bool dummy_restart_output = false;
       if ((p_peer->GetCodecs() == nullptr) ||
           !SetCodecOtaConfig(p_peer, p_codec_info, num_protect, p_protect_info,
-                             &dummy_restart_output, t_local_sep)) {
+                             t_local_sep)) {
         log::error("cannot set source codec {} for peer {}", A2DP_CodecName(p_codec_info),
                    p_peer->addr);
       } else {
@@ -508,14 +505,14 @@ void BtaAvCo::ProcessSetConfig(tBTA_AV_HNDL bta_av_handle, const RawAddress& pee
     // Check if codec configuration is supported
     if (!codec_config_supported) {
       category = AVDT_ASC_CODEC;
-      status = A2DP_WRONG_CODEC;
+      status = AVDTP_UNSUPPORTED_CONFIGURATION;
     }
   }
 
   if (status != A2DP_SUCCESS) {
     log::verbose("peer {} reject s={} c={}", p_peer->addr, status, category);
     // Call call-in rejecting the configuration
-    bta_av_ci_setconfig(bta_av_handle, status, category, 0, nullptr, false, avdt_handle);
+    bta_av_ci_setconfig(bta_av_handle, status, category, false, avdt_handle);
     return;
   }
 
@@ -524,8 +521,7 @@ void BtaAvCo::ProcessSetConfig(tBTA_AV_HNDL bta_av_handle, const RawAddress& pee
   p_peer->reconfig_needed = reconfig_needed;
   log::verbose("peer {} accept reconf={}", p_peer->addr, reconfig_needed);
   // Call call-in accepting the configuration
-  bta_av_ci_setconfig(bta_av_handle, A2DP_SUCCESS, A2DP_SUCCESS, 0, nullptr, reconfig_needed,
-                      avdt_handle);
+  bta_av_ci_setconfig(bta_av_handle, A2DP_SUCCESS, A2DP_SUCCESS, reconfig_needed, avdt_handle);
 }
 
 void BtaAvCo::ProcessOpen(tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
@@ -1335,15 +1331,13 @@ BtaAvCoState* BtaAvCo::getStateFromPeer(const BtaAvCoPeer* p_peer) {
 
 bool BtaAvCo::SetCodecOtaConfig(BtaAvCoPeer* p_peer, const uint8_t* p_ota_codec_config,
                                 uint8_t num_protect, const uint8_t* p_protect_info,
-                                bool* p_restart_output, const uint8_t t_local_sep) {
+                                const uint8_t t_local_sep) {
   uint8_t result_codec_config[AVDT_CODEC_SIZE];
   bool restart_input = false;
   bool restart_output = false;
   bool config_updated = false;
 
   log::info("peer_address={}, codec: {}", p_peer->addr, A2DP_CodecInfoString(p_ota_codec_config));
-
-  *p_restart_output = false;
 
   // Find the peer SEP codec to use
   const BtaAvCoSep* p_sink = peer_cache_->FindPeerSink(
@@ -1367,7 +1361,6 @@ bool BtaAvCo::SetCodecOtaConfig(BtaAvCoPeer* p_peer, const uint8_t* p_ota_codec_
   if (restart_output) {
     log::verbose("restart output for codec: {}", A2DP_CodecInfoString(result_codec_config));
 
-    *p_restart_output = true;
     p_peer->p_sink = p_sink;
     SaveNewCodecConfig(p_peer, result_codec_config, num_protect, p_protect_info, t_local_sep);
   }

@@ -640,7 +640,7 @@ struct tL2C_CB {
  */
 struct tL2C_CONN_INFO {
   RawAddress bd_addr;          /* Remote BD address */
-  uint8_t status;              /* Connection status */
+  tHCI_STATUS hci_status;      /* Connection status */
   uint16_t psm;                /* PSM of the connection */
   uint16_t l2cap_result;       /* L2CAP result */
   uint16_t l2cap_status;       /* L2CAP status */
@@ -664,10 +664,6 @@ struct tL2C_TX_COMPLETE_CB_INFO {
   uint16_t num_sdu;
   tL2CA_TX_COMPLETE_CB* cb;
 };
-
-/* The offset in a buffer that L2CAP will use when building commands.
- */
-#define L2CAP_SEND_CMD_OFFSET 0
 
 /* Number of ACL buffers to use for high priority channel
  */
