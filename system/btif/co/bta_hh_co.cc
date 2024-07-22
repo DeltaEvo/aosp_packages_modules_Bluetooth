@@ -37,6 +37,7 @@
 #include "osi/include/allocator.h"
 #include "osi/include/compat.h"
 #include "osi/include/osi.h"
+#include "osi/include/properties.h"
 #include "storage/config_keys.h"
 #include "types/raw_address.h"
 
@@ -57,10 +58,13 @@ static tBTA_HH_RPT_CACHE_ENTRY sReportCache[BTA_HH_NV_LOAD_MAX];
 
 using namespace bluetooth;
 
+static const char kPropertyWaitMsAfterUhidOpen[] = "bluetooth.hid.wait_ms_after_uhid_open";
+
 static const bthh_report_type_t map_rtype_uhid_hh[] = {BTHH_FEATURE_REPORT, BTHH_OUTPUT_REPORT,
                                                        BTHH_INPUT_REPORT};
 
 static void* btif_hh_poll_event_thread(void* arg);
+static bool to_uhid_thread(int fd, const tBTA_HH_TO_UHID_EVT* ev);
 
 void uhid_set_non_blocking(int fd) {
   int opts = fcntl(fd, F_GETFL);
@@ -158,14 +162,41 @@ static void uhid_flush_input_queue(btif_hh_uhid_t* p_uhid) {
   }
 }
 
-static void uhid_on_open(btif_hh_uhid_t* p_uhid) {
+static void uhid_set_ready(btif_hh_uhid_t* p_uhid) {
   if (p_uhid->ready_for_data) {
     return;
   }
-  // TODO: handle the case when UHID is still not ready even after sending
-  //       UHID_OPEN event, e.g. a custom delay.
   p_uhid->ready_for_data = true;
   uhid_flush_input_queue(p_uhid);
+}
+
+// This runs on main thread.
+static void uhid_open_timeout(void* data) {
+  int send_fd = PTR_TO_INT(data);
+  tBTA_HH_TO_UHID_EVT ev = {};
+
+  // Notify the UHID thread that the timer has expired.
+  log::verbose("UHID Open timeout evt");
+  ev.type = BTA_HH_UHID_INBOUND_OPEN_TIMEOUT_EVT;
+  to_uhid_thread(send_fd, &ev);
+}
+
+static void uhid_on_open(btif_hh_uhid_t* p_uhid) {
+  if (p_uhid->ready_for_data || alarm_is_scheduled(p_uhid->ready_timer)) {
+    return;
+  }
+
+  // On some platforms delay is required, because even though UHID has indicated
+  // ready, the input events might still not be processed, and therefore lost.
+  // If it's not required, immediately set UHID as ready.
+  int ready_delay_ms = osi_property_get_int32(kPropertyWaitMsAfterUhidOpen, 0);
+  if (ready_delay_ms == 0) {
+    uhid_set_ready(p_uhid);
+    return;
+  }
+
+  alarm_set_on_mloop(p_uhid->ready_timer, ready_delay_ms, uhid_open_timeout,
+                     INT_TO_PTR(p_uhid->internal_send_fd));
 }
 
 static void uhid_queue_input(btif_hh_uhid_t* p_uhid, struct uhid_event* ev) {
@@ -224,6 +255,11 @@ static int uhid_read_outbound_event(btif_hh_uhid_t* p_uhid) {
     case UHID_CLOSE:
       log::verbose("UHID_CLOSE from uhid-dev\n");
       p_uhid->ready_for_data = false;
+      if (com::android::bluetooth::flags::hid_report_queuing()) {
+        if (alarm_is_scheduled(p_uhid->ready_timer)) {
+          alarm_cancel(p_uhid->ready_timer);
+        }
+      }
       break;
     case UHID_OUTPUT:
       if (ret < (ssize_t)(sizeof(ev.type) + sizeof(ev.u.output))) {
@@ -315,6 +351,9 @@ static int uhid_read_inbound_event(btif_hh_uhid_t* p_uhid) {
         uhid_queue_input(p_uhid, &ev.uhid);
       }
       break;
+    case BTA_HH_UHID_INBOUND_OPEN_TIMEOUT_EVT:
+      uhid_set_ready(p_uhid);
+      break;
     case BTA_HH_UHID_INBOUND_CLOSE_EVT:
       res = 1;  // any positive value indicates a normal close event
       break;
@@ -404,6 +443,7 @@ static void uhid_fd_close(btif_hh_uhid_t* p_uhid) {
     fixed_queue_free(p_uhid->input_queue, nullptr);
     p_uhid->input_queue = nullptr;
 
+    alarm_free(p_uhid->ready_timer);
     osi_free(p_uhid);
   }
 }
@@ -436,6 +476,7 @@ static bool uhid_fd_open(btif_hh_device_t* p_dev) {
     uhid->link_spec = p_dev->link_spec;
     uhid->dev_handle = p_dev->dev_handle;
     uhid->internal_recv_fd = sockets[0];
+    uhid->internal_send_fd = sockets[1];
     p_dev->internal_send_fd = sockets[1];
 
     // UHID thread owns the uhid struct and is responsible to free it.
@@ -591,6 +632,7 @@ static void* btif_hh_poll_event_thread(void* arg) {
       return 0;
     }
     p_uhid->ready_for_data = false;
+    p_uhid->ready_timer = alarm_new("uhid_ready_timer");
 
     p_uhid->get_rpt_id_queue = fixed_queue_new(SIZE_MAX);
     log::assert_that(p_uhid->get_rpt_id_queue, "assert failed: p_uhid->get_rpt_id_queue");
