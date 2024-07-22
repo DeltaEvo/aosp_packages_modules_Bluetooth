@@ -42,7 +42,6 @@ namespace stack_acl {
 // Function state capture and return values, if needed
 struct BTM_BLE_IS_RESOLVE_BDA BTM_BLE_IS_RESOLVE_BDA;
 struct BTM_IsAclConnectionUp BTM_IsAclConnectionUp;
-struct BTM_IsAclConnectionUpAndHandleValid BTM_IsAclConnectionUpAndHandleValid;
 struct BTM_IsBleConnection BTM_IsBleConnection;
 struct BTM_IsPhy2mSupported BTM_IsPhy2mSupported;
 struct BTM_ReadRemoteConnectionAddr BTM_ReadRemoteConnectionAddr;
@@ -145,10 +144,6 @@ bool BTM_BLE_IS_RESOLVE_BDA(const RawAddress& x) {
 bool BTM_IsAclConnectionUp(const RawAddress& remote_bda, tBT_TRANSPORT transport) {
   inc_func_call_count(__func__);
   return test::mock::stack_acl::BTM_IsAclConnectionUp(remote_bda, transport);
-}
-bool BTM_IsAclConnectionUpAndHandleValid(const RawAddress& remote_bda, tBT_TRANSPORT transport) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_acl::BTM_IsAclConnectionUpAndHandleValid(remote_bda, transport);
 }
 bool BTM_IsBleConnection(uint16_t hci_handle) {
   inc_func_call_count(__func__);

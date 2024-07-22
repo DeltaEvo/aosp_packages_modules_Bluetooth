@@ -3342,7 +3342,8 @@ static void btif_dm_ble_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
 
       if (com::android::bluetooth::flags::read_model_num_fix() &&
           is_le_audio_capable_during_service_discovery(bd_addr) &&
-          !btif_model_name_known(bd_addr) && BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
+          !btif_model_name_known(bd_addr) &&
+          get_btm_client_interface().peer.BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
         log::info("Read model name for le audio capable device");
         if (!DIS_ReadDISInfo(bd_addr, read_dis_cback, DIS_ATTR_MODEL_NUM_BIT)) {
           log::warn("Read DIS failed");
@@ -3937,7 +3938,7 @@ void btif_dm_metadata_changed(const RawAddress& remote_bd_addr, int key,
     // TODO(b/334067583): Remove this DIS read when b/334067583 is fixed
     if (com::android::bluetooth::flags::read_model_num_fix() &&
         !btif_model_name_known(remote_bd_addr) &&
-        BTM_IsAclConnectionUp(remote_bd_addr, BT_TRANSPORT_LE)) {
+        get_btm_client_interface().peer.BTM_IsAclConnectionUp(remote_bd_addr, BT_TRANSPORT_LE)) {
       log::info("Read model name for le audio capable device");
       if (!DIS_ReadDISInfo(remote_bd_addr, read_dis_cback, DIS_ATTR_MODEL_NUM_BIT)) {
         log::warn("Read DIS failed");

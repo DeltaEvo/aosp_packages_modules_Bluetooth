@@ -48,6 +48,7 @@
 #include "stack/include/bt_psm_types.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/btm_ble_api.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_log_history.h"
 #include "stack/include/l2c_api.h"
 #include "stack/include/l2cap_acl_interface.h"
@@ -102,7 +103,8 @@ void l2cble_notify_le_connection(const RawAddress& bda) {
     return;
   }
 
-  if (BTM_IsAclConnectionUp(bda, BT_TRANSPORT_LE) && p_lcb->link_state != LST_CONNECTED) {
+  if (get_btm_client_interface().peer.BTM_IsAclConnectionUp(bda, BT_TRANSPORT_LE) &&
+      p_lcb->link_state != LST_CONNECTED) {
     /* update link status */
     // TODO Move this back into acl layer
     btm_establish_continue_from_address(bda, BT_TRANSPORT_LE);

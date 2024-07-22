@@ -57,17 +57,6 @@ struct BTM_IsAclConnectionUp {
   }
 };
 extern struct BTM_IsAclConnectionUp BTM_IsAclConnectionUp;
-// Name: BTM_IsAclConnectionUpAndHandleValid
-// Params: const RawAddress& remote_bda, tBT_TRANSPORT transport
-// Returns: bool
-struct BTM_IsAclConnectionUpAndHandleValid {
-  std::function<bool(const RawAddress& remote_bda, tBT_TRANSPORT transport)> body{
-          [](const RawAddress& /* remote_bda */, tBT_TRANSPORT /* transport */) { return false; }};
-  bool operator()(const RawAddress& remote_bda, tBT_TRANSPORT transport) {
-    return body(remote_bda, transport);
-  }
-};
-extern struct BTM_IsAclConnectionUpAndHandleValid BTM_IsAclConnectionUpAndHandleValid;
 // Name: BTM_IsBleConnection
 // Params: uint16_t hci_handle
 // Returns: bool

@@ -44,10 +44,10 @@
 #include "include/hardware/bt_hh.h"
 #include "main/shim/dumpsys.h"
 #include "osi/include/allocator.h"
-#include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/btm_ble_api.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/hidh_api.h"
 #include "types/raw_address.h"
 
@@ -1487,8 +1487,9 @@ static void btif_hh_transport_select(tAclLinkSpec& link_spec) {
   BTM_ReadDevInfo(bd_addr, &dev_type, &addr_type);
 
   // Find which transports are already connected
-  bool bredr_acl = BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_BR_EDR);
-  bool le_acl = BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE);
+  bool bredr_acl =
+          get_btm_client_interface().peer.BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_BR_EDR);
+  bool le_acl = get_btm_client_interface().peer.BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE);
 
   // Find which services known to be available
   if (btif_storage_get_remote_device_property(&bd_addr, &remote_properties) == BT_STATUS_SUCCESS) {
