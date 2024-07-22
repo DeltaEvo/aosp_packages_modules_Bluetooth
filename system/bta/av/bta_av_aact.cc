@@ -1851,7 +1851,8 @@ void bta_av_do_start(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
    * It would not hurt us, if the peer device wants us to be central
    * disable sniff mode unconditionally during streaming */
   tHCI_ROLE cur_role;
-  if ((BTM_GetRole(p_scb->PeerAddress(), &cur_role) == BTM_SUCCESS) &&
+  if ((get_btm_client_interface().link_policy.BTM_GetRole(p_scb->PeerAddress(), &cur_role) ==
+       BTM_SUCCESS) &&
       (cur_role == HCI_ROLE_CENTRAL)) {
     BTM_block_role_switch_and_sniff_mode_for(p_scb->PeerAddress());
   } else {
@@ -2322,7 +2323,8 @@ void bta_av_start_ok(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
        * Because it would not hurt source, if the peer device wants source to be
        * central.
        * disable sniff mode unconditionally during streaming */
-      if ((BTM_GetRole(p_scb->PeerAddress(), &cur_role) == BTM_SUCCESS) &&
+      if ((get_btm_client_interface().link_policy.BTM_GetRole(p_scb->PeerAddress(), &cur_role) ==
+           BTM_SUCCESS) &&
           (cur_role == HCI_ROLE_CENTRAL)) {
         BTM_block_role_switch_and_sniff_mode_for(p_scb->PeerAddress());
       } else {

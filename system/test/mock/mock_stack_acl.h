@@ -319,19 +319,6 @@ struct acl_get_connection_from_handle {
   tACL_CONN* operator()(uint16_t handle) { return body(handle); }
 };
 extern struct acl_get_connection_from_handle acl_get_connection_from_handle;
-// Name: BTM_GetRole
-// Params: const RawAddress& remote_bd_addr, tHCI_ROLE* p_role
-// Returns: tBTM_STATUS
-struct BTM_GetRole {
-  std::function<tBTM_STATUS(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role)> body{
-          [](const RawAddress& /* remote_bd_addr */, tHCI_ROLE* /* p_role */) {
-            return BTM_SUCCESS;
-          }};
-  tBTM_STATUS operator()(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role) {
-    return body(remote_bd_addr, p_role);
-  }
-};
-extern struct BTM_GetRole BTM_GetRole;
 // Name: BTM_ReadFailedContactCounter
 // Params: const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb
 // Returns: tBTM_STATUS
@@ -417,15 +404,6 @@ struct btm_is_acl_locally_initiated {
   bool operator()(void) { return body(); }
 };
 extern struct btm_is_acl_locally_initiated btm_is_acl_locally_initiated;
-// Name: BTM_GetMaxPacketSize
-// Params: const RawAddress& addr
-// Returns: uint16_t
-struct BTM_GetMaxPacketSize {
-  std::function<uint16_t(const RawAddress& addr)> body{
-          [](const RawAddress& /* addr */) { return 0; }};
-  uint16_t operator()(const RawAddress& addr) { return body(addr); }
-};
-extern struct BTM_GetMaxPacketSize BTM_GetMaxPacketSize;
 // Name: BTM_GetNumAclLinks
 // Params: void
 // Returns: uint16_t
@@ -442,19 +420,6 @@ struct acl_get_supported_packet_types {
   uint16_t operator()() { return body(); }
 };
 extern struct acl_get_supported_packet_types acl_get_supported_packet_types;
-// Name: BTM_GetPeerSCA
-// Params: const RawAddress& remote_bda, tBT_TRANSPORT transport
-// Returns: uint8_t
-struct BTM_GetPeerSCA {
-  std::function<uint8_t(const RawAddress& remote_bda, tBT_TRANSPORT transport)> body{
-          [](const RawAddress& /* remote_bda */, tBT_TRANSPORT /* transport */) {
-            return BT_TRANSPORT_BR_EDR;
-          }};
-  uint8_t operator()(const RawAddress& remote_bda, tBT_TRANSPORT transport) {
-    return body(remote_bda, transport);
-  }
-};
-extern struct BTM_GetPeerSCA BTM_GetPeerSCA;
 // Name: acl_link_role_from_handle
 // Params: uint16_t handle
 // Returns: uint8_t
