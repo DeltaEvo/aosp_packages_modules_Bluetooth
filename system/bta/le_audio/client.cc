@@ -3935,9 +3935,9 @@ public:
 
     log::debug(
             "active_group_id: {}\n audio_receiver_state: {}\n audio_sender_state: "
-            "{}\n configuration_context_type_: {}\n group {}\n",
+            "{}\n configuration_context_type_: {}\n",
             active_group_id_, audio_receiver_state_, audio_sender_state_,
-            ToHexString(configuration_context_type_), group ? " exist " : " does not exist ");
+            ToHexString(configuration_context_type_));
 
     switch (audio_sender_state_) {
       case AudioState::STARTED:
