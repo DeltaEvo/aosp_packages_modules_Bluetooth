@@ -26,7 +26,9 @@
 
 #include <base/strings/stringprintf.h>
 #include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 
+#include <list>
 #include <string>
 #include <vector>
 
@@ -95,9 +97,21 @@ inline std::string device_info_text(tBTA_DM_DEV_INFO info) {
 #define BTA_DM_PM_EXECUTE 3
 typedef uint8_t tBTA_DM_PM_REQ;
 
+struct tBTA_DM_REMOVE_PENDNIG {
+  RawAddress pseudo_addr;
+  RawAddress identity_addr;
+  bool le_connected;
+  bool bredr_connected;
+};
+
+bool bta_dm_removal_pending(const RawAddress& bd_addr);
+
 struct tBTA_DM_PEER_DEVICE {
   RawAddress peer_bdaddr;
+
+  // TODO: Remove when flag wait_for_disconnect_before_unbond is shipped
   tBTA_DM_CONN_STATE conn_state{tBTA_DM_CONN_STATE::BTA_DM_CONNECTED};
+
   tBTA_PREF_ROLES pref_role;
   bool in_use;
 
@@ -135,6 +149,11 @@ public:
   bool is_ssr_active() const { return info & BTA_DM_DI_USE_SSR; }
 
   bool is_connected() const {
+    // Devices getting removed should be treated as disconnected
+    if (com::android::bluetooth::flags::wait_for_disconnect_before_unbond() &&
+        bta_dm_removal_pending(peer_bdaddr)) {
+      return false;
+    }
     return (conn_state == tBTA_DM_CONN_STATE::BTA_DM_CONNECTED);
   }
 
@@ -223,6 +242,8 @@ typedef struct {
   tBTA_CUSTOM_UUID bta_custom_uuid[BTA_EIR_SERVER_NUM_CUSTOM_UUID];
 #endif
   alarm_t* switch_delay_timer;
+
+  std::list<tBTA_DM_REMOVE_PENDNIG> pending_removals;
 } tBTA_DM_CB;
 
 /* DI control block */
