@@ -145,7 +145,6 @@ cc_defaults {
         ":BluetoothHalSources",
         ":BluetoothHciSources",
         ":BluetoothL2capSources",
-        ":BluetoothLogRedactionSources",
         ":BluetoothMetricsSources",
         ":BluetoothNeighborSources",
         ":BluetoothOsSources",

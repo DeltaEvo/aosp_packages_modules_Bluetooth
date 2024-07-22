@@ -588,13 +588,6 @@ filegroup {
 }
 
 filegroup {
-    name: "TestMockGdOsLoggingLogRedaction",
-    srcs: [
-        "mock/mock_gd_os_logging_log_redaction.cc",
-    ],
-}
-
-filegroup {
     name: "TestFakeOsi",
     srcs: [
         ":TestMockOsi",

@@ -122,9 +122,7 @@ template <>
 struct formatter<ConnectAddressWithType> : formatter<std::string> {
   template <class Context>
   typename Context::iterator format(const ConnectAddressWithType& address, Context& ctx) const {
-    std::string repr = bluetooth::os::should_log_be_redacted()
-                               ? address.ToRedactedStringForLogging()
-                               : address.ToStringForLogging();
+    std::string repr = address.ToRedactedStringForLogging();
     return fmt::formatter<std::string>::format(repr, ctx);
   }
 };
