@@ -21,8 +21,8 @@
 
 bool A2DP_IsCodecValidOpus(const uint8_t* p_codec_info) { return false; }
 
-bool A2DP_IsVendorSinkCodecSupportedOpus(const uint8_t* p_codec_info) {
-  return false;
+tA2DP_STATUS A2DP_IsVendorSinkCodecSupportedOpus(const uint8_t* p_codec_info) {
+  return A2DP_NOT_SUPPORTED_CODEC_TYPE;
 }
 
 bool A2DP_VendorUsesRtpHeaderOpus(bool content_protection_enabled,
