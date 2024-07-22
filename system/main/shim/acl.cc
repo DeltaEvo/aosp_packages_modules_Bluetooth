@@ -23,13 +23,17 @@
 
 #include <chrono>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <future>
 #include <map>
 #include <memory>
 #include <optional>
+#include <queue>
 #include <string>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
 #include "common/bind.h"
 #include "common/init_flags.h"
@@ -161,7 +165,8 @@ inline bool IsRpa(const hci::AddressWithType address_with_type) {
 
 class ShadowAcceptlist {
 public:
-  ShadowAcceptlist(uint8_t max_acceptlist_size) : max_acceptlist_size_(max_acceptlist_size) {}
+  explicit ShadowAcceptlist(uint8_t max_acceptlist_size)
+      : max_acceptlist_size_(max_acceptlist_size) {}
 
   bool Add(const hci::AddressWithType& address_with_type) {
     if (acceptlist_set_.size() == max_acceptlist_size_) {
@@ -201,7 +206,7 @@ private:
 
 class ShadowAddressResolutionList {
 public:
-  ShadowAddressResolutionList(uint8_t max_address_resolution_size)
+  explicit ShadowAddressResolutionList(uint8_t max_address_resolution_size)
       : max_address_resolution_size_(max_address_resolution_size) {}
 
   bool Add(const hci::AddressWithType& address_with_type) {
@@ -972,9 +977,12 @@ struct shim::legacy::Acl::impl {
 
   void LeSubrateRequest(HciHandle handle, uint16_t subrate_min, uint16_t subrate_max,
                         uint16_t max_latency, uint16_t cont_num, uint16_t sup_tout) {
-    log::assert_that(IsLeAcl(handle), "handle {} is not a LE connection", handle);
-    handle_to_le_connection_map_[handle]->LeSubrateRequest(subrate_min, subrate_max, max_latency,
-                                                           cont_num, sup_tout);
+    if (IsLeAcl(handle)) {
+      handle_to_le_connection_map_[handle]->LeSubrateRequest(subrate_min, subrate_max, max_latency,
+                                                             cont_num, sup_tout);
+    } else {
+      log::info("handle {} is not a LE connection", handle);
+    }
   }
 
   void SetConnectionEncryption(HciHandle handle, hci::Enable enable) {
