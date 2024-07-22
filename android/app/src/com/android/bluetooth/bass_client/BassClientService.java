@@ -1892,9 +1892,12 @@ public class BassClientService extends ProfileService {
                 int skip,
                 int timeout,
                 int status) {
+            int broadcastId = getBroadcastIdForSyncHandle(BassConstants.INVALID_SYNC_HANDLE);
             log(
                     "onSyncEstablished syncHandle: "
                             + syncHandle
+                            + ", broadcastId: "
+                            + broadcastId
                             + ", device: "
                             + device
                             + ", advertisingSid: "
@@ -1944,9 +1947,7 @@ public class BassClientService extends ProfileService {
                     Iterator<AddSourceData> iterator = mPendingSourcesToAdd.iterator();
                     while (iterator.hasNext()) {
                         AddSourceData pendingSourcesToAdd = iterator.next();
-                        BluetoothDevice sourceDevice =
-                                pendingSourcesToAdd.mSourceMetadata.getSourceDevice();
-                        if (sourceDevice.equals(device)) {
+                        if (pendingSourcesToAdd.mSourceMetadata.getBroadcastId() == broadcastId) {
                             addSource(
                                     pendingSourcesToAdd.mSink,
                                     pendingSourcesToAdd.mSourceMetadata,
@@ -1957,9 +1958,31 @@ public class BassClientService extends ProfileService {
                 }
             } else {
                 // remove failed sync handle
-                int broadcastId = getBroadcastIdForSyncHandle(BassConstants.INVALID_SYNC_HANDLE);
                 log("onSyncEstablished failed for broadcast id: " + broadcastId);
-                mCachedBroadcasts.remove(broadcastId);
+                boolean notifiedOfLost = false;
+                synchronized (mPendingSourcesToAdd) {
+                    Iterator<AddSourceData> iterator = mPendingSourcesToAdd.iterator();
+                    while (iterator.hasNext()) {
+                        AddSourceData pendingSourcesToAdd = iterator.next();
+                        if (pendingSourcesToAdd.mSourceMetadata.getBroadcastId() == broadcastId) {
+                            if (!notifiedOfLost) {
+                                notifiedOfLost = true;
+                                mCallbacks.notifySourceLost(broadcastId);
+                            }
+                            mCallbacks.notifySourceAddFailed(
+                                    pendingSourcesToAdd.mSink,
+                                    pendingSourcesToAdd.mSourceMetadata,
+                                    BluetoothStatusCodes.ERROR_LOCAL_NOT_ENOUGH_RESOURCES);
+                            iterator.remove();
+                        }
+                    }
+                }
+                synchronized (mSearchScanCallbackLock) {
+                    // Clear from cache to make possible sync again (only during active searching)
+                    if (mSearchScanCallback != null) {
+                        mCachedBroadcasts.remove(broadcastId);
+                    }
+                }
                 mPeriodicAdvCallbacksMap.remove(BassConstants.INVALID_SYNC_HANDLE);
             }
             handleSelectSourceRequest();
@@ -2029,8 +2052,12 @@ public class BassClientService extends ProfileService {
                 }
             }
             clearAllDataForSyncHandle(syncHandle);
-            // Clear from cache to make possible sync again
-            mCachedBroadcasts.remove(broadcastId);
+            // Clear from cache to make possible sync again (only during active searching)
+            synchronized (mSearchScanCallbackLock) {
+                if (mSearchScanCallback != null) {
+                    mCachedBroadcasts.remove(broadcastId);
+                }
+            }
         }
 
         @Override

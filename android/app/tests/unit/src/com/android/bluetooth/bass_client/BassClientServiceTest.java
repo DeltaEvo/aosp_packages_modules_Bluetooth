@@ -774,6 +774,216 @@ public class BassClientServiceTest {
     }
 
     @Test
+    public void testNotRemovingCachedBroadcastOnLostWithoutScanning() {
+        mSetFlagsRule.enableFlags(
+                Flags.FLAG_LEAUDIO_BROADCAST_EXTRACT_PERIODIC_SCANNER_FROM_STATE_MACHINE);
+
+        prepareConnectedDeviceGroup();
+        startSearchingForSources();
+
+        // Scan and sync 1
+        onScanResult(mSourceDevice, TEST_BROADCAST_ID);
+        InOrder inOrder = inOrder(mMethodProxy);
+        inOrder.verify(mMethodProxy)
+                .periodicAdvertisingManagerRegisterSync(
+                        any(), any(), anyInt(), anyInt(), any(), any());
+        onSyncEstablished(mSourceDevice, TEST_SYNC_HANDLE);
+
+        // Sync lost during scanning removes cached broadcast
+        BassClientService.PACallback callback = mBassClientService.new PACallback();
+        callback.onSyncLost(TEST_SYNC_HANDLE);
+
+        // Add source to not cached broadcast cause addFailed notification
+        BluetoothLeBroadcastMetadata meta = createBroadcastMetadata(TEST_BROADCAST_ID);
+        mBassClientService.addSource(mCurrentDevice, meta, true);
+        handleHandoverSupport();
+        TestUtils.waitForLooperToFinishScheduledTask(mBassClientService.getCallbacks().getLooper());
+        try {
+            verify(mCallback)
+                    .onSourceAddFailed(
+                            eq(mCurrentDevice),
+                            eq(meta),
+                            eq(BluetoothStatusCodes.ERROR_BAD_PARAMETERS));
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+
+        // Scan and sync again
+        onScanResult(mSourceDevice, TEST_BROADCAST_ID);
+        inOrder.verify(mMethodProxy)
+                .periodicAdvertisingManagerRegisterSync(
+                        any(), any(), anyInt(), anyInt(), any(), any());
+        onSyncEstablished(mSourceDevice, TEST_SYNC_HANDLE);
+
+        // Stop searching
+        mBassClientService.stopSearchingForSources();
+
+        // Sync lost without active scanning should not remove broadcast cache
+        callback.onSyncLost(TEST_SYNC_HANDLE);
+
+        // Add source to unsynced broadcast, causes synchronization first
+        mBassClientService.addSource(mCurrentDevice, meta, true);
+        handleHandoverSupport();
+        inOrder.verify(mMethodProxy)
+                .periodicAdvertisingManagerRegisterSync(
+                        any(), any(), anyInt(), anyInt(), any(), any());
+    }
+
+    @Test
+    public void testNotRemovingCachedBroadcastOnFailEstablishWithoutScanning() {
+        mSetFlagsRule.enableFlags(
+                Flags.FLAG_LEAUDIO_BROADCAST_EXTRACT_PERIODIC_SCANNER_FROM_STATE_MACHINE);
+
+        final BluetoothDevice device1 =
+                mBluetoothAdapter.getRemoteLeDevice(
+                        "00:11:22:33:44:11", BluetoothDevice.ADDRESS_TYPE_RANDOM);
+        final BluetoothDevice device2 =
+                mBluetoothAdapter.getRemoteLeDevice(
+                        "00:11:22:33:44:22", BluetoothDevice.ADDRESS_TYPE_RANDOM);
+        final BluetoothDevice device3 =
+                mBluetoothAdapter.getRemoteLeDevice(
+                        "00:11:22:33:44:33", BluetoothDevice.ADDRESS_TYPE_RANDOM);
+        final BluetoothDevice device4 =
+                mBluetoothAdapter.getRemoteLeDevice(
+                        "00:11:22:33:44:44", BluetoothDevice.ADDRESS_TYPE_RANDOM);
+        final BluetoothDevice device5 =
+                mBluetoothAdapter.getRemoteLeDevice(
+                        "00:11:22:33:44:55", BluetoothDevice.ADDRESS_TYPE_RANDOM);
+        final int handle1 = 0;
+        final int handle2 = 1;
+        final int handle3 = 2;
+        final int handle4 = 3;
+        final int handle5 = 4;
+        final int broadcastId1 = 1111;
+        final int broadcastId2 = 2222;
+        final int broadcastId3 = 3333;
+        final int broadcastId4 = 4444;
+        final int broadcastId5 = 5555;
+
+        prepareConnectedDeviceGroup();
+        startSearchingForSources();
+
+        // Scan and sync 5 sources cause removing 1 synced element
+        onScanResult(device1, broadcastId1);
+        onSyncEstablished(device1, handle1);
+        onScanResult(device2, broadcastId2);
+        onSyncEstablished(device2, handle2);
+        onScanResult(device3, broadcastId3);
+        onSyncEstablished(device3, handle3);
+        onScanResult(device4, broadcastId4);
+        onSyncEstablished(device4, handle4);
+        onScanResult(device5, broadcastId5);
+        onSyncEstablished(device5, handle5);
+        InOrder inOrder = inOrder(mMethodProxy);
+        inOrder.verify(mMethodProxy, times(5))
+                .periodicAdvertisingManagerRegisterSync(
+                        any(), any(), anyInt(), anyInt(), any(), any());
+
+        BluetoothLeBroadcastMetadata.Builder builder =
+                new BluetoothLeBroadcastMetadata.Builder()
+                        .setEncrypted(false)
+                        .setSourceDevice(device1, BluetoothDevice.ADDRESS_TYPE_RANDOM)
+                        .setSourceAdvertisingSid(TEST_ADVERTISER_SID)
+                        .setBroadcastId(broadcastId1)
+                        .setBroadcastCode(null)
+                        .setPaSyncInterval(TEST_PA_SYNC_INTERVAL)
+                        .setPresentationDelayMicros(TEST_PRESENTATION_DELAY_MS);
+        // builder expect at least one subgroup
+        builder.addSubgroup(createBroadcastSubgroup());
+        BluetoothLeBroadcastMetadata meta = builder.build();
+
+        // Add source to unsynced broadcast, causes synchronization first
+        mBassClientService.addSource(mCurrentDevice, meta, true);
+        handleHandoverSupport();
+        inOrder.verify(mMethodProxy)
+                .periodicAdvertisingManagerRegisterSync(
+                        any(), any(), anyInt(), anyInt(), any(), any());
+
+        // Error in syncEstablished causes soureLost, sourceAddFailed notification
+        // and removing cache because scanning is active
+        BassClientService.PACallback callback = mBassClientService.new PACallback();
+        callback.onSyncEstablished(
+                handle1, device1, TEST_ADVERTISER_SID, 0, 200, BluetoothGatt.GATT_FAILURE);
+        TestUtils.waitForLooperToFinishScheduledTask(mBassClientService.getCallbacks().getLooper());
+        InOrder inOrderCallback = inOrder(mCallback);
+        try {
+            inOrderCallback.verify(mCallback).onSourceLost(eq(broadcastId1));
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+        try {
+            inOrderCallback
+                    .verify(mCallback)
+                    .onSourceAddFailed(
+                            eq(mCurrentDevice),
+                            eq(meta),
+                            eq(BluetoothStatusCodes.ERROR_LOCAL_NOT_ENOUGH_RESOURCES));
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+
+        // Add source to not cached broadcast causes addFailed notification
+        mBassClientService.addSource(mCurrentDevice, meta, true);
+        handleHandoverSupport();
+        TestUtils.waitForLooperToFinishScheduledTask(mBassClientService.getCallbacks().getLooper());
+        try {
+            inOrderCallback
+                    .verify(mCallback)
+                    .onSourceAddFailed(
+                            eq(mCurrentDevice),
+                            eq(meta),
+                            eq(BluetoothStatusCodes.ERROR_BAD_PARAMETERS));
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+
+        // Scan and sync again
+        onScanResult(device1, broadcastId1);
+        inOrder.verify(mMethodProxy)
+                .periodicAdvertisingManagerRegisterSync(
+                        any(), any(), anyInt(), anyInt(), any(), any());
+        onSyncEstablished(device1, handle1);
+
+        // Stop searching
+        mBassClientService.stopSearchingForSources();
+
+        // Add source to unsynced broadcast, causes synchronization first
+        mBassClientService.addSource(mCurrentDevice, meta, true);
+        handleHandoverSupport();
+        inOrder.verify(mMethodProxy)
+                .periodicAdvertisingManagerRegisterSync(
+                        any(), any(), anyInt(), anyInt(), any(), any());
+
+        // Error in syncEstablished causes soureLost, sourceAddFailed notification
+        // and not removing cache because scanning is inactice
+        callback.onSyncEstablished(
+                handle1, device1, TEST_ADVERTISER_SID, 0, 200, BluetoothGatt.GATT_FAILURE);
+        TestUtils.waitForLooperToFinishScheduledTask(mBassClientService.getCallbacks().getLooper());
+        try {
+            inOrderCallback.verify(mCallback).onSourceLost(eq(broadcastId1));
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+        try {
+            inOrderCallback
+                    .verify(mCallback)
+                    .onSourceAddFailed(
+                            eq(mCurrentDevice),
+                            eq(meta),
+                            eq(BluetoothStatusCodes.ERROR_LOCAL_NOT_ENOUGH_RESOURCES));
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+
+        // Add source to unsynced broadcast, causes synchronization first
+        mBassClientService.addSource(mCurrentDevice, meta, true);
+        handleHandoverSupport();
+        inOrder.verify(mMethodProxy)
+                .periodicAdvertisingManagerRegisterSync(
+                        any(), any(), anyInt(), anyInt(), any(), any());
+    }
+
+    @Test
     public void testStopSearchingForSources_timeoutForActiveSync() {
         mSetFlagsRule.enableFlags(
                 Flags.FLAG_LEAUDIO_BROADCAST_EXTRACT_PERIODIC_SCANNER_FROM_STATE_MACHINE);
