@@ -390,7 +390,7 @@ public:
    * configurations. This will not be used for finding best possible vendor
    * codec configuration.
    */
-  const set_configurations::AudioSetConfiguration* FindFirstSupportedConfiguration(
+  std::unique_ptr<set_configurations::AudioSetConfiguration> FindFirstSupportedConfiguration(
           const CodecManager::UnicastConfigurationRequirements& requirements,
           const set_configurations::AudioSetConfigurations* confs) const;
 

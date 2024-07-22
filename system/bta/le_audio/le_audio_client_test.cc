@@ -1452,7 +1452,7 @@ protected:
     ON_CALL(*mock_codec_manager_, GetCodecConfig)
             .WillByDefault(Invoke([](const CodecManager::UnicastConfigurationRequirements&
                                              requirements,
-                                     CodecManager::UnicastConfigurationVerifier verifier) {
+                                     CodecManager::UnicastConfigurationProvider provider) {
               auto filtered = *le_audio::AudioSetConfigurationProvider::Get()->GetConfigurations(
                       requirements.audio_context_type);
               // Filter out the dual bidir SWB configurations
@@ -1467,9 +1467,7 @@ protected:
                                               }),
                                filtered.end());
               }
-              auto cptr = verifier(requirements, &filtered);
-              return cptr ? std::make_unique<set_configurations::AudioSetConfiguration>(*cptr)
-                          : nullptr;
+              return provider(requirements, &filtered);
             }));
   }
 
@@ -10502,13 +10500,13 @@ TEST_F(UnicastTest, CodecFrameBlocks2) {
     }
   });
 
-  // Add a frame block PAC passing verifier
+  // Add a frame block PAC passing provider
   bool is_fb2_passed_as_requirement = false;
   ON_CALL(*mock_codec_manager_, GetCodecConfig)
           .WillByDefault(Invoke(
                   [&](const bluetooth::le_audio::CodecManager::UnicastConfigurationRequirements&
                               requirements,
-                      bluetooth::le_audio::CodecManager::UnicastConfigurationVerifier verifier) {
+                      bluetooth::le_audio::CodecManager::UnicastConfigurationProvider provider) {
                     auto filtered = *bluetooth::le_audio::AudioSetConfigurationProvider::Get()
                                              ->GetConfigurations(requirements.audio_context_type);
                     // Filter out the dual bidir SWB configurations
@@ -10525,12 +10523,12 @@ TEST_F(UnicastTest, CodecFrameBlocks2) {
                                              }),
                               filtered.end());
                     }
-                    auto cfg = verifier(requirements, &filtered);
+                    auto cfg = provider(requirements, &filtered);
                     if (cfg == nullptr) {
-                      return std::unique_ptr<set_configurations::AudioSetConfiguration>(nullptr);
+                      return std::unique_ptr<
+                              bluetooth::le_audio::set_configurations::AudioSetConfiguration>(
+                              nullptr);
                     }
-
-                    auto config = *cfg;
 
                     if (requirements.sink_pacs.has_value()) {
                       for (auto const& rec : requirements.sink_pacs.value()) {
@@ -10540,7 +10538,7 @@ TEST_F(UnicastTest, CodecFrameBlocks2) {
                               max_codec_frames_per_sdu) {
                             // Inject the proper Codec Frames Per SDU as the json
                             // configs are conservative and will always give us 1
-                            for (auto& entry : config.confs.sink) {
+                            for (auto& entry : cfg->confs.sink) {
                               entry.codec.params.Add(
                                       codec_spec_conf::kLeAudioLtvTypeCodecFrameBlocksPerSdu,
                                       (uint8_t)max_codec_frames_per_sdu);
@@ -10550,7 +10548,7 @@ TEST_F(UnicastTest, CodecFrameBlocks2) {
                         }
                       }
                     }
-                    return std::make_unique<set_configurations::AudioSetConfiguration>(config);
+                    return cfg;
                   }));
 
   types::BidirectionalPair<stream_parameters> codec_manager_stream_params;

@@ -1873,7 +1873,7 @@ bool LeAudioDeviceGroup::IsConfiguredForContext(LeAudioContextType context_type)
   return stream_conf.conf.get() == GetActiveConfiguration().get();
 }
 
-const set_configurations::AudioSetConfiguration*
+std::unique_ptr<set_configurations::AudioSetConfiguration>
 LeAudioDeviceGroup::FindFirstSupportedConfiguration(
         const CodecManager::UnicastConfigurationRequirements& requirements,
         const set_configurations::AudioSetConfigurations* confs) const {
@@ -1887,7 +1887,7 @@ LeAudioDeviceGroup::FindFirstSupportedConfiguration(
     log::assert_that(conf != nullptr, "confs should not be null");
     if (IsAudioSetConfigurationSupported(requirements, conf)) {
       log::debug("found: {}", conf->name);
-      return conf;
+      return std::make_unique<set_configurations::AudioSetConfiguration>(*conf);
     }
   }
 
