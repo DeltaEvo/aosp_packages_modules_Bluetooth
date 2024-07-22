@@ -364,7 +364,6 @@ static bluetooth::core::CoreInterface* CreateInterfaceToProfiles() {
   };
   static bluetooth::core::HACK_ProfileInterface profileInterface{
           // HID
-          .btif_hh_connect = btif_hh_connect,
           .btif_hh_virtual_unplug = btif_hh_virtual_unplug,
           .bta_hh_read_ssr_param = bta_hh_read_ssr_param,
 
