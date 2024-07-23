@@ -1714,14 +1714,14 @@ static void btif_on_service_discovery_results(RawAddress bd_addr,
 }
 
 void btif_on_gatt_results(RawAddress bd_addr, BD_NAME bd_name,
-                          std::vector<bluetooth::Uuid>& services, bool transport_le) {
+                          std::vector<bluetooth::Uuid>& services, bool is_transport_le) {
   std::vector<bt_property_t> prop;
   std::vector<uint8_t> property_value;
   std::set<Uuid> uuids;
   RawAddress static_addr_copy = pairing_cb.static_bdaddr;
   bool lea_supported = is_le_audio_capable_during_service_discovery(bd_addr);
 
-  if (transport_le) {
+  if (is_transport_le) {
     log::info("New GATT over LE UUIDs for {}:", bd_addr);
     BTM_LogHistory(kBtmLogTag, bd_addr, "Discovered GATT services using LE transport");
     if (btif_is_gatt_service_discovery_post_pairing(bd_addr)) {
@@ -1769,7 +1769,7 @@ void btif_on_gatt_results(RawAddress bd_addr, BD_NAME bd_name,
      * immediately send them with rest of SDP results in
      * on_service_discovery_results
      */
-    if (!transport_le) {
+    if (!is_transport_le) {
       return;
     }
 
@@ -1835,7 +1835,7 @@ void btif_on_gatt_results(RawAddress bd_addr, BD_NAME bd_name,
     ASSERTC(ret == BT_STATUS_SUCCESS, "failed to save remote device property", ret);
   }
 
-  if (!transport_le) {
+  if (!is_transport_le) {
     /* If services were returned as part of SDP discovery, we will immediately
      * send them with rest of SDP results in on_service_discovery_results */
     return;
