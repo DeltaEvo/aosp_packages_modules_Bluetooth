@@ -2977,7 +2977,17 @@ void btm_sec_auth_complete(uint16_t handle, tHCI_STATUS status) {
     return;
   }
 
-  btm_sec_cb.collision_start_time = 0;
+  if (com::android::bluetooth::flags::clear_collision_state_on_pairing_complete()) {
+    if (p_dev_rec && btm_sec_cb.p_collided_dev_rec &&
+        p_dev_rec->bd_addr == btm_sec_cb.p_collided_dev_rec->bd_addr) {
+      btm_sec_cb.collision_start_time = 0;
+      btm_sec_cb.p_collided_dev_rec = NULL;
+      if (alarm_is_scheduled(btm_sec_cb.sec_collision_timer))
+        alarm_cancel(btm_sec_cb.sec_collision_timer);
+    }
+  } else {
+    btm_sec_cb.collision_start_time = 0;
+  }
 
   btm_restore_mode();
 
@@ -3714,6 +3724,16 @@ void btm_sec_disconnected(uint16_t handle, tHCI_REASON reason, std::string comme
   /* clear unused flags */
   p_dev_rec->sm4 &= BTM_SM4_TRUE;
 
+  if (com::android::bluetooth::flags::clear_collision_state_on_pairing_complete()) {
+    if (btm_sec_cb.p_collided_dev_rec &&
+        p_dev_rec->bd_addr == btm_sec_cb.p_collided_dev_rec->bd_addr) {
+      log::debug("clear auth collision info after disconnection");
+      btm_sec_cb.collision_start_time = 0;
+      btm_sec_cb.p_collided_dev_rec = NULL;
+      if (alarm_is_scheduled(btm_sec_cb.sec_collision_timer))
+        alarm_cancel(btm_sec_cb.sec_collision_timer);
+    }
+  }
   /* If we are in the process of bonding we need to tell client that auth failed
    */
   const uint8_t old_pairing_flags = btm_sec_cb.pairing_flags;
@@ -4023,7 +4043,8 @@ void btm_sec_link_key_request(const RawAddress bda) {
   }
 
   if ((btm_sec_cb.pairing_state == BTM_PAIR_STATE_WAIT_PIN_REQ) &&
-      (btm_sec_cb.collision_start_time != 0) && (btm_sec_cb.p_collided_dev_rec->bd_addr == bda)) {
+      (btm_sec_cb.collision_start_time != 0) &&
+      (btm_sec_cb.p_collided_dev_rec && btm_sec_cb.p_collided_dev_rec->bd_addr == bda)) {
     log::verbose(
             "btm_sec_link_key_request() rejecting link key req State: {} "
             "START_TIMEOUT : {}",
