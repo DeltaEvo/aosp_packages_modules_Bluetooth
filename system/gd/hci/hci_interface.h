@@ -41,13 +41,13 @@ public:
   HciInterface() = default;
   virtual ~HciInterface() = default;
 
-  virtual void EnqueueCommand(
+  void EnqueueCommand(
           std::unique_ptr<CommandBuilder> command,
           common::ContextualOnceCallback<void(CommandCompleteView)> on_complete) override = 0;
 
-  virtual void EnqueueCommand(
-          std::unique_ptr<CommandBuilder> command,
-          common::ContextualOnceCallback<void(CommandStatusView)> on_status) override = 0;
+  void EnqueueCommand(std::unique_ptr<CommandBuilder> command,
+                      common::ContextualOnceCallback<void(CommandStatusView)> on_status) override =
+          0;
 
   virtual common::BidiQueueEnd<AclBuilder, AclView>* GetAclQueueEnd() = 0;
 
@@ -116,21 +116,21 @@ protected:
   template <typename T>
   class CommandInterfaceImpl : public CommandInterface<T> {
   public:
-    explicit CommandInterfaceImpl(HciInterface& hci) : hci_(hci) {}
+    explicit CommandInterfaceImpl(HciInterface* hci) : hci_(hci) {}
     virtual ~CommandInterfaceImpl() = default;
 
     void EnqueueCommand(
             std::unique_ptr<T> command,
             common::ContextualOnceCallback<void(CommandCompleteView)> on_complete) override {
-      hci_.EnqueueCommand(std::move(command), std::move(on_complete));
+      hci_->EnqueueCommand(std::move(command), std::move(on_complete));
     }
 
     void EnqueueCommand(
             std::unique_ptr<T> command,
             common::ContextualOnceCallback<void(CommandStatusView)> on_status) override {
-      hci_.EnqueueCommand(std::move(command), std::move(on_status));
+      hci_->EnqueueCommand(std::move(command), std::move(on_status));
     }
-    HciInterface& hci_;
+    HciInterface* hci_;
   };
 };
 

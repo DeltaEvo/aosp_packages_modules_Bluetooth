@@ -21,11 +21,11 @@
 #include <memory>
 #include <string>
 
-#include "address.h"
-#include "class_of_device.h"
 #include "common/bidi_queue.h"
 #include "common/contextual_callback.h"
 #include "hci/acl_connection_interface.h"
+#include "hci/address.h"
+#include "hci/class_of_device.h"
 #include "hci/distance_measurement_interface.h"
 #include "hci/hci_interface.h"
 #include "hci/hci_packets.h"
@@ -161,14 +161,14 @@ private:
           on_sco_connection_request_{};
 
   // Interfaces
-  CommandInterfaceImpl<AclCommandBuilder> acl_connection_manager_interface_{*this};
-  CommandInterfaceImpl<AclCommandBuilder> le_acl_connection_manager_interface_{*this};
-  CommandInterfaceImpl<SecurityCommandBuilder> security_interface{*this};
-  CommandInterfaceImpl<LeSecurityCommandBuilder> le_security_interface{*this};
-  CommandInterfaceImpl<LeAdvertisingCommandBuilder> le_advertising_interface{*this};
-  CommandInterfaceImpl<LeScanningCommandBuilder> le_scanning_interface{*this};
-  CommandInterfaceImpl<LeIsoCommandBuilder> le_iso_interface{*this};
-  CommandInterfaceImpl<DistanceMeasurementCommandBuilder> distance_measurement_interface{*this};
+  CommandInterfaceImpl<AclCommandBuilder> acl_connection_manager_interface_{this};
+  CommandInterfaceImpl<AclCommandBuilder> le_acl_connection_manager_interface_{this};
+  CommandInterfaceImpl<SecurityCommandBuilder> security_interface{this};
+  CommandInterfaceImpl<LeSecurityCommandBuilder> le_security_interface{this};
+  CommandInterfaceImpl<LeAdvertisingCommandBuilder> le_advertising_interface{this};
+  CommandInterfaceImpl<LeScanningCommandBuilder> le_scanning_interface{this};
+  CommandInterfaceImpl<LeIsoCommandBuilder> le_iso_interface{this};
+  CommandInterfaceImpl<DistanceMeasurementCommandBuilder> distance_measurement_interface{this};
 };
 }  // namespace hci
 }  // namespace bluetooth
