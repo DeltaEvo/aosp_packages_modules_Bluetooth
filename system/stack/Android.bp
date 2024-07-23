@@ -296,6 +296,7 @@ cc_library_static {
         "-fvisibility=default",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libaconfig_storage_read_api_cc",
         "libbluetooth_core_rs",
         "libbluetooth_crypto_toolbox",
@@ -898,6 +899,7 @@ cc_test {
         "libcutils",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libaconfig_storage_read_api_cc",
         "libbase",
         "libbluetooth-types",
@@ -990,6 +992,7 @@ cc_test {
         "server_configurable_flags",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libbase",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
@@ -1133,6 +1136,7 @@ cc_test {
         "server_configurable_flags",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libbase",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
@@ -1435,6 +1439,7 @@ cc_test {
         "server_configurable_flags",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libbase",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
@@ -1697,6 +1702,7 @@ cc_test {
         "test/stack_include_test.cc",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libbase",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
@@ -2079,6 +2085,7 @@ cc_test {
         "test/stack_l2cap_test.cc",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libbluetooth-types",
         "libbluetooth_gd",
         "libbluetooth_log",
@@ -2173,6 +2180,7 @@ cc_test {
         "test/stack_acl_test.cc",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libbluetooth-types",
         "libbluetooth_gd",
         "libbluetooth_log",
