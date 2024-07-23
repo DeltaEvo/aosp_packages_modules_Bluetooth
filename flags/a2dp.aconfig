@@ -125,3 +125,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "avdt_prioritize_mandatory_codec"
+    namespace: "bluetooth"
+    description: "Reject remote peer HD codec configuration if mandatory codec is preferred in the stack"
+    bug: "350427803"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
