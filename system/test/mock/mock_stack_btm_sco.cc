@@ -30,10 +30,6 @@
 #include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
-bool BTM_IsScoActiveByBdaddr(const RawAddress& /* remote_bda */) {
-  inc_func_call_count(__func__);
-  return false;
-}
 bool btm_sco_removed(uint16_t /* hci_handle */, tHCI_REASON /* reason */) {
   inc_func_call_count(__func__);
   return false;

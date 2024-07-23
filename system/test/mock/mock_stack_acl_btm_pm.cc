@@ -54,11 +54,6 @@ uint32_t BTM_PM_ReadBleScanDutyCycle(void) {
   inc_func_call_count(__func__);
   return 0;
 }
-tBTM_STATUS BTM_PmRegister(uint8_t /* mask */, uint8_t* /* p_pm_id */,
-                           tBTM_PM_STATUS_CBACK* /* p_cb */) {
-  inc_func_call_count(__func__);
-  return BTM_SUCCESS;
-}
 tBTM_STATUS BTM_SetPowerMode(uint8_t /* pm_id */, const RawAddress& /* remote_bda */,
                              const tBTM_PM_PWR_MD* /* p_mode */) {
   inc_func_call_count(__func__);
