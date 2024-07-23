@@ -228,35 +228,8 @@ struct tBTM_INQUIRY_VAR_ST {
 
   bool registered_for_hci_events;
 
-  void Init() {
-    alarm_free(classic_inquiry_timer);
-
-    classic_inquiry_timer = alarm_new("btm_inq.classic_inquiry_timer");
-
-    discoverable_mode = BTM_NON_DISCOVERABLE;
-    connectable_mode = BTM_NON_CONNECTABLE;
-
-    page_scan_window = HCI_DEF_PAGESCAN_WINDOW;
-    page_scan_period = HCI_DEF_PAGESCAN_INTERVAL;
-    inq_scan_window = HCI_DEF_INQUIRYSCAN_WINDOW;
-    inq_scan_period = HCI_DEF_INQUIRYSCAN_INTERVAL;
-    inq_scan_type = BTM_SCAN_TYPE_STANDARD;
-    page_scan_type = HCI_DEF_SCAN_TYPE;
-
-    p_inq_cmpl_cb = nullptr;
-    p_inq_results_cb = nullptr;
-
-    inq_counter = 0;
-    inqparms = {};
-    inq_cmpl_info = {};
-
-    per_min_delay = 0;
-    per_max_delay = 0;
-    state = BTM_INQ_INACTIVE_STATE;
-    inq_active = 0;
-    registered_for_hci_events = false;
-  }
-  void Free() { alarm_free(classic_inquiry_timer); }
+  void Init();
+  void Free();
 };
 
 bool btm_inq_find_bdaddr(const RawAddress& p_bda);
