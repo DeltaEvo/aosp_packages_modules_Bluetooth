@@ -299,7 +299,7 @@ public class BluetoothManagerServiceTest {
 
     private IBluetoothCallback transition_offToOn() throws Exception {
         IBluetoothCallback btCallback = transition_offToBleOn();
-        verify(mAdapterBinder, times(1)).startBrEdr(any());
+        verify(mAdapterBinder, times(1)).bleOnToOn(any());
 
         // AdapterService go to turning_on and start all profile on its own
         btCallback.onBluetoothStateChange(STATE_BLE_ON, STATE_TURNING_ON);
@@ -324,7 +324,7 @@ public class BluetoothManagerServiceTest {
         transition_offToBleOn();
 
         // Check that there was no transition to STATE_ON
-        verify(mAdapterBinder, times(0)).startBrEdr(any());
+        verify(mAdapterBinder, times(0)).bleOnToOn(any());
         assertThat(mManagerService.getState()).isEqualTo(STATE_BLE_ON);
     }
 

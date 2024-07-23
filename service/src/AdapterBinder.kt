@@ -59,8 +59,8 @@ class AdapterBinder(rawBinder: IBinder) {
     }
 
     @Throws(RemoteException::class)
-    fun startBrEdr(source: AttributionSource) {
-        adapterBinder.startBrEdr(source)
+    fun bleOnToOn(source: AttributionSource) {
+        adapterBinder.bleOnToOn(source)
     }
 
     @Throws(RemoteException::class)
