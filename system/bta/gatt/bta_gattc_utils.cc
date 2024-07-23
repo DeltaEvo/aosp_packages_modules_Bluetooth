@@ -260,7 +260,7 @@ void bta_gattc_clcb_dealloc(tBTA_GATTC_CLCB* p_clcb) {
    * p_q_cmd. */
   p_clcb->bta_conn_id = 0;
   p_clcb->bda = {};
-  p_clcb->transport = 0;
+  p_clcb->transport = BT_TRANSPORT_AUTO;
   p_clcb->p_rcb = NULL;
   p_clcb->p_srcb = NULL;
   p_clcb->request_during_discovery = 0;
