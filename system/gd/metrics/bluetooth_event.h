@@ -18,12 +18,17 @@
 
 #include "hci/address.h"
 #include "hci/hci_packets.h"
+#include "stack/include/btm_status.h"
+#include "types/raw_address.h"
 
 namespace bluetooth {
 namespace metrics {
 
 void LogAclCompletionEvent(const hci::Address& address, hci::ErrorCode reason,
                            bool is_locally_initiated);
+
+
+void LogAclAfterRemoteNameRequest(const RawAddress& raw_address, tBTM_STATUS status);
 
 }  // namespace metrics
 }  // namespace bluetooth
