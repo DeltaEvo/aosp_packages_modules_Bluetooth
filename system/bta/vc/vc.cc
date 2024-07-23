@@ -1163,7 +1163,7 @@ private:
       } break;
 
       case BTA_GATTC_SRVC_CHG_EVT:
-        OnServiceChangeEvent(p_data->remote_bda);
+        OnServiceChangeEvent(p_data->service_changed.remote_bda);
         break;
 
       case BTA_GATTC_SRVC_DISC_DONE_EVT:

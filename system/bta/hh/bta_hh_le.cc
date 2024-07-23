@@ -2217,7 +2217,7 @@ static void bta_hh_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
       break;
 
     case BTA_GATTC_SRVC_CHG_EVT:
-      link_spec.addrt.bda = p_data->remote_bda;
+      link_spec.addrt.bda = p_data->service_changed.remote_bda;
       bta_hh_le_service_changed(link_spec);
       break;
 

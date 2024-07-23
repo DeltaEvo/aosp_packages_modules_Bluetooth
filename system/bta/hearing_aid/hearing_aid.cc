@@ -2057,14 +2057,14 @@ static void hearingaid_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data) 
       if (!instance) {
         return;
       }
-      instance->OnServiceChangeEvent(p_data->remote_bda);
+      instance->OnServiceChangeEvent(p_data->service_changed.remote_bda);
       break;
 
     case BTA_GATTC_SRVC_DISC_DONE_EVT:
       if (!instance) {
         return;
       }
-      instance->OnServiceDiscDoneEvent(p_data->service_changed.remote_bda);
+      instance->OnServiceDiscDoneEvent(p_data->remote_bda);
       break;
     case BTA_GATTC_PHY_UPDATE_EVT: {
       if (!instance) {
