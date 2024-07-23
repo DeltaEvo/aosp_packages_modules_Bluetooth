@@ -823,6 +823,7 @@ cc_test {
     shared_libs: [
         "libbase",
         "libcrypto",
+        "libcutils",
         "libhidlbase",
         "liblog", // __android_log_print
     ],
@@ -841,6 +842,7 @@ cc_test {
         "libflatbuffers-cpp",
         "libgmock",
         "libosi",
+        "server_configurable_flags",
     ],
     sanitize: {
         cfi: false,
@@ -1019,9 +1021,9 @@ cc_test {
         "libaconfig_storage_read_api_cc",
         "libbase",
         "libcrypto",
+        "libcutils",
         "libhidlbase",
         "liblog",
-        "server_configurable_flags",
     ],
     static_libs: [
         "libbluetooth-types",
@@ -1041,6 +1043,7 @@ cc_test {
         "libgtest",
         "liblc3",
         "libosi",
+        "server_configurable_flags",
     ],
     data: [
         ":audio_set_configurations_bfbs",
@@ -1187,6 +1190,7 @@ cc_test {
         "libbase",
         "libbinder_ndk",
         "libcrypto",
+        "libcutils",
         "libfmq",
         "libhidlbase",
         "liblog",
@@ -1210,6 +1214,7 @@ cc_test {
         "libgtest",
         "liblc3",
         "libosi",
+        "server_configurable_flags",
     ],
     sanitize: {
         cfi: true,
