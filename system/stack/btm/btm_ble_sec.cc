@@ -532,7 +532,7 @@ bool BTM_ReadConnectedTransportAddress(RawAddress* remote_bda, tBT_TRANSPORT tra
   }
 
   if (transport == BT_TRANSPORT_BR_EDR) {
-    if (BTM_IsAclConnectionUp(p_dev_rec->bd_addr, transport)) {
+    if (get_btm_client_interface().peer.BTM_IsAclConnectionUp(p_dev_rec->bd_addr, transport)) {
       *remote_bda = p_dev_rec->bd_addr;
       return true;
     } else if (p_dev_rec->device_type & BT_DEVICE_TYPE_BREDR) {
@@ -545,7 +545,8 @@ bool BTM_ReadConnectedTransportAddress(RawAddress* remote_bda, tBT_TRANSPORT tra
 
   if (transport == BT_TRANSPORT_LE) {
     *remote_bda = p_dev_rec->ble.pseudo_addr;
-    if (BTM_IsAclConnectionUp(p_dev_rec->ble.pseudo_addr, transport)) {
+    if (get_btm_client_interface().peer.BTM_IsAclConnectionUp(p_dev_rec->ble.pseudo_addr,
+                                                              transport)) {
       return true;
     } else {
       return false;
@@ -588,7 +589,7 @@ tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr, uint16_t tx_pdu_leng
     tx_time = BTM_BLE_DATA_TX_TIME_MAX;
   }
 
-  if (!BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
+  if (!get_btm_client_interface().peer.BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
     log::info("Unable to set data length because no le acl link connected to device");
     return BTM_WRONG_MODE;
   }

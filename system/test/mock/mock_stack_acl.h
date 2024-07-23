@@ -57,17 +57,6 @@ struct BTM_IsAclConnectionUp {
   }
 };
 extern struct BTM_IsAclConnectionUp BTM_IsAclConnectionUp;
-// Name: BTM_IsAclConnectionUpAndHandleValid
-// Params: const RawAddress& remote_bda, tBT_TRANSPORT transport
-// Returns: bool
-struct BTM_IsAclConnectionUpAndHandleValid {
-  std::function<bool(const RawAddress& remote_bda, tBT_TRANSPORT transport)> body{
-          [](const RawAddress& /* remote_bda */, tBT_TRANSPORT /* transport */) { return false; }};
-  bool operator()(const RawAddress& remote_bda, tBT_TRANSPORT transport) {
-    return body(remote_bda, transport);
-  }
-};
-extern struct BTM_IsAclConnectionUpAndHandleValid BTM_IsAclConnectionUpAndHandleValid;
 // Name: BTM_IsBleConnection
 // Params: uint16_t hci_handle
 // Returns: bool
@@ -319,32 +308,6 @@ struct acl_get_connection_from_handle {
   tACL_CONN* operator()(uint16_t handle) { return body(handle); }
 };
 extern struct acl_get_connection_from_handle acl_get_connection_from_handle;
-// Name: BTM_GetLinkSuperTout
-// Params: const RawAddress& remote_bda, uint16_t* p_timeout
-// Returns: tBTM_STATUS
-struct BTM_GetLinkSuperTout {
-  std::function<tBTM_STATUS(const RawAddress& remote_bda, uint16_t* p_timeout)> body{
-          [](const RawAddress& /* remote_bda */, uint16_t* /* p_timeout */) {
-            return BTM_SUCCESS;
-          }};
-  tBTM_STATUS operator()(const RawAddress& remote_bda, uint16_t* p_timeout) {
-    return body(remote_bda, p_timeout);
-  }
-};
-extern struct BTM_GetLinkSuperTout BTM_GetLinkSuperTout;
-// Name: BTM_GetRole
-// Params: const RawAddress& remote_bd_addr, tHCI_ROLE* p_role
-// Returns: tBTM_STATUS
-struct BTM_GetRole {
-  std::function<tBTM_STATUS(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role)> body{
-          [](const RawAddress& /* remote_bd_addr */, tHCI_ROLE* /* p_role */) {
-            return BTM_SUCCESS;
-          }};
-  tBTM_STATUS operator()(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role) {
-    return body(remote_bd_addr, p_role);
-  }
-};
-extern struct BTM_GetRole BTM_GetRole;
 // Name: BTM_ReadFailedContactCounter
 // Params: const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb
 // Returns: tBTM_STATUS
@@ -430,28 +393,6 @@ struct btm_is_acl_locally_initiated {
   bool operator()(void) { return body(); }
 };
 extern struct btm_is_acl_locally_initiated btm_is_acl_locally_initiated;
-// Name: BTM_GetHCIConnHandle
-// Params: const RawAddress& remote_bda, tBT_TRANSPORT transport
-// Returns: uint16_t
-struct BTM_GetHCIConnHandle {
-  std::function<uint16_t(const RawAddress& remote_bda, tBT_TRANSPORT transport)> body{
-          [](const RawAddress& /* remote_bda */, tBT_TRANSPORT /* transport */) {
-            return BT_TRANSPORT_BR_EDR;
-          }};
-  uint16_t operator()(const RawAddress& remote_bda, tBT_TRANSPORT transport) {
-    return body(remote_bda, transport);
-  }
-};
-extern struct BTM_GetHCIConnHandle BTM_GetHCIConnHandle;
-// Name: BTM_GetMaxPacketSize
-// Params: const RawAddress& addr
-// Returns: uint16_t
-struct BTM_GetMaxPacketSize {
-  std::function<uint16_t(const RawAddress& addr)> body{
-          [](const RawAddress& /* addr */) { return 0; }};
-  uint16_t operator()(const RawAddress& addr) { return body(addr); }
-};
-extern struct BTM_GetMaxPacketSize BTM_GetMaxPacketSize;
 // Name: BTM_GetNumAclLinks
 // Params: void
 // Returns: uint16_t
@@ -468,19 +409,6 @@ struct acl_get_supported_packet_types {
   uint16_t operator()() { return body(); }
 };
 extern struct acl_get_supported_packet_types acl_get_supported_packet_types;
-// Name: BTM_GetPeerSCA
-// Params: const RawAddress& remote_bda, tBT_TRANSPORT transport
-// Returns: uint8_t
-struct BTM_GetPeerSCA {
-  std::function<uint8_t(const RawAddress& remote_bda, tBT_TRANSPORT transport)> body{
-          [](const RawAddress& /* remote_bda */, tBT_TRANSPORT /* transport */) {
-            return BT_TRANSPORT_BR_EDR;
-          }};
-  uint8_t operator()(const RawAddress& remote_bda, tBT_TRANSPORT transport) {
-    return body(remote_bda, transport);
-  }
-};
-extern struct BTM_GetPeerSCA BTM_GetPeerSCA;
 // Name: acl_link_role_from_handle
 // Params: uint16_t handle
 // Returns: uint8_t
@@ -538,14 +466,6 @@ struct BTM_acl_after_controller_started {
   void operator()() { body(); }
 };
 extern struct BTM_acl_after_controller_started BTM_acl_after_controller_started;
-// Name: BTM_default_unblock_role_switch
-// Params:
-// Returns: void
-struct BTM_default_unblock_role_switch {
-  std::function<void()> body{[]() { ; }};
-  void operator()() { body(); }
-};
-extern struct BTM_default_unblock_role_switch BTM_default_unblock_role_switch;
 // Name: BTM_unblock_role_switch_for
 // Params: const RawAddress& peer_addr
 // Returns: void

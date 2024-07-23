@@ -736,7 +736,7 @@ tBTM_STATUS btm_sec_bond_by_transport(const RawAddress& bd_addr, tBLE_ADDR_TYPE 
                p_dev_rec->hci_handle);
 
   /* If connection already exists... */
-  if (BTM_IsAclConnectionUpAndHandleValid(bd_addr, transport)) {
+  if (get_btm_client_interface().peer.BTM_IsAclConnectionUpAndHandleValid(bd_addr, transport)) {
     log::debug("An ACL connection currently exists peer:{} transport:{}", bd_addr,
                bt_transport_text(transport));
     btm_sec_wait_and_start_authentication(p_dev_rec);
@@ -1051,7 +1051,7 @@ tBTM_STATUS BTM_SetEncryption(const RawAddress& bd_addr, tBT_TRANSPORT transport
   tBTM_STATUS rc = BTM_SUCCESS;
   switch (transport) {
     case BT_TRANSPORT_LE:
-      if (BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
+      if (get_btm_client_interface().peer.BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
         rc = btm_ble_set_encryption(bd_addr, sec_act, L2CA_GetBleConnRole(bd_addr));
       } else {
         rc = BTM_WRONG_MODE;
@@ -1967,7 +1967,7 @@ void btm_sec_check_pending_reqs(void) {
     tBTM_SEC_QUEUE_ENTRY* p_e;
     while ((p_e = (tBTM_SEC_QUEUE_ENTRY*)fixed_queue_try_dequeue(bq)) != NULL) {
       /* Check that the ACL is still up before starting security procedures */
-      if (BTM_IsAclConnectionUp(p_e->bd_addr, p_e->transport)) {
+      if (get_btm_client_interface().peer.BTM_IsAclConnectionUp(p_e->bd_addr, p_e->transport)) {
         if (p_e->psm != 0) {
           log::verbose("PSM:0x{:04x} Is_Orig:{}", p_e->psm, p_e->is_orig);
 
@@ -2056,7 +2056,8 @@ static tBTM_STATUS btm_sec_dd_create_conn(tBTM_SEC_DEV_REC* p_dev_rec) {
   if (status == BTM_CMD_STARTED) {
     btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_WAIT_PIN_REQ);
     /* If already connected, start pending security procedure */
-    if (BTM_IsAclConnectionUp(p_dev_rec->bd_addr, BT_TRANSPORT_BR_EDR)) {
+    if (get_btm_client_interface().peer.BTM_IsAclConnectionUp(p_dev_rec->bd_addr,
+                                                              BT_TRANSPORT_BR_EDR)) {
       return BTM_SUCCESS;
     }
     return BTM_CMD_STARTED;
@@ -2115,8 +2116,10 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr, const uint8_
   log::info("btm_sec_rmt_name_request_complete for {}",
             p_bd_addr ? ADDRESS_TO_LOGGABLE_CSTR(*p_bd_addr) : "null");
 
-  if ((!p_bd_addr && !BTM_IsAclConnectionUp(btm_sec_cb.connecting_bda, BT_TRANSPORT_BR_EDR)) ||
-      (p_bd_addr && !BTM_IsAclConnectionUp(*p_bd_addr, BT_TRANSPORT_BR_EDR))) {
+  if ((!p_bd_addr && !get_btm_client_interface().peer.BTM_IsAclConnectionUp(
+                             btm_sec_cb.connecting_bda, BT_TRANSPORT_BR_EDR)) ||
+      (p_bd_addr &&
+       !get_btm_client_interface().peer.BTM_IsAclConnectionUp(*p_bd_addr, BT_TRANSPORT_BR_EDR))) {
     log::warn("Remote read request complete with no underlying link connection");
   }
 
@@ -2974,7 +2977,17 @@ void btm_sec_auth_complete(uint16_t handle, tHCI_STATUS status) {
     return;
   }
 
-  btm_sec_cb.collision_start_time = 0;
+  if (com::android::bluetooth::flags::clear_collision_state_on_pairing_complete()) {
+    if (p_dev_rec && btm_sec_cb.p_collided_dev_rec &&
+        p_dev_rec->bd_addr == btm_sec_cb.p_collided_dev_rec->bd_addr) {
+      btm_sec_cb.collision_start_time = 0;
+      btm_sec_cb.p_collided_dev_rec = NULL;
+      if (alarm_is_scheduled(btm_sec_cb.sec_collision_timer))
+        alarm_cancel(btm_sec_cb.sec_collision_timer);
+    }
+  } else {
+    btm_sec_cb.collision_start_time = 0;
+  }
 
   btm_restore_mode();
 
@@ -3052,7 +3065,10 @@ void btm_sec_auth_complete(uint16_t handle, tHCI_STATUS status) {
                      hci_error_code_text(status));
 
       tHCI_ROLE role = HCI_ROLE_UNKNOWN;
-      BTM_GetRole(p_dev_rec->bd_addr, &role);
+      if (get_btm_client_interface().link_policy.BTM_GetRole(p_dev_rec->bd_addr, &role) !=
+          BTM_SUCCESS) {
+        log::warn("Unable to get link role peer:{}", p_dev_rec->bd_addr);
+      }
       if (role == HCI_ROLE_CENTRAL) {
         // Encryption is required to start SM over BR/EDR
         // indicate that this is encryption after authentication
@@ -3228,7 +3244,10 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status, uint8_t encr_en
       log::verbose("BR key is temporary, skip derivation of LE LTK");
     }
     tHCI_ROLE role = HCI_ROLE_UNKNOWN;
-    BTM_GetRole(p_dev_rec->bd_addr, &role);
+    if (get_btm_client_interface().link_policy.BTM_GetRole(p_dev_rec->bd_addr, &role) !=
+        BTM_SUCCESS) {
+      log::warn("Unable to get link policy role peer:{}", p_dev_rec->bd_addr);
+    }
     if (p_dev_rec->sec_rec.new_encryption_key_is_p256) {
       if (btm_sec_use_smp_br_chnl(p_dev_rec) && role == HCI_ROLE_CENTRAL &&
           /* if LE key is not known, do deriving */
@@ -3705,6 +3724,16 @@ void btm_sec_disconnected(uint16_t handle, tHCI_REASON reason, std::string comme
   /* clear unused flags */
   p_dev_rec->sm4 &= BTM_SM4_TRUE;
 
+  if (com::android::bluetooth::flags::clear_collision_state_on_pairing_complete()) {
+    if (btm_sec_cb.p_collided_dev_rec &&
+        p_dev_rec->bd_addr == btm_sec_cb.p_collided_dev_rec->bd_addr) {
+      log::debug("clear auth collision info after disconnection");
+      btm_sec_cb.collision_start_time = 0;
+      btm_sec_cb.p_collided_dev_rec = NULL;
+      if (alarm_is_scheduled(btm_sec_cb.sec_collision_timer))
+        alarm_cancel(btm_sec_cb.sec_collision_timer);
+    }
+  }
   /* If we are in the process of bonding we need to tell client that auth failed
    */
   const uint8_t old_pairing_flags = btm_sec_cb.pairing_flags;
@@ -4014,7 +4043,8 @@ void btm_sec_link_key_request(const RawAddress bda) {
   }
 
   if ((btm_sec_cb.pairing_state == BTM_PAIR_STATE_WAIT_PIN_REQ) &&
-      (btm_sec_cb.collision_start_time != 0) && (btm_sec_cb.p_collided_dev_rec->bd_addr == bda)) {
+      (btm_sec_cb.collision_start_time != 0) &&
+      (btm_sec_cb.p_collided_dev_rec && btm_sec_cb.p_collided_dev_rec->bd_addr == bda)) {
     log::verbose(
             "btm_sec_link_key_request() rejecting link key req State: {} "
             "START_TIMEOUT : {}",
@@ -4769,7 +4799,8 @@ static bool btm_sec_check_prefetch_pin(tBTM_SEC_DEV_REC* p_dev_rec) {
       if (btm_sec_cb.api.p_pin_callback &&
           ((btm_sec_cb.pairing_flags & BTM_PAIR_FLAGS_PIN_REQD) == 0)) {
         log::verbose("PIN code callback called");
-        if (BTM_IsAclConnectionUp(p_dev_rec->bd_addr, BT_TRANSPORT_BR_EDR)) {
+        if (get_btm_client_interface().peer.BTM_IsAclConnectionUp(p_dev_rec->bd_addr,
+                                                                  BT_TRANSPORT_BR_EDR)) {
           btm_sec_cb.pairing_flags |= BTM_PAIR_FLAGS_PIN_REQD;
         }
         (btm_sec_cb.api.p_pin_callback)(p_dev_rec->bd_addr, p_dev_rec->dev_class,

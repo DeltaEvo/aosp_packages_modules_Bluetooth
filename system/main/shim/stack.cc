@@ -24,7 +24,6 @@
 
 #include <string>
 
-#include "common/init_flags.h"
 #include "common/strings.h"
 #include "hal/hci_hal.h"
 #include "hci/acl_manager.h"
@@ -47,7 +46,6 @@
 #include "main/shim/le_advertising_manager.h"
 #include "main/shim/le_scanning_manager.h"
 #include "metrics/counter_metrics.h"
-#include "os/log.h"
 #include "shim/dumpsys.h"
 #include "storage/storage_module.h"
 #if TARGET_FLOSS
@@ -57,7 +55,6 @@
 namespace bluetooth {
 namespace shim {
 
-using ::bluetooth::common::InitFlags;
 using ::bluetooth::common::StringFormat;
 
 struct Stack::impl {

@@ -34,7 +34,6 @@
 #include "btif_hf.h"
 #include "btif_util.h"
 #include "internal_include/bt_trace.h"
-#include "os/log.h"
 #include "types/raw_address.h"
 
 using namespace bluetooth;
@@ -167,11 +166,15 @@ void btif_a2dp_on_offload_started(const RawAddress& peer_addr, tBTA_AV_STATUS st
 
   if (btif_av_is_a2dp_offload_running()) {
     if (ack != BluetoothAudioStatus::SUCCESS && btif_av_stream_started_ready(A2dpType::kSource)) {
-      // Offload request will return with failure from btif_av sm if
-      // suspend is triggered for remote start. Disconnect only if SoC
-      // returned failure for offload VSC
       log::error("peer {} offload start failed", peer_addr);
-      btif_av_source_disconnect(peer_addr);
+      if (com::android::bluetooth::flags::stop_on_offload_fail()) {
+        btif_av_stream_stop(peer_addr);
+      } else {
+        // Offload request will return with failure from btif_av sm if
+        // suspend is triggered for remote start. Disconnect only if SoC
+        // returned failure for offload VSC
+        btif_av_source_disconnect(peer_addr);
+      }
     }
   }
 

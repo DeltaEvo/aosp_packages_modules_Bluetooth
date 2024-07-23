@@ -22,18 +22,13 @@
 #include <memory>
 #include <utility>
 
-#include "common/callback.h"
-#include "common/init_flags.h"
 #include "hci/address_with_type.h"
 #include "hci/event_checkers.h"
 #include "hci/hci_packets.h"
 #include "hci/le_scanning_callback.h"
 #include "hci/le_scanning_interface.h"
 #include "hci/le_scanning_reassembler.h"
-#include "hci/uuid.h"
-#include "module.h"
 #include "os/alarm.h"
-#include "os/log.h"
 
 namespace bluetooth {
 namespace hci {

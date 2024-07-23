@@ -364,3 +364,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "leaudio_broadcast_volume_control_primary_group_only"
+    namespace: "bluetooth"
+    description: "Only control broadcast primary group volume"
+    bug: "354201794"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}

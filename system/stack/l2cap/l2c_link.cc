@@ -61,7 +61,6 @@ static void l2c_link_send_to_lower(tL2C_LCB* p_lcb, BT_HDR* p_buf, tL2C_TX_COMPL
 static BT_HDR* l2cu_get_next_buffer_to_send(tL2C_LCB* p_lcb, tL2C_TX_COMPLETE_CB_INFO* p_cbi);
 
 void l2c_link_hci_conn_comp(tHCI_STATUS status, uint16_t handle, const RawAddress& p_bda) {
-  tL2C_LCB* p_lcb;
   tL2C_CCB* p_ccb;
 
   /* Save the parameters */
@@ -77,10 +76,9 @@ void l2c_link_hci_conn_comp(tHCI_STATUS status, uint16_t handle, const RawAddres
   };
 
   /* See if we have a link control block for the remote device */
-  p_lcb = l2cu_find_lcb_by_bd_addr(ci.bd_addr, BT_TRANSPORT_BR_EDR);
-
-  /* If we don't have one, allocate one */
+  tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(ci.bd_addr, BT_TRANSPORT_BR_EDR);
   if (p_lcb == nullptr) {
+    /* If we don't have one, allocate one */
     p_lcb = l2cu_allocate_lcb(ci.bd_addr, false, BT_TRANSPORT_BR_EDR);
     if (p_lcb == nullptr) {
       log::warn("Failed to allocate an LCB");
@@ -187,7 +185,6 @@ void l2c_link_hci_conn_comp(tHCI_STATUS status, uint16_t handle, const RawAddres
  ******************************************************************************/
 void l2c_link_sec_comp(RawAddress p_bda, tBT_TRANSPORT transport, void* p_ref_data,
                        tBTM_STATUS btm_status) {
-  tL2C_LCB* p_lcb;
   tL2C_CCB* p_ccb;
   tL2C_CCB* p_next_ccb;
 
@@ -210,9 +207,8 @@ void l2c_link_sec_comp(RawAddress p_bda, tBT_TRANSPORT transport, void* p_ref_da
           .peer_mtu{},
   };
 
-  p_lcb = l2cu_find_lcb_by_bd_addr(p_bda, transport);
-
   /* If we don't have one, this is an error */
+  tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(p_bda, transport);
   if (!p_lcb) {
     log::warn("L2CAP got sec_comp for unknown BD_ADDR");
     return;
@@ -318,12 +314,12 @@ static void l2c_link_iot_store_disc_reason(RawAddress& bda, uint8_t reason) {
  *
  ******************************************************************************/
 bool l2c_link_hci_disc_comp(uint16_t handle, tHCI_REASON reason) {
-  tL2C_LCB* p_lcb = l2cu_find_lcb_by_handle(handle);
   tL2C_CCB* p_ccb;
   bool status = true;
   bool lcb_is_free = true;
 
   /* If we don't have one, maybe an SCO link. Send to MM */
+  tL2C_LCB* p_lcb = l2cu_find_lcb_by_handle(handle);
   if (!p_lcb) {
     status = false;
   } else {

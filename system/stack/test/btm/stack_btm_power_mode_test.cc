@@ -18,7 +18,6 @@
 
 #include <cstdint>
 
-#include "common/init_flags.h"
 #include "hci/controller_interface_mock.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/acl_hci_link_interface.h"
@@ -30,10 +29,6 @@
 using testing::Return;
 
 namespace {
-const char* test_flags[] = {
-        "INIT_default_log_level_str=LOG_DEBUG",
-        nullptr,
-};
 
 const RawAddress kRawAddress = RawAddress({0x11, 0x22, 0x33, 0x44, 0x55, 0x66});
 const uint16_t kHciHandle = 123;
@@ -57,7 +52,6 @@ protected:
     bluetooth::hci::testing::mock_controller_ = &controller_;
     power_mode_callback_queue.clear();
     reset_mock_function_count_map();
-    bluetooth::common::InitFlags::Load(test_flags);
     ASSERT_EQ(BTM_SUCCESS, BTM_PmRegister(BTM_PM_REG_SET, &pm_id_,
                                           [](const RawAddress& p_bda, tBTM_PM_STATUS status,
                                              uint16_t value, tHCI_STATUS hci_status) {

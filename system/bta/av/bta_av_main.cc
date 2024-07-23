@@ -39,11 +39,11 @@
 #include "btif/include/btif_av_co.h"
 #include "btif/include/btif_config.h"
 #include "internal_include/bt_target.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_uuid16.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/hci_error_code.h"
 #include "stack/include/sdp_api.h"
 #include "storage/config_keys.h"
@@ -919,7 +919,8 @@ static void bta_av_sys_rs_cback(tBTA_SYS_CONN_STATUS /* status */, tHCI_ROLE new
   }
 
   /* restore role switch policy, if role switch failed */
-  if ((HCI_SUCCESS != hci_status) && (BTM_GetRole(peer_addr, &cur_role) == BTM_SUCCESS) &&
+  if ((HCI_SUCCESS != hci_status) &&
+      (get_btm_client_interface().link_policy.BTM_GetRole(peer_addr, &cur_role) == BTM_SUCCESS) &&
       (cur_role == HCI_ROLE_PERIPHERAL)) {
     BTM_unblock_role_switch_for(peer_addr);
   }
@@ -1039,7 +1040,7 @@ bool bta_av_switch_if_needed(tBTA_AV_SCB* p_scb) {
     if (p_scbi && (p_scb->hdi != i) &&   /* not the original channel */
         ((bta_av_cb.conn_audio & mask))) /* connected audio */
     {
-      BTM_GetRole(p_scbi->PeerAddress(), &role);
+      get_btm_client_interface().link_policy.BTM_GetRole(p_scbi->PeerAddress(), &role);
       /* this channel is open - clear the role switch link policy for this link
        */
       if (HCI_ROLE_CENTRAL != role) {
@@ -1076,7 +1077,8 @@ bool bta_av_switch_if_needed(tBTA_AV_SCB* p_scb) {
  ******************************************************************************/
 bool bta_av_link_role_ok(tBTA_AV_SCB* p_scb, uint8_t bits) {
   tHCI_ROLE role;
-  if (BTM_GetRole(p_scb->PeerAddress(), &role) != BTM_SUCCESS) {
+  if (get_btm_client_interface().link_policy.BTM_GetRole(p_scb->PeerAddress(), &role) !=
+      BTM_SUCCESS) {
     log::warn("Unable to find link role for device:{}", p_scb->PeerAddress());
     return true;
   }

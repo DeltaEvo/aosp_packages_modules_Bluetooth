@@ -84,3 +84,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "wait_for_disconnect_before_unbond"
+    namespace: "bluetooth"
+    description: "Disconnect all links before removing the bond"
+    bug: "345299969"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}

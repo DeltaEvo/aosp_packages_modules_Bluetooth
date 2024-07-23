@@ -29,7 +29,6 @@
 
 // Original usings
 using bluetooth::Uuid;
-using namespace bluetooth::legacy::stack::sdp;
 
 // Mocked internal structures, if any
 

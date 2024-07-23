@@ -111,7 +111,7 @@ bool A2DP_IsVendorPeerSinkCodecValid(const uint8_t* p_codec_info) {
   return false;
 }
 
-bool A2DP_IsVendorSinkCodecSupported(const uint8_t* p_codec_info) {
+tA2DP_STATUS A2DP_IsVendorSinkCodecSupported(const uint8_t* p_codec_info) {
   uint32_t vendor_id = A2DP_VendorCodecGetVendorId(p_codec_info);
   uint16_t codec_id = A2DP_VendorCodecGetCodecId(p_codec_info);
 
@@ -128,7 +128,7 @@ bool A2DP_IsVendorSinkCodecSupported(const uint8_t* p_codec_info) {
     return A2DP_IsVendorSinkCodecSupportedOpus(p_codec_info);
   }
 
-  return false;
+  return A2DP_NOT_SUPPORTED_CODEC_TYPE;
 }
 
 uint32_t A2DP_VendorCodecGetVendorId(const uint8_t* p_codec_info) {

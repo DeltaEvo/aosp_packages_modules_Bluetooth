@@ -22,7 +22,6 @@
 
 #include "audio_hal_client/audio_hal_client.h"
 #include "audio_hal_interface/le_audio_software.h"
-#include "common/init_flags.h"
 #include "hci/controller_interface_mock.h"
 #include "hci/hci_packets.h"
 #include "internal_include/stack_config.h"
@@ -55,11 +54,6 @@ T& bluetooth::le_audio::types::BidirectionalPair<T>::get(uint8_t direction) {
 static const std::vector<AudioSetConfiguration> offload_capabilities_none(0);
 
 const std::vector<AudioSetConfiguration>* offload_capabilities = &offload_capabilities_none;
-
-static const char* test_flags[] = {
-        "INIT_default_log_level_str=LOG_VERBOSE",
-        nullptr,
-};
 
 const std::string kSmpOptions("mock smp options");
 bool get_pts_avrcp_test(void) { return false; }
@@ -97,14 +91,6 @@ stack_config_t mock_stack_config{
 };
 
 const stack_config_t* stack_config_get_interface(void) { return &mock_stack_config; }
-
-namespace server_configurable_flags {
-std::string GetServerConfigurableFlag(const std::string& experiment_category_name,
-                                      const std::string& experiment_flag_name,
-                                      const std::string& default_value) {
-  return "";
-}
-}  // namespace server_configurable_flags
 
 namespace bluetooth {
 namespace audio {
@@ -284,7 +270,6 @@ class CodecManagerTestBase : public Test {
 public:
   virtual void SetUp() override {
     __android_log_set_minimum_priority(ANDROID_LOG_VERBOSE);
-    bluetooth::common::InitFlags::Load(test_flags);
     set_mock_offload_capabilities(offload_capabilities_none);
 
     bluetooth::legacy::hci::testing::SetMock(legacy_hci_mock_);

@@ -26,7 +26,7 @@
 #ifdef __ANDROID__
 #include <cutils/trace.h>
 #endif
-#include <inttypes.h>
+
 #include <limits.h>
 #include <string.h>
 
@@ -43,7 +43,6 @@
 #include "common/metrics.h"
 #include "common/repeating_timer.h"
 #include "common/time_util.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/fixed_queue.h"
 #include "osi/include/wakelock.h"

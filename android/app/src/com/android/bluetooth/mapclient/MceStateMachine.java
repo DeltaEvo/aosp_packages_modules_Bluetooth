@@ -1161,6 +1161,9 @@ class MceStateMachine extends StateMachine {
                         if (smsReceiverPackageName != null && !smsReceiverPackageName.isEmpty()) {
                             // Clone intent and broadcast to SMS receiver package if one exists
                             Intent messageNotificationIntent = (Intent) intent.clone();
+                            // Repeat action for easier static analyze of the intent
+                            messageNotificationIntent.setAction(
+                                    BluetoothMapClient.ACTION_MESSAGE_RECEIVED);
                             messageNotificationIntent.setPackage(smsReceiverPackageName);
                             mService.sendBroadcast(messageNotificationIntent, RECEIVE_SMS);
                         }

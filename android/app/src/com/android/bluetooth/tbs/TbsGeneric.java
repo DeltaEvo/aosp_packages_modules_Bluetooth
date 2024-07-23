@@ -234,7 +234,7 @@ public class TbsGeneric {
      *
      * @param device device for which authorization is changed
      */
-    public void onDeviceAuthorizationSet(BluetoothDevice device) {
+    public synchronized void onDeviceAuthorizationSet(BluetoothDevice device) {
         // Notify TBS GATT service instance in case of pending operations
         if (mTbsGatt != null) {
             mTbsGatt.onDeviceAuthorizationSet(device);

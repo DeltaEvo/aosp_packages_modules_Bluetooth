@@ -40,7 +40,6 @@
 #include <hardware/bt_hearing_aid.h>
 #include <hardware/bt_le_audio.h>
 #include <hardware/bt_vc.h>
-#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -62,10 +61,8 @@
 #include "btif_config.h"
 #include "btif_dm.h"
 #include "btif_metrics_logging.h"
-#include "btif_profile_storage.h"
 #include "btif_storage.h"
 #include "btif_util.h"
-#include "common/init_flags.h"
 #include "common/lru_cache.h"
 #include "common/metrics.h"
 #include "device/include/interop.h"
@@ -77,9 +74,7 @@
 #include "main/shim/helpers.h"
 #include "main/shim/le_advertising_manager.h"
 #include "main_thread.h"
-#include "os/log.h"
 #include "os/logging/log_adapter.h"
-#include "osi/include/allocator.h"
 #include "osi/include/properties.h"
 #include "osi/include/stack_power_telemetry.h"
 #include "stack/btm/btm_dev.h"
@@ -100,7 +95,6 @@
 #include "stack/include/btm_sec_api_types.h"
 #include "stack/include/smp_api.h"
 #include "stack/include/srvc_api.h"  // tDIS_VALUE
-#include "stack/sdp/sdpint.h"
 #include "storage/config_keys.h"
 #include "types/raw_address.h"
 
@@ -595,12 +589,6 @@ static void bond_state_changed(bt_status_t status, const RawAddress& bd_addr,
     if (com::android::bluetooth::flags::bond_transport_after_bond_cancel_fix()) {
       btif_config_remove_device(bd_addr.ToString());
     }
-
-    if (bluetooth::common::init_flags::pbap_pse_dynamic_version_upgrade_is_enabled()) {
-      if (btif_storage_is_pce_version_102(bd_addr)) {
-        update_pce_entry_to_interop_database(bd_addr);
-      }
-    }
   } else if (state == BT_BOND_STATE_BONDED) {
     allocate_metric_id_from_metric_id_allocator(bd_addr);
     if (!save_metric_id_from_metric_id_allocator(bd_addr)) {
@@ -785,7 +773,6 @@ bool is_le_audio_capable_during_service_discovery(const RawAddress& bd_addr) {
  *
  ******************************************************************************/
 static void btif_dm_cb_create_bond(const RawAddress bd_addr, tBT_TRANSPORT transport) {
-  bool is_hid = check_cod_hid_major(bd_addr, COD_HID_POINTING);
   bond_state_changed(BT_STATUS_SUCCESS, bd_addr, BT_BOND_STATE_BONDING);
 
   if (transport == BT_TRANSPORT_AUTO && is_device_le_audio_capable(bd_addr)) {
@@ -1339,7 +1326,7 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event, tBTA_DM_SEARCH*
     case BTA_DM_INQ_RES_EVT: {
       /* inquiry result */
       bt_bdname_t bdname;
-      uint8_t remote_name_len;
+      uint8_t remote_name_len = 0;
       uint8_t num_uuids = 0, max_num_uuid = 32;
       uint8_t uuid_list[32 * Uuid::kNumBytes16];
 
@@ -1368,7 +1355,6 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event, tBTA_DM_SEARCH*
       {
         std::vector<bt_property_t> bt_properties;
         uint32_t dev_type;
-        uint32_t num_properties = 0;
         bt_status_t status;
         tBLE_ADDR_TYPE addr_type = BLE_ADDR_PUBLIC;
 
@@ -1555,7 +1541,7 @@ static bool btif_is_interesting_le_service(bluetooth::Uuid uuid) {
 
 static bt_status_t btif_get_existing_uuids(RawAddress* bd_addr, Uuid* existing_uuids) {
   bt_property_t tmp_prop;
-  BTIF_STORAGE_FILL_PROPERTY(&tmp_prop, BT_PROPERTY_UUIDS, sizeof(existing_uuids), existing_uuids);
+  BTIF_STORAGE_FILL_PROPERTY(&tmp_prop, BT_PROPERTY_UUIDS, sizeof(*existing_uuids), existing_uuids);
 
   return btif_storage_get_remote_device_property(bd_addr, &tmp_prop);
 }
@@ -1787,21 +1773,11 @@ void btif_on_gatt_results(RawAddress bd_addr, BD_NAME bd_name,
       return;
     }
 
-    if (lea_supported) {
-      if (bluetooth::common::init_flags::
-                  sdp_return_classic_services_when_le_discovery_fails_is_enabled()) {
-        log::info("Will return Classic SDP results, if done, to unblock bonding");
-      } else {
-        // LEA device w/o this flag
-        // TODO: we might want to remove bond or do some action on
-        // half-discovered device
-        log::warn("No GATT service found for the LE Audio device {}", bd_addr);
-        return;
-      }
-    } else {
+    if (!lea_supported) {
       log::info("LE audio not supported, no need to report any UUIDs");
       return;
     }
+    log::info("Will return Classic SDP results, if done, to unblock bonding");
   }
 
   Uuid existing_uuids[BT_MAX_NUM_UUIDS] = {};
@@ -3366,7 +3342,8 @@ static void btif_dm_ble_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
 
       if (com::android::bluetooth::flags::read_model_num_fix() &&
           is_le_audio_capable_during_service_discovery(bd_addr) &&
-          !btif_model_name_known(bd_addr) && BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
+          !btif_model_name_known(bd_addr) &&
+          get_btm_client_interface().peer.BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
         log::info("Read model name for le audio capable device");
         if (!DIS_ReadDISInfo(bd_addr, read_dis_cback, DIS_ATTR_MODEL_NUM_BIT)) {
           log::warn("Read DIS failed");
@@ -3961,7 +3938,7 @@ void btif_dm_metadata_changed(const RawAddress& remote_bd_addr, int key,
     // TODO(b/334067583): Remove this DIS read when b/334067583 is fixed
     if (com::android::bluetooth::flags::read_model_num_fix() &&
         !btif_model_name_known(remote_bd_addr) &&
-        BTM_IsAclConnectionUp(remote_bd_addr, BT_TRANSPORT_LE)) {
+        get_btm_client_interface().peer.BTM_IsAclConnectionUp(remote_bd_addr, BT_TRANSPORT_LE)) {
       log::info("Read model name for le audio capable device");
       if (!DIS_ReadDISInfo(remote_bd_addr, read_dis_cback, DIS_ATTR_MODEL_NUM_BIT)) {
         log::warn("Read DIS failed");

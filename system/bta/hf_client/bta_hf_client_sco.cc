@@ -134,7 +134,7 @@ static void bta_hf_client_sco_conn_rsp(tBTA_HF_CLIENT_CB* client_cb,
     hci_status = HCI_ERR_HOST_REJECT_DEVICE;
   }
 
-  BTM_EScoConnRsp(p_data->sco_inx, hci_status, &resp);
+  get_btm_client_interface().sco.BTM_EScoConnRsp(p_data->sco_inx, hci_status, &resp);
 }
 
 /*******************************************************************************
@@ -259,8 +259,9 @@ static void bta_hf_client_sco_create(tBTA_HF_CLIENT_CB* client_cb, bool is_orig)
     bta_sys_sco_use(BTA_ID_HS, 1, client_cb->peer_addr);
   }
 
-  status = BTM_CreateSco(&client_cb->peer_addr, is_orig, params.packet_types, &client_cb->sco_idx,
-                         bta_hf_client_sco_conn_cback, bta_hf_client_sco_disc_cback);
+  status = get_btm_client_interface().sco.BTM_CreateSco(
+          &client_cb->peer_addr, is_orig, params.packet_types, &client_cb->sco_idx,
+          bta_hf_client_sco_conn_cback, bta_hf_client_sco_disc_cback);
   if (status == BTM_CMD_STARTED && !is_orig) {
     if (!BTM_RegForEScoEvts(client_cb->sco_idx, bta_hf_client_esco_connreq_cback)) {
       log::verbose("SCO registration success");

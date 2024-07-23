@@ -119,9 +119,7 @@ template <>
 struct formatter<bluetooth::hci::Address> : formatter<std::string> {
   template <class Context>
   typename Context::iterator format(const bluetooth::hci::Address& address, Context& ctx) const {
-    std::string repr = bluetooth::os::should_log_be_redacted()
-                               ? address.ToRedactedStringForLogging()
-                               : address.ToStringForLogging();
+    std::string repr = address.ToRedactedStringForLogging();
     return fmt::formatter<std::string>::format(repr, ctx);
   }
 };

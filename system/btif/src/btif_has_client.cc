@@ -20,7 +20,6 @@
 #include <hardware/bluetooth.h>
 #include <hardware/bt_has.h>
 
-#include <bitset>
 #include <string>
 #include <vector>
 

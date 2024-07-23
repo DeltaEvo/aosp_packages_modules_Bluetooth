@@ -208,20 +208,8 @@ init_flags!(
     name: InitFlags
     flags: {
         classic_discovery_only,
-        dynamic_avrcp_version_enhancement = true,
         hci_adapter: i32,
-        leaudio_targeted_announcement_reconnection_mode = true,
-        pbap_pse_dynamic_version_upgrade = false,
-        redact_log = true,
-        sco_codec_timeout_clear,
-        sdp_serialization = true,
-        sdp_skip_rnr_if_known = true,
-        set_min_encryption = true,
-        subrating = true,
         use_unified_connection_manager,
-        sdp_return_classic_services_when_le_discovery_fails = true,
-        use_rsi_from_cached_inqiry_results = false,
-        att_mtu_default: i32 = 517,
     }
     extra_parsed_flags: {
         "--hci" => parse_hci_adapter(_, _),
@@ -270,17 +258,6 @@ mod tests {
         let _guard = ASYNC_LOCK.lock().unwrap();
         test_load(vec!["--hci=2"]);
         assert_eq!(get_hci_adapter(), 2);
-    }
-    #[test]
-    fn test_redact_logging() {
-        let _guard = ASYNC_LOCK.lock().unwrap();
-        assert!(redact_log_is_enabled()); // default is true
-        test_load(vec!["INIT_redact_log=false"]);
-        assert!(!redact_log_is_enabled()); // turned off
-        test_load(vec!["INIT_redact_log=foo"]);
-        assert!(redact_log_is_enabled()); // invalid value, interpreted as default, true
-        test_load(vec!["INIT_redact_log=true"]);
-        assert!(redact_log_is_enabled()); // turned on
     }
 
     init_flags_struct!(

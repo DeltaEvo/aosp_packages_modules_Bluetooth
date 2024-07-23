@@ -387,18 +387,19 @@ static bt_status_t btif_gatts_add_service(int server_if, const btgatt_db_element
           Bind(&add_service_impl, server_if, std::vector(service, service + service_count)));
 }
 
-static bt_status_t btif_gatts_stop_service(int server_if, int service_handle) {
+static bt_status_t btif_gatts_stop_service(int /* server_if */, int service_handle) {
   CHECK_BTGATT_INIT();
   return do_in_jni_thread(Bind(&BTA_GATTS_StopService, service_handle));
 }
 
-static bt_status_t btif_gatts_delete_service(int server_if, int service_handle) {
+static bt_status_t btif_gatts_delete_service(int /* server_if */, int service_handle) {
   CHECK_BTGATT_INIT();
   return do_in_jni_thread(Bind(&BTA_GATTS_DeleteService, service_handle));
 }
 
-static bt_status_t btif_gatts_send_indication(int server_if, int attribute_handle, int conn_id,
-                                              int confirm, const uint8_t* value, size_t length) {
+static bt_status_t btif_gatts_send_indication(int /* server_if */, int attribute_handle,
+                                              int conn_id, int confirm, const uint8_t* value,
+                                              size_t length) {
   CHECK_BTGATT_INIT();
 
   if (length > GATT_MAX_ATTR_LEN) {

@@ -26,7 +26,6 @@
 #include <vector>
 
 #include "common/bind.h"
-#include "common/init_flags.h"
 #include "hci/acl_manager/assembler.h"
 #include "hci/acl_manager/le_acceptlist_callbacks.h"
 #include "hci/acl_manager/le_acl_connection.h"

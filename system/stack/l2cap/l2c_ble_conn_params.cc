@@ -37,6 +37,7 @@
 #include "stack/btm/btm_dev.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/btm_ble_api_types.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/l2c_api.h"
 #include "stack/include/main_thread.h"
 #include "stack/l2cap/l2c_int.h"
@@ -61,13 +62,11 @@ static void l2cble_start_subrate_change(tL2C_LCB* p_lcb);
 bool L2CA_UpdateBleConnParams(const RawAddress& rem_bda, uint16_t min_int, uint16_t max_int,
                               uint16_t latency, uint16_t timeout, uint16_t min_ce_len,
                               uint16_t max_ce_len) {
-  tL2C_LCB* p_lcb;
-
   /* See if we have a link control block for the remote device */
-  p_lcb = l2cu_find_lcb_by_bd_addr(rem_bda, BT_TRANSPORT_LE);
+  tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(rem_bda, BT_TRANSPORT_LE);
 
   /* If we do not have one, create one and accept the connection. */
-  if (!p_lcb || !BTM_IsAclConnectionUp(rem_bda, BT_TRANSPORT_LE)) {
+  if (!p_lcb || !get_btm_client_interface().peer.BTM_IsAclConnectionUp(rem_bda, BT_TRANSPORT_LE)) {
     log::warn("- unknown BD_ADDR {}", rem_bda);
     return false;
   }
@@ -390,7 +389,8 @@ void l2cble_use_preferred_conn_params(const RawAddress& bda) {
  *
  ******************************************************************************/
 static void l2cble_start_subrate_change(tL2C_LCB* p_lcb) {
-  if (!BTM_IsAclConnectionUp(p_lcb->remote_bd_addr, BT_TRANSPORT_LE)) {
+  if (!get_btm_client_interface().peer.BTM_IsAclConnectionUp(p_lcb->remote_bd_addr,
+                                                             BT_TRANSPORT_LE)) {
     log::error("No known connection ACL for {}", p_lcb->remote_bd_addr);
     return;
   }
@@ -474,13 +474,11 @@ void L2CA_SetDefaultSubrate(uint16_t subrate_min, uint16_t subrate_max, uint16_t
  ******************************************************************************/
 bool L2CA_SubrateRequest(const RawAddress& rem_bda, uint16_t subrate_min, uint16_t subrate_max,
                          uint16_t max_latency, uint16_t cont_num, uint16_t timeout) {
-  tL2C_LCB* p_lcb;
-
   /* See if we have a link control block for the remote device */
-  p_lcb = l2cu_find_lcb_by_bd_addr(rem_bda, BT_TRANSPORT_LE);
+  tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(rem_bda, BT_TRANSPORT_LE);
 
   /* If we don't have one, create one and accept the connection. */
-  if (!p_lcb || !BTM_IsAclConnectionUp(rem_bda, BT_TRANSPORT_LE)) {
+  if (!p_lcb || !get_btm_client_interface().peer.BTM_IsAclConnectionUp(rem_bda, BT_TRANSPORT_LE)) {
     log::warn("unknown BD_ADDR {}", rem_bda);
     return false;
   }

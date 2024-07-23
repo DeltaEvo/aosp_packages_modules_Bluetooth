@@ -23,7 +23,6 @@
 #include <gtest/gtest.h>
 
 #include "bta/include/bta_groups.h"
-#include "common/init_flags.h"
 #include "test/common/mock_functions.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"

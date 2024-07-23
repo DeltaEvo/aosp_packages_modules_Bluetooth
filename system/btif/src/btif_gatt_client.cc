@@ -371,7 +371,7 @@ static bt_status_t btif_gattc_close(int client_if, const RawAddress& bd_addr, in
   return do_in_jni_thread(Bind(&btif_gattc_close_impl, client_if, bd_addr, conn_id));
 }
 
-static bt_status_t btif_gattc_refresh(int client_if, const RawAddress& bd_addr) {
+static bt_status_t btif_gattc_refresh(int /* client_if */, const RawAddress& bd_addr) {
   CHECK_BTGATT_INIT();
   return do_in_jni_thread(Bind(&BTA_GATTC_Refresh, bd_addr));
 }
@@ -405,7 +405,7 @@ static bt_status_t btif_gattc_get_gatt_db(int conn_id) {
 }
 
 void read_char_cb(uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
-                  uint8_t* value, void* data) {
+                  uint8_t* value, void* /* data */) {
   btgatt_read_params_t params = {
           .handle = handle,
           .value.len = len,
@@ -427,7 +427,7 @@ static bt_status_t btif_gattc_read_char(int conn_id, uint16_t handle, int auth_r
 }
 
 void read_using_char_uuid_cb(uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
-                             uint8_t* value, void* data) {
+                             uint8_t* value, void* /* data */) {
   btgatt_read_params_t params = {
           .handle = handle,
           .value.len = len,
@@ -450,7 +450,7 @@ static bt_status_t btif_gattc_read_using_char_uuid(int conn_id, const Uuid& uuid
 }
 
 void read_desc_cb(uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
-                  uint8_t* value, void* data) {
+                  uint8_t* value, void* /* data */) {
   btgatt_read_params_t params;
   params.value_type = 0x00 /* GATTC_READ_VALUE_TYPE_VALUE */;
   params.status = status;
@@ -471,7 +471,7 @@ static bt_status_t btif_gattc_read_char_descr(int conn_id, uint16_t handle, int 
 }
 
 void write_char_cb(uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
-                   const uint8_t* value, void* data) {
+                   const uint8_t* value, void* /* data */) {
   std::vector<uint8_t> val(value, value + len);
   CLI_CBACK_WRAP_IN_JNI(
           write_characteristic_cb,
@@ -499,7 +499,7 @@ static bt_status_t btif_gattc_write_char(int conn_id, uint16_t handle, int write
 }
 
 void write_descr_cb(uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
-                    const uint8_t* value, void* data) {
+                    const uint8_t* value, void* /* data */) {
   std::vector<uint8_t> val(value, value + len);
 
   CLI_CBACK_WRAP_IN_JNI(

@@ -1490,7 +1490,8 @@ public class BluetoothInCallService extends InCallService {
                 return false;
             }
             for (BluetoothCall call : calls) {
-                if (call.getState() != Call.STATE_DISCONNECTED) {
+                if (call.getState() != Call.STATE_DISCONNECTED
+                        && call.getState() != Call.STATE_DISCONNECTING) {
                     return false;
                 }
             }

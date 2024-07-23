@@ -26,7 +26,6 @@
 #include <vector>
 
 #include "common/bind.h"
-#include "common/init_flags.h"
 #include "common/stop_watch.h"
 #include "hal/hci_hal.h"
 #include "hci/class_of_device.h"
