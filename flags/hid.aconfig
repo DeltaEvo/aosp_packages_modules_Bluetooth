@@ -62,3 +62,13 @@ flag {
     description: "Queue incoming HID reports if UHID is not ready"
     bug: "345498287"
 }
+
+flag {
+    name: "remove_input_device_on_vup"
+    namespace: "bluetooth"
+    description: "Remove the input device entry on device removal"
+    bug: "354758065"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
