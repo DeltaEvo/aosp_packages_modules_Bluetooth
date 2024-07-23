@@ -28,14 +28,6 @@
 #include "bta/le_audio/le_audio_types.h"
 #include "btm_iso_api_types.h"
 
-namespace server_configurable_flags {
-std::string GetServerConfigurableFlag(const std::string& /* experiment_category_name */,
-                                      const std::string& /* experiment_flag_name */,
-                                      const std::string& /* default_value */) {
-  return "";
-}
-}  // namespace server_configurable_flags
-
 namespace bluetooth {
 namespace {
 

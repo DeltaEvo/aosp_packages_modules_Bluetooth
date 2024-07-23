@@ -92,14 +92,6 @@ stack_config_t mock_stack_config{
 
 const stack_config_t* stack_config_get_interface(void) { return &mock_stack_config; }
 
-namespace server_configurable_flags {
-std::string GetServerConfigurableFlag(const std::string& experiment_category_name,
-                                      const std::string& experiment_flag_name,
-                                      const std::string& default_value) {
-  return "";
-}
-}  // namespace server_configurable_flags
-
 namespace bluetooth {
 namespace audio {
 namespace le_audio {

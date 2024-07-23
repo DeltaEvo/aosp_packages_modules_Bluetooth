@@ -84,14 +84,6 @@ static base::Callback<void(BT_OCTET8)> generator_cb;
 
 void btsnd_hcic_ble_rand(base::Callback<void(BT_OCTET8)> cb) { generator_cb = cb; }
 
-namespace server_configurable_flags {
-std::string GetServerConfigurableFlag(const std::string& experiment_category_name,
-                                      const std::string& experiment_flag_name,
-                                      const std::string& default_value) {
-  return "";
-}
-}  // namespace server_configurable_flags
-
 std::atomic<int> num_async_tasks;
 bluetooth::common::MessageLoopThread message_loop_thread("test message loop");
 bluetooth::common::MessageLoopThread* get_main_thread() { return &message_loop_thread; }
