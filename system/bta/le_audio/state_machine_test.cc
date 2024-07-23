@@ -602,6 +602,8 @@ protected:
   }
 
   void TearDown() override {
+    com::android::bluetooth::flags::provider_->reset_flags();
+
     /* Clear the alarm on tear down in case test case ends when the
      * alarm is scheduled
      */

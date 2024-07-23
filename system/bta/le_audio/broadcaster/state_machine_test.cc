@@ -307,6 +307,7 @@ protected:
   }
 
   void TearDown() override {
+    com::android::bluetooth::flags::provider_->reset_flags();
     iso_manager_->Stop();
     mock_iso_manager_ = nullptr;
     Mock::VerifyAndClearExpectations(sm_callbacks_.get());
@@ -512,9 +513,9 @@ TEST_F(StateMachineTest, UpdateAnnouncement) {
   ASSERT_EQ(first_len + types::LeAudioLtvMap(metadata).RawPacketSize(), second_len);
 }
 
-TEST_F_WITH_FLAGS(
-        StateMachineTest, UpdateBroadcastAnnouncementWithCallback,
-        REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(TEST_BT, leaudio_broadcast_update_metadata_callback))) {
+TEST_F(StateMachineTest, UpdateBroadcastAnnouncementWithCallback) {
+  com::android::bluetooth::flags::provider_->leaudio_broadcast_update_metadata_callback(true);
+
   EXPECT_CALL(*(sm_callbacks_.get()), OnStateMachineCreateStatus(_, true)).Times(1);
 
   auto broadcast_id = InstantiateStateMachine();
@@ -534,9 +535,9 @@ TEST_F_WITH_FLAGS(
   ASSERT_EQ(announcement, broadcasts_[broadcast_id]->GetBroadcastAnnouncement());
 }
 
-TEST_F_WITH_FLAGS(
-        StateMachineTest, UpdatePublicBroadcastAnnouncementWithCallback,
-        REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(TEST_BT, leaudio_broadcast_update_metadata_callback))) {
+TEST_F(StateMachineTest, UpdatePublicBroadcastAnnouncementWithCallback) {
+  com::android::bluetooth::flags::provider_->leaudio_broadcast_update_metadata_callback(true);
+
   EXPECT_CALL(*(sm_callbacks_.get()), OnStateMachineCreateStatus(_, true)).Times(1);
 
   auto broadcast_id = InstantiateStateMachine();
