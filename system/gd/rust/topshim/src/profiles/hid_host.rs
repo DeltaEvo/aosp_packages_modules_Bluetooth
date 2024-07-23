@@ -15,7 +15,7 @@ use topshim_macros::{cb_variant, profile_enabled_or};
 
 use log::warn;
 
-#[derive(Debug, FromPrimitive, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, FromPrimitive, PartialEq, PartialOrd)]
 #[repr(u32)]
 pub enum BthhConnectionState {
     Connected = 0,
