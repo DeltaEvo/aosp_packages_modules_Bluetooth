@@ -944,8 +944,9 @@ void bta_gattc_disc_cmpl(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* /* p_da
   }
 
   if (p_clcb->p_rcb->p_cback) {
-    tBTA_GATTC bta_gattc;
-    bta_gattc.remote_bda = p_clcb->p_srcb->server_bda;
+    tBTA_GATTC bta_gattc = {
+            .service_discovery_done.remote_bda = p_clcb->p_srcb->server_bda,
+    };
     (*p_clcb->p_rcb->p_cback)(BTA_GATTC_SRVC_DISC_DONE_EVT, &bta_gattc);
   }
 }

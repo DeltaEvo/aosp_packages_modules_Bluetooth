@@ -5766,7 +5766,7 @@ void le_audio_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
       break;
 
     case BTA_GATTC_SRVC_DISC_DONE_EVT:
-      instance->OnGattServiceDiscoveryDone(p_data->service_changed.remote_bda);
+      instance->OnGattServiceDiscoveryDone(p_data->service_discovery_done.remote_bda);
       break;
 
     case BTA_GATTC_SRVC_CHG_EVT:
