@@ -39,8 +39,8 @@ class AdapterBinder(rawBinder: IBinder) {
     }
 
     @Throws(RemoteException::class)
-    fun enable(quietMode: Boolean, source: AttributionSource) {
-        adapterBinder.enable(quietMode, source)
+    fun offToBleOn(quietMode: Boolean, source: AttributionSource) {
+        adapterBinder.offToBleOn(quietMode, source)
     }
 
     @Throws(RemoteException::class)
