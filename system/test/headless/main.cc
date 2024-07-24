@@ -16,8 +16,8 @@
 
 #define LOG_TAG "bt_headless"
 
+#include <bluetooth/log.h>
 #include <fcntl.h>
-#include <stdio.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -25,8 +25,7 @@
 #include <iostream>
 #include <unordered_map>
 
-#include "base/logging.h"     // LOG() stdout and android log
-#include "os/log.h"           // android log only
+#include "os/log.h"  // android log only
 #include "test/headless/adapter/adapter.h"
 #include "test/headless/connect/connect.h"
 #include "test/headless/discovery/discovery.h"
@@ -43,6 +42,7 @@
 #include "test/headless/util.h"
 
 using namespace bluetooth::test::headless;
+using namespace bluetooth;
 
 int console_fd = -1;
 
@@ -61,12 +61,11 @@ FILE* redirected_stderr_{nullptr};
 // This keeps everybody happy.
 void start_trick_the_android_logging_subsystem() {
   redirected_stderr_ = freopen(kRedirectedStderrFilename, "w", stderr);
-  ASSERT_LOG(redirected_stderr_ != nullptr,
-             "Unable to open redirected stderr file");
+  log::assert_that(redirected_stderr_ != nullptr, "Unable to open redirected stderr file");
 }
 
 void stop_trick_the_android_logging_subsystem() {
-  ASSERT(redirected_stderr_ != nullptr);
+  log::assert_that(redirected_stderr_ != nullptr, "assert failed: redirected_stderr_ != nullptr");
   fclose(redirected_stderr_);
   redirected_stderr_ = nullptr;
 }
@@ -77,7 +76,7 @@ void clear_logcat() {
     // parent process
     int status;
     waitpid(pid, &status, 0);  // wait for the child to exit
-    ASSERT_LOG(WIFEXITED(status), "Unable to clear logcat");
+    log::assert_that(WIFEXITED(status), "Unable to clear logcat");
   } else {
     // child process
     const char exec[] = "/system/bin/logcat";
@@ -85,44 +84,29 @@ void clear_logcat() {
 
     execl(exec, exec, arg0, NULL);
 
-    ASSERT_LOG(false, "Should not return from exec process");
+    log::fatal("Should not return from exec process");
   }
 }
 
 class Main : public HeadlessTest<int> {
- public:
-  Main(const bluetooth::test::headless::GetOpt& options)
-      : HeadlessTest<int>(options) {
-    test_nodes_.emplace(
-        "adapter",
-        std::make_unique<bluetooth::test::headless::Adapter>(options));
-    test_nodes_.emplace(
-        "dumpsys",
-        std::make_unique<bluetooth::test::headless::Dumpsys>(options));
-    test_nodes_.emplace(
-        "connect",
-        std::make_unique<bluetooth::test::headless::Connect>(options));
-    test_nodes_.emplace(
-        "mode", std::make_unique<bluetooth::test::headless::Mode>(options));
-    test_nodes_.emplace(
-        "nop", std::make_unique<bluetooth::test::headless::Nop>(options));
-    test_nodes_.emplace(
-        "pairing",
-        std::make_unique<bluetooth::test::headless::Pairing>(options));
-    test_nodes_.emplace(
-        "read", std::make_unique<bluetooth::test::headless::Read>(options));
-    test_nodes_.emplace(
-        "scan", std::make_unique<bluetooth::test::headless::Scan>(options));
-    test_nodes_.emplace(
-        "sdp", std::make_unique<bluetooth::test::headless::Sdp>(options));
-    test_nodes_.emplace(
-        "discovery",
-        std::make_unique<bluetooth::test::headless::Discovery>(options));
+public:
+  Main(const bluetooth::test::headless::GetOpt& options) : HeadlessTest<int>(options) {
+    test_nodes_.emplace("adapter", std::make_unique<bluetooth::test::headless::Adapter>(options));
+    test_nodes_.emplace("dumpsys", std::make_unique<bluetooth::test::headless::Dumpsys>(options));
+    test_nodes_.emplace("connect", std::make_unique<bluetooth::test::headless::Connect>(options));
+    test_nodes_.emplace("mode", std::make_unique<bluetooth::test::headless::Mode>(options));
+    test_nodes_.emplace("nop", std::make_unique<bluetooth::test::headless::Nop>(options));
+    test_nodes_.emplace("pairing", std::make_unique<bluetooth::test::headless::Pairing>(options));
+    test_nodes_.emplace("read", std::make_unique<bluetooth::test::headless::Read>(options));
+    test_nodes_.emplace("scan", std::make_unique<bluetooth::test::headless::Scan>(options));
+    test_nodes_.emplace("sdp", std::make_unique<bluetooth::test::headless::Sdp>(options));
+    test_nodes_.emplace("discovery",
+                        std::make_unique<bluetooth::test::headless::Discovery>(options));
   }
 
   int Run() override {
     console_fd = fcntl(STDERR_FILENO, F_DUPFD_CLOEXEC, STDERR_FILENO);
-    ASSERT(console_fd != -1);
+    log::assert_that(console_fd != -1, "assert failed: console_fd != -1");
     if (options_.close_stderr_) {
       fclose(stderr);
     }

@@ -16,6 +16,7 @@
 
 #include "os/reactor.h"
 
+#include <bluetooth/log.h>
 #include <fcntl.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
@@ -44,10 +45,10 @@ using common::Closure;
 struct Reactor::Event::impl {
   impl() {
     fd_ = eventfd(0, EFD_SEMAPHORE | EFD_NONBLOCK);
-    ASSERT_LOG(fd_ != -1, "Unable to create nonblocking event file descriptor semaphore");
+    log::assert_that(fd_ != -1, "Unable to create nonblocking event file descriptor semaphore");
   }
   ~impl() {
-    ASSERT_LOG(fd_ != -1, "Unable to close a never-opened event file descriptor");
+    log::assert_that(fd_ != -1, "Unable to close a never-opened event file descriptor");
     close(fd_);
     fd_ = -1;
   }
@@ -55,17 +56,13 @@ struct Reactor::Event::impl {
 };
 
 Reactor::Event::Event() : pimpl_(new impl()) {}
-Reactor::Event::~Event() {
-  delete pimpl_;
-}
+Reactor::Event::~Event() { delete pimpl_; }
 
 bool Reactor::Event::Read() {
   uint64_t val = 0;
   return eventfd_read(pimpl_->fd_, &val) == 0;
 }
-int Reactor::Event::Id() const {
-  return pimpl_->fd_;
-}
+int Reactor::Event::Id() const { return pimpl_->fd_; }
 void Reactor::Event::Clear() {
   uint64_t val;
   while (eventfd_read(pimpl_->fd_, &val) == 0) {
@@ -74,16 +71,16 @@ void Reactor::Event::Clear() {
 void Reactor::Event::Close() {
   int close_status;
   RUN_NO_INTR(close_status = close(pimpl_->fd_));
-  ASSERT(close_status != -1);
+  log::assert_that(close_status != -1, "assert failed: close_status != -1");
 }
 void Reactor::Event::Notify() {
   uint64_t val = 1;
   auto write_result = eventfd_write(pimpl_->fd_, val);
-  ASSERT(write_result != -1);
+  log::assert_that(write_result != -1, "assert failed: write_result != -1");
 }
 
 class Reactor::Reactable {
- public:
+public:
   Reactable(int fd, Closure on_read_ready, Closure on_write_ready)
       : fd_(fd),
         on_read_ready_(std::move(on_read_ready)),
@@ -101,32 +98,32 @@ class Reactor::Reactable {
 
 Reactor::Reactor() : epoll_fd_(0), control_fd_(0), is_running_(false) {
   RUN_NO_INTR(epoll_fd_ = epoll_create1(EPOLL_CLOEXEC));
-  ASSERT_LOG(epoll_fd_ != -1, "could not create epoll fd: %s", strerror(errno));
+  log::assert_that(epoll_fd_ != -1, "could not create epoll fd: {}", strerror(errno));
 
   control_fd_ = eventfd(0, EFD_NONBLOCK);
-  ASSERT(control_fd_ != -1);
+  log::assert_that(control_fd_ != -1, "assert failed: control_fd_ != -1");
 
   epoll_event control_epoll_event = {EPOLLIN, {.ptr = nullptr}};
   int result;
   RUN_NO_INTR(result = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, control_fd_, &control_epoll_event));
-  ASSERT(result != -1);
+  log::assert_that(result != -1, "assert failed: result != -1");
 }
 
 Reactor::~Reactor() {
   int result;
   RUN_NO_INTR(result = epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, control_fd_, nullptr));
-  ASSERT(result != -1);
+  log::assert_that(result != -1, "assert failed: result != -1");
 
   RUN_NO_INTR(result = close(control_fd_));
-  ASSERT(result != -1);
+  log::assert_that(result != -1, "assert failed: result != -1");
 
   RUN_NO_INTR(result = close(epoll_fd_));
-  ASSERT(result != -1);
+  log::assert_that(result != -1, "assert failed: result != -1");
 }
 
 void Reactor::Run() {
   bool already_running = is_running_.exchange(true);
-  ASSERT(!already_running);
+  log::assert_that(!already_running, "assert failed: !already_running");
 
   int timeout_ms = -1;
   bool waiting_for_idle = false;
@@ -138,7 +135,7 @@ void Reactor::Run() {
     epoll_event events[kEpollMaxEvents];
     int count;
     RUN_NO_INTR(count = epoll_wait(epoll_fd_, events, kEpollMaxEvents, timeout_ms));
-    ASSERT(count != -1);
+    log::assert_that(count != -1, "epoll_wait failed: fd={}, err={}", epoll_fd_, strerror(errno));
     if (waiting_for_idle && count == 0) {
       timeout_ms = -1;
       waiting_for_idle = false;
@@ -149,7 +146,7 @@ void Reactor::Run() {
 
     for (int i = 0; i < count; ++i) {
       auto event = events[i];
-      ASSERT(event.events != 0u);
+      log::assert_that(event.events != 0u, "assert failed: event.events != 0u");
 
       // If the ptr stored in epoll_event.data is nullptr, it means the control fd triggered
       if (event.data.ptr == nullptr) {
@@ -163,7 +160,7 @@ void Reactor::Run() {
           waiting_for_idle = true;
           continue;
         } else {
-          LOG_ERROR("Unknown control_fd value %" PRIu64 "x", value);
+          log::error("Unknown control_fd value {:x}", value);
           continue;
         }
       }
@@ -171,7 +168,8 @@ void Reactor::Run() {
       std::unique_lock<std::mutex> lock(mutex_);
       executing_reactable_finished_ = nullptr;
       // See if this reactable has been removed in the meantime.
-      if (std::find(invalidation_list_.begin(), invalidation_list_.end(), reactable) != invalidation_list_.end()) {
+      if (std::find(invalidation_list_.begin(), invalidation_list_.end(), reactable) !=
+          invalidation_list_.end()) {
         continue;
       }
 
@@ -180,7 +178,8 @@ void Reactor::Run() {
         lock.unlock();
         reactable->is_executing_ = true;
       }
-      if (event.events & (EPOLLIN | EPOLLHUP | EPOLLRDHUP | EPOLLERR) && !reactable->on_read_ready_.is_null()) {
+      if (event.events & (EPOLLIN | EPOLLHUP | EPOLLRDHUP | EPOLLERR) &&
+          !reactable->on_read_ready_.is_null()) {
         reactable->on_read_ready_.Run();
       }
       if (event.events & EPOLLOUT && !reactable->on_write_ready_.is_null()) {
@@ -201,10 +200,10 @@ void Reactor::Run() {
 
 void Reactor::Stop() {
   if (!is_running_) {
-    LOG_WARN("not running, will stop once it's started");
+    log::warn("not running, will stop once it's started");
   }
   auto control = eventfd_write(control_fd_, kStopReactor);
-  ASSERT(control != -1);
+  log::assert_that(control != -1, "assert failed: control != -1");
 }
 
 std::unique_ptr<Reactor::Event> Reactor::NewEvent() const {
@@ -221,17 +220,17 @@ Reactor::Reactable* Reactor::Register(int fd, Closure on_read_ready, Closure on_
   }
   auto* reactable = new Reactable(fd, on_read_ready, on_write_ready);
   epoll_event event = {
-      .events = poll_event_type,
-      .data = {.ptr = reactable},
+          .events = poll_event_type,
+          .data = {.ptr = reactable},
   };
   int register_fd;
   RUN_NO_INTR(register_fd = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &event));
-  ASSERT(register_fd != -1);
+  log::assert_that(register_fd != -1, "assert failed: register_fd != -1");
   return reactable;
 }
 
 void Reactor::Unregister(Reactor::Reactable* reactable) {
-  ASSERT(reactable != nullptr);
+  log::assert_that(reactable != nullptr, "assert failed: reactable != nullptr");
   {
     std::lock_guard<std::mutex> lock(mutex_);
     invalidation_list_.push_back(reactable);
@@ -242,17 +241,19 @@ void Reactor::Unregister(Reactor::Reactable* reactable) {
     std::lock_guard<std::mutex> reactable_lock(reactable->mutex_);
     RUN_NO_INTR(result = epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, reactable->fd_, nullptr));
     if (result == -1 && errno == ENOENT) {
-      LOG_INFO("reactable is invalid or unregistered");
+      log::info("reactable is invalid or unregistered");
     } else {
-      ASSERT(result != -1);
+      log::assert_that(result != -1, "could not unregister epoll fd: {}", strerror(errno));
     }
 
-    // If we are unregistering during the callback event from this reactable, we delete it after the callback is
-    // executed. reactable->is_executing_ is protected by reactable->mutex_, so it's thread safe.
+    // If we are unregistering during the callback event from this reactable, we delete it after the
+    // callback is executed. reactable->is_executing_ is protected by reactable->mutex_, so it's
+    // thread safe.
     if (reactable->is_executing_) {
       reactable->removed_ = true;
       reactable->finished_promise_ = std::make_unique<std::promise<void>>();
-      executing_reactable_finished_ = std::make_shared<std::future<void>>(reactable->finished_promise_->get_future());
+      executing_reactable_finished_ =
+              std::make_shared<std::future<void>>(reactable->finished_promise_->get_future());
       delaying_delete_until_callback_finished = true;
     }
   }
@@ -269,7 +270,7 @@ bool Reactor::WaitForUnregisteredReactable(std::chrono::milliseconds timeout) {
   }
   auto stop_status = executing_reactable_finished_->wait_for(timeout);
   if (stop_status != std::future_status::ready) {
-    LOG_ERROR("Unregister reactable timed out");
+    log::error("Unregister reactable timed out");
   }
   return stop_status == std::future_status::ready;
 }
@@ -283,14 +284,14 @@ bool Reactor::WaitForIdle(std::chrono::milliseconds timeout) {
   }
 
   auto control = eventfd_write(control_fd_, kWaitForIdle);
-  ASSERT(control != -1);
+  log::assert_that(control != -1, "assert failed: control != -1");
 
   auto idle_status = future->wait_for(timeout);
   return idle_status == std::future_status::ready;
 }
 
 void Reactor::ModifyRegistration(Reactor::Reactable* reactable, ReactOn react_on) {
-  ASSERT(reactable != nullptr);
+  log::assert_that(reactable != nullptr, "assert failed: reactable != nullptr");
 
   uint32_t poll_event_type = 0;
   if (react_on == REACT_ON_READ_ONLY || react_on == REACT_ON_READ_WRITE) {
@@ -300,12 +301,12 @@ void Reactor::ModifyRegistration(Reactor::Reactable* reactable, ReactOn react_on
     poll_event_type |= EPOLLOUT;
   }
   epoll_event event = {
-      .events = poll_event_type,
-      .data = {.ptr = reactable},
+          .events = poll_event_type,
+          .data = {.ptr = reactable},
   };
   int modify_fd;
   RUN_NO_INTR(modify_fd = epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, reactable->fd_, &event));
-  ASSERT(modify_fd != -1);
+  log::assert_that(modify_fd != -1, "assert failed: modify_fd != -1");
 }
 
 }  // namespace os

@@ -41,9 +41,8 @@ namespace shim {
  *                  BTM_SetSecurityLevel().
  *
  ******************************************************************************/
-uint16_t L2CA_Register(uint16_t psm, const tL2CAP_APPL_INFO& p_cb_info,
-                       bool enable_snoop, tL2CAP_ERTM_INFO* p_ertm_info,
-                       uint16_t my_mtu, uint16_t required_remote_mtu,
+uint16_t L2CA_Register(uint16_t psm, const tL2CAP_APPL_INFO& p_cb_info, bool enable_snoop,
+                       tL2CAP_ERTM_INFO* p_ertm_info, uint16_t my_mtu, uint16_t required_remote_mtu,
                        uint16_t sec_level);
 
 /*******************************************************************************
@@ -110,8 +109,8 @@ uint16_t L2CA_ConnectReq(uint16_t psm, const RawAddress& p_bd_addr);
  *                  and BTM_SetSecurityLevel().
  *
  ******************************************************************************/
-uint16_t L2CA_RegisterLECoc(uint16_t psm, const tL2CAP_APPL_INFO& p_cb_info,
-                            uint16_t sec_level, tL2CAP_LE_CFG_INFO cfg);
+uint16_t L2CA_RegisterLECoc(uint16_t psm, const tL2CAP_APPL_INFO& p_cb_info, uint16_t sec_level,
+                            tL2CAP_LE_CFG_INFO cfg);
 
 /*******************************************************************************
  *
@@ -137,8 +136,7 @@ void L2CA_DeregisterLECoc(uint16_t psm);
  * Returns          the CID of the connection, or 0 if it failed to start
  *
  ******************************************************************************/
-uint16_t L2CA_ConnectLECocReq(uint16_t psm, const RawAddress& p_bd_addr,
-                              tL2CAP_LE_CFG_INFO* p_cfg);
+uint16_t L2CA_ConnectLECocReq(uint16_t psm, const RawAddress& p_bd_addr, tL2CAP_LE_CFG_INFO* p_cfg);
 
 /*******************************************************************************
  *
@@ -162,8 +160,7 @@ bool L2CA_GetPeerLECocConfig(uint16_t lcid, tL2CAP_LE_CFG_INFO* peer_cfg);
  *
  ******************************************************************************/
 
-bool L2CA_ReconfigCreditBasedConnsReq(const RawAddress& bd_addr,
-                                      std::vector<uint16_t>& lcids,
+bool L2CA_ReconfigCreditBasedConnsReq(const RawAddress& bd_addr, std::vector<uint16_t>& lcids,
                                       tL2CAP_LE_CFG_INFO* p_cfg);
 
 /*******************************************************************************
@@ -179,8 +176,8 @@ bool L2CA_ReconfigCreditBasedConnsReq(const RawAddress& bd_addr,
  *
  ******************************************************************************/
 
-extern std::vector<uint16_t> L2CA_ConnectCreditBasedReq(
-    uint16_t psm, const RawAddress& p_bd_addr, tL2CAP_LE_CFG_INFO* p_cfg);
+extern std::vector<uint16_t> L2CA_ConnectCreditBasedReq(uint16_t psm, const RawAddress& p_bd_addr,
+                                                        tL2CAP_LE_CFG_INFO* p_cfg);
 
 /*******************************************************************************
  *
@@ -194,8 +191,8 @@ extern std::vector<uint16_t> L2CA_ConnectCreditBasedReq(
  ******************************************************************************/
 
 bool L2CA_ConnectCreditBasedRsp(const RawAddress& p_bd_addr, uint8_t id,
-                                std::vector<uint16_t>& accepted_lcids,
-                                uint16_t result, tL2CAP_LE_CFG_INFO* p_cfg);
+                                std::vector<uint16_t>& accepted_lcids, uint16_t result,
+                                tL2CAP_LE_CFG_INFO* p_cfg);
 
 /*******************************************************************************
  *
@@ -216,21 +213,16 @@ bool L2CA_DisconnectLECocReq(uint16_t cid);
  *
  * Description      Higher layers call this function to write data.
  *
- * Returns          L2CAP_DW_SUCCESS, if data accepted, else false
- *                  L2CAP_DW_CONGESTED, if data accepted and the channel is
- *                                      congested
- *                  L2CAP_DW_FAILED, if error
+ * Returns          tL2CAP_DW_RESULT::SUCCESS, if data accepted, else
+ *                  false
+ *                  tL2CAP_DW_RESULT::CONGESTED, if data accepted
+ *                  and the channel is congested
+ *                  tL2CAP_DW_RESULT::FAILED, if error
  *
  ******************************************************************************/
 uint8_t L2CA_DataWrite(uint16_t cid, BT_HDR* p_data);
 
 uint8_t L2CA_LECocDataWrite(uint16_t cid, BT_HDR* p_data);
-
-// Given a local channel identifier, |lcid|, this function returns the bound
-// remote channel identifier, |rcid|. If
-// |lcid| is not known or is invalid, this function returns false and does not
-// modify the value pointed at by |rcid|. |rcid| may be NULL.
-bool L2CA_GetRemoteCid(uint16_t lcid, uint16_t* rcid);
 
 /*******************************************************************************
  *
@@ -318,8 +310,7 @@ bool L2CA_SetChnlFlushability(uint16_t cid, bool is_flushable);
  *  Return value:    true if peer is connected
  *
  ******************************************************************************/
-bool L2CA_GetPeerFeatures(const RawAddress& bd_addr, uint32_t* p_ext_feat,
-                          uint8_t* p_chnl_mask);
+bool L2CA_GetPeerFeatures(const RawAddress& bd_addr, uint32_t* p_ext_feat, uint8_t* p_chnl_mask);
 
 /*******************************************************************************
  *
@@ -333,8 +324,7 @@ bool L2CA_GetPeerFeatures(const RawAddress& bd_addr, uint32_t* p_ext_feat,
  *  Return value:   true if registered OK
  *
  ******************************************************************************/
-bool L2CA_RegisterFixedChannel(uint16_t fixed_cid,
-                               tL2CAP_FIXED_CHNL_REG* p_freg);
+bool L2CA_RegisterFixedChannel(uint16_t fixed_cid, tL2CAP_FIXED_CHNL_REG* p_freg);
 
 /*******************************************************************************
  *
@@ -360,12 +350,11 @@ bool L2CA_ConnectFixedChnl(uint16_t fixed_cid, const RawAddress& bd_addr);
  *                  BD Address of remote
  *                  Pointer to buffer of type BT_HDR
  *
- * Return value     L2CAP_DW_SUCCESS, if data accepted
- *                  L2CAP_DW_FAILED,  if error
+ * Return value     tL2CAP_DW_RESULT::SUCCESS, if data accepted
+ *                  tL2CAP_DW_RESULT::FAILED,  if error
  *
  ******************************************************************************/
-uint16_t L2CA_SendFixedChnlData(uint16_t fixed_cid, const RawAddress& rem_bda,
-                                BT_HDR* p_buf);
+uint16_t L2CA_SendFixedChnlData(uint16_t fixed_cid, const RawAddress& rem_bda, BT_HDR* p_buf);
 
 /*******************************************************************************
  *
@@ -385,9 +374,8 @@ bool L2CA_RemoveFixedChnl(uint16_t fixed_cid, const RawAddress& rem_bda);
 uint16_t L2CA_GetLeHandle(const RawAddress& rem_bda);
 hci_role_t L2CA_GetBleConnRole(const RawAddress& bd_addr);
 
-void L2CA_LeConnectionUpdate(const RawAddress& rem_bda, uint16_t min_int,
-                             uint16_t max_int, uint16_t latency,
-                             uint16_t timeout, uint16_t min_ce_len,
+void L2CA_LeConnectionUpdate(const RawAddress& rem_bda, uint16_t min_int, uint16_t max_int,
+                             uint16_t latency, uint16_t timeout, uint16_t min_ce_len,
                              uint16_t max_ce_len);
 
 /*******************************************************************************
@@ -411,23 +399,20 @@ bool L2CA_SetLeGattTimeout(const RawAddress& rem_bda, uint16_t idle_tout);
 
 bool L2CA_MarkLeLinkAsActive(const RawAddress& rem_bda);
 
-bool L2CA_UpdateBleConnParams(const RawAddress& rem_bda, uint16_t min_int,
-                              uint16_t max_int, uint16_t latency,
-                              uint16_t timeout, uint16_t min_ce_len,
+bool L2CA_UpdateBleConnParams(const RawAddress& rem_bda, uint16_t min_int, uint16_t max_int,
+                              uint16_t latency, uint16_t timeout, uint16_t min_ce_len,
                               uint16_t max_ce_len);
 /* When called with lock=true, LE connection parameters will be locked on
  * fastest value, and we won't accept request to change it from remote. When
  * called with lock=false, parameters are relaxed.
  */
-void L2CA_LockBleConnParamsForServiceDiscovery(const RawAddress& rem_bda,
-                                               bool lock);
+void L2CA_LockBleConnParamsForServiceDiscovery(const RawAddress& rem_bda, bool lock);
 
 /* When called with lock=true, LE connection parameters will be locked on
  * fastest value, and we won't accept request to change it from remote. When
  * called with lock=false, parameters are relaxed.
  */
-void L2CA_LockBleConnParamsForProfileConnection(const RawAddress& rem_bda,
-                                                bool lock);
+void L2CA_LockBleConnParamsForProfileConnection(const RawAddress& rem_bda, bool lock);
 
 /*******************************************************************************
  *
@@ -452,8 +437,8 @@ void L2CA_SetBondingState(const RawAddress& p_bd_addr, bool is_bonding);
 
 void L2CA_SwitchRoleToCentral(const RawAddress& addr);
 
-bool L2CA_ReadRemoteVersion(const RawAddress& addr, uint8_t* lmp_version,
-                            uint16_t* manufacturer, uint16_t* lmp_sub_version);
+bool L2CA_ReadRemoteVersion(const RawAddress& addr, uint8_t* lmp_version, uint16_t* manufacturer,
+                            uint16_t* lmp_sub_version);
 
 uint8_t* L2CA_ReadRemoteFeatures(const RawAddress& addr);
 
@@ -463,12 +448,10 @@ uint16_t L2CA_GetNumLinks();
 
 bool L2CA_IsLeLink(uint16_t acl_handle);
 
-void L2CA_ReadConnectionAddr(const RawAddress& pseudo_addr,
-                             RawAddress& conn_addr,
+void L2CA_ReadConnectionAddr(const RawAddress& pseudo_addr, RawAddress& conn_addr,
                              tBLE_ADDR_TYPE* p_addr_type);
 
-bool L2CA_ReadRemoteConnectionAddr(const RawAddress& pseudo_addr,
-                                   RawAddress& conn_addr,
+bool L2CA_ReadRemoteConnectionAddr(const RawAddress& pseudo_addr, RawAddress& conn_addr,
                                    tBLE_ADDR_TYPE* p_addr_type);
 
 }  // namespace shim

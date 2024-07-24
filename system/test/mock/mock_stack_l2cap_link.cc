@@ -44,9 +44,7 @@ tL2C_CCB* l2cu_get_next_channel_in_rr(tL2C_LCB* /* p_lcb */) {
 void l2c_OnHciModeChangeSendPendingPackets(RawAddress /* remote */) {
   inc_func_call_count(__func__);
 }
-void l2c_info_resp_timer_timeout(void* /* data */) {
-  inc_func_call_count(__func__);
-}
+void l2c_info_resp_timer_timeout(void* /* data */) { inc_func_call_count(__func__); }
 void l2c_link_adjust_allocation(void) { inc_func_call_count(__func__); }
 void l2c_link_adjust_chnl_allocation(void) { inc_func_call_count(__func__); }
 void l2c_link_check_send_pkts(tL2C_LCB* /* p_lcb */, uint16_t /* local_cid */,
@@ -57,30 +55,22 @@ void l2c_link_hci_conn_comp(tHCI_STATUS /* status */, uint16_t /* handle */,
                             const RawAddress& /* p_bda */) {
   inc_func_call_count(__func__);
 }
-void l2c_link_init(const uint16_t /* acl_buffer_count_classic */) {
+void l2c_link_init(const uint16_t /* acl_buffer_count_classic */) { inc_func_call_count(__func__); }
+void l2c_link_role_changed(const RawAddress* /* bd_addr */, tHCI_ROLE /* new_role */,
+                           tHCI_STATUS /* hci_status */) {
   inc_func_call_count(__func__);
 }
-void l2c_link_role_changed(const RawAddress* /* bd_addr */,
-                           uint8_t /* new_role */, uint8_t /* hci_status */) {
-  inc_func_call_count(__func__);
-}
-void l2c_link_sec_comp(const RawAddress* /* p_bda */,
-                       tBT_TRANSPORT /* transport */, void* /* p_ref_data */,
-                       uint8_t /* status */) {
+void l2c_link_sec_comp(const RawAddress* /* p_bda */, tBT_TRANSPORT /* transport */,
+                       void* /* p_ref_data */, uint8_t /* status */) {
   inc_func_call_count(__func__);
 }
 
-void l2c_link_segments_xmitted(BT_HDR* /* p_msg */) {
-  inc_func_call_count(__func__);
-}
+void l2c_link_segments_xmitted(BT_HDR* /* p_msg */) { inc_func_call_count(__func__); }
 void l2c_link_timeout(tL2C_LCB* /* p_lcb */) { inc_func_call_count(__func__); }
 void l2c_packets_completed(uint16_t /* handle */, uint16_t /* num_sent */) {
   inc_func_call_count(__func__);
 }
-void l2c_pin_code_request(const RawAddress& /* bd_addr */) {
-  inc_func_call_count(__func__);
-}
-void l2cble_update_sec_act(const RawAddress& /* bd_addr */,
-                           uint16_t /* sec_act */) {
+void l2c_pin_code_request(const RawAddress& /* bd_addr */) { inc_func_call_count(__func__); }
+void l2cble_update_sec_act(const RawAddress& /* bd_addr */, uint16_t /* sec_act */) {
   inc_func_call_count(__func__);
 }

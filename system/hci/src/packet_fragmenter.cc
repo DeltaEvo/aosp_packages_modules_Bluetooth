@@ -20,14 +20,13 @@
 
 #include "packet_fragmenter.h"
 
-#include <base/logging.h>
+#include <bluetooth/log.h>
 #include <string.h>
 
 #include <unordered_map>
 
 #include "hci/include/buffer_allocator.h"
 #include "hci/include/hci_layer.h"
-#include "include/check.h"
 #include "internal_include/bt_target.h"
 #include "os/log.h"
 #include "stack/include/bt_hdr.h"
@@ -46,25 +45,21 @@
 // 2 bytes for handle, 2 bytes for data length (Volume 2, Part E, 5.4.5)
 #define HCI_ISO_PREAMBLE_SIZE 4
 
-#define HCI_ISO_HEADER_LEN_WITHOUT_TS \
-  (HCI_ISO_HEADER_ISO_LEN_SIZE + HCI_ISO_HEADER_PACKET_SEQ_SIZE)
-#define HCI_ISO_HEADER_LEN_WITH_TS \
-  (HCI_ISO_HEADER_LEN_WITHOUT_TS + HCI_ISO_HEADER_TIMESTAMP_SIZE)
+#define HCI_ISO_HEADER_LEN_WITHOUT_TS (HCI_ISO_HEADER_ISO_LEN_SIZE + HCI_ISO_HEADER_PACKET_SEQ_SIZE)
+#define HCI_ISO_HEADER_LEN_WITH_TS (HCI_ISO_HEADER_LEN_WITHOUT_TS + HCI_ISO_HEADER_TIMESTAMP_SIZE)
 
-#define HCI_ISO_SET_CONTINUATION_FLAG(handle) \
-  (((handle)&0x4FFF) | (0x0001 << 12))
-#define HCI_ISO_SET_COMPLETE_FLAG(handle) (((handle)&0x4FFF) | (0x0002 << 12))
-#define HCI_ISO_SET_END_FRAG_FLAG(handle) (((handle)&0x4FFF) | (0x0003 << 12))
-#define HCI_ISO_SET_TIMESTAMP_FLAG(handle) (((handle)&0x3FFF) | (0x0001 << 14))
+#define HCI_ISO_SET_CONTINUATION_FLAG(handle) (((handle) & 0x4FFF) | (0x0001 << 12))
+#define HCI_ISO_SET_COMPLETE_FLAG(handle) (((handle) & 0x4FFF) | (0x0002 << 12))
+#define HCI_ISO_SET_END_FRAG_FLAG(handle) (((handle) & 0x4FFF) | (0x0003 << 12))
+#define HCI_ISO_SET_TIMESTAMP_FLAG(handle) (((handle) & 0x3FFF) | (0x0001 << 14))
 
 #define HCI_ISO_GET_TS_FLAG(handle) (((handle) >> 14) & 0x0001)
-#define HCI_ISO_GET_PACKET_STATUS_FLAGS(iso_sdu_length) \
-  (iso_sdu_length & 0xC000)
+#define HCI_ISO_GET_PACKET_STATUS_FLAGS(iso_sdu_length) (iso_sdu_length & 0xC000)
 #define HCI_ISO_SDU_LENGTH_MASK 0x0FFF
 
-#define APPLY_CONTINUATION_FLAG(handle) (((handle)&0xCFFF) | 0x1000)
-#define APPLY_START_FLAG(handle) (((handle)&0xCFFF) | 0x2000)
-#define SUB_EVENT(event) ((event)&MSG_SUB_EVT_MASK)
+#define APPLY_CONTINUATION_FLAG(handle) (((handle) & 0xCFFF) | 0x1000)
+#define APPLY_START_FLAG(handle) (((handle) & 0xCFFF) | 0x2000)
+#define SUB_EVENT(event) ((event) & MSG_SUB_EVT_MASK)
 #define GET_BOUNDARY_FLAG(handle) (((handle) >> 12) & 0x0003)
 #define GET_BROADCAST_FLAG(handle) (((handle) >> 14) & 0x0003)
 
@@ -76,6 +71,8 @@
 #define L2CAP_HEADER_SIZE (L2CAP_HEADER_PDU_LEN_SIZE + L2CAP_HEADER_CID_SIZE)
 
 // Our interface and callbacks
+
+using namespace bluetooth;
 
 static const allocator_t* buffer_allocator;
 static const packet_fragmenter_callbacks_t* callbacks;
@@ -89,11 +86,12 @@ static void init(const packet_fragmenter_callbacks_t* result_callbacks) {
 static void cleanup() { partial_iso_packets.clear(); }
 
 static void fragment_and_dispatch(BT_HDR* packet, uint16_t max_data_size) {
-  CHECK(packet != NULL);
+  log::assert_that(packet != NULL, "assert failed: packet != NULL");
 
   uint16_t event = packet->event & MSG_EVT_MASK;
 
-  CHECK(event == MSG_STACK_TO_HC_HCI_ISO);
+  log::assert_that(event == MSG_STACK_TO_HC_HCI_ISO,
+                   "assert failed: event == MSG_STACK_TO_HC_HCI_ISO");
 
   uint8_t* stream = packet->data + packet->offset;
   uint16_t max_packet_size = max_data_size + HCI_ISO_PREAMBLE_SIZE;
@@ -127,11 +125,9 @@ static void fragment_and_dispatch(BT_HDR* packet, uint16_t max_data_size) {
       // Write the ISO header for the next fragment
       stream = packet->data + packet->offset;
       if (remaining_length > max_packet_size) {
-        UINT16_TO_STREAM(stream,
-                         HCI_ISO_SET_CONTINUATION_FLAG(handle & HANDLE_MASK));
+        UINT16_TO_STREAM(stream, HCI_ISO_SET_CONTINUATION_FLAG(handle & HANDLE_MASK));
       } else {
-        UINT16_TO_STREAM(stream,
-                         HCI_ISO_SET_END_FRAG_FLAG(handle & HANDLE_MASK));
+        UINT16_TO_STREAM(stream, HCI_ISO_SET_END_FRAG_FLAG(handle & HANDLE_MASK));
       }
       UINT16_TO_STREAM(stream, remaining_length - HCI_ISO_PREAMBLE_SIZE);
     }
@@ -148,14 +144,16 @@ static void reassemble_and_dispatch(BT_HDR* packet) {
   uint16_t iso_full_len;
 
   uint16_t event = packet->event & MSG_EVT_MASK;
-  CHECK(event == MSG_HC_TO_STACK_HCI_ISO);
+  log::assert_that(event == MSG_HC_TO_STACK_HCI_ISO,
+                   "assert failed: event == MSG_HC_TO_STACK_HCI_ISO");
 
   STREAM_TO_UINT16(handle, stream);
   STREAM_TO_UINT16(iso_length, stream);
   // last 2 bits is RFU
   iso_length = iso_length & 0x3FFF;
 
-  CHECK(iso_length == packet->len - HCI_ISO_PREAMBLE_SIZE);
+  log::assert_that(iso_length == packet->len - HCI_ISO_PREAMBLE_SIZE,
+                   "assert failed: iso_length == packet->len - HCI_ISO_PREAMBLE_SIZE");
 
   uint8_t boundary_flag = GET_BOUNDARY_FLAG(handle);
   uint8_t ts_flag = HCI_ISO_GET_TS_FLAG(handle);
@@ -170,10 +168,9 @@ static void reassemble_and_dispatch(BT_HDR* packet) {
       uint8_t packet_status_flags;
 
       if (map_iter != partial_iso_packets.end()) {
-        LOG_WARN(
-            "%s found unfinished packet for the iso handle with start packet. "
-            "Dropping old.",
-            __func__);
+        log::warn(
+                "found unfinished packet for the iso handle with start packet. "
+                "Dropping old.");
         BT_HDR* hdl = map_iter->second;
         partial_iso_packets.erase(map_iter);
         buffer_allocator->free(hdl);
@@ -187,8 +184,7 @@ static void reassemble_and_dispatch(BT_HDR* packet) {
       }
 
       if (iso_length < iso_hdr_len) {
-        LOG_WARN("%s ISO packet too small (%d < %d). Dropping it.", __func__,
-                 packet->len, iso_hdr_len);
+        log::warn("ISO packet too small ({} < {}). Dropping it.", packet->len, iso_hdr_len);
         buffer_allocator->free(packet);
         return;
       }
@@ -206,31 +202,28 @@ static void reassemble_and_dispatch(BT_HDR* packet) {
       packet_status_flags = HCI_ISO_GET_PACKET_STATUS_FLAGS(iso_sdu_length);
       iso_sdu_length = iso_sdu_length & HCI_ISO_SDU_LENGTH_MASK;
 
-      if (packet_status_flags)
-        LOG_ERROR("%s packet status flags: 0x%02x", __func__,
-                  packet_status_flags);
+      if (packet_status_flags) {
+        log::error("packet status flags: 0x{:02x}", packet_status_flags);
+      }
 
       iso_full_len = iso_sdu_length + iso_hdr_len + HCI_ISO_PREAMBLE_SIZE;
       if ((iso_full_len + sizeof(BT_HDR)) > BT_DEFAULT_BUFFER_SIZE) {
-        LOG_ERROR("%s Dropping ISO packet with invalid length (%d).", __func__,
-                  iso_sdu_length);
+        log::error("Dropping ISO packet with invalid length ({}).", iso_sdu_length);
         buffer_allocator->free(packet);
         return;
       }
 
-      if (((boundary_flag == HCI_ISO_BF_COMPLETE_PACKET) &&
-           (iso_full_len != packet->len)) ||
+      if (((boundary_flag == HCI_ISO_BF_COMPLETE_PACKET) && (iso_full_len != packet->len)) ||
           ((boundary_flag == HCI_ISO_BF_FIRST_FRAGMENTED_PACKET) &&
            (iso_full_len <= packet->len))) {
-        LOG_ERROR("%s corrupted ISO frame", __func__);
+        log::error("corrupted ISO frame");
         buffer_allocator->free(packet);
         return;
       }
 
-      partial_packet =
-          (BT_HDR*)buffer_allocator->alloc(iso_full_len + sizeof(BT_HDR));
+      partial_packet = (BT_HDR*)buffer_allocator->alloc(iso_full_len + sizeof(BT_HDR));
       if (!partial_packet) {
-        LOG_ERROR("%s cannot allocate partial packet", __func__);
+        log::error("cannot allocate partial packet");
         buffer_allocator->free(packet);
         return;
       }
@@ -262,27 +255,24 @@ static void reassemble_and_dispatch(BT_HDR* packet) {
       // pass-through
     case HCI_ISO_BF_LAST_FRAGMENT_PACKET:
       if (map_iter == partial_iso_packets.end()) {
-        LOG_WARN("%s got continuation for unknown packet. Dropping it.",
-                 __func__);
+        log::warn("got continuation for unknown packet. Dropping it.");
         buffer_allocator->free(packet);
         return;
       }
 
       partial_packet = map_iter->second;
-      if (partial_packet->len <
-          (partial_packet->offset + packet->len - HCI_ISO_PREAMBLE_SIZE)) {
-        LOG_ERROR(
-            "%s got packet which would exceed expected length of %d. "
-            "dropping full packet",
-            __func__, partial_packet->len);
+      if (partial_packet->len < (partial_packet->offset + packet->len - HCI_ISO_PREAMBLE_SIZE)) {
+        log::error(
+                "got packet which would exceed expected length of {}. dropping "
+                "full packet",
+                partial_packet->len);
         buffer_allocator->free(packet);
         partial_iso_packets.erase(map_iter);
         buffer_allocator->free(partial_packet);
         return;
       }
 
-      memcpy(partial_packet->data + partial_packet->offset,
-             packet->data + HCI_ISO_PREAMBLE_SIZE,
+      memcpy(partial_packet->data + partial_packet->offset, packet->data + HCI_ISO_PREAMBLE_SIZE,
              packet->len - HCI_ISO_PREAMBLE_SIZE);
 
       if (boundary_flag == HCI_ISO_BF_CONTINUATION_FRAGMENT_PACKET) {
@@ -291,12 +281,11 @@ static void reassemble_and_dispatch(BT_HDR* packet) {
         return;
       }
 
-      if (partial_packet->len !=
-          partial_packet->offset + packet->len - HCI_ISO_PREAMBLE_SIZE) {
-        LOG_ERROR(
-            "%s got last fragment, but it doesn't fill up the whole packet of "
-            "size %d",
-            __func__, partial_packet->len);
+      if (partial_packet->len != partial_packet->offset + packet->len - HCI_ISO_PREAMBLE_SIZE) {
+        log::error(
+                "got last fragment, but it doesn't fill up the whole packet of "
+                "size {}",
+                partial_packet->len);
         buffer_allocator->free(packet);
         partial_iso_packets.erase(map_iter);
         buffer_allocator->free(partial_packet);
@@ -305,10 +294,11 @@ static void reassemble_and_dispatch(BT_HDR* packet) {
 
       partial_packet->layer_specific |= BT_ISO_HDR_OFFSET_POINTS_DATA;
       partial_packet->offset = HCI_ISO_PREAMBLE_SIZE;
-      if (partial_packet->layer_specific & BT_ISO_HDR_CONTAINS_TS)
+      if (partial_packet->layer_specific & BT_ISO_HDR_CONTAINS_TS) {
         partial_packet->offset += HCI_ISO_HEADER_LEN_WITH_TS;
-      else
+      } else {
         partial_packet->offset += HCI_ISO_HEADER_LEN_WITHOUT_TS;
+      }
 
       buffer_allocator->free(packet);
 
@@ -317,7 +307,7 @@ static void reassemble_and_dispatch(BT_HDR* packet) {
 
       break;
     default:
-      LOG_ERROR("%s Unexpected packet, dropping full packet", __func__);
+      log::error("Unexpected packet, dropping full packet");
       buffer_allocator->free(packet);
       break;
   }
@@ -325,8 +315,7 @@ static void reassemble_and_dispatch(BT_HDR* packet) {
 
 static const packet_fragmenter_t interface = {init, cleanup,
 
-                                              fragment_and_dispatch,
-                                              reassemble_and_dispatch};
+                                              fragment_and_dispatch, reassemble_and_dispatch};
 
 const packet_fragmenter_t* packet_fragmenter_get_interface() {
   buffer_allocator = buffer_allocator_get_interface();

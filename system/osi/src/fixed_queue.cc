@@ -16,18 +16,20 @@
  *
  ******************************************************************************/
 
-#include <base/logging.h>
+#include "osi/include/fixed_queue.h"
+
+#include <bluetooth/log.h>
 #include <string.h>
 
 #include <mutex>
 
-#include "check.h"
 #include "osi/include/allocator.h"
-#include "osi/include/fixed_queue.h"
 #include "osi/include/list.h"
 #include "osi/include/osi.h"
 #include "osi/include/reactor.h"
 #include "osi/semaphore.h"
+
+using namespace bluetooth;
 
 typedef struct fixed_queue_t {
   list_t* list;
@@ -44,20 +46,25 @@ typedef struct fixed_queue_t {
 static void internal_dequeue_ready(void* context);
 
 fixed_queue_t* fixed_queue_new(size_t capacity) {
-  fixed_queue_t* ret =
-      static_cast<fixed_queue_t*>(osi_calloc(sizeof(fixed_queue_t)));
+  fixed_queue_t* ret = static_cast<fixed_queue_t*>(osi_calloc(sizeof(fixed_queue_t)));
 
   ret->mutex = new std::mutex;
   ret->capacity = capacity;
 
   ret->list = list_new(NULL);
-  if (!ret->list) goto error;
+  if (!ret->list) {
+    goto error;
+  }
 
   ret->enqueue_sem = semaphore_new(capacity);
-  if (!ret->enqueue_sem) goto error;
+  if (!ret->enqueue_sem) {
+    goto error;
+  }
 
   ret->dequeue_sem = semaphore_new(0);
-  if (!ret->dequeue_sem) goto error;
+  if (!ret->dequeue_sem) {
+    goto error;
+  }
 
   return ret;
 
@@ -67,14 +74,18 @@ error:
 }
 
 void fixed_queue_free(fixed_queue_t* queue, fixed_queue_free_cb free_cb) {
-  if (!queue) return;
+  if (!queue) {
+    return;
+  }
 
   fixed_queue_unregister_dequeue(queue);
 
-  if (free_cb)
-    for (const list_node_t* node = list_begin(queue->list);
-         node != list_end(queue->list); node = list_next(node))
+  if (free_cb) {
+    for (const list_node_t* node = list_begin(queue->list); node != list_end(queue->list);
+         node = list_next(node)) {
       free_cb(list_node(node));
+    }
+  }
 
   list_free(queue->list);
   semaphore_free(queue->enqueue_sem);
@@ -84,7 +95,9 @@ void fixed_queue_free(fixed_queue_t* queue, fixed_queue_free_cb free_cb) {
 }
 
 void fixed_queue_flush(fixed_queue_t* queue, fixed_queue_free_cb free_cb) {
-  if (!queue) return;
+  if (!queue) {
+    return;
+  }
 
   while (!fixed_queue_is_empty(queue)) {
     void* data = fixed_queue_try_dequeue(queue);
@@ -95,28 +108,32 @@ void fixed_queue_flush(fixed_queue_t* queue, fixed_queue_free_cb free_cb) {
 }
 
 bool fixed_queue_is_empty(fixed_queue_t* queue) {
-  if (queue == NULL) return true;
+  if (queue == NULL) {
+    return true;
+  }
 
   std::lock_guard<std::mutex> lock(*queue->mutex);
   return list_is_empty(queue->list);
 }
 
 size_t fixed_queue_length(fixed_queue_t* queue) {
-  if (queue == NULL) return 0;
+  if (queue == NULL) {
+    return 0;
+  }
 
   std::lock_guard<std::mutex> lock(*queue->mutex);
   return list_length(queue->list);
 }
 
 size_t fixed_queue_capacity(fixed_queue_t* queue) {
-  CHECK(queue != NULL);
+  log::assert_that(queue != NULL, "assert failed: queue != NULL");
 
   return queue->capacity;
 }
 
 void fixed_queue_enqueue(fixed_queue_t* queue, void* data) {
-  CHECK(queue != NULL);
-  CHECK(data != NULL);
+  log::assert_that(queue != NULL, "assert failed: queue != NULL");
+  log::assert_that(data != NULL, "assert failed: data != NULL");
 
   semaphore_wait(queue->enqueue_sem);
 
@@ -129,7 +146,7 @@ void fixed_queue_enqueue(fixed_queue_t* queue, void* data) {
 }
 
 void* fixed_queue_dequeue(fixed_queue_t* queue) {
-  CHECK(queue != NULL);
+  log::assert_that(queue != NULL, "assert failed: queue != NULL");
 
   semaphore_wait(queue->dequeue_sem);
 
@@ -146,10 +163,12 @@ void* fixed_queue_dequeue(fixed_queue_t* queue) {
 }
 
 bool fixed_queue_try_enqueue(fixed_queue_t* queue, void* data) {
-  CHECK(queue != NULL);
-  CHECK(data != NULL);
+  log::assert_that(queue != NULL, "assert failed: queue != NULL");
+  log::assert_that(data != NULL, "assert failed: data != NULL");
 
-  if (!semaphore_try_wait(queue->enqueue_sem)) return false;
+  if (!semaphore_try_wait(queue->enqueue_sem)) {
+    return false;
+  }
 
   {
     std::lock_guard<std::mutex> lock(*queue->mutex);
@@ -161,9 +180,13 @@ bool fixed_queue_try_enqueue(fixed_queue_t* queue, void* data) {
 }
 
 void* fixed_queue_try_dequeue(fixed_queue_t* queue) {
-  if (queue == NULL) return NULL;
+  if (queue == NULL) {
+    return NULL;
+  }
 
-  if (!semaphore_try_wait(queue->dequeue_sem)) return NULL;
+  if (!semaphore_try_wait(queue->dequeue_sem)) {
+    return NULL;
+  }
 
   void* ret = NULL;
   {
@@ -178,29 +201,34 @@ void* fixed_queue_try_dequeue(fixed_queue_t* queue) {
 }
 
 void* fixed_queue_try_peek_first(fixed_queue_t* queue) {
-  if (queue == NULL) return NULL;
+  if (queue == NULL) {
+    return NULL;
+  }
 
   std::lock_guard<std::mutex> lock(*queue->mutex);
   return list_is_empty(queue->list) ? NULL : list_front(queue->list);
 }
 
 void* fixed_queue_try_peek_last(fixed_queue_t* queue) {
-  if (queue == NULL) return NULL;
+  if (queue == NULL) {
+    return NULL;
+  }
 
   std::lock_guard<std::mutex> lock(*queue->mutex);
   return list_is_empty(queue->list) ? NULL : list_back(queue->list);
 }
 
 void* fixed_queue_try_remove_from_queue(fixed_queue_t* queue, void* data) {
-  if (queue == NULL) return NULL;
+  if (queue == NULL) {
+    return NULL;
+  }
 
   bool removed = false;
   {
     std::lock_guard<std::mutex> lock(*queue->mutex);
-    if (list_contains(queue->list, data) &&
-        semaphore_try_wait(queue->dequeue_sem)) {
+    if (list_contains(queue->list, data) && semaphore_try_wait(queue->dequeue_sem)) {
       removed = list_remove(queue->list, data);
-      CHECK(removed);
+      log::assert_that(removed, "assert failed: removed");
     }
   }
 
@@ -212,7 +240,7 @@ void* fixed_queue_try_remove_from_queue(fixed_queue_t* queue, void* data) {
 }
 
 list_t* fixed_queue_get_list(fixed_queue_t* queue) {
-  CHECK(queue != NULL);
+  log::assert_that(queue != NULL, "assert failed: queue != NULL");
 
   // NOTE: Using the list in this way is not thread-safe.
   // Using this list in any context where threads can call other functions
@@ -221,33 +249,32 @@ list_t* fixed_queue_get_list(fixed_queue_t* queue) {
 }
 
 int fixed_queue_get_dequeue_fd(const fixed_queue_t* queue) {
-  CHECK(queue != NULL);
+  log::assert_that(queue != NULL, "assert failed: queue != NULL");
   return semaphore_get_fd(queue->dequeue_sem);
 }
 
 int fixed_queue_get_enqueue_fd(const fixed_queue_t* queue) {
-  CHECK(queue != NULL);
+  log::assert_that(queue != NULL, "assert failed: queue != NULL");
   return semaphore_get_fd(queue->enqueue_sem);
 }
 
-void fixed_queue_register_dequeue(fixed_queue_t* queue, reactor_t* reactor,
-                                  fixed_queue_cb ready_cb, void* context) {
-  CHECK(queue != NULL);
-  CHECK(reactor != NULL);
-  CHECK(ready_cb != NULL);
+void fixed_queue_register_dequeue(fixed_queue_t* queue, reactor_t* reactor, fixed_queue_cb ready_cb,
+                                  void* context) {
+  log::assert_that(queue != NULL, "assert failed: queue != NULL");
+  log::assert_that(reactor != NULL, "assert failed: reactor != NULL");
+  log::assert_that(ready_cb != NULL, "assert failed: ready_cb != NULL");
 
   // Make sure we're not already registered
   fixed_queue_unregister_dequeue(queue);
 
   queue->dequeue_ready = ready_cb;
   queue->dequeue_context = context;
-  queue->dequeue_object =
-      reactor_register(reactor, fixed_queue_get_dequeue_fd(queue), queue,
-                       internal_dequeue_ready, NULL);
+  queue->dequeue_object = reactor_register(reactor, fixed_queue_get_dequeue_fd(queue), queue,
+                                           internal_dequeue_ready, NULL);
 }
 
 void fixed_queue_unregister_dequeue(fixed_queue_t* queue) {
-  CHECK(queue != NULL);
+  log::assert_that(queue != NULL, "assert failed: queue != NULL");
 
   if (queue->dequeue_object) {
     reactor_unregister(queue->dequeue_object);
@@ -256,7 +283,7 @@ void fixed_queue_unregister_dequeue(fixed_queue_t* queue) {
 }
 
 static void internal_dequeue_ready(void* context) {
-  CHECK(context != NULL);
+  log::assert_that(context != NULL, "assert failed: context != NULL");
 
   fixed_queue_t* queue = static_cast<fixed_queue_t*>(context);
   queue->dequeue_ready(queue, queue->dequeue_context);

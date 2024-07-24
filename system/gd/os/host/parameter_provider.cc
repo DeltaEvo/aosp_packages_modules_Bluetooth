@@ -16,6 +16,7 @@
 
 #include "os/parameter_provider.h"
 
+#include <bluetooth/log.h>
 #include <unistd.h>
 
 #include <cerrno>
@@ -32,6 +33,7 @@ std::mutex parameter_mutex;
 std::string config_file_path;
 std::string snoop_log_file_path;
 std::string snooz_log_file_path;
+std::string sysprops_file_path;
 }  // namespace
 
 // Write to $PWD/bt_stack.conf if $PWD can be found, otherwise, write to $HOME/bt_stack.conf
@@ -44,7 +46,8 @@ std::string ParameterProvider::ConfigFilePath() {
   }
   char cwd[PATH_MAX] = {};
   if (getcwd(cwd, sizeof(cwd)) == nullptr) {
-    LOG_ERROR("Failed to get current working directory due to \"%s\", returning default", strerror(errno));
+    log::error("Failed to get current working directory due to \"{}\", returning default",
+               strerror(errno));
     return "bt_config.conf";
   }
   return std::string(cwd) + "/bt_config.conf";
@@ -64,7 +67,8 @@ std::string ParameterProvider::SnoopLogFilePath() {
   }
   char cwd[PATH_MAX] = {};
   if (getcwd(cwd, sizeof(cwd)) == nullptr) {
-    LOG_ERROR("Failed to get current working directory due to \"%s\", returning default", strerror(errno));
+    log::error("Failed to get current working directory due to \"{}\", returning default",
+               strerror(errno));
     return "btsnoop_hci.log";
   }
   return std::string(cwd) + "/btsnoop_hci.log";
@@ -85,7 +89,8 @@ std::string ParameterProvider::SnoozLogFilePath() {
   }
   char cwd[PATH_MAX] = {};
   if (getcwd(cwd, sizeof(cwd)) == nullptr) {
-    LOG_ERROR("Failed to get current working directory due to \"%s\", returning default", strerror(errno));
+    log::error("Failed to get current working directory due to \"{}\", returning default",
+               strerror(errno));
     return "bt_config.conf";
   }
   return std::string(cwd) + "/btsnooz_hci.log";
@@ -97,7 +102,13 @@ void ParameterProvider::OverrideSnoozLogFilePath(const std::string& path) {
 }
 
 std::string ParameterProvider::SyspropsFilePath() {
-  return "";
+  std::lock_guard<std::mutex> lock(parameter_mutex);
+  return sysprops_file_path;
+}
+
+void ParameterProvider::OverrideSyspropsFilePath(const std::string& path) {
+  std::lock_guard<std::mutex> lock(parameter_mutex);
+  sysprops_file_path = path;
 }
 
 bluetooth_keystore::BluetoothKeystoreInterface* ParameterProvider::GetBtKeystoreInterface() {
@@ -105,17 +116,13 @@ bluetooth_keystore::BluetoothKeystoreInterface* ParameterProvider::GetBtKeystore
 }
 
 void ParameterProvider::SetBtKeystoreInterface(
-    bluetooth_keystore::BluetoothKeystoreInterface* /* bt_keystore */) {}
+        bluetooth_keystore::BluetoothKeystoreInterface* /* bt_keystore */) {}
 
-bool ParameterProvider::IsCommonCriteriaMode() {
-  return false;
-}
+bool ParameterProvider::IsCommonCriteriaMode() { return false; }
 
 void ParameterProvider::SetCommonCriteriaMode(bool /* enable */) {}
 
-int ParameterProvider::GetCommonCriteriaConfigCompareResult() {
-  return 0b11;
-}
+int ParameterProvider::GetCommonCriteriaConfigCompareResult() { return 0b11; }
 
 void ParameterProvider::SetCommonCriteriaConfigCompareResult(int /* result */) {}
 

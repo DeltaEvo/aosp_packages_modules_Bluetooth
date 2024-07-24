@@ -33,7 +33,7 @@ namespace l2cap {
 namespace le {
 
 class L2capLeModule : public bluetooth::Module {
- public:
+public:
   L2capLeModule();
   L2capLeModule(const L2capLeModule&) = delete;
   L2capLeModule& operator=(const L2capLeModule&) = delete;
@@ -52,7 +52,7 @@ class L2capLeModule : public bluetooth::Module {
 
   static const ModuleFactory Factory;
 
- protected:
+protected:
   void ListDependencies(ModuleList* list) const override;
 
   void Start() override;
@@ -61,18 +61,19 @@ class L2capLeModule : public bluetooth::Module {
 
   std::string ToString() const override;
 
- private:
+private:
   struct impl;
   std::unique_ptr<impl> pimpl_;
 
   friend security::SecurityModule;
 
   /**
-   * Only for the LE security module to inject functionality to enforce security level for a connection. When LE
-   * security module is stopping, inject nullptr. Note: We expect this only to be called during stack startup. This is
-   * not synchronized.
+   * Only for the LE security module to inject functionality to enforce security level for a
+   * connection. When LE security module is stopping, inject nullptr. Note: We expect this only to
+   * be called during stack startup. This is not synchronized.
    */
-  virtual void InjectSecurityEnforcementInterface(SecurityEnforcementInterface* security_enforcement_interface);
+  virtual void InjectSecurityEnforcementInterface(
+          SecurityEnforcementInterface* security_enforcement_interface);
 
   /**
    * Set the link property listener.

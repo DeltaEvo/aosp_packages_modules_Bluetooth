@@ -20,6 +20,7 @@
 
 #include <vector>
 
+#include "btm_api_types.h"
 #include "device/include/esco_parameters.h"
 #include "internal_include/bt_target.h"
 #include "raw_address.h"
@@ -48,7 +49,7 @@ struct bt_codecs {
 };
 
 // Use default packet size for codec if this value is given.
-constexpr int kDefaultPacketSize = 0;
+constexpr size_t kDefaultPacketSize = 0;
 
 constexpr inline int esco_coding_to_codec(esco_coding_format_t esco_coding) {
   switch (esco_coding) {
@@ -91,14 +92,13 @@ bool get_offload_enabled();
 bool enable_offload(bool enable);
 
 // Notify the codec datapath to lower layer for offload mode.
-void set_codec_datapath(int codec_uuid);
+void set_codec_datapath(tBTA_AG_UUID_CODEC codec_uuid);
 
 // Get the maximum supported packet size from the lower layer.
-int get_packet_size(int codec);
+size_t get_packet_size(int codec);
 
 // Notify the lower layer about SCO connection change.
-void notify_sco_connection_change(RawAddress device, bool is_connected,
-                                  int codec);
+void notify_sco_connection_change(RawAddress device, bool is_connected, int codec);
 
 // Update eSCO parameters
 void update_esco_parameters(enh_esco_params_t* p_parms);

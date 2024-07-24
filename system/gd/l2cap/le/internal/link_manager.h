@@ -41,13 +41,11 @@ namespace le {
 namespace internal {
 
 class LinkManager : public hci::acl_manager::LeConnectionCallbacks {
- public:
-  LinkManager(
-      os::Handler* l2cap_handler,
-      hci::AclManager* acl_manager,
-      FixedChannelServiceManagerImpl* service_manager,
-      DynamicChannelServiceManagerImpl* dynamic_service_manager,
-      l2cap::internal::ParameterProvider* parameter_provider)
+public:
+  LinkManager(os::Handler* l2cap_handler, hci::AclManager* acl_manager,
+              FixedChannelServiceManagerImpl* service_manager,
+              DynamicChannelServiceManagerImpl* dynamic_service_manager,
+              l2cap::internal::ParameterProvider* parameter_provider)
       : l2cap_handler_(l2cap_handler),
         acl_manager_(acl_manager),
         fixed_channel_service_manager_(service_manager),
@@ -71,8 +69,9 @@ class LinkManager : public hci::acl_manager::LeConnectionCallbacks {
   // ACL methods
 
   Link* GetLink(hci::AddressWithType address_with_type);
-  void OnLeConnectSuccess(hci::AddressWithType connecting_address_with_type,
-                          std::unique_ptr<hci::acl_manager::LeAclConnection> acl_connection) override;
+  void OnLeConnectSuccess(
+          hci::AddressWithType connecting_address_with_type,
+          std::unique_ptr<hci::acl_manager::LeAclConnection> acl_connection) override;
   void OnLeConnectFail(hci::AddressWithType address_with_type, hci::ErrorCode reason) override;
 
   // FixedChannelManager methods
@@ -82,8 +81,9 @@ class LinkManager : public hci::acl_manager::LeConnectionCallbacks {
 
   // DynamicChannelManager methods
 
-  void ConnectDynamicChannelServices(hci::AddressWithType device,
-                                     Link::PendingDynamicChannelConnection pending_dynamic_channel_connection, Psm psm);
+  void ConnectDynamicChannelServices(
+          hci::AddressWithType device,
+          Link::PendingDynamicChannelConnection pending_dynamic_channel_connection, Psm psm);
 
   void OnDisconnect(hci::AddressWithType address_with_type);
 
@@ -91,18 +91,16 @@ class LinkManager : public hci::acl_manager::LeConnectionCallbacks {
 
   void RegisterLinkPropertyListener(os::Handler* handler, LinkPropertyListener* listener);
 
-  void OnReadRemoteVersionInformationComplete(
-      hci::ErrorCode hci_status,
-      hci::AddressWithType address_with_type,
-      uint8_t lmp_version,
-      uint16_t manufacturer_name,
-      uint16_t sub_version);
+  void OnReadRemoteVersionInformationComplete(hci::ErrorCode hci_status,
+                                              hci::AddressWithType address_with_type,
+                                              uint8_t lmp_version, uint16_t manufacturer_name,
+                                              uint16_t sub_version);
 
   // Reported by link to indicate how many pending packets are remaining to be set.
   // If there is anything outstanding, don't delete link
   void OnPendingPacketChange(hci::AddressWithType remote, int num_packets);
 
- private:
+private:
   // Dependencies
   os::Handler* l2cap_handler_;
   hci::AclManager* acl_manager_;
@@ -113,8 +111,9 @@ class LinkManager : public hci::acl_manager::LeConnectionCallbacks {
   // Internal states
   std::unordered_map<hci::AddressWithType, PendingLink> pending_links_;
   std::unordered_map<hci::AddressWithType, Link> links_;
-  std::unordered_map<hci::AddressWithType, std::list<std::pair<Psm, Link::PendingDynamicChannelConnection>>>
-      pending_dynamic_channels_;
+  std::unordered_map<hci::AddressWithType,
+                     std::list<std::pair<Psm, Link::PendingDynamicChannelConnection>>>
+          pending_dynamic_channels_;
   os::Handler* link_property_callback_handler_ = nullptr;
   LinkPropertyListener* link_property_listener_ = nullptr;
   std::unordered_set<hci::AddressWithType> disconnected_links_;

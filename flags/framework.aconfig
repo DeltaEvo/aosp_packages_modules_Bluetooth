@@ -2,14 +2,18 @@ package: "com.android.bluetooth.flags"
 container: "com.android.btservices"
 
 flag {
-    name: "mfi_has_uuid"
+    name: "override_context_to_specify_device_id"
     namespace: "bluetooth"
-    description: "Use MFi HAS uuid to judge if a device is hearing aid"
-    bug: "310543599"
+    description: "In Bluetooth Manager, override the context with createDeviceContext to pin a specific DeviceId"
+    bug: "349657939"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
 }
 
 flag {
     name: "support_metadata_device_types_apis"
+    is_exported: true
     namespace: "bluetooth"
     description: "Support more device types in bt device metadata"
     bug: "289584302"
@@ -17,6 +21,7 @@ flag {
 
 flag {
     name: "support_exclusive_manager"
+    is_exported: true
     namespace: "bluetooth"
     description: "Support setting/retrieving the exclusive manager app for a BluetoothDevice"
     bug: "319716512"
@@ -24,6 +29,7 @@ flag {
 
 flag {
     name: "key_missing_broadcast"
+    is_exported: true
     namespace: "bluetooth"
     description: "Broadcast when remote device it lost bond"
     bug: "311447399"
@@ -45,14 +51,18 @@ flag {
 
 flag {
     name: "get_address_type_api"
+    is_exported: true
     namespace: "bluetooth"
     description: "Change visibility of BluetoothDevice#getAddressType API to public"
     bug: "321120941"
 }
 
 flag {
-    name: "remove_bond_with_address_map"
+    name: "remove_address_map_on_unbond"
     namespace: "bluetooth"
     description: "Removes the address map when the bond is removed"
-    bug: "326603271"
+    bug: "335465028"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
 }

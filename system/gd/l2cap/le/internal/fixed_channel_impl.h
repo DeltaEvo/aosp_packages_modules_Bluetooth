@@ -34,7 +34,7 @@ class Link;
 
 class FixedChannelImpl : public l2cap::internal::ChannelImpl,
                          public bluetooth::common::IRedactableLoggable {
- public:
+public:
   FixedChannelImpl(Cid cid, Link* link, os::Handler* l2cap_handler);
 
   FixedChannelImpl(const FixedChannelImpl&) = delete;
@@ -42,24 +42,21 @@ class FixedChannelImpl : public l2cap::internal::ChannelImpl,
 
   virtual ~FixedChannelImpl() = default;
 
-  hci::AddressWithType GetDevice() const {
-    return device_;
-  }
+  hci::AddressWithType GetDevice() const { return device_; }
 
   /* Return the role we have in the associated link */
   virtual hci::Role GetRole() const;
 
   virtual hci::acl_manager::LeAclConnection* GetAclConnection() const;
 
-  virtual void RegisterOnCloseCallback(os::Handler* user_handler, FixedChannel::OnCloseCallback on_close_callback);
+  virtual void RegisterOnCloseCallback(os::Handler* user_handler,
+                                       FixedChannel::OnCloseCallback on_close_callback);
 
   virtual void Acquire();
 
   virtual void Release();
 
-  virtual bool IsAcquired() const {
-    return acquired_;
-  }
+  virtual bool IsAcquired() const { return acquired_; }
 
   Cid GetCid() const override;
   Cid GetRemoteCid() const override;
@@ -83,17 +80,19 @@ class FixedChannelImpl : public l2cap::internal::ChannelImpl,
     return ss.str();
   }
 
-  common::BidiQueueEnd<packet::BasePacketBuilder, packet::PacketView<packet::kLittleEndian>>* GetQueueUpEnd() {
+  common::BidiQueueEnd<packet::BasePacketBuilder, packet::PacketView<packet::kLittleEndian>>*
+  GetQueueUpEnd() {
     return channel_queue_.GetUpEnd();
   }
 
-  common::BidiQueueEnd<packet::PacketView<packet::kLittleEndian>, packet::BasePacketBuilder>* GetQueueDownEnd() {
+  common::BidiQueueEnd<packet::PacketView<packet::kLittleEndian>, packet::BasePacketBuilder>*
+  GetQueueDownEnd() {
     return channel_queue_.GetDownEnd();
   }
 
   LinkOptions* GetLinkOptions();
 
- private:
+private:
   // Constructor states
   // For logging purpose only
   const Cid cid_;
@@ -112,8 +111,8 @@ class FixedChannelImpl : public l2cap::internal::ChannelImpl,
   bool closed_ = false;
   hci::ErrorCode close_reason_ = hci::ErrorCode::SUCCESS;
   static constexpr size_t kChannelQueueSize = 10;
-  common::BidiQueue<packet::PacketView<packet::kLittleEndian>, packet::BasePacketBuilder> channel_queue_{
-      kChannelQueueSize};
+  common::BidiQueue<packet::PacketView<packet::kLittleEndian>, packet::BasePacketBuilder>
+          channel_queue_{kChannelQueueSize};
 };
 
 }  // namespace internal

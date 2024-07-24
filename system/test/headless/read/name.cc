@@ -20,19 +20,16 @@
 
 #include <future>
 
-#include "base/logging.h"  // LOG() stdout and android log
-#include "os/log.h"        // android log only
-#include "stack/include/btm_api.h"
-#include "stack/include/btm_api_types.h"
+#include "stack/btm/neighbor_inquiry.h"
+#include "stack/include/bt_name.h"
+#include "stack/include/btm_client_interface.h"
 #include "test/headless/get_options.h"
 #include "test/headless/headless.h"
 #include "types/raw_address.h"
 
 std::promise<tBTM_REMOTE_DEV_NAME> promise_;
 
-void RemoteNameCallback(const tBTM_REMOTE_DEV_NAME* data) {
-  promise_.set_value(*data);
-}
+void RemoteNameCallback(const tBTM_REMOTE_DEV_NAME* data) { promise_.set_value(*data); }
 
 int bluetooth::test::headless::Name::Run() {
   if (options_.loop_ < 1) {
@@ -53,8 +50,8 @@ int bluetooth::test::headless::Name::Run() {
 
     auto future = promise_.get_future();
 
-    tBTM_STATUS status = BTM_ReadRemoteDeviceName(
-        raw_address, &RemoteNameCallback, BT_TRANSPORT_BR_EDR);
+    tBTM_STATUS status = get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
+            raw_address, &RemoteNameCallback, BT_TRANSPORT_BR_EDR);
     if (status != BTM_CMD_STARTED) {
       fprintf(stdout, "Failure to start read remote device\n");
       return -1;
@@ -66,15 +63,14 @@ int bluetooth::test::headless::Name::Run() {
         char buf[BD_NAME_LEN];
         memcpy(buf, name_packet.remote_bd_name, BD_NAME_LEN);
         std::string name(buf);
-        fprintf(stdout, "Name result mac:%s name:%s\n",
-                raw_address.ToString().c_str(), name.c_str());
+        fprintf(stdout, "Name result mac:%s name:%s\n", raw_address.ToString().c_str(),
+                name.c_str());
       } break;
       case BTM_BAD_VALUE_RET:
         fprintf(stdout, "Name Timeout or other failure");
         return -2;
       default:
-        fprintf(stdout, "Unexpected remote name request failure status:%hd",
-                name_packet.status);
+        fprintf(stdout, "Unexpected remote name request failure status:%hd", name_packet.status);
         return -2;
     }
     return 0;

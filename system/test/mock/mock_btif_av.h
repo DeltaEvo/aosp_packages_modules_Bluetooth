@@ -28,6 +28,7 @@
 // Original included files, if any
 
 #include "bta/include/bta_av_api.h"
+#include "btif/include/btif_av.h"
 #include "include/hardware/bt_av.h"
 #include "types/raw_address.h"
 
@@ -57,23 +58,26 @@ namespace btif_av {
 // Shared state between mocked functions and tests
 // Name: btif_av_acl_disconnected
 // Params: const RawAddress& peer_address
+// Params: const A2dpType local_a2dp_type.
 // Return: void
 struct btif_av_acl_disconnected {
-  std::function<void(const RawAddress& peer_address)> body{
-      [](const RawAddress& /* peer_address */) {}};
-  void operator()(const RawAddress& peer_address) { body(peer_address); };
+  std::function<void(const RawAddress& peer_address, const A2dpType local_a2dp_type)> body{
+          [](const RawAddress& /* peer_address */, const A2dpType /* local_a2dp_type */) {}};
+  void operator()(const RawAddress& peer_address, const A2dpType local_a2dp_type) {
+    body(peer_address, local_a2dp_type);
+  }
 };
 extern struct btif_av_acl_disconnected btif_av_acl_disconnected;
 
 // Name: btif_av_clear_remote_suspend_flag
-// Params: void
+// Params: const A2dpType local_a2dp_type.
 // Return: void
 struct btif_av_clear_remote_suspend_flag {
-  std::function<void(void)> body{[](void) {}};
-  void operator()(void) { body(); };
+  std::function<void(const A2dpType local_a2dp_type)> body{
+          [](const A2dpType /* local_a2dp_type */) {}};
+  void operator()(const A2dpType local_a2dp_type) { body(local_a2dp_type); }
 };
-extern struct btif_av_clear_remote_suspend_flag
-    btif_av_clear_remote_suspend_flag;
+extern struct btif_av_clear_remote_suspend_flag btif_av_clear_remote_suspend_flag;
 
 // Name: btif_av_find_by_handle
 // Params: tBTA_AV_HNDL bta_handle
@@ -81,54 +85,32 @@ extern struct btif_av_clear_remote_suspend_flag
 struct btif_av_find_by_handle {
   static const RawAddress& return_value;
   std::function<const RawAddress&(tBTA_AV_HNDL bta_handle)> body{
-      [](tBTA_AV_HNDL /* bta_handle */) { return return_value; }};
-  const RawAddress& operator()(tBTA_AV_HNDL bta_handle) {
-    return body(bta_handle);
-  };
+          [](tBTA_AV_HNDL /* bta_handle */) { return return_value; }};
+  const RawAddress& operator()(tBTA_AV_HNDL bta_handle) { return body(bta_handle); }
 };
 extern struct btif_av_find_by_handle btif_av_find_by_handle;
 
 // Name: btif_av_get_audio_delay
-// Params:
+// Params: const A2dpType local_a2dp_type.
 // Return: uint16_t
 struct btif_av_get_audio_delay {
   static uint16_t return_value;
-  std::function<uint16_t()> body{[]() { return return_value; }};
-  uint16_t operator()() { return body(); };
+  std::function<uint16_t(const A2dpType local_a2dp_type)> body{
+          [](const A2dpType /* local_a2dp_type */) { return return_value; }};
+  uint16_t operator()(const A2dpType local_a2dp_type) { return body(local_a2dp_type); }
 };
 extern struct btif_av_get_audio_delay btif_av_get_audio_delay;
 
 // Name: btif_av_get_peer_sep
-// Params: void
+// Params: const A2dpType local_a2dp_type.
 // Return: uint8_t
 struct btif_av_get_peer_sep {
   static uint8_t return_value;
-  std::function<uint8_t(void)> body{[](void) { return return_value; }};
-  uint8_t operator()(void) { return body(); };
+  std::function<uint8_t(const A2dpType local_a2dp_type)> body{
+          [](const A2dpType /* local_a2dp_type */) { return return_value; }};
+  uint8_t operator()(const A2dpType local_a2dp_type) { return body(local_a2dp_type); }
 };
 extern struct btif_av_get_peer_sep btif_av_get_peer_sep;
-
-// Name: btif_av_get_sink_interface
-// Params: void
-// Return: const btav_sink_interface_t*
-struct btif_av_get_sink_interface {
-  static const btav_sink_interface_t* return_value;
-  std::function<const btav_sink_interface_t*(void)> body{
-      [](void) { return return_value; }};
-  const btav_sink_interface_t* operator()(void) { return body(); };
-};
-extern struct btif_av_get_sink_interface btif_av_get_sink_interface;
-
-// Name: btif_av_get_src_interface
-// Params: void
-// Return: const btav_source_interface_t*
-struct btif_av_get_src_interface {
-  static const btav_source_interface_t* return_value;
-  std::function<const btav_source_interface_t*(void)> body{
-      [](void) { return return_value; }};
-  const btav_source_interface_t* operator()(void) { return body(); };
-};
-extern struct btif_av_get_src_interface btif_av_get_src_interface;
 
 // Name: btif_av_is_a2dp_offload_enabled
 // Params:
@@ -136,7 +118,7 @@ extern struct btif_av_get_src_interface btif_av_get_src_interface;
 struct btif_av_is_a2dp_offload_enabled {
   static bool return_value;
   std::function<bool()> body{[]() { return return_value; }};
-  bool operator()() { return body(); };
+  bool operator()() { return body(); }
 };
 extern struct btif_av_is_a2dp_offload_enabled btif_av_is_a2dp_offload_enabled;
 
@@ -146,43 +128,48 @@ extern struct btif_av_is_a2dp_offload_enabled btif_av_is_a2dp_offload_enabled;
 struct btif_av_is_a2dp_offload_running {
   static bool return_value;
   std::function<bool()> body{[]() { return return_value; }};
-  bool operator()() { return body(); };
+  bool operator()() { return body(); }
 };
 extern struct btif_av_is_a2dp_offload_running btif_av_is_a2dp_offload_running;
 
 // Name: btif_av_is_connected
-// Params: void
+// Params: const A2dpType local_a2dp_type.
 // Return: bool
 struct btif_av_is_connected {
   static bool return_value;
-  std::function<bool(void)> body{[](void) { return return_value; }};
-  bool operator()(void) { return body(); };
+  std::function<bool(const A2dpType local_a2dp_type)> body{
+          [](const A2dpType /* local_a2dp_type */) { return return_value; }};
+  bool operator()(const A2dpType local_a2dp_type) { return body(local_a2dp_type); }
 };
 extern struct btif_av_is_connected btif_av_is_connected;
 
 // Name: btif_av_is_connected_addr
-// Params: const RawAddress& peer_address
+// Params: const RawAddress& peer_address, const A2dpType local_a2dp_type
 // Return: bool
 struct btif_av_is_connected_addr {
   static bool return_value;
-  std::function<bool(const RawAddress& peer_address)> body{
-      [](const RawAddress& /* peer_address */) { return return_value; }};
-  bool operator()(const RawAddress& peer_address) {
-    return body(peer_address);
-  };
+  std::function<bool(const RawAddress& peer_address, const A2dpType local_a2dp_type)> body{
+          [](const RawAddress& /* peer_address */, const A2dpType /* local_a2dp_type */) {
+            return return_value;
+          }};
+  bool operator()(const RawAddress& peer_address, const A2dpType local_a2dp_type) {
+    return body(peer_address, local_a2dp_type);
+  }
 };
 extern struct btif_av_is_connected_addr btif_av_is_connected_addr;
 
 // Name: btif_av_is_peer_edr
-// Params: const RawAddress& peer_address
+// Params: const RawAddress& peer_address, const A2dpType local_a2dp_type
 // Return: bool
 struct btif_av_is_peer_edr {
   static bool return_value;
-  std::function<bool(const RawAddress& peer_address)> body{
-      [](const RawAddress& /* peer_address */) { return return_value; }};
-  bool operator()(const RawAddress& peer_address) {
-    return body(peer_address);
-  };
+  std::function<bool(const RawAddress& peer_address, const A2dpType local_a2dp_type)> body{
+          [](const RawAddress& /* peer_address */, const A2dpType /* local_a2dp_type */) {
+            return return_value;
+          }};
+  bool operator()(const RawAddress& peer_address, const A2dpType local_a2dp_type) {
+    return body(peer_address, local_a2dp_type);
+  }
 };
 extern struct btif_av_is_peer_edr btif_av_is_peer_edr;
 
@@ -192,10 +179,8 @@ extern struct btif_av_is_peer_edr btif_av_is_peer_edr;
 struct btif_av_is_peer_silenced {
   static bool return_value;
   std::function<bool(const RawAddress& peer_address)> body{
-      [](const RawAddress& /* peer_address */) { return return_value; }};
-  bool operator()(const RawAddress& peer_address) {
-    return body(peer_address);
-  };
+          [](const RawAddress& /* peer_address */) { return return_value; }};
+  bool operator()(const RawAddress& peer_address) { return body(peer_address); }
 };
 extern struct btif_av_is_peer_silenced btif_av_is_peer_silenced;
 
@@ -205,7 +190,7 @@ extern struct btif_av_is_peer_silenced btif_av_is_peer_silenced;
 struct btif_av_is_sink_enabled {
   static bool return_value;
   std::function<bool(void)> body{[](void) { return return_value; }};
-  bool operator()(void) { return body(); };
+  bool operator()(void) { return body(); }
 };
 extern struct btif_av_is_sink_enabled btif_av_is_sink_enabled;
 
@@ -215,7 +200,7 @@ extern struct btif_av_is_sink_enabled btif_av_is_sink_enabled;
 struct btif_av_is_source_enabled {
   static bool return_value;
   std::function<bool(void)> body{[](void) { return return_value; }};
-  bool operator()(void) { return body(); };
+  bool operator()(void) { return body(); }
 };
 extern struct btif_av_is_source_enabled btif_av_is_source_enabled;
 
@@ -225,10 +210,8 @@ extern struct btif_av_is_source_enabled btif_av_is_source_enabled;
 struct btif_av_peer_is_connected_sink {
   static bool return_value;
   std::function<bool(const RawAddress& peer_address)> body{
-      [](const RawAddress& /* peer_address */) { return return_value; }};
-  bool operator()(const RawAddress& peer_address) {
-    return body(peer_address);
-  };
+          [](const RawAddress& /* peer_address */) { return return_value; }};
+  bool operator()(const RawAddress& peer_address) { return body(peer_address); }
 };
 extern struct btif_av_peer_is_connected_sink btif_av_peer_is_connected_sink;
 
@@ -238,10 +221,8 @@ extern struct btif_av_peer_is_connected_sink btif_av_peer_is_connected_sink;
 struct btif_av_peer_is_connected_source {
   static bool return_value;
   std::function<bool(const RawAddress& peer_address)> body{
-      [](const RawAddress& /* peer_address */) { return return_value; }};
-  bool operator()(const RawAddress& peer_address) {
-    return body(peer_address);
-  };
+          [](const RawAddress& /* peer_address */) { return return_value; }};
+  bool operator()(const RawAddress& peer_address) { return body(peer_address); }
 };
 extern struct btif_av_peer_is_connected_source btif_av_peer_is_connected_source;
 
@@ -251,10 +232,8 @@ extern struct btif_av_peer_is_connected_source btif_av_peer_is_connected_source;
 struct btif_av_peer_is_sink {
   static bool return_value;
   std::function<bool(const RawAddress& peer_address)> body{
-      [](const RawAddress& /* peer_address */) { return return_value; }};
-  bool operator()(const RawAddress& peer_address) {
-    return body(peer_address);
-  };
+          [](const RawAddress& /* peer_address */) { return return_value; }};
+  bool operator()(const RawAddress& peer_address) { return body(peer_address); }
 };
 extern struct btif_av_peer_is_sink btif_av_peer_is_sink;
 
@@ -264,37 +243,40 @@ extern struct btif_av_peer_is_sink btif_av_peer_is_sink;
 struct btif_av_peer_is_source {
   static bool return_value;
   std::function<bool(const RawAddress& peer_address)> body{
-      [](const RawAddress& /* peer_address */) { return return_value; }};
-  bool operator()(const RawAddress& peer_address) {
-    return body(peer_address);
-  };
+          [](const RawAddress& /* peer_address */) { return return_value; }};
+  bool operator()(const RawAddress& peer_address) { return body(peer_address); }
 };
 extern struct btif_av_peer_is_source btif_av_peer_is_source;
 
 // Name: btif_av_peer_prefers_mandatory_codec
-// Params: const RawAddress& peer_address
+// Params: const RawAddress& peer_address, const A2dpType local_a2dp_type
 // Return: bool
 struct btif_av_peer_prefers_mandatory_codec {
   static bool return_value;
-  std::function<bool(const RawAddress& peer_address)> body{
-      [](const RawAddress& /* peer_address */) { return return_value; }};
-  bool operator()(const RawAddress& peer_address) {
-    return body(peer_address);
-  };
+  std::function<bool(const RawAddress& peer_address, const A2dpType local_a2dp_type)> body{
+          [](const RawAddress& /* peer_address */, const A2dpType /* local_a2dp_type */) {
+            ;
+            return return_value;
+          }};
+  bool operator()(const RawAddress& peer_address, const A2dpType local_a2dp_type) {
+    return body(peer_address, local_a2dp_type);
+  }
 };
-extern struct btif_av_peer_prefers_mandatory_codec
-    btif_av_peer_prefers_mandatory_codec;
+extern struct btif_av_peer_prefers_mandatory_codec btif_av_peer_prefers_mandatory_codec;
 
 // Name: btif_av_peer_supports_3mbps
-// Params: const RawAddress& peer_address
+// Params: const RawAddress& peer_address, const A2dpType local_a2dp_type
 // Return: bool
 struct btif_av_peer_supports_3mbps {
   static bool return_value;
-  std::function<bool(const RawAddress& peer_address)> body{
-      [](const RawAddress& /* peer_address */) { return return_value; }};
-  bool operator()(const RawAddress& peer_address) {
-    return body(peer_address);
-  };
+  std::function<bool(const RawAddress& peer_address, const A2dpType local_a2dp_type)> body{
+          [](const RawAddress& /* peer_address */, const A2dpType /* local_a2dp_type */) {
+            ;
+            return return_value;
+          }};
+  bool operator()(const RawAddress& peer_address, const A2dpType local_a2dp_type) {
+    return body(peer_address, local_a2dp_type);
+  }
 };
 extern struct btif_av_peer_supports_3mbps btif_av_peer_supports_3mbps;
 
@@ -304,49 +286,34 @@ extern struct btif_av_peer_supports_3mbps btif_av_peer_supports_3mbps;
 // codecs_local_capabilities, const std::vector<btav_a2dp_codec_config_t>&
 // codecs_selectable_capabilities Return: void
 struct btif_av_report_source_codec_state {
-  std::function<void(
-      const RawAddress& peer_address,
-      const btav_a2dp_codec_config_t& codec_config,
-      const std::vector<btav_a2dp_codec_config_t>& codecs_local_capabilities,
-      const std::vector<btav_a2dp_codec_config_t>&
-          codecs_selectable_capabilities)>
-      body{[](const RawAddress& /* peer_address */,
-              const btav_a2dp_codec_config_t& /* codec_config */,
-              const std::vector<btav_a2dp_codec_config_t>&
-              /* codecs_local_capabilities */,
-              const std::vector<btav_a2dp_codec_config_t>&
-              /* codecs_selectable_capabilities */) {}};
-  void operator()(
-      const RawAddress& peer_address,
-      const btav_a2dp_codec_config_t& codec_config,
-      const std::vector<btav_a2dp_codec_config_t>& codecs_local_capabilities,
-      const std::vector<btav_a2dp_codec_config_t>&
-          codecs_selectable_capabilities) {
-    body(peer_address, codec_config, codecs_local_capabilities,
-         codecs_selectable_capabilities);
-  };
+  std::function<void(const RawAddress& peer_address, const btav_a2dp_codec_config_t& codec_config,
+                     const std::vector<btav_a2dp_codec_config_t>& codecs_local_capabilities,
+                     const std::vector<btav_a2dp_codec_config_t>& codecs_selectable_capabilities)>
+          body{[](const RawAddress& /* peer_address */,
+                  const btav_a2dp_codec_config_t& /* codec_config */,
+                  const std::vector<btav_a2dp_codec_config_t>&
+                  /* codecs_local_capabilities */,
+                  const std::vector<btav_a2dp_codec_config_t>&
+                  /* codecs_selectable_capabilities */) {}};
+  void operator()(const RawAddress& peer_address, const btav_a2dp_codec_config_t& codec_config,
+                  const std::vector<btav_a2dp_codec_config_t>& codecs_local_capabilities,
+                  const std::vector<btav_a2dp_codec_config_t>& codecs_selectable_capabilities) {
+    body(peer_address, codec_config, codecs_local_capabilities, codecs_selectable_capabilities);
+  }
 };
-extern struct btif_av_report_source_codec_state
-    btif_av_report_source_codec_state;
-
-// Name: btif_av_reset_audio_delay
-// Params: void
-// Return: void
-struct btif_av_reset_audio_delay {
-  std::function<void(void)> body{[](void) {}};
-  void operator()(void) { body(); };
-};
-extern struct btif_av_reset_audio_delay btif_av_reset_audio_delay;
+extern struct btif_av_report_source_codec_state btif_av_report_source_codec_state;
 
 // Name: btif_av_set_audio_delay
-// Params: const RawAddress& peer_address, uint16_t delay
-// Return: void
+// Params: const RawAddress& peer_address, uint16_t delay, const A2dpType
+// local_a2dp_type Return: void
 struct btif_av_set_audio_delay {
-  std::function<void(const RawAddress& peer_address, uint16_t delay)> body{
-      [](const RawAddress& /* peer_address */, uint16_t /* delay */) {}};
-  void operator()(const RawAddress& peer_address, uint16_t delay) {
-    body(peer_address, delay);
-  };
+  std::function<void(const RawAddress& peer_address, uint16_t delay,
+                     const A2dpType local_a2dp_type)>
+          body{[](const RawAddress& /* peer_address */, uint16_t /* delay */,
+                  const A2dpType /* local_a2dp_type */) {}};
+  void operator()(const RawAddress& peer_address, uint16_t delay, const A2dpType local_a2dp_type) {
+    body(peer_address, delay, local_a2dp_type);
+  }
 };
 extern struct btif_av_set_audio_delay btif_av_set_audio_delay;
 
@@ -355,21 +322,17 @@ extern struct btif_av_set_audio_delay btif_av_set_audio_delay;
 // Return: void
 struct btif_av_set_dynamic_audio_buffer_size {
   std::function<void(uint8_t dynamic_audio_buffer_size)> body{
-      [](uint8_t /* dynamic_audio_buffer_size */) {}};
-  void operator()(uint8_t dynamic_audio_buffer_size) {
-    body(dynamic_audio_buffer_size);
-  };
+          [](uint8_t /* dynamic_audio_buffer_size */) {}};
+  void operator()(uint8_t dynamic_audio_buffer_size) { body(dynamic_audio_buffer_size); }
 };
-extern struct btif_av_set_dynamic_audio_buffer_size
-    btif_av_set_dynamic_audio_buffer_size;
+extern struct btif_av_set_dynamic_audio_buffer_size btif_av_set_dynamic_audio_buffer_size;
 
 // Name: btif_av_set_low_latency
 // Params: bool is_low_latency
 // Return: void
 struct btif_av_set_low_latency {
-  std::function<void(bool is_low_latency)> body{
-      [](bool /* is_low_latency */) {}};
-  void operator()(bool is_low_latency) { body(is_low_latency); };
+  std::function<void(bool is_low_latency)> body{[](bool /* is_low_latency */) {}};
+  void operator()(bool is_low_latency) { body(is_low_latency); }
 };
 extern struct btif_av_set_low_latency btif_av_set_low_latency;
 
@@ -379,7 +342,7 @@ extern struct btif_av_set_low_latency btif_av_set_low_latency;
 struct btif_av_sink_active_peer {
   static RawAddress return_value;
   std::function<RawAddress(void)> body{[](void) { return return_value; }};
-  RawAddress operator()(void) { return body(); };
+  RawAddress operator()(void) { return body(); }
 };
 extern struct btif_av_sink_active_peer btif_av_sink_active_peer;
 
@@ -388,9 +351,8 @@ extern struct btif_av_sink_active_peer btif_av_sink_active_peer;
 // Return: bt_status_t
 struct btif_av_sink_execute_service {
   static bt_status_t return_value;
-  std::function<bt_status_t(bool enable)> body{
-      [](bool /* enable */) { return return_value; }};
-  bt_status_t operator()(bool enable) { return body(enable); };
+  std::function<bt_status_t(bool enable)> body{[](bool /* enable */) { return return_value; }};
+  bt_status_t operator()(bool enable) { return body(enable); }
 };
 extern struct btif_av_sink_execute_service btif_av_sink_execute_service;
 
@@ -400,7 +362,7 @@ extern struct btif_av_sink_execute_service btif_av_sink_execute_service;
 struct btif_av_source_active_peer {
   static RawAddress return_value;
   std::function<RawAddress(void)> body{[](void) { return return_value; }};
-  RawAddress operator()(void) { return body(); };
+  RawAddress operator()(void) { return body(); }
 };
 extern struct btif_av_source_active_peer btif_av_source_active_peer;
 
@@ -409,21 +371,10 @@ extern struct btif_av_source_active_peer btif_av_source_active_peer;
 // Return: bt_status_t
 struct btif_av_source_execute_service {
   static bt_status_t return_value;
-  std::function<bt_status_t(bool enable)> body{
-      [](bool /* enable */) { return return_value; }};
-  bt_status_t operator()(bool enable) { return body(enable); };
+  std::function<bt_status_t(bool enable)> body{[](bool /* enable */) { return return_value; }};
+  bt_status_t operator()(bool enable) { return body(enable); }
 };
 extern struct btif_av_source_execute_service btif_av_source_execute_service;
-
-// Name: btif_av_src_disconnect_sink
-// Params: const RawAddress& peer_address
-// Return: void
-struct btif_av_src_disconnect_sink {
-  std::function<void(const RawAddress& peer_address)> body{
-      [](const RawAddress& /* peer_address */) {}};
-  void operator()(const RawAddress& peer_address) { body(peer_address); };
-};
-extern struct btif_av_src_disconnect_sink btif_av_src_disconnect_sink;
 
 // Name: btif_av_src_sink_coexist_enabled
 // Params: void
@@ -431,26 +382,28 @@ extern struct btif_av_src_disconnect_sink btif_av_src_disconnect_sink;
 struct btif_av_src_sink_coexist_enabled {
   static bool return_value;
   std::function<bool(void)> body{[](void) { return return_value; }};
-  bool operator()(void) { return body(); };
+  bool operator()(void) { return body(); }
 };
 extern struct btif_av_src_sink_coexist_enabled btif_av_src_sink_coexist_enabled;
 
 // Name: btif_av_stream_ready
-// Params: void
+// Params: const A2dpType local_a2dp_type
 // Return: bool
 struct btif_av_stream_ready {
   static bool return_value;
-  std::function<bool(void)> body{[](void) { return return_value; }};
-  bool operator()(void) { return body(); };
+  std::function<bool(const A2dpType local_a2dp_type)> body{
+          [](const A2dpType /* local_a2dp_type */) { return return_value; }};
+  bool operator()(const A2dpType local_a2dp_type) { return body(local_a2dp_type); }
 };
 extern struct btif_av_stream_ready btif_av_stream_ready;
 
 // Name: btif_av_stream_start
-// Params: void
+// Params: const A2dpType local_a2dp_type
 // Return: void
 struct btif_av_stream_start {
-  std::function<void(void)> body{[](void) {}};
-  void operator()(void) { body(); };
+  std::function<void(const A2dpType local_a2dp_type)> body{
+          [](const A2dpType /* local_a2dp_type */) {}};
+  void operator()(const A2dpType local_a2dp_type) { body(local_a2dp_type); }
 };
 extern struct btif_av_stream_start btif_av_stream_start;
 
@@ -459,7 +412,7 @@ extern struct btif_av_stream_start btif_av_stream_start;
 // Return: void
 struct btif_av_stream_start_offload {
   std::function<void(void)> body{[](void) {}};
-  void operator()(void) { body(); };
+  void operator()(void) { body(); }
 };
 extern struct btif_av_stream_start_offload btif_av_stream_start_offload;
 
@@ -467,20 +420,19 @@ extern struct btif_av_stream_start_offload btif_av_stream_start_offload;
 // Params: bool use_latency_mode
 // Return: void
 struct btif_av_stream_start_with_latency {
-  std::function<void(bool use_latency_mode)> body{
-      [](bool /* use_latency_mode */) {}};
-  void operator()(bool use_latency_mode) { body(use_latency_mode); };
+  std::function<void(bool use_latency_mode)> body{[](bool /* use_latency_mode */) {}};
+  void operator()(bool use_latency_mode) { body(use_latency_mode); }
 };
-extern struct btif_av_stream_start_with_latency
-    btif_av_stream_start_with_latency;
+extern struct btif_av_stream_start_with_latency btif_av_stream_start_with_latency;
 
 // Name: btif_av_stream_started_ready
-// Params: void
+// Params: const A2dpType local_a2dp_type
 // Return: bool
 struct btif_av_stream_started_ready {
   static bool return_value;
-  std::function<bool(void)> body{[](void) { return return_value; }};
-  bool operator()(void) { return body(); };
+  std::function<bool(const A2dpType local_a2dp_type)> body{
+          [](const A2dpType /* local_a2dp_type */) { return return_value; }};
+  bool operator()(const A2dpType local_a2dp_type) { return body(local_a2dp_type); }
 };
 extern struct btif_av_stream_started_ready btif_av_stream_started_ready;
 
@@ -489,8 +441,8 @@ extern struct btif_av_stream_started_ready btif_av_stream_started_ready;
 // Return: void
 struct btif_av_stream_stop {
   std::function<void(const RawAddress& peer_address)> body{
-      [](const RawAddress& /* peer_address */) {}};
-  void operator()(const RawAddress& peer_address) { body(peer_address); };
+          [](const RawAddress& /* peer_address */) {}};
+  void operator()(const RawAddress& peer_address) { body(peer_address); }
 };
 extern struct btif_av_stream_stop btif_av_stream_stop;
 
@@ -499,7 +451,7 @@ extern struct btif_av_stream_stop btif_av_stream_stop;
 // Return: void
 struct btif_av_stream_suspend {
   std::function<void(void)> body{[](void) {}};
-  void operator()(void) { body(); };
+  void operator()(void) { body(); }
 };
 extern struct btif_av_stream_suspend btif_av_stream_suspend;
 
@@ -508,7 +460,7 @@ extern struct btif_av_stream_suspend btif_av_stream_suspend;
 // Return: void
 struct btif_debug_av_dump {
   std::function<void(int fd)> body{[](int /* fd */) {}};
-  void operator()(int fd) { body(fd); };
+  void operator()(int fd) { body(fd); }
 };
 extern struct btif_debug_av_dump btif_debug_av_dump;
 
@@ -517,21 +469,10 @@ extern struct btif_debug_av_dump btif_debug_av_dump;
 // Return: const char*
 struct dump_av_sm_event_name {
   static const char* return_value;
-  std::function<const char*(int event)> body{
-      [](int /* event */) { return return_value; }};
-  const char* operator()(int event) { return body(event); };
+  std::function<const char*(int event)> body{[](int /* event */) { return return_value; }};
+  const char* operator()(int event) { return body(event); }
 };
 extern struct dump_av_sm_event_name dump_av_sm_event_name;
-
-// Name: src_do_suspend_in_main_thread
-// Params: btif_av_sm_event_t event
-// Return: void
-struct src_do_suspend_in_main_thread {
-  std::function<void(btif_av_sm_event_t event)> body{
-      [](btif_av_sm_event_t /* event */) {}};
-  void operator()(btif_av_sm_event_t event) { body(event); };
-};
-extern struct src_do_suspend_in_main_thread src_do_suspend_in_main_thread;
 
 }  // namespace btif_av
 }  // namespace mock

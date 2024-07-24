@@ -27,14 +27,13 @@
 #include "has_ctp.h"
 
 /* Journal and journal entry classes used by the state dumping functionality. */
-namespace le_audio {
+namespace bluetooth::le_audio {
 namespace has {
 static constexpr uint8_t kHasJournalNumRecords = 20;
 
 struct HasJournalRecord {
   /* Indicates which value the `event` contains (due to ambiguous uint8_t) */
-  bool is_operation : 1, is_notification : 1, is_features_change : 1,
-      is_active_preset_change : 1;
+  bool is_operation : 1, is_notification : 1, is_features_change : 1, is_active_preset_change : 1;
   std::variant<HasCtpOp, HasCtpNtf, uint8_t> event;
   struct timespec timestamp;
 
@@ -44,8 +43,7 @@ struct HasJournalRecord {
   /* Status of the operation to be set once it gets completed */
   uint8_t op_status;
 
-  HasJournalRecord(const HasCtpOp& op, void* context)
-      : event(op), op_context_handle(context) {
+  HasJournalRecord(const HasCtpOp& op, void* context) : event(op), op_context_handle(context) {
     clock_gettime(CLOCK_REALTIME, &timestamp);
     is_operation = true;
     is_notification = false;
@@ -78,7 +76,7 @@ std::ostream& operator<<(std::ostream& os, const HasJournalRecord& r);
 
 template <class valT, size_t cache_max>
 class CacheList {
- public:
+public:
   valT& Append(valT data) {
     items_.push_front(std::move(data));
 
@@ -98,16 +96,18 @@ class CacheList {
   const_iterator end(void) const { return items_.end(); }
 
   void Erase(iterator it) {
-    if (it != items_.end()) items_.erase(it);
+    if (it != items_.end()) {
+      items_.erase(it);
+    }
   }
 
   void Clear(void) { items_.clear(); }
   bool isEmpty(void) { return items_.empty(); }
 
- private:
+private:
   typename std::list<valT> items_;
 };
 
 using HasJournal = CacheList<HasJournalRecord, kHasJournalNumRecords>;
 }  // namespace has
-}  // namespace le_audio
+}  // namespace bluetooth::le_audio

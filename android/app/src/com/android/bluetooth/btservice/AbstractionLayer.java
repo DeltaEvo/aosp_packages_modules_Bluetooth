@@ -16,12 +16,9 @@
 
 package com.android.bluetooth.btservice;
 
-/*
- * @hide
- */
-
 public final class AbstractionLayer {
-    // Do not modify without upating the HAL files.
+    // Do not modify without updating the HAL files.
+    // Do not modify without migrating data in the config
 
     // TODO: Some of the constants are repeated from BluetoothAdapter.java.
     // Get rid of them and maintain just one.
@@ -38,7 +35,6 @@ public final class AbstractionLayer {
     static final int BT_PROPERTY_CLASS_OF_DEVICE = 0x04;
     static final int BT_PROPERTY_TYPE_OF_DEVICE = 0x05;
     static final int BT_PROPERTY_SERVICE_RECORD = 0x06;
-    static final int BT_PROPERTY_ADAPTER_SCAN_MODE = 0x07;
     static final int BT_PROPERTY_ADAPTER_BONDED_DEVICES = 0x08;
     static final int BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT = 0x09;
 
@@ -50,7 +46,6 @@ public final class AbstractionLayer {
 
     static final int BT_PROPERTY_DYNAMIC_AUDIO_BUFFER = 0x10;
     static final int BT_PROPERTY_REMOTE_IS_COORDINATED_SET_MEMBER = 0x11;
-    static final int BT_PROPERTY_WL_MEDIA_PLAYERS_LIST = 0x14;
     static final int BT_PROPERTY_REMOTE_ASHA_CAPABILITY = 0X15;
     static final int BT_PROPERTY_REMOTE_ASHA_TRUNCATED_HISYNCID = 0X16;
     static final int BT_PROPERTY_REMOTE_MODEL_NUM = 0x17;
@@ -58,8 +53,6 @@ public final class AbstractionLayer {
     public static final int BT_DEVICE_TYPE_BREDR = 0x01;
     public static final int BT_DEVICE_TYPE_BLE = 0x02;
     public static final int BT_DEVICE_TYPE_DUAL = 0x03;
-
-    static final int BT_PROPERTY_LOCAL_IO_CAPS = 0x0e;
 
     static final int BT_BOND_STATE_NONE = 0x00;
     static final int BT_BOND_STATE_BONDING = 0x01;

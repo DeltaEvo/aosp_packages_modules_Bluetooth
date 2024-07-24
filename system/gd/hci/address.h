@@ -26,6 +26,7 @@
 #include <string>
 
 #include "common/interfaces/ILoggable.h"
+#include "os/logging/log_adapter.h"
 #include "packet/custom_field_fixed_size_interface.h"
 #include "storage/serializable.h"
 
@@ -35,7 +36,7 @@ namespace hci {
 class Address final : public packet::CustomFieldFixedSizeInterface<Address>,
                       public storage::Serializable<Address>,
                       public bluetooth::common::IRedactableLoggable {
- public:
+public:
   static constexpr size_t kLength = 6;
 
   // Bluetooth MAC address bytes saved in little endian format.
@@ -49,12 +50,8 @@ class Address final : public packet::CustomFieldFixedSizeInterface<Address>,
   Address(std::initializer_list<uint8_t> l);
 
   // CustomFieldFixedSizeInterface methods
-  inline uint8_t* data() override {
-    return address.data();
-  }
-  inline const uint8_t* data() const override {
-    return address.data();
-  }
+  inline uint8_t* data() override { return address.data(); }
+  inline const uint8_t* data() const override { return address.data(); }
 
   // storage::Serializable methods
   std::string ToString() const override;
@@ -66,28 +63,14 @@ class Address final : public packet::CustomFieldFixedSizeInterface<Address>,
   std::string ToLegacyConfigString() const override;
   static std::optional<Address> FromLegacyConfigString(const std::string& str);
 
-  bool operator<(const Address& rhs) const {
-    return address < rhs.address;
-  }
-  bool operator==(const Address& rhs) const {
-    return address == rhs.address;
-  }
-  bool operator>(const Address& rhs) const {
-    return (rhs < *this);
-  }
-  bool operator<=(const Address& rhs) const {
-    return !(*this > rhs);
-  }
-  bool operator>=(const Address& rhs) const {
-    return !(*this < rhs);
-  }
-  bool operator!=(const Address& rhs) const {
-    return !(*this == rhs);
-  }
+  bool operator<(const Address& rhs) const { return address < rhs.address; }
+  bool operator==(const Address& rhs) const { return address == rhs.address; }
+  bool operator>(const Address& rhs) const { return rhs < *this; }
+  bool operator<=(const Address& rhs) const { return !(*this > rhs); }
+  bool operator>=(const Address& rhs) const { return !(*this < rhs); }
+  bool operator!=(const Address& rhs) const { return !(*this == rhs); }
 
-  bool IsEmpty() const {
-    return *this == kEmpty;
-  }
+  bool IsEmpty() const { return *this == kEmpty; }
 
   // Converts |string| to Address and places it in |to|. If |from| does
   // not represent a Bluetooth address, |to| is not modified and this function
@@ -102,7 +85,7 @@ class Address final : public packet::CustomFieldFixedSizeInterface<Address>,
 
   static const Address kEmpty;  // 00:00:00:00:00:00
   static const Address kAny;    // FF:FF:FF:FF:FF:FF
- private:
+private:
   std::string _ToMaskedColonSepHexString(int bytes_to_mask) const;
 };
 
@@ -127,3 +110,19 @@ struct hash<bluetooth::hci::Address> {
   }
 };
 }  // namespace std
+
+#if __has_include(<bluetooth/log.h>)
+#include <bluetooth/log.h>
+
+namespace fmt {
+template <>
+struct formatter<bluetooth::hci::Address> : formatter<std::string> {
+  template <class Context>
+  typename Context::iterator format(const bluetooth::hci::Address& address, Context& ctx) const {
+    std::string repr = address.ToRedactedStringForLogging();
+    return fmt::formatter<std::string>::format(repr, ctx);
+  }
+};
+}  // namespace fmt
+
+#endif  // __has_include(<bluetooth/log.h>

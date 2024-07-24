@@ -17,7 +17,6 @@
 
 #include <base/functional/bind.h>
 #include <base/functional/callback.h>
-#include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
 #include <bluetooth/log.h>
 #include <hardware/bt_gatt_types.h>
@@ -38,7 +37,6 @@
 #include "gap_api.h"
 #include "gatt_api.h"
 #include "has_types.h"
-#include "include/check.h"
 #include "internal_include/bt_trace.h"
 #include "os/log.h"
 #include "osi/include/properties.h"
@@ -53,39 +51,35 @@ using bluetooth::has::kFeatureBitPresetSynchronizationSupported;
 using bluetooth::has::kHasPresetIndexInvalid;
 using bluetooth::has::PresetInfo;
 using bluetooth::has::PresetInfoReason;
-using le_audio::has::HasClient;
-using le_audio::has::HasCtpGroupOpCoordinator;
-using le_audio::has::HasCtpNtf;
-using le_audio::has::HasCtpOp;
-using le_audio::has::HasDevice;
-using le_audio::has::HasGattOpContext;
-using le_audio::has::HasJournalRecord;
-using le_audio::has::HasPreset;
-using le_audio::has::kControlPointMandatoryOpcodesBitmask;
-using le_audio::has::kControlPointSynchronizedOpcodesBitmask;
-using le_audio::has::kUuidActivePresetIndex;
-using le_audio::has::kUuidHearingAccessService;
-using le_audio::has::kUuidHearingAidFeatures;
-using le_audio::has::kUuidHearingAidPresetControlPoint;
-using le_audio::has::PresetCtpChangeId;
-using le_audio::has::PresetCtpOpcode;
+using bluetooth::le_audio::has::HasClient;
+using bluetooth::le_audio::has::HasCtpGroupOpCoordinator;
+using bluetooth::le_audio::has::HasCtpNtf;
+using bluetooth::le_audio::has::HasCtpOp;
+using bluetooth::le_audio::has::HasDevice;
+using bluetooth::le_audio::has::HasGattOpContext;
+using bluetooth::le_audio::has::HasJournalRecord;
+using bluetooth::le_audio::has::HasPreset;
+using bluetooth::le_audio::has::kControlPointMandatoryOpcodesBitmask;
+using bluetooth::le_audio::has::kControlPointSynchronizedOpcodesBitmask;
+using bluetooth::le_audio::has::kUuidActivePresetIndex;
+using bluetooth::le_audio::has::kUuidHearingAccessService;
+using bluetooth::le_audio::has::kUuidHearingAidFeatures;
+using bluetooth::le_audio::has::kUuidHearingAidPresetControlPoint;
+using bluetooth::le_audio::has::PresetCtpChangeId;
+using bluetooth::le_audio::has::PresetCtpOpcode;
 using namespace bluetooth;
 
 void btif_storage_add_leaudio_has_device(const RawAddress& address,
-                                         std::vector<uint8_t> presets_bin,
-                                         uint8_t features,
+                                         std::vector<uint8_t> presets_bin, uint8_t features,
                                          uint8_t active_preset);
 bool btif_storage_get_leaudio_has_presets(const RawAddress& address,
                                           std::vector<uint8_t>& presets_bin,
                                           uint8_t& active_preset);
 void btif_storage_set_leaudio_has_presets(const RawAddress& address,
                                           std::vector<uint8_t> presets_bin);
-bool btif_storage_get_leaudio_has_features(const RawAddress& address,
-                                           uint8_t& features);
-void btif_storage_set_leaudio_has_features(const RawAddress& address,
-                                           uint8_t features);
-void btif_storage_set_leaudio_has_active_preset(const RawAddress& address,
-                                                uint8_t active_preset);
+bool btif_storage_get_leaudio_has_features(const RawAddress& address, uint8_t& features);
+void btif_storage_set_leaudio_has_features(const RawAddress& address, uint8_t features);
+void btif_storage_set_leaudio_has_active_preset(const RawAddress& address, uint8_t active_preset);
 void btif_storage_remove_leaudio_has(const RawAddress& address);
 
 bool gatt_profile_get_eatt_support(const RawAddress& remote_bda);
@@ -124,76 +118,81 @@ std::mutex instance_mutex;
  * synchronised preset change operations on the Binaural Hearing Aid devices.
  */
 class HasClientImpl : public HasClient {
- public:
-  HasClientImpl(bluetooth::has::HasClientCallbacks* callbacks,
-                base::Closure initCb)
+public:
+  HasClientImpl(bluetooth::has::HasClientCallbacks* callbacks, base::Closure initCb)
       : gatt_if_(0), callbacks_(callbacks) {
     BTA_GATTC_AppRegister(
-        [](tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
-          if (instance && p_data) instance->GattcCallback(event, p_data);
-        },
-        base::Bind(
-            [](base::Closure initCb, uint8_t client_id, uint8_t status) {
-              if (status != GATT_SUCCESS) {
-                log::error(
-                    "Can't start Hearing Aid Service client profile - no gatt "
-                    "clients left!");
-                return;
+            [](tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
+              if (instance && p_data) {
+                instance->GattcCallback(event, p_data);
               }
-              instance->gatt_if_ = client_id;
-              initCb.Run();
             },
-            initCb),
-        true);
+            base::Bind(
+                    [](base::Closure initCb, uint8_t client_id, uint8_t status) {
+                      if (status != GATT_SUCCESS) {
+                        log::error(
+                                "Can't start Hearing Aid Service client profile - no gatt "
+                                "clients left!");
+                        return;
+                      }
+                      instance->gatt_if_ = client_id;
+                      initCb.Run();
+                    },
+                    initCb),
+            true);
   }
 
   ~HasClientImpl() override = default;
 
   void Connect(const RawAddress& address) override {
-    DLOG(INFO) << __func__ << ": " <<  ADDRESS_TO_LOGGABLE_STR(address);
+    log::info("{}", address);
+
+    if (!BTM_IsLinkKeyKnown(address, BT_TRANSPORT_LE)) {
+      log::error("Connecting  {} when not bonded", address);
+      callbacks_->OnConnectionState(ConnectionState::DISCONNECTED, address);
+      return;
+    }
 
     std::vector<RawAddress> addresses = {address};
     auto csis_api = CsisClient::Get();
     if (csis_api != nullptr) {
       // Connect entire CAS set of devices
-      auto group_id = csis_api->GetGroupId(
-          address, bluetooth::Uuid::From16Bit(UUID_COMMON_AUDIO_SERVICE));
+      auto group_id =
+              csis_api->GetGroupId(address, bluetooth::Uuid::From16Bit(UUID_COMMON_AUDIO_SERVICE));
       addresses = csis_api->GetDeviceList(group_id);
     }
 
     if (addresses.empty()) {
-      log::warn("{} is not part of any set", ADDRESS_TO_LOGGABLE_STR(address));
+      log::warn("{} is not part of any set", address);
       addresses = {address};
     }
 
     for (auto const& addr : addresses) {
-      auto device = std::find_if(devices_.begin(), devices_.end(),
-                                 HasDevice::MatchAddress(addr));
+      auto device = std::find_if(devices_.begin(), devices_.end(), HasDevice::MatchAddress(addr));
       if (device == devices_.end()) {
         devices_.emplace_back(addr, true);
         BTA_GATTC_Open(gatt_if_, addr, BTM_BLE_DIRECT_CONNECTION, false);
 
       } else {
         device->is_connecting_actively = true;
-        if (!device->IsConnected())
+        if (!device->IsConnected()) {
           BTA_GATTC_Open(gatt_if_, addr, BTM_BLE_DIRECT_CONNECTION, false);
+        }
       }
     }
   }
 
-  void AddFromStorage(const RawAddress& address, uint8_t features,
-                      uint16_t is_acceptlisted) {
-    DLOG(INFO) << __func__ << ": " << ADDRESS_TO_LOGGABLE_STR(address)
-               << ", features=" << loghex(features)
-               << ", isAcceptlisted=" << is_acceptlisted;
+  void AddFromStorage(const RawAddress& address, uint8_t features, uint16_t is_acceptlisted) {
+    log::debug("{}, features=0x{:x}, isAcceptlisted={}", address, features, is_acceptlisted);
 
     /* Notify upper layer about the device */
     callbacks_->OnDeviceAvailable(address, features);
     if (is_acceptlisted) {
-      auto device = std::find_if(devices_.begin(), devices_.end(),
-                                 HasDevice::MatchAddress(address));
-      if (device == devices_.end())
+      auto device =
+              std::find_if(devices_.begin(), devices_.end(), HasDevice::MatchAddress(address));
+      if (device == devices_.end()) {
         devices_.push_back(HasDevice(address, features));
+      }
 
       /* Connect in background */
       BTA_GATTC_Open(gatt_if_, address, BTM_BLE_BKG_CONNECT_ALLOW_LIST, false);
@@ -201,28 +200,26 @@ class HasClientImpl : public HasClient {
   }
 
   void Disconnect(const RawAddress& address) override {
-    DLOG(INFO) << __func__ << ": " << ADDRESS_TO_LOGGABLE_STR(address);
+    log::debug("{}", address);
 
     std::vector<RawAddress> addresses = {address};
     auto csis_api = CsisClient::Get();
     if (csis_api != nullptr) {
       // Disconnect entire CAS set of devices
-      auto group_id = csis_api->GetGroupId(
-          address, bluetooth::Uuid::From16Bit(UUID_COMMON_AUDIO_SERVICE));
+      auto group_id =
+              csis_api->GetGroupId(address, bluetooth::Uuid::From16Bit(UUID_COMMON_AUDIO_SERVICE));
       addresses = csis_api->GetDeviceList(group_id);
     }
 
     if (addresses.empty()) {
-      log::warn("{} is not part of any set", ADDRESS_TO_LOGGABLE_STR(address));
+      log::warn("{} is not part of any set", address);
       addresses = {address};
     }
 
     for (auto const& addr : addresses) {
-      auto device = std::find_if(devices_.begin(), devices_.end(),
-                                 HasDevice::MatchAddress(addr));
+      auto device = std::find_if(devices_.begin(), devices_.end(), HasDevice::MatchAddress(addr));
       if (device == devices_.end()) {
-        log::warn("Device not connected to profile{}",
-                  ADDRESS_TO_LOGGABLE_STR(addr));
+        log::warn("Device not connected to profile{}", addr);
         return;
       }
 
@@ -250,18 +247,17 @@ class HasClientImpl : public HasClient {
                                   tGATT_STATUS status) {
     /* Find journal entry by the context and update */
     auto journal_entry = std::find_if(
-        device.has_journal_.begin(), device.has_journal_.end(),
-        [&context](auto const& record) {
-          if (record.is_operation) {
-            return HasGattOpContext(record.op_context_handle) == context;
-          }
-          return false;
-        });
+            device.has_journal_.begin(), device.has_journal_.end(), [&context](auto const& record) {
+              if (record.is_operation) {
+                return HasGattOpContext(record.op_context_handle) == context;
+              }
+              return false;
+            });
 
     if (journal_entry == device.has_journal_.end()) {
       log::warn(
-          "Journaling error or journal length limit was set to low. Unable to "
-          "log the operation outcome.");
+              "Journaling error or journal length limit was set to low. Unable to "
+              "log the operation outcome.");
       return;
     }
 
@@ -274,9 +270,8 @@ class HasClientImpl : public HasClient {
   }
 
   std::optional<HasCtpOp> ExtractPendingCtpOp(uint16_t op_id) {
-    auto op_it =
-        std::find_if(pending_operations_.begin(), pending_operations_.end(),
-                     [op_id](auto const& el) { return op_id == el.op_id; });
+    auto op_it = std::find_if(pending_operations_.begin(), pending_operations_.end(),
+                              [op_id](auto const& el) { return op_id == el.op_id; });
 
     if (op_it != pending_operations_.end()) {
       auto op = *op_it;
@@ -289,9 +284,8 @@ class HasClientImpl : public HasClient {
 
   void EnqueueCtpOp(HasCtpOp op) { pending_operations_.push_back(op); }
 
-  void OnHasActivePresetCycleStatus(uint16_t conn_id, tGATT_STATUS status,
-                                    void* user_data) {
-    DLOG(INFO) << __func__ << " status: " << +status;
+  void OnHasActivePresetCycleStatus(uint16_t conn_id, tGATT_STATUS status, void* user_data) {
+    log::debug("status: {}", status);
 
     auto device = GetDevice(conn_id);
     if (!device) {
@@ -300,12 +294,14 @@ class HasClientImpl : public HasClient {
     }
 
     /* Journal update */
-    LOG_ASSERT(user_data != nullptr) << "Has operation context is missing!";
+    log::assert_that(user_data != nullptr, "Has operation context is missing!");
     auto context = HasGattOpContext(user_data);
     UpdateJournalOpEntryStatus(*device, context, status);
 
     auto op_opt = ExtractPendingCtpOp(context.ctp_op_id);
-    if (status == GATT_SUCCESS) return;
+    if (status == GATT_SUCCESS) {
+      return;
+    }
 
     /* This could be one of the coordinated group preset change request */
     pending_group_operation_timeouts_.erase(context.ctp_op_id);
@@ -316,32 +312,31 @@ class HasClientImpl : public HasClient {
       return;
     }
     auto op = op_opt.value();
-    callbacks_->OnActivePresetSelectError(op.addr_or_group,
-                                          GattStatus2SvcErrorCode(status));
+    callbacks_->OnActivePresetSelectError(op.addr_or_group, GattStatus2SvcErrorCode(status));
 
     if (status == GATT_DATABASE_OUT_OF_SYNC) {
-      log::info("Database out of sync for {}",
-                ADDRESS_TO_LOGGABLE_CSTR(device->addr));
+      log::info("Database out of sync for {}", device->addr);
       ClearDeviceInformationAndStartSearch(device);
     }
   }
 
-  void OnHasPresetNameSetStatus(uint16_t conn_id, tGATT_STATUS status,
-                                void* user_data) {
+  void OnHasPresetNameSetStatus(uint16_t conn_id, tGATT_STATUS status, void* user_data) {
     auto device = GetDevice(conn_id);
     if (!device) {
       log::warn("Device not connected to profile, conn_id={}", conn_id);
       return;
     }
 
-    LOG_ASSERT(user_data != nullptr) << "Has operation context is missing!";
+    log::assert_that(user_data != nullptr, "Has operation context is missing!");
     HasGattOpContext context(user_data);
 
     /* Journal update */
     UpdateJournalOpEntryStatus(*device, context, status);
 
     auto op_opt = ExtractPendingCtpOp(context.ctp_op_id);
-    if (status == GATT_SUCCESS) return;
+    if (status == GATT_SUCCESS) {
+      return;
+    }
 
     /* This could be one of the coordinated group preset change request */
     pending_group_operation_timeouts_.erase(context.ctp_op_id);
@@ -352,31 +347,30 @@ class HasClientImpl : public HasClient {
       return;
     }
     auto op = op_opt.value();
-    callbacks_->OnSetPresetNameError(device->addr, op.index,
-                                     GattStatus2SvcErrorCode(status));
+    callbacks_->OnSetPresetNameError(device->addr, op.index, GattStatus2SvcErrorCode(status));
     if (status == GATT_DATABASE_OUT_OF_SYNC) {
-      log::info("Database out of sync for {}",
-                ADDRESS_TO_LOGGABLE_CSTR(device->addr));
+      log::info("Database out of sync for {}", device->addr);
       ClearDeviceInformationAndStartSearch(device);
     }
   }
 
-  void OnHasPresetNameGetStatus(uint16_t conn_id, tGATT_STATUS status,
-                                void* user_data) {
+  void OnHasPresetNameGetStatus(uint16_t conn_id, tGATT_STATUS status, void* user_data) {
     auto device = GetDevice(conn_id);
     if (!device) {
       log::warn("Device not connected to profile, conn_id={}", conn_id);
       return;
     }
 
-    LOG_ASSERT(user_data != nullptr) << "Has operation context is missing!";
+    log::assert_that(user_data != nullptr, "Has operation context is missing!");
     HasGattOpContext context(user_data);
 
     /* Journal update */
     UpdateJournalOpEntryStatus(*device, context, status);
 
     auto op_opt = ExtractPendingCtpOp(context.ctp_op_id);
-    if (status == GATT_SUCCESS) return;
+    if (status == GATT_SUCCESS) {
+      return;
+    }
 
     /* Error handling */
     if (!op_opt.has_value()) {
@@ -384,23 +378,19 @@ class HasClientImpl : public HasClient {
       return;
     }
     auto op = op_opt.value();
-    callbacks_->OnPresetInfoError(device->addr, op.index,
-                                  GattStatus2SvcErrorCode(status));
+    callbacks_->OnPresetInfoError(device->addr, op.index, GattStatus2SvcErrorCode(status));
 
     if (status == GATT_DATABASE_OUT_OF_SYNC) {
-      log::info("Database out of sync for {}",
-                ADDRESS_TO_LOGGABLE_CSTR(device->addr));
+      log::info("Database out of sync for {}", device->addr);
       ClearDeviceInformationAndStartSearch(device);
     } else {
-      log::error("Devices {}: Control point not usable. Disconnecting!",
-                 ADDRESS_TO_LOGGABLE_CSTR(device->addr));
+      log::error("Devices {}: Control point not usable. Disconnecting!", device->addr);
       BTA_GATTC_Close(device->conn_id);
     }
   }
 
-  void OnHasPresetIndexOperation(uint16_t conn_id, tGATT_STATUS status,
-                                 void* user_data) {
-    DLOG(INFO) << __func__;
+  void OnHasPresetIndexOperation(uint16_t conn_id, tGATT_STATUS status, void* user_data) {
+    log::debug("");
 
     auto device = GetDevice(conn_id);
     if (!device) {
@@ -408,14 +398,16 @@ class HasClientImpl : public HasClient {
       return;
     }
 
-    LOG_ASSERT(user_data != nullptr) << "Has operation context is missing!";
+    log::assert_that(user_data != nullptr, "Has operation context is missing!");
     HasGattOpContext context(user_data);
 
     /* Journal update */
     UpdateJournalOpEntryStatus(*device, context, status);
 
     auto op_opt = ExtractPendingCtpOp(context.ctp_op_id);
-    if (status == GATT_SUCCESS) return;
+    if (status == GATT_SUCCESS) {
+      return;
+    }
 
     /* This could be one of the coordinated group preset change request */
     pending_group_operation_timeouts_.erase(context.ctp_op_id);
@@ -428,27 +420,23 @@ class HasClientImpl : public HasClient {
 
     auto op = op_opt.value();
     if (op.opcode == PresetCtpOpcode::READ_PRESETS) {
-      callbacks_->OnPresetInfoError(device->addr, op.index,
-                                    GattStatus2SvcErrorCode(status));
+      callbacks_->OnPresetInfoError(device->addr, op.index, GattStatus2SvcErrorCode(status));
 
     } else {
-      callbacks_->OnActivePresetSelectError(op.addr_or_group,
-                                            GattStatus2SvcErrorCode(status));
+      callbacks_->OnActivePresetSelectError(op.addr_or_group, GattStatus2SvcErrorCode(status));
     }
 
     if (status == GATT_DATABASE_OUT_OF_SYNC) {
-      log::info("Database out of sync for {}",
-                ADDRESS_TO_LOGGABLE_CSTR(device->addr));
+      log::info("Database out of sync for {}", device->addr);
       ClearDeviceInformationAndStartSearch(device);
     } else {
-      log::error("Devices {}: Control point not usable. Disconnecting!",
-                 ADDRESS_TO_LOGGABLE_CSTR(device->addr));
+      log::error("Devices {}: Control point not usable. Disconnecting!", device->addr);
       BTA_GATTC_Close(device->conn_id);
     }
   }
 
   void CpReadAllPresetsOperation(HasCtpOp operation) {
-    DLOG(INFO) << __func__ << " Operation: " << operation;
+    log::debug("Operation: {}", operation);
 
     if (std::holds_alternative<int>(operation.addr_or_group)) {
       log::error("Read all presets on the entire group not supported.");
@@ -457,13 +445,12 @@ class HasClientImpl : public HasClient {
       return;
     }
 
-    auto device = std::find_if(
-        devices_.begin(), devices_.end(),
-        HasDevice::MatchAddress(std::get<RawAddress>(operation.addr_or_group)));
+    auto device =
+            std::find_if(devices_.begin(), devices_.end(),
+                         HasDevice::MatchAddress(std::get<RawAddress>(operation.addr_or_group)));
     if (device == devices_.end()) {
       log::warn("Device not connected to profile addr: {}",
-                ADDRESS_TO_LOGGABLE_STR(
-                    std::get<RawAddress>(operation.addr_or_group)));
+                std::get<RawAddress>(operation.addr_or_group));
       callbacks_->OnPresetInfoError(device->addr, operation.index,
                                     ErrorCode::OPERATION_NOT_POSSIBLE);
       return;
@@ -482,31 +469,35 @@ class HasClientImpl : public HasClient {
     /* Write to control point */
     EnqueueCtpOp(operation);
     BtaGattQueue::WriteCharacteristic(
-        device->conn_id, device->cp_handle, operation.ToCharacteristicValue(),
-        GATT_WRITE,
-        [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
-           const uint8_t* value, void* user_data) {
-          if (instance)
-            instance->OnHasPresetNameGetStatus(conn_id, status, user_data);
-        },
-        context);
+            device->conn_id, device->cp_handle, operation.ToCharacteristicValue(), GATT_WRITE,
+            [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
+               const uint8_t* value, void* user_data) {
+              if (instance) {
+                instance->OnHasPresetNameGetStatus(conn_id, status, user_data);
+              }
+            },
+            context);
   }
 
-  ErrorCode CpPresetIndexOperationWriteReq(HasDevice& device,
-                                           HasCtpOp& operation) {
-    DLOG(INFO) << __func__ << " Operation: " << operation;
+  ErrorCode CpPresetIndexOperationWriteReq(HasDevice& device, HasCtpOp& operation) {
+    log::debug("Operation: {}", operation);
 
-    if (!device.IsConnected()) return ErrorCode::OPERATION_NOT_POSSIBLE;
+    if (!device.IsConnected()) {
+      return ErrorCode::OPERATION_NOT_POSSIBLE;
+    }
 
-    if (!device.SupportsPresets()) return ErrorCode::OPERATION_NOT_SUPPORTED;
+    if (!device.SupportsPresets()) {
+      return ErrorCode::OPERATION_NOT_SUPPORTED;
+    }
 
-    if (!device.SupportsOperation(operation.opcode))
-      return operation.IsGroupRequest()
-                 ? ErrorCode::GROUP_OPERATION_NOT_SUPPORTED
-                 : ErrorCode::OPERATION_NOT_SUPPORTED;
+    if (!device.SupportsOperation(operation.opcode)) {
+      return operation.IsGroupRequest() ? ErrorCode::GROUP_OPERATION_NOT_SUPPORTED
+                                        : ErrorCode::OPERATION_NOT_SUPPORTED;
+    }
 
-    if (!device.IsValidPreset(operation.index))
+    if (!device.IsValidPreset(operation.index)) {
       return ErrorCode::INVALID_PRESET_INDEX;
+    }
 
     auto context = HasGattOpContext(operation);
 
@@ -516,22 +507,21 @@ class HasClientImpl : public HasClient {
     /* Write to control point */
     EnqueueCtpOp(operation);
     BtaGattQueue::WriteCharacteristic(
-        device.conn_id, device.cp_handle, operation.ToCharacteristicValue(),
-        GATT_WRITE,
-        [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
-           const uint8_t* value, void* user_data) {
-          if (instance)
-            instance->OnHasPresetIndexOperation(conn_id, status, user_data);
-        },
-        context);
+            device.conn_id, device.cp_handle, operation.ToCharacteristicValue(), GATT_WRITE,
+            [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
+               const uint8_t* value, void* user_data) {
+              if (instance) {
+                instance->OnHasPresetIndexOperation(conn_id, status, user_data);
+              }
+            },
+            context);
 
     return ErrorCode::NO_ERROR;
   }
 
   bool AreAllDevicesAvailable(const std::vector<RawAddress>& addresses) {
     for (auto& addr : addresses) {
-      auto device = std::find_if(devices_.begin(), devices_.end(),
-                                 HasDevice::MatchAddress(addr));
+      auto device = std::find_if(devices_.begin(), devices_.end(), HasDevice::MatchAddress(addr));
       if (device == devices_.end() || !device->IsConnected()) {
         return false;
       }
@@ -540,10 +530,9 @@ class HasClientImpl : public HasClient {
   }
 
   ErrorCode CpPresetOperationCaller(
-      HasCtpOp operation,
-      std::function<ErrorCode(HasDevice& device, HasCtpOp& operation)>
-          write_cb) {
-    DLOG(INFO) << __func__ << " Operation: " << operation;
+          HasCtpOp operation,
+          std::function<ErrorCode(HasDevice& device, HasCtpOp& operation)> write_cb) {
+    log::debug("Operation: {}", operation);
     auto status = ErrorCode::NO_ERROR;
 
     if (operation.IsGroupRequest()) {
@@ -566,8 +555,8 @@ class HasClientImpl : public HasClient {
 
         } else {
           /* Make this a coordinated operation */
-          pending_group_operation_timeouts_.emplace(
-              operation.op_id, HasCtpGroupOpCoordinator(addresses, operation));
+          pending_group_operation_timeouts_.emplace(operation.op_id,
+                                                    HasCtpGroupOpCoordinator(addresses, operation));
 
           if (operation.IsSyncedOperation()) {
             status = ErrorCode::GROUP_OPERATION_NOT_SUPPORTED;
@@ -575,8 +564,8 @@ class HasClientImpl : public HasClient {
             /* Clear the error if we find device to forward the operation */
             bool was_sent = false;
             for (auto& addr : addresses) {
-              auto device = std::find_if(devices_.begin(), devices_.end(),
-                                         HasDevice::MatchAddress(addr));
+              auto device =
+                      std::find_if(devices_.begin(), devices_.end(), HasDevice::MatchAddress(addr));
               if (device != devices_.end()) {
                 status = write_cb(*device, operation);
                 if (status == ErrorCode::NO_ERROR) {
@@ -585,17 +574,21 @@ class HasClientImpl : public HasClient {
                 }
               }
             }
-            if (!was_sent) status = ErrorCode::OPERATION_NOT_POSSIBLE;
+            if (!was_sent) {
+              status = ErrorCode::OPERATION_NOT_POSSIBLE;
+            }
 
           } else {
             status = ErrorCode::GROUP_OPERATION_NOT_SUPPORTED;
 
             for (auto& addr : addresses) {
-              auto device = std::find_if(devices_.begin(), devices_.end(),
-                                         HasDevice::MatchAddress(addr));
+              auto device =
+                      std::find_if(devices_.begin(), devices_.end(), HasDevice::MatchAddress(addr));
               if (device != devices_.end()) {
                 status = write_cb(*device, operation);
-                if (status != ErrorCode::NO_ERROR) break;
+                if (status != ErrorCode::NO_ERROR) {
+                  break;
+                }
               }
             }
           }
@@ -608,11 +601,13 @@ class HasClientImpl : public HasClient {
       }
 
     } else {
-      auto device = std::find_if(devices_.begin(), devices_.end(),
-                                 HasDevice::MatchAddress(std::get<RawAddress>(
-                                     operation.addr_or_group)));
+      auto device =
+              std::find_if(devices_.begin(), devices_.end(),
+                           HasDevice::MatchAddress(std::get<RawAddress>(operation.addr_or_group)));
       status = ErrorCode::OPERATION_NOT_POSSIBLE;
-      if (device != devices_.end()) status = write_cb(*device, operation);
+      if (device != devices_.end()) {
+        status = write_cb(*device, operation);
+      }
     }
 
     return status;
@@ -622,27 +617,25 @@ class HasClientImpl : public HasClient {
     log::info("Operation: {}", operation);
 
     auto status = CpPresetOperationCaller(
-        operation, [](HasDevice& device, HasCtpOp operation) -> ErrorCode {
-          if (instance)
-            return instance->CpPresetIndexOperationWriteReq(device, operation);
-          return ErrorCode::OPERATION_NOT_POSSIBLE;
-        });
+            operation, [](HasDevice& device, HasCtpOp operation) -> ErrorCode {
+              if (instance) {
+                return instance->CpPresetIndexOperationWriteReq(device, operation);
+              }
+              return ErrorCode::OPERATION_NOT_POSSIBLE;
+            });
 
     if (status != ErrorCode::NO_ERROR) {
       switch (operation.opcode) {
         case PresetCtpOpcode::READ_PRESETS:
-          LOG_ASSERT(
-              std::holds_alternative<RawAddress>(operation.addr_or_group))
-              << " Unsupported group operation!";
+          log::assert_that(std::holds_alternative<RawAddress>(operation.addr_or_group),
+                           "Unsupported group operation!");
 
-          callbacks_->OnPresetInfoError(
-              std::get<RawAddress>(operation.addr_or_group), operation.index,
-              status);
+          callbacks_->OnPresetInfoError(std::get<RawAddress>(operation.addr_or_group),
+                                        operation.index, status);
           break;
         case PresetCtpOpcode::SET_ACTIVE_PRESET:
         case PresetCtpOpcode::SET_ACTIVE_PRESET_SYNC:
-          callbacks_->OnActivePresetSelectError(operation.addr_or_group,
-                                                status);
+          callbacks_->OnActivePresetSelectError(operation.addr_or_group, status);
           break;
         default:
           break;
@@ -650,19 +643,21 @@ class HasClientImpl : public HasClient {
     }
   }
 
-  ErrorCode CpPresetsCycleOperationWriteReq(HasDevice& device,
-                                            HasCtpOp& operation) {
-    DLOG(INFO) << __func__ << " addr: " << ADDRESS_TO_LOGGABLE_STR(device.addr)
-               << " operation: " << operation;
+  ErrorCode CpPresetsCycleOperationWriteReq(HasDevice& device, HasCtpOp& operation) {
+    log::debug("addr: {} operation: {}", device.addr, operation);
 
-    if (!device.IsConnected()) return ErrorCode::OPERATION_NOT_POSSIBLE;
+    if (!device.IsConnected()) {
+      return ErrorCode::OPERATION_NOT_POSSIBLE;
+    }
 
-    if (!device.SupportsPresets()) return ErrorCode::OPERATION_NOT_SUPPORTED;
+    if (!device.SupportsPresets()) {
+      return ErrorCode::OPERATION_NOT_SUPPORTED;
+    }
 
-    if (!device.SupportsOperation(operation.opcode))
-      return operation.IsGroupRequest()
-                 ? ErrorCode::GROUP_OPERATION_NOT_SUPPORTED
-                 : ErrorCode::OPERATION_NOT_SUPPORTED;
+    if (!device.SupportsOperation(operation.opcode)) {
+      return operation.IsGroupRequest() ? ErrorCode::GROUP_OPERATION_NOT_SUPPORTED
+                                        : ErrorCode::OPERATION_NOT_SUPPORTED;
+    }
 
     auto context = HasGattOpContext(operation);
 
@@ -672,51 +667,57 @@ class HasClientImpl : public HasClient {
     /* Write to control point */
     EnqueueCtpOp(operation);
     BtaGattQueue::WriteCharacteristic(
-        device.conn_id, device.cp_handle, operation.ToCharacteristicValue(),
-        GATT_WRITE,
-        [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
-           const uint8_t* value, void* user_data) {
-          if (instance)
-            instance->OnHasActivePresetCycleStatus(conn_id, status, user_data);
-        },
-        context);
+            device.conn_id, device.cp_handle, operation.ToCharacteristicValue(), GATT_WRITE,
+            [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
+               const uint8_t* value, void* user_data) {
+              if (instance) {
+                instance->OnHasActivePresetCycleStatus(conn_id, status, user_data);
+              }
+            },
+            context);
     return ErrorCode::NO_ERROR;
   }
 
   void CpPresetsCycleOperation(HasCtpOp operation) {
-    DLOG(INFO) << __func__ << " Operation: " << operation;
+    log::debug("Operation: {}", operation);
 
     auto status = CpPresetOperationCaller(
-        operation, [](HasDevice& device, HasCtpOp operation) -> ErrorCode {
-          if (instance)
-            return instance->CpPresetsCycleOperationWriteReq(device, operation);
-          return ErrorCode::OPERATION_NOT_POSSIBLE;
-        });
+            operation, [](HasDevice& device, HasCtpOp operation) -> ErrorCode {
+              if (instance) {
+                return instance->CpPresetsCycleOperationWriteReq(device, operation);
+              }
+              return ErrorCode::OPERATION_NOT_POSSIBLE;
+            });
 
-    if (status != ErrorCode::NO_ERROR)
+    if (status != ErrorCode::NO_ERROR) {
       callbacks_->OnActivePresetSelectError(operation.addr_or_group, status);
+    }
   }
 
-  ErrorCode CpWritePresetNameOperationWriteReq(HasDevice& device,
-                                               HasCtpOp operation) {
-    DLOG(INFO) << __func__ << " addr: " << ADDRESS_TO_LOGGABLE_STR(device.addr)
-               << " operation: " << operation;
+  ErrorCode CpWritePresetNameOperationWriteReq(HasDevice& device, HasCtpOp operation) {
+    log::debug("addr: {} operation: {}", device.addr, operation);
 
-    if (!device.IsConnected()) return ErrorCode::OPERATION_NOT_POSSIBLE;
+    if (!device.IsConnected()) {
+      return ErrorCode::OPERATION_NOT_POSSIBLE;
+    }
 
-    if (!device.SupportsPresets()) return ErrorCode::OPERATION_NOT_SUPPORTED;
-
-    if (!device.IsValidPreset(operation.index, true))
-      return device.IsValidPreset(operation.index)
-                 ? ErrorCode::SET_NAME_NOT_ALLOWED
-                 : ErrorCode::INVALID_PRESET_INDEX;
-
-    if (!device.SupportsOperation(operation.opcode))
+    if (!device.SupportsPresets()) {
       return ErrorCode::OPERATION_NOT_SUPPORTED;
+    }
+
+    if (!device.IsValidPreset(operation.index, true)) {
+      return device.IsValidPreset(operation.index) ? ErrorCode::SET_NAME_NOT_ALLOWED
+                                                   : ErrorCode::INVALID_PRESET_INDEX;
+    }
+
+    if (!device.SupportsOperation(operation.opcode)) {
+      return ErrorCode::OPERATION_NOT_SUPPORTED;
+    }
 
     if (operation.name.value_or("").length() >
-        le_audio::has::HasPreset::kPresetNameLengthLimit)
+        bluetooth::le_audio::has::HasPreset::kPresetNameLengthLimit) {
       return ErrorCode::INVALID_PRESET_NAME_LENGTH;
+    }
 
     auto context = HasGattOpContext(operation, operation.index);
 
@@ -726,20 +727,20 @@ class HasClientImpl : public HasClient {
     /* Write to control point */
     EnqueueCtpOp(operation);
     BtaGattQueue::WriteCharacteristic(
-        device.conn_id, device.cp_handle, operation.ToCharacteristicValue(),
-        GATT_WRITE,
-        [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
-           const uint8_t* value, void* user_data) {
-          if (instance)
-            instance->OnHasPresetNameSetStatus(conn_id, status, user_data);
-        },
-        context);
+            device.conn_id, device.cp_handle, operation.ToCharacteristicValue(), GATT_WRITE,
+            [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
+               const uint8_t* value, void* user_data) {
+              if (instance) {
+                instance->OnHasPresetNameSetStatus(conn_id, status, user_data);
+              }
+            },
+            context);
 
     return ErrorCode::NO_ERROR;
   }
 
   void CpWritePresetNameOperation(HasCtpOp operation) {
-    DLOG(INFO) << __func__ << " operation: " << operation;
+    log::debug("operation: {}", operation);
 
     auto status = ErrorCode::NO_ERROR;
 
@@ -750,8 +751,8 @@ class HasClientImpl : public HasClient {
         addresses = csis_api->GetDeviceList(operation.GetGroupId());
 
         /* Make this a coordinated operation */
-        pending_group_operation_timeouts_.emplace(
-            operation.op_id, HasCtpGroupOpCoordinator(addresses, operation));
+        pending_group_operation_timeouts_.emplace(operation.op_id,
+                                                  HasCtpGroupOpCoordinator(addresses, operation));
       }
 
     } else {
@@ -766,8 +767,7 @@ class HasClientImpl : public HasClient {
     }
 
     for (auto& addr : addresses) {
-      auto device = std::find_if(devices_.begin(), devices_.end(),
-                                 HasDevice::MatchAddress(addr));
+      auto device = std::find_if(devices_.begin(), devices_.end(), HasDevice::MatchAddress(addr));
       if (device != devices_.end()) {
         status = CpWritePresetNameOperationWriteReq(*device, operation);
         if (status != ErrorCode::NO_ERROR) {
@@ -778,11 +778,11 @@ class HasClientImpl : public HasClient {
     }
 
     if (status != ErrorCode::NO_ERROR) {
-      if (operation.IsGroupRequest())
+      if (operation.IsGroupRequest()) {
         pending_group_operation_timeouts_.erase(operation.op_id);
+      }
 
-      callbacks_->OnSetPresetNameError(operation.addr_or_group, operation.index,
-                                       status);
+      callbacks_->OnSetPresetNameError(operation.addr_or_group, operation.index, status);
     }
   }
 
@@ -792,19 +792,26 @@ class HasClientImpl : public HasClient {
      * You never know if the user will make another call for the other devices
      * in this set even though the may support locally synced operations.
      */
-    if (std::holds_alternative<RawAddress>(addr_or_group_id)) return false;
+    if (std::holds_alternative<RawAddress>(addr_or_group_id)) {
+      return false;
+    }
 
     auto csis_api = CsisClient::Get();
-    if (csis_api == nullptr) return false;
+    if (csis_api == nullptr) {
+      return false;
+    }
 
     auto addresses = csis_api->GetDeviceList(std::get<int>(addr_or_group_id));
-    if (addresses.empty()) return false;
+    if (addresses.empty()) {
+      return false;
+    }
 
     for (auto& addr : addresses) {
-      auto device = std::find_if(devices_.begin(), devices_.end(),
-                                 HasDevice::MatchAddress(addr));
+      auto device = std::find_if(devices_.begin(), devices_.end(), HasDevice::MatchAddress(addr));
       if (device != devices_.end()) {
-        if (device->SupportsOperation(opcode)) return true;
+        if (device->SupportsOperation(opcode)) {
+          return true;
+        }
       }
     }
 
@@ -813,93 +820,80 @@ class HasClientImpl : public HasClient {
 
   void SelectActivePreset(std::variant<RawAddress, int> addr_or_group_id,
                           uint8_t preset_index) override {
-    DLOG(INFO) << __func__;
+    log::debug("");
 
-    auto opcode = shouldRequestSyncedOp(addr_or_group_id,
-                                        PresetCtpOpcode::SET_ACTIVE_PRESET_SYNC)
-                      ? PresetCtpOpcode::SET_ACTIVE_PRESET_SYNC
-                      : PresetCtpOpcode::SET_ACTIVE_PRESET;
+    auto opcode = shouldRequestSyncedOp(addr_or_group_id, PresetCtpOpcode::SET_ACTIVE_PRESET_SYNC)
+                          ? PresetCtpOpcode::SET_ACTIVE_PRESET_SYNC
+                          : PresetCtpOpcode::SET_ACTIVE_PRESET;
 
     CpPresetIndexOperation(HasCtpOp(addr_or_group_id, opcode, preset_index));
   }
 
-  void NextActivePreset(
-      std::variant<RawAddress, int> addr_or_group_id) override {
-    DLOG(INFO) << __func__;
+  void NextActivePreset(std::variant<RawAddress, int> addr_or_group_id) override {
+    log::debug("");
 
-    auto opcode = shouldRequestSyncedOp(addr_or_group_id,
-                                        PresetCtpOpcode::SET_NEXT_PRESET_SYNC)
-                      ? PresetCtpOpcode::SET_NEXT_PRESET_SYNC
-                      : PresetCtpOpcode::SET_NEXT_PRESET;
+    auto opcode = shouldRequestSyncedOp(addr_or_group_id, PresetCtpOpcode::SET_NEXT_PRESET_SYNC)
+                          ? PresetCtpOpcode::SET_NEXT_PRESET_SYNC
+                          : PresetCtpOpcode::SET_NEXT_PRESET;
 
     CpPresetsCycleOperation(HasCtpOp(addr_or_group_id, opcode));
   }
 
-  void PreviousActivePreset(
-      std::variant<RawAddress, int> addr_or_group_id) override {
-    DLOG(INFO) << __func__;
+  void PreviousActivePreset(std::variant<RawAddress, int> addr_or_group_id) override {
+    log::debug("");
 
-    auto opcode = shouldRequestSyncedOp(addr_or_group_id,
-                                        PresetCtpOpcode::SET_PREV_PRESET_SYNC)
-                      ? PresetCtpOpcode::SET_PREV_PRESET_SYNC
-                      : PresetCtpOpcode::SET_PREV_PRESET;
+    auto opcode = shouldRequestSyncedOp(addr_or_group_id, PresetCtpOpcode::SET_PREV_PRESET_SYNC)
+                          ? PresetCtpOpcode::SET_PREV_PRESET_SYNC
+                          : PresetCtpOpcode::SET_PREV_PRESET;
 
     CpPresetsCycleOperation(HasCtpOp(addr_or_group_id, opcode));
   }
 
   void GetPresetInfo(const RawAddress& address, uint8_t preset_index) override {
-    auto device = std::find_if(devices_.begin(), devices_.end(),
-                               HasDevice::MatchAddress(address));
+    auto device = std::find_if(devices_.begin(), devices_.end(), HasDevice::MatchAddress(address));
     if (device == devices_.end()) {
-      log::warn("Device not connected to profile{}",
-                ADDRESS_TO_LOGGABLE_STR(address));
+      log::warn("Device not connected to profile{}", address);
       return;
     }
 
-    DLOG(INFO) << __func__ << " preset idx: " << +preset_index;
+    log::debug("preset idx: {}", preset_index);
 
     /* Due to mandatory control point notifications or indications, preset
      * details are always up to date. However we have to be able to do the
      * READ_PRESET_BY_INDEX, to pass the test specification requirements.
      */
-    if (osi_property_get_bool("persist.bluetooth.has.always_use_preset_cache",
-                              true)) {
+    if (osi_property_get_bool("persist.bluetooth.has.always_use_preset_cache", true)) {
       auto* preset = device->GetPreset(preset_index);
       if (preset == nullptr) {
-        log::error("Invalid preset request{}",
-                   ADDRESS_TO_LOGGABLE_STR(address));
-        callbacks_->OnPresetInfoError(address, preset_index,
-                                      ErrorCode::INVALID_PRESET_INDEX);
+        log::error("Invalid preset request{}", address);
+        callbacks_->OnPresetInfoError(address, preset_index, ErrorCode::INVALID_PRESET_INDEX);
         return;
       }
 
-      callbacks_->OnPresetInfo(address,
-                               PresetInfoReason::PRESET_INFO_REQUEST_RESPONSE,
+      callbacks_->OnPresetInfo(address, PresetInfoReason::PRESET_INFO_REQUEST_RESPONSE,
                                {{.preset_index = preset_index,
                                  .writable = preset->IsWritable(),
                                  .available = preset->IsAvailable(),
                                  .preset_name = preset->GetName()}});
     } else {
-      CpPresetIndexOperation(
-          HasCtpOp(address, PresetCtpOpcode::READ_PRESETS, preset_index));
+      CpPresetIndexOperation(HasCtpOp(address, PresetCtpOpcode::READ_PRESETS, preset_index));
     }
   }
 
-  void SetPresetName(std::variant<RawAddress, int> addr_or_group_id,
-                     uint8_t preset_index, std::string name) override {
-    DLOG(INFO) << __func__ << "preset_idx: " << +preset_index
-               << ", name: " << name;
+  void SetPresetName(std::variant<RawAddress, int> addr_or_group_id, uint8_t preset_index,
+                     std::string name) override {
+    log::debug("preset_idx: {}, name: {}", preset_index, name);
 
-    CpWritePresetNameOperation(HasCtpOp(addr_or_group_id,
-                                        PresetCtpOpcode::WRITE_PRESET_NAME,
+    CpWritePresetNameOperation(HasCtpOp(addr_or_group_id, PresetCtpOpcode::WRITE_PRESET_NAME,
                                         preset_index, 1 /* Don't care */, name));
   }
 
   void CleanUp() {
     BTA_GATTC_AppDeregister(gatt_if_);
     for (auto& device : devices_) {
-      if (device.conn_id != GATT_INVALID_CONN_ID)
+      if (device.conn_id != GATT_INVALID_CONN_ID) {
         BTA_GATTC_Close(device.conn_id);
+      }
       DoDisconnectCleanUp(device);
     }
 
@@ -926,65 +920,59 @@ class HasClientImpl : public HasClient {
 
   void OnGroupOpCoordinatorTimeout(void* p) {
     log::error(
-        "Coordinated operation timeout:  not all the devices notified their "
-        "state change on time.");
+            "Coordinated operation timeout:  not all the devices notified their "
+            "state change on time.");
 
     /* Clear pending group operations */
     pending_group_operation_timeouts_.clear();
     HasCtpGroupOpCoordinator::Cleanup();
   }
 
- private:
+private:
   void WriteAllNeededCcc(const HasDevice& device) {
     if (device.conn_id == GATT_INVALID_CONN_ID) {
-      log::error("Device {} is not connected",
-                 ADDRESS_TO_LOGGABLE_CSTR(device.addr));
+      log::error("Device {} is not connected", device.addr);
       return;
     }
 
     /* Write CCC values even remote should have it */
     log::info("Subscribing for notification/indications");
     if (device.SupportsFeaturesNotification()) {
-      SubscribeForNotifications(device.conn_id, device.addr,
-                                device.features_handle,
+      SubscribeForNotifications(device.conn_id, device.addr, device.features_handle,
                                 device.features_ccc_handle);
     }
 
     if (device.SupportsPresets()) {
-      SubscribeForNotifications(device.conn_id, device.addr, device.cp_handle,
-                                device.cp_ccc_handle, device.cp_ccc_val);
-      SubscribeForNotifications(device.conn_id, device.addr,
-                                device.active_preset_handle,
+      SubscribeForNotifications(device.conn_id, device.addr, device.cp_handle, device.cp_ccc_handle,
+                                device.cp_ccc_val);
+      SubscribeForNotifications(device.conn_id, device.addr, device.active_preset_handle,
                                 device.active_preset_ccc_handle);
     }
 
-    if (osi_property_get_bool("persist.bluetooth.has.always_use_preset_cache",
-                              true) == false) {
-      CpReadAllPresetsOperation(HasCtpOp(
-          device.addr, PresetCtpOpcode::READ_PRESETS,
-          le_audio::has::kStartPresetIndex, le_audio::has::kMaxNumOfPresets));
+    if (osi_property_get_bool("persist.bluetooth.has.always_use_preset_cache", true) == false) {
+      CpReadAllPresetsOperation(HasCtpOp(device.addr, PresetCtpOpcode::READ_PRESETS,
+                                         bluetooth::le_audio::has::kStartPresetIndex,
+                                         bluetooth::le_audio::has::kMaxNumOfPresets));
     }
   }
 
   void OnEncrypted(HasDevice& device) {
-    DLOG(INFO) << __func__ << ": " << ADDRESS_TO_LOGGABLE_STR(device.addr);
+    log::debug("{}", device.addr);
 
     if (device.isGattServiceValid()) {
       device.is_connecting_actively = false;
       NotifyHasDeviceValid(device);
       callbacks_->OnPresetInfo(device.addr, PresetInfoReason::ALL_PRESET_INFO,
                                device.GetAllPresetInfo());
-      callbacks_->OnActivePresetSelected(device.addr,
-                                         device.currently_active_preset);
+      callbacks_->OnActivePresetSelected(device.addr, device.currently_active_preset);
       WriteAllNeededCcc(device);
     } else {
-      BTA_GATTC_ServiceSearchRequest(device.conn_id,
-                                     &kUuidHearingAccessService);
+      BTA_GATTC_ServiceSearchRequest(device.conn_id, kUuidHearingAccessService);
     }
   }
 
   void NotifyHasDeviceValid(const HasDevice& device) {
-    DLOG(INFO) << __func__ << " addr:" << ADDRESS_TO_LOGGABLE_STR(device.addr);
+    log::debug("addr:{}", device.addr);
 
     std::vector<uint8_t> preset_indices;
     preset_indices.reserve(device.has_presets.size());
@@ -997,7 +985,9 @@ class HasClientImpl : public HasClient {
   }
 
   void MarkDeviceValidIfInInitialDiscovery(HasDevice& device) {
-    if (device.isGattServiceValid()) return;
+    if (device.isGattServiceValid()) {
+      return;
+    }
 
     --device.gatt_svc_validation_steps;
 
@@ -1006,57 +996,51 @@ class HasClientImpl : public HasClient {
 
       std::vector<uint8_t> presets_bin;
       if (device.SerializePresets(presets_bin)) {
-        btif_storage_add_leaudio_has_device(device.addr, presets_bin,
-                                            device.GetFeatures(),
+        btif_storage_add_leaudio_has_device(device.addr, presets_bin, device.GetFeatures(),
                                             device.currently_active_preset);
       }
       NotifyHasDeviceValid(device);
     }
   }
 
-  void OnGattWriteCcc(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
-                      void* user_data) {
-    DLOG(INFO) << __func__ << ": handle=" << loghex(handle);
+  void OnGattWriteCcc(uint16_t conn_id, tGATT_STATUS status, uint16_t handle, void* user_data) {
+    log::debug("handle=0x{:x}", handle);
 
     auto device = GetDevice(conn_id);
     if (!device) {
-      log::error("unknown conn_id={}", loghex(conn_id));
+      log::error("unknown conn_id=0x{:x}", conn_id);
       BtaGattQueue::Clean(conn_id);
       return;
     }
 
     if (status == GATT_DATABASE_OUT_OF_SYNC) {
-      log::info("Database out of sync for {}",
-                ADDRESS_TO_LOGGABLE_CSTR(device->addr));
+      log::info("Database out of sync for {}", device->addr);
       ClearDeviceInformationAndStartSearch(device);
       return;
     }
 
     HasGattOpContext context(user_data);
-    bool enabling_ntf = context.context_flags &
-                        HasGattOpContext::kContextFlagsEnableNotification;
+    bool enabling_ntf = context.context_flags & HasGattOpContext::kContextFlagsEnableNotification;
 
     if (handle == device->features_ccc_handle) {
-      if (status == GATT_SUCCESS)
+      if (status == GATT_SUCCESS) {
         device->features_notifications_enabled = enabling_ntf;
+      }
 
-    } else if ((handle == device->active_preset_ccc_handle) ||
-               (handle == device->cp_ccc_handle)) {
+    } else if ((handle == device->active_preset_ccc_handle) || (handle == device->cp_ccc_handle)) {
       /* Both of these CCC are mandatory */
       if (enabling_ntf && (status != GATT_SUCCESS)) {
-        log::error("Failed to register for notifications on handle={}",
-                   loghex(handle));
+        log::error("Failed to register for notifications on handle=0x{:x}", handle);
         BTA_GATTC_Close(conn_id);
         return;
       }
     }
   }
 
-  void OnHasNotification(uint16_t conn_id, uint16_t handle, uint16_t len,
-                         const uint8_t* value) {
+  void OnHasNotification(uint16_t conn_id, uint16_t handle, uint16_t len, const uint8_t* value) {
     auto device = GetDevice(conn_id);
     if (!device) {
-      log::warn("Skipping unknown device, conn_id={}", loghex(conn_id));
+      log::warn("Skipping unknown device, conn_id=0x{:x}", conn_id);
       return;
     }
 
@@ -1072,27 +1056,26 @@ class HasClientImpl : public HasClient {
   }
 
   /* Gets the device from variant, possibly searching by conn_id */
-  HasDevice* GetDevice(
-      std::variant<uint16_t, HasDevice*> conn_id_device_variant) {
+  HasDevice* GetDevice(std::variant<uint16_t, HasDevice*> conn_id_device_variant) {
     HasDevice* device = nullptr;
 
     if (std::holds_alternative<HasDevice*>(conn_id_device_variant)) {
       device = std::get<HasDevice*>(conn_id_device_variant);
     } else {
-      auto it = std::find_if(
-          devices_.begin(), devices_.end(),
-          HasDevice::MatchConnId(std::get<uint16_t>(conn_id_device_variant)));
-      if (it != devices_.end()) device = &(*it);
+      auto it = std::find_if(devices_.begin(), devices_.end(),
+                             HasDevice::MatchConnId(std::get<uint16_t>(conn_id_device_variant)));
+      if (it != devices_.end()) {
+        device = &(*it);
+      }
     }
 
     return device;
   }
 
-  void OnHasFeaturesValue(
-      std::variant<uint16_t, HasDevice*> conn_id_device_variant,
-      tGATT_STATUS status, uint16_t handle, uint16_t len, const uint8_t* value,
-      void* user_data = nullptr) {
-    DLOG(INFO) << __func__;
+  void OnHasFeaturesValue(std::variant<uint16_t, HasDevice*> conn_id_device_variant,
+                          tGATT_STATUS status, uint16_t handle, uint16_t len, const uint8_t* value,
+                          void* user_data = nullptr) {
+    log::debug("");
 
     auto device = GetDevice(conn_id_device_variant);
     if (!device) {
@@ -1102,8 +1085,7 @@ class HasClientImpl : public HasClient {
 
     if (status != GATT_SUCCESS) {
       if (status == GATT_DATABASE_OUT_OF_SYNC) {
-        log::info("Database out of sync for {}",
-                  ADDRESS_TO_LOGGABLE_CSTR(device->addr));
+        log::info("Database out of sync for {}", device->addr);
         ClearDeviceInformationAndStartSearch(device);
       } else {
         log::error("Could not read characteristic at handle=0x{:04x}", handle);
@@ -1113,8 +1095,7 @@ class HasClientImpl : public HasClient {
     }
 
     if (len != 1) {
-      log::error("Invalid features value length={} at handle={}", len,
-                 loghex(handle));
+      log::error("Invalid features value length={} at handle=0x{:x}", len, handle);
       BTA_GATTC_Close(device->conn_id);
       return;
     }
@@ -1134,8 +1115,9 @@ class HasClientImpl : public HasClient {
     /* When service is not yet validated, report the available device with
      * features.
      */
-    if (!device->isGattServiceValid())
+    if (!device->isGattServiceValid()) {
       callbacks_->OnDeviceAvailable(device->addr, device->GetFeatures());
+    }
 
     /* Notify features */
     callbacks_->OnFeaturesUpdate(device->addr, device->GetFeatures());
@@ -1171,12 +1153,14 @@ class HasClientImpl : public HasClient {
   }
 
   void OnHasPresetReadResponseNotification(HasDevice& device) {
-    DLOG(INFO) << __func__;
+    log::debug("");
 
     while (device.ctp_notifications_.size() != 0) {
       auto ntf = device.ctp_notifications_.front();
       /* Process only read response events */
-      if (ntf.opcode != PresetCtpOpcode::READ_PRESET_RESPONSE) break;
+      if (ntf.opcode != PresetCtpOpcode::READ_PRESET_RESPONSE) {
+        break;
+      }
 
       /* Update preset values */
       if (ntf.preset.has_value()) {
@@ -1189,10 +1173,10 @@ class HasClientImpl : public HasClient {
        */
       if (device.isGattServiceValid()) {
         auto info = device.GetPresetInfo(ntf.preset.value().GetIndex());
-        if (info.has_value())
-          callbacks_->OnPresetInfo(
-              device.addr, PresetInfoReason::PRESET_INFO_REQUEST_RESPONSE,
-              {{info.value()}});
+        if (info.has_value()) {
+          callbacks_->OnPresetInfo(device.addr, PresetInfoReason::PRESET_INFO_REQUEST_RESPONSE,
+                                   {{info.value()}});
+        }
       }
 
       /* Journal update */
@@ -1213,14 +1197,14 @@ class HasClientImpl : public HasClient {
       /* If this was the last validation step then send the currently active
        * preset as well.
        */
-      if (device.isGattServiceValid())
-        callbacks_->OnActivePresetSelected(device.addr,
-                                           device.currently_active_preset);
+      if (device.isGattServiceValid()) {
+        callbacks_->OnActivePresetSelected(device.addr, device.currently_active_preset);
+      }
     }
   }
 
   void OnHasPresetGenericUpdate(HasDevice& device) {
-    DLOG(ERROR) << __func__;
+    log::verbose("");
 
     std::vector<PresetInfo> updated_infos;
     std::vector<PresetInfo> deleted_infos;
@@ -1230,34 +1214,41 @@ class HasClientImpl : public HasClient {
       auto nt = device.ctp_notifications_.front();
 
       /* Break if not a generic update anymore */
-      if (nt.opcode != PresetCtpOpcode::PRESET_CHANGED) break;
-      if (nt.change_id != PresetCtpChangeId::PRESET_GENERIC_UPDATE) break;
+      if (nt.opcode != PresetCtpOpcode::PRESET_CHANGED) {
+        break;
+      }
+      if (nt.change_id != PresetCtpChangeId::PRESET_GENERIC_UPDATE) {
+        break;
+      }
 
       if (nt.preset.has_value()) {
-        /* Erase old value if exist */
-        device.has_presets.erase(nt.preset->GetIndex());
-
         /* Erase in-between indices */
-        if (nt.prev_index != 0) {
-          auto it = device.has_presets.begin();
-          while (it != device.has_presets.end()) {
-            if ((it->GetIndex() > nt.prev_index) &&
-                (it->GetIndex() < nt.preset->GetIndex())) {
-              auto info = device.GetPresetInfo(it->GetIndex());
-              if (info.has_value()) deleted_infos.push_back(info.value());
-
-              it = device.has_presets.erase(it);
-
-            } else {
-              ++it;
+        auto it = device.has_presets.begin();
+        while (it != device.has_presets.end()) {
+          if ((it->GetIndex() > nt.prev_index) && (it->GetIndex() < nt.preset->GetIndex())) {
+            auto info = device.GetPresetInfo(it->GetIndex());
+            if (info.has_value()) {
+              deleted_infos.push_back(info.value());
             }
+
+            it = device.has_presets.erase(it);
+
+          } else {
+            ++it;
           }
         }
         /* Update presets */
-        device.has_presets.insert(*nt.preset);
-
-        auto info = device.GetPresetInfo(nt.preset->GetIndex());
-        if (info.has_value()) updated_infos.push_back(info.value());
+        auto info = device.GetPreset(nt.preset->GetIndex());
+        if (info) {
+          if (*info != *nt.preset) {
+            device.has_presets.erase(nt.preset->GetIndex());
+            device.has_presets.insert(*nt.preset);
+            updated_infos.push_back(*device.GetPresetInfo(nt.preset->GetIndex()));
+          }
+        } else {
+          device.has_presets.insert(*nt.preset);
+          updated_infos.push_back(*device.GetPresetInfo(nt.preset->GetIndex()));
+        }
       }
 
       /* Journal update */
@@ -1278,29 +1269,28 @@ class HasClientImpl : public HasClient {
         auto& group_op_coordinator = it->second;
 
         /* Here we interested only in valid preset name changes */
-        if (!((group_op_coordinator.operation.opcode ==
-               PresetCtpOpcode::WRITE_PRESET_NAME) &&
-              group_op_coordinator.operation.name.has_value()))
+        if (!((group_op_coordinator.operation.opcode == PresetCtpOpcode::WRITE_PRESET_NAME) &&
+              group_op_coordinator.operation.name.has_value())) {
           continue;
+        }
 
         /* Match preset update results with the triggering operation */
         auto renamed_preset_info = std::find_if(
-            updated_infos.begin(), updated_infos.end(),
-            [&group_op_coordinator](const auto& info) {
-              return (group_op_coordinator.operation.name.value() ==
-                      info.preset_name);
-            });
-        if (renamed_preset_info == updated_infos.end()) continue;
+                updated_infos.begin(), updated_infos.end(),
+                [&group_op_coordinator](const auto& info) {
+                  return group_op_coordinator.operation.name.value() == info.preset_name;
+                });
+        if (renamed_preset_info == updated_infos.end()) {
+          continue;
+        }
 
         if (group_op_coordinator.SetCompleted(device.addr)) {
-          group_op_coordinator.preset_info_verification_list.push_back(
-              *renamed_preset_info);
+          group_op_coordinator.preset_info_verification_list.push_back(*renamed_preset_info);
 
           /* Call the proper group operation completion callback */
           if (group_op_coordinator.IsFullyCompleted()) {
-            callbacks_->OnPresetInfo(
-                group_op_coordinator.operation.GetGroupId(),
-                PresetInfoReason::PRESET_INFO_UPDATE, {*renamed_preset_info});
+            callbacks_->OnPresetInfo(group_op_coordinator.operation.GetGroupId(),
+                                     PresetInfoReason::PRESET_INFO_UPDATE, {*renamed_preset_info});
             pending_group_operation_timeouts_.erase(it->first);
           }
 
@@ -1318,18 +1308,18 @@ class HasClientImpl : public HasClient {
         }
       }
 
-      if (!updated_infos.empty())
-        callbacks_->OnPresetInfo(
-            device.addr, PresetInfoReason::PRESET_INFO_UPDATE, updated_infos);
+      if (!updated_infos.empty()) {
+        callbacks_->OnPresetInfo(device.addr, PresetInfoReason::PRESET_INFO_UPDATE, updated_infos);
+      }
 
-      if (!deleted_infos.empty())
-        callbacks_->OnPresetInfo(device.addr, PresetInfoReason::PRESET_DELETED,
-                                 deleted_infos);
+      if (!deleted_infos.empty()) {
+        callbacks_->OnPresetInfo(device.addr, PresetInfoReason::PRESET_DELETED, deleted_infos);
+      }
     }
   }
 
   void OnHasPresetAvailabilityChanged(HasDevice& device) {
-    DLOG(INFO) << __func__;
+    log::debug("");
 
     std::vector<PresetInfo> infos;
 
@@ -1337,15 +1327,18 @@ class HasClientImpl : public HasClient {
       auto nt = device.ctp_notifications_.front();
 
       /* Process only preset change notifications */
-      if (nt.opcode != PresetCtpOpcode::PRESET_CHANGED) break;
+      if (nt.opcode != PresetCtpOpcode::PRESET_CHANGED) {
+        break;
+      }
 
       auto preset = device.has_presets.extract(nt.index).value();
       auto new_props = preset.GetProperties();
 
       /* Process only the preset availability changes and then notify */
       if ((nt.change_id != PresetCtpChangeId::PRESET_AVAILABLE) &&
-          (nt.change_id != PresetCtpChangeId::PRESET_UNAVAILABLE))
+          (nt.change_id != PresetCtpChangeId::PRESET_UNAVAILABLE)) {
         break;
+      }
 
       /* Availability change */
       if (nt.change_id == PresetCtpChangeId::PRESET_AVAILABLE) {
@@ -1353,11 +1346,12 @@ class HasClientImpl : public HasClient {
       } else {
         new_props &= !HasPreset::kPropertyAvailable;
       }
-      device.has_presets.insert(
-          HasPreset(preset.GetIndex(), new_props, preset.GetName()));
+      device.has_presets.insert(HasPreset(preset.GetIndex(), new_props, preset.GetName()));
 
       auto info = device.GetPresetInfo(nt.index);
-      if (info.has_value()) infos.push_back(info.value());
+      if (info.has_value()) {
+        infos.push_back(info.value());
+      }
 
       /* Journal update */
       device.has_journal_.Append(HasJournalRecord(nt));
@@ -1372,12 +1366,11 @@ class HasClientImpl : public HasClient {
       }
     }
 
-    callbacks_->OnPresetInfo(
-        device.addr, PresetInfoReason::PRESET_AVAILABILITY_CHANGED, infos);
+    callbacks_->OnPresetInfo(device.addr, PresetInfoReason::PRESET_AVAILABILITY_CHANGED, infos);
   }
 
   void OnHasPresetDeleted(HasDevice& device) {
-    DLOG(INFO) << __func__;
+    log::debug("");
 
     std::vector<PresetInfo> infos;
     bool is_deleted = false;
@@ -1386,13 +1379,19 @@ class HasClientImpl : public HasClient {
       auto nt = device.ctp_notifications_.front();
 
       /* Process only preset change notifications */
-      if (nt.opcode != PresetCtpOpcode::PRESET_CHANGED) break;
+      if (nt.opcode != PresetCtpOpcode::PRESET_CHANGED) {
+        break;
+      }
 
       /* Process only the deletions and then notify */
-      if (nt.change_id != PresetCtpChangeId::PRESET_DELETED) break;
+      if (nt.change_id != PresetCtpChangeId::PRESET_DELETED) {
+        break;
+      }
 
       auto info = device.GetPresetInfo(nt.index);
-      if (info.has_value()) infos.push_back(info.value());
+      if (info.has_value()) {
+        infos.push_back(info.value());
+      }
 
       if (device.has_presets.count(nt.index)) {
         is_deleted = true;
@@ -1412,9 +1411,9 @@ class HasClientImpl : public HasClient {
       }
     }
 
-    if (is_deleted)
-      callbacks_->OnPresetInfo(device.addr, PresetInfoReason::PRESET_DELETED,
-                               infos);
+    if (is_deleted) {
+      callbacks_->OnPresetInfo(device.addr, PresetInfoReason::PRESET_DELETED, infos);
+    }
   }
 
   void ProcessCtpNotificationQueue(HasDevice& device) {
@@ -1422,7 +1421,7 @@ class HasClientImpl : public HasClient {
 
     while (device.ctp_notifications_.size() != 0) {
       auto ntf = device.ctp_notifications_.front();
-      DLOG(INFO) << __func__ << " ntf: " << ntf;
+      log::debug("ntf: {}", ntf);
 
       if (ntf.opcode == PresetCtpOpcode::PRESET_CHANGED) {
         switch (ntf.change_id) {
@@ -1452,8 +1451,7 @@ class HasClientImpl : public HasClient {
     }
   }
 
-  void OnHasCtpValueNotification(HasDevice* device, uint16_t len,
-                                 const uint8_t* value) {
+  void OnHasCtpValueNotification(HasDevice* device, uint16_t len, const uint8_t* value) {
     auto ntf_opt = HasCtpNtf::FromCharacteristicValue(len, value);
     if (!ntf_opt.has_value()) {
       log::error("Unhandled notification for device: {}", *device);
@@ -1462,17 +1460,18 @@ class HasClientImpl : public HasClient {
     }
 
     auto ntf = ntf_opt.value();
-    DLOG(INFO) << __func__ << ntf;
+    log::debug("{}", ntf);
 
     device->ctp_notifications_.push_back(ntf);
-    if (ntf.is_last) ProcessCtpNotificationQueue(*device);
+    if (ntf.is_last) {
+      ProcessCtpNotificationQueue(*device);
+    }
   }
 
-  void OnHasActivePresetValue(
-      std::variant<uint16_t, HasDevice*> conn_id_device_variant,
-      tGATT_STATUS status, uint16_t handle, uint16_t len, const uint8_t* value,
-      void* user_data = nullptr) {
-    DLOG(INFO) << __func__;
+  void OnHasActivePresetValue(std::variant<uint16_t, HasDevice*> conn_id_device_variant,
+                              tGATT_STATUS status, uint16_t handle, uint16_t len,
+                              const uint8_t* value, void* user_data = nullptr) {
+    log::debug("");
 
     auto device = GetDevice(conn_id_device_variant);
     if (!device) {
@@ -1482,8 +1481,7 @@ class HasClientImpl : public HasClient {
 
     if (status != GATT_SUCCESS) {
       if (status == GATT_DATABASE_OUT_OF_SYNC) {
-        log::info("Database out of sync for {}",
-                  ADDRESS_TO_LOGGABLE_CSTR(device->addr));
+        log::info("Database out of sync for {}", device->addr);
         ClearDeviceInformationAndStartSearch(device);
       } else {
         log::error("Could not read characteristic at handle=0x{:04x}", handle);
@@ -1492,8 +1490,7 @@ class HasClientImpl : public HasClient {
     }
 
     if (len != 1) {
-      log::error("Invalid preset value length={} at handle={}", len,
-                 loghex(handle));
+      log::error("Invalid preset value length={} at handle=0x{:x}", len, handle);
       BTA_GATTC_Close(device->conn_id);
       return;
     }
@@ -1503,13 +1500,11 @@ class HasClientImpl : public HasClient {
     STREAM_TO_UINT8(device->currently_active_preset, pp);
 
     if (device->isGattServiceValid()) {
-      btif_storage_set_leaudio_has_active_preset(
-          device->addr, device->currently_active_preset);
+      btif_storage_set_leaudio_has_active_preset(device->addr, device->currently_active_preset);
     }
 
     /* Journal update */
-    device->has_journal_.Append(
-        HasJournalRecord(device->currently_active_preset, false));
+    device->has_journal_.Append(HasJournalRecord(device->currently_active_preset, false));
 
     /* If svc not marked valid, this might be the last validation step. */
     MarkDeviceValidIfInInitialDiscovery(*device);
@@ -1543,17 +1538,17 @@ class HasClientImpl : public HasClient {
               break;
           }
           if (group_op_coordinator.IsFullyCompleted()) {
-            callbacks_->OnActivePresetSelected(
-                group_op_coordinator.operation.GetGroupId(),
-                device->currently_active_preset);
+            callbacks_->OnActivePresetSelected(group_op_coordinator.operation.GetGroupId(),
+                                               device->currently_active_preset);
             pending_group_operation_timeouts_.erase(it->first);
           }
-          if (matches) break;
+          if (matches) {
+            break;
+          }
         }
 
       } else {
-        callbacks_->OnActivePresetSelected(device->addr,
-                                           device->currently_active_preset);
+        callbacks_->OnActivePresetSelected(device->addr, device->currently_active_preset);
       }
     }
   }
@@ -1561,61 +1556,56 @@ class HasClientImpl : public HasClient {
   void DeregisterNotifications(HasDevice& device) {
     /* Deregister from optional features notifications */
     if (device.features_ccc_handle != GAP_INVALID_HANDLE) {
-      BTA_GATTC_DeregisterForNotifications(gatt_if_, device.addr,
-                                           device.features_handle);
+      BTA_GATTC_DeregisterForNotifications(gatt_if_, device.addr, device.features_handle);
     }
 
     /* Deregister from active presets notifications if presets exist */
     if (device.active_preset_ccc_handle != GAP_INVALID_HANDLE) {
-      BTA_GATTC_DeregisterForNotifications(gatt_if_, device.addr,
-                                           device.active_preset_handle);
+      BTA_GATTC_DeregisterForNotifications(gatt_if_, device.addr, device.active_preset_handle);
     }
 
     /* Deregister from control point notifications */
     if (device.cp_ccc_handle != GAP_INVALID_HANDLE) {
-      BTA_GATTC_DeregisterForNotifications(gatt_if_, device.addr,
-                                           device.cp_handle);
+      BTA_GATTC_DeregisterForNotifications(gatt_if_, device.addr, device.cp_handle);
     }
   }
 
   /* Cleans up after the device disconnection */
-  void DoDisconnectCleanUp(HasDevice& device,
-                           bool invalidate_gatt_service = true) {
-    log::debug(": device={}", ADDRESS_TO_LOGGABLE_CSTR(device.addr));
+  void DoDisconnectCleanUp(HasDevice& device, bool invalidate_gatt_service = true) {
+    log::debug(": device={}", device.addr);
 
     DeregisterNotifications(device);
 
     if (device.conn_id != GATT_INVALID_CONN_ID) {
       BtaGattQueue::Clean(device.conn_id);
-      if (invalidate_gatt_service) device.gatt_svc_validation_steps = 0xFE;
+      if (invalidate_gatt_service) {
+        device.gatt_svc_validation_steps = 0xFE;
+      }
     }
 
     /* Clear pending operations */
     auto addr = device.addr;
     pending_operations_.erase(
-        std::remove_if(
-            pending_operations_.begin(), pending_operations_.end(),
-            [&addr](auto& el) {
-              if (std::holds_alternative<RawAddress>(el.addr_or_group)) {
-                return std::get<RawAddress>(el.addr_or_group) == addr;
-              }
-              return false;
-            }),
-        pending_operations_.end());
+            std::remove_if(pending_operations_.begin(), pending_operations_.end(),
+                           [&addr](auto& el) {
+                             if (std::holds_alternative<RawAddress>(el.addr_or_group)) {
+                               return std::get<RawAddress>(el.addr_or_group) == addr;
+                             }
+                             return false;
+                           }),
+            pending_operations_.end());
 
     device.ConnectionCleanUp();
   }
 
   /* These below are all GATT service discovery, validation, cache & storage */
   bool CacheAttributeHandles(const gatt::Service& service, HasDevice* device) {
-    DLOG(INFO) << __func__ << ": device="
-               << ADDRESS_TO_LOGGABLE_STR(device->addr);
+    log::debug("device={}", device->addr);
 
     for (const gatt::Characteristic& charac : service.characteristics) {
       if (charac.uuid == kUuidActivePresetIndex) {
         /* Find the mandatory CCC descriptor */
-        uint16_t ccc_handle =
-            FindCccHandle(device->conn_id, charac.value_handle);
+        uint16_t ccc_handle = FindCccHandle(device->conn_id, charac.value_handle);
         if (ccc_handle == GAP_INVALID_HANDLE) {
           log::error("no HAS Active Preset CCC descriptor found!");
           return false;
@@ -1625,22 +1615,22 @@ class HasClientImpl : public HasClient {
 
       } else if (charac.uuid == kUuidHearingAidPresetControlPoint) {
         /* Find the mandatory CCC descriptor */
-        uint16_t ccc_handle =
-            FindCccHandle(device->conn_id, charac.value_handle);
+        uint16_t ccc_handle = FindCccHandle(device->conn_id, charac.value_handle);
         if (ccc_handle == GAP_INVALID_HANDLE) {
           log::error("no HAS Control Point CCC descriptor found!");
           return false;
         }
         uint8_t ccc_val = 0;
-        if (charac.properties & GATT_CHAR_PROP_BIT_NOTIFY)
+        if (charac.properties & GATT_CHAR_PROP_BIT_NOTIFY) {
           ccc_val |= GATT_CHAR_CLIENT_CONFIG_NOTIFICATION;
+        }
 
-        if (charac.properties & GATT_CHAR_PROP_BIT_INDICATE)
+        if (charac.properties & GATT_CHAR_PROP_BIT_INDICATE) {
           ccc_val |= GATT_CHAR_CLIENT_CONFIG_INDICTION;
+        }
 
         if (ccc_val == 0) {
-          log::error("Invalid properties for the control point 0x{:02x}",
-                     charac.properties);
+          log::error("Invalid properties for the control point 0x{:02x}", charac.properties);
           return false;
         }
 
@@ -1649,8 +1639,7 @@ class HasClientImpl : public HasClient {
         device->cp_ccc_val = ccc_val;
       } else if (charac.uuid == kUuidHearingAidFeatures) {
         /* Find the optional CCC descriptor */
-        uint16_t ccc_handle =
-            FindCccHandle(device->conn_id, charac.value_handle);
+        uint16_t ccc_handle = FindCccHandle(device->conn_id, charac.value_handle);
         device->features_ccc_handle = ccc_handle;
         device->features_handle = charac.value_handle;
       }
@@ -1659,19 +1648,18 @@ class HasClientImpl : public HasClient {
   }
 
   bool LoadHasDetailsFromStorage(HasDevice* device) {
-    DLOG(INFO) << __func__ << ": device="
-               << ADDRESS_TO_LOGGABLE_STR(device->addr);
+    log::debug("device={}", device->addr);
 
     std::vector<uint8_t> presets_bin;
     uint8_t active_preset;
 
-    if (!btif_storage_get_leaudio_has_presets(device->addr, presets_bin,
-                                              active_preset))
+    if (!btif_storage_get_leaudio_has_presets(device->addr, presets_bin, active_preset)) {
       return false;
+    }
 
-    if (!HasDevice::DeserializePresets(presets_bin.data(), presets_bin.size(),
-                                       *device))
+    if (!HasDevice::DeserializePresets(presets_bin.data(), presets_bin.size(), *device)) {
       return false;
+    }
 
     log::verbose("Loading HAS service details from storage.");
 
@@ -1679,8 +1667,9 @@ class HasClientImpl : public HasClient {
 
     /* Update features and refresh opcode support map */
     uint8_t val;
-    if (btif_storage_get_leaudio_has_features(device->addr, val))
+    if (btif_storage_get_leaudio_has_features(device->addr, val)) {
       device->UpdateFeatures(val);
+    }
 
     /* With all the details loaded we can already mark it as valid */
     device->gatt_svc_validation_steps = 0;
@@ -1689,9 +1678,10 @@ class HasClientImpl : public HasClient {
     NotifyHasDeviceValid(*device);
     callbacks_->OnPresetInfo(device->addr, PresetInfoReason::ALL_PRESET_INFO,
                              device->GetAllPresetInfo());
-    callbacks_->OnActivePresetSelected(device->addr,
-                                       device->currently_active_preset);
-    if (device->conn_id == GATT_INVALID_CONN_ID) return true;
+    callbacks_->OnActivePresetSelected(device->addr, device->currently_active_preset);
+    if (device->conn_id == GATT_INVALID_CONN_ID) {
+      return true;
+    }
 
     /* Be mistrustful here: write CCC values even remote should have it */
     log::info("Subscribing for notification/indications");
@@ -1700,8 +1690,7 @@ class HasClientImpl : public HasClient {
     return true;
   }
 
-  bool StartInitialHasDetailsReadAndValidation(const gatt::Service& service,
-                                               HasDevice* device) {
+  bool StartInitialHasDetailsReadAndValidation(const gatt::Service& service, HasDevice* device) {
     // Validate service structure
     if (device->features_handle == GAP_INVALID_HANDLE) {
       /* Missing key characteristic */
@@ -1710,8 +1699,12 @@ class HasClientImpl : public HasClient {
     }
 
     if (device->cp_handle != GAP_INVALID_HANDLE) {
-      if (device->active_preset_handle == GAP_INVALID_HANDLE) return false;
-      if (device->active_preset_ccc_handle == GAP_INVALID_HANDLE) return false;
+      if (device->active_preset_handle == GAP_INVALID_HANDLE) {
+        return false;
+      }
+      if (device->active_preset_ccc_handle == GAP_INVALID_HANDLE) {
+        return false;
+      }
     }
 
     /* Number of reads or notifications required to validate the service */
@@ -1719,19 +1712,18 @@ class HasClientImpl : public HasClient {
 
     /* Read the initial features */
     BtaGattQueue::ReadCharacteristic(
-        device->conn_id, device->features_handle,
-        [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
-           uint8_t* value, void* user_data) {
-          if (instance)
-            instance->OnHasFeaturesValue(conn_id, status, handle, len, value,
-                                         user_data);
-        },
-        nullptr);
+            device->conn_id, device->features_handle,
+            [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len, uint8_t* value,
+               void* user_data) {
+              if (instance) {
+                instance->OnHasFeaturesValue(conn_id, status, handle, len, value, user_data);
+              }
+            },
+            nullptr);
 
     /* Register for features notifications */
     if (device->SupportsFeaturesNotification()) {
-      SubscribeForNotifications(device->conn_id, device->addr,
-                                device->features_handle,
+      SubscribeForNotifications(device->conn_id, device->addr, device->features_handle,
                                 device->features_ccc_handle);
     } else {
       log::warn("server does not support features notification");
@@ -1742,48 +1734,48 @@ class HasClientImpl : public HasClient {
      */
     if (device->SupportsPresets()) {
       /* Subscribe for active preset notifications */
-      SubscribeForNotifications(device->conn_id, device->addr,
-                                device->active_preset_handle,
+      SubscribeForNotifications(device->conn_id, device->addr, device->active_preset_handle,
                                 device->active_preset_ccc_handle);
 
-      SubscribeForNotifications(device->conn_id, device->addr,
-                                device->cp_handle, device->cp_ccc_handle,
-                                device->cp_ccc_val);
+      SubscribeForNotifications(device->conn_id, device->addr, device->cp_handle,
+                                device->cp_ccc_handle, device->cp_ccc_val);
 
       /* Get all the presets */
-      CpReadAllPresetsOperation(HasCtpOp(
-          device->addr, PresetCtpOpcode::READ_PRESETS,
-          le_audio::has::kStartPresetIndex, le_audio::has::kMaxNumOfPresets));
+      CpReadAllPresetsOperation(HasCtpOp(device->addr, PresetCtpOpcode::READ_PRESETS,
+                                         bluetooth::le_audio::has::kStartPresetIndex,
+                                         bluetooth::le_audio::has::kMaxNumOfPresets));
 
       /* Read the current active preset index */
       BtaGattQueue::ReadCharacteristic(
-          device->conn_id, device->active_preset_handle,
-          [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
-             uint16_t len, uint8_t* value, void* user_data) {
-            if (instance)
-              instance->OnHasActivePresetValue(conn_id, status, handle, len,
-                                               value, user_data);
-          },
-          nullptr);
+              device->conn_id, device->active_preset_handle,
+              [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
+                 uint8_t* value, void* user_data) {
+                if (instance) {
+                  instance->OnHasActivePresetValue(conn_id, status, handle, len, value, user_data);
+                }
+              },
+              nullptr);
     } else {
-      log::warn(
-          "server can only report HAS features, other functionality is "
-          "disabled");
+      log::warn("server can only report HAS features, other functionality is disabled");
     }
 
     return true;
   }
 
   bool OnHasServiceFound(const gatt::Service& service, void* context) {
-    DLOG(INFO) << __func__;
+    log::debug("");
 
     auto* device = static_cast<HasDevice*>(context);
 
     /* Initially validate and store GATT service discovery data */
-    if (!CacheAttributeHandles(service, device)) return false;
+    if (!CacheAttributeHandles(service, device)) {
+      return false;
+    }
 
     /* If deatails are loaded from storage we are done here */
-    if (LoadHasDetailsFromStorage(device)) return true;
+    if (LoadHasDetailsFromStorage(device)) {
+      return true;
+    }
 
     /* No storred details - read all the details and validate */
     return StartInitialHasDetailsReadAndValidation(service, device);
@@ -1791,7 +1783,7 @@ class HasClientImpl : public HasClient {
 
   /* These below are all generic event handlers calling in HAS specific code. */
   void GattcCallback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
-    DLOG(INFO) << __func__ << ": event = " << static_cast<int>(event);
+    log::debug("event = {}", static_cast<int>(event));
 
     switch (event) {
       case BTA_GATTC_DEREG_EVT:
@@ -1815,7 +1807,7 @@ class HasClientImpl : public HasClient {
 
       case BTA_GATTC_ENC_CMPL_CB_EVT:
         OnLeEncryptionComplete(p_data->enc_cmpl.remote_bda,
-            BTM_IsEncrypted(p_data->enc_cmpl.remote_bda, BT_TRANSPORT_LE));
+                               BTM_IsEncrypted(p_data->enc_cmpl.remote_bda, BT_TRANSPORT_LE));
         break;
 
       case BTA_GATTC_SRVC_CHG_EVT:
@@ -1832,23 +1824,20 @@ class HasClientImpl : public HasClient {
   }
 
   void OnGattConnected(const tBTA_GATTC_OPEN& evt) {
-    log::info("{}, conn_id=0x{:04x}, transport={}, status={}(0x{:02x})",
-              ADDRESS_TO_LOGGABLE_CSTR(evt.remote_bda), evt.conn_id,
-              bt_transport_text(evt.transport), gatt_status_text(evt.status),
+    log::info("{}, conn_id=0x{:04x}, transport={}, status={}(0x{:02x})", evt.remote_bda,
+              evt.conn_id, bt_transport_text(evt.transport), gatt_status_text(evt.status),
               evt.status);
 
     if (evt.transport != BT_TRANSPORT_LE) {
-      log::warn("Only LE connection is allowed (transport {})",
-                bt_transport_text(evt.transport));
+      log::warn("Only LE connection is allowed (transport {})", bt_transport_text(evt.transport));
       BTA_GATTC_Close(evt.conn_id);
       return;
     }
 
-    auto device = std::find_if(devices_.begin(), devices_.end(),
-                               HasDevice::MatchAddress(evt.remote_bda));
+    auto device =
+            std::find_if(devices_.begin(), devices_.end(), HasDevice::MatchAddress(evt.remote_bda));
     if (device == devices_.end()) {
-      log::warn("Skipping unknown device, address={}",
-                ADDRESS_TO_LOGGABLE_STR(evt.remote_bda));
+      log::warn("Skipping unknown device, address={}", evt.remote_bda);
       BTA_GATTC_Close(evt.conn_id);
       return;
     }
@@ -1861,8 +1850,7 @@ class HasClientImpl : public HasClient {
 
       log::warn("Failed to connect to server device");
       devices_.erase(device);
-      callbacks_->OnConnectionState(ConnectionState::DISCONNECTED,
-                                    evt.remote_bda);
+      callbacks_->OnConnectionState(ConnectionState::DISCONNECTED, evt.remote_bda);
       return;
     }
 
@@ -1882,54 +1870,49 @@ class HasClientImpl : public HasClient {
       return;
     }
 
-    int result = BTM_SetEncryption(device->addr, BT_TRANSPORT_LE, nullptr,
-                                   nullptr, BTM_BLE_SEC_ENCRYPT);
+    int result =
+            BTM_SetEncryption(device->addr, BT_TRANSPORT_LE, nullptr, nullptr, BTM_BLE_SEC_ENCRYPT);
 
-    log::info("Encryption required for {}. Request result: 0x{:02x}",
-              ADDRESS_TO_LOGGABLE_CSTR(device->addr), result);
+    log::info("Encryption required for {}. Request result: 0x{:02x}", device->addr, result);
 
     if (result == BTM_ERR_KEY_MISSING) {
-      log::error("Link key unknown for {}, disconnect profile",
-                 ADDRESS_TO_LOGGABLE_CSTR(device->addr));
+      log::error("Link key unknown for {}, disconnect profile", device->addr);
       BTA_GATTC_Close(device->conn_id);
     }
   }
 
   void OnGattDisconnected(const tBTA_GATTC_CLOSE& evt) {
-    auto device = std::find_if(devices_.begin(), devices_.end(),
-                               HasDevice::MatchAddress(evt.remote_bda));
+    auto device =
+            std::find_if(devices_.begin(), devices_.end(), HasDevice::MatchAddress(evt.remote_bda));
     if (device == devices_.end()) {
-      log::warn("Skipping unknown device disconnect, conn_id={}",
-                loghex(evt.conn_id));
+      log::warn("Skipping unknown device disconnect, conn_id=0x{:x}", evt.conn_id);
       return;
     }
-    DLOG(INFO) << __func__ << ": device="
-               << ADDRESS_TO_LOGGABLE_STR(device->addr)
-               << ": reason=" << loghex(static_cast<int>(evt.reason));
+    log::debug("device={}: reason=0x{:x}", device->addr, static_cast<int>(evt.reason));
 
     /* Don't notify disconnect state for background connection that failed */
-    if (device->is_connecting_actively || device->isGattServiceValid())
-      callbacks_->OnConnectionState(ConnectionState::DISCONNECTED,
-                                    evt.remote_bda);
+    if (device->is_connecting_actively || device->isGattServiceValid()) {
+      callbacks_->OnConnectionState(ConnectionState::DISCONNECTED, evt.remote_bda);
+    }
 
-    auto peer_disconnected = (evt.reason == GATT_CONN_TIMEOUT) ||
-                             (evt.reason == GATT_CONN_TERMINATE_PEER_USER);
+    auto peer_disconnected =
+            (evt.reason == GATT_CONN_TIMEOUT) || (evt.reason == GATT_CONN_TERMINATE_PEER_USER);
     DoDisconnectCleanUp(*device, peer_disconnected ? false : true);
 
     /* Connect in background - is this ok? */
-    if (peer_disconnected)
-      BTA_GATTC_Open(gatt_if_, device->addr, BTM_BLE_BKG_CONNECT_ALLOW_LIST,
-                     false);
+    if (peer_disconnected) {
+      BTA_GATTC_Open(gatt_if_, device->addr, BTM_BLE_BKG_CONNECT_ALLOW_LIST, false);
+    }
   }
 
   void OnGattServiceSearchComplete(const tBTA_GATTC_SEARCH_CMPL& evt) {
     auto device = GetDevice(evt.conn_id);
     if (!device) {
-      log::warn("Skipping unknown device, conn_id={}", loghex(evt.conn_id));
+      log::warn("Skipping unknown device, conn_id=0x{:x}", evt.conn_id);
       return;
     }
 
-    DLOG(INFO) << __func__;
+    log::debug("");
 
     /* verify link is encrypted */
     if (!BTM_IsEncrypted(device->addr, BT_TRANSPORT_LE)) {
@@ -1947,14 +1930,11 @@ class HasClientImpl : public HasClient {
         return;
       }
 
-      const std::list<gatt::Service>* all_services =
-          BTA_GATTC_GetServices(device->conn_id);
+      const std::list<gatt::Service>* all_services = BTA_GATTC_GetServices(device->conn_id);
 
-      auto service =
-          std::find_if(all_services->begin(), all_services->end(),
-                       [](const gatt::Service& svc) {
-                         return svc.uuid == kUuidHearingAccessService;
-                       });
+      auto service = std::find_if(
+              all_services->begin(), all_services->end(),
+              [](const gatt::Service& svc) { return svc.uuid == kUuidHearingAccessService; });
       if (service == all_services->end()) {
         log::error("No service found");
         BTA_GATTC_Close(device->conn_id);
@@ -1973,27 +1953,27 @@ class HasClientImpl : public HasClient {
   void OnGattNotification(const tBTA_GATTC_NOTIFY& evt) {
     /* Reject invalid lengths */
     if (evt.len > GATT_MAX_ATTR_LEN) {
-      log::error("rejected BTA_GATTC_NOTIF_EVT. is_notify = {}, len={}",
-                 evt.is_notify, static_cast<int>(evt.len));
+      log::error("rejected BTA_GATTC_NOTIF_EVT. is_notify = {}, len={}", evt.is_notify,
+                 static_cast<int>(evt.len));
     }
-    if (!evt.is_notify) BTA_GATTC_SendIndConfirm(evt.conn_id, evt.cid);
+    if (!evt.is_notify) {
+      BTA_GATTC_SendIndConfirm(evt.conn_id, evt.cid);
+    }
 
     OnHasNotification(evt.conn_id, evt.handle, evt.len, evt.value);
   }
 
   void OnLeEncryptionComplete(const RawAddress& address, bool success) {
-    DLOG(INFO) << __func__ << ": " << ADDRESS_TO_LOGGABLE_STR(address);
+    log::debug("{}", address);
 
-    auto device = std::find_if(devices_.begin(), devices_.end(),
-                               HasDevice::MatchAddress(address));
+    auto device = std::find_if(devices_.begin(), devices_.end(), HasDevice::MatchAddress(address));
     if (device == devices_.end()) {
-      log::warn("Skipping unknown device{}", ADDRESS_TO_LOGGABLE_STR(address));
+      log::warn("Skipping unknown device{}", address);
       return;
     }
 
     if (!success) {
-      log::error("Encryption failed for device {}",
-                 ADDRESS_TO_LOGGABLE_STR(address));
+      log::error("Encryption failed for device {}", address);
 
       BTA_GATTC_Close(device->conn_id);
       return;
@@ -2002,8 +1982,7 @@ class HasClientImpl : public HasClient {
     if (device->isGattServiceValid()) {
       instance->OnEncrypted(*device);
     } else {
-      BTA_GATTC_ServiceSearchRequest(device->conn_id,
-                                     &kUuidHearingAccessService);
+      BTA_GATTC_ServiceSearchRequest(device->conn_id, kUuidHearingAccessService);
     }
   }
 
@@ -2013,7 +1992,7 @@ class HasClientImpl : public HasClient {
       return;
     }
 
-    log::info("{}", ADDRESS_TO_LOGGABLE_CSTR(device->addr));
+    log::info("{}", device->addr);
 
     if (!device->isGattServiceValid()) {
       log::info("Service already invalidated");
@@ -2025,80 +2004,75 @@ class HasClientImpl : public HasClient {
     BtaGattQueue::Clean(device->conn_id);
     device->ClearSvcData();
     btif_storage_remove_leaudio_has(device->addr);
-    BTA_GATTC_ServiceSearchRequest(device->conn_id, &kUuidHearingAccessService);
+    BTA_GATTC_ServiceSearchRequest(device->conn_id, kUuidHearingAccessService);
   }
 
   void OnGattServiceChangeEvent(const RawAddress& address) {
-    auto device = std::find_if(devices_.begin(), devices_.end(),
-                               HasDevice::MatchAddress(address));
+    auto device = std::find_if(devices_.begin(), devices_.end(), HasDevice::MatchAddress(address));
     if (device == devices_.end()) {
-      log::warn("Skipping unknown device: {}",
-                ADDRESS_TO_LOGGABLE_STR(address));
+      log::warn("Skipping unknown device: {}", address);
       return;
     }
-    log::info("{}", ADDRESS_TO_LOGGABLE_CSTR(address));
+    log::info("{}", address);
     ClearDeviceInformationAndStartSearch(&(*device));
   }
 
   void OnGattServiceDiscoveryDoneEvent(const RawAddress& address) {
-    auto device = std::find_if(devices_.begin(), devices_.end(),
-                               HasDevice::MatchAddress(address));
+    auto device = std::find_if(devices_.begin(), devices_.end(), HasDevice::MatchAddress(address));
     if (device == devices_.end()) {
-      log::warn("Skipping unknown device: {}",
-                ADDRESS_TO_LOGGABLE_STR(address));
+      log::warn("Skipping unknown device: {}", address);
       return;
     }
 
-    DLOG(INFO) << __func__ << ": address="
-               << ADDRESS_TO_LOGGABLE_STR(address);
+    log::debug("address={}", address);
 
-    if (!device->isGattServiceValid())
-      BTA_GATTC_ServiceSearchRequest(device->conn_id,
-                                     &kUuidHearingAccessService);
+    if (!device->isGattServiceValid()) {
+      BTA_GATTC_ServiceSearchRequest(device->conn_id, kUuidHearingAccessService);
+    }
   }
 
   static uint16_t FindCccHandle(uint16_t conn_id, uint16_t char_handle) {
-    const gatt::Characteristic* p_char =
-        BTA_GATTC_GetCharacteristic(conn_id, char_handle);
+    const gatt::Characteristic* p_char = BTA_GATTC_GetCharacteristic(conn_id, char_handle);
     if (!p_char) {
       log::warn("No such characteristic: {}", char_handle);
       return GAP_INVALID_HANDLE;
     }
 
     for (const gatt::Descriptor& desc : p_char->descriptors) {
-      if (desc.uuid == Uuid::From16Bit(GATT_UUID_CHAR_CLIENT_CONFIG))
+      if (desc.uuid == Uuid::From16Bit(GATT_UUID_CHAR_CLIENT_CONFIG)) {
         return desc.handle;
+      }
     }
 
     return GAP_INVALID_HANDLE;
   }
 
-  void SubscribeForNotifications(
-      uint16_t conn_id, const RawAddress& address, uint16_t value_handle,
-      uint16_t ccc_handle,
-      uint16_t ccc_val = GATT_CHAR_CLIENT_CONFIG_NOTIFICATION) {
+  void SubscribeForNotifications(uint16_t conn_id, const RawAddress& address, uint16_t value_handle,
+                                 uint16_t ccc_handle,
+                                 uint16_t ccc_val = GATT_CHAR_CLIENT_CONFIG_NOTIFICATION) {
     if (value_handle != GAP_INVALID_HANDLE) {
       tGATT_STATUS register_status =
-          BTA_GATTC_RegisterForNotifications(gatt_if_, address, value_handle);
-      DLOG(INFO) << __func__ << ": BTA_GATTC_RegisterForNotifications, status="
-                 << loghex(+register_status)
-                 << " value=" << loghex(value_handle)
-                 << " ccc=" << loghex(ccc_handle);
+              BTA_GATTC_RegisterForNotifications(gatt_if_, address, value_handle);
+      log::debug("BTA_GATTC_RegisterForNotifications, status=0x{:x} value=0x{:x} ccc=0x{:x}",
+                 register_status, value_handle, ccc_handle);
 
-      if (register_status != GATT_SUCCESS) return;
+      if (register_status != GATT_SUCCESS) {
+        return;
+      }
     }
 
     std::vector<uint8_t> value(2);
     uint8_t* value_ptr = value.data();
     UINT16_TO_STREAM(value_ptr, ccc_val);
     BtaGattQueue::WriteDescriptor(
-        conn_id, ccc_handle, std::move(value), GATT_WRITE,
-        [](uint16_t conn_id, tGATT_STATUS status, uint16_t value_handle,
-           uint16_t len, const uint8_t* value, void* data) {
-          if (instance)
-            instance->OnGattWriteCcc(conn_id, status, value_handle, data);
-        },
-        HasGattOpContext(HasGattOpContext::kContextFlagsEnableNotification));
+            conn_id, ccc_handle, std::move(value), GATT_WRITE,
+            [](uint16_t conn_id, tGATT_STATUS status, uint16_t value_handle, uint16_t len,
+               const uint8_t* value, void* data) {
+              if (instance) {
+                instance->OnGattWriteCcc(conn_id, status, value_handle, data);
+              }
+            },
+            HasGattOpContext(HasGattOpContext::kContextFlagsEnableNotification));
   }
 
   uint8_t gatt_if_;
@@ -2106,8 +2080,7 @@ class HasClientImpl : public HasClient {
   std::list<HasDevice> devices_;
   std::list<HasCtpOp> pending_operations_;
 
-  typedef std::map<decltype(HasCtpOp::op_id), HasCtpGroupOpCoordinator>
-      has_operation_timeouts_t;
+  typedef std::map<decltype(HasCtpOp::op_id), HasCtpGroupOpCoordinator> has_operation_timeouts_t;
   has_operation_timeouts_t pending_group_operation_timeouts_;
 };
 
@@ -2117,8 +2090,7 @@ alarm_t* HasCtpGroupOpCoordinator::operation_timeout_timer = nullptr;
 size_t HasCtpGroupOpCoordinator::ref_cnt = 0u;
 alarm_callback_t HasCtpGroupOpCoordinator::cb = [](void*) {};
 
-void HasClient::Initialize(bluetooth::has::HasClientCallbacks* callbacks,
-                           base::Closure initCb) {
+void HasClient::Initialize(bluetooth::has::HasClientCallbacks* callbacks, base::Closure initCb) {
   std::scoped_lock<std::mutex> lock(instance_mutex);
   if (instance) {
     log::error("Already initialized!");
@@ -2126,7 +2098,9 @@ void HasClient::Initialize(bluetooth::has::HasClientCallbacks* callbacks,
   }
 
   HasCtpGroupOpCoordinator::Initialize([](void* p) {
-    if (instance) instance->OnGroupOpCoordinatorTimeout(p);
+    if (instance) {
+      instance->OnGroupOpCoordinatorTimeout(p);
+    }
   });
   instance = new HasClientImpl(callbacks, initCb);
 }
@@ -2134,18 +2108,17 @@ void HasClient::Initialize(bluetooth::has::HasClientCallbacks* callbacks,
 bool HasClient::IsHasClientRunning() { return instance; }
 
 HasClient* HasClient::Get(void) {
-  CHECK(instance);
+  log::assert_that(instance != nullptr, "assert failed: instance != nullptr");
   return instance;
-};
+}
 
-void HasClient::AddFromStorage(const RawAddress& addr, uint8_t features,
-                               uint16_t is_acceptlisted) {
+void HasClient::AddFromStorage(const RawAddress& addr, uint8_t features, uint16_t is_acceptlisted) {
   if (!instance) {
     log::error("Not initialized yet");
   }
 
   instance->AddFromStorage(addr, features, is_acceptlisted);
-};
+}
 
 void HasClient::CleanUp() {
   std::scoped_lock<std::mutex> lock(instance_mutex);
@@ -2158,13 +2131,14 @@ void HasClient::CleanUp() {
   }
 
   HasCtpGroupOpCoordinator::Cleanup();
-};
+}
 
 void HasClient::DebugDump(int fd) {
   std::scoped_lock<std::mutex> lock(instance_mutex);
   dprintf(fd, "Hearing Access Service Client:\n");
-  if (instance)
+  if (instance) {
     instance->Dump(fd);
-  else
+  } else {
     dprintf(fd, "  no instance\n\n");
+  }
 }

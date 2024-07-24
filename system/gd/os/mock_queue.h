@@ -34,17 +34,17 @@ namespace os {
 
 template <typename T>
 class MockIQueueEnqueue : public IQueueEnqueue<T> {
- public:
+public:
   using EnqueueCallback = common::Callback<std::unique_ptr<T>()>;
 
   virtual void RegisterEnqueue(Handler* handler, EnqueueCallback callback) {
-    ASSERT(registered_handler == nullptr);
+    log::assert_that(registered_handler == nullptr, "assert failed: registered_handler == nullptr");
     registered_handler = handler;
     registered_enqueue_callback = callback;
   }
 
   virtual void UnregisterEnqueue() {
-    ASSERT(registered_handler != nullptr);
+    log::assert_that(registered_handler != nullptr, "assert failed: registered_handler != nullptr");
     registered_handler = nullptr;
     registered_enqueue_callback = {};
   }
@@ -63,17 +63,17 @@ class MockIQueueEnqueue : public IQueueEnqueue<T> {
 
 template <typename T>
 class MockIQueueDequeue : public IQueueDequeue<T> {
- public:
+public:
   using DequeueCallback = common::Callback<void()>;
 
   virtual void RegisterDequeue(Handler* handler, DequeueCallback callback) {
-    ASSERT(registered_handler == nullptr);
+    log::assert_that(registered_handler == nullptr, "assert failed: registered_handler == nullptr");
     registered_handler = handler;
     registered_dequeue_callback = callback;
   }
 
   virtual void UnregisterDequeue() {
-    ASSERT(registered_handler != nullptr);
+    log::assert_that(registered_handler != nullptr, "assert failed: registered_handler != nullptr");
     registered_handler = nullptr;
     registered_dequeue_callback = {};
   }

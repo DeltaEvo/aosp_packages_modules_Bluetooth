@@ -20,6 +20,7 @@
 
 #include "osi/include/wakelock.h"
 
+#include <bluetooth/log.h>
 #include <fcntl.h>
 #include <hardware/bluetooth.h>
 #include <pthread.h>
@@ -32,12 +33,12 @@
 #include <mutex>
 #include <string>
 
-#include "base/logging.h"
 #include "common/metrics.h"
 #include "os/log.h"
 #include "osi/include/osi.h"
 
 using bluetooth::common::BluetoothMetricsLogger;
+using namespace bluetooth;
 
 static bt_os_callouts_t* wakelock_os_callouts = NULL;
 static bool is_native = true;
@@ -90,7 +91,7 @@ static void update_wakelock_released_stats(bt_status_t released_status);
 void wakelock_set_os_callouts(bt_os_callouts_t* callouts) {
   wakelock_os_callouts = callouts;
   is_native = (wakelock_os_callouts == NULL);
-  LOG_INFO("%s set to %s", __func__, (is_native) ? "native" : "non-native");
+  log::info("set to {}", (is_native) ? "native" : "non-native");
 }
 
 bool wakelock_acquire(void) {
@@ -98,43 +99,44 @@ bool wakelock_acquire(void) {
 
   bt_status_t status = BT_STATUS_FAIL;
 
-  if (is_native)
+  if (is_native) {
     status = wakelock_acquire_native();
-  else
+  } else {
     status = wakelock_acquire_callout();
+  }
 
   update_wakelock_acquired_stats(status);
 
-  if (status != BT_STATUS_SUCCESS)
-    LOG_ERROR("%s unable to acquire wake lock: %d", __func__, status);
+  if (status != BT_STATUS_SUCCESS) {
+    log::error("unable to acquire wake lock: {}", status);
+  }
 
-  return (status == BT_STATUS_SUCCESS);
+  return status == BT_STATUS_SUCCESS;
 }
 
 static bt_status_t wakelock_acquire_callout(void) {
-  return static_cast<bt_status_t>(
-      wakelock_os_callouts->acquire_wake_lock(WAKE_LOCK_ID));
+  return static_cast<bt_status_t>(wakelock_os_callouts->acquire_wake_lock(WAKE_LOCK_ID));
 }
 
 static bt_status_t wakelock_acquire_native(void) {
   if (wake_lock_fd == INVALID_FD) {
-    LOG_ERROR("%s lock not acquired, invalid fd", __func__);
+    log::error("lock not acquired, invalid fd");
     return BT_STATUS_PARM_INVALID;
   }
 
   if (wake_unlock_fd == INVALID_FD) {
-    LOG_ERROR("%s not acquiring lock: can't release lock", __func__);
+    log::error("not acquiring lock: can't release lock");
     return BT_STATUS_PARM_INVALID;
   }
 
   long lock_name_len = strlen(WAKE_LOCK_ID);
   locked_id_len = write(wake_lock_fd, WAKE_LOCK_ID, lock_name_len);
   if (locked_id_len == -1) {
-    LOG_ERROR("%s wake lock not acquired: %s", __func__, strerror(errno));
-    return BT_STATUS_FAIL;
+    log::error("wake lock not acquired: {}", strerror(errno));
+    return BT_STATUS_WAKELOCK_ERROR;
   } else if (locked_id_len < lock_name_len) {
     // TODO (jamuraa): this is weird. maybe we should release and retry.
-    LOG_WARN("%s wake lock truncated to %zd chars", __func__, locked_id_len);
+    log::warn("wake lock truncated to {} chars", locked_id_len);
   }
   return BT_STATUS_SUCCESS;
 }
@@ -144,33 +146,32 @@ bool wakelock_release(void) {
 
   bt_status_t status = BT_STATUS_FAIL;
 
-  if (is_native)
+  if (is_native) {
     status = wakelock_release_native();
-  else
+  } else {
     status = wakelock_release_callout();
+  }
 
   update_wakelock_released_stats(status);
 
-  return (status == BT_STATUS_SUCCESS);
+  return status == BT_STATUS_SUCCESS;
 }
 
 static bt_status_t wakelock_release_callout(void) {
-  return static_cast<bt_status_t>(
-      wakelock_os_callouts->release_wake_lock(WAKE_LOCK_ID));
+  return static_cast<bt_status_t>(wakelock_os_callouts->release_wake_lock(WAKE_LOCK_ID));
 }
 
 static bt_status_t wakelock_release_native(void) {
   if (wake_unlock_fd == INVALID_FD) {
-    LOG_ERROR("%s lock not released, invalid fd", __func__);
+    log::error("lock not released, invalid fd");
     return BT_STATUS_PARM_INVALID;
   }
 
   ssize_t wrote_name_len = write(wake_unlock_fd, WAKE_LOCK_ID, locked_id_len);
   if (wrote_name_len == -1) {
-    LOG_ERROR("%s can't release wake lock: %s", __func__, strerror(errno));
+    log::error("can't release wake lock: {}", strerror(errno));
   } else if (wrote_name_len < locked_id_len) {
-    LOG_ERROR("%s lock release only wrote %zd, assuming released", __func__,
-              wrote_name_len);
+    log::error("lock release only wrote {}, assuming released", wrote_name_len);
   }
   return BT_STATUS_SUCCESS;
 }
@@ -178,32 +179,36 @@ static bt_status_t wakelock_release_native(void) {
 static void wakelock_initialize(void) {
   reset_wakelock_stats();
 
-  if (is_native) wakelock_initialize_native();
+  if (is_native) {
+    wakelock_initialize_native();
+  }
 }
 
 static void wakelock_initialize_native(void) {
-  LOG_INFO("%s opening wake locks", __func__);
+  log::info("opening wake locks");
 
-  if (wake_lock_path.empty()) wake_lock_path = DEFAULT_WAKE_LOCK_PATH;
+  if (wake_lock_path.empty()) {
+    wake_lock_path = DEFAULT_WAKE_LOCK_PATH;
+  }
 
   wake_lock_fd = open(wake_lock_path.c_str(), O_RDWR | O_CLOEXEC);
   if (wake_lock_fd == INVALID_FD) {
-    LOG_ERROR("%s can't open wake lock %s: %s", __func__,
-              wake_lock_path.c_str(), strerror(errno));
+    log::error("can't open wake lock {}: {}", wake_lock_path, strerror(errno));
   }
 
-  if (wake_unlock_path.empty()) wake_unlock_path = DEFAULT_WAKE_UNLOCK_PATH;
+  if (wake_unlock_path.empty()) {
+    wake_unlock_path = DEFAULT_WAKE_UNLOCK_PATH;
+  }
 
   wake_unlock_fd = open(wake_unlock_path.c_str(), O_RDWR | O_CLOEXEC);
   if (wake_unlock_fd == INVALID_FD) {
-    LOG_ERROR("%s can't open wake unlock %s: %s", __func__,
-              wake_unlock_path.c_str(), strerror(errno));
+    log::error("can't open wake unlock {}: {}", wake_unlock_path, strerror(errno));
   }
 }
 
 void wakelock_cleanup(void) {
   if (wakelock_stats.is_acquired) {
-    LOG_ERROR("%s releasing wake lock as part of cleanup", __func__);
+    log::error("releasing wake lock as part of cleanup");
     wakelock_release();
   }
   wake_lock_path.clear();
@@ -212,15 +217,19 @@ void wakelock_cleanup(void) {
 }
 
 void wakelock_set_paths(const char* lock_path, const char* unlock_path) {
-  if (lock_path) wake_lock_path = lock_path;
+  if (lock_path) {
+    wake_lock_path = lock_path;
+  }
 
-  if (unlock_path) wake_unlock_path = unlock_path;
+  if (unlock_path) {
+    wake_unlock_path = unlock_path;
+  }
 }
 
 static uint64_t now_ms(void) {
   struct timespec ts;
   if (clock_gettime(CLOCK_ID, &ts) == -1) {
-    LOG_ERROR("%s unable to get current time: %s", __func__, strerror(errno));
+    log::error("unable to get current time: {}", strerror(errno));
     return 0;
   }
 
@@ -272,8 +281,8 @@ static void update_wakelock_acquired_stats(bt_status_t acquired_status) {
   wakelock_stats.acquired_count++;
   wakelock_stats.last_acquired_timestamp_ms = just_now_ms;
 
-  BluetoothMetricsLogger::GetInstance()->LogWakeEvent(
-      bluetooth::common::WAKE_EVENT_ACQUIRED, "", "", just_now_ms);
+  BluetoothMetricsLogger::GetInstance()->LogWakeEvent(bluetooth::common::WAKE_EVENT_ACQUIRED, "",
+                                                      "", just_now_ms);
 }
 
 //
@@ -304,8 +313,7 @@ static void update_wakelock_released_stats(bt_status_t released_status) {
 
   // Compute the acquired interval and update the statistics
   uint64_t delta_ms = just_now_ms - wakelock_stats.last_acquired_timestamp_ms;
-  if (delta_ms < wakelock_stats.min_acquired_interval_ms ||
-      wakelock_stats.released_count == 1) {
+  if (delta_ms < wakelock_stats.min_acquired_interval_ms || wakelock_stats.released_count == 1) {
     wakelock_stats.min_acquired_interval_ms = delta_ms;
   }
   if (delta_ms > wakelock_stats.max_acquired_interval_ms) {
@@ -314,8 +322,8 @@ static void update_wakelock_released_stats(bt_status_t released_status) {
   wakelock_stats.last_acquired_interval_ms = delta_ms;
   wakelock_stats.total_acquired_interval_ms += delta_ms;
 
-  BluetoothMetricsLogger::GetInstance()->LogWakeEvent(
-      bluetooth::common::WAKE_EVENT_RELEASED, "", "", just_now_ms);
+  BluetoothMetricsLogger::GetInstance()->LogWakeEvent(bluetooth::common::WAKE_EVENT_RELEASED, "",
+                                                      "", just_now_ms);
 }
 
 void wakelock_debug_dump(int fd) {
@@ -332,35 +340,34 @@ void wakelock_debug_dump(int fd) {
 
   if (wakelock_stats.is_acquired) {
     delta_ms = just_now_ms - wakelock_stats.last_acquired_timestamp_ms;
-    if (delta_ms > max_interval_ms) max_interval_ms = delta_ms;
-    if (delta_ms < min_interval_ms) min_interval_ms = delta_ms;
+    if (delta_ms > max_interval_ms) {
+      max_interval_ms = delta_ms;
+    }
+    if (delta_ms < min_interval_ms) {
+      min_interval_ms = delta_ms;
+    }
     last_interval_ms = delta_ms;
   }
-  uint64_t total_interval_ms =
-      wakelock_stats.total_acquired_interval_ms + delta_ms;
+  uint64_t total_interval_ms = wakelock_stats.total_acquired_interval_ms + delta_ms;
 
-  if (wakelock_stats.acquired_count > 0)
+  if (wakelock_stats.acquired_count > 0) {
     avg_interval_ms = total_interval_ms / wakelock_stats.acquired_count;
+  }
 
   dprintf(fd, "\nBluetooth Wakelock Statistics:\n");
   dprintf(fd, "  Is acquired                    : %s\n",
           wakelock_stats.is_acquired ? "true" : "false");
-  dprintf(fd, "  Acquired/released count        : %zu / %zu\n",
-          wakelock_stats.acquired_count, wakelock_stats.released_count);
-  dprintf(fd, "  Acquired/released error count  : %zu / %zu\n",
-          wakelock_stats.acquired_errors, wakelock_stats.released_errors);
-  dprintf(fd, "  Last acquire/release error code: %d / %d\n",
-          wakelock_stats.last_acquired_error,
+  dprintf(fd, "  Acquired/released count        : %zu / %zu\n", wakelock_stats.acquired_count,
+          wakelock_stats.released_count);
+  dprintf(fd, "  Acquired/released error count  : %zu / %zu\n", wakelock_stats.acquired_errors,
+          wakelock_stats.released_errors);
+  dprintf(fd, "  Last acquire/release error code: %d / %d\n", wakelock_stats.last_acquired_error,
           wakelock_stats.last_released_error);
-  dprintf(fd, "  Last acquired time (ms)        : %llu\n",
-          (unsigned long long)last_interval_ms);
+  dprintf(fd, "  Last acquired time (ms)        : %llu\n", (unsigned long long)last_interval_ms);
   dprintf(fd, "  Acquired time min/max/avg (ms) : %llu / %llu / %llu\n",
-          (unsigned long long)min_interval_ms,
-          (unsigned long long)max_interval_ms,
+          (unsigned long long)min_interval_ms, (unsigned long long)max_interval_ms,
           (unsigned long long)avg_interval_ms);
-  dprintf(fd, "  Total acquired time (ms)       : %llu\n",
-          (unsigned long long)total_interval_ms);
+  dprintf(fd, "  Total acquired time (ms)       : %llu\n", (unsigned long long)total_interval_ms);
   dprintf(fd, "  Total run time (ms)            : %llu\n",
-          (unsigned long long)(just_now_ms -
-                               wakelock_stats.last_reset_timestamp_ms));
+          (unsigned long long)(just_now_ms - wakelock_stats.last_reset_timestamp_ms));
 }

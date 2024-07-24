@@ -21,13 +21,13 @@
 #include <cstdint>
 #include <vector>
 
-#include "os/handler.h"
+#include "common/contextual_callback.h"
 
 namespace bluetooth {
 namespace fuzz {
 
-std::vector<std::vector<uint8_t>> SplitInput(
-    const uint8_t* data, size_t size, const uint8_t* separator, size_t separatorSize);
+std::vector<std::vector<uint8_t>> SplitInput(const uint8_t* data, size_t size,
+                                             const uint8_t* separator, size_t separatorSize);
 
 std::vector<uint8_t> GetArbitraryBytes(FuzzedDataProvider* fdp);
 
@@ -38,12 +38,15 @@ std::vector<uint8_t> GetArbitraryBytes(FuzzedDataProvider* fdp);
   }
 
 template <typename TView>
-void InvokeIfValid(common::ContextualOnceCallback<void(TView)> callback, std::vector<uint8_t> data) {
+void InvokeIfValid(common::ContextualOnceCallback<void(TView)> callback,
+                   std::vector<uint8_t> data) {
   auto packet = TView::FromBytes(data);
   if (!packet.IsValid()) {
     return;
   }
-  callback.InvokeIfNotEmpty(packet);
+  if (callback) {
+    callback(packet);
+  }
 }
 
 template <typename TView>
@@ -52,7 +55,9 @@ void InvokeIfValid(common::ContextualCallback<void(TView)> callback, std::vector
   if (!packet.IsValid()) {
     return;
   }
-  callback.InvokeIfNotEmpty(packet);
+  if (callback) {
+    callback(packet);
+  }
 }
 
 }  // namespace fuzz

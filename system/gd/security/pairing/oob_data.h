@@ -28,24 +28,20 @@ using SimplePairingHash = std::array<uint8_t, 16>;
 using SimplePairingRandomizer = std::array<uint8_t, 16>;
 
 class OobData {
- public:
+public:
   OobData() {}
   OobData(SimplePairingHash C, SimplePairingRandomizer R) : C_(C), R_(R) {}
 
-  SimplePairingHash GetC() {
-    return C_;
-  }
+  SimplePairingHash GetC() { return C_; }
 
-  SimplePairingRandomizer GetR() {
-    return R_;
-  }
+  SimplePairingRandomizer GetR() { return R_; }
 
   bool IsValid() {
     return !std::all_of(C_.begin(), C_.end(), [](uint8_t b) { return b == 0; }) &&
            !std::all_of(R_.begin(), R_.end(), [](uint8_t b) { return b == 0; });
   }
 
- private:
+private:
   SimplePairingHash C_ = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   SimplePairingRandomizer R_ = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 };

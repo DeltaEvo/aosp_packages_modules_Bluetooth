@@ -21,30 +21,20 @@
 #include <stdint.h>
 
 #ifdef __cplusplus
-extern "C" {
-#endif
 
-static const char BTE_LOGMSG_MODULE[] = "bte_logmsg_module";
-
-#ifdef __cplusplus
-}
-#endif
-
-#ifdef __cplusplus
+#include <bluetooth/log.h>
 
 #include <array>
 #include <iomanip>
 #include <sstream>
 #include <type_traits>
 
-#include "check.h"
 #include "os/logging/log_adapter.h"
 
 /* Prints integral parameter x as hex string, with '0' fill */
 template <typename T>
 std::string loghex(T x) {
-  static_assert(std::is_integral<T>::value,
-                "loghex parameter must be integral.");
+  static_assert(std::is_integral<T>::value, "loghex parameter must be integral.");
   std::stringstream tmp;
   tmp << std::showbase << std::internal << std::hex << std::setfill('0')
       << std::setw((sizeof(T) * 2) + 2) << +x;
@@ -54,25 +44,12 @@ std::string loghex(T x) {
 /* Prints integral array as hex string, with '0' fill */
 template <typename T, size_t N>
 std::string loghex(std::array<T, N> array) {
-  static_assert(std::is_integral<T>::value,
-                "type stored in array must be integral.");
+  static_assert(std::is_integral<T>::value, "type stored in array must be integral.");
   std::stringstream tmp;
   for (const auto& x : array) {
-    tmp << std::internal << std::hex << std::setfill('0')
-        << std::setw((sizeof(uint8_t) * 2) + 2) << +x;
+    tmp << std::internal << std::hex << std::setfill('0') << std::setw((sizeof(uint8_t) * 2) + 2)
+        << +x;
   }
-  return tmp.str();
-}
-
-/**
- * Obtains the string representation of a boolean value.
- *
- * @param value the boolean value to use
- * @return the string representation of the boolean value: "true" or "false"
- */
-inline std::string logbool(bool value) {
-  std::stringstream tmp;
-  tmp << std::boolalpha << value;
   return tmp.str();
 }
 
@@ -86,13 +63,16 @@ inline std::string logbool(bool value) {
  * @param name the field name to add
  * @return the result string
  */
-inline std::string& AppendField(std::string* p_result, bool append,
-                                const std::string& name) {
-  CHECK(p_result != nullptr);
-  if (!append) return *p_result;
-  if (!p_result->empty()) *p_result += "|";
+inline std::string& AppendField(std::string* p_result, bool append, const std::string& name) {
+  bluetooth::log::assert_that(p_result != nullptr, "assert failed: p_result != nullptr");
+  if (!append) {
+    return *p_result;
+  }
+  if (!p_result->empty()) {
+    *p_result += "|";
+  }
   *p_result += name;
   return *p_result;
 }
 
-#endif
+#endif  // __cplusplus

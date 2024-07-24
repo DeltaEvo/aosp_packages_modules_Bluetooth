@@ -1,12 +1,9 @@
 use crate::{
     gatt::server::att_database::AttDatabase,
     packets::{
-        AttAttributeDataBuilder, AttChild, AttErrorResponseBuilder, AttOpcode, AttReadRequestView,
-        AttReadResponseBuilder,
+        AttChild, AttErrorResponseBuilder, AttOpcode, AttReadRequestView, AttReadResponseBuilder,
     },
 };
-
-use super::helpers::truncate_att_data::truncate_att_data;
 
 pub async fn handle_read_request<T: AttDatabase>(
     request: AttReadRequestView<'_>,
@@ -16,11 +13,11 @@ pub async fn handle_read_request<T: AttDatabase>(
     let handle = request.get_attribute_handle().into();
 
     match db.read_attribute(handle).await {
-        Ok(data) => AttReadResponseBuilder {
+        Ok(mut data) => {
             // as per 5.3 3F 3.4.4.4 ATT_READ_RSP, we truncate to MTU - 1
-            value: AttAttributeDataBuilder { _child_: truncate_att_data(data, mtu - 1) },
+            data.truncate(mtu - 1);
+            AttReadResponseBuilder { value: data.into_boxed_slice() }.into()
         }
-        .into(),
         Err(error_code) => AttErrorResponseBuilder {
             opcode_in_error: AttOpcode::READ_REQUEST,
             handle_in_error: handle.into(),
@@ -43,8 +40,8 @@ mod test {
                 test::test_att_db::TestAttDatabase,
             },
         },
-        packets::{AttAttributeDataChild, AttErrorCode, AttReadRequestBuilder, Serializable},
-        utils::packet::{build_att_data, build_view_or_crash},
+        packets::{AttErrorCode, AttReadRequestBuilder, Serializable},
+        utils::packet::build_view_or_crash,
     };
 
     fn make_db_with_handle_and_value(handle: u16, value: Vec<u8>) -> TestAttDatabase {
@@ -78,9 +75,7 @@ mod test {
         response.to_vec().unwrap(); // check it serializes
         assert_eq!(
             response,
-            AttChild::AttReadResponse(AttReadResponseBuilder {
-                value: build_att_data(AttAttributeDataChild::RawData([4, 5].into()))
-            })
+            AttChild::AttReadResponse(AttReadResponseBuilder { value: [4, 5].into() })
         )
     }
 

@@ -24,14 +24,16 @@ namespace bluetooth {
 namespace security {
 class L2capSecurityModuleInterface : public l2cap::classic::SecurityEnforcementInterface,
                                      public l2cap::le::SecurityEnforcementInterface {
- public:
-  L2capSecurityModuleInterface(internal::SecurityManagerImpl* security_manager_impl, os::Handler* security_handler);
-  void Enforce(hci::AddressWithType remote, l2cap::classic::SecurityPolicy policy,
-               l2cap::classic::SecurityEnforcementInterface::ResultCallback result_callback) override;
+public:
+  L2capSecurityModuleInterface(internal::SecurityManagerImpl* security_manager_impl,
+                               os::Handler* security_handler);
+  void Enforce(
+          hci::AddressWithType remote, l2cap::classic::SecurityPolicy policy,
+          l2cap::classic::SecurityEnforcementInterface::ResultCallback result_callback) override;
   void Enforce(hci::AddressWithType remote, l2cap::le::SecurityPolicy policy,
                l2cap::le::SecurityEnforcementInterface::ResultCallback result_callback) override;
 
- private:
+private:
   internal::SecurityManagerImpl* security_manager_impl_;
   os::Handler* security_handler_ = nullptr;
 };

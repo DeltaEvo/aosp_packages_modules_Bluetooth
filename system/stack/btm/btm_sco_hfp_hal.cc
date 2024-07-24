@@ -18,9 +18,7 @@
 
 #include <vector>
 
-#include "common/init_flags.h"
 #include "device/include/esco_parameters.h"
-#include "internal_include/bt_target.h"
 #include "osi/include/properties.h"
 
 namespace hfp_hal_interface {
@@ -34,13 +32,13 @@ std::vector<bt_codec> cached_codecs;
 // offloaded defaults.
 void init() {
   bt_codec cvsd = {
-      .codec = codec::CVSD,
-      .data_path = ESCO_DATA_PATH_PCM,
+          .codec = codec::CVSD,
+          .data_path = ESCO_DATA_PATH_PCM,
   };
 
   bt_codec msbc = {
-      .codec = codec::MSBC,
-      .data_path = ESCO_DATA_PATH_PCM,
+          .codec = codec::MSBC,
+          .data_path = ESCO_DATA_PATH_PCM,
   };
 
   cached_codecs.clear();
@@ -49,17 +47,12 @@ void init() {
 }
 
 // This is not used in Android.
-bool is_coding_format_supported(esco_coding_format_t coding_format) {
-  return true;
-}
+bool is_coding_format_supported(esco_coding_format_t /* coding_format */) { return true; }
 
 // Android statically compiles WBS support.
-bool get_wbs_supported() { return !DISABLE_WBS; }
+bool get_wbs_supported() { return true; }
 
-bool get_swb_supported() {
-  return osi_property_get_bool("bluetooth.hfp.swb.supported", false) &&
-         bluetooth::common::init_flags::sco_codec_select_lc3_is_enabled();
-}
+bool get_swb_supported() { return osi_property_get_bool("bluetooth.hfp.swb.supported", false); }
 
 // Checks the supported codecs
 bt_codecs get_codec_capabilities(uint64_t codecs) {
@@ -90,16 +83,16 @@ bool enable_offload(bool enable) {
 }
 
 // On Android, this is a no-op because the settings default to offloaded case.
-void set_codec_datapath(int codec_uuid) {}
+void set_codec_datapath(tBTA_AG_UUID_CODEC /* codec_uuid */) {}
 
 // No packet size limits on Android since it will be offloaded.
-int get_packet_size(int codec) { return kDefaultPacketSize; }
+size_t get_packet_size(int /* codec */) { return kDefaultPacketSize; }
 
-void notify_sco_connection_change(RawAddress device, bool is_connected,
-                                  int codec) {
+void notify_sco_connection_change(RawAddress /* device */, bool /* is_connected */,
+                                  int /* codec */) {
   // Do nothing since this is handled by Android's audio hidl.
 }
 
 // On Android, this is a no-op because the settings default to work for Android.
-void update_esco_parameters(enh_esco_params_t* p_parms) {}
+void update_esco_parameters(enh_esco_params_t* /* p_parms */) {}
 }  // namespace hfp_hal_interface

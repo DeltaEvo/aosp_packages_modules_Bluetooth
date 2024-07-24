@@ -20,7 +20,6 @@
 
 #include "btcore/include/module.h"
 
-#include <base/logging.h>
 #include <bluetooth/log.h>
 #include <dlfcn.h>
 #include <string.h>
@@ -29,7 +28,6 @@
 #include <unordered_map>
 
 #include "common/message_loop_thread.h"
-#include "include/check.h"
 #include "os/log.h"
 
 using bluetooth::common::MessageLoopThread;
@@ -56,13 +54,14 @@ void module_management_stop(void) { metadata.clear(); }
 
 const module_t* get_module(const char* name) {
   module_t* module = (module_t*)dlsym(RTLD_DEFAULT, name);
-  CHECK(module);
+  log::assert_that(module != nullptr, "assert failed: module != nullptr");
   return module;
 }
 
 bool module_init(const module_t* module) {
-  CHECK(module != NULL);
-  CHECK(get_module_state(module) == MODULE_STATE_NONE);
+  log::assert_that(module != NULL, "assert failed: module != NULL");
+  log::assert_that(get_module_state(module) == MODULE_STATE_NONE,
+                   "assert failed: get_module_state(module) == MODULE_STATE_NONE");
 
   if (!call_lifecycle_function(module->init)) {
     log::error("Failed to initialize module \"{}\"", module->name);
@@ -74,14 +73,15 @@ bool module_init(const module_t* module) {
 }
 
 bool module_start_up(const module_t* module) {
-  CHECK(module != NULL);
+  log::assert_that(module != NULL, "assert failed: module != NULL");
   // TODO(zachoverflow): remove module->init check once automagic order/call is
   // in place.
   // This hack is here so modules which don't require init don't have to have
   // useless calls
   // as we're converting the startup sequence.
-  CHECK(get_module_state(module) == MODULE_STATE_INITIALIZED ||
-        module->init == NULL);
+  log::assert_that(get_module_state(module) == MODULE_STATE_INITIALIZED || module->init == NULL,
+                   "assert failed: get_module_state(module) == "
+                   "MODULE_STATE_INITIALIZED || module->init == NULL");
 
   log::info("Starting module \"{}\"", module->name);
   if (!call_lifecycle_function(module->start_up)) {
@@ -95,17 +95,18 @@ bool module_start_up(const module_t* module) {
 }
 
 void module_shut_down(const module_t* module) {
-  CHECK(module != NULL);
+  log::assert_that(module != NULL, "assert failed: module != NULL");
   module_state_t state = get_module_state(module);
-  CHECK(state <= MODULE_STATE_STARTED);
+  log::assert_that(state <= MODULE_STATE_STARTED, "assert failed: state <= MODULE_STATE_STARTED");
 
   // Only something to do if the module was actually started
-  if (state < MODULE_STATE_STARTED) return;
+  if (state < MODULE_STATE_STARTED) {
+    return;
+  }
 
   log::info("Shutting down module \"{}\"", module->name);
   if (!call_lifecycle_function(module->shut_down)) {
-    log::error("Failed to shutdown module \"{}\". Continuing anyway.",
-               module->name);
+    log::error("Failed to shutdown module \"{}\". Continuing anyway.", module->name);
   }
   log::info("Shutdown of module \"{}\" completed", module->name);
 
@@ -113,17 +114,19 @@ void module_shut_down(const module_t* module) {
 }
 
 void module_clean_up(const module_t* module) {
-  CHECK(module != NULL);
+  log::assert_that(module != NULL, "assert failed: module != NULL");
   module_state_t state = get_module_state(module);
-  CHECK(state <= MODULE_STATE_INITIALIZED);
+  log::assert_that(state <= MODULE_STATE_INITIALIZED,
+                   "assert failed: state <= MODULE_STATE_INITIALIZED");
 
   // Only something to do if the module was actually initialized
-  if (state < MODULE_STATE_INITIALIZED) return;
+  if (state < MODULE_STATE_INITIALIZED) {
+    return;
+  }
 
   log::info("Cleaning up module \"{}\"", module->name);
   if (!call_lifecycle_function(module->clean_up)) {
-    log::error("Failed to cleanup module \"{}\". Continuing anyway.",
-               module->name);
+    log::error("Failed to cleanup module \"{}\". Continuing anyway.", module->name);
   }
   log::info("Cleanup of module \"{}\" completed", module->name);
 
@@ -132,12 +135,16 @@ void module_clean_up(const module_t* module) {
 
 static bool call_lifecycle_function(module_lifecycle_fn function) {
   // A NULL lifecycle function means it isn't needed, so assume success
-  if (!function) return true;
+  if (!function) {
+    return true;
+  }
 
   future_t* future = function();
 
   // A NULL future means synchronous success
-  if (!future) return true;
+  if (!future) {
+    return true;
+  }
 
   // Otherwise fall back to the future
   return future_await(future);

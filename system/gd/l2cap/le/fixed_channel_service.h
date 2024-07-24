@@ -30,7 +30,7 @@ class FixedChannelServiceManagerImpl;
 }
 
 class FixedChannelService {
- public:
+public:
   FixedChannelService() = default;
   FixedChannelService(const FixedChannelService&) = delete;
   FixedChannelService& operator=(const FixedChannelService&) = delete;
@@ -47,8 +47,9 @@ class FixedChannelService {
 
   friend internal::FixedChannelServiceManagerImpl;
 
- private:
-  FixedChannelService(Cid cid, internal::FixedChannelServiceManagerImpl* manager, os::Handler* handler)
+private:
+  FixedChannelService(Cid cid, internal::FixedChannelServiceManagerImpl* manager,
+                      os::Handler* handler)
       : cid_(cid), manager_(manager), l2cap_layer_handler_(handler) {}
   Cid cid_ = kInvalidCid;
   internal::FixedChannelServiceManagerImpl* manager_ = nullptr;

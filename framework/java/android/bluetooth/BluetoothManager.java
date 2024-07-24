@@ -16,7 +16,7 @@
 
 package android.bluetooth;
 
-import static android.bluetooth.BluetoothUtils.getSyncTimeout;
+import static com.android.modules.utils.build.SdkLevel.isAtLeastU;
 
 import android.annotation.RequiresFeature;
 import android.annotation.RequiresNoPermission;
@@ -24,17 +24,13 @@ import android.annotation.RequiresPermission;
 import android.annotation.SystemService;
 import android.bluetooth.annotations.RequiresBluetoothConnectPermission;
 import android.bluetooth.annotations.RequiresLegacyBluetoothPermission;
-import android.content.AttributionSource;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.RemoteException;
 import android.util.Log;
 
-import com.android.modules.utils.SynchronousResultReceiver;
-
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeoutException;
 
 /**
  * High level manager used to obtain an instance of an {@link BluetoothAdapter} and to conduct
@@ -55,22 +51,27 @@ import java.util.concurrent.TimeoutException;
 @SystemService(Context.BLUETOOTH_SERVICE)
 @RequiresFeature(PackageManager.FEATURE_BLUETOOTH)
 public final class BluetoothManager {
-    private static final String TAG = "BluetoothManager";
-    private static final boolean DBG = false;
+    private static final String TAG = BluetoothManager.class.getSimpleName();
 
-    private final AttributionSource mAttributionSource;
     private final BluetoothAdapter mAdapter;
+    private final Context mContext;
 
     /** @hide */
     public BluetoothManager(Context context) {
-        mAttributionSource = context.getAttributionSource();
-        mAdapter = BluetoothAdapter.createAdapter(mAttributionSource);
+        if (com.android.bluetooth.flags.Flags.overrideContextToSpecifyDeviceId() && isAtLeastU()) {
+            // Pin the context DeviceId prevent the associated attribution source to be obsolete
+            // TODO: b/343739429 -- pass the context to BluetoothAdapter constructor instead
+            mContext = context.createDeviceContext(Context.DEVICE_ID_DEFAULT);
+        } else {
+            mContext = context;
+        }
+        mAdapter = BluetoothAdapter.createAdapter(mContext.getAttributionSource());
     }
 
     /**
-     * Get the BLUETOOTH Adapter for this device.
+     * Get the BluetoothAdapter for this device.
      *
-     * @return the BLUETOOTH Adapter
+     * @return the BluetoothAdapter
      */
     @RequiresNoPermission
     public BluetoothAdapter getAdapter() {
@@ -94,8 +95,6 @@ public final class BluetoothManager {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public int getConnectionState(BluetoothDevice device, int profile) {
-        if (DBG) Log.d(TAG, "getConnectionState()");
-
         List<BluetoothDevice> connectedDevices = getConnectedDevices(profile);
         for (BluetoothDevice connectedDevice : connectedDevices) {
             if (device.equals(connectedDevice)) {
@@ -122,7 +121,6 @@ public final class BluetoothManager {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public List<BluetoothDevice> getConnectedDevices(int profile) {
-        if (DBG) Log.d(TAG, "getConnectedDevices");
         return getDevicesMatchingConnectionStates(
                 profile, new int[] {BluetoothProfile.STATE_CONNECTED});
     }
@@ -146,8 +144,6 @@ public final class BluetoothManager {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public List<BluetoothDevice> getDevicesMatchingConnectionStates(int profile, int[] states) {
-        if (DBG) Log.d(TAG, "getDevicesMatchingConnectionStates");
-
         if (profile != BluetoothProfile.GATT && profile != BluetoothProfile.GATT_SERVER) {
             throw new IllegalArgumentException("Profile not supported: " + profile);
         }
@@ -157,14 +153,12 @@ public final class BluetoothManager {
         try {
             IBluetoothGatt iGatt = mAdapter.getBluetoothGatt();
             if (iGatt == null) return devices;
-            final SynchronousResultReceiver<List<BluetoothDevice>> recv =
-                    SynchronousResultReceiver.get();
-            iGatt.getDevicesMatchingConnectionStates(states, mAttributionSource, recv);
             devices =
                     Attributable.setAttributionSource(
-                            recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(devices),
-                            mAttributionSource);
-        } catch (RemoteException | TimeoutException e) {
+                            iGatt.getDevicesMatchingConnectionStates(
+                                    states, mContext.getAttributionSource()),
+                            mContext.getAttributionSource());
+        } catch (RemoteException e) {
             Log.e(TAG, "", e);
         }
 

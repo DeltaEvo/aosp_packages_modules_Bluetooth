@@ -16,6 +16,7 @@
 
 package com.android.bluetooth.btservice;
 
+import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
@@ -32,16 +33,14 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
-  A CompanionManager to specify parameters between companion devices and regular devices.
-
-  1.  A paired device is recognized as a companion device if its METADATA_SOFTWARE_VERSION is
-      set to BluetoothDevice.COMPANION_TYPE_PRIMARY or BluetoothDevice.COMPANION_TYPE_SECONDARY.
-  2.  Only can have one companion device at a time.
-  3.  Remove bond does not remove the companion device record.
-  4.  Factory reset Bluetooth removes the companion device.
-  5.  Companion device has individual GATT connection parameters.
-*/
-
+ * A CompanionManager to specify parameters between companion devices and regular devices.
+ *
+ * <p>1. A paired device is recognized as a companion device if its METADATA_SOFTWARE_VERSION is set
+ * to BluetoothDevice.COMPANION_TYPE_PRIMARY or BluetoothDevice.COMPANION_TYPE_SECONDARY. 2. Only
+ * can have one companion device at a time. 3. Remove bond does not remove the companion device
+ * record. 4. Factory reset Bluetooth removes the companion device. 5. Companion device has
+ * individual GATT connection parameters.
+ */
 public class CompanionManager {
     private static final String TAG = "BluetoothCompanionManager";
 
@@ -59,13 +58,13 @@ public class CompanionManager {
     private final int[] mGattConnLowDefault;
     private final int[] mGattConnDckDefault;
 
-    @VisibleForTesting static final int COMPANION_TYPE_NONE      = 0;
-    @VisibleForTesting static final int COMPANION_TYPE_PRIMARY   = 1;
+    @VisibleForTesting static final int COMPANION_TYPE_NONE = 0;
+    @VisibleForTesting static final int COMPANION_TYPE_PRIMARY = 1;
     @VisibleForTesting static final int COMPANION_TYPE_SECONDARY = 2;
 
     public static final int GATT_CONN_INTERVAL_MIN = 0;
     public static final int GATT_CONN_INTERVAL_MAX = 1;
-    public static final int GATT_CONN_LATENCY      = 2;
+    public static final int GATT_CONN_LATENCY = 2;
 
     @VisibleForTesting static final String COMPANION_INFO = "bluetooth_companion_info";
     @VisibleForTesting static final String COMPANION_DEVICE_KEY = "companion_device";
@@ -95,72 +94,113 @@ public class CompanionManager {
     public CompanionManager(AdapterService service, ServiceFactory factory) {
         mAdapterService = service;
 
-        mGattConnHighDefault = new int[] {
-                getGattConfig(PROPERTY_HIGH_MIN_INTERVAL,
-                        R.integer.gatt_high_priority_min_interval),
-                getGattConfig(PROPERTY_HIGH_MAX_INTERVAL,
-                        R.integer.gatt_high_priority_max_interval),
-                getGattConfig(PROPERTY_HIGH_LATENCY,
-                        R.integer.gatt_high_priority_latency)};
-        mGattConnBalanceDefault = new int[] {
-                getGattConfig(PROPERTY_BALANCED_MIN_INTERVAL,
-                        R.integer.gatt_balanced_priority_min_interval),
-                getGattConfig(PROPERTY_BALANCED_MAX_INTERVAL,
-                        R.integer.gatt_balanced_priority_max_interval),
-                getGattConfig(PROPERTY_BALANCED_LATENCY,
-                        R.integer.gatt_balanced_priority_latency)};
-        mGattConnLowDefault = new int[] {
-                getGattConfig(PROPERTY_LOW_MIN_INTERVAL, R.integer.gatt_low_power_min_interval),
-                getGattConfig(PROPERTY_LOW_MAX_INTERVAL, R.integer.gatt_low_power_max_interval),
-                getGattConfig(PROPERTY_LOW_LATENCY, R.integer.gatt_low_power_latency)};
-        mGattConnDckDefault = new int[] {
-                getGattConfig(PROPERTY_DCK_MIN_INTERVAL, R.integer.gatt_dck_priority_min_interval),
-                getGattConfig(PROPERTY_DCK_MAX_INTERVAL, R.integer.gatt_dck_priority_max_interval),
-                getGattConfig(PROPERTY_DCK_LATENCY, R.integer.gatt_dck_priority_latency)};
+        mGattConnHighDefault =
+                new int[] {
+                    getGattConfig(
+                            PROPERTY_HIGH_MIN_INTERVAL, R.integer.gatt_high_priority_min_interval),
+                    getGattConfig(
+                            PROPERTY_HIGH_MAX_INTERVAL, R.integer.gatt_high_priority_max_interval),
+                    getGattConfig(PROPERTY_HIGH_LATENCY, R.integer.gatt_high_priority_latency)
+                };
+        mGattConnBalanceDefault =
+                new int[] {
+                    getGattConfig(
+                            PROPERTY_BALANCED_MIN_INTERVAL,
+                            R.integer.gatt_balanced_priority_min_interval),
+                    getGattConfig(
+                            PROPERTY_BALANCED_MAX_INTERVAL,
+                            R.integer.gatt_balanced_priority_max_interval),
+                    getGattConfig(
+                            PROPERTY_BALANCED_LATENCY, R.integer.gatt_balanced_priority_latency)
+                };
+        mGattConnLowDefault =
+                new int[] {
+                    getGattConfig(PROPERTY_LOW_MIN_INTERVAL, R.integer.gatt_low_power_min_interval),
+                    getGattConfig(PROPERTY_LOW_MAX_INTERVAL, R.integer.gatt_low_power_max_interval),
+                    getGattConfig(PROPERTY_LOW_LATENCY, R.integer.gatt_low_power_latency)
+                };
+        mGattConnDckDefault =
+                new int[] {
+                    getGattConfig(
+                            PROPERTY_DCK_MIN_INTERVAL, R.integer.gatt_dck_priority_min_interval),
+                    getGattConfig(
+                            PROPERTY_DCK_MAX_INTERVAL, R.integer.gatt_dck_priority_max_interval),
+                    getGattConfig(PROPERTY_DCK_LATENCY, R.integer.gatt_dck_priority_latency)
+                };
 
-        mGattConnHighPrimary = new int[] {
-                getGattConfig(PROPERTY_HIGH_MIN_INTERVAL + PROPERTY_SUFFIX_PRIMARY,
-                        R.integer.gatt_high_priority_min_interval_primary),
-                getGattConfig(PROPERTY_HIGH_MAX_INTERVAL + PROPERTY_SUFFIX_PRIMARY,
-                        R.integer.gatt_high_priority_max_interval_primary),
-                getGattConfig(PROPERTY_HIGH_LATENCY + PROPERTY_SUFFIX_PRIMARY,
-                        R.integer.gatt_high_priority_latency_primary)};
-        mGattConnBalancePrimary = new int[] {
-                getGattConfig(PROPERTY_BALANCED_MIN_INTERVAL + PROPERTY_SUFFIX_PRIMARY,
-                        R.integer.gatt_balanced_priority_min_interval_primary),
-                getGattConfig(PROPERTY_BALANCED_MAX_INTERVAL + PROPERTY_SUFFIX_PRIMARY,
-                        R.integer.gatt_balanced_priority_max_interval_primary),
-                getGattConfig(PROPERTY_BALANCED_LATENCY + PROPERTY_SUFFIX_PRIMARY,
-                        R.integer.gatt_balanced_priority_latency_primary)};
-        mGattConnLowPrimary = new int[] {
-                getGattConfig(PROPERTY_LOW_MIN_INTERVAL + PROPERTY_SUFFIX_PRIMARY,
-                        R.integer.gatt_low_power_min_interval_primary),
-                getGattConfig(PROPERTY_LOW_MAX_INTERVAL + PROPERTY_SUFFIX_PRIMARY,
-                        R.integer.gatt_low_power_max_interval_primary),
-                getGattConfig(PROPERTY_LOW_LATENCY + PROPERTY_SUFFIX_PRIMARY,
-                        R.integer.gatt_low_power_latency_primary)};
+        mGattConnHighPrimary =
+                new int[] {
+                    getGattConfig(
+                            PROPERTY_HIGH_MIN_INTERVAL + PROPERTY_SUFFIX_PRIMARY,
+                            R.integer.gatt_high_priority_min_interval_primary),
+                    getGattConfig(
+                            PROPERTY_HIGH_MAX_INTERVAL + PROPERTY_SUFFIX_PRIMARY,
+                            R.integer.gatt_high_priority_max_interval_primary),
+                    getGattConfig(
+                            PROPERTY_HIGH_LATENCY + PROPERTY_SUFFIX_PRIMARY,
+                            R.integer.gatt_high_priority_latency_primary)
+                };
+        mGattConnBalancePrimary =
+                new int[] {
+                    getGattConfig(
+                            PROPERTY_BALANCED_MIN_INTERVAL + PROPERTY_SUFFIX_PRIMARY,
+                            R.integer.gatt_balanced_priority_min_interval_primary),
+                    getGattConfig(
+                            PROPERTY_BALANCED_MAX_INTERVAL + PROPERTY_SUFFIX_PRIMARY,
+                            R.integer.gatt_balanced_priority_max_interval_primary),
+                    getGattConfig(
+                            PROPERTY_BALANCED_LATENCY + PROPERTY_SUFFIX_PRIMARY,
+                            R.integer.gatt_balanced_priority_latency_primary)
+                };
+        mGattConnLowPrimary =
+                new int[] {
+                    getGattConfig(
+                            PROPERTY_LOW_MIN_INTERVAL + PROPERTY_SUFFIX_PRIMARY,
+                            R.integer.gatt_low_power_min_interval_primary),
+                    getGattConfig(
+                            PROPERTY_LOW_MAX_INTERVAL + PROPERTY_SUFFIX_PRIMARY,
+                            R.integer.gatt_low_power_max_interval_primary),
+                    getGattConfig(
+                            PROPERTY_LOW_LATENCY + PROPERTY_SUFFIX_PRIMARY,
+                            R.integer.gatt_low_power_latency_primary)
+                };
 
-        mGattConnHighSecondary = new int[] {
-                getGattConfig(PROPERTY_HIGH_MIN_INTERVAL + PROPERTY_SUFFIX_SECONDARY,
-                        R.integer.gatt_high_priority_min_interval_secondary),
-                getGattConfig(PROPERTY_HIGH_MAX_INTERVAL + PROPERTY_SUFFIX_SECONDARY,
-                        R.integer.gatt_high_priority_max_interval_secondary),
-                getGattConfig(PROPERTY_HIGH_LATENCY + PROPERTY_SUFFIX_SECONDARY,
-                        R.integer.gatt_high_priority_latency_secondary)};
-        mGattConnBalanceSecondary = new int[] {
-                getGattConfig(PROPERTY_BALANCED_MIN_INTERVAL + PROPERTY_SUFFIX_SECONDARY,
-                        R.integer.gatt_balanced_priority_min_interval_secondary),
-                getGattConfig(PROPERTY_BALANCED_MAX_INTERVAL + PROPERTY_SUFFIX_SECONDARY,
-                        R.integer.gatt_balanced_priority_max_interval_secondary),
-                getGattConfig(PROPERTY_BALANCED_LATENCY + PROPERTY_SUFFIX_SECONDARY,
-                        R.integer.gatt_balanced_priority_latency_secondary)};
-        mGattConnLowSecondary = new int[] {
-                getGattConfig(PROPERTY_LOW_MIN_INTERVAL + PROPERTY_SUFFIX_SECONDARY,
-                        R.integer.gatt_low_power_min_interval_secondary),
-                getGattConfig(PROPERTY_LOW_MAX_INTERVAL + PROPERTY_SUFFIX_SECONDARY,
-                        R.integer.gatt_low_power_max_interval_secondary),
-                getGattConfig(PROPERTY_LOW_LATENCY + PROPERTY_SUFFIX_SECONDARY,
-                        R.integer.gatt_low_power_latency_secondary)};
+        mGattConnHighSecondary =
+                new int[] {
+                    getGattConfig(
+                            PROPERTY_HIGH_MIN_INTERVAL + PROPERTY_SUFFIX_SECONDARY,
+                            R.integer.gatt_high_priority_min_interval_secondary),
+                    getGattConfig(
+                            PROPERTY_HIGH_MAX_INTERVAL + PROPERTY_SUFFIX_SECONDARY,
+                            R.integer.gatt_high_priority_max_interval_secondary),
+                    getGattConfig(
+                            PROPERTY_HIGH_LATENCY + PROPERTY_SUFFIX_SECONDARY,
+                            R.integer.gatt_high_priority_latency_secondary)
+                };
+        mGattConnBalanceSecondary =
+                new int[] {
+                    getGattConfig(
+                            PROPERTY_BALANCED_MIN_INTERVAL + PROPERTY_SUFFIX_SECONDARY,
+                            R.integer.gatt_balanced_priority_min_interval_secondary),
+                    getGattConfig(
+                            PROPERTY_BALANCED_MAX_INTERVAL + PROPERTY_SUFFIX_SECONDARY,
+                            R.integer.gatt_balanced_priority_max_interval_secondary),
+                    getGattConfig(
+                            PROPERTY_BALANCED_LATENCY + PROPERTY_SUFFIX_SECONDARY,
+                            R.integer.gatt_balanced_priority_latency_secondary)
+                };
+        mGattConnLowSecondary =
+                new int[] {
+                    getGattConfig(
+                            PROPERTY_LOW_MIN_INTERVAL + PROPERTY_SUFFIX_SECONDARY,
+                            R.integer.gatt_low_power_min_interval_secondary),
+                    getGattConfig(
+                            PROPERTY_LOW_MAX_INTERVAL + PROPERTY_SUFFIX_SECONDARY,
+                            R.integer.gatt_low_power_max_interval_secondary),
+                    getGattConfig(
+                            PROPERTY_LOW_LATENCY + PROPERTY_SUFFIX_SECONDARY,
+                            R.integer.gatt_low_power_latency_secondary)
+                };
     }
 
     private int getGattConfig(String property, int resId) {
@@ -173,8 +213,8 @@ public class CompanionManager {
 
             try {
                 mCompanionDevice = mAdapter.getRemoteDevice(address);
-                mCompanionType = getCompanionPreferences().getInt(
-                        COMPANION_TYPE_KEY, COMPANION_TYPE_NONE);
+                mCompanionType =
+                        getCompanionPreferences().getInt(COMPANION_TYPE_KEY, COMPANION_TYPE_NONE);
             } catch (IllegalArgumentException e) {
                 mCompanionDevice = null;
                 mCompanionType = COMPANION_TYPE_NONE;
@@ -183,9 +223,10 @@ public class CompanionManager {
 
         if (mCompanionDevice == null) {
             // We don't have any companion phone registered, try look from the bonded devices
-            for (BluetoothDevice device : mAdapter.getBondedDevices()) {
-                byte[] metadata = mAdapterService.getMetadata(device,
-                        BluetoothDevice.METADATA_SOFTWARE_VERSION);
+            for (BluetoothDevice device : mAdapterService.getBondedDevices()) {
+                byte[] metadata =
+                        mAdapterService.getMetadata(
+                                device, BluetoothDevice.METADATA_SOFTWARE_VERSION);
                 if (metadata == null) {
                     continue;
                 }
@@ -208,30 +249,35 @@ public class CompanionManager {
                 @Override
                 public void onMetadataChanged(BluetoothDevice device, int key, byte[] value) {
                     String valueStr = new String(value);
-                    Log.d(TAG, String.format("Metadata updated in Device %s: %d = %s.", device,
-                            key, value == null ? null : valueStr));
+                    Log.d(
+                            TAG,
+                            String.format(
+                                    "Metadata updated in Device %s: %d = %s.",
+                                    device, key, value == null ? null : valueStr));
                     if (key == BluetoothDevice.METADATA_SOFTWARE_VERSION
                             && (valueStr.equals(BluetoothDevice.COMPANION_TYPE_PRIMARY)
-                            || valueStr.equals(BluetoothDevice.COMPANION_TYPE_SECONDARY))) {
+                                    || valueStr.equals(BluetoothDevice.COMPANION_TYPE_SECONDARY))) {
                         setCompanionDevice(device, valueStr);
                     }
                 }
             };
 
+    @SuppressLint("AndroidFrameworkRequiresPermission") // TODO: b/350563786
     private void setCompanionDevice(BluetoothDevice companionDevice, String type) {
         synchronized (mMetadataListeningDevices) {
             Log.i(TAG, "setCompanionDevice: " + companionDevice + ", type=" + type);
             mCompanionDevice = companionDevice;
-            mCompanionType = type.equals(BluetoothDevice.COMPANION_TYPE_PRIMARY)
-                    ? COMPANION_TYPE_PRIMARY : COMPANION_TYPE_SECONDARY;
+            mCompanionType =
+                    type.equals(BluetoothDevice.COMPANION_TYPE_PRIMARY)
+                            ? COMPANION_TYPE_PRIMARY
+                            : COMPANION_TYPE_SECONDARY;
 
             // unregister all metadata listeners
             for (BluetoothDevice device : mMetadataListeningDevices) {
                 try {
                     mAdapter.removeOnMetadataChangedListener(device, mMetadataListener);
                 } catch (IllegalArgumentException e) {
-                    Log.e(TAG, "failed to unregister metadata listener for "
-                            + device + " " + e);
+                    Log.e(TAG, "failed to unregister metadata listener for " + device + " " + e);
                 }
             }
             mMetadataListeningDevices.clear();
@@ -272,6 +318,7 @@ public class CompanionManager {
         }
     }
 
+    @SuppressLint("AndroidFrameworkRequiresPermission") // TODO: b/350563786
     private void registerMetadataListener(BluetoothDevice device) {
         synchronized (mMetadataListeningDevices) {
             Log.d(TAG, "register metadata listener: " + device);
@@ -279,13 +326,13 @@ public class CompanionManager {
                 mAdapter.addOnMetadataChangedListener(
                         device, mAdapterService.getMainExecutor(), mMetadataListener);
             } catch (IllegalArgumentException e) {
-                Log.e(TAG, "failed to register metadata listener for "
-                        + device + " " + e);
+                Log.e(TAG, "failed to register metadata listener for " + device + " " + e);
             }
             mMetadataListeningDevices.add(device);
         }
     }
 
+    @SuppressLint("AndroidFrameworkRequiresPermission") // TODO: b/350563786
     private void removeMetadataListener(BluetoothDevice device) {
         synchronized (mMetadataListeningDevices) {
             if (!mMetadataListeningDevices.contains(device)) return;
@@ -294,13 +341,11 @@ public class CompanionManager {
             try {
                 mAdapter.removeOnMetadataChangedListener(device, mMetadataListener);
             } catch (IllegalArgumentException e) {
-                Log.e(TAG, "failed to unregister metadata listener for "
-                        + device + " " + e);
+                Log.e(TAG, "failed to unregister metadata listener for " + device + " " + e);
             }
             mMetadataListeningDevices.remove(device);
         }
     }
-
 
     /**
      * Method to get the stored companion device
@@ -336,9 +381,7 @@ public class CompanionManager {
         return device.equals(mCompanionDevice);
     }
 
-    /**
-     * Method to reset the stored companion info
-     */
+    /** Method to reset the stored companion info */
     public void factoryReset() {
         synchronized (mMetadataListeningDevices) {
             mCompanionDevice = null;
@@ -355,11 +398,11 @@ public class CompanionManager {
      * Gets the GATT connection parameters of the device
      *
      * @param address the address of the Bluetooth device
-     * @param type type of the parameter, can be GATT_CONN_INTERVAL_MIN, GATT_CONN_INTERVAL_MAX
-     * or GATT_CONN_LATENCY
+     * @param type type of the parameter, can be GATT_CONN_INTERVAL_MIN, GATT_CONN_INTERVAL_MAX or
+     *     GATT_CONN_LATENCY
      * @param priority the priority of the connection, can be
-     * BluetoothGatt.CONNECTION_PRIORITY_HIGH, BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER or
-     * BluetoothGatt.CONNECTION_PRIORITY_BALANCED
+     *     BluetoothGatt.CONNECTION_PRIORITY_HIGH, BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER or
+     *     BluetoothGatt.CONNECTION_PRIORITY_BALANCED
      * @return the connection parameter in integer
      */
     public int getGattConnParameters(String address, int type, int priority) {

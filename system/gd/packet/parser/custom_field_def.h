@@ -24,7 +24,7 @@
 #include "type_def.h"
 
 class CustomFieldDef : public TypeDef {
- public:
+public:
   CustomFieldDef(std::string name, std::string include);
 
   CustomFieldDef(std::string name, std::string include, int size);
@@ -34,8 +34,6 @@ class CustomFieldDef : public TypeDef {
   virtual Type GetDefinitionType() const override;
 
   void GenInclude(std::ostream& s) const;
-
-  void GenPyBind11Include(std::ostream& s) const;
 
   void GenUsing(std::ostream& s) const;
 

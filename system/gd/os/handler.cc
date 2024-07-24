@@ -16,13 +16,12 @@
 
 #include "os/handler.h"
 
-#include <cstring>
+#include <bluetooth/log.h>
 
 #include "common/bind.h"
 #include "common/callback.h"
 #include "os/log.h"
 #include "os/reactor.h"
-#include "os/utils.h"
 
 namespace bluetooth {
 namespace os {
@@ -31,13 +30,14 @@ using common::OnceClosure;
 Handler::Handler(Thread* thread) : tasks_(new std::queue<OnceClosure>()), thread_(thread) {
   event_ = thread_->GetReactor()->NewEvent();
   reactable_ = thread_->GetReactor()->Register(
-      event_->Id(), common::Bind(&Handler::handle_next_event, common::Unretained(this)), common::Closure());
+          event_->Id(), common::Bind(&Handler::handle_next_event, common::Unretained(this)),
+          common::Closure());
 }
 
 Handler::~Handler() {
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    ASSERT_LOG(was_cleared(), "Handlers must be cleared before they are destroyed");
+    log::assert_that(was_cleared(), "Handlers must be cleared before they are destroyed");
   }
   event_->Close();
 }
@@ -46,7 +46,7 @@ void Handler::Post(OnceClosure closure) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
     if (was_cleared()) {
-      LOG_WARN("Posting to a handler which has been cleared");
+      log::warn("Posting to a handler which has been cleared");
       return;
     }
     tasks_->emplace(std::move(closure));
@@ -58,7 +58,7 @@ void Handler::Clear() {
   std::queue<OnceClosure>* tmp = nullptr;
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    ASSERT_LOG(!was_cleared(), "Handlers must only be cleared once");
+    log::assert_that(!was_cleared(), "Handlers must only be cleared once");
     std::swap(tasks_, tmp);
   }
   delete tmp;
@@ -70,8 +70,9 @@ void Handler::Clear() {
 }
 
 void Handler::WaitUntilStopped(std::chrono::milliseconds timeout) {
-  ASSERT(reactable_ == nullptr);
-  ASSERT(thread_->GetReactor()->WaitForUnregisteredReactable(timeout));
+  log::assert_that(reactable_ == nullptr, "assert failed: reactable_ == nullptr");
+  log::assert_that(thread_->GetReactor()->WaitForUnregisteredReactable(timeout),
+                   "assert failed: thread_->GetReactor()->WaitForUnregisteredReactable(timeout)");
 }
 
 void Handler::handle_next_event() {
@@ -83,7 +84,7 @@ void Handler::handle_next_event() {
     if (was_cleared()) {
       return;
     }
-    ASSERT_LOG(has_data, "Notified for work but no work available");
+    log::assert_that(has_data, "Notified for work but no work available");
 
     closure = std::move(tasks_->front());
     tasks_->pop();

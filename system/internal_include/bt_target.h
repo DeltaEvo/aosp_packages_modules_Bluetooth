@@ -28,7 +28,7 @@
 #define TRUE true
 #endif
 
-//------------------Added from bdroid_buildcfg.h---------------------
+// ------------------Added from bdroid_buildcfg.h---------------------
 #ifndef L2CAP_EXTFEA_SUPPORTED_MASK
 #define L2CAP_EXTFEA_SUPPORTED_MASK                                            \
   (L2CAP_EXTFEA_ENH_RETRANS | L2CAP_EXTFEA_STREAM_MODE | L2CAP_EXTFEA_NO_CRC | \
@@ -40,8 +40,7 @@
 #endif
 
 #ifndef BTA_RFC_MTU_SIZE
-#define BTA_RFC_MTU_SIZE \
-  (L2CAP_MTU_SIZE - L2CAP_MIN_OFFSET - RFCOMM_DATA_OVERHEAD)
+#define BTA_RFC_MTU_SIZE (L2CAP_MTU_SIZE - L2CAP_MIN_OFFSET - RFCOMM_DATA_OVERHEAD)
 #endif
 
 #ifndef BTA_PAN_INCLUDED
@@ -92,7 +91,7 @@
 #define BTA_FTC_IDLE_TO_SNIFF_DELAY_MS 5000
 #endif
 
-//------------------End added from bdroid_buildcfg.h---------------------
+// ------------------End added from bdroid_buildcfg.h---------------------
 
 /******************************************************************************
  *
@@ -192,15 +191,6 @@
  *
  *****************************************************************************/
 
-/* Cancel Inquiry on incoming SSP */
-#ifndef BTM_NO_SSP_ON_INQUIRY
-#define BTM_NO_SSP_ON_INQUIRY FALSE
-#endif
-
-#ifndef DISABLE_WBS
-#define DISABLE_WBS FALSE
-#endif
-
 /**************************
  * Initial SCO TX credit
  ************************/
@@ -253,27 +243,6 @@
 #define BTM_SEC_MAX_SERVICE_RECORDS 32
 #endif
 
-/* If True, force a retrieval of remote device name for each bond in case it's
- * changed */
-#ifndef BTM_SEC_FORCE_RNR_FOR_DBOND
-#define BTM_SEC_FORCE_RNR_FOR_DBOND FALSE
-#endif
-
-/* Maximum device name length used in btm database. */
-#ifndef BTM_MAX_REM_BD_NAME_LEN
-#define BTM_MAX_REM_BD_NAME_LEN 248
-#endif
-
-/* Maximum local device name length stored btm database */
-#ifndef BTM_MAX_LOC_BD_NAME_LEN
-#define BTM_MAX_LOC_BD_NAME_LEN 248
-#endif
-
-/* Maximum service name stored with security authorization (0 if not needed) */
-#ifndef BTM_SEC_SERVICE_NAME_LEN
-#define BTM_SEC_SERVICE_NAME_LEN BT_MAX_SERVICE_NAME_LEN
-#endif
-
 /* Maximum length of the service name. */
 #ifndef BT_MAX_SERVICE_NAME_LEN
 #define BT_MAX_SERVICE_NAME_LEN 21
@@ -290,29 +259,6 @@
 #ifndef BTM_SEC_TIMEOUT_VALUE
 #define BTM_SEC_TIMEOUT_VALUE 35
 #endif
-
-/* Maximum number of callbacks that can be registered using
- * BTM_RegisterForVSEvents */
-#ifndef BTM_MAX_VSE_CALLBACKS
-#define BTM_MAX_VSE_CALLBACKS 3
-#endif
-
-/******************************************
- *    Lisbon Features
- ******************************************/
-/* This is set to TRUE if the FEC is required for EIR packet. */
-#ifndef BTM_EIR_DEFAULT_FEC_REQUIRED
-#define BTM_EIR_DEFAULT_FEC_REQUIRED TRUE
-#endif
-
-/* The IO capability of the local device (for Simple Pairing) */
-#ifndef BTM_LOCAL_IO_CAPS
-#define BTM_LOCAL_IO_CAPS BTM_IO_CAP_IO
-#endif
-
-/*************************
- * End of Lisbon Features
- *************************/
 
 /******************************************************************************
  *
@@ -376,8 +322,7 @@
 #endif
 
 #ifndef L2CAP_LAST_FIXED_CHNL
-#define L2CAP_LAST_FIXED_CHNL \
-  (L2CAP_FIRST_FIXED_CHNL + L2CAP_NUM_FIXED_CHNLS - 1)
+#define L2CAP_LAST_FIXED_CHNL (L2CAP_FIRST_FIXED_CHNL + L2CAP_NUM_FIXED_CHNLS - 1)
 #endif
 
 /* Used for conformance testing ONLY:  When TRUE lets scriptwrapper overwrite
@@ -399,10 +344,6 @@
  * BLE
  *
  *****************************************************************************/
-
-#ifndef LOCAL_BLE_CONTROLLER_ID
-#define LOCAL_BLE_CONTROLLER_ID 1
-#endif
 
 /* The maximum number of simultaneous applications that can register with LE
  * L2CAP. */
@@ -428,8 +369,15 @@
  * create l2cap connection, it will use this fixed ID. */
 #define CONN_MGR_ID_L2CAP (GATT_MAX_APPS + 10)
 
+/* This value is used for static allocation of resources. The actual maximum at
+ * runtime is controlled by a system property. */
 #ifndef GATT_MAX_PHY_CHANNEL
-#define GATT_MAX_PHY_CHANNEL 7
+#define GATT_MAX_PHY_CHANNEL 16
+#endif
+
+/* Devices must support at least 8 GATT channels per the CDD. */
+#ifndef GATT_MAX_PHY_CHANNEL_FLOOR
+#define GATT_MAX_PHY_CHANNEL_FLOOR 8
 #endif
 
 /* Used for conformance testing ONLY */
@@ -476,11 +424,7 @@
    Prefer greater than 0 second, and no less than default inactivity link idle
    timer(L2CAP_LINK_INACTIVITY_TOUT) in l2cap) */
 #ifndef SMP_LINK_TOUT_MIN
-#if (L2CAP_LINK_INACTIVITY_TOUT > 0)
 #define SMP_LINK_TOUT_MIN L2CAP_LINK_INACTIVITY_TOUT
-#else
-#define SMP_LINK_TOUT_MIN 2
-#endif
 #endif
 /******************************************************************************
  *
@@ -535,7 +479,7 @@
 
 /* The maximum number of simultaneous client and server connections. */
 #ifndef SDP_MAX_CONNECTIONS
-#define SDP_MAX_CONNECTIONS 4
+#define SDP_MAX_CONNECTIONS 16
 #endif
 
 /* The MTU size for the L2CAP configuration. */
@@ -607,11 +551,6 @@
 /* The port transmit queue high watermark level, in number of buffers. */
 #ifndef PORT_TX_BUF_CRITICAL_WM
 #define PORT_TX_BUF_CRITICAL_WM 15
-#endif
-
-/* The RFCOMM multiplexer preferred flow control mechanism. */
-#ifndef PORT_FC_DEFAULT
-#define PORT_FC_DEFAULT PORT_FC_CREDIT
 #endif
 
 /******************************************************************************
@@ -766,7 +705,7 @@
 
 /*************************************************************************
  * Definitions for Both HID-Host & Device
-*/
+ */
 #ifndef HID_MAX_SVC_NAME_LEN
 #define HID_MAX_SVC_NAME_LEN 32
 #endif
@@ -781,7 +720,7 @@
 
 /*************************************************************************
  * Definitions for HID-Host
-*/
+ */
 #ifndef HID_HOST_INCLUDED
 #define HID_HOST_INCLUDED TRUE
 #endif
@@ -820,24 +759,9 @@
 
 /******************************************************************************
  *
- * AVRCP
- *
- *****************************************************************************/
-
-#ifndef DUMP_PCM_DATA
-#define DUMP_PCM_DATA FALSE
-#endif
-
-/******************************************************************************
- *
  * BTA
  *
  *****************************************************************************/
-/* BTA EIR canned UUID list (default is dynamic) */
-#ifndef BTA_EIR_CANNED_UUID_LIST
-#define BTA_EIR_CANNED_UUID_LIST FALSE
-#endif
-
 /* Number of supported customer UUID in EIR */
 #ifndef BTA_EIR_SERVER_NUM_CUSTOM_UUID
 #define BTA_EIR_SERVER_NUM_CUSTOM_UUID 8

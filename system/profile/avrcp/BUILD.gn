@@ -32,11 +32,14 @@ config("avrcp_config") {
 
 static_library("profile_avrcp") {
   sources = [
+    "avrcp_sdp_records.cc",
+    "avrcp_sdp_service.cc",
     "connection_handler.cc",
     "device.cc",
   ]
 
   deps = [
+    "//bt/flags:bluetooth_flags_c_lib",
     "//bt/system/gd/rust/shim:libbluetooth_rust_interop",
   ]
 

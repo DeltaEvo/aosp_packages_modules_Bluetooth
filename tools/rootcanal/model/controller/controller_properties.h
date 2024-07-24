@@ -57,7 +57,7 @@ struct ControllerQuirks {
 // and the capabilities of the Link Manager and Baseband in the BR/EDR
 // Controller. The Host device cannot modify any of these parameters.
 struct ControllerProperties {
- public:
+public:
   ControllerProperties();
   ControllerProperties(rootcanal::configuration::Controller const&);
   ControllerProperties(ControllerProperties const&) = default;
@@ -181,8 +181,7 @@ struct ControllerProperties {
 
   bool SupportsCommand(bluetooth::hci::OpCodeIndex op_code) const {
     int index = static_cast<int>(op_code);
-    return (supported_commands[index / 10] & (UINT64_C(1) << (index % 10))) !=
-           0;
+    return (supported_commands[index / 10] & (UINT64_C(1) << (index % 10))) != 0;
   }
 
   /// Return a bit mask with all supported PHYs

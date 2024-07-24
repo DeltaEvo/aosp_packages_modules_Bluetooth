@@ -23,7 +23,7 @@
 
 #include "le_audio_types.h"
 
-namespace le_audio {
+namespace bluetooth::le_audio {
 
 TEST(ContentControlIdKeeperTest, testStart) {
   auto ccid_keeper = ContentControlIdKeeper::GetInstance();
@@ -39,29 +39,25 @@ TEST(ContentControlIdKeeperTest, testMultipleSetGetOneCcid) {
 
   int ccid_one = 1;
 
-  ccid_keeper->SetCcid(
-      types::LeAudioContextType::MEDIA | types::LeAudioContextType::ALERTS,
-      ccid_one);
+  ccid_keeper->SetCcid(types::LeAudioContextType::MEDIA | types::LeAudioContextType::ALERTS,
+                       ccid_one);
   ASSERT_EQ(ccid_one, ccid_keeper->GetCcid(types::LeAudioContextType::MEDIA));
   ASSERT_EQ(ccid_one, ccid_keeper->GetCcid(types::LeAudioContextType::ALERTS));
 
-  auto media_ccids = ccid_keeper->GetAllCcids(
-      types::AudioContexts(types::LeAudioContextType::MEDIA));
+  auto media_ccids =
+          ccid_keeper->GetAllCcids(types::AudioContexts(types::LeAudioContextType::MEDIA));
   ASSERT_EQ(1LU, media_ccids.size());
-  ASSERT_NE(media_ccids.end(),
-            std::find(media_ccids.begin(), media_ccids.end(), ccid_one));
+  ASSERT_NE(media_ccids.end(), std::find(media_ccids.begin(), media_ccids.end(), ccid_one));
 
-  auto allerts_ccids = ccid_keeper->GetAllCcids(
-      types::AudioContexts(types::LeAudioContextType::ALERTS));
+  auto allerts_ccids =
+          ccid_keeper->GetAllCcids(types::AudioContexts(types::LeAudioContextType::ALERTS));
   ASSERT_EQ(1LU, allerts_ccids.size());
-  ASSERT_NE(allerts_ccids.end(),
-            std::find(allerts_ccids.begin(), allerts_ccids.end(), ccid_one));
+  ASSERT_NE(allerts_ccids.end(), std::find(allerts_ccids.begin(), allerts_ccids.end(), ccid_one));
 
   auto all_ccids = ccid_keeper->GetAllCcids(types::LeAudioContextType::MEDIA |
                                             types::LeAudioContextType::ALERTS);
   ASSERT_EQ(1LU, all_ccids.size());
-  ASSERT_NE(all_ccids.end(),
-            std::find(all_ccids.begin(), all_ccids.end(), ccid_one));
+  ASSERT_NE(all_ccids.end(), std::find(all_ccids.begin(), all_ccids.end(), ccid_one));
 
   ccid_keeper->Stop();
 }
@@ -77,28 +73,23 @@ TEST(ContentControlIdKeeperTest, testMultipleSetGetMultipleCcids) {
   ccid_keeper->SetCcid(types::LeAudioContextType::MEDIA, ccid_two);
   ASSERT_EQ(ccid_two, ccid_keeper->GetCcid(types::LeAudioContextType::MEDIA));
   ccid_keeper->SetCcid(types::LeAudioContextType::ALERTS, ccid_three);
-  ASSERT_EQ(ccid_three,
-            ccid_keeper->GetCcid(types::LeAudioContextType::ALERTS));
+  ASSERT_EQ(ccid_three, ccid_keeper->GetCcid(types::LeAudioContextType::ALERTS));
 
-  auto media_ccids = ccid_keeper->GetAllCcids(
-      types::AudioContexts(types::LeAudioContextType::MEDIA));
+  auto media_ccids =
+          ccid_keeper->GetAllCcids(types::AudioContexts(types::LeAudioContextType::MEDIA));
   ASSERT_EQ(1LU, media_ccids.size());
-  ASSERT_NE(media_ccids.end(),
-            std::find(media_ccids.begin(), media_ccids.end(), ccid_two));
+  ASSERT_NE(media_ccids.end(), std::find(media_ccids.begin(), media_ccids.end(), ccid_two));
 
-  auto allerts_ccids = ccid_keeper->GetAllCcids(
-      types::AudioContexts(types::LeAudioContextType::ALERTS));
+  auto allerts_ccids =
+          ccid_keeper->GetAllCcids(types::AudioContexts(types::LeAudioContextType::ALERTS));
   ASSERT_EQ(1LU, allerts_ccids.size());
-  ASSERT_NE(allerts_ccids.end(),
-            std::find(allerts_ccids.begin(), allerts_ccids.end(), ccid_three));
+  ASSERT_NE(allerts_ccids.end(), std::find(allerts_ccids.begin(), allerts_ccids.end(), ccid_three));
 
   auto all_ccids = ccid_keeper->GetAllCcids(types::LeAudioContextType::MEDIA |
                                             types::LeAudioContextType::ALERTS);
   ASSERT_EQ(2LU, all_ccids.size());
-  ASSERT_NE(all_ccids.end(),
-            std::find(all_ccids.begin(), all_ccids.end(), ccid_two));
-  ASSERT_NE(all_ccids.end(),
-            std::find(all_ccids.begin(), all_ccids.end(), ccid_three));
+  ASSERT_NE(all_ccids.end(), std::find(all_ccids.begin(), all_ccids.end(), ccid_two));
+  ASSERT_NE(all_ccids.end(), std::find(all_ccids.begin(), all_ccids.end(), ccid_three));
 
   ccid_keeper->Stop();
 }
@@ -123,4 +114,4 @@ TEST(ContentControlIdKeeperTest, testStop) {
   ASSERT_EQ(0LU, all_ccids.size());
 }
 
-}  // namespace le_audio
+}  // namespace bluetooth::le_audio

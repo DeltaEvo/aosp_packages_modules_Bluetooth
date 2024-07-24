@@ -19,8 +19,6 @@
  *   Functions generated:3
  */
 
-#include <base/logging.h>
-
 #include "avrc_api.h"
 #include "avrc_defs.h"
 #include "stack/include/bt_hdr.h"
@@ -31,8 +29,7 @@ tAVRC_STS AVRC_BldResponse(uint8_t /* handle */, tAVRC_RESPONSE* /* p_rsp */,
   inc_func_call_count(__func__);
   return 0;
 }
-tAVRC_STS avrc_bld_group_navigation_rsp(uint16_t /* navi_id */,
-                                        BT_HDR* /* p_pkt */) {
+tAVRC_STS avrc_bld_group_navigation_rsp(uint16_t /* navi_id */, BT_HDR* /* p_pkt */) {
   inc_func_call_count(__func__);
   return 0;
 }

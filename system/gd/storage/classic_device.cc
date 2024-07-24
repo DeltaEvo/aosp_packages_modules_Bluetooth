@@ -25,21 +25,18 @@ namespace storage {
 
 const std::unordered_set<std::string_view> ClassicDevice::kLinkKeyProperties = {"LinkKey"};
 
-ClassicDevice::ClassicDevice(ConfigCache* config, ConfigCache* memory_only_config, std::string section)
+ClassicDevice::ClassicDevice(ConfigCache* config, ConfigCache* memory_only_config,
+                             std::string section)
     : config_(config), memory_only_config_(memory_only_config), section_(std::move(section)) {}
 
-Device ClassicDevice::Parent() {
-  return Device(config_, memory_only_config_, section_);
-}
+Device ClassicDevice::Parent() { return Device(config_, memory_only_config_, section_); }
 
-std::string ClassicDevice::ToLogString() const {
-  return section_;
-}
+std::string ClassicDevice::ToLogString() const { return section_; }
 
 hci::Address ClassicDevice::GetAddress() const {
   // section name of a classic device is its MAC address
   auto addr = hci::Address::FromString(section_);
-  ASSERT(addr.has_value());
+  log::assert_that(addr.has_value(), "assert failed: addr.has_value()");
   return std::move(addr.value());
 }
 

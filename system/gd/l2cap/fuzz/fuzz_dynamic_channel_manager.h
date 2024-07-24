@@ -29,24 +29,26 @@ namespace bluetooth {
 namespace shim {
 namespace {
 class FuzzDynamicChannelManager : public l2cap::classic::DynamicChannelManager {
- public:
+public:
   void ConnectChannel(
-      hci::Address device,
-      l2cap::classic::DynamicChannelConfigurationOption configuration_option,
-      l2cap::Psm psm,
-      l2cap::classic::DynamicChannelManager::OnConnectionOpenCallback on_open_callback,
-      l2cap::classic::DynamicChannelManager::OnConnectionFailureCallback on_fail_callback) override {
-    impl_.ConnectChannel(device, configuration_option, psm, std::move(on_open_callback), std::move(on_fail_callback));
+          hci::Address device,
+          l2cap::classic::DynamicChannelConfigurationOption configuration_option, l2cap::Psm psm,
+          l2cap::classic::DynamicChannelManager::OnConnectionOpenCallback on_open_callback,
+          l2cap::classic::DynamicChannelManager::OnConnectionFailureCallback on_fail_callback)
+          override {
+    impl_.ConnectChannel(device, configuration_option, psm, std::move(on_open_callback),
+                         std::move(on_fail_callback));
   }
 
-  void RegisterService(
-      l2cap::Psm psm,
-      l2cap::classic::DynamicChannelConfigurationOption configuration_option,
-      const l2cap::classic::SecurityPolicy& security_policy,
-      l2cap::classic::DynamicChannelManager::OnRegistrationCompleteCallback on_registration_complete,
-      l2cap::classic::DynamicChannelManager::OnConnectionOpenCallback on_open_callback) override {
-    impl_.RegisterService(
-        psm, configuration_option, security_policy, std::move(on_registration_complete), std::move(on_open_callback));
+  void RegisterService(l2cap::Psm psm,
+                       l2cap::classic::DynamicChannelConfigurationOption configuration_option,
+                       const l2cap::classic::SecurityPolicy& security_policy,
+                       l2cap::classic::DynamicChannelManager::OnRegistrationCompleteCallback
+                               on_registration_complete,
+                       l2cap::classic::DynamicChannelManager::OnConnectionOpenCallback
+                               on_open_callback) override {
+    impl_.RegisterService(psm, configuration_option, security_policy,
+                          std::move(on_registration_complete), std::move(on_open_callback));
   }
   FuzzDynamicChannelManager(FuzzDynamicChannelManagerImpl& impl) : impl_(impl) {}
   FuzzDynamicChannelManagerImpl& impl_;

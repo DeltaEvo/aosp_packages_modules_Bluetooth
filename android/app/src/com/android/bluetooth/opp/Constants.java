@@ -32,6 +32,9 @@
 
 package com.android.bluetooth.opp;
 
+import android.annotation.RequiresPermission;
+import android.annotation.SdkConstant;
+import android.annotation.SdkConstant.SdkConstantType;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothProtoEnums;
 import android.content.ContentValues;
@@ -56,11 +59,11 @@ public class Constants {
 
     /** the permission required for others to send us handover broadcasts */
     static final String PERMISSION_ALLOWLIST_BLUETOOTH_DEVICE =
-                "com.android.permission.ALLOWLIST_BLUETOOTH_DEVICE";
+            "com.android.permission.ALLOWLIST_BLUETOOTH_DEVICE";
 
     /**
-     * The intent that gets sent when the service must wake up for a retry
-     * Note: Only retry Outbound transfers
+     * The intent that gets sent when the service must wake up for a retry Note: Only retry Outbound
+     * transfers
      */
     static final String ACTION_RETRY = "android.btopp.intent.action.RETRY";
 
@@ -95,15 +98,24 @@ public class Constants {
     static final String ACTION_HANDOVER_SEND_MULTIPLE =
             "android.nfc.handover.intent.action.HANDOVER_SEND_MULTIPLE";
 
-    /** the intent that is used for indicating an incoming transfer*/
+    /** permission needed to be able to receive handover status requests */
+    static final String HANDOVER_STATUS_PERMISSION = "android.permission.NFC_HANDOVER_STATUS";
+
+    /** the intent that is used for indicating an incoming transfer */
+    @RequiresPermission(HANDOVER_STATUS_PERMISSION)
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     static final String ACTION_HANDOVER_STARTED =
             "android.nfc.handover.intent.action.HANDOVER_STARTED";
 
     /** intent action used to indicate the progress of a handover transfer */
+    @RequiresPermission(HANDOVER_STATUS_PERMISSION)
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     static final String ACTION_BT_OPP_TRANSFER_PROGRESS =
             "android.nfc.handover.intent.action.TRANSFER_PROGRESS";
 
     /** intent action used to indicate the completion of a handover transfer */
+    @RequiresPermission(HANDOVER_STATUS_PERMISSION)
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     static final String ACTION_BT_OPP_TRANSFER_DONE =
             "android.nfc.handover.intent.action.TRANSFER_DONE";
 
@@ -145,9 +157,6 @@ public class Constants {
     static final String EXTRA_BT_OPP_TRANSFER_MIMETYPE =
             "android.nfc.handover.intent.extra.TRANSFER_MIME_TYPE";
 
-    /** permission needed to be able to receive handover status requests */
-    static final String HANDOVER_STATUS_PERMISSION = "android.permission.NFC_HANDOVER_STATUS";
-
     /** the intent that gets sent when deleting the incoming file confirmation notification */
     static final String ACTION_HIDE = "android.btopp.intent.action.HIDE";
 
@@ -186,31 +195,31 @@ public class Constants {
     static final int MEDIA_SCANNED_SCANNED_FAILED = 2;
 
     /**
-     * The MIME type(s) of we could accept from other device.
-     * This is in essence a "acceptlist" of acceptable types.
-     * Today, restricted to images, audio, video and certain text types.
+     * The MIME type(s) of we could accept from other device. This is in essence a "acceptlist" of
+     * acceptable types. Today, restricted to images, audio, video and certain text types.
      */
-    static final String[] ACCEPTABLE_SHARE_INBOUND_TYPES = new String[]{
-            "image/*",
-            "video/*",
-            "audio/*",
-            "text/x-vcard",
-            "text/x-vcalendar",
-            "text/calendar",
-            "text/plain",
-            "text/html",
-            "text/xml",
-            "application/epub+zip",
-            "application/zip",
-            "application/vnd.ms-excel",
-            "application/msword",
-            "application/vnd.ms-powerpoint",
-            "application/pdf",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            "application/x-hwp",
-    };
+    static final String[] ACCEPTABLE_SHARE_INBOUND_TYPES =
+            new String[] {
+                "image/*",
+                "video/*",
+                "audio/*",
+                "text/x-vcard",
+                "text/x-vcalendar",
+                "text/calendar",
+                "text/plain",
+                "text/html",
+                "text/xml",
+                "application/epub+zip",
+                "application/zip",
+                "application/vnd.ms-excel",
+                "application/msword",
+                "application/vnd.ms-powerpoint",
+                "application/pdf",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                "application/x-hwp",
+            };
 
     /** Where we store received files */
     static final String DEFAULT_STORE_SUBDIR = "/bluetooth";
@@ -219,13 +228,9 @@ public class Constants {
     static final int NFC_ALIVE_CHECK_MS = 10000;
 
     /**
-     * To log debug/verbose in OPP, use the command "setprop log.tag.BluetoothOpp DEBUG" or
-     * "setprop log.tag.BluetoothOpp VERBOSE" and then "adb root" + "adb shell "stop; start""
-     **/
-    static final boolean DEBUG = true;
-
-    static final boolean VERBOSE = Log.isLoggable(TAG, Log.VERBOSE);
-
+     * To log debug/verbose in OPP, use the command "setprop log.tag.BluetoothOpp DEBUG" or "setprop
+     * log.tag.BluetoothOpp VERBOSE" and then "adb root" + "adb shell "stop; start""
+     */
     static final int MAX_RECORDS_IN_DATABASE = 50;
 
     static final int BATCH_STATUS_PENDING = 0;
@@ -246,8 +251,9 @@ public class Constants {
         Uri contentUri = Uri.parse(BluetoothShare.CONTENT_URI + "/" + id);
         ContentValues updateValues = new ContentValues();
         updateValues.put(BluetoothShare.STATUS, status);
-        BluetoothMethodProxy.getInstance().contentResolverUpdate(context.getContentResolver(),
-                contentUri, updateValues, null, null);
+        BluetoothMethodProxy.getInstance()
+                .contentResolverUpdate(
+                        context.getContentResolver(), contentUri, updateValues, null, null);
         Constants.sendIntentIfCompleted(context, contentUri, status);
     }
 

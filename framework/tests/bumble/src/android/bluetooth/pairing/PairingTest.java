@@ -39,7 +39,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.ParcelUuid;
-import android.platform.test.annotations.RequiresFlagsEnabled;
 import android.platform.test.flag.junit.CheckFlagsRule;
 import android.platform.test.flag.junit.DeviceFlagsValueProvider;
 import android.util.Log;
@@ -47,7 +46,6 @@ import android.util.Log;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
-import com.android.bluetooth.flags.Flags;
 import com.android.compatibility.common.util.AdoptShellPermissionsRule;
 
 import io.grpc.stub.StreamObserver;
@@ -65,13 +63,6 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.hamcrest.MockitoHamcrest;
 
-import java.time.Duration;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-
 import pandora.GattProto;
 import pandora.HostProto.AdvertiseRequest;
 import pandora.HostProto.AdvertiseResponse;
@@ -81,6 +72,13 @@ import pandora.SecurityProto.PairingEvent;
 import pandora.SecurityProto.PairingEventAnswer;
 import pandora.SecurityProto.SecureRequest;
 import pandora.SecurityProto.SecureResponse;
+
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 @RunWith(AndroidJUnit4.class)
 public class PairingTest {
@@ -170,11 +168,10 @@ public class PairingTest {
      * <ol>
      *   <li>1. Bumble resets, enables inquiry and page scan, and sets I/O cap to no display no
      *       input
-     *   <li>2. Android connects to Bumble via its MAC address
-     *   <li>3. Android tries to create bond, emitting bonding intent 4. Android confirms the
-     *       pairing via pairing request intent
-     *   <li>5. Bumble confirms the pairing internally (optional, added only for test confirmation)
-     *   <li>6. Android verifies bonded intent
+     *   <li>2. Android tries to create bond via MAC address, emitting bonding intent
+     *   <li>3. Android confirms the pairing via pairing request intent
+     *   <li>4. Bumble confirms the pairing internally (optional, added only for test confirmation)
+     *   <li>5. Android verifies bonded intent
      * </ol>
      */
     @Test
@@ -218,6 +215,71 @@ public class PairingTest {
     }
 
     /**
+     * Test a simple BR/EDR just works pairing flow in the follow steps:
+     *
+     * <ol>
+     *   <li>1. Bumble resets, enables inquiry and page scan, and sets I/O cap to no display no
+     *       input
+     *   <li>2. Android connects to Bumble via its MAC address
+     *   <li>3. Android tries to create bond, emitting bonding intent
+     *   <li>4. Android confirms the pairing via pairing request intent
+     *   <li>5. Bumble confirms the pairing internally (optional, added only for test confirmation)
+     *   <li>6. Android verifies bonded intent
+     * </ol>
+     */
+    @Test
+    public void testBrEdrPairing_phoneInitiatedBrEdrInquiryOnlyJustWorksWhileSdpConnected() {
+        registerIntentActions(
+                BluetoothDevice.ACTION_ACL_CONNECTED,
+                BluetoothDevice.ACTION_BOND_STATE_CHANGED,
+                BluetoothDevice.ACTION_PAIRING_REQUEST);
+
+        StreamObserver<PairingEventAnswer> pairingEventAnswerObserver =
+                mBumble.security()
+                        .withDeadlineAfter(BOND_INTENT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
+                        .onPairing(mPairingEventStreamObserver);
+
+        // Start SDP.  This will create an ACL connection before the bonding starts.
+        assertThat(mBumbleDevice.fetchUuidsWithSdp(BluetoothDevice.TRANSPORT_BREDR)).isTrue();
+
+        verifyIntentReceived(
+                hasAction(BluetoothDevice.ACTION_ACL_CONNECTED),
+                hasExtra(BluetoothDevice.EXTRA_DEVICE, mBumbleDevice));
+
+
+        assertThat(mBumbleDevice.createBond()).isTrue();
+        verifyIntentReceived(
+                hasAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED),
+                hasExtra(BluetoothDevice.EXTRA_DEVICE, mBumbleDevice),
+                hasExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_BONDING));
+
+        verifyIntentReceived(
+                hasAction(BluetoothDevice.ACTION_PAIRING_REQUEST),
+                hasExtra(BluetoothDevice.EXTRA_DEVICE, mBumbleDevice),
+                hasExtra(
+                        BluetoothDevice.EXTRA_PAIRING_VARIANT,
+                        BluetoothDevice.PAIRING_VARIANT_CONSENT));
+        mBumbleDevice.setPairingConfirmation(true);
+
+        PairingEvent pairingEvent = mPairingEventStreamObserver.iterator().next();
+        assertThat(pairingEvent.hasJustWorks()).isTrue();
+        pairingEventAnswerObserver.onNext(
+                PairingEventAnswer.newBuilder().setEvent(pairingEvent).setConfirm(true).build());
+
+        verifyIntentReceived(
+                hasAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED),
+                hasExtra(BluetoothDevice.EXTRA_DEVICE, mBumbleDevice),
+                hasExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_BONDED));
+
+        verifyNoMoreInteractions(mReceiver);
+
+        unregisterIntentActions(
+                BluetoothDevice.ACTION_ACL_CONNECTED,
+                BluetoothDevice.ACTION_BOND_STATE_CHANGED,
+                BluetoothDevice.ACTION_PAIRING_REQUEST);
+    }
+
+    /**
      * Test if parallel GATT service discovery interrupts cancelling LE pairing
      *
      * <p>Prerequisites:
@@ -242,7 +304,6 @@ public class PairingTest {
      * Expectation: Pairing gets cancelled instead of getting timed out
      */
     @Test
-    @RequiresFlagsEnabled(Flags.FLAG_RESET_PAIRING_ONLY_FOR_RELATED_SERVICE_DISCOVERY)
     public void testCancelBondLe_WithGattServiceDiscovery() {
         registerIntentActions(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
 
@@ -293,7 +354,6 @@ public class PairingTest {
      * Expectation: Pairing succeeds
      */
     @Test
-    @RequiresFlagsEnabled(Flags.FLAG_RESET_PAIRING_ONLY_FOR_RELATED_SERVICE_DISCOVERY)
     public void testBondLe_WithGattServiceDiscovery() {
         registerIntentActions(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
 
@@ -355,10 +415,10 @@ public class PairingTest {
                         .next();
 
         // Todo: Unexpected empty ACTION_UUID intent is generated
-        verifyIntentReceived(hasAction(BluetoothDevice.ACTION_UUID));
+        verifyIntentReceivedUnordered(hasAction(BluetoothDevice.ACTION_UUID));
 
         // Wait for connection on Android
-        verifyIntentReceived(
+        verifyIntentReceivedUnordered(
                 hasAction(BluetoothDevice.ACTION_ACL_CONNECTED),
                 hasExtra(BluetoothDevice.EXTRA_TRANSPORT, BluetoothDevice.TRANSPORT_LE));
 
@@ -402,9 +462,7 @@ public class PairingTest {
         // so that ACTION_UUID is received here.
         verifyIntentReceived(
                 hasAction(BluetoothDevice.ACTION_UUID),
-                hasExtra(
-                        BluetoothDevice.EXTRA_UUID,
-                        Matchers.arrayContainingInAnyOrder(BATTERY_UUID)));
+                hasExtra(BluetoothDevice.EXTRA_UUID, Matchers.hasItemInArray(BATTERY_UUID)));
 
         unregisterIntentActions(
                 BluetoothDevice.ACTION_BOND_STATE_CHANGED,

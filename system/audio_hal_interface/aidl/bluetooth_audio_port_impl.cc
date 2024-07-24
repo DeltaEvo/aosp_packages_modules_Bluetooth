@@ -16,8 +16,12 @@
 
 #include "bluetooth_audio_port_impl.h"
 
+#include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
+
 #include <vector>
 
+#include "android/binder_ibinder_platform.h"
 #include "btif/include/btif_common.h"
 #include "common/stop_watch_legacy.h"
 
@@ -28,8 +32,8 @@ namespace aidl {
 using ::bluetooth::common::StopWatchLegacy;
 
 BluetoothAudioPortImpl::BluetoothAudioPortImpl(
-    IBluetoothTransportInstance* transport_instance,
-    const std::shared_ptr<IBluetoothAudioProvider>& provider)
+        IBluetoothTransportInstance* transport_instance,
+        const std::shared_ptr<IBluetoothAudioProvider>& provider)
     : transport_instance_(transport_instance), provider_(provider) {}
 
 BluetoothAudioPortImpl::~BluetoothAudioPortImpl() {}
@@ -38,11 +42,9 @@ ndk::ScopedAStatus BluetoothAudioPortImpl::startStream(bool is_low_latency) {
   StopWatchLegacy stop_watch(__func__);
   BluetoothAudioCtrlAck ack = transport_instance_->StartRequest(is_low_latency);
   if (ack != BluetoothAudioCtrlAck::PENDING) {
-    auto aidl_retval =
-        provider_->streamStarted(BluetoothAudioCtrlAckToHalStatus(ack));
+    auto aidl_retval = provider_->streamStarted(BluetoothAudioCtrlAckToHalStatus(ack));
     if (!aidl_retval.isOk()) {
-      LOG(ERROR) << __func__ << ": BluetoothAudioHal failure: "
-                 << aidl_retval.getDescription();
+      log::error("BluetoothAudioHal failure: {}", aidl_retval.getDescription());
     }
   }
   return ndk::ScopedAStatus::ok();
@@ -52,11 +54,9 @@ ndk::ScopedAStatus BluetoothAudioPortImpl::suspendStream() {
   StopWatchLegacy stop_watch(__func__);
   BluetoothAudioCtrlAck ack = transport_instance_->SuspendRequest();
   if (ack != BluetoothAudioCtrlAck::PENDING) {
-    auto aidl_retval =
-        provider_->streamSuspended(BluetoothAudioCtrlAckToHalStatus(ack));
+    auto aidl_retval = provider_->streamSuspended(BluetoothAudioCtrlAckToHalStatus(ack));
     if (!aidl_retval.isOk()) {
-      LOG(ERROR) << __func__ << ": BluetoothAudioHal failure: "
-                 << aidl_retval.getDescription();
+      log::error("BluetoothAudioHal failure: {}", aidl_retval.getDescription());
     }
   }
   return ndk::ScopedAStatus::ok();
@@ -69,13 +69,13 @@ ndk::ScopedAStatus BluetoothAudioPortImpl::stopStream() {
 }
 
 ndk::ScopedAStatus BluetoothAudioPortImpl::getPresentationPosition(
-    PresentationPosition* _aidl_return) {
+        PresentationPosition* _aidl_return) {
   StopWatchLegacy stop_watch(__func__);
   uint64_t remote_delay_report_ns;
   uint64_t total_bytes_read;
   timespec data_position;
-  bool retval = transport_instance_->GetPresentationPosition(
-      &remote_delay_report_ns, &total_bytes_read, &data_position);
+  bool retval = transport_instance_->GetPresentationPosition(&remote_delay_report_ns,
+                                                             &total_bytes_read, &data_position);
 
   PresentationPosition::TimeSpec transmittedOctetsTimeStamp;
   if (retval) {
@@ -85,33 +85,29 @@ ndk::ScopedAStatus BluetoothAudioPortImpl::getPresentationPosition(
     total_bytes_read = 0;
     transmittedOctetsTimeStamp = {};
   }
-  VLOG(2) << __func__ << ": result=" << retval
-          << ", delay=" << remote_delay_report_ns
-          << ", data=" << total_bytes_read
-          << " byte(s), timestamp=" << transmittedOctetsTimeStamp.toString();
-  _aidl_return->remoteDeviceAudioDelayNanos =
-      static_cast<int64_t>(remote_delay_report_ns);
+  log::verbose("result={}, delay={}, data={} byte(s), timestamp={}", retval, remote_delay_report_ns,
+               total_bytes_read, transmittedOctetsTimeStamp.toString());
+  _aidl_return->remoteDeviceAudioDelayNanos = static_cast<int64_t>(remote_delay_report_ns);
   _aidl_return->transmittedOctets = static_cast<int64_t>(total_bytes_read);
   _aidl_return->transmittedOctetsTimestamp = transmittedOctetsTimeStamp;
   return ndk::ScopedAStatus::ok();
 }
 
 ndk::ScopedAStatus BluetoothAudioPortImpl::updateSourceMetadata(
-    const SourceMetadata& source_metadata) {
+        const SourceMetadata& source_metadata) {
   StopWatchLegacy stop_watch(__func__);
-  LOG(INFO) << __func__ << ": " << source_metadata.tracks.size() << " track(s)";
+  log::info("{} track(s)", source_metadata.tracks.size());
 
   std::vector<playback_track_metadata_v7> tracks_vec;
   tracks_vec.reserve(source_metadata.tracks.size());
   for (const auto& track : source_metadata.tracks) {
     auto num_of_tags = track.tags.size();
-    LOG(INFO) << __func__ << " metadata tags size: " << num_of_tags;
+    log::info("metadata tags size: {}", num_of_tags);
 
     playback_track_metadata_v7 desc_track = {
-        .base = {.usage = static_cast<audio_usage_t>(track.usage),
-                 .content_type =
-                     static_cast<audio_content_type_t>(track.contentType),
-                 .gain = track.gain},
+            .base = {.usage = static_cast<audio_usage_t>(track.usage),
+                     .content_type = static_cast<audio_content_type_t>(track.contentType),
+                     .gain = track.gain},
     };
 
     if (num_of_tags != 0) {
@@ -121,10 +117,8 @@ ndk::ScopedAStatus BluetoothAudioPortImpl::updateSourceMetadata(
       for (size_t i = 0; i < num_of_tags - 1; i++) {
         int string_len = track.tags[i].length();
 
-        if ((copied_size >= max_tags_size) ||
-            (copied_size + string_len >= max_tags_size)) {
-          LOG(ERROR) << __func__
-                     << "Too many tags, copied size: " << copied_size;
+        if ((copied_size >= max_tags_size) || (copied_size + string_len >= max_tags_size)) {
+          log::error("Too many tags, copied size: {}", copied_size);
           break;
         }
 
@@ -135,12 +129,10 @@ ndk::ScopedAStatus BluetoothAudioPortImpl::updateSourceMetadata(
       }
 
       int string_len = track.tags[num_of_tags - 1].length();
-      if ((copied_size >= max_tags_size) ||
-          (copied_size + string_len >= max_tags_size)) {
-        LOG(ERROR) << __func__ << "Too many tags, copied size: " << copied_size;
+      if ((copied_size >= max_tags_size) || (copied_size + string_len >= max_tags_size)) {
+        log::error("Too many tags, copied size: {}", copied_size);
       } else {
-        track.tags[num_of_tags - 1].copy(desc_track.tags + copied_size,
-                                         string_len, 0);
+        track.tags[num_of_tags - 1].copy(desc_track.tags + copied_size, string_len, 0);
       }
     } else {
       memset(desc_track.tags, 0, sizeof(desc_track.tags));
@@ -149,29 +141,28 @@ ndk::ScopedAStatus BluetoothAudioPortImpl::updateSourceMetadata(
     tracks_vec.push_back(desc_track);
   }
 
-  const source_metadata_v7_t legacy_source_metadata = {
-      .track_count = tracks_vec.size(), .tracks = tracks_vec.data()};
+  const source_metadata_v7_t legacy_source_metadata = {.track_count = tracks_vec.size(),
+                                                       .tracks = tracks_vec.data()};
   transport_instance_->SourceMetadataChanged(legacy_source_metadata);
   return ndk::ScopedAStatus::ok();
 }
 
-ndk::ScopedAStatus BluetoothAudioPortImpl::updateSinkMetadata(
-    const SinkMetadata& sink_metadata) {
+ndk::ScopedAStatus BluetoothAudioPortImpl::updateSinkMetadata(const SinkMetadata& sink_metadata) {
   StopWatchLegacy stop_watch(__func__);
-  LOG(INFO) << __func__ << ": " << sink_metadata.tracks.size() << " track(s)";
+  log::info("{} track(s)", sink_metadata.tracks.size());
 
   std::vector<record_track_metadata_v7> tracks_vec;
   tracks_vec.reserve(sink_metadata.tracks.size());
   for (const auto& track : sink_metadata.tracks) {
     auto num_of_tags = track.tags.size();
-    LOG(INFO) << __func__ << " metadata tags size: " << num_of_tags;
+    log::info("metadata tags size: {}", num_of_tags);
 
     record_track_metadata_v7 desc_track = {
-        .base =
-            {
-                .source = static_cast<audio_source_t>(track.source),
-                .gain = track.gain,
-            },
+            .base =
+                    {
+                            .source = static_cast<audio_source_t>(track.source),
+                            .gain = track.gain,
+                    },
     };
 
     if (num_of_tags != 0) {
@@ -181,10 +172,8 @@ ndk::ScopedAStatus BluetoothAudioPortImpl::updateSinkMetadata(
       for (size_t i = 0; i < num_of_tags - 1; i++) {
         int string_len = track.tags[i].length();
 
-        if ((copied_size >= max_tags_size) ||
-            (copied_size + string_len >= max_tags_size)) {
-          LOG(ERROR) << __func__
-                     << "Too many tags, copied size: " << copied_size;
+        if ((copied_size >= max_tags_size) || (copied_size + string_len >= max_tags_size)) {
+          log::error("Too many tags, copied size: {}", copied_size);
           break;
         }
 
@@ -195,12 +184,10 @@ ndk::ScopedAStatus BluetoothAudioPortImpl::updateSinkMetadata(
       }
 
       int string_len = track.tags[num_of_tags - 1].length();
-      if ((copied_size >= max_tags_size) ||
-          (copied_size + string_len >= max_tags_size)) {
-        LOG(ERROR) << __func__ << "Too many tags, copied size: " << copied_size;
+      if ((copied_size >= max_tags_size) || (copied_size + string_len >= max_tags_size)) {
+        log::error("Too many tags, copied size: {}", copied_size);
       } else {
-        track.tags[num_of_tags - 1].copy(desc_track.tags + copied_size,
-                                         string_len, 0);
+        track.tags[num_of_tags - 1].copy(desc_track.tags + copied_size, string_len, 0);
       }
     } else {
       memset(desc_track.tags, 0, sizeof(desc_track.tags));
@@ -209,24 +196,32 @@ ndk::ScopedAStatus BluetoothAudioPortImpl::updateSinkMetadata(
     tracks_vec.push_back(desc_track);
   }
 
-  const sink_metadata_v7_t legacy_sink_metadata = {
-      .track_count = tracks_vec.size(), .tracks = tracks_vec.data()};
+  const sink_metadata_v7_t legacy_sink_metadata = {.track_count = tracks_vec.size(),
+                                                   .tracks = tracks_vec.data()};
   transport_instance_->SinkMetadataChanged(legacy_sink_metadata);
   return ndk::ScopedAStatus::ok();
 }
 
-ndk::ScopedAStatus BluetoothAudioPortImpl::setLatencyMode(
-    LatencyMode latency_mode) {
+ndk::ScopedAStatus BluetoothAudioPortImpl::setLatencyMode(LatencyMode latency_mode) {
   bool is_low_latency = latency_mode == LatencyMode::LOW_LATENCY ? true : false;
   invoke_switch_buffer_size_cb(is_low_latency);
   transport_instance_->SetLatencyMode(latency_mode);
   return ndk::ScopedAStatus::ok();
 }
 
-PresentationPosition::TimeSpec BluetoothAudioPortImpl::timespec_convert_to_hal(
-    const timespec& ts) {
-  return {.tvSec = static_cast<int64_t>(ts.tv_sec),
-          .tvNSec = static_cast<int64_t>(ts.tv_nsec)};
+PresentationPosition::TimeSpec BluetoothAudioPortImpl::timespec_convert_to_hal(const timespec& ts) {
+  return {.tvSec = static_cast<int64_t>(ts.tv_sec), .tvNSec = static_cast<int64_t>(ts.tv_nsec)};
+}
+
+// Overriding create binder and inherit RT from caller.
+// In our case, the caller is the AIDL session control, so we match the priority
+// of the AIDL session / AudioFlinger writer thread.
+ndk::SpAIBinder BluetoothAudioPortImpl::createBinder() {
+  auto binder = BnBluetoothAudioPort::createBinder();
+  if (com::android::bluetooth::flags::audio_port_binder_inherit_rt()) {
+    AIBinder_setInheritRt(binder.get(), true);
+  }
+  return binder;
 }
 
 }  // namespace aidl

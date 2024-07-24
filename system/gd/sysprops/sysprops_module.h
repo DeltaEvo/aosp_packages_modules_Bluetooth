@@ -15,22 +15,26 @@
  */
 #pragma once
 
+#ifdef __ANDROID__
+#error "sysprops_module is not supposed to be used on Android"
+#endif
+
 #include "module.h"
 
 namespace bluetooth {
 namespace sysprops {
 
 class SyspropsModule : public bluetooth::Module {
- public:
-  SyspropsModule() = default;
+public:
+  SyspropsModule();
   SyspropsModule(const SyspropsModule&) = delete;
   SyspropsModule& operator=(const SyspropsModule&) = delete;
 
-  ~SyspropsModule() = default;
+  ~SyspropsModule();
 
   static const ModuleFactory Factory;
 
- protected:
+protected:
   void ListDependencies(ModuleList* list) const override;
 
   void Start() override;
@@ -39,7 +43,7 @@ class SyspropsModule : public bluetooth::Module {
 
   std::string ToString() const override;
 
- private:
+private:
   struct impl;
   std::unique_ptr<impl> pimpl_;
   void parse_config(std::string file_path);

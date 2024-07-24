@@ -84,7 +84,26 @@ inline std::string btif_hh_status_text(const BTIF_HH_STATUS& status) {
   }
 }
 
-// Shared with uhid polling thread
+/* Uhid thread has exclusive access to this block. */
+typedef struct {
+  int fd;                // for interfacing with uhid
+  int internal_recv_fd;  // for receiving internal events in uhid thread
+  int internal_send_fd;  // for passing to other threads so they can send
+                         // internal events
+  uint8_t dev_handle;
+  tAclLinkSpec link_spec;
+  uint8_t hh_keep_polling;  // Deprecated with the aflags hid_report_queuing.
+                            // TODO: remove after launching the aflag.
+  bool ready_for_data;
+  fixed_queue_t* get_rpt_id_queue;
+#if ENABLE_UHID_SET_REPORT
+  fixed_queue_t* set_rpt_id_queue;
+#endif  // ENABLE_UHID_SET_REPORT
+  fixed_queue_t* input_queue;  // to store the inputs before uhid is ready.
+  alarm_t* ready_timer;
+} btif_hh_uhid_t;
+
+/* Control block to maintain properties of devices */
 typedef struct {
   bthh_connection_state_t dev_status;
   uint8_t dev_handle;
@@ -92,16 +111,12 @@ typedef struct {
   tBTA_HH_ATTR_MASK attr_mask;
   uint8_t sub_class;
   uint8_t app_id;
-  int fd;
-  bool ready_for_data;
+  int internal_send_fd;  // for sending internal events from btif
   pthread_t hh_poll_thread_id;
-  uint8_t hh_keep_polling;
   alarm_t* vup_timer;
-  fixed_queue_t* get_rpt_id_queue;
-#if ENABLE_UHID_SET_REPORT
-  fixed_queue_t* set_rpt_id_queue;
-#endif // ENABLE_UHID_SET_REPORT
   bool local_vup;  // Indicated locally initiated VUP
+  btif_hh_uhid_t uhid;  // Deprecated with the aflags hid_report_queuing.
+                        // TODO: remove after launching the aflag.
 } btif_hh_device_t;
 
 /* Control block to maintain properties of devices */
@@ -109,6 +124,7 @@ typedef struct {
   uint8_t dev_handle;
   tAclLinkSpec link_spec;
   tBTA_HH_ATTR_MASK attr_mask;
+  bool reconnect_allowed;  // Connection policy
 } btif_hh_added_device_t;
 
 /**
@@ -131,17 +147,20 @@ typedef struct {
 extern btif_hh_cb_t btif_hh_cb;
 
 btif_hh_device_t* btif_hh_find_connected_dev_by_handle(uint8_t handle);
+btif_hh_device_t* btif_hh_find_dev_by_handle(uint8_t handle);
+btif_hh_device_t* btif_hh_find_empty_dev(void);
+bt_status_t btif_hh_virtual_unplug(const tAclLinkSpec& link_spec);
 void btif_hh_remove_device(const tAclLinkSpec& link_spec);
-bool btif_hh_add_added_dev(const tAclLinkSpec& link_spec,
-                           tBTA_HH_ATTR_MASK attr_mask);
-bt_status_t btif_hh_virtual_unplug(const tAclLinkSpec* link_spec);
-void btif_hh_disconnect(const tAclLinkSpec* link_spec);
-void btif_hh_setreport(btif_hh_device_t* p_dev, bthh_report_type_t r_type,
-                       uint16_t size, uint8_t* report);
-void btif_hh_senddata(btif_hh_device_t* p_dev, uint16_t size, uint8_t* report);
-void btif_hh_getreport(btif_hh_device_t* p_dev, bthh_report_type_t r_type,
-                       uint8_t reportId, uint16_t bufferSize);
+void btif_hh_setreport(btif_hh_uhid_t* p_uhid, bthh_report_type_t r_type, uint16_t size,
+                       uint8_t* report);
+void btif_hh_senddata(btif_hh_uhid_t* p_uhid, uint16_t size, uint8_t* report);
+void btif_hh_getreport(btif_hh_uhid_t* p_uhid, bthh_report_type_t r_type, uint8_t reportId,
+                       uint16_t bufferSize);
 void btif_hh_service_registration(bool enable);
+
+void btif_hh_load_bonded_dev(const tAclLinkSpec& link_spec, tBTA_HH_ATTR_MASK attr_mask,
+                             uint8_t sub_class, uint8_t app_id, tBTA_HH_DEV_DSCP_INFO dscp_info,
+                             bool reconnect_allowed);
 
 void DumpsysHid(int fd);
 

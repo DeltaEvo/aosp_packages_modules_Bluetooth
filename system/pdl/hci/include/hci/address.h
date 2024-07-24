@@ -26,6 +26,7 @@
 #include <string>
 
 #include "common/interfaces/ILoggable.h"
+#include "os/logging/log_adapter.h"
 #include "packet/custom_field_fixed_size_interface.h"
 #include "storage/serializable.h"
 
@@ -35,7 +36,7 @@ namespace hci {
 class Address final : public packet::CustomFieldFixedSizeInterface<Address>,
                       public storage::Serializable<Address>,
                       public bluetooth::common::IRedactableLoggable {
- public:
+public:
   static constexpr size_t kLength = 6;
 
   // Bluetooth MAC address bytes saved in little endian format.
@@ -64,7 +65,7 @@ class Address final : public packet::CustomFieldFixedSizeInterface<Address>,
 
   bool operator<(const Address& rhs) const { return address < rhs.address; }
   bool operator==(const Address& rhs) const { return address == rhs.address; }
-  bool operator>(const Address& rhs) const { return (rhs < *this); }
+  bool operator>(const Address& rhs) const { return rhs < *this; }
   bool operator<=(const Address& rhs) const { return !(*this > rhs); }
   bool operator>=(const Address& rhs) const { return !(*this < rhs); }
   bool operator!=(const Address& rhs) const { return !(*this == rhs); }
@@ -84,7 +85,7 @@ class Address final : public packet::CustomFieldFixedSizeInterface<Address>,
 
   static const Address kEmpty;  // 00:00:00:00:00:00
   static const Address kAny;    // FF:FF:FF:FF:FF:FF
- private:
+private:
   std::string _ToMaskedColonSepHexString(int bytes_to_mask) const;
 };
 
@@ -104,9 +105,24 @@ struct hash<bluetooth::hci::Address> {
   std::size_t operator()(const bluetooth::hci::Address& val) const {
     static_assert(sizeof(uint64_t) >= bluetooth::hci::Address::kLength);
     uint64_t int_addr = 0;
-    memcpy(reinterpret_cast<uint8_t*>(&int_addr), val.data(),
-           bluetooth::hci::Address::kLength);
+    memcpy(reinterpret_cast<uint8_t*>(&int_addr), val.data(), bluetooth::hci::Address::kLength);
     return std::hash<uint64_t>{}(int_addr);
   }
 };
 }  // namespace std
+
+#if __has_include(<bluetooth/log.h>)
+#include <bluetooth/log.h>
+
+namespace fmt {
+template <>
+struct formatter<bluetooth::hci::Address> : formatter<std::string> {
+  template <class Context>
+  typename Context::iterator format(const bluetooth::hci::Address& address, Context& ctx) const {
+    std::string repr = address.ToRedactedStringForLogging();
+    return fmt::formatter<std::string>::format(repr, ctx);
+  }
+};
+}  // namespace fmt
+
+#endif  // __has_include(<bluetooth/log.h>)

@@ -16,13 +16,10 @@
 
 #include "stack/include/a2dp_vendor_ldac_decoder.h"
 
-#include <base/logging.h>
 #include <gtest/gtest.h>
-#include <stdio.h>
 
 #include <cstdint>
 
-#include "include/check.h"
 #include "osi/include/allocator.h"
 #include "stack/include/bt_hdr.h"
 
@@ -36,17 +33,16 @@ uint8_t* Data(BT_HDR* packet) { return packet->data + packet->offset; }
  * Test class to test selected functionality in stack/a2dp
  */
 class A2dpStackTest : public ::testing::Test {
- protected:
+protected:
   BT_HDR* AllocateL2capPacket(const std::vector<uint8_t> data) const {
     auto packet = AllocatePacket(data.size());
     std::copy(data.cbegin(), data.cend(), Data(packet));
     return packet;
   }
 
- private:
+private:
   BT_HDR* AllocatePacket(size_t packet_length) const {
-    BT_HDR* packet =
-        static_cast<BT_HDR*>(osi_calloc(sizeof(BT_HDR) + packet_length));
+    BT_HDR* packet = static_cast<BT_HDR*>(osi_calloc(sizeof(BT_HDR) + packet_length));
     packet->len = packet_length;
     return packet;
   }
@@ -55,6 +51,6 @@ class A2dpStackTest : public ::testing::Test {
 TEST_F(A2dpStackTest, DecodePacket_ZeroLength) {
   const std::vector<uint8_t> data;
   BT_HDR* p_buf = AllocateL2capPacket(data);
-  CHECK(!a2dp_vendor_ldac_decoder_decode_packet(p_buf));
+  ASSERT_FALSE(a2dp_vendor_ldac_decoder_decode_packet(p_buf));
   osi_free(p_buf);
 }

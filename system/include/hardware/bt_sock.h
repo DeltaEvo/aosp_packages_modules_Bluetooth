@@ -52,6 +52,10 @@ typedef struct {
   // The reader must read using a buffer of at least this size to avoid
   // loosing data. (L2CAP only)
   unsigned short max_rx_packet_size;
+
+  // The connection uuid. (L2CAP only)
+  uint64_t conn_uuid_lsb;
+  uint64_t conn_uuid_msb;
 } __attribute__((packed)) sock_connect_signal_t;
 
 typedef struct {
@@ -68,8 +72,8 @@ typedef struct {
    * socket. This is used for traffic accounting purposes.
    */
   bt_status_t (*listen)(btsock_type_t type, const char* service_name,
-                        const bluetooth::Uuid* service_uuid, int channel,
-                        int* sock_fd, int flags, int callingUid);
+                        const bluetooth::Uuid* service_uuid, int channel, int* sock_fd, int flags,
+                        int callingUid);
 
   /**
    * Connect to a RFCOMM UUID channel of remote device, It returns the socket fd
@@ -78,9 +82,8 @@ typedef struct {
    * which is requesting the socket. This is used for traffic accounting
    * purposes.
    */
-  bt_status_t (*connect)(const RawAddress* bd_addr, btsock_type_t type,
-                         const bluetooth::Uuid* uuid, int channel, int* sock_fd,
-                         int flags, int callingUid);
+  bt_status_t (*connect)(const RawAddress* bd_addr, btsock_type_t type, const bluetooth::Uuid* uuid,
+                         int channel, int* sock_fd, int flags, int callingUid);
 
   /**
    * Set the LE Data Length value to this connected peer to the
@@ -96,16 +99,25 @@ typedef struct {
    * This API allows the host to start the control request while it works as an
    * RFCOMM server.
    */
-  bt_status_t (*control_req)(uint8_t dlci, const RawAddress& bd_addr,
-                             uint8_t modem_signal, uint8_t break_signal,
-                             uint8_t discard_buffers, uint8_t break_signal_seq,
-                             bool fc);
+  bt_status_t (*control_req)(uint8_t dlci, const RawAddress& bd_addr, uint8_t modem_signal,
+                             uint8_t break_signal, uint8_t discard_buffers,
+                             uint8_t break_signal_seq, bool fc);
 
   /**
    * Disconnect all RFCOMM and L2CAP socket connections with the associated
    * device address.
    */
   bt_status_t (*disconnect_all)(const RawAddress* bd_addr);
+
+  /**
+   * Get L2CAP local channel ID with the associated connection uuid.
+   */
+  bt_status_t (*get_l2cap_local_cid)(bluetooth::Uuid& conn_uuid, uint16_t* cid);
+
+  /**
+   * Get L2CAP remote channel ID with the associated connection uuid.
+   */
+  bt_status_t (*get_l2cap_remote_cid)(bluetooth::Uuid& conn_uuid, uint16_t* cid);
 
 } btsock_interface_t;
 

@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include <bluetooth/log.h>
+
 #include <functional>
 #include <iterator>
 #include <list>
@@ -26,17 +28,13 @@
 #include <thread>
 #include <unordered_map>
 
-#include <base/logging.h>
-
-#include "check.h"
-
 namespace bluetooth {
 
 namespace common {
 
 template <typename K, typename V>
 class LegacyLruCache {
- public:
+public:
   using Node = std::pair<K, V>;
   /**
    * Constructor of the cache
@@ -44,11 +42,10 @@ class LegacyLruCache {
    * @param capacity maximum size of the cache
    * @param log_tag, keyword to put at the head of log.
    */
-  LegacyLruCache(const size_t& capacity, const std::string& log_tag)
-      : capacity_(capacity) {
+  LegacyLruCache(const size_t& capacity, const std::string& log_tag) : capacity_(capacity) {
     if (capacity_ == 0) {
       // don't allow invalid capacity
-      LOG(FATAL) << log_tag << " unable to have 0 LRU Cache capacity";
+      log::fatal("{} unable to have 0 LRU Cache capacity", log_tag);
     }
   }
 
@@ -95,7 +92,7 @@ class LegacyLruCache {
    * @return true if the cache has the key
    */
   bool Get(const K& key, V* value) {
-    CHECK(value != nullptr);
+    log::assert_that(value != nullptr, "assert failed: value != nullptr");
     std::lock_guard<std::recursive_mutex> lock(lru_mutex_);
     auto value_ptr = Find(key);
     if (value_ptr == nullptr) {
@@ -179,7 +176,7 @@ class LegacyLruCache {
     return lru_map_.size();
   }
 
- private:
+private:
   std::list<Node> node_list_;
   size_t capacity_;
   std::unordered_map<K, typename std::list<Node>::iterator> lru_map_;

@@ -54,7 +54,6 @@ struct btif_config_get_paired_devices btif_config_get_paired_devices;
 struct btif_config_remove btif_config_remove;
 struct btif_config_remove_device btif_config_remove_device;
 struct btif_config_clear btif_config_clear;
-struct btif_debug_config_dump btif_debug_config_dump;
 
 }  // namespace btif_config
 }  // namespace mock
@@ -73,53 +72,45 @@ bool btif_config_exist(const std::string& section, const std::string& key) {
   inc_func_call_count(__func__);
   return test::mock::btif_config::btif_config_exist(section, key);
 }
-bool btif_config_get_int(const std::string& section, const std::string& key,
-                         int* value) {
+bool btif_config_get_int(const std::string& section, const std::string& key, int* value) {
   inc_func_call_count(__func__);
   return test::mock::btif_config::btif_config_get_int(section, key, value);
 }
-bool btif_config_set_int(const std::string& section, const std::string& key,
-                         int value) {
+bool btif_config_set_int(const std::string& section, const std::string& key, int value) {
   inc_func_call_count(__func__);
   return test::mock::btif_config::btif_config_set_int(section, key, value);
 }
-bool btif_config_get_uint64(const std::string& section, const std::string& key,
-                            uint64_t* value) {
+bool btif_config_get_uint64(const std::string& section, const std::string& key, uint64_t* value) {
   inc_func_call_count(__func__);
   return test::mock::btif_config::btif_config_get_uint64(section, key, value);
 }
-bool btif_config_set_uint64(const std::string& section, const std::string& key,
-                            uint64_t value) {
+bool btif_config_set_uint64(const std::string& section, const std::string& key, uint64_t value) {
   inc_func_call_count(__func__);
   return test::mock::btif_config::btif_config_set_uint64(section, key, value);
 }
-bool btif_config_get_str(const std::string& section, const std::string& key,
-                         char* value, int* size_bytes) {
+bool btif_config_get_str(const std::string& section, const std::string& key, char* value,
+                         int* size_bytes) {
   inc_func_call_count(__func__);
-  return test::mock::btif_config::btif_config_get_str(section, key, value,
-                                                      size_bytes);
+  return test::mock::btif_config::btif_config_get_str(section, key, value, size_bytes);
 }
 bool btif_config_set_str(const std::string& section, const std::string& key,
                          const std::string& value) {
   inc_func_call_count(__func__);
   return test::mock::btif_config::btif_config_set_str(section, key, value);
 }
-bool btif_config_get_bin(const std::string& section, const std::string& key,
-                         uint8_t* value, size_t* length) {
+bool btif_config_get_bin(const std::string& section, const std::string& key, uint8_t* value,
+                         size_t* length) {
   inc_func_call_count(__func__);
-  return test::mock::btif_config::btif_config_get_bin(section, key, value,
-                                                      length);
+  return test::mock::btif_config::btif_config_get_bin(section, key, value, length);
 }
-size_t btif_config_get_bin_length(const std::string& section,
-                                  const std::string& key) {
+size_t btif_config_get_bin_length(const std::string& section, const std::string& key) {
   inc_func_call_count(__func__);
   return test::mock::btif_config::btif_config_get_bin_length(section, key);
 }
-bool btif_config_set_bin(const std::string& section, const std::string& key,
-                         const uint8_t* value, size_t length) {
+bool btif_config_set_bin(const std::string& section, const std::string& key, const uint8_t* value,
+                         size_t length) {
   inc_func_call_count(__func__);
-  return test::mock::btif_config::btif_config_set_bin(section, key, value,
-                                                      length);
+  return test::mock::btif_config::btif_config_set_bin(section, key, value, length);
 }
 std::vector<RawAddress> btif_config_get_paired_devices() {
   inc_func_call_count(__func__);
@@ -132,10 +123,6 @@ bool btif_config_remove(const std::string& section, const std::string& key) {
 bool btif_config_clear(void) {
   inc_func_call_count(__func__);
   return test::mock::btif_config::btif_config_clear();
-}
-void btif_debug_config_dump(int fd) {
-  inc_func_call_count(__func__);
-  test::mock::btif_config::btif_debug_config_dump(fd);
 }
 
 // END mockcify generation

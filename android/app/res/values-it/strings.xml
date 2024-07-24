@@ -16,6 +16,7 @@
 
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="app_name" msgid="2326164424236203271">"Bluetooth"</string>
     <string name="permlab_bluetoothShareManager" msgid="5297865456717871041">"Accedere alla gestione dei download."</string>
     <string name="permdesc_bluetoothShareManager" msgid="1588034776955941477">"Consente all\'applicazione di accedere al gestore BluetoothShare e di utilizzarlo per trasferire file."</string>
     <string name="permlab_bluetoothAcceptlist" msgid="5785922051395856524">"Aggiunta dell\'accesso del dispositivo Bluetooth alla lista consentita."</string>
@@ -100,7 +101,6 @@
     <string name="status_connection_error" msgid="8253709700568062220">"Connessione non riuscita."</string>
     <string name="status_protocol_error" msgid="3231573735130475654">"Impossibile gestire correttamente la richiesta."</string>
     <string name="status_unknown_error" msgid="314676481744304866">"Errore sconosciuto."</string>
-    <string name="btopp_live_folder" msgid="4859989703965326287">"Ricevuti tramite Bluetooth"</string>
     <string name="opp_notification_group" msgid="150067508422520653">"Condivisione Bluetooth"</string>
     <string name="download_success" msgid="3438268368708549686">"Ricezione completata (<xliff:g id="FILE_SIZE">%1$s</xliff:g>)"</string>
     <string name="upload_success" msgid="143787470859042049">"Invio completato (<xliff:g id="FILE_SIZE">%1$s</xliff:g>)"</string>
@@ -130,9 +130,13 @@
     <string name="bluetooth_opp_file_limit_exceeded" msgid="6612109860149473930">"Impossibile trasferire file con dimensioni superiori a 4 GB"</string>
     <string name="bluetooth_connect_action" msgid="2319449093046720209">"Connettiti a Bluetooth"</string>
     <string name="bluetooth_enabled_apm_title" msgid="6914461147844949044">"Bluetooth attivo in modalità aereo"</string>
-    <string name="bluetooth_enabled_apm_message" msgid="8409900562494838113">"Se tieni attivo il Bluetooth, il telefono ricorderà di tenerlo attivo la prossima volta che sarai in modalità aereo"</string>
+    <string name="bluetooth_enabled_apm_message" msgid="6168686193308136881">"Se tieni attivo il Bluetooth, il dispositivo memorizza che dovrà tenerlo attivo la prossima volta che sarai in modalità aereo"</string>
     <string name="bluetooth_stays_on_title" msgid="39720820955212918">"Il Bluetooth rimane attivo"</string>
-    <string name="bluetooth_stays_on_message" msgid="7142453371222249965">"Il telefono memorizza che deve tenere attivo il Bluetooth in modalità aereo. Disattiva il Bluetooth se non vuoi tenerlo attivo."</string>
+    <string name="bluetooth_stays_on_message" msgid="3669663452593157737">"Il dispositivo memorizza che deve tenere attivo il Bluetooth in modalità aereo. Disattiva il Bluetooth se non vuoi tenerlo attivo."</string>
     <string name="bluetooth_and_wifi_stays_on_title" msgid="5821932798860821244">"Wi-Fi e Bluetooth rimangono attivi"</string>
-    <string name="bluetooth_and_wifi_stays_on_message" msgid="2390749828997719812">"Il telefono memorizza che deve tenere attivi il Wi‑Fi e il Bluetooth in modalità aereo. Disattiva il Wi-Fi e il Bluetooth se non vuoi tenerli attivi."</string>
+    <string name="bluetooth_and_wifi_stays_on_message" msgid="7848565203843882558">"Il dispositivo memorizza che deve tenere attivi il Wi‑Fi e il Bluetooth in modalità aereo. Disattiva il Wi-Fi e il Bluetooth se non vuoi tenerli attivi."</string>
+    <string name="bluetooth_enabled_auto_on_title" msgid="1799541656310353393">"Il Bluetooth è stato attivato automaticamente"</string>
+    <string name="bluetooth_enabled_auto_on_message" msgid="1070556457440100730">"È possibile attivare/disattivare il riavvio automatico nelle impostazioni del Bluetooth."</string>
+    <string name="bluetooth_disable_auto_on" msgid="1085026923461565937">"Disattiva"</string>
+    <string name="bluetooth_notification_group" msgid="7251886707585872194">"Modifica dello stato automatico del Bluetooth"</string>
 </resources>

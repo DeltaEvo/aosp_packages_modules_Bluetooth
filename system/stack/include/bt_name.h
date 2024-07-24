@@ -16,62 +16,38 @@
 
 #pragma once
 
-#ifdef __cplusplus
 #include <cstdint>
 #include <cstring>
-#else
-#include <stdint.h>
-#include <string.h>
-#endif
 
-// NOTE: Shared with internal_include/bt_target.h
-/* Maximum device name length used in btm database. */
-#ifndef BTM_MAX_REM_BD_NAME_LEN
-#define BTM_MAX_REM_BD_NAME_LEN 248
-#endif
-
-/* Maximum local device name length stored btm database */
-#ifndef BTM_MAX_LOC_BD_NAME_LEN
-#define BTM_MAX_LOC_BD_NAME_LEN 248
-#endif
+#include "osi/include/compat.h"  // strlcpy
 
 #define BD_NAME_LEN 248
 typedef uint8_t BD_NAME[BD_NAME_LEN + 1]; /* Device name */
 
-/* Device name of peer (may be truncated to save space in BTM database) */
-typedef uint8_t tBTM_BD_NAME[BTM_MAX_REM_BD_NAME_LEN + 1];
-
-typedef uint8_t tBTM_LOC_BD_NAME[BTM_MAX_LOC_BD_NAME_LEN + 1];
-
-#ifdef __cplusplus
-#include "osi/include/compat.h"  // strlcpy
-inline constexpr tBTM_BD_NAME kBtmBdNameEmpty = {};
+inline constexpr BD_NAME kBtmBdNameEmpty = {};
 constexpr size_t kBdNameLength = static_cast<size_t>(BD_NAME_LEN);
-constexpr uint8_t kBdNameDelim = (uint8_t)NULL;
+constexpr uint8_t kBdNameDelim = (uint8_t)'\0';
 
-inline size_t bd_name_copy(BD_NAME bd_name_dest, const char* src) {
-  return strlcpy(reinterpret_cast<char*>(bd_name_dest), const_cast<char*>(src),
+inline size_t bd_name_copy(BD_NAME bd_name_dest, const BD_NAME bd_name_src) {
+  return strlcpy(reinterpret_cast<char*>(bd_name_dest), reinterpret_cast<const char*>(bd_name_src),
                  kBdNameLength + 1);
 }
-inline size_t bd_name_copy(BD_NAME bd_name_dest, const BD_NAME bd_name_src) {
-  return strlcpy(reinterpret_cast<char*>(bd_name_dest),
-                 reinterpret_cast<const char*>(bd_name_src), kBdNameLength + 1);
-}
 inline void bd_name_clear(BD_NAME bd_name) { *bd_name = {0}; }
-inline bool bd_name_is_empty(const BD_NAME bd_name) {
-  return bd_name[0] == '\0';
-}
+inline bool bd_name_is_empty(const BD_NAME bd_name) { return bd_name[0] == '\0'; }
 
-inline void bd_name_from_char_pointer(BD_NAME bd_name_dest,
-                                      const char* bd_name_char) {
-  if (bd_name_char != nullptr) {
-    strlcpy(reinterpret_cast<char*>(bd_name_dest), bd_name_char,
-            kBdNameLength + 1);
+inline void bd_name_from_char_pointer(BD_NAME bd_name_dest, const char* bd_name_char) {
+  if (bd_name_char == nullptr) {
+    bd_name_clear(bd_name_dest);
+    return;
+  }
+
+  size_t src_len = strlcpy(reinterpret_cast<char*>(bd_name_dest), bd_name_char, sizeof(BD_NAME));
+  if (src_len < sizeof(BD_NAME) - 1) {
+    /* Zero the remaining destination memory */
+    memset(bd_name_dest + src_len, 0, sizeof(BD_NAME) - src_len);
   }
 }
 inline bool bd_name_is_equal(const BD_NAME bd_name1, const BD_NAME bd_name2) {
   return memcmp(reinterpret_cast<void*>(const_cast<uint8_t*>(bd_name1)),
-                reinterpret_cast<void*>(const_cast<uint8_t*>(bd_name2)),
-                kBdNameLength + 1) == 0;
+                reinterpret_cast<void*>(const_cast<uint8_t*>(bd_name2)), kBdNameLength + 1) == 0;
 }
-#endif

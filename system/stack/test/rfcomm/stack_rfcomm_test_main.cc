@@ -17,13 +17,10 @@
  ******************************************************************************/
 
 #include <base/command_line.h>
-#include <base/logging.h>
 #include <base/strings/string_piece.h>
 #include <base/strings/string_util.h>
 #include <bluetooth/log.h>
 #include <gtest/gtest.h>
-
-#include <string>
 
 using namespace bluetooth;
 
@@ -48,8 +45,8 @@ int main(int argc, char** argv) {
   const char* logging_argv[] = {"bt_stack", log_level_arg};
   // Init command line object with logging switches
   if (!base::CommandLine::Init(2, logging_argv)) {
-    log::fatal("base::CommandLine::Init failed, arg0={}, arg1={}",
-               logging_argv[0], logging_argv[1]);
+    log::fatal("base::CommandLine::Init failed, arg0={}, arg1={}", logging_argv[0],
+               logging_argv[1]);
     return 1;
   }
 

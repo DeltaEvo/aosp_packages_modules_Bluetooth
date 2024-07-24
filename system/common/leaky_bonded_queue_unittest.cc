@@ -15,16 +15,16 @@
  *  limitations under the License.
  *
  ******************************************************************************/
+#include "common/leaky_bonded_queue.h"
+
+#include <bluetooth/log.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-
-#include <base/logging.h>
-
-#include "common/leaky_bonded_queue.h"
 
 namespace testing {
 
 using bluetooth::common::LeakyBondedQueue;
+using namespace bluetooth;
 
 #define ITEM_EQ(a, b)                  \
   do {                                 \
@@ -33,14 +33,14 @@ using bluetooth::common::LeakyBondedQueue;
   } while (0)
 
 class Item {
- public:
+public:
   Item(int i) { index = i; }
   virtual ~Item() {}
   int index;
 };
 
 class MockItem : public Item {
- public:
+public:
   MockItem(int i) : Item(i) {}
   ~MockItem() override { Destruct(); }
   MOCK_METHOD0(Destruct, void());
@@ -72,7 +72,7 @@ TEST(LeakyBondedQueueTest, TestEnqueueDequeue) {
   ITEM_EQ(item3_3, item3);
   EXPECT_THAT(item4_4, NotNull());
   ITEM_EQ(item4_4, item4);
-  LOG(INFO) << "All done release items";
+  log::info("All done release items");
   EXPECT_CALL(*item2_2, Destruct()).Times(1);
   delete item2_2;
   EXPECT_CALL(*item3_3, Destruct()).Times(1);

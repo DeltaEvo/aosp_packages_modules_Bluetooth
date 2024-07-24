@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "l2cap/le/internal/fixed_channel_service_manager_impl.h"
+#include <gtest/gtest.h>
 
 #include <future>
 
@@ -22,10 +22,9 @@
 #include "l2cap/cid.h"
 #include "l2cap/le/fixed_channel_manager.h"
 #include "l2cap/le/fixed_channel_service.h"
+#include "l2cap/le/internal/fixed_channel_service_manager_impl.h"
 #include "os/handler.h"
 #include "os/thread.h"
-
-#include <gtest/gtest.h>
 
 namespace bluetooth {
 namespace l2cap {
@@ -33,7 +32,7 @@ namespace le {
 namespace internal {
 
 class L2capLeServiceManagerTest : public ::testing::Test {
- public:
+public:
   ~L2capLeServiceManagerTest() = default;
 
   void OnServiceRegistered(bool expect_success, FixedChannelManager::RegistrationResult result,
@@ -42,7 +41,7 @@ class L2capLeServiceManagerTest : public ::testing::Test {
     service_registered_ = expect_success;
   }
 
- protected:
+protected:
   void SetUp() override {
     manager_ = new FixedChannelServiceManagerImpl{nullptr};
     thread_ = new os::Thread("test_thread", os::Thread::Priority::NORMAL);
@@ -59,7 +58,8 @@ class L2capLeServiceManagerTest : public ::testing::Test {
   void sync_user_handler() {
     std::promise<void> promise;
     auto future = promise.get_future();
-    user_handler_->Post(common::BindOnce(&std::promise<void>::set_value, common::Unretained(&promise)));
+    user_handler_->Post(
+            common::BindOnce(&std::promise<void>::set_value, common::Unretained(&promise)));
     future.wait_for(std::chrono::milliseconds(3));
   }
 
@@ -72,9 +72,9 @@ class L2capLeServiceManagerTest : public ::testing::Test {
 
 TEST_F(L2capLeServiceManagerTest, register_and_unregister_le_fixed_channel) {
   FixedChannelServiceImpl::PendingRegistration pending_registration{
-      .user_handler_ = user_handler_,
-      .on_registration_complete_callback_ =
-          common::BindOnce(&L2capLeServiceManagerTest::OnServiceRegistered, common::Unretained(this), true)};
+          .user_handler_ = user_handler_,
+          .on_registration_complete_callback_ = common::BindOnce(
+                  &L2capLeServiceManagerTest::OnServiceRegistered, common::Unretained(this), true)};
   Cid cid = kSmpBrCid;
   EXPECT_FALSE(manager_->IsServiceRegistered(cid));
   manager_->Register(cid, std::move(pending_registration));
@@ -87,9 +87,10 @@ TEST_F(L2capLeServiceManagerTest, register_and_unregister_le_fixed_channel) {
 
 TEST_F(L2capLeServiceManagerTest, register_le_fixed_channel_bad_cid) {
   FixedChannelServiceImpl::PendingRegistration pending_registration{
-      .user_handler_ = user_handler_,
-      .on_registration_complete_callback_ =
-          common::BindOnce(&L2capLeServiceManagerTest::OnServiceRegistered, common::Unretained(this), false)};
+          .user_handler_ = user_handler_,
+          .on_registration_complete_callback_ =
+                  common::BindOnce(&L2capLeServiceManagerTest::OnServiceRegistered,
+                                   common::Unretained(this), false)};
   Cid cid = 0x1000;
   EXPECT_FALSE(manager_->IsServiceRegistered(cid));
   manager_->Register(cid, std::move(pending_registration));

@@ -19,11 +19,13 @@ impl<Db: AttDatabase> AttCommandHandler<Db> {
         match packet.get_opcode() {
             AttOpcode::WRITE_COMMAND => {
                 let Ok(packet) = AttWriteCommandView::try_parse(packet) else {
-                  warn!("failed to parse WRITE_COMMAND packet");
-                  return;
+                    warn!("failed to parse WRITE_COMMAND packet");
+                    return;
                 };
-                snapshotted_db
-                    .write_no_response_attribute(packet.get_handle().into(), packet.get_value());
+                snapshotted_db.write_no_response_attribute(
+                    packet.get_handle().into(),
+                    &packet.get_value_iter().collect::<Vec<_>>(),
+                );
             }
             _ => {
                 warn!("Dropping unsupported opcode {:?}", packet.get_opcode());
@@ -45,14 +47,8 @@ mod test {
                 test::test_att_db::TestAttDatabase,
             },
         },
-        packets::{
-            AttAttributeDataChild, AttErrorCode, AttErrorResponseBuilder, AttOpcode,
-            AttWriteCommandBuilder,
-        },
-        utils::{
-            packet::{build_att_data, build_att_view_or_crash},
-            task::block_on_locally,
-        },
+        packets::{AttErrorCode, AttErrorResponseBuilder, AttOpcode, AttWriteCommandBuilder},
+        utils::{packet::build_att_view_or_crash, task::block_on_locally},
     };
 
     #[test]
@@ -67,12 +63,12 @@ mod test {
             vec![1, 2, 3],
         )]);
         let handler = AttCommandHandler { db: db.clone() };
-        let data = AttAttributeDataChild::RawData([1, 2].into());
+        let data = [1, 2];
 
         // act: send write command
         let att_view = build_att_view_or_crash(AttWriteCommandBuilder {
             handle: AttHandle(3).into(),
-            value: build_att_data(data.clone()),
+            value: data.into(),
         });
         handler.process_packet(att_view.view());
 

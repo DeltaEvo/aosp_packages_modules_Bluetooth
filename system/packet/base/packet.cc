@@ -16,35 +16,29 @@
 
 #include "packet.h"
 
-#include <base/logging.h>
+#include <bluetooth/log.h>
+
 #include <algorithm>
 
-#include "check.h"
 #include "iterator.h"
 
 namespace bluetooth {
 
 size_t Packet::size() const { return packet_end_index_ - packet_start_index_; }
 
-Iterator Packet::begin() const {
-  return Iterator(shared_from_this(), packet_start_index_);
-}
+Iterator Packet::begin() const { return Iterator(shared_from_this(), packet_start_index_); }
 
-Iterator Packet::end() const {
-  return Iterator(shared_from_this(), packet_end_index_);
-}
+Iterator Packet::end() const { return Iterator(shared_from_this(), packet_end_index_); }
 
 // For the Array operator, treat index 0 as the relative start of the packet
-uint8_t Packet::operator[](size_t i) {
-  return get_at_index(i + packet_start_index_);
-}
+uint8_t Packet::operator[](size_t i) { return get_at_index(i + packet_start_index_); }
 
 size_t Packet::get_length() const { return data_->size(); }
 
 // Iterators use the absolute index to access data.
 uint8_t Packet::get_at_index(size_t index) const {
-  CHECK_GE(index, packet_start_index_);
-  CHECK_LT(index, packet_end_index_);
+  log::assert_that(index >= packet_start_index_, "assert failed: index >= packet_start_index_");
+  log::assert_that(index < packet_end_index_, "assert failed: index < packet_end_index_");
   return data_->at(index);
 }
 

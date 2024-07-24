@@ -138,19 +138,19 @@ pub fn get_default_adapter() -> VirtualHciIndex {
                 .try_into()
                 .ok()
         })
-        .map(|i| VirtualHciIndex(i))
+        .map(VirtualHciIndex)
         .unwrap_or(DEFAULT_ADAPTER)
 }
 
 pub fn set_default_adapter(hci: VirtualHciIndex) -> bool {
-    match read_config().ok().and_then(|config| {
-        let mut cfg = serde_json::from_str::<Value>(config.as_str()).ok()?;
-        cfg[DEFAULT_ADAPTER_KEY] = serde_json::to_value(hci.to_i32()).ok().unwrap();
-        serde_json::ser::to_string_pretty(&cfg).ok()
-    }) {
-        Some(s) => std::fs::write(BTMANAGERD_CONF, s).is_ok(),
-        None => false,
-    }
+    (|| {
+        let config: String = read_config()?;
+        let mut cfg = serde_json::from_str::<Value>(config.as_str())?;
+        cfg[DEFAULT_ADAPTER_KEY] = serde_json::to_value(hci.to_i32())?;
+        let new_config: String = serde_json::ser::to_string_pretty(&cfg)?;
+        std::fs::write(BTMANAGERD_CONF, new_config)
+    })()
+    .is_ok()
 }
 
 fn list_hci_devices_string() -> Vec<String> {
@@ -222,6 +222,36 @@ pub fn write_floss_ll_privacy_enabled(enabled: bool) -> std::io::Result<()> {
     std::fs::write(format!("{}/{}", FLOSS_SYSPROPS_OVERRIDE_DIR, "privacy_override.conf"), data)
 }
 
+pub fn read_floss_address_privacy_enabled() -> std::io::Result<bool> {
+    let parent = Path::new(FLOSS_SYSPROPS_OVERRIDE_DIR);
+    if !parent.is_dir() {
+        return Ok(false);
+    }
+
+    let data = std::fs::read_to_string(format!(
+        "{}/{}",
+        FLOSS_SYSPROPS_OVERRIDE_DIR, "privacy_address_override.conf"
+    ))?;
+
+    Ok(data == "[Sysprops]\nbluetooth.core.gap.le.privacy.own_address_type.enabled=true\n")
+}
+
+pub fn write_floss_address_privacy_enabled(enabled: bool) -> std::io::Result<()> {
+    let parent = Path::new(FLOSS_SYSPROPS_OVERRIDE_DIR);
+
+    std::fs::create_dir_all(parent)?;
+
+    let data = format!(
+        "[Sysprops]\nbluetooth.core.gap.le.privacy.own_address_type.enabled={}",
+        if enabled { "true\n" } else { "false\n" }
+    );
+
+    std::fs::write(
+        format!("{}/{}", FLOSS_SYSPROPS_OVERRIDE_DIR, "privacy_address_override.conf"),
+        data,
+    )
+}
+
 pub fn set_adapter_coredump_state(enabled: bool) -> std::io::Result<()> {
     let data = format!("{}\n", !enabled as i32);
 
@@ -280,18 +310,15 @@ mod tests {
             get_log_level_internal("{\"log_level\": \"trace\"}".to_string()).unwrap(),
             LevelFilter::Trace
         );
-        assert_eq!(
-            get_log_level_internal("{\"log_level\": \"random\"}".to_string()).is_none(),
-            true
-        );
+        assert!(get_log_level_internal("{\"log_level\": \"random\"}".to_string()).is_none());
     }
 
     #[test]
     fn parse_hci0_enabled() {
-        assert_eq!(
-            is_hci_n_enabled_internal_wrapper("{\"hci0\":\n{\"enabled\": true}}".to_string(), 0),
-            true
-        );
+        assert!(is_hci_n_enabled_internal_wrapper(
+            "{\"hci0\":\n{\"enabled\": true}}".to_string(),
+            0
+        ));
     }
 
     #[test]
@@ -302,29 +329,29 @@ mod tests {
             true,
         )
         .unwrap();
-        assert_eq!(is_hci_n_enabled_internal_wrapper(modified_string, 0), true);
+        assert!(is_hci_n_enabled_internal_wrapper(modified_string, 0));
     }
 
     #[test]
     fn modify_hci0_enabled_from_empty() {
         let modified_string =
             modify_hci_n_enabled_internal("{}".to_string(), VirtualHciIndex(0), true).unwrap();
-        assert_eq!(is_hci_n_enabled_internal_wrapper(modified_string, 0), true);
+        assert!(is_hci_n_enabled_internal_wrapper(modified_string, 0));
     }
 
     #[test]
     fn parse_hci0_not_enabled() {
-        assert_eq!(
-            is_hci_n_enabled_internal_wrapper("{\"hci0\":\n{\"enabled\": false}}".to_string(), 0),
-            false
-        );
+        assert!(!is_hci_n_enabled_internal_wrapper(
+            "{\"hci0\":\n{\"enabled\": false}}".to_string(),
+            0
+        ));
     }
 
     #[test]
     fn parse_hci1_not_present() {
-        assert_eq!(
-            is_hci_n_enabled_internal_wrapper("{\"hci0\":\n{\"enabled\": true}}".to_string(), 1),
-            true
-        );
+        assert!(is_hci_n_enabled_internal_wrapper(
+            "{\"hci0\":\n{\"enabled\": true}}".to_string(),
+            1
+        ));
     }
 }

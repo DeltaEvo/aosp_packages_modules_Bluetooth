@@ -16,7 +16,14 @@
 
 #pragma once
 
-enum {
+#include <bluetooth/log.h>
+
+#include <cstdint>
+#include <string>
+
+#include "include/macros.h"
+
+enum tBT_PSM : uint16_t {
   BT_PSM_SDP = 0x0001,
   BT_PSM_RFCOMM = 0x0003,
   BT_PSM_TCS = 0x0005,
@@ -30,11 +37,38 @@ enum {
   BT_PSM_AVCTP = 0x0017,
   BT_PSM_AVDTP = 0x0019,
   BT_PSM_AVCTP_13 = 0x001B, /* Advanced Control - Browsing */
-  BT_PSM_UDI_CP = 0x001D, /* Unrestricted Digital Information Profile C-Plane */
-  BT_PSM_ATT = 0x001F,    /* Attribute Protocol  */
+  BT_PSM_UDI_CP = 0x001D,   /* Unrestricted Digital Information Profile C-Plane */
+  BT_PSM_ATT = 0x001F,      /* Attribute Protocol  */
   BT_PSM_EATT = 0x0027,
   /* We will not allocate a PSM in the reserved range to 3rd party apps
    */
   BRCM_RESERVED_PSM_START = 0x5AE1,
   BRCM_RESERVED_PSM_END = 0x5AFF,
 };
+
+inline std::string bt_psm_text(const tBT_PSM& psm) {
+  switch (psm) {
+    CASE_RETURN_STRING_HEX04(BT_PSM_SDP);
+    CASE_RETURN_STRING_HEX04(BT_PSM_RFCOMM);
+    CASE_RETURN_STRING_HEX04(BT_PSM_TCS);
+    CASE_RETURN_STRING_HEX04(BT_PSM_CTP);
+    CASE_RETURN_STRING_HEX04(BT_PSM_BNEP);
+    CASE_RETURN_STRING_HEX04(BT_PSM_HIDC);
+    CASE_RETURN_STRING_HEX04(BT_PSM_HIDI);
+    CASE_RETURN_STRING_HEX04(BT_PSM_UPNP);
+    CASE_RETURN_STRING_HEX04(BT_PSM_AVCTP);
+    CASE_RETURN_STRING_HEX04(BT_PSM_AVDTP);
+    CASE_RETURN_STRING_HEX04(BT_PSM_AVCTP_13);
+    CASE_RETURN_STRING_HEX04(BT_PSM_UDI_CP);
+    CASE_RETURN_STRING_HEX04(BT_PSM_ATT);
+    CASE_RETURN_STRING_HEX04(BT_PSM_EATT);
+    CASE_RETURN_STRING_HEX04(BRCM_RESERVED_PSM_START);
+    CASE_RETURN_STRING_HEX04(BRCM_RESERVED_PSM_END);
+  };
+  RETURN_UNKNOWN_TYPE_STRING(type, psm);
+}
+
+namespace fmt {
+template <>
+struct formatter<tBT_PSM> : enum_formatter<tBT_PSM> {};
+}  // namespace fmt

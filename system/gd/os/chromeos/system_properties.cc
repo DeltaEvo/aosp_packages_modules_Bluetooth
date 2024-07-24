@@ -28,7 +28,7 @@ std::mutex properties_mutex;
 
 // Properties set along with some default values for Floss.
 std::unordered_map<std::string, std::string> properties = {
-    {"bluetooth.profile.avrcp.target.enabled", "true"},
+        {"bluetooth.profile.avrcp.target.enabled", "true"},
 };
 }  // namespace
 
@@ -53,13 +53,9 @@ bool ClearSystemPropertiesForHost() {
   return true;
 }
 
-bool IsRootCanalEnabled() {
-  return false;
-}
+bool IsRootCanalEnabled() { return false; }
 
-int GetAndroidVendorReleaseVersion() {
-  return 0;
-}
+int GetAndroidVendorReleaseVersion() { return 0; }
 
 }  // namespace os
 }  // namespace bluetooth

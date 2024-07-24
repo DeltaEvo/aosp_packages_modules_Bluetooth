@@ -1,4 +1,5 @@
 package: "com.android.bluetooth.flags"
+container: "com.android.btservices"
 
 flag {
     name: "handle_delivery_sending_failure_events"
@@ -12,4 +13,11 @@ flag {
     namespace: "bluetooth"
     description: "Use entire message handle of messages pushed from MCE to MSE."
     bug: "323382399"
+}
+
+flag {
+    name: "refactor_saving_messages_and_metadata"
+    namespace: "bluetooth"
+    description: "Refactor how MAP Client collects and saves a message and its metadata."
+    bug: "331478849"
 }

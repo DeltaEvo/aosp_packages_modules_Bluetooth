@@ -48,12 +48,11 @@
 #define BTM_MSBC_SAMPLE_SIZE 2 /* 2 bytes*/
 #define BTM_MSBC_FS 120        /* Frame Size */
 
-#define BTM_PLC_WL 256 /* 16ms - Window Length for pattern matching */
-#define BTM_PLC_TL 64  /* 4ms - Template Length for matching */
-#define BTM_PLC_HL \
-  (BTM_PLC_WL + BTM_MSBC_FS - 1) /* Length of History buffer required */
-#define BTM_PLC_SBCRL 36         /* SBC Reconvergence sample Length */
-#define BTM_PLC_OLAL 16          /* OverLap-Add Length */
+#define BTM_PLC_WL 256                            /* 16ms - Window Length for pattern matching */
+#define BTM_PLC_TL 64                             /* 4ms - Template Length for matching */
+#define BTM_PLC_HL (BTM_PLC_WL + BTM_MSBC_FS - 1) /* Length of History buffer required */
+#define BTM_PLC_SBCRL 36                          /* SBC Reconvergence sample Length */
+#define BTM_PLC_OLAL 16                           /* OverLap-Add Length */
 
 /* Disable the PLC when there are more than threshold of lost packets in the
  * window */
@@ -77,8 +76,7 @@ void sco_data_cb(tUIPC_CH_ID, tUIPC_EVENT event) {
        * Read directly from media task from here on (keep callback for
        * connection events.
        */
-      UIPC_Ioctl(*sco_uipc, UIPC_CH_ID_AV_AUDIO, UIPC_REG_REMOVE_ACTIVE_READSET,
-                 NULL);
+      UIPC_Ioctl(*sco_uipc, UIPC_CH_ID_AV_AUDIO, UIPC_REG_REMOVE_ACTIVE_READSET, NULL);
       UIPC_Ioctl(*sco_uipc, UIPC_CH_ID_AV_AUDIO, UIPC_SET_READ_POLL_TMO,
                  reinterpret_cast<void*>(SCO_DATA_READ_POLL_MS));
       break;
@@ -139,6 +137,14 @@ size_t write(const uint8_t* p_buf, uint32_t len) {
   return UIPC_Send(*sco_uipc, UIPC_CH_ID_AV_AUDIO, 0, p_buf, len) ? len : 0;
 }
 
+enum decode_buf_state {
+  DECODE_BUF_EMPTY,
+  DECODE_BUF_FULL,
+
+  // Neither empty nor full.
+  DECODE_BUF_HALFFULL,
+};
+
 namespace wbs {
 
 /* Second octet of H2 header is composed by 4 bits fixed 0x8 and 4 bits
@@ -149,43 +155,39 @@ static const uint8_t btm_h2_header_frames_count[] = {0x08, 0x38, 0xc8, 0xf8};
  * code ties to limited packet size values. Specifically list them out
  * to check against when setting packet size. The first entry is the default
  * value as a fallback. */
-constexpr size_t btm_wbs_supported_pkt_size[] = {BTM_MSBC_PKT_LEN, 72, 0};
+constexpr size_t btm_wbs_supported_pkt_size[] = {BTM_MSBC_PKT_LEN, 72, 24, 0};
 /* Buffer size should be set to least common multiple of SCO packet size and
  * BTM_MSBC_PKT_LEN for optimizing buffer copy. */
-constexpr size_t btm_wbs_msbc_buffer_size[] = {BTM_MSBC_PKT_LEN, 360, 0};
+constexpr size_t btm_wbs_msbc_buffer_size[] = {BTM_MSBC_PKT_LEN, 360, 120, 0};
 
 /* The pre-computed SCO packet per HFP 1.7 spec. This mSBC packet will be
  * decoded into all-zero input PCM. */
 static const uint8_t btm_msbc_zero_packet[] = {
-    0x01, 0x08, /* Mock H2 header */
-    0xad, 0x00, 0x00, 0xc5, 0x00, 0x00, 0x00, 0x00, 0x77, 0x6d, 0xb6, 0xdd,
-    0xdb, 0x6d, 0xb7, 0x76, 0xdb, 0x6d, 0xdd, 0xb6, 0xdb, 0x77, 0x6d, 0xb6,
-    0xdd, 0xdb, 0x6d, 0xb7, 0x76, 0xdb, 0x6d, 0xdd, 0xb6, 0xdb, 0x77, 0x6d,
-    0xb6, 0xdd, 0xdb, 0x6d, 0xb7, 0x76, 0xdb, 0x6d, 0xdd, 0xb6, 0xdb, 0x77,
-    0x6d, 0xb6, 0xdd, 0xdb, 0x6d, 0xb7, 0x76, 0xdb, 0x6c,
-    /* End of Audio Samples */
-    0x00 /* A padding byte defined by mSBC */};
+        0x01, 0x08, /* Mock H2 header */
+        0xad, 0x00, 0x00, 0xc5, 0x00, 0x00, 0x00, 0x00, 0x77, 0x6d, 0xb6, 0xdd, 0xdb, 0x6d, 0xb7,
+        0x76, 0xdb, 0x6d, 0xdd, 0xb6, 0xdb, 0x77, 0x6d, 0xb6, 0xdd, 0xdb, 0x6d, 0xb7, 0x76, 0xdb,
+        0x6d, 0xdd, 0xb6, 0xdb, 0x77, 0x6d, 0xb6, 0xdd, 0xdb, 0x6d, 0xb7, 0x76, 0xdb, 0x6d, 0xdd,
+        0xb6, 0xdb, 0x77, 0x6d, 0xb6, 0xdd, 0xdb, 0x6d, 0xb7, 0x76, 0xdb, 0x6c,
+        /* End of Audio Samples */
+        0x00 /* A padding byte defined by mSBC */};
 
 /* Raised Cosine table for OLA */
-static const float rcos[BTM_PLC_OLAL] = {
-    0.99148655f, 0.96623611f, 0.92510857f, 0.86950446f,
-    0.80131732f, 0.72286918f, 0.63683150f, 0.54613418f,
-    0.45386582f, 0.36316850f, 0.27713082f, 0.19868268f,
-    0.13049554f, 0.07489143f, 0.03376389f, 0.00851345f};
+static const float rcos[BTM_PLC_OLAL] = {0.99148655f, 0.96623611f, 0.92510857f, 0.86950446f,
+                                         0.80131732f, 0.72286918f, 0.63683150f, 0.54613418f,
+                                         0.45386582f, 0.36316850f, 0.27713082f, 0.19868268f,
+                                         0.13049554f, 0.07489143f, 0.03376389f, 0.00851345f};
 
 static int16_t f_to_s16(float input) {
-  return input > INT16_MAX   ? INT16_MAX
-         : input < INT16_MIN ? INT16_MIN
-                             : (int16_t)input;
+  return input > INT16_MAX ? INT16_MAX : input < INT16_MIN ? INT16_MIN : (int16_t)input;
 }
 /* This structure tracks the packet loss for last PLC_WINDOW_SIZE of packets */
 struct tBTM_MSBC_BTM_PLC_WINDOW {
   bool loss_hist[BTM_PLC_WINDOW_SIZE]; /* The packet loss history of receiving
                                       packets.*/
-  unsigned int idx;   /* The index of the to be updated packet loss status. */
-  unsigned int count; /* The count of lost packets in the window. */
+  unsigned int idx;                    /* The index of the to be updated packet loss status. */
+  unsigned int count;                  /* The count of lost packets in the window. */
 
- public:
+public:
   void update_plc_state(bool is_packet_loss) {
     bool* curr = &loss_hist[idx];
     if (is_packet_loss != *curr) {
@@ -217,26 +219,25 @@ struct tBTM_MSBC_BTM_PLC_WINDOW {
  */
 struct tBTM_MSBC_PLC {
   int16_t hist[BTM_PLC_HL + BTM_MSBC_FS + BTM_PLC_SBCRL +
-               BTM_PLC_OLAL]; /* The history buffer for receiving samples, we
-                                 also use it to buffer the processed
-                                 replacement samples */
-  unsigned best_lag;      /* The index of the best substitution samples in the
-                             sample history */
-  int handled_bad_frames; /* Number of bad frames handled since the last good
-                             frame */
+               BTM_PLC_OLAL];          /* The history buffer for receiving samples, we
+                                          also use it to buffer the processed
+                                          replacement samples */
+  unsigned best_lag;                   /* The index of the best substitution samples in the
+                                          sample history */
+  int handled_bad_frames;              /* Number of bad frames handled since the last good
+                                          frame */
   int16_t decoded_buffer[BTM_MSBC_FS]; /* Used for storing the samples from
                                       decoding the mSBC zero frame packet and
                                       also constructed frames */
-  tBTM_MSBC_BTM_PLC_WINDOW*
-      pl_window; /* Used to monitor how many packets are bad within the recent
-                    BTM_PLC_WINDOW_SIZE of packets. We use this to determine if
-                    we want to disable the PLC temporarily */
+  tBTM_MSBC_BTM_PLC_WINDOW* pl_window; /* Used to monitor how many packets are bad within the recent
+                                          BTM_PLC_WINDOW_SIZE of packets. We use this to determine
+                                          if we want to disable the PLC temporarily */
 
   int num_decoded_frames; /* Number of total read mSBC frames. */
   int num_lost_frames;    /* Number of total lost mSBC frames. */
 
-  void overlap_add(int16_t* output, float scaler_d, const int16_t* desc,
-                   float scaler_a, const int16_t* asc) {
+  void overlap_add(int16_t* output, float scaler_d, const int16_t* desc, float scaler_a,
+                   const int16_t* asc) {
     for (int i = 0; i < BTM_PLC_OLAL; i++) {
       output[i] = f_to_s16(scaler_d * desc[i] * rcos[i] +
                            scaler_a * asc[i] * rcos[BTM_PLC_OLAL - 1 - i]);
@@ -276,20 +277,26 @@ struct tBTM_MSBC_PLC {
       sum_y += abs(y[i]);
     }
 
-    if (sum_y == 0) return 1.2f;
+    if (sum_y == 0) {
+      return 1.2f;
+    }
 
     scaler = (float)sum_x / sum_y;
     return scaler > 1.2f ? 1.2f : scaler < 0.75f ? 0.75f : scaler;
   }
 
- public:
+public:
   void init() {
-    if (pl_window) osi_free(pl_window);
+    if (pl_window) {
+      osi_free(pl_window);
+    }
     pl_window = (tBTM_MSBC_BTM_PLC_WINDOW*)osi_calloc(sizeof(*pl_window));
   }
 
   void deinit() {
-    if (pl_window) osi_free_and_reset((void**)&pl_window);
+    if (pl_window) {
+      osi_free_and_reset((void**)&pl_window);
+    }
   }
 
   int get_num_decoded_frames() { return num_decoded_frames; }
@@ -306,8 +313,8 @@ struct tBTM_MSBC_PLC {
 
     /* mSBC codec is stateful, the history of signal would contribute to the
      * decode result decoded_buffer. This should never fail. */
-    GetInterfaceToProfiles()->msbcCodec->decodePacket(
-        btm_msbc_zero_packet, decoded_buffer, sizeof(decoded_buffer));
+    GetInterfaceToProfiles()->msbcCodec->decodePacket(btm_msbc_zero_packet, decoded_buffer,
+                                                      sizeof(decoded_buffer));
 
     /* The PLC algorithm is more likely to generate bad results that sound
      * robotic after severe packet losses happened. Only applying it when
@@ -317,25 +324,22 @@ struct tBTM_MSBC_PLC {
         /* Finds the best matching samples and amplitude */
         best_lag = pattern_match(hist) + BTM_PLC_TL;
         best_match_hist = &hist[best_lag];
-        scaler =
-            amplitude_match(&hist[BTM_PLC_HL - BTM_MSBC_FS], best_match_hist);
+        scaler = amplitude_match(&hist[BTM_PLC_HL - BTM_MSBC_FS], best_match_hist);
 
         /* Constructs the substitution samples */
         overlap_add(frame_head, 1.0, decoded_buffer, scaler, best_match_hist);
-        for (int i = BTM_PLC_OLAL; i < BTM_MSBC_FS; i++)
+        for (int i = BTM_PLC_OLAL; i < BTM_MSBC_FS; i++) {
           hist[BTM_PLC_HL + i] = f_to_s16(scaler * best_match_hist[i]);
-        overlap_add(&frame_head[BTM_MSBC_FS], scaler,
-                    &best_match_hist[BTM_MSBC_FS], 1.0,
+        }
+        overlap_add(&frame_head[BTM_MSBC_FS], scaler, &best_match_hist[BTM_MSBC_FS], 1.0,
                     &best_match_hist[BTM_MSBC_FS]);
 
         memmove(&frame_head[BTM_MSBC_FS + BTM_PLC_OLAL],
-                &best_match_hist[BTM_MSBC_FS + BTM_PLC_OLAL],
-                BTM_PLC_SBCRL * BTM_MSBC_SAMPLE_SIZE);
+                &best_match_hist[BTM_MSBC_FS + BTM_PLC_OLAL], BTM_PLC_SBCRL * BTM_MSBC_SAMPLE_SIZE);
       } else {
         /* Using the existing best lag and copy the following frames */
         memmove(frame_head, &hist[best_lag],
-                (BTM_MSBC_FS + BTM_PLC_SBCRL + BTM_PLC_OLAL) *
-                    BTM_MSBC_SAMPLE_SIZE);
+                (BTM_MSBC_FS + BTM_PLC_SBCRL + BTM_PLC_OLAL) * BTM_MSBC_SAMPLE_SIZE);
       }
       /* Copy the constructed frames to decoded buffer for caller to use */
       std::copy(frame_head, &frame_head[BTM_MSBC_FS], decoded_buffer);
@@ -348,10 +352,9 @@ struct tBTM_MSBC_PLC {
        * concealment result sounds more artificial and weird than simply writing
        * zeros and following samples.
        */
-      std::copy(std::begin(decoded_buffer), std::end(decoded_buffer),
-                frame_head);
-      std::fill(&frame_head[BTM_MSBC_FS],
-                &frame_head[BTM_MSBC_FS + BTM_PLC_SBCRL + BTM_PLC_OLAL], 0);
+      std::copy(std::begin(decoded_buffer), std::end(decoded_buffer), frame_head);
+      std::fill(&frame_head[BTM_MSBC_FS], &frame_head[BTM_MSBC_FS + BTM_PLC_SBCRL + BTM_PLC_OLAL],
+                0);
       /* No need to copy the frames as we'll use the decoded zero frames in the
        * decoded buffer as our concealment frames */
 
@@ -384,8 +387,7 @@ struct tBTM_MSBC_PLC {
     }
 
     /* Shift the history and update the good frame to the end of it */
-    memmove(hist, &hist[BTM_MSBC_FS],
-            (BTM_PLC_HL - BTM_MSBC_FS) * BTM_MSBC_SAMPLE_SIZE);
+    memmove(hist, &hist[BTM_MSBC_FS], (BTM_PLC_HL - BTM_MSBC_FS) * BTM_MSBC_SAMPLE_SIZE);
     std::copy(input, &input[BTM_MSBC_FS], &hist[BTM_PLC_HL - BTM_MSBC_FS]);
     pl_window->update_plc_state(0);
   }
@@ -394,15 +396,7 @@ struct tBTM_MSBC_PLC {
 /* Define the structure that contains mSBC data */
 struct tBTM_MSBC_INFO {
   size_t packet_size; /* SCO mSBC packet size supported by lower layer */
-  size_t buf_size; /* The size of the buffer, determined by the packet_size. */
-
-  enum decode_buf_state {
-    DECODE_BUF_EMPTY,
-    DECODE_BUF_FULL,
-
-    // Neither empty nor full.
-    DECODE_BUF_HALFFULL,
-  };
+  size_t buf_size;    /* The size of the buffer, determined by the packet_size. */
 
   uint8_t* packet_buf;      /* Temporary buffer to store the data */
   uint8_t* msbc_decode_buf; /* Buffer to store mSBC packets to decode */
@@ -430,7 +424,7 @@ struct tBTM_MSBC_INFO {
                                 the read pointer is currently located
                                 in the first or second half of the
                                 circular buffer */
-  bool read_corrupted;      /* If the current mSBC packet read is corrupted */
+  bool read_corrupted;       /* If the current mSBC packet read is corrupted */
 
   uint8_t* msbc_encode_buf; /* Buffer to store the encoded SCO packets */
   size_t encode_buf_wo;     /* Write offset of the encode buffer */
@@ -440,13 +434,11 @@ struct tBTM_MSBC_INFO {
 
   uint8_t num_encoded_msbc_pkts; /* Number of the encoded mSBC packets */
 
-  tBTM_MSBC_PLC* plc; /* PLC component to handle the packet loss of input */
+  tBTM_MSBC_PLC* plc;              /* PLC component to handle the packet loss of input */
   tBTM_SCO_PKT_STATUS* pkt_status; /* Record of mSBC packet status */
-  static size_t get_supported_packet_size(size_t pkt_size,
-                                          size_t* buffer_size) {
+  static size_t get_supported_packet_size(size_t pkt_size, size_t* buffer_size) {
     int i;
-    for (i = 0; btm_wbs_supported_pkt_size[i] != 0 &&
-                btm_wbs_supported_pkt_size[i] != pkt_size;
+    for (i = 0; btm_wbs_supported_pkt_size[i] != 0 && btm_wbs_supported_pkt_size[i] != pkt_size;
          i++)
       ;
     /* In case of unsupported value, error log and fallback to
@@ -471,7 +463,7 @@ struct tBTM_MSBC_INFO {
     return false;
   }
 
- public:
+public:
   size_t init(size_t pkt_size) {
     decode_buf_wo = 0;
     decode_buf_ro = 0;
@@ -482,16 +474,23 @@ struct tBTM_MSBC_INFO {
     encode_buf_ro = 0;
 
     pkt_size = get_supported_packet_size(pkt_size, &buf_size);
-    if (pkt_size == packet_size) return packet_size;
+    if (pkt_size == packet_size) {
+      return packet_size;
+    }
     packet_size = pkt_size;
 
-    if (packet_buf) osi_free(packet_buf);
-    packet_buf = (uint8_t*)osi_calloc(packet_size);
+    if (!packet_buf) {
+      packet_buf = (uint8_t*)osi_calloc(BTM_MSBC_PKT_LEN);
+    }
 
-    if (msbc_decode_buf) osi_free(msbc_decode_buf);
+    if (msbc_decode_buf) {
+      osi_free(msbc_decode_buf);
+    }
     msbc_decode_buf = (uint8_t*)osi_calloc(buf_size);
 
-    if (msbc_encode_buf) osi_free(msbc_encode_buf);
+    if (msbc_encode_buf) {
+      osi_free(msbc_encode_buf);
+    }
     msbc_encode_buf = (uint8_t*)osi_calloc(buf_size);
 
     if (plc) {
@@ -501,7 +500,9 @@ struct tBTM_MSBC_INFO {
     plc = (tBTM_MSBC_PLC*)osi_calloc(sizeof(*plc));
     plc->init();
 
-    if (pkt_status) osi_free(pkt_status);
+    if (pkt_status) {
+      osi_free(pkt_status);
+    }
     pkt_status = (tBTM_SCO_PKT_STATUS*)osi_calloc(sizeof(*pkt_status));
     pkt_status->init();
 
@@ -509,18 +510,25 @@ struct tBTM_MSBC_INFO {
   }
 
   void deinit() {
-    if (msbc_decode_buf) osi_free(msbc_decode_buf);
-    if (packet_buf) osi_free(packet_buf);
-    if (msbc_encode_buf) osi_free(msbc_encode_buf);
+    if (msbc_decode_buf) {
+      osi_free(msbc_decode_buf);
+    }
+    if (packet_buf) {
+      osi_free(packet_buf);
+    }
+    if (msbc_encode_buf) {
+      osi_free(msbc_encode_buf);
+    }
     if (plc) {
       plc->deinit();
       osi_free_and_reset((void**)&plc);
     }
-    if (pkt_status) osi_free_and_reset((void**)&pkt_status);
+    if (pkt_status) {
+      osi_free_and_reset((void**)&pkt_status);
+    }
   }
 
-  void incr_buf_offset(size_t& offset, bool& mirror, size_t bsize,
-                       size_t amount) {
+  void incr_buf_offset(size_t& offset, bool& mirror, size_t bsize, size_t amount) {
     if (bsize - offset > amount) {
       offset += amount;
       return;
@@ -532,7 +540,9 @@ struct tBTM_MSBC_INFO {
 
   decode_buf_state decode_buf_status() {
     if (decode_buf_ro == decode_buf_wo) {
-      if (decode_buf_ro_mirror == decode_buf_wo_mirror) return DECODE_BUF_EMPTY;
+      if (decode_buf_ro_mirror == decode_buf_wo_mirror) {
+        return DECODE_BUF_EMPTY;
+      }
       return DECODE_BUF_FULL;
     }
     return DECODE_BUF_HALFFULL;
@@ -546,7 +556,9 @@ struct tBTM_MSBC_INFO {
         return buf_size;
       case DECODE_BUF_HALFFULL:
       default:
-        if (decode_buf_wo > decode_buf_ro) return decode_buf_wo - decode_buf_ro;
+        if (decode_buf_wo > decode_buf_ro) {
+          return decode_buf_wo - decode_buf_ro;
+        }
         return buf_size - (decode_buf_ro - decode_buf_wo);
     };
   }
@@ -559,12 +571,15 @@ struct tBTM_MSBC_INFO {
       return;
     }
 
-    incr_buf_offset(decode_buf_ro, decode_buf_ro_mirror, buf_size,
-                    BTM_MSBC_PKT_LEN);
+    incr_buf_offset(decode_buf_ro, decode_buf_ro_mirror, buf_size, BTM_MSBC_PKT_LEN);
   }
 
   size_t write(const std::vector<uint8_t>& input) {
     if (input.size() > decode_buf_avail_len()) {
+      log::warn(
+              "Cannot write input with size {} into decode_buf with {} empty "
+              "space.",
+              input.size(), decode_buf_avail_len());
       return 0;
     }
 
@@ -573,12 +588,10 @@ struct tBTM_MSBC_INFO {
     } else {
       std::copy(input.begin(), input.begin() + buf_size - decode_buf_wo,
                 msbc_decode_buf + decode_buf_wo);
-      std::copy(input.begin() + buf_size - decode_buf_wo, input.end(),
-                msbc_decode_buf);
+      std::copy(input.begin() + buf_size - decode_buf_wo, input.end(), msbc_decode_buf);
     }
 
-    incr_buf_offset(decode_buf_wo, decode_buf_wo_mirror, buf_size,
-                    input.size());
+    incr_buf_offset(decode_buf_wo, decode_buf_wo_mirror, buf_size, input.size());
     return input.size();
   }
 
@@ -591,19 +604,15 @@ struct tBTM_MSBC_INFO {
     size_t rp = 0;
     size_t data_len = decode_buf_data_len();
     while (rp < BTM_MSBC_PKT_LEN && data_len - rp >= BTM_MSBC_PKT_LEN) {
-      if ((msbc_decode_buf[(decode_buf_ro + rp) % buf_size] !=
-           BTM_MSBC_H2_HEADER_0) ||
-          (!verify_h2_header_seq_num(
-              msbc_decode_buf[(decode_buf_ro + rp + 1) % buf_size])) ||
-          (msbc_decode_buf[(decode_buf_ro + rp + 2) % buf_size] !=
-           BTM_MSBC_SYNC_WORD)) {
+      if ((msbc_decode_buf[(decode_buf_ro + rp) % buf_size] != BTM_MSBC_H2_HEADER_0) ||
+          (!verify_h2_header_seq_num(msbc_decode_buf[(decode_buf_ro + rp + 1) % buf_size])) ||
+          (msbc_decode_buf[(decode_buf_ro + rp + 2) % buf_size] != BTM_MSBC_SYNC_WORD)) {
         rp++;
         continue;
       }
 
       if (rp != 0) {
-        log::warn("Skipped {} bytes of mSBC data ahead of a valid mSBC frame",
-                  (unsigned long)rp);
+        log::warn("Skipped {} bytes of mSBC data ahead of a valid mSBC frame", (unsigned long)rp);
         incr_buf_offset(decode_buf_ro, decode_buf_ro_mirror, buf_size, rp);
       }
 
@@ -612,10 +621,8 @@ struct tBTM_MSBC_INFO {
         return &msbc_decode_buf[decode_buf_ro];
       }
 
-      std::copy(msbc_decode_buf + decode_buf_ro, msbc_decode_buf + buf_size,
-                packet_buf);
-      std::copy(msbc_decode_buf,
-                msbc_decode_buf + BTM_MSBC_PKT_LEN - (buf_size - decode_buf_ro),
+      std::copy(msbc_decode_buf + decode_buf_ro, msbc_decode_buf + buf_size, packet_buf);
+      std::copy(msbc_decode_buf, msbc_decode_buf + BTM_MSBC_PKT_LEN - (buf_size - decode_buf_ro),
                 packet_buf + (buf_size - decode_buf_ro));
       return packet_buf;
     }
@@ -643,7 +650,9 @@ struct tBTM_MSBC_INFO {
   }
 
   size_t mark_pkt_dequeued() {
-    if (encode_buf_wo - encode_buf_ro < packet_size) return 0;
+    if (encode_buf_wo - encode_buf_ro < packet_size) {
+      return 0;
+    }
 
     encode_buf_ro += packet_size;
     if (encode_buf_ro == encode_buf_wo) {
@@ -656,8 +665,6 @@ struct tBTM_MSBC_INFO {
 
   const uint8_t* sco_pkt_read_ptr() {
     if (encode_buf_wo - encode_buf_ro < packet_size) {
-      log::debug("Insufficient data to dequeue. buf_wo:{}, buf_ro:{}",
-                 encode_buf_wo, encode_buf_ro);
       return nullptr;
     }
 
@@ -683,21 +690,24 @@ size_t init(size_t pkt_size) {
 void cleanup() {
   GetInterfaceToProfiles()->msbcCodec->cleanup();
 
-  if (msbc_info == nullptr) return;
+  if (msbc_info == nullptr) {
+    return;
+  }
 
   msbc_info->deinit();
   osi_free_and_reset((void**)&msbc_info);
 }
 
 bool fill_plc_stats(int* num_decoded_frames, double* packet_loss_ratio) {
-  if (msbc_info == NULL || num_decoded_frames == NULL ||
-      packet_loss_ratio == NULL)
+  if (msbc_info == NULL || num_decoded_frames == NULL || packet_loss_ratio == NULL) {
     return false;
+  }
 
   int decoded_frames = msbc_info->plc->get_num_decoded_frames();
   int lost_frames = msbc_info->plc->get_num_lost_frames();
-  if (decoded_frames <= 0 || lost_frames < 0 || lost_frames > decoded_frames)
+  if (decoded_frames <= 0 || lost_frames < 0 || lost_frames > decoded_frames) {
     return false;
+  }
 
   *num_decoded_frames = decoded_frames;
   *packet_loss_ratio = (double)lost_frames / decoded_frames;
@@ -712,9 +722,9 @@ bool enqueue_packet(const std::vector<uint8_t>& data, bool corrupted) {
 
   if (data.size() != msbc_info->packet_size) {
     log::warn(
-        "Ignoring the coming packet with size {} that is inconsistent with the "
-        "HAL reported packet size {}",
-        (unsigned long)data.size(), (unsigned long)msbc_info->packet_size);
+            "Ignoring the coming packet with size {} that is inconsistent with the "
+            "HAL reported packet size {}",
+            (unsigned long)data.size(), (unsigned long)msbc_info->packet_size);
     return false;
   }
 
@@ -751,9 +761,8 @@ size_t decode(const uint8_t** out_data) {
     goto packet_loss;
   }
 
-  if (!GetInterfaceToProfiles()->msbcCodec->decodePacket(
-          frame_head, msbc_info->decoded_pcm_buf,
-          sizeof(msbc_info->decoded_pcm_buf))) {
+  if (!GetInterfaceToProfiles()->msbcCodec->decodePacket(frame_head, msbc_info->decoded_pcm_buf,
+                                                         sizeof(msbc_info->decoded_pcm_buf))) {
     goto packet_loss;
   }
 
@@ -792,12 +801,11 @@ size_t encode(int16_t* data, size_t len) {
     return 0;
   }
 
-  encoded_size =
-      GetInterfaceToProfiles()->msbcCodec->encodePacket(data, pkt_body);
+  encoded_size = GetInterfaceToProfiles()->msbcCodec->encodePacket(data, pkt_body);
   if (encoded_size != BTM_MSBC_PKT_FRAME_LEN) {
     log::warn("Encoding invalid packet size: {}", (unsigned long)encoded_size);
-    std::copy(&btm_msbc_zero_packet[BTM_MSBC_H2_HEADER_LEN],
-              std::end(btm_msbc_zero_packet), pkt_body);
+    std::copy(&btm_msbc_zero_packet[BTM_MSBC_H2_HEADER_LEN], std::end(btm_msbc_zero_packet),
+              pkt_body);
   }
 
   return BTM_MSBC_CODE_SIZE;
@@ -842,21 +850,44 @@ constexpr uint8_t btm_h2_header_frames_count[] = {0x08, 0x38, 0xc8, 0xf8};
  * code ties to limited packet size values. Specifically list them out
  * to check against when setting packet size. The first entry is the default
  * value as a fallback. */
-constexpr size_t btm_swb_supported_pkt_size[] = {BTM_LC3_PKT_LEN, 72, 0};
+constexpr size_t btm_swb_supported_pkt_size[] = {BTM_LC3_PKT_LEN, 72, 24, 0};
 
 /* Buffer size should be set to least common multiple of SCO packet size and
  * BTM_LC3_PKT_LEN for optimizing buffer copy. */
-constexpr size_t btm_swb_lc3_buffer_size[] = {BTM_LC3_PKT_LEN, 360, 0};
+constexpr size_t btm_swb_lc3_buffer_size[] = {BTM_LC3_PKT_LEN, 360, 120, 0};
 
 /* Define the structure that contains LC3 data */
 struct tBTM_LC3_INFO {
   size_t packet_size; /* SCO LC3 packet size supported by lower layer */
-  size_t buf_size; /* The size of the buffer, determined by the packet_size. */
+  size_t buf_size;    /* The size of the buffer, determined by the packet_size. */
 
+  uint8_t* packet_buf;     /* Temporary buffer to store the data */
   uint8_t* lc3_decode_buf; /* Buffer to store LC3 packets to decode */
   size_t decode_buf_wo;    /* Write offset of the decode buffer */
   size_t decode_buf_ro;    /* Read offset of the decode buffer */
-  bool read_corrupted;     /* If the current LC3 packet read is corrupted */
+
+  /* Within the circular buffer, which can be visualized as having
+     two halves, mirror indicators track the pointer's location,
+     signaling whether it resides in the first or second segment:
+
+              [buf_size-1] ┼ - - -─┼ [0]
+                           │       │
+                           │       │
+     wo = x, wo_mirror = 0 ^       v ro = x, ro_mirror = 1
+                           │       │
+                           │       │
+                       [0] ┼ - - - ┼ [buf_size-1]
+              (First Half)           (Second Half)
+  */
+  bool decode_buf_wo_mirror; /* The mirror indicator specifies whether
+                                the write pointer is currently located
+                                in the first or second half of the
+                                circular buffer */
+  bool decode_buf_ro_mirror; /* The mirror indicator specifies whether
+                                the read pointer is currently located
+                                in the first or second half of the
+                                circular buffer */
+  bool read_corrupted;       /* If the current LC3 packet read is corrupted */
 
   uint8_t* lc3_encode_buf; /* Buffer to store the encoded SCO packets */
   size_t encode_buf_wo;    /* Write offset of the encode buffer */
@@ -868,11 +899,9 @@ struct tBTM_LC3_INFO {
 
   tBTM_SCO_PKT_STATUS* pkt_status; /* Record of LC3 packet status */
 
-  static size_t get_supported_packet_size(size_t pkt_size,
-                                          size_t* buffer_size) {
+  static size_t get_supported_packet_size(size_t pkt_size, size_t* buffer_size) {
     int i;
-    for (i = 0; btm_swb_supported_pkt_size[i] != 0 &&
-                btm_swb_supported_pkt_size[i] != pkt_size;
+    for (i = 0; btm_swb_supported_pkt_size[i] != 0 && btm_swb_supported_pkt_size[i] != pkt_size;
          i++)
       ;
     /* In case of unsupported value, error log and fallback to
@@ -897,24 +926,39 @@ struct tBTM_LC3_INFO {
     return false;
   }
 
- public:
+public:
   size_t init(size_t pkt_size) {
     decode_buf_wo = 0;
     decode_buf_ro = 0;
+    decode_buf_wo_mirror = false;
+    decode_buf_ro_mirror = false;
+
     encode_buf_wo = 0;
     encode_buf_ro = 0;
 
     pkt_size = get_supported_packet_size(pkt_size, &buf_size);
-    if (pkt_size == packet_size) return packet_size;
+    if (pkt_size == packet_size) {
+      return packet_size;
+    }
     packet_size = pkt_size;
 
-    if (lc3_decode_buf) osi_free(lc3_decode_buf);
+    if (!packet_buf) {
+      packet_buf = (uint8_t*)osi_calloc(BTM_LC3_PKT_LEN);
+    }
+
+    if (lc3_decode_buf) {
+      osi_free(lc3_decode_buf);
+    }
     lc3_decode_buf = (uint8_t*)osi_calloc(buf_size);
 
-    if (lc3_encode_buf) osi_free(lc3_encode_buf);
+    if (lc3_encode_buf) {
+      osi_free(lc3_encode_buf);
+    }
     lc3_encode_buf = (uint8_t*)osi_calloc(buf_size);
 
-    if (pkt_status) osi_free(pkt_status);
+    if (pkt_status) {
+      osi_free(pkt_status);
+    }
     pkt_status = (tBTM_SCO_PKT_STATUS*)osi_calloc(sizeof(*pkt_status));
     pkt_status->init();
 
@@ -922,12 +966,56 @@ struct tBTM_LC3_INFO {
   }
 
   void deinit() {
-    if (lc3_decode_buf) osi_free(lc3_decode_buf);
-    if (lc3_encode_buf) osi_free(lc3_encode_buf);
-    if (pkt_status) osi_free_and_reset((void**)&pkt_status);
+    if (lc3_decode_buf) {
+      osi_free(lc3_decode_buf);
+    }
+    if (packet_buf) {
+      osi_free(packet_buf);
+    }
+    if (lc3_encode_buf) {
+      osi_free(lc3_encode_buf);
+    }
+    if (pkt_status) {
+      osi_free_and_reset((void**)&pkt_status);
+    }
   }
 
-  size_t decodable() { return decode_buf_wo - decode_buf_ro; }
+  void incr_buf_offset(size_t& offset, bool& mirror, size_t bsize, size_t amount) {
+    if (bsize - offset > amount) {
+      offset += amount;
+      return;
+    }
+
+    mirror = !mirror;
+    offset = amount - (bsize - offset);
+  }
+
+  decode_buf_state decode_buf_status() {
+    if (decode_buf_ro == decode_buf_wo) {
+      if (decode_buf_ro_mirror == decode_buf_wo_mirror) {
+        return DECODE_BUF_EMPTY;
+      }
+      return DECODE_BUF_FULL;
+    }
+    return DECODE_BUF_HALFFULL;
+  }
+
+  size_t decode_buf_data_len() {
+    switch (decode_buf_status()) {
+      case DECODE_BUF_EMPTY:
+        return 0;
+      case DECODE_BUF_FULL:
+        return buf_size;
+      case DECODE_BUF_HALFFULL:
+      default:
+        if (decode_buf_wo > decode_buf_ro) {
+          return decode_buf_wo - decode_buf_ro;
+        }
+        return buf_size - (decode_buf_ro - decode_buf_wo);
+    };
+  }
+
+  size_t decode_buf_avail_len() { return buf_size - decode_buf_data_len(); }
 
   uint8_t* fill_lc3_pkt_template() {
     uint8_t* wp = &lc3_encode_buf[encode_buf_wo];
@@ -945,25 +1033,32 @@ struct tBTM_LC3_INFO {
   }
 
   void mark_pkt_decoded() {
-    if (decode_buf_ro + BTM_LC3_PKT_LEN > decode_buf_wo) {
+    if (decode_buf_data_len() < BTM_LC3_PKT_LEN) {
       log::error("Trying to mark read offset beyond write offset.");
       return;
     }
 
-    decode_buf_ro += BTM_LC3_PKT_LEN;
-    if (decode_buf_ro == decode_buf_wo) {
-      decode_buf_ro = 0;
-      decode_buf_wo = 0;
-    }
+    incr_buf_offset(decode_buf_ro, decode_buf_ro_mirror, buf_size, BTM_LC3_PKT_LEN);
   }
 
   size_t write(const std::vector<uint8_t>& input) {
-    if (input.size() > buf_size - decode_buf_wo) {
+    if (input.size() > decode_buf_avail_len()) {
+      log::warn(
+              "Cannot write input with size {} into decode_buf with {} empty "
+              "space.",
+              input.size(), decode_buf_avail_len());
       return 0;
     }
 
-    std::copy(input.begin(), input.end(), lc3_decode_buf + decode_buf_wo);
-    decode_buf_wo += input.size();
+    if (buf_size - decode_buf_wo > input.size()) {
+      std::copy(input.begin(), input.end(), lc3_decode_buf + decode_buf_wo);
+    } else {
+      std::copy(input.begin(), input.begin() + buf_size - decode_buf_wo,
+                lc3_decode_buf + decode_buf_wo);
+      std::copy(input.begin() + buf_size - decode_buf_wo, input.end(), lc3_decode_buf);
+    }
+
+    incr_buf_offset(decode_buf_wo, decode_buf_wo_mirror, buf_size, input.size());
     return input.size();
   }
 
@@ -974,27 +1069,37 @@ struct tBTM_LC3_INFO {
     }
 
     size_t rp = 0;
-    while (rp < BTM_LC3_PKT_LEN &&
-           decode_buf_wo - (decode_buf_ro + rp) >= BTM_LC3_PKT_LEN) {
-      if ((lc3_decode_buf[decode_buf_ro + rp] != BTM_LC3_H2_HEADER_0) ||
-          !verify_h2_header_seq_num(lc3_decode_buf[decode_buf_ro + rp + 1])) {
+    size_t data_len = decode_buf_data_len();
+    while (rp < BTM_LC3_PKT_LEN && data_len - rp >= BTM_LC3_PKT_LEN) {
+      if ((lc3_decode_buf[(decode_buf_ro + rp) % buf_size] != BTM_LC3_H2_HEADER_0) ||
+          !verify_h2_header_seq_num(lc3_decode_buf[(decode_buf_ro + rp + 1) % buf_size])) {
         rp++;
         continue;
       }
 
       if (rp != 0) {
-        log::warn("Skipped {} bytes of LC3 data ahead of a valid LC3 frame",
-                  (unsigned long)rp);
-        decode_buf_ro += rp;
+        log::warn("Skipped {} bytes of LC3 data ahead of a valid LC3 frame", (unsigned long)rp);
+        incr_buf_offset(decode_buf_ro, decode_buf_ro_mirror, buf_size, rp);
       }
-      return &lc3_decode_buf[decode_buf_ro];
+
+      // Get the frame head.
+      if (buf_size - decode_buf_ro >= BTM_LC3_PKT_LEN) {
+        return &lc3_decode_buf[decode_buf_ro];
+      }
+
+      std::copy(lc3_decode_buf + decode_buf_ro, lc3_decode_buf + buf_size, packet_buf);
+      std::copy(lc3_decode_buf, lc3_decode_buf + BTM_LC3_PKT_LEN - (buf_size - decode_buf_ro),
+                packet_buf + (buf_size - decode_buf_ro));
+      return packet_buf;
     }
 
     return nullptr;
   }
 
   size_t mark_pkt_dequeued() {
-    if (encode_buf_wo - encode_buf_ro < packet_size) return 0;
+    if (encode_buf_wo - encode_buf_ro < packet_size) {
+      return 0;
+    }
 
     encode_buf_ro += packet_size;
     if (encode_buf_ro == encode_buf_wo) {
@@ -1007,8 +1112,6 @@ struct tBTM_LC3_INFO {
 
   const uint8_t* sco_pkt_read_ptr() {
     if (encode_buf_wo - encode_buf_ro < packet_size) {
-      log::debug("Insufficient data to dequeue. buf_wo:{}, buf_ro:{}",
-                 encode_buf_wo, encode_buf_ro);
       return nullptr;
     }
 
@@ -1042,19 +1145,22 @@ void cleanup() {
   decoded_frames = 0;
   lost_frames = 0;
 
-  if (lc3_info == nullptr) return;
+  if (lc3_info == nullptr) {
+    return;
+  }
 
   lc3_info->deinit();
   osi_free_and_reset((void**)&lc3_info);
 }
 
 bool fill_plc_stats(int* num_decoded_frames, double* packet_loss_ratio) {
-  if (lc3_info == NULL || num_decoded_frames == NULL ||
-      packet_loss_ratio == NULL)
+  if (lc3_info == NULL || num_decoded_frames == NULL || packet_loss_ratio == NULL) {
     return false;
+  }
 
-  if (decoded_frames <= 0 || lost_frames < 0 || lost_frames > decoded_frames)
+  if (decoded_frames <= 0 || lost_frames < 0 || lost_frames > decoded_frames) {
     return false;
+  }
 
   *num_decoded_frames = decoded_frames;
   *packet_loss_ratio = (double)lost_frames / decoded_frames;
@@ -1069,9 +1175,9 @@ bool enqueue_packet(const std::vector<uint8_t>& data, bool corrupted) {
 
   if (data.size() != lc3_info->packet_size) {
     log::warn(
-        "Ignoring the coming packet with size {} that is inconsistent with the "
-        "HAL reported packet size {}",
-        (unsigned long)data.size(), (unsigned long)lc3_info->packet_size);
+            "Ignoring the coming packet with size {} that is inconsistent with the "
+            "HAL reported packet size {}",
+            (unsigned long)data.size(), (unsigned long)lc3_info->packet_size);
     return false;
   }
 
@@ -1096,14 +1202,14 @@ size_t decode(const uint8_t** out_data) {
     return 0;
   }
 
-  if (lc3_info->decodable() < BTM_LC3_PKT_LEN) {
+  if (lc3_info->decode_buf_data_len() < BTM_LC3_PKT_LEN) {
     return 0;
   }
 
   frame_head = lc3_info->find_lc3_pkt_head();
 
   bool plc_conducted = !GetInterfaceToProfiles()->lc3Codec->decodePacket(
-      frame_head, lc3_info->decoded_pcm_buf, sizeof(lc3_info->decoded_pcm_buf));
+          frame_head, lc3_info->decoded_pcm_buf, sizeof(lc3_info->decoded_pcm_buf));
 
   lc3_info->pkt_status->update(plc_conducted);
 

@@ -1,12 +1,10 @@
 #include "osi/semaphore.h"
 
-#include <base/logging.h>
 #include <gtest/gtest.h>
 #include <sys/select.h>
 #include <unistd.h>
 
 #include "common/message_loop_thread.h"
-#include "include/check.h"
 #include "osi/include/osi.h"
 #include "osi/include/reactor.h"
 
@@ -19,10 +17,17 @@ struct SemaphoreTestSequenceHelper {
 
 namespace {
 void sleep_then_increment_counter(void* context) {
-  SemaphoreTestSequenceHelper* helper =
-      reinterpret_cast<SemaphoreTestSequenceHelper*>(context);
-  CHECK(helper);
-  CHECK(helper->semaphore);
+  SemaphoreTestSequenceHelper* helper = reinterpret_cast<SemaphoreTestSequenceHelper*>(context);
+  EXPECT_NE(helper, nullptr);
+  if (helper == nullptr) {
+    return;
+  }
+
+  EXPECT_NE(helper->semaphore, nullptr);
+  if (helper->semaphore == nullptr) {
+    return;
+  }
+
   sleep(1);
   ++helper->counter;
   semaphore_post(helper->semaphore);
@@ -78,11 +83,9 @@ TEST_F(SemaphoreTest, test_ensure_wait) {
 
   EXPECT_FALSE(semaphore_try_wait(semaphore));
   SemaphoreTestSequenceHelper sequence_helper = {semaphore, 0};
-  thread.DoInThread(FROM_HERE, base::BindOnce(sleep_then_increment_counter,
-                                              &sequence_helper));
+  thread.DoInThread(FROM_HERE, base::BindOnce(sleep_then_increment_counter, &sequence_helper));
   semaphore_wait(semaphore);
-  EXPECT_EQ(sequence_helper.counter, 1)
-      << "semaphore_wait() did not wait for counter to increment";
+  EXPECT_EQ(sequence_helper.counter, 1) << "semaphore_wait() did not wait for counter to increment";
 
   semaphore_free(semaphore);
   thread.ShutDown();

@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
-#include <algorithm>
-
 #include "get_element_attributes_packet.h"
+
+#include <bluetooth/log.h>
+
+#include <algorithm>
 
 namespace bluetooth {
 namespace avrcp {
@@ -31,8 +33,7 @@ uint8_t GetElementAttributesRequest::GetNumAttributes() const {
   return it.extract<uint8_t>();
 }
 
-std::vector<Attribute> GetElementAttributesRequest::GetAttributesRequested()
-    const {
+std::vector<Attribute> GetElementAttributesRequest::GetAttributesRequested() const {
   auto it = begin() + VendorPacket::kMinSize() + static_cast<size_t>(8);
 
   size_t number_of_attributes = it.extract<uint8_t>();
@@ -47,8 +48,12 @@ std::vector<Attribute> GetElementAttributesRequest::GetAttributesRequested()
 }
 
 bool GetElementAttributesRequest::IsValid() const {
-  if (!VendorPacket::IsValid()) return false;
-  if (size() < kMinSize()) return false;
+  if (!VendorPacket::IsValid()) {
+    return false;
+  }
+  if (size() < kMinSize()) {
+    return false;
+  }
 
   size_t num_attributes = GetNumAttributes();
   auto attr_start = begin() + VendorPacket::kMinSize() + static_cast<size_t>(9);
@@ -85,15 +90,13 @@ std::string GetElementAttributesRequest::ToString() const {
 std::unique_ptr<GetElementAttributesResponseBuilder>
 GetElementAttributesResponseBuilder::MakeBuilder(size_t mtu) {
   std::unique_ptr<GetElementAttributesResponseBuilder> builder(
-      new GetElementAttributesResponseBuilder(mtu));
+          new GetElementAttributesResponseBuilder(mtu));
 
   return builder;
 }
 
-size_t GetElementAttributesResponseBuilder::AddAttributeEntry(
-    AttributeEntry entry) {
-  CHECK_LT(entries_.size(), size_t(0xFF))
-      << __func__ << ": attribute entry overflow";
+size_t GetElementAttributesResponseBuilder::AddAttributeEntry(AttributeEntry entry) {
+  log::assert_that(entries_.size() < size_t(0xFF), "attribute entry overflow");
 
   size_t remaining_space = mtu_ - size();
   if (entry.size() > remaining_space) {
@@ -108,8 +111,8 @@ size_t GetElementAttributesResponseBuilder::AddAttributeEntry(
   return entry.size();
 }
 
-size_t GetElementAttributesResponseBuilder::AddAttributeEntry(
-    Attribute attribute, const std::string& value) {
+size_t GetElementAttributesResponseBuilder::AddAttributeEntry(Attribute attribute,
+                                                              const std::string& value) {
   return AddAttributeEntry(AttributeEntry(attribute, value));
 }
 
@@ -124,7 +127,7 @@ size_t GetElementAttributesResponseBuilder::size() const {
 }
 
 bool GetElementAttributesResponseBuilder::Serialize(
-    const std::shared_ptr<::bluetooth::Packet>& pkt) {
+        const std::shared_ptr<::bluetooth::Packet>& pkt) {
   ReserveSpace(pkt, size());
 
   PacketBuilder::PushHeader(pkt);

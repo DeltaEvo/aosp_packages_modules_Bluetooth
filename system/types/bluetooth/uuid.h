@@ -34,7 +34,7 @@ namespace bluetooth {
 //    Endian.
 // 4. UUID in storage is always string.
 class Uuid final {
- public:
+public:
   static constexpr size_t kNumBytes128 = 16;
   static constexpr size_t kNumBytes32 = 4;
   static constexpr size_t kNumBytes16 = 2;
@@ -46,9 +46,6 @@ class Uuid final {
   using UUID128Bit = std::array<uint8_t, kNumBytes128>;
 
   Uuid() = default;
-
-  // Creates and returns a random 128-bit UUID.
-  static Uuid GetRandom();
 
   // Returns the shortest possible representation of this UUID in bytes. Either
   // kNumBytes16, kNumBytes32, or kNumBytes128
@@ -117,8 +114,8 @@ class Uuid final {
   bool operator==(const Uuid& rhs) const;
   bool operator!=(const Uuid& rhs) const;
 
- private:
-  constexpr Uuid(const UUID128Bit& val) : uu{val} {};
+private:
+  constexpr Uuid(const UUID128Bit& val) : uu{val} {}
 
   // Network-byte-ordered ID (Big Endian).
   UUID128Bit uu;
@@ -140,8 +137,8 @@ struct hash<bluetooth::Uuid> {
   std::size_t operator()(const bluetooth::Uuid& key) const {
     const auto& uuid_bytes = key.To128BitBE();
     std::hash<std::string> hash_fn;
-    return hash_fn(std::string(reinterpret_cast<const char*>(uuid_bytes.data()),
-                               uuid_bytes.size()));
+    return hash_fn(
+            std::string(reinterpret_cast<const char*>(uuid_bytes.data()), uuid_bytes.size()));
   }
 };
 

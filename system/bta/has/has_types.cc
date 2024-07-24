@@ -17,14 +17,13 @@
 
 #include "has_types.h"
 
-namespace le_audio {
+namespace bluetooth::le_audio {
 namespace has {
 
 std::ostream& operator<<(std::ostream& os, const HasDevice& b) {
-  os << "HAP device: {"
-     << "addr: " << b.addr << ", conn id: " << b.conn_id << "}";
+  os << "HAP device: {" << "addr: " << b.addr << ", conn id: " << b.conn_id << "}";
   return os;
 }
 
 }  // namespace has
-}  // namespace le_audio
+}  // namespace bluetooth::le_audio

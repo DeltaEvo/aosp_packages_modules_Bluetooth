@@ -17,7 +17,8 @@
 
 #include "dumpsys/dumpsys.h"
 
-#include <android_bluetooth_flags.h>
+#include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 #include <unistd.h>
 
 #include <future>
@@ -26,6 +27,7 @@
 
 #include "dumpsys/filter.h"
 #include "dumpsys_data_generated.h"
+#include "main/shim/stack.h"
 #include "module.h"
 #include "module_dumper.h"
 #include "os/log.h"
@@ -44,31 +46,31 @@ constexpr char kDumpsysTitle[] = "----- Gd Dumpsys ------";
 }  // namespace
 
 struct Dumpsys::impl {
- public:
+public:
   void DumpWithArgsSync(int fd, const char** args, std::promise<void> promise);
   int GetNumberOfBundledSchemas() const;
 
   impl(const Dumpsys& dumpsys_module, const dumpsys::ReflectionSchema& reflection_schema);
   ~impl() = default;
 
- protected:
-  void FilterAsUser(std::string* dumpsys_data);
-  void FilterAsDeveloper(std::string* dumpsys_data);
+protected:
+  void FilterSchema(std::string* dumpsys_data) const;
   std::string PrintAsJson(std::string* dumpsys_data) const;
 
   bool IsDebuggable() const;
 
- private:
-  void DumpWithArgsAsync(int fd, const char** args);
+private:
+  void DumpWithArgsAsync(int fd, const char** args) const;
 
   const Dumpsys& dumpsys_module_;
   const dumpsys::ReflectionSchema reflection_schema_;
 };
 
 const ModuleFactory Dumpsys::Factory =
-    ModuleFactory([]() { return new Dumpsys(bluetooth::dumpsys::GetBundledSchemaData()); });
+        ModuleFactory([]() { return new Dumpsys(bluetooth::dumpsys::GetBundledSchemaData()); });
 
-Dumpsys::impl::impl(const Dumpsys& dumpsys_module, const dumpsys::ReflectionSchema& reflection_schema)
+Dumpsys::impl::impl(const Dumpsys& dumpsys_module,
+                    const dumpsys::ReflectionSchema& reflection_schema)
     : dumpsys_module_(dumpsys_module), reflection_schema_(std::move(reflection_schema)) {}
 
 int Dumpsys::impl::GetNumberOfBundledSchemas() const {
@@ -76,27 +78,22 @@ int Dumpsys::impl::GetNumberOfBundledSchemas() const {
 }
 
 bool Dumpsys::impl::IsDebuggable() const {
-  return (os::GetSystemProperty(kReadOnlyDebuggableProperty) == "1");
+  return os::GetSystemProperty(kReadOnlyDebuggableProperty) == "1";
 }
 
-void Dumpsys::impl::FilterAsDeveloper(std::string* dumpsys_data) {
-  ASSERT(dumpsys_data != nullptr);
-  dumpsys::FilterInPlace(dumpsys::FilterType::AS_DEVELOPER, reflection_schema_, dumpsys_data);
-}
-
-void Dumpsys::impl::FilterAsUser(std::string* dumpsys_data) {
-  ASSERT(dumpsys_data != nullptr);
-  dumpsys::FilterInPlace(dumpsys::FilterType::AS_USER, reflection_schema_, dumpsys_data);
+void Dumpsys::impl::FilterSchema(std::string* dumpsys_data) const {
+  log::assert_that(dumpsys_data != nullptr, "assert failed: dumpsys_data != nullptr");
+  dumpsys::FilterSchema(reflection_schema_, dumpsys_data);
 }
 
 std::string Dumpsys::impl::PrintAsJson(std::string* dumpsys_data) const {
-  ASSERT(dumpsys_data != nullptr);
+  log::assert_that(dumpsys_data != nullptr, "assert failed: dumpsys_data != nullptr");
 
   const std::string root_name = reflection_schema_.GetRootName();
   if (root_name.empty()) {
     char buf[255];
     snprintf(buf, sizeof(buf), "ERROR: Unable to find root name in prebundled reflection schema\n");
-    LOG_WARN("%s", buf);
+    log::warn("{}", buf);
     return std::string(buf);
   }
 
@@ -104,7 +101,7 @@ std::string Dumpsys::impl::PrintAsJson(std::string* dumpsys_data) const {
   if (schema == nullptr) {
     char buf[255];
     snprintf(buf, sizeof(buf), "ERROR: Unable to find schema root name:%s\n", root_name.c_str());
-    LOG_WARN("%s", buf);
+    log::warn("{}", buf);
     return std::string(buf);
   }
 
@@ -113,55 +110,64 @@ std::string Dumpsys::impl::PrintAsJson(std::string* dumpsys_data) const {
   flatbuffers::Parser parser{options};
   if (!parser.Deserialize(schema)) {
     char buf[255];
-    snprintf(buf, sizeof(buf), "ERROR: Unable to deserialize bundle root name:%s\n", root_name.c_str());
-    LOG_WARN("%s", buf);
+    snprintf(buf, sizeof(buf), "ERROR: Unable to deserialize bundle root name:%s\n",
+             root_name.c_str());
+    log::warn("{}", buf);
     return std::string(buf);
   }
 
   std::string jsongen;
   // GenerateText was renamed to GenText in 23.5.26 because the return behavior was changed.
   // https://github.com/google/flatbuffers/commit/950a71ab893e96147c30dd91735af6db73f72ae0
-#if FLATBUFFERS_VERSION_MAJOR < 23 ||   \
-    (FLATBUFFERS_VERSION_MAJOR == 23 && \
-     (FLATBUFFERS_VERSION_MINOR < 5 ||  \
-      (FLATBUFFERS_VERSION_MINOR == 5 && FLATBUFFERS_VERSION_REVISION < 26)))
+#if FLATBUFFERS_VERSION_MAJOR < 23 ||       \
+        (FLATBUFFERS_VERSION_MAJOR == 23 && \
+         (FLATBUFFERS_VERSION_MINOR < 5 ||  \
+          (FLATBUFFERS_VERSION_MINOR == 5 && FLATBUFFERS_VERSION_REVISION < 26)))
   flatbuffers::GenerateText(parser, dumpsys_data->data(), &jsongen);
 #else
   const char* error = flatbuffers::GenText(parser, dumpsys_data->data(), &jsongen);
   if (error != nullptr) {
-    LOG_WARN("%s", error);
+    log::warn("{}", error);
   }
 #endif
   return jsongen;
 }
 
-void Dumpsys::impl::DumpWithArgsAsync(int fd, const char** args) {
+void Dumpsys::impl::DumpWithArgsAsync(int fd, const char** args) const {
   ParsedDumpsysArgs parsed_dumpsys_args(args);
   const auto registry = dumpsys_module_.GetModuleRegistry();
 
-  int dumper_fd = STDOUT_FILENO;
-  if (IS_FLAG_ENABLED(dumpsys_use_passed_in_fd)) {
-    dumper_fd = fd;
-  }
-  ModuleDumper dumper(dumper_fd, *registry, kDumpsysTitle);
+  ModuleDumper dumper(fd, *registry, kDumpsysTitle);
   std::string dumpsys_data;
   std::ostringstream oss;
   dumper.DumpState(&dumpsys_data, oss);
 
   dprintf(fd, " ----- Filtering as Developer -----\n");
-  FilterAsDeveloper(&dumpsys_data);
+  FilterSchema(&dumpsys_data);
 
   dprintf(fd, "%s", PrintAsJson(&dumpsys_data).c_str());
 }
 
 void Dumpsys::impl::DumpWithArgsSync(int fd, const char** args, std::promise<void> promise) {
-  DumpWithArgsAsync(fd, args);
+  if (com::android::bluetooth::flags::dumpsys_acquire_stack_when_executing()) {
+    if (bluetooth::shim::Stack::GetInstance()->LockForDumpsys([=, *this]() {
+          log::info("Started dumpsys procedure");
+          this->DumpWithArgsAsync(fd, args);
+        })) {
+      log::info("Successful dumpsys procedure");
+    } else {
+      log::info("Failed dumpsys procedure as stack was not longer active");
+    }
+  } else {
+    DumpWithArgsAsync(fd, args);
+  }
   promise.set_value();
 }
 
 Dumpsys::Dumpsys(const std::string& pre_bundled_schema)
     : reflection_schema_(dumpsys::ReflectionSchema(pre_bundled_schema)) {}
 
+// DEPRECATED Flag: dumpsys_acquire_stack_when_executing
 void Dumpsys::Dump(int fd, const char** args) {
   if (fd <= 0) {
     return;
@@ -171,6 +177,7 @@ void Dumpsys::Dump(int fd, const char** args) {
   CallOn(pimpl_.get(), &Dumpsys::impl::DumpWithArgsSync, fd, args, std::move(promise));
   future.get();
 }
+// !DEPRECATED Flag: dumpsys_acquire_stack_when_executing
 
 void Dumpsys::Dump(int fd, const char** args, std::promise<void> promise) {
   if (fd <= 0) {
@@ -180,22 +187,16 @@ void Dumpsys::Dump(int fd, const char** args, std::promise<void> promise) {
   CallOn(pimpl_.get(), &Dumpsys::impl::DumpWithArgsSync, fd, args, std::move(promise));
 }
 
-os::Handler* Dumpsys::GetGdShimHandler() {
-  return GetHandler();
-}
+os::Handler* Dumpsys::GetGdShimHandler() { return GetHandler(); }
 
 /**
  * Module methods
  */
 void Dumpsys::ListDependencies(ModuleList* /* list */) const {}
 
-void Dumpsys::Start() {
-  pimpl_ = std::make_unique<impl>(*this, reflection_schema_);
-}
+void Dumpsys::Start() { pimpl_ = std::make_unique<impl>(*this, reflection_schema_); }
 
-void Dumpsys::Stop() {
-  pimpl_.reset();
-}
+void Dumpsys::Stop() { pimpl_.reset(); }
 
 DumpsysDataFinisher Dumpsys::GetDumpsysData(flatbuffers::FlatBufferBuilder* fb_builder) const {
   auto name = fb_builder->CreateString("----- Shim Dumpsys -----");
@@ -205,12 +206,12 @@ DumpsysDataFinisher Dumpsys::GetDumpsysData(flatbuffers::FlatBufferBuilder* fb_b
   builder.add_number_of_bundled_schemas(pimpl_->GetNumberOfBundledSchemas());
   auto dumpsys_data = builder.Finish();
 
-  return [dumpsys_data](DumpsysDataBuilder* builder) { builder->add_shim_dumpsys_data(dumpsys_data); };
+  return [dumpsys_data](DumpsysDataBuilder* builder) {
+    builder->add_shim_dumpsys_data(dumpsys_data);
+  };
 }
 
-std::string Dumpsys::ToString() const {
-  return kModuleName;
-}
+std::string Dumpsys::ToString() const { return kModuleName; }
 
 }  // namespace shim
 }  // namespace bluetooth

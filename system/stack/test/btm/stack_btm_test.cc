@@ -18,14 +18,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <cstddef>
 #include <iostream>
 #include <sstream>
 
-#include "common/init_flags.h"
 #include "hci/controller_interface_mock.h"
 #include "hci/hci_layer_mock.h"
-#include "internal_include/bt_target.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/btm/btm_sco.h"
@@ -35,6 +32,7 @@
 #include "stack/include/acl_hci_link_interface.h"
 #include "stack/include/btm_client_interface.h"
 #include "stack/l2cap/l2c_int.h"
+#include "stack/test/btm/btm_test_fixtures.h"
 #include "test/common/mock_functions.h"
 #include "test/mock/mock_legacy_hci_interface.h"
 #include "test/mock/mock_main_shim_entry.h"
@@ -48,37 +46,36 @@ extern tBTM_CB btm_cb;
 tL2C_CB l2cb;
 
 const std::string kSmpOptions("mock smp options");
-const std::string kBroadcastAudioConfigOptions(
-    "mock broadcast audio config options");
+const std::string kBroadcastAudioConfigOptions("mock broadcast audio config options");
 
 namespace {
 
 using testing::Return;
 using testing::Test;
 
-class StackBtmTest : public Test {
- public:
- protected:
+class StackBtmTest : public BtmWithMocksTest {
+public:
+protected:
   void SetUp() override {
-    reset_mock_function_count_map();
+    BtmWithMocksTest::SetUp();
     bluetooth::hci::testing::mock_controller_ = &controller_;
   }
   void TearDown() override {
     bluetooth::hci::testing::mock_controller_ = nullptr;
+    BtmWithMocksTest::TearDown();
   }
   bluetooth::hci::testing::MockControllerInterface controller_;
 };
 
 class StackBtmWithQueuesTest : public StackBtmTest {
- public:
- protected:
+public:
+protected:
   void SetUp() override {
     StackBtmTest::SetUp();
-    up_thread_ = new bluetooth::os::Thread(
-        "up_thread", bluetooth::os::Thread::Priority::NORMAL);
+    up_thread_ = new bluetooth::os::Thread("up_thread", bluetooth::os::Thread::Priority::NORMAL);
     up_handler_ = new bluetooth::os::Handler(up_thread_);
-    down_thread_ = new bluetooth::os::Thread(
-        "down_thread", bluetooth::os::Thread::Priority::NORMAL);
+    down_thread_ =
+            new bluetooth::os::Thread("down_thread", bluetooth::os::Thread::Priority::NORMAL);
     down_handler_ = new bluetooth::os::Handler(down_thread_);
     bluetooth::hci::testing::mock_hci_layer_ = &mock_hci_;
     bluetooth::hci::testing::mock_gd_shim_handler_ = up_handler_;
@@ -93,9 +90,7 @@ class StackBtmWithQueuesTest : public StackBtmTest {
     delete down_thread_;
     StackBtmTest::TearDown();
   }
-  bluetooth::common::BidiQueue<bluetooth::hci::ScoView,
-                               bluetooth::hci::ScoBuilder>
-      sco_queue_{10};
+  bluetooth::common::BidiQueue<bluetooth::hci::ScoView, bluetooth::hci::ScoBuilder> sco_queue_{10};
   bluetooth::hci::testing::MockHciLayer mock_hci_;
   bluetooth::legacy::hci::testing::MockInterface legacy_hci_mock_;
   bluetooth::os::Thread* up_thread_;
@@ -105,12 +100,11 @@ class StackBtmWithQueuesTest : public StackBtmTest {
 };
 
 class StackBtmWithInitFreeTest : public StackBtmWithQueuesTest {
- public:
- protected:
+public:
+protected:
   void SetUp() override {
     StackBtmWithQueuesTest::SetUp();
-    EXPECT_CALL(mock_hci_, GetScoQueueEnd())
-        .WillOnce(Return(sco_queue_.GetUpEnd()));
+    EXPECT_CALL(mock_hci_, GetScoQueueEnd()).WillOnce(Return(sco_queue_.GetUpEnd()));
 
     btm_cb.Init();
     btm_sec_cb.Init(BTM_SEC_MODE_SC);
@@ -123,8 +117,7 @@ class StackBtmWithInitFreeTest : public StackBtmWithQueuesTest {
 };
 
 TEST_F(StackBtmWithQueuesTest, GlobalLifecycle) {
-  EXPECT_CALL(mock_hci_, GetScoQueueEnd())
-      .WillOnce(Return(sco_queue_.GetUpEnd()));
+  EXPECT_CALL(mock_hci_, GetScoQueueEnd()).WillOnce(Return(sco_queue_.GetUpEnd()));
   get_btm_client_interface().lifecycle.btm_init();
   get_btm_client_interface().lifecycle.btm_free();
 }
@@ -135,24 +128,20 @@ TEST_F(StackBtmTest, DynamicLifecycle) {
 }
 
 TEST_F(StackBtmWithQueuesTest, InitFree) {
-  EXPECT_CALL(mock_hci_, GetScoQueueEnd())
-      .WillOnce(Return(sco_queue_.GetUpEnd()));
+  EXPECT_CALL(mock_hci_, GetScoQueueEnd()).WillOnce(Return(sco_queue_.GetUpEnd()));
   btm_cb.Init();
   btm_cb.Free();
 }
 
 TEST_F(StackBtmWithQueuesTest, tSCO_CB) {
-  EXPECT_CALL(mock_hci_, GetScoQueueEnd())
-      .WillOnce(Return(sco_queue_.GetUpEnd()));
-  bluetooth::common::InitFlags::SetAllForTesting();
+  EXPECT_CALL(mock_hci_, GetScoQueueEnd()).WillOnce(Return(sco_queue_.GetUpEnd()));
   tSCO_CB* p_sco = &btm_cb.sco_cb;
   p_sco->Init();
   p_sco->Free();
 }
 
 TEST_F(StackBtmWithQueuesTest, InformClientOnConnectionSuccess) {
-  EXPECT_CALL(mock_hci_, GetScoQueueEnd())
-      .WillOnce(Return(sco_queue_.GetUpEnd()));
+  EXPECT_CALL(mock_hci_, GetScoQueueEnd()).WillOnce(Return(sco_queue_.GetUpEnd()));
   get_btm_client_interface().lifecycle.btm_init();
 
   RawAddress bda({0x11, 0x22, 0x33, 0x44, 0x55, 0x66});
@@ -164,8 +153,7 @@ TEST_F(StackBtmWithQueuesTest, InformClientOnConnectionSuccess) {
 }
 
 TEST_F(StackBtmWithQueuesTest, NoInformClientOnConnectionFail) {
-  EXPECT_CALL(mock_hci_, GetScoQueueEnd())
-      .WillOnce(Return(sco_queue_.GetUpEnd()));
+  EXPECT_CALL(mock_hci_, GetScoQueueEnd()).WillOnce(Return(sco_queue_.GetUpEnd()));
   get_btm_client_interface().lifecycle.btm_init();
 
   RawAddress bda({0x11, 0x22, 0x33, 0x44, 0x55, 0x66});
@@ -177,8 +165,7 @@ TEST_F(StackBtmWithQueuesTest, NoInformClientOnConnectionFail) {
 }
 
 TEST_F(StackBtmWithQueuesTest, default_packet_type) {
-  EXPECT_CALL(mock_hci_, GetScoQueueEnd())
-      .WillOnce(Return(sco_queue_.GetUpEnd()));
+  EXPECT_CALL(mock_hci_, GetScoQueueEnd()).WillOnce(Return(sco_queue_.GetUpEnd()));
   get_btm_client_interface().lifecycle.btm_init();
 
   btm_cb.acl_cb_.SetDefaultPacketTypeMask(0x4321);
@@ -188,8 +175,7 @@ TEST_F(StackBtmWithQueuesTest, default_packet_type) {
 }
 
 TEST_F(StackBtmWithQueuesTest, change_packet_type) {
-  EXPECT_CALL(mock_hci_, GetScoQueueEnd())
-      .WillOnce(Return(sco_queue_.GetUpEnd()));
+  EXPECT_CALL(mock_hci_, GetScoQueueEnd()).WillOnce(Return(sco_queue_.GetUpEnd()));
   get_btm_client_interface().lifecycle.btm_init();
 
   uint16_t handle = 0x123;
@@ -204,11 +190,11 @@ TEST_F(StackBtmWithQueuesTest, change_packet_type) {
   uint64_t features = 0xffffffffffffffff;
   acl_process_supported_features(0x123, features);
 
-  EXPECT_CALL(legacy_hci_mock_, ChangeConnectionPacketType(
-                                    handle, 0x4400 | HCI_PKT_TYPES_MASK_DM1));
-  EXPECT_CALL(legacy_hci_mock_, ChangeConnectionPacketType(
-                                    handle, (0xcc00 | HCI_PKT_TYPES_MASK_DM1 |
-                                             HCI_PKT_TYPES_MASK_DH1)));
+  EXPECT_CALL(legacy_hci_mock_,
+              ChangeConnectionPacketType(handle, 0x4400 | HCI_PKT_TYPES_MASK_DM1));
+  EXPECT_CALL(legacy_hci_mock_,
+              ChangeConnectionPacketType(
+                      handle, (0xcc00 | HCI_PKT_TYPES_MASK_DM1 | HCI_PKT_TYPES_MASK_DH1)));
 
   btm_set_packet_types_from_address(bda, 0x55aa);
   btm_set_packet_types_from_address(bda, 0xffff);
@@ -222,25 +208,22 @@ TEST(BtmTest, BTM_EIR_MAX_SERVICES) { ASSERT_EQ(46, BTM_EIR_MAX_SERVICES); }
 
 }  // namespace
 
-void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
-                                       const uint8_t* p_bd_name,
+void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr, const uint8_t* p_bd_name,
                                        tHCI_STATUS status);
 
 struct {
   RawAddress bd_addr;
   DEV_CLASS dc;
-  tBTM_BD_NAME bd_name;
+  BD_NAME bd_name;
 } btm_test;
 
 TEST_F(StackBtmWithInitFreeTest, btm_sec_rmt_name_request_complete) {
-  bluetooth::common::InitFlags::SetAllForTesting();
-
   ASSERT_TRUE(BTM_SecAddRmtNameNotifyCallback(
-      [](const RawAddress& bd_addr, DEV_CLASS dc, tBTM_BD_NAME bd_name) {
-        btm_test.bd_addr = bd_addr;
-        btm_test.dc = dc;
-        memcpy(btm_test.bd_name, bd_name, BTM_MAX_REM_BD_NAME_LEN);
-      }));
+          [](const RawAddress& bd_addr, DEV_CLASS dc, BD_NAME bd_name) {
+            btm_test.bd_addr = bd_addr;
+            btm_test.dc = dc;
+            memcpy(btm_test.bd_name, bd_name, BD_NAME_LEN);
+          }));
 
   RawAddress bd_addr = RawAddress({0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6});
   const uint8_t* p_bd_name = (const uint8_t*)"MyTestName";
@@ -263,15 +246,15 @@ TEST_F(StackBtmWithInitFreeTest, btm_sec_rmt_name_request_complete) {
 
 TEST_F(StackBtmTest, sco_state_text) {
   std::vector<std::pair<tSCO_STATE, std::string>> states = {
-      std::make_pair(SCO_ST_UNUSED, "SCO_ST_UNUSED"),
-      std::make_pair(SCO_ST_LISTENING, "SCO_ST_LISTENING"),
-      std::make_pair(SCO_ST_W4_CONN_RSP, "SCO_ST_W4_CONN_RSP"),
-      std::make_pair(SCO_ST_CONNECTING, "SCO_ST_CONNECTING"),
-      std::make_pair(SCO_ST_CONNECTED, "SCO_ST_CONNECTED"),
-      std::make_pair(SCO_ST_DISCONNECTING, "SCO_ST_DISCONNECTING"),
-      std::make_pair(SCO_ST_PEND_UNPARK, "SCO_ST_PEND_UNPARK"),
-      std::make_pair(SCO_ST_PEND_ROLECHANGE, "SCO_ST_PEND_ROLECHANGE"),
-      std::make_pair(SCO_ST_PEND_MODECHANGE, "SCO_ST_PEND_MODECHANGE"),
+          std::make_pair(SCO_ST_UNUSED, "SCO_ST_UNUSED"),
+          std::make_pair(SCO_ST_LISTENING, "SCO_ST_LISTENING"),
+          std::make_pair(SCO_ST_W4_CONN_RSP, "SCO_ST_W4_CONN_RSP"),
+          std::make_pair(SCO_ST_CONNECTING, "SCO_ST_CONNECTING"),
+          std::make_pair(SCO_ST_CONNECTED, "SCO_ST_CONNECTED"),
+          std::make_pair(SCO_ST_DISCONNECTING, "SCO_ST_DISCONNECTING"),
+          std::make_pair(SCO_ST_PEND_UNPARK, "SCO_ST_PEND_UNPARK"),
+          std::make_pair(SCO_ST_PEND_ROLECHANGE, "SCO_ST_PEND_ROLECHANGE"),
+          std::make_pair(SCO_ST_PEND_MODECHANGE, "SCO_ST_PEND_MODECHANGE"),
   };
   for (const auto& state : states) {
     ASSERT_STREQ(state.second.c_str(), sco_state_text(state.first).c_str());
@@ -279,31 +262,29 @@ TEST_F(StackBtmTest, sco_state_text) {
   std::ostringstream oss;
   oss << "unknown_sco_state: " << std::numeric_limits<std::uint16_t>::max();
   ASSERT_STREQ(oss.str().c_str(),
-               sco_state_text(static_cast<tSCO_STATE>(
-                                  std::numeric_limits<std::uint16_t>::max()))
-                   .c_str());
+               sco_state_text(static_cast<tSCO_STATE>(std::numeric_limits<std::uint16_t>::max()))
+                       .c_str());
 }
 
 bool is_disconnect_reason_valid(const tHCI_REASON& reason);
 TEST_F(StackBtmWithInitFreeTest, is_disconnect_reason_valid) {
   std::set<tHCI_REASON> valid_reason_set{
-      HCI_ERR_AUTH_FAILURE,
-      HCI_ERR_PEER_USER,
-      HCI_ERR_REMOTE_LOW_RESOURCE,
-      HCI_ERR_REMOTE_POWER_OFF,
-      HCI_ERR_UNSUPPORTED_REM_FEATURE,
-      HCI_ERR_PAIRING_WITH_UNIT_KEY_NOT_SUPPORTED,
-      HCI_ERR_UNACCEPT_CONN_INTERVAL,
+          HCI_ERR_AUTH_FAILURE,
+          HCI_ERR_PEER_USER,
+          HCI_ERR_REMOTE_LOW_RESOURCE,
+          HCI_ERR_REMOTE_POWER_OFF,
+          HCI_ERR_UNSUPPORTED_REM_FEATURE,
+          HCI_ERR_PAIRING_WITH_UNIT_KEY_NOT_SUPPORTED,
+          HCI_ERR_UNACCEPT_CONN_INTERVAL,
   };
   for (unsigned u = 0; u < 256; u++) {
     const tHCI_REASON reason = static_cast<tHCI_REASON>(u);
-    if (valid_reason_set.count(reason))
+    if (valid_reason_set.count(reason)) {
       ASSERT_TRUE(is_disconnect_reason_valid(reason));
-    else
+    } else {
       ASSERT_FALSE(is_disconnect_reason_valid(reason));
+    }
   }
 }
 
-TEST_F(StackBtmWithInitFreeTest, Init) {
-  ASSERT_FALSE(btm_cb.btm_inq_vars.remname_active);
-}
+TEST_F(StackBtmWithInitFreeTest, Init) { ASSERT_FALSE(btm_cb.rnr.remname_active); }

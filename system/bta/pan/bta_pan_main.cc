@@ -26,9 +26,7 @@
 #include <cstdint>
 
 #include "bta/pan/bta_pan_int.h"
-#include "include/check.h"
 #include "internal_include/bt_target.h"
-#include "osi/include/osi.h"  // UNUSED_ATTR
 #include "stack/include/bt_hdr.h"
 
 using namespace bluetooth;
@@ -56,8 +54,8 @@ typedef void (*tBTA_PAN_ACTION)(tBTA_PAN_SCB* p_scb, tBTA_PAN_DATA* p_data);
 
 /* action function list */
 const tBTA_PAN_ACTION bta_pan_action[] = {
-    bta_pan_api_close, bta_pan_tx_path,   bta_pan_rx_path,    bta_pan_tx_flow,
-    bta_pan_write_buf, bta_pan_conn_open, bta_pan_conn_close, bta_pan_free_buf,
+        bta_pan_api_close, bta_pan_tx_path,   bta_pan_rx_path,    bta_pan_tx_flow,
+        bta_pan_write_buf, bta_pan_conn_open, bta_pan_conn_close, bta_pan_free_buf,
 
 };
 
@@ -68,51 +66,50 @@ const tBTA_PAN_ACTION bta_pan_action[] = {
 
 /* state table for listen state */
 const uint8_t bta_pan_st_idle[][BTA_PAN_NUM_COLS] = {
-    /* API_CLOSE */ {BTA_PAN_API_CLOSE, BTA_PAN_IDLE_ST},
-    /* CI_TX_READY */ {BTA_PAN_IGNORE, BTA_PAN_IDLE_ST},
-    /* CI_RX_READY */ {BTA_PAN_IGNORE, BTA_PAN_IDLE_ST},
-    /* CI_TX_FLOW */ {BTA_PAN_IGNORE, BTA_PAN_IDLE_ST},
-    /* CI_RX_WRITE */ {BTA_PAN_IGNORE, BTA_PAN_IDLE_ST},
-    /* CI_RX_WRITEBUF */ {BTA_PAN_IGNORE, BTA_PAN_IDLE_ST},
-    /* PAN_CONN_OPEN */ {BTA_PAN_CONN_OPEN, BTA_PAN_OPEN_ST},
-    /* PAN_CONN_CLOSE */ {BTA_PAN_CONN_OPEN, BTA_PAN_IDLE_ST},
-    /* FLOW_ENABLE */ {BTA_PAN_IGNORE, BTA_PAN_IDLE_ST},
-    /* BNEP_DATA */ {BTA_PAN_IGNORE, BTA_PAN_IDLE_ST}
+        /* API_CLOSE */ {BTA_PAN_API_CLOSE, BTA_PAN_IDLE_ST},
+        /* CI_TX_READY */ {BTA_PAN_IGNORE, BTA_PAN_IDLE_ST},
+        /* CI_RX_READY */ {BTA_PAN_IGNORE, BTA_PAN_IDLE_ST},
+        /* CI_TX_FLOW */ {BTA_PAN_IGNORE, BTA_PAN_IDLE_ST},
+        /* CI_RX_WRITE */ {BTA_PAN_IGNORE, BTA_PAN_IDLE_ST},
+        /* CI_RX_WRITEBUF */ {BTA_PAN_IGNORE, BTA_PAN_IDLE_ST},
+        /* PAN_CONN_OPEN */ {BTA_PAN_CONN_OPEN, BTA_PAN_OPEN_ST},
+        /* PAN_CONN_CLOSE */ {BTA_PAN_CONN_OPEN, BTA_PAN_IDLE_ST},
+        /* FLOW_ENABLE */ {BTA_PAN_IGNORE, BTA_PAN_IDLE_ST},
+        /* BNEP_DATA */ {BTA_PAN_IGNORE, BTA_PAN_IDLE_ST}
 
 };
 
 /* state table for open state */
 const uint8_t bta_pan_st_open[][BTA_PAN_NUM_COLS] = {
-    /* API_CLOSE */ {BTA_PAN_API_CLOSE, BTA_PAN_OPEN_ST},
-    /* CI_TX_READY */ {BTA_PAN_TX_PATH, BTA_PAN_OPEN_ST},
-    /* CI_RX_READY */ {BTA_PAN_RX_PATH, BTA_PAN_OPEN_ST},
-    /* CI_TX_FLOW */ {BTA_PAN_TX_FLOW, BTA_PAN_OPEN_ST},
-    /* CI_RX_WRITE */ {BTA_PAN_IGNORE, BTA_PAN_OPEN_ST},
-    /* CI_RX_WRITEBUF */ {BTA_PAN_WRITE_BUF, BTA_PAN_OPEN_ST},
-    /* PAN_CONN_OPEN */ {BTA_PAN_IGNORE, BTA_PAN_OPEN_ST},
-    /* PAN_CONN_CLOSE */ {BTA_PAN_CONN_CLOSE, BTA_PAN_IDLE_ST},
-    /* FLOW_ENABLE */ {BTA_PAN_RX_PATH, BTA_PAN_OPEN_ST},
-    /* BNEP_DATA */ {BTA_PAN_TX_PATH, BTA_PAN_OPEN_ST}};
+        /* API_CLOSE */ {BTA_PAN_API_CLOSE, BTA_PAN_OPEN_ST},
+        /* CI_TX_READY */ {BTA_PAN_TX_PATH, BTA_PAN_OPEN_ST},
+        /* CI_RX_READY */ {BTA_PAN_RX_PATH, BTA_PAN_OPEN_ST},
+        /* CI_TX_FLOW */ {BTA_PAN_TX_FLOW, BTA_PAN_OPEN_ST},
+        /* CI_RX_WRITE */ {BTA_PAN_IGNORE, BTA_PAN_OPEN_ST},
+        /* CI_RX_WRITEBUF */ {BTA_PAN_WRITE_BUF, BTA_PAN_OPEN_ST},
+        /* PAN_CONN_OPEN */ {BTA_PAN_IGNORE, BTA_PAN_OPEN_ST},
+        /* PAN_CONN_CLOSE */ {BTA_PAN_CONN_CLOSE, BTA_PAN_IDLE_ST},
+        /* FLOW_ENABLE */ {BTA_PAN_RX_PATH, BTA_PAN_OPEN_ST},
+        /* BNEP_DATA */ {BTA_PAN_TX_PATH, BTA_PAN_OPEN_ST}};
 
 /* state table for closing state */
 const uint8_t bta_pan_st_closing[][BTA_PAN_NUM_COLS] = {
-    /* API_CLOSE */ {BTA_PAN_IGNORE, BTA_PAN_CLOSING_ST},
-    /* CI_TX_READY */ {BTA_PAN_TX_PATH, BTA_PAN_CLOSING_ST},
-    /* CI_RX_READY */ {BTA_PAN_RX_PATH, BTA_PAN_CLOSING_ST},
-    /* CI_TX_FLOW */ {BTA_PAN_TX_FLOW, BTA_PAN_CLOSING_ST},
-    /* CI_RX_WRITE */ {BTA_PAN_IGNORE, BTA_PAN_CLOSING_ST},
-    /* CI_RX_WRITEBUF */ {BTA_PAN_FREE_BUF, BTA_PAN_CLOSING_ST},
-    /* PAN_CONN_OPEN */ {BTA_PAN_IGNORE, BTA_PAN_CLOSING_ST},
-    /* PAN_CONN_CLOSE */ {BTA_PAN_CONN_CLOSE, BTA_PAN_IDLE_ST},
-    /* FLOW_ENABLE */ {BTA_PAN_RX_PATH, BTA_PAN_CLOSING_ST},
-    /* BNEP_DATA */ {BTA_PAN_TX_PATH, BTA_PAN_CLOSING_ST}};
+        /* API_CLOSE */ {BTA_PAN_IGNORE, BTA_PAN_CLOSING_ST},
+        /* CI_TX_READY */ {BTA_PAN_TX_PATH, BTA_PAN_CLOSING_ST},
+        /* CI_RX_READY */ {BTA_PAN_RX_PATH, BTA_PAN_CLOSING_ST},
+        /* CI_TX_FLOW */ {BTA_PAN_TX_FLOW, BTA_PAN_CLOSING_ST},
+        /* CI_RX_WRITE */ {BTA_PAN_IGNORE, BTA_PAN_CLOSING_ST},
+        /* CI_RX_WRITEBUF */ {BTA_PAN_FREE_BUF, BTA_PAN_CLOSING_ST},
+        /* PAN_CONN_OPEN */ {BTA_PAN_IGNORE, BTA_PAN_CLOSING_ST},
+        /* PAN_CONN_CLOSE */ {BTA_PAN_CONN_CLOSE, BTA_PAN_IDLE_ST},
+        /* FLOW_ENABLE */ {BTA_PAN_RX_PATH, BTA_PAN_CLOSING_ST},
+        /* BNEP_DATA */ {BTA_PAN_TX_PATH, BTA_PAN_CLOSING_ST}};
 
 /* type for state table */
 typedef const uint8_t (*tBTA_PAN_ST_TBL)[BTA_PAN_NUM_COLS];
 
 /* state table */
-const tBTA_PAN_ST_TBL bta_pan_st_tbl[] = {bta_pan_st_idle, bta_pan_st_open,
-                                          bta_pan_st_closing};
+const tBTA_PAN_ST_TBL bta_pan_st_tbl[] = {bta_pan_st_idle, bta_pan_st_open, bta_pan_st_closing};
 
 /*****************************************************************************
  * Global data
@@ -161,14 +158,12 @@ tBTA_PAN_SCB* bta_pan_scb_alloc(void) {
  * Returns          void
  *
  ******************************************************************************/
-void bta_pan_sm_execute(tBTA_PAN_SCB* p_scb, uint16_t event,
-                        tBTA_PAN_DATA* p_data) {
+void bta_pan_sm_execute(tBTA_PAN_SCB* p_scb, uint16_t event, tBTA_PAN_DATA* p_data) {
   tBTA_PAN_ST_TBL state_table;
   uint8_t action;
   int i;
 
-  log::verbose("PAN scb={} event=0x{:x} state={}", bta_pan_scb_to_idx(p_scb),
-               event, p_scb->state);
+  log::verbose("PAN scb={} event=0x{:x} state={}", bta_pan_scb_to_idx(p_scb), event, p_scb->state);
 
   /* look up the state table for the current state */
   state_table = bta_pan_st_tbl[p_scb->state];
@@ -181,8 +176,10 @@ void bta_pan_sm_execute(tBTA_PAN_SCB* p_scb, uint16_t event,
   /* execute action functions */
   for (i = 0; i < BTA_PAN_ACTIONS; i++) {
     action = state_table[event][i];
-    CHECK(action < BTA_PAN_MAX_ACTIONS);
-    if (action == BTA_PAN_IGNORE) continue;
+    log::assert_that(action < BTA_PAN_MAX_ACTIONS, "assert failed: action < BTA_PAN_MAX_ACTIONS");
+    if (action == BTA_PAN_IGNORE) {
+      continue;
+    }
     (*bta_pan_action[action])(p_scb, p_data);
   }
 }
@@ -216,9 +213,7 @@ void bta_pan_api_enable(tBTA_PAN_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-void bta_pan_api_disable(UNUSED_ATTR tBTA_PAN_DATA* p_data) {
-  bta_pan_disable();
-}
+void bta_pan_api_disable(tBTA_PAN_DATA* /* p_data */) { bta_pan_disable(); }
 
 /*******************************************************************************
  *
@@ -270,9 +265,7 @@ void bta_pan_scb_dealloc(tBTA_PAN_SCB* p_scb) {
  * Returns          Index of scb.
  *
  ******************************************************************************/
-uint8_t bta_pan_scb_to_idx(tBTA_PAN_SCB* p_scb) {
-  return ((uint8_t)(p_scb - bta_pan_cb.scb)) + 1;
-}
+uint8_t bta_pan_scb_to_idx(tBTA_PAN_SCB* p_scb) { return ((uint8_t)(p_scb - bta_pan_cb.scb)) + 1; }
 
 /*******************************************************************************
  *

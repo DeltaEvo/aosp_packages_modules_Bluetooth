@@ -19,6 +19,9 @@
 #define LOG_TAG "BtGdWakelockNative"
 
 #include "os/internal/wakelock_native.h"
+
+#include <bluetooth/log.h>
+
 #include "os/log.h"
 
 namespace bluetooth {
@@ -27,22 +30,18 @@ namespace internal {
 
 struct WakelockNative::Impl {};
 
-void WakelockNative::Initialize() {
-  LOG_INFO("Host native wakelock is not implemented");
-}
+void WakelockNative::Initialize() { log::info("Host native wakelock is not implemented"); }
 
 WakelockNative::StatusCode WakelockNative::Acquire(const std::string& /* lock_name */) {
-  LOG_INFO("Host native wakelock is not implemented");
+  log::info("Host native wakelock is not implemented");
   return StatusCode::SUCCESS;
 }
 
 WakelockNative::StatusCode WakelockNative::Release(const std::string& /* lock_name */) {
-  LOG_INFO("Host native wakelock is not implemented");
+  log::info("Host native wakelock is not implemented");
   return StatusCode::SUCCESS;
 }
-void WakelockNative::CleanUp() {
-  LOG_INFO("Host native wakelock is not implemented");
-}
+void WakelockNative::CleanUp() { log::info("Host native wakelock is not implemented"); }
 
 WakelockNative::WakelockNative() : pimpl_(std::make_unique<Impl>()) {}
 

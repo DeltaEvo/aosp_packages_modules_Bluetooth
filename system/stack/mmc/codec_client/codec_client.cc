@@ -16,8 +16,8 @@
 
 #include "mmc/codec_client/codec_client.h"
 
-#include <base/logging.h>
 #include <base/timer/elapsed_timer.h>
+#include <bluetooth/log.h>
 #include <dbus/bus.h>
 #include <dbus/message.h>
 #include <dbus/object_proxy.h>
@@ -37,6 +37,8 @@
 namespace mmc {
 namespace {
 
+using namespace bluetooth;
+
 // Codec param field number in |ConfigParam|
 const int kUnsupportedType = -1;
 const int kHfpLc3EncoderId = 1;
@@ -53,7 +55,7 @@ int CodecId(const ConfigParam& config) {
   } else if (config.has_a2dp_aac_encoder_param()) {
     return kA2dpAacEncoderId;
   } else {
-    LOG(WARNING) << "Unsupported codec type is used.";
+    log::warn("Unsupported codec type is used.");
     return kUnsupportedType;
   }
 }
@@ -70,22 +72,24 @@ CodecClient::CodecClient() {
   bus_ = new dbus::Bus(options);
 
   if (!bus_->Connect()) {
-    LOG(ERROR) << "Failed to connect system bus";
+    log::error("Failed to connect system bus");
     return;
   }
 
   // Get proxy to send DBus method call.
-  codec_manager_ = bus_->GetObjectProxy(mmc::kMmcServiceName,
-                                        dbus::ObjectPath(mmc::kMmcServicePath));
+  codec_manager_ =
+          bus_->GetObjectProxy(mmc::kMmcServiceName, dbus::ObjectPath(mmc::kMmcServicePath));
   if (!codec_manager_) {
-    LOG(ERROR) << "Failed to get object proxy";
+    log::error("Failed to get object proxy");
     return;
   }
 }
 
 CodecClient::~CodecClient() {
   cleanup();
-  if (bus_) bus_->ShutdownAndBlock();
+  if (bus_) {
+    bus_->ShutdownAndBlock();
+  }
 }
 
 int CodecClient::init(const ConfigParam config) {
@@ -94,66 +98,62 @@ int CodecClient::init(const ConfigParam config) {
   // Set up record logger.
   record_logger_ = std::make_unique<MmcRttLogger>(CodecId(config));
 
-  dbus::MethodCall method_call(mmc::kMmcServiceInterface,
-                               mmc::kCodecInitMethod);
+  dbus::MethodCall method_call(mmc::kMmcServiceInterface, mmc::kCodecInitMethod);
   dbus::MessageWriter writer(&method_call);
 
   mmc::CodecInitRequest request;
   *request.mutable_config() = config;
   if (!writer.AppendProtoAsArrayOfBytes(request)) {
-    LOG(ERROR) << "Failed to encode CodecInitRequest protobuf";
+    log::error("Failed to encode CodecInitRequest protobuf");
     return -EINVAL;
   }
 
   std::unique_ptr<dbus::Response> dbus_response =
-      codec_manager_
-          ->CallMethodAndBlock(&method_call,
-                               dbus::ObjectProxy::TIMEOUT_USE_DEFAULT)
+          codec_manager_
+                  ->CallMethodAndBlock(&method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT)
 // TODO(b/297976471): remove the build flag once libchrome uprev is done.
 #if BASE_VER >= 1170299
-          .value_or(nullptr)
+                  .value_or(nullptr)
 #endif
-      ;
+          ;
 
   if (!dbus_response) {
-    LOG(ERROR) << "CodecInit failed";
+    log::error("CodecInit failed");
     return -ECOMM;
   }
 
   dbus::MessageReader reader(dbus_response.get());
   mmc::CodecInitResponse response;
   if (!reader.PopArrayOfBytesAsProto(&response)) {
-    LOG(ERROR) << "Failed to parse response protobuf";
+    log::error("Failed to parse response protobuf");
     return -EINVAL;
   }
 
   if (response.socket_token().empty()) {
-    LOG(ERROR) << "CodecInit returned empty socket token";
+    log::error("CodecInit returned empty socket token");
     return -EBADMSG;
   }
 
   if (response.input_frame_size() < 0) {
-    LOG(ERROR) << "CodecInit returned negative frame size";
+    log::error("CodecInit returned negative frame size");
     return -EBADMSG;
   }
 
   // Create socket.
   skt_fd_ = socket(AF_UNIX, SOCK_SEQPACKET, 0);
   if (skt_fd_ < 0) {
-    LOG(ERROR) << "Failed to create socket: " << strerror(errno);
+    log::error("Failed to create socket: {}", strerror(errno));
     return -errno;
   }
 
   struct sockaddr_un addr = {};
   addr.sun_family = AF_UNIX;
-  strncpy(addr.sun_path, response.socket_token().c_str(),
-          sizeof(addr.sun_path) - 1);
+  strncpy(addr.sun_path, response.socket_token().c_str(), sizeof(addr.sun_path) - 1);
 
   // Connect to socket for transcoding.
-  int rc =
-      connect(skt_fd_, (struct sockaddr*)&addr, sizeof(struct sockaddr_un));
+  int rc = connect(skt_fd_, (struct sockaddr*)&addr, sizeof(struct sockaddr_un));
   if (rc < 0) {
-    LOG(ERROR) << "Failed to connect socket: " << strerror(errno);
+    log::error("Failed to connect socket: {}", strerror(errno));
     return -errno;
   }
   unlink(addr.sun_path);
@@ -172,38 +172,35 @@ void CodecClient::cleanup() {
     record_logger_.release();
   }
 
-  dbus::MethodCall method_call(mmc::kMmcServiceInterface,
-                               mmc::kCodecCleanUpMethod);
+  dbus::MethodCall method_call(mmc::kMmcServiceInterface, mmc::kCodecCleanUpMethod);
 
   std::unique_ptr<dbus::Response> dbus_response =
-      codec_manager_
-          ->CallMethodAndBlock(&method_call,
-                               dbus::ObjectProxy::TIMEOUT_USE_DEFAULT)
+          codec_manager_
+                  ->CallMethodAndBlock(&method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT)
 // TODO(b/297976471): remove the build flag once libchrome uprev is done.
 #if BASE_VER >= 1170299
-          .value_or(nullptr)
+                  .value_or(nullptr)
 #endif
-      ;
+          ;
 
   if (!dbus_response) {
-    LOG(WARNING) << "CodecCleanUp failed";
+    log::warn("CodecCleanUp failed");
   }
   return;
 }
 
-int CodecClient::transcode(uint8_t* i_buf, int i_len, uint8_t* o_buf,
-                           int o_len) {
+int CodecClient::transcode(uint8_t* i_buf, int i_len, uint8_t* o_buf, int o_len) {
   // Start Timer
   base::ElapsedTimer timer;
 
   // i_buf and o_buf cannot be null.
   if (i_buf == nullptr || o_buf == nullptr) {
-    LOG(ERROR) << "Buffer is null";
+    log::error("Buffer is null");
     return -EINVAL;
   }
 
   if (i_len <= 0 || o_len <= 0) {
-    LOG(ERROR) << "Non-positive buffer length";
+    log::error("Non-positive buffer length");
     return -EINVAL;
   }
 
@@ -211,12 +208,12 @@ int CodecClient::transcode(uint8_t* i_buf, int i_len, uint8_t* o_buf,
   int rc = send(skt_fd_, i_buf, i_len, MSG_NOSIGNAL);
 
   if (rc < 0) {
-    LOG(ERROR) << "Failed to send data: " << strerror(errno);
+    log::error("Failed to send data: {}", strerror(errno));
     return -errno;
   }
   // Full packet should be sent under SOCK_SEQPACKET setting.
   if (rc < i_len) {
-    LOG(ERROR) << "Failed to send full packet";
+    log::error("Failed to send full packet");
     return -EIO;
   }
 
@@ -226,24 +223,24 @@ int CodecClient::transcode(uint8_t* i_buf, int i_len, uint8_t* o_buf,
 
   int pollret = poll(&pfd, 1, -1);
   if (pollret < 0) {
-    LOG(ERROR) << "Failed to poll: " << strerror(errno);
+    log::error("Failed to poll: {}", strerror(errno));
     return -errno;
   }
 
   if (pfd.revents & (POLLHUP | POLLNVAL)) {
-    LOG(ERROR) << "Socket closed remotely.";
+    log::error("Socket closed remotely.");
     return -EIO;
   }
 
   // POLLIN is returned..
   rc = recv(skt_fd_, o_buf, o_len, MSG_NOSIGNAL);
   if (rc < 0) {
-    LOG(ERROR) << "Failed to recv data: " << strerror(errno);
+    log::error("Failed to recv data: {}", strerror(errno));
     return -errno;
   }
   // Should be able to recv data when POLLIN is returned.
   if (rc == 0) {
-    LOG(ERROR) << "Failed to recv data";
+    log::error("Failed to recv data");
     return -EIO;
   }
 

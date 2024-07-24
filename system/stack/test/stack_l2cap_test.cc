@@ -14,16 +14,22 @@
  * limitations under the License.
  */
 
+#include <bluetooth/log.h>
+#include <fcntl.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <sys/socket.h>
 
-#include "common/init_flags.h"
-#include "device/include/controller.h"
+#include "bt_psm_types.h"
+#include "hci/controller_interface_mock.h"
 #include "osi/include/allocator.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/include/l2cap_controller_interface.h"
 #include "stack/include/l2cap_hci_link_interface.h"
+#include "stack/include/l2cap_module.h"
 #include "stack/include/l2cdefs.h"
 #include "stack/l2cap/l2c_int.h"
+#include "test/mock/mock_main_shim_entry.h"
 
 tBTM_CB btm_cb;
 extern tL2C_CB l2cb;
@@ -31,30 +37,35 @@ extern tL2C_CB l2cb;
 void l2c_link_send_to_lower_br_edr(tL2C_LCB* p_lcb, BT_HDR* p_buf);
 void l2c_link_send_to_lower_ble(tL2C_LCB* p_lcb, BT_HDR* p_buf);
 
+using testing::Return;
+
 namespace {
 constexpr uint16_t kAclBufferCountClassic = 123;
-constexpr uint8_t kAclBufferCountBle = 45;
+constexpr uint16_t kAclBufferCountBle = 45;
+constexpr uint16_t kAclBufferSizeBle = 45;
 
 }  // namespace
 
 class StackL2capTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
-    bluetooth::common::InitFlags::SetAllForTesting();
-    controller_.get_acl_buffer_count_classic = []() {
-      return kAclBufferCountClassic;
-    };
-    controller_.get_acl_buffer_count_ble = []() { return kAclBufferCountBle; };
-    controller_.SupportsBle = []() -> bool { return true; };
+    bluetooth::hci::testing::mock_controller_ = &controller_interface_;
+    ON_CALL(controller_interface_, GetNumAclPacketBuffers)
+            .WillByDefault(Return(kAclBufferCountClassic));
+    bluetooth::hci::LeBufferSize le_sizes;
+    le_sizes.total_num_le_packets_ = kAclBufferCountBle;
+    le_sizes.le_data_packet_length_ = kAclBufferSizeBle;
+    ON_CALL(controller_interface_, GetLeBufferSize).WillByDefault(Return(le_sizes));
+    ON_CALL(controller_interface_, SupportsBle).WillByDefault(Return(true));
     l2c_init();
   }
 
   void TearDown() override {
     l2c_free();
-    controller_ = {};
+    bluetooth::hci::testing::mock_controller_ = nullptr;
   }
 
-  controller_t controller_;
+  bluetooth::hci::testing::MockControllerInterface controller_interface_;
 };
 
 TEST_F(StackL2capTest, l2cble_process_data_length_change_event) {
@@ -78,100 +89,98 @@ TEST_F(StackL2capTest, l2cble_process_data_length_change_event) {
 }
 
 class StackL2capChannelTest : public StackL2capTest {
- protected:
+protected:
   void SetUp() override { StackL2capTest::SetUp(); }
 
   void TearDown() override { StackL2capTest::TearDown(); }
 
   tL2C_CCB ccb_ = {
-      .in_use = true,
-      .chnl_state = CST_OPEN,  // tL2C_CHNL_STATE
-      .local_conn_cfg =
-          {
-              // tL2CAP_LE_CFG_INFO
-              .result = 0,
-              .mtu = 100,
-              .mps = 100,
-              .credits = L2CA_LeCreditDefault(),
-              .number_of_channels = L2CAP_CREDIT_BASED_MAX_CIDS,
-          },
-      .peer_conn_cfg =
-          {
-              // tL2CAP_LE_CFG_INFO
-              .result = 0,
-              .mtu = 100,
-              .mps = 100,
-              .credits = L2CA_LeCreditDefault(),
-              .number_of_channels = L2CAP_CREDIT_BASED_MAX_CIDS,
-          },
-      .is_first_seg = false,
-      .ble_sdu = nullptr,     // BT_HDR*; Buffer for storing unassembled sdu
-      .ble_sdu_length = 0,    /* Length of unassembled sdu length*/
-      .p_next_ccb = nullptr,  // struct t_l2c_ccb* Next CCB in the chain
-      .p_prev_ccb = nullptr,  // struct t_l2c_ccb* Previous CCB in the chain
-      .p_lcb = nullptr,  // struct t_l2c_linkcb* Link this CCB is assigned to
-      .local_cid = 40,
-      .remote_cid = 80,
-      .l2c_ccb_timer = nullptr,  // alarm_t* CCB Timer Entry
-      .p_rcb = nullptr,          // tL2C_RCB* Registration CB for this Channel
-      .config_done = 0,          // Configuration flag word
-      .remote_config_rsp_result = 0,  // The config rsp result from remote
-      .local_id = 12,                 // Transaction ID for local trans
-      .remote_id = 22,                // Transaction ID for local
-      .flags = 0,
-      .connection_initiator = false,
-      .our_cfg = {},   // tL2CAP_CFG_INFO Our saved configuration options
-      .peer_cfg = {},  // tL2CAP_CFG_INFO Peer's saved configuration options
-      .xmit_hold_q = nullptr,  // fixed_queue_t*  Transmit data hold queue
-      .cong_sent = false,
-      .buff_quota = 0,
+          .in_use = true,
+          .chnl_state = CST_OPEN,  // tL2C_CHNL_STATE
+          .local_conn_cfg =
+                  {
+                          // tL2CAP_LE_CFG_INFO
+                          .result = 0,
+                          .mtu = 100,
+                          .mps = 100,
+                          .credits = L2CA_LeCreditDefault(),
+                          .number_of_channels = L2CAP_CREDIT_BASED_MAX_CIDS,
+                  },
+          .peer_conn_cfg =
+                  {
+                          // tL2CAP_LE_CFG_INFO
+                          .result = 0,
+                          .mtu = 100,
+                          .mps = 100,
+                          .credits = L2CA_LeCreditDefault(),
+                          .number_of_channels = L2CAP_CREDIT_BASED_MAX_CIDS,
+                  },
+          .is_first_seg = false,
+          .ble_sdu = nullptr,     // BT_HDR*; Buffer for storing unassembled sdu
+          .ble_sdu_length = 0,    /* Length of unassembled sdu length*/
+          .p_next_ccb = nullptr,  // struct t_l2c_ccb* Next CCB in the chain
+          .p_prev_ccb = nullptr,  // struct t_l2c_ccb* Previous CCB in the chain
+          .p_lcb = nullptr,       // struct t_l2c_linkcb* Link this CCB is assigned to
+          .local_cid = 40,
+          .remote_cid = 80,
+          .l2c_ccb_timer = nullptr,       // alarm_t* CCB Timer Entry
+          .p_rcb = nullptr,               // tL2C_RCB* Registration CB for this Channel
+          .config_done = 0,               // Configuration flag word
+          .remote_config_rsp_result = 0,  // The config rsp result from remote
+          .local_id = 12,                 // Transaction ID for local trans
+          .remote_id = 22,                // Transaction ID for local
+          .flags = 0,
+          .connection_initiator = false,
+          .our_cfg = {},           // tL2CAP_CFG_INFO Our saved configuration options
+          .peer_cfg = {},          // tL2CAP_CFG_INFO Peer's saved configuration options
+          .xmit_hold_q = nullptr,  // fixed_queue_t*  Transmit data hold queue
+          .cong_sent = false,
+          .buff_quota = 0,
 
-      .ccb_priority =
-          L2CAP_CHNL_PRIORITY_HIGH,  // tL2CAP_CHNL_PRIORITY Channel priority
-      .tx_data_rate = 0,  // tL2CAP_CHNL_PRIORITY  Channel Tx data rate
-      .rx_data_rate = 0,  // tL2CAP_CHNL_PRIORITY  Channel Rx data rate
+          .ccb_priority = L2CAP_CHNL_PRIORITY_HIGH,  // tL2CAP_CHNL_PRIORITY Channel priority
+          .tx_data_rate = 0,                         // tL2CAP_CHNL_PRIORITY  Channel Tx data rate
+          .rx_data_rate = 0,                         // tL2CAP_CHNL_PRIORITY  Channel Rx data rate
 
-      .ertm_info =
-          {
-              // .tL2CAP_ERTM_INFO
-              .preferred_mode = 0,
-          },
-      .fcrb =
-          {
-              // tL2C_FCRB
-              .next_tx_seq = 0,
-              .last_rx_ack = 0,
-              .next_seq_expected = 0,
-              .last_ack_sent = 0,
-              .num_tries = 0,
-              .max_held_acks = 0,
-              .remote_busy = false,
-              .rej_sent = false,
-              .srej_sent = false,
-              .wait_ack = false,
-              .rej_after_srej = false,
-              .send_f_rsp = false,
-              .rx_sdu_len = 0,
-              .p_rx_sdu =
-                  nullptr,  // BT_HDR* Buffer holding the SDU being received
-              .waiting_for_ack_q = nullptr,  // fixed_queue_t*
-              .srej_rcv_hold_q = nullptr,    // fixed_queue_t*
-              .retrans_q = nullptr,          // fixed_queue_t*
-              .ack_timer = nullptr,          // alarm_t*
-              .mon_retrans_timer = nullptr,  // alarm_t*
-          },
-      .tx_mps = 0,
-      .max_rx_mtu = 0,
-      .fcr_cfg_tries = 0,
-      .peer_cfg_already_rejected = false,
-      .out_cfg_fcr_present = false,
-      .is_flushable = false,
-      .fixed_chnl_idle_tout = 0,
-      .tx_data_len = 0,
-      .remote_credit_count = 0,
-      .ecoc = false,
-      .reconfig_started = false,
-      .metrics = {},
+          .ertm_info =
+                  {
+                          // .tL2CAP_ERTM_INFO
+                          .preferred_mode = 0,
+                  },
+          .fcrb =
+                  {
+                          // tL2C_FCRB
+                          .next_tx_seq = 0,
+                          .last_rx_ack = 0,
+                          .next_seq_expected = 0,
+                          .last_ack_sent = 0,
+                          .num_tries = 0,
+                          .max_held_acks = 0,
+                          .remote_busy = false,
+                          .rej_sent = false,
+                          .srej_sent = false,
+                          .wait_ack = false,
+                          .rej_after_srej = false,
+                          .send_f_rsp = false,
+                          .rx_sdu_len = 0,
+                          .p_rx_sdu = nullptr,  // BT_HDR* Buffer holding the SDU being received
+                          .waiting_for_ack_q = nullptr,  // fixed_queue_t*
+                          .srej_rcv_hold_q = nullptr,    // fixed_queue_t*
+                          .retrans_q = nullptr,          // fixed_queue_t*
+                          .ack_timer = nullptr,          // alarm_t*
+                          .mon_retrans_timer = nullptr,  // alarm_t*
+                  },
+          .tx_mps = 0,
+          .max_rx_mtu = 0,
+          .fcr_cfg_tries = 0,
+          .peer_cfg_already_rejected = false,
+          .out_cfg_fcr_present = false,
+          .is_flushable = false,
+          .fixed_chnl_idle_tout = 0,
+          .tx_data_len = 0,
+          .remote_credit_count = 0,
+          .ecoc = false,
+          .reconfig_started = false,
+          .metrics = {},
   };
 };
 
@@ -194,55 +203,84 @@ TEST_F(StackL2capChannelTest, l2c_lcc_proc_pdu__NextSegment) {
 TEST_F(StackL2capChannelTest, l2c_link_init) {
   l2cb.num_lm_acl_bufs = 0;
   l2cb.controller_xmit_window = 0;
+  l2c_link_init(kAclBufferCountClassic);
 
-  l2c_link_init(controller_.get_acl_buffer_count_classic());
-
-  ASSERT_EQ(controller_.get_acl_buffer_count_classic(), l2cb.num_lm_acl_bufs);
-  ASSERT_EQ(controller_.get_acl_buffer_count_classic(),
-            l2cb.controller_xmit_window);
+  ASSERT_EQ(kAclBufferCountClassic, l2cb.num_lm_acl_bufs);
+  ASSERT_EQ(kAclBufferCountClassic, l2cb.controller_xmit_window);
 }
 
 TEST_F(StackL2capTest, l2cap_result_code_text) {
   std::vector<std::pair<tL2CAP_CONN, std::string>> results = {
-      std::make_pair(L2CAP_CONN_OK, "L2CAP_CONN_OK"),
-      std::make_pair(L2CAP_CONN_PENDING, "L2CAP_CONN_PENDING"),
-      std::make_pair(L2CAP_CONN_NO_PSM, "L2CAP_CONN_NO_PSM"),
-      std::make_pair(L2CAP_CONN_SECURITY_BLOCK, "L2CAP_CONN_SECURITY_BLOCK"),
-      std::make_pair(L2CAP_CONN_NO_RESOURCES, "L2CAP_CONN_NO_RESOURCES"),
-      std::make_pair(L2CAP_CONN_TIMEOUT, "L2CAP_CONN_TIMEOUT"),
-      std::make_pair(L2CAP_CONN_OTHER_ERROR, "L2CAP_CONN_OTHER_ERROR"),
-      std::make_pair(L2CAP_CONN_ACL_CONNECTION_FAILED,
-                     "L2CAP_CONN_ACL_CONNECTION_FAILED"),
-      std::make_pair(L2CAP_CONN_CLIENT_SECURITY_CLEARANCE_FAILED,
-                     "L2CAP_CONN_CLIENT_SECURITY_CLEARANCE_FAILED"),
-      std::make_pair(L2CAP_CONN_NO_LINK, "L2CAP_CONN_NO_LINK"),
-      std::make_pair(L2CAP_CONN_CANCEL, "L2CAP_CONN_CANCEL"),
-      std::make_pair(L2CAP_CONN_INSUFFICIENT_AUTHENTICATION,
-                     "L2CAP_CONN_INSUFFICIENT_AUTHENTICATION"),
-      std::make_pair(L2CAP_CONN_INSUFFICIENT_AUTHORIZATION,
-                     "L2CAP_CONN_INSUFFICIENT_AUTHORIZATION"),
-      std::make_pair(L2CAP_CONN_INSUFFICIENT_ENCRYP_KEY_SIZE,
-                     "L2CAP_CONN_INSUFFICIENT_ENCRYP_KEY_SIZE"),
-      std::make_pair(L2CAP_CONN_INSUFFICIENT_ENCRYP,
-                     "L2CAP_CONN_INSUFFICIENT_ENCRYP"),
-      std::make_pair(L2CAP_CONN_INVALID_SOURCE_CID,
-                     "L2CAP_CONN_INVALID_SOURCE_CID"),
-      std::make_pair(L2CAP_CONN_SOURCE_CID_ALREADY_ALLOCATED,
-                     "L2CAP_CONN_SOURCE_CID_ALREADY_ALLOCATED"),
-      std::make_pair(L2CAP_CONN_UNACCEPTABLE_PARAMETERS,
-                     "L2CAP_CONN_UNACCEPTABLE_PARAMETERS"),
-      std::make_pair(L2CAP_CONN_INVALID_PARAMETERS,
-                     "L2CAP_CONN_INVALID_PARAMETERS"),
+          std::make_pair(L2CAP_CONN_OK, "L2CAP_CONN_OK"),
+          std::make_pair(L2CAP_CONN_PENDING, "L2CAP_CONN_PENDING"),
+          std::make_pair(L2CAP_CONN_NO_PSM, "L2CAP_CONN_NO_PSM"),
+          std::make_pair(L2CAP_CONN_SECURITY_BLOCK, "L2CAP_CONN_SECURITY_BLOCK"),
+          std::make_pair(L2CAP_CONN_NO_RESOURCES, "L2CAP_CONN_NO_RESOURCES"),
+          std::make_pair(L2CAP_CONN_TIMEOUT, "L2CAP_CONN_TIMEOUT"),
+          std::make_pair(L2CAP_CONN_OTHER_ERROR, "L2CAP_CONN_OTHER_ERROR"),
+          std::make_pair(L2CAP_CONN_ACL_CONNECTION_FAILED, "L2CAP_CONN_ACL_CONNECTION_FAILED"),
+          std::make_pair(L2CAP_CONN_CLIENT_SECURITY_CLEARANCE_FAILED,
+                         "L2CAP_CONN_CLIENT_SECURITY_CLEARANCE_FAILED"),
+          std::make_pair(L2CAP_CONN_NO_LINK, "L2CAP_CONN_NO_LINK"),
+          std::make_pair(L2CAP_CONN_CANCEL, "L2CAP_CONN_CANCEL"),
+          std::make_pair(L2CAP_CONN_INSUFFICIENT_AUTHENTICATION,
+                         "L2CAP_CONN_INSUFFICIENT_AUTHENTICATION"),
+          std::make_pair(L2CAP_CONN_INSUFFICIENT_AUTHORIZATION,
+                         "L2CAP_CONN_INSUFFICIENT_AUTHORIZATION"),
+          std::make_pair(L2CAP_CONN_INSUFFICIENT_ENCRYP_KEY_SIZE,
+                         "L2CAP_CONN_INSUFFICIENT_ENCRYP_KEY_SIZE"),
+          std::make_pair(L2CAP_CONN_INSUFFICIENT_ENCRYP, "L2CAP_CONN_INSUFFICIENT_ENCRYP"),
+          std::make_pair(L2CAP_CONN_INVALID_SOURCE_CID, "L2CAP_CONN_INVALID_SOURCE_CID"),
+          std::make_pair(L2CAP_CONN_SOURCE_CID_ALREADY_ALLOCATED,
+                         "L2CAP_CONN_SOURCE_CID_ALREADY_ALLOCATED"),
+          std::make_pair(L2CAP_CONN_UNACCEPTABLE_PARAMETERS, "L2CAP_CONN_UNACCEPTABLE_PARAMETERS"),
+          std::make_pair(L2CAP_CONN_INVALID_PARAMETERS, "L2CAP_CONN_INVALID_PARAMETERS"),
   };
   for (const auto& result : results) {
-    ASSERT_STREQ(result.second.c_str(),
-                 l2cap_result_code_text(result.first).c_str());
+    ASSERT_STREQ(result.second.c_str(), l2cap_result_code_text(result.first).c_str());
   }
   std::ostringstream oss;
   oss << "UNKNOWN[" << std::numeric_limits<std::uint16_t>::max() << "]";
-  ASSERT_STREQ(
-      oss.str().c_str(),
-      l2cap_result_code_text(
-          static_cast<tL2CAP_CONN>(std::numeric_limits<std::uint16_t>::max()))
-          .c_str());
+  ASSERT_STREQ(oss.str().c_str(),
+               l2cap_result_code_text(
+                       static_cast<tL2CAP_CONN>(std::numeric_limits<std::uint16_t>::max()))
+                       .c_str());
+}
+
+TEST_F(StackL2capTest, L2CA_Dumpsys) {
+  int sv[2];
+  char buf[32];
+  ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
+  ASSERT_EQ(0, fcntl(sv[1], F_SETFL, fcntl(sv[1], F_GETFL, 0) | O_NONBLOCK));
+
+  L2CA_Dumpsys(sv[0]);
+  while (read(sv[1], buf, sizeof(buf)) != -1) {
+  }
+}
+
+TEST_F(StackL2capTest, bt_psm_text) {
+  std::map<tBT_PSM, std::string> map = {
+          {BT_PSM_SDP, "BT_PSM_SDP"},
+          {BT_PSM_RFCOMM, "BT_PSM_RFCOMM"},
+          {BT_PSM_TCS, "BT_PSM_TCS"},
+          {BT_PSM_CTP, "BT_PSM_CTP"},
+          {BT_PSM_BNEP, "BT_PSM_BNEP"},
+          {BT_PSM_HIDC, "BT_PSM_HIDC"},
+          {HID_PSM_CONTROL, "HID_PSM_CONTROL"},
+          {BT_PSM_HIDI, "BT_PSM_HIDI"},
+          {HID_PSM_INTERRUPT, "HID_PSM_INTERRUPT"},
+          {BT_PSM_UPNP, "BT_PSM_UPNP"},
+          {BT_PSM_AVCTP, "BT_PSM_AVCTP"},
+          {BT_PSM_AVDTP, "BT_PSM_AVDTP"},
+          {BT_PSM_AVCTP_13, "BT_PSM_AVCTP_13"},
+          {BT_PSM_UDI_CP, "BT_PSM_UDI_CP"},
+          {BT_PSM_ATT, "BT_PSM_ATT"},
+          {BT_PSM_EATT, "BT_PSM_EATT"},
+          {BRCM_RESERVED_PSM_START, "BRCM_RESERVED_PSM_START"},
+          {BRCM_RESERVED_PSM_END, "BRCM_RESERVED_PSM_END"},
+  };
+
+  for (const auto& it : map) {
+    bluetooth::log::info("{} {} ", bt_psm_text(it.first), it.second);
+  }
 }

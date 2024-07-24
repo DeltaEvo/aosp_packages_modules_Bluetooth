@@ -1,6 +1,8 @@
 //! Implementation of the Socket API (IBluetoothSocketManager).
 
-use bt_topshim::btif::{BluetoothInterface, BtStatus, RawAddress, Uuid};
+use bt_topshim::btif::{
+    BluetoothInterface, BtStatus, DisplayAddress, DisplayUuid, RawAddress, Uuid,
+};
 use bt_topshim::profiles::socket;
 use log;
 use nix::sys::socket::{recvmsg, ControlMessageOwned};
@@ -21,7 +23,6 @@ use tokio::time;
 use crate::bluetooth::BluetoothDevice;
 use crate::bluetooth_admin::{BluetoothAdmin, IBluetoothAdmin};
 use crate::callbacks::Callbacks;
-use crate::uuid::UuidHelper;
 use crate::Message;
 use crate::RPCProxy;
 
@@ -113,9 +114,9 @@ impl BluetoothServerSocket {
             sock_type: SocketType::Rfcomm,
             flags,
             psm: None,
-            channel: channel,
-            name: name,
-            uuid: uuid,
+            channel,
+            name,
+            uuid,
         }
     }
 
@@ -144,10 +145,10 @@ impl BluetoothServerSocket {
         sock.id = self.id;
         sock.sock_type = self.sock_type.clone();
         sock.flags = self.flags;
-        sock.uuid = self.uuid.clone();
+        sock.uuid = self.uuid;
 
         // Data from connection.
-        sock.remote_device = BluetoothDevice::new(conn.addr.to_string(), "".into());
+        sock.remote_device = BluetoothDevice::new(conn.addr, "".into());
         sock.port = conn.channel;
         sock.max_rx_size = conn.max_rx_packet_size.into();
         sock.max_tx_size = conn.max_tx_packet_size.into();
@@ -169,12 +170,12 @@ impl fmt::Display for BluetoothServerSocket {
                 (Some(psm), Some(cn)) => format!("psm {} | cn {}", psm, cn),
                 (None, Some(cn)) => format!("cn {}", cn),
                 (Some(psm), None) => format!("psm {}", psm),
-                (None, None) => format!("none"),
+                (None, None) => "none".to_string(),
             },
             self.sock_type,
             self.name.as_ref().unwrap_or(&String::new()),
             match self.uuid {
-                Some(u) => UuidHelper::to_string(&u.uu),
+                Some(u) => DisplayUuid(&u).to_string(),
                 None => "".to_string(),
             }
         )
@@ -205,7 +206,7 @@ impl BluetoothSocket {
     fn new() -> Self {
         BluetoothSocket {
             id: 0,
-            remote_device: BluetoothDevice::new(String::new(), String::new()),
+            remote_device: BluetoothDevice::new(RawAddress::default(), String::new()),
             sock_type: SocketType::Unknown,
             flags: 0,
             fd: None,
@@ -253,11 +254,11 @@ impl fmt::Display for BluetoothSocket {
         write!(
             f,
             "[{}]:{} (type: {:?}) (uuid: {})",
-            self.remote_device.address,
+            DisplayAddress(&self.remote_device.address),
             self.port,
             self.sock_type,
             match self.uuid {
-                Some(u) => UuidHelper::to_string(&u.uu),
+                Some(u) => DisplayUuid(&u).to_string(),
                 None => "".to_string(),
             }
         )
@@ -554,6 +555,19 @@ impl BluetoothSocketManager {
         self.sock = Some(socket::BtSocket::new(&intf.lock().unwrap()));
     }
 
+    /// Check if there is any listening socket.
+    pub fn is_listening(&self) -> bool {
+        self.listening.values().any(|vs| !vs.is_empty())
+    }
+
+    /// Trigger adapter to update connectable mode.
+    fn trigger_update_connectable_mode(&self) {
+        let txl = self.tx.clone();
+        tokio::spawn(async move {
+            let _ = txl.send(Message::TriggerUpdateConnectableMode).await;
+        });
+    }
+
     // TODO(abps) - We need to save information about who the caller is so that
     //              we can pipe it down to the lower levels. This needs to be
     //              provided by the projection layer and is currently missing.
@@ -576,8 +590,8 @@ impl BluetoothSocketManager {
         cbid: CallbackId,
     ) -> SocketResult {
         if let Some(uuid) = socket_info.uuid {
-            if !self.admin.lock().unwrap().is_service_allowed(uuid.into()) {
-                log::debug!("service {} is blocked by admin policy", uuid);
+            if !self.admin.lock().unwrap().is_service_allowed(uuid) {
+                log::debug!("service {} is blocked by admin policy", DisplayUuid(&uuid));
                 return SocketResult::new(BtStatus::AuthRejected, INVALID_SOCKET_ID);
             }
             if self
@@ -585,8 +599,8 @@ impl BluetoothSocketManager {
                 .iter()
                 .any(|(_, v)| v.iter().any(|s| s.uuid.map_or(false, |u| u == uuid)))
             {
-                log::warn!("Service {} already exists", uuid);
-                return SocketResult::new(BtStatus::Fail, INVALID_SOCKET_ID);
+                log::warn!("Service {} already exists", DisplayUuid(&uuid));
+                return SocketResult::new(BtStatus::SocketError, INVALID_SOCKET_ID);
             }
         }
 
@@ -595,10 +609,7 @@ impl BluetoothSocketManager {
             self.sock.as_ref().expect("Socket Manager not initialized").listen(
                 socket_info.sock_type.clone(),
                 socket_info.name.as_ref().unwrap_or(&String::new()).clone(),
-                match socket_info.uuid {
-                    Some(u) => Some(u.uu.clone()),
-                    None => None,
-                },
+                socket_info.uuid,
                 match socket_info.sock_type {
                     SocketType::Rfcomm => socket_info.channel.unwrap_or(DYNAMIC_CHANNEL),
                     SocketType::L2cap | SocketType::L2capLe => {
@@ -617,7 +628,7 @@ impl BluetoothSocketManager {
                 let id = self.next_socket_id();
                 socket_info.id = id;
                 let (runner_tx, runner_rx) = channel::<SocketRunnerActions>(10);
-                let uuid = socket_info.uuid.clone();
+                let uuid = socket_info.uuid;
 
                 // Push a listening task to local runtime to wait for device to
                 // start accepting or get closed.
@@ -628,12 +639,12 @@ impl BluetoothSocketManager {
                     Some(v) => v,
                     None => {
                         log::debug!("Converting from file to unixstream failed");
-                        return SocketResult::new(BtStatus::Fail, INVALID_SOCKET_ID);
+                        return SocketResult::new(BtStatus::SocketError, INVALID_SOCKET_ID);
                     }
                 };
 
                 // We only send socket ready after we've read the channel out.
-                let listen_status = status.clone();
+                let listen_status = status;
                 let joinhandle = self.runtime.spawn(async move {
                     BluetoothSocketManager::listening_task(
                         cbid,
@@ -651,6 +662,9 @@ impl BluetoothSocketManager {
                     .entry(cbid)
                     .or_default()
                     .push(InternalListeningSocket::new(cbid, id, runner_tx, uuid, joinhandle));
+
+                // Update the connectable mode since the list of listening socket has changed.
+                self.trigger_update_connectable_mode();
 
                 SocketResult::new(status, id)
             }
@@ -675,32 +689,18 @@ impl BluetoothSocketManager {
         cbid: CallbackId,
     ) -> SocketResult {
         if let Some(uuid) = socket_info.uuid {
-            if !self.admin.lock().unwrap().is_service_allowed(uuid.into()) {
-                log::debug!("service {} is blocked by admin policy", uuid);
+            if !self.admin.lock().unwrap().is_service_allowed(uuid) {
+                log::debug!("service {} is blocked by admin policy", DisplayUuid(&uuid));
                 return SocketResult::new(BtStatus::AuthRejected, INVALID_SOCKET_ID);
             }
         }
 
-        let addr = match RawAddress::from_string(socket_info.remote_device.address.clone()) {
-            Some(v) => v,
-            None => {
-                log::warn!(
-                    "Invalid address during socket connection: {}",
-                    socket_info.remote_device.address.clone()
-                );
-                return SocketResult::new(BtStatus::InvalidParam, INVALID_SOCKET_ID);
-            }
-        };
-
         // Create connecting socket pair.
         let (mut status, result) =
             self.sock.as_ref().expect("Socket manager not initialized").connect(
-                addr,
+                socket_info.remote_device.address,
                 socket_info.sock_type.clone(),
-                match socket_info.uuid {
-                    Some(u) => Some(u.uu.clone()),
-                    None => None,
-                },
+                socket_info.uuid,
                 socket_info.port,
                 socket_info.flags,
                 self.get_caller_uid(),
@@ -768,12 +768,12 @@ impl BluetoothSocketManager {
         let connection_timeout = Duration::from_millis(CONNECT_COMPLETE_TIMEOUT_MS);
         // Wait for stream to be readable, then read channel. This is the first thing that must
         // happen in the listening channel. If this fails, close the channel.
-        let mut channel_bytes = [0 as u8; 4];
+        let mut channel_bytes = [0_u8; 4];
         let mut status =
             Self::wait_and_read_stream(connection_timeout, &stream, &mut channel_bytes).await;
         let channel = i32::from_ne_bytes(channel_bytes);
         if channel <= 0 {
-            status = BtStatus::Fail;
+            status = BtStatus::SocketError;
         }
 
         // If we don't get a valid channel, consider the socket as closed.
@@ -808,7 +808,7 @@ impl BluetoothSocketManager {
         };
         // Notify via callbacks that this socket is ready to be listened to since we have the
         // channel available now.
-        let (forwarded_socket, forwarded_status) = (socket_info.clone(), listen_status.clone());
+        let (forwarded_socket, forwarded_status) = (socket_info.clone(), listen_status);
         let _ = rpc_tx
             .send(Message::SocketManagerActions(SocketActions::OnIncomingSocketReady(
                 cbid,
@@ -945,7 +945,7 @@ impl BluetoothSocketManager {
 
                             // If we returned an error for the above socket, then the recv failed.
                             // Just continue this loop.
-                            if !sock.is_ok() {
+                            if sock.is_err() {
                                 continue;
                             }
 
@@ -971,7 +971,7 @@ impl BluetoothSocketManager {
                                             SocketActions::OnIncomingSocketReady(
                                                 cbid,
                                                 cloned_socket_info,
-                                                BtStatus::Fail,
+                                                BtStatus::SocketError,
                                             ),
                                         ))
                                         .await;
@@ -1022,7 +1022,7 @@ impl BluetoothSocketManager {
                 Ok(()) => {}
                 Err(_e) => {
                     // Stream was not readable. This is usually due to some polling error.
-                    return BtStatus::Fail;
+                    return BtStatus::SocketError;
                 }
             },
             Err(_) => {
@@ -1034,13 +1034,11 @@ impl BluetoothSocketManager {
         match stream.try_read(buf) {
             Ok(n) => {
                 if n != buf.len() {
-                    return BtStatus::Fail;
+                    return BtStatus::SocketError;
                 }
-                return BtStatus::Success;
+                BtStatus::Success
             }
-            _ => {
-                return BtStatus::Fail;
-            }
+            _ => BtStatus::SocketError,
         }
     }
 
@@ -1065,7 +1063,7 @@ impl BluetoothSocketManager {
                     .send(Message::SocketManagerActions(SocketActions::OnOutgoingConnectionResult(
                         cbid,
                         socket_id,
-                        BtStatus::Fail,
+                        BtStatus::SocketError,
                         None,
                     )))
                     .await;
@@ -1074,11 +1072,11 @@ impl BluetoothSocketManager {
         };
 
         // Wait for stream to be readable, then read channel
-        let mut channel_bytes = [0 as u8; 4];
+        let mut channel_bytes = [0_u8; 4];
         let mut status =
             Self::wait_and_read_stream(connection_timeout, &stream, &mut channel_bytes).await;
         if i32::from_ne_bytes(channel_bytes) <= 0 {
-            status = BtStatus::Fail;
+            status = BtStatus::SocketError;
         }
         if status != BtStatus::Success {
             log::info!(
@@ -1115,10 +1113,7 @@ impl BluetoothSocketManager {
                     let _ = tx
                         .send(Message::SocketManagerActions(
                             SocketActions::OnOutgoingConnectionResult(
-                                cbid,
-                                socket_id,
-                                status.clone(),
-                                None,
+                                cbid, socket_id, status, None,
                             ),
                         ))
                         .await;
@@ -1134,7 +1129,7 @@ impl BluetoothSocketManager {
                             SocketActions::OnOutgoingConnectionResult(
                                 cbid,
                                 socket_id,
-                                status.clone(),
+                                status,
                                 Some(sock),
                             ),
                         ))
@@ -1147,7 +1142,7 @@ impl BluetoothSocketManager {
                     .send(Message::SocketManagerActions(SocketActions::OnOutgoingConnectionResult(
                         cbid,
                         socket_id,
-                        BtStatus::Fail,
+                        BtStatus::SocketError,
                         None,
                     )))
                     .await;
@@ -1172,6 +1167,9 @@ impl BluetoothSocketManager {
                         .entry(cbid)
                         .and_modify(|v| v.retain(|s| s.socket_id != socket_id));
                 }
+
+                // Update the connectable mode since the list of listening socket has changed.
+                self.trigger_update_connectable_mode();
             }
 
             SocketActions::OnHandleIncomingConnection(cbid, socket_id, socket) => {
@@ -1202,14 +1200,11 @@ impl BluetoothSocketManager {
         let forbidden_sockets = self
             .listening
             .values()
-            .into_iter()
             .flatten()
             .filter(|sock| {
                 sock.uuid
                     // Don't need to close L2cap socket (indicated by no uuid).
-                    .map_or(false, |uuid| {
-                        !self.admin.lock().unwrap().is_service_allowed(uuid.into())
-                    })
+                    .map_or(false, |uuid| !self.admin.lock().unwrap().is_service_allowed(uuid))
             })
             .map(|sock| (sock.socket_id, sock.tx.clone(), sock.uuid.unwrap()))
             .collect::<Vec<(u64, Sender<SocketRunnerActions>, Uuid)>>();
@@ -1219,7 +1214,7 @@ impl BluetoothSocketManager {
                 log::debug!(
                     "socket id {} is not allowed by admin policy due to uuid {}, closing",
                     id,
-                    uuid
+                    DisplayUuid(&uuid)
                 );
                 let _ = tx.send(SocketRunnerActions::Close(id)).await;
             }
@@ -1245,28 +1240,24 @@ impl BluetoothSocketManager {
                 });
             }
         });
+
+        // Update the connectable mode since the list of listening socket has changed.
+        self.trigger_update_connectable_mode();
+
         self.callbacks.remove_callback(callback);
     }
 
     // Send MSC command to the peer. ONLY FOR QUALIFICATION USE.
     // libbluetooth auto starts the control request only when it is the client.
     // This function allows the host to start the control request while as a server.
-    pub fn rfcomm_send_msc(&mut self, dlci: u8, addr: String) {
-        match (|| -> Result<(), &str> {
-            let addr = RawAddress::from_string(addr)
-                .ok_or("Invalid address for starting control request")?;
-            let sock = self
-                .sock
-                .as_ref()
-                .ok_or("Socket Manager not initialized when starting control request")?;
-            if sock.send_msc(dlci, addr) != BtStatus::Success {
-                return Err("Failed to start control request");
-            }
-            Ok(())
-        })() {
-            Ok(_) => {}
-            Err(msg) => log::warn!("{}", msg),
+    pub fn rfcomm_send_msc(&mut self, dlci: u8, addr: RawAddress) {
+        let Some(sock) = self.sock.as_ref() else {
+            log::warn!("Socket Manager not initialized when starting control request");
+            return;
         };
+        if sock.send_msc(dlci, addr) != BtStatus::Success {
+            log::warn!("Failed to start control request");
+        }
     }
 }
 
@@ -1472,10 +1463,7 @@ impl IBluetoothSocketManager for BluetoothSocketManager {
             Some(v) => {
                 if let Some(found) = v.iter().find(|item| item.socket_id == id) {
                     let tx = found.tx.clone();
-                    let timeout_duration = match timeout_ms {
-                        Some(t) => Some(Duration::from_millis(t.into())),
-                        None => None,
-                    };
+                    let timeout_duration = timeout_ms.map(|t| Duration::from_millis(t.into()));
                     self.runtime.spawn(async move {
                         let _ =
                             tx.send(SocketRunnerActions::AcceptTimeout(id, timeout_duration)).await;

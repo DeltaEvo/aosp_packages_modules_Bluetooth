@@ -22,24 +22,18 @@
 #include "bta/include/bta_hf_client_api.h"
 #include "common/message_loop_thread.h"
 #include "device/include/esco_parameters.h"
-#include "test/mock/mock_device_controller.h"
 #include "types/raw_address.h"
 
 namespace base {
 class MessageLoop;
 }  // namespace base
 
-bluetooth::common::MessageLoopThread* get_main_thread() { return nullptr; }
-void do_in_main_thread(base::Location const&, base::OnceCallback<void()>) {
-  return;
-}
-
 namespace {
 const RawAddress bdaddr1({0x11, 0x22, 0x33, 0x44, 0x55, 0x66});
 }  // namespace
 
 class BtaHfClientSecurityTest : public testing::Test {
- protected:
+protected:
   void SetUp() override {
     // Reset the memory block, this is the state on which the allocate handle
     // would start operating

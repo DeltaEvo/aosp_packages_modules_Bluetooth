@@ -16,13 +16,13 @@
  *
  ******************************************************************************/
 
-#include <base/logging.h>
+#include "common/lru.h"
+
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
 #include <chrono>
 #include <limits>
-
-#include "common/lru.h"
 
 namespace testing {
 

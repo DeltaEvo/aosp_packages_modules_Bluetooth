@@ -16,9 +16,8 @@
 
 #include "iterator.h"
 
-#include <base/logging.h>
+#include <bluetooth/log.h>
 
-#include "check.h"
 #include "packet.h"
 
 namespace bluetooth {
@@ -27,8 +26,10 @@ Iterator::Iterator(std::shared_ptr<const Packet> packet, size_t i) {
   packet_ = packet;
   index_ = i;
 
-  CHECK_GE(index_, packet->packet_start_index_);
-  CHECK_LE(index_, packet->packet_end_index_);
+  log::assert_that(index_ >= packet->packet_start_index_,
+                   "assert failed: index_ >= packet->packet_start_index_");
+  log::assert_that(index_ <= packet->packet_end_index_,
+                   "assert failed: index_ <= packet->packet_end_index_");
 }
 
 Iterator::Iterator(const Iterator& itr) { *this = itr; }
@@ -41,8 +42,7 @@ Iterator Iterator::operator+(size_t offset) {
 
 Iterator& Iterator::operator+=(size_t offset) {
   size_t new_offset = index_ + offset;
-  index_ = new_offset > packet_->packet_end_index_ ? packet_->packet_end_index_
-                                                   : new_offset;
+  index_ = new_offset > packet_->packet_end_index_ ? packet_->packet_end_index_ : new_offset;
   return *this;
 }
 
@@ -50,7 +50,9 @@ Iterator Iterator::operator++(int) {
   auto itr(*this);
   index_++;
 
-  if (index_ > packet_->packet_end_index_) index_ = packet_->packet_end_index_;
+  if (index_ > packet_->packet_end_index_) {
+    index_ = packet_->packet_end_index_;
+  }
 
   return itr;
 }
@@ -58,7 +60,9 @@ Iterator Iterator::operator++(int) {
 Iterator& Iterator::operator++() {
   index_++;
 
-  if (index_ > packet_->packet_end_index_) index_ = packet_->packet_end_index_;
+  if (index_ > packet_->packet_end_index_) {
+    index_ = packet_->packet_end_index_;
+  }
 
   return *this;
 }
@@ -73,21 +77,25 @@ int Iterator::operator-(const Iterator& itr) { return index_ - itr.index_; }
 
 Iterator& Iterator::operator-=(size_t offset) {
   index_ = (index_ < offset || index_ - offset < packet_->packet_start_index_)
-               ? packet_->packet_start_index_
-               : index_ - offset;
+                   ? packet_->packet_start_index_
+                   : index_ - offset;
 
   return *this;
 }
 
 Iterator Iterator::operator--(int) {
   auto itr(*this);
-  if (index_ != packet_->packet_start_index_) index_--;
+  if (index_ != packet_->packet_start_index_) {
+    index_--;
+  }
 
   return itr;
 }
 
 Iterator& Iterator::operator--() {
-  if (index_ != packet_->packet_start_index_) index_--;
+  if (index_ != packet_->packet_start_index_) {
+    index_--;
+  }
 
   return *this;
 }
@@ -100,29 +108,30 @@ Iterator& Iterator::operator=(const Iterator& itr) {
 }
 
 bool Iterator::operator==(const Iterator& itr) const {
-  return ((packet_ == itr.packet_) && (index_ == itr.index_));
+  return (packet_ == itr.packet_) && (index_ == itr.index_);
 }
 
 bool Iterator::operator!=(const Iterator& itr) const { return !(*this == itr); }
 
 bool Iterator::operator<(const Iterator& itr) const {
-  return ((packet_ == itr.packet_) && (index_ < itr.index_));
+  return (packet_ == itr.packet_) && (index_ < itr.index_);
 }
 
 bool Iterator::operator>(const Iterator& itr) const {
-  return ((packet_ == itr.packet_) && (index_ > itr.index_));
+  return (packet_ == itr.packet_) && (index_ > itr.index_);
 }
 
 bool Iterator::operator<=(const Iterator& itr) const {
-  return ((packet_ == itr.packet_) && (index_ <= itr.index_));
+  return (packet_ == itr.packet_) && (index_ <= itr.index_);
 }
 
 bool Iterator::operator>=(const Iterator& itr) const {
-  return ((packet_ == itr.packet_) && (index_ >= itr.index_));
+  return (packet_ == itr.packet_) && (index_ >= itr.index_);
 }
 
 uint8_t Iterator::operator*() const {
-  CHECK_NE(index_, packet_->packet_end_index_);
+  log::assert_that(index_ != packet_->packet_end_index_,
+                   "assert failed: index_ != packet_->packet_end_index_");
 
   return packet_->get_at_index(index_);
 }

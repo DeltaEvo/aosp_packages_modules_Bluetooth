@@ -26,6 +26,7 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::time::{sleep, Duration};
 
 use crate::battery_manager::{BatteryManager, BatterySet};
 use crate::battery_provider_manager::BatteryProviderManager;
@@ -45,10 +46,11 @@ use crate::dis::{DeviceInformation, ServiceCallbacks};
 use crate::socket_manager::{BluetoothSocketManager, SocketActions};
 use crate::suspend::Suspend;
 use bt_topshim::{
-    btif::{BaseCallbacks, BtTransport},
+    btif::{BaseCallbacks, BtAclState, BtBondState, BtTransport, RawAddress},
     profiles::{
         a2dp::A2dpCallbacks,
         avrcp::AvrcpCallbacks,
+        csis::CsisClientCallbacks,
         gatt::GattAdvCallbacks,
         gatt::GattAdvInbandCallbacks,
         gatt::GattClientCallbacks,
@@ -57,7 +59,9 @@ use bt_topshim::{
         gatt::GattServerCallbacks,
         hfp::HfpCallbacks,
         hid_host::{BthhReportType, HHCallbacks},
+        le_audio::LeAudioClientCallbacks,
         sdp::SdpCallbacks,
+        vc::VolumeControlCallbacks,
     },
 };
 
@@ -79,6 +83,7 @@ pub enum Message {
     Base(BaseCallbacks),
     GattClient(GattClientCallbacks),
     GattServer(GattServerCallbacks),
+    LeAudioClient(LeAudioClientCallbacks),
     LeScanner(GattScannerCallbacks),
     LeScannerInband(GattScannerInbandCallbacks),
     LeAdvInband(GattAdvInbandCallbacks),
@@ -86,6 +91,9 @@ pub enum Message {
     HidHost(HHCallbacks),
     Hfp(HfpCallbacks),
     Sdp(SdpCallbacks),
+    VolumeControl(VolumeControlCallbacks),
+    CsisClient(CsisClientCallbacks),
+    CreateBondWithRetry(BluetoothDevice, BtTransport, u32, Duration),
 
     // Actions within the stack
     Media(MediaActions),
@@ -97,12 +105,13 @@ pub enum Message {
     ConnectionCallbackDisconnected(u32),
 
     // Some delayed actions for the adapter.
+    TriggerUpdateConnectableMode,
     DelayedAdapterActions(DelayedActions),
 
-    // Follows IBluetooth's on_device_(dis)connected callback but doesn't require depending on
-    // Bluetooth.
-    OnAclConnected(BluetoothDevice, BtTransport),
-    OnAclDisconnected(BluetoothDevice),
+    // Follows IBluetooth's on_device_(dis)connected and bond_state callbacks
+    // but doesn't require depending on Bluetooth.
+    OnDeviceConnectionStateChanged(BluetoothDevice, BtAclState, BtBondState, BtTransport),
+    OnDeviceDisconnected(BluetoothDevice),
 
     // Suspend related
     SuspendCallbackRegistered(u32),
@@ -123,7 +132,7 @@ pub enum Message {
 
     // Battery related
     BatteryProviderManagerCallbackDisconnected(u32),
-    BatteryProviderManagerBatteryUpdated(String, BatterySet),
+    BatteryProviderManagerBatteryUpdated(RawAddress, BatterySet),
     BatteryServiceCallbackDisconnected(u32),
     BatteryService(BatteryServiceActions),
     BatteryServiceRefresh,
@@ -147,18 +156,21 @@ pub enum Message {
     // Qualification Only
     QaCallbackDisconnected(u32),
     QaAddMediaPlayer(String, bool),
-    QaRfcommSendMsc(u8, String),
+    QaRfcommSendMsc(u8, RawAddress),
     QaFetchDiscoverableMode,
     QaFetchConnectable,
     QaSetConnectable(bool),
     QaFetchAlias,
-    QaGetHidReport(String, BthhReportType, u8),
-    QaSetHidReport(String, BthhReportType, String),
-    QaSendHidData(String, String),
+    QaGetHidReport(RawAddress, BthhReportType, u8),
+    QaSetHidReport(RawAddress, BthhReportType, String),
+    QaSendHidData(RawAddress, String),
 
     // UHid callbacks
-    UHidHfpOutputCallback(String, u8, u8),
-    UHidTelephonyUseCallback(String, bool),
+    UHidHfpOutputCallback(RawAddress, u8, u8),
+    UHidTelephonyUseCallback(RawAddress, bool),
+
+    // GATT Callbacks
+    GattClientDisconnected(RawAddress),
 }
 
 pub enum BluetoothAPI {
@@ -200,6 +212,7 @@ impl Stack {
     /// Runs the main dispatch loop.
     pub async fn dispatch(
         mut rx: Receiver<Message>,
+        tx: Sender<Message>,
         api_tx: Sender<APIMessage>,
         bluetooth: Arc<Mutex<Box<Bluetooth>>>,
         bluetooth_gatt: Arc<Mutex<Box<BluetoothGatt>>>,
@@ -223,9 +236,9 @@ impl Stack {
 
             match m.unwrap() {
                 Message::InterfaceShutdown => {
-                    let tx = api_tx.clone();
+                    let txl = api_tx.clone();
                     tokio::spawn(async move {
-                        let _ = tx.send(APIMessage::ShutDown).await;
+                        let _ = txl.send(APIMessage::ShutDown).await;
                     });
                 }
 
@@ -258,12 +271,51 @@ impl Stack {
                     dispatch_base_callbacks(suspend.lock().unwrap().as_mut(), b);
                 }
 
+                // When pairing is busy for any reason, the bond cannot be created.
+                // Allow retries until it is ready for bonding.
+                Message::CreateBondWithRetry(device, bt_transport, num_attempts, retry_delay) => {
+                    if num_attempts == 0 {
+                        continue;
+                    }
+
+                    let mut bt = bluetooth.lock().unwrap();
+                    if !bt.is_pairing_busy() {
+                        bt.create_bond(device, bt_transport);
+                        continue;
+                    }
+
+                    let txl = tx.clone();
+                    tokio::spawn(async move {
+                        sleep(retry_delay).await;
+                        let _ = txl
+                            .send(Message::CreateBondWithRetry(
+                                device,
+                                bt_transport,
+                                num_attempts - 1,
+                                retry_delay,
+                            ))
+                            .await;
+                    });
+                }
+
                 Message::GattClient(m) => {
                     dispatch_gatt_client_callbacks(bluetooth_gatt.lock().unwrap().as_mut(), m);
                 }
 
                 Message::GattServer(m) => {
                     dispatch_gatt_server_callbacks(bluetooth_gatt.lock().unwrap().as_mut(), m);
+                }
+
+                Message::LeAudioClient(a) => {
+                    bluetooth_media.lock().unwrap().dispatch_le_audio_callbacks(a);
+                }
+
+                Message::VolumeControl(a) => {
+                    bluetooth_media.lock().unwrap().dispatch_vc_callbacks(a);
+                }
+
+                Message::CsisClient(a) => {
+                    bluetooth_media.lock().unwrap().dispatch_csis_callbacks(a);
                 }
 
                 Message::LeScanner(m) => {
@@ -317,6 +369,13 @@ impl Stack {
                     bluetooth.lock().unwrap().connection_callback_disconnected(id);
                 }
 
+                Message::TriggerUpdateConnectableMode => {
+                    let is_listening = bluetooth_socketmgr.lock().unwrap().is_listening();
+                    bluetooth.lock().unwrap().handle_delayed_actions(
+                        DelayedActions::UpdateConnectableMode(is_listening),
+                    );
+                }
+
                 Message::DelayedAdapterActions(action) => {
                     bluetooth.lock().unwrap().handle_delayed_actions(action);
                 }
@@ -324,16 +383,20 @@ impl Stack {
                 // Any service needing an updated list of devices can have an
                 // update method triggered from here rather than needing a
                 // reference to Bluetooth.
-                Message::OnAclConnected(device, transport) => {
-                    battery_service
-                        .lock()
-                        .unwrap()
-                        .handle_action(BatteryServiceActions::Connect(device, transport));
+                Message::OnDeviceConnectionStateChanged(
+                    device,
+                    acl_state,
+                    bond_state,
+                    transport,
+                ) => {
+                    battery_service.lock().unwrap().handle_action(BatteryServiceActions::Connect(
+                        device, acl_state, bond_state, transport,
+                    ));
                 }
 
                 // For battery service, use this to clean up internal handles. GATT connection is
                 // already dropped if ACL disconnect has occurred.
-                Message::OnAclDisconnected(device) => {
+                Message::OnDeviceDisconnected(device) => {
                     battery_service
                         .lock()
                         .unwrap()
@@ -483,6 +546,13 @@ impl Stack {
                         .lock()
                         .unwrap()
                         .dispatch_uhid_telephony_use_callback(addr, state);
+                }
+
+                Message::GattClientDisconnected(address) => {
+                    bluetooth
+                        .lock()
+                        .unwrap()
+                        .disconnect_if_no_media_or_hid_profiles_connected(address);
                 }
             }
         }

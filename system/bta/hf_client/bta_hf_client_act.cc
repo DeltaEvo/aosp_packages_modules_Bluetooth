@@ -24,13 +24,14 @@
  ******************************************************************************/
 
 #include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 
 #include "bta/hf_client/bta_hf_client_int.h"
 #include "bta/include/bta_dm_api.h"
-#include "os/log.h"
 #include "stack/include/l2c_api.h"
 #include "stack/include/port_api.h"
 #include "stack/include/sdp_status.h"
+#include "types/bt_transport.h"
 #include "types/raw_address.h"
 
 using namespace bluetooth;
@@ -53,8 +54,7 @@ using namespace bluetooth;
  *
  ******************************************************************************/
 void bta_hf_client_start_close(tBTA_HF_CLIENT_DATA* p_data) {
-  tBTA_HF_CLIENT_CB* client_cb =
-      bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
+  tBTA_HF_CLIENT_CB* client_cb = bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
     log::error("wrong handle to control block {}", p_data->hdr.layer_specific);
     return;
@@ -62,7 +62,10 @@ void bta_hf_client_start_close(tBTA_HF_CLIENT_DATA* p_data) {
 
   /* Take the link out of sniff and set L2C idle time to 0 */
   bta_dm_pm_active(client_cb->peer_addr);
-  L2CA_SetIdleTimeoutByBdAddr(client_cb->peer_addr, 0, BT_TRANSPORT_BR_EDR);
+  if (!L2CA_SetIdleTimeoutByBdAddr(client_cb->peer_addr, 0, BT_TRANSPORT_BR_EDR)) {
+    log::warn("Unable to set L2CAP idle timeout peer:{} transport:{} timeout:{}",
+              client_cb->peer_addr, bt_transport_text(BT_TRANSPORT_BR_EDR), 0);
+  }
 
   /* if SCO is open close SCO and wait on RFCOMM close */
   if (client_cb->sco_state == BTA_HF_CLIENT_SCO_OPEN_ST) {
@@ -86,8 +89,7 @@ void bta_hf_client_start_close(tBTA_HF_CLIENT_DATA* p_data) {
  *
  ******************************************************************************/
 void bta_hf_client_start_open(tBTA_HF_CLIENT_DATA* p_data) {
-  tBTA_HF_CLIENT_CB* client_cb =
-      bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
+  tBTA_HF_CLIENT_CB* client_cb = bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
     log::error("wrong handle to control block {}", p_data->hdr.layer_specific);
     return;
@@ -99,14 +101,22 @@ void bta_hf_client_start_open(tBTA_HF_CLIENT_DATA* p_data) {
   }
 
   /* Check if RFCOMM has any incoming connection to avoid collision. */
-  RawAddress pending_bd_addr = RawAddress::kEmpty;
-  if (PORT_IsOpening(&pending_bd_addr)) {
-    /* Let the incoming connection goes through.                        */
-    /* Issue collision for now.                                         */
-    /* We will decide what to do when we find incoming connection later.*/
-    bta_hf_client_collision_cback(BTA_SYS_CONN_OPEN, BTA_ID_HS, 0,
-                                  client_cb->peer_addr);
-    return;
+  if (com::android::bluetooth::flags::rfcomm_prevent_unnecessary_collisions()) {
+    if (PORT_IsCollisionDetected(client_cb->peer_addr)) {
+      /* Let the incoming connection go through.                          */
+      /* Issue collision for now.                                         */
+      /* We will decide what to do when we find incoming connection later.*/
+      bta_hf_client_collision_cback(BTA_SYS_CONN_OPEN, BTA_ID_HS, 0, client_cb->peer_addr);
+    }
+  } else {
+    RawAddress pending_bd_addr = RawAddress::kEmpty;
+    if (PORT_IsOpening(&pending_bd_addr)) {
+      /* Let the incoming connection go through.                          */
+      /* Issue collision for now.                                         */
+      /* We will decide what to do when we find incoming connection later.*/
+      bta_hf_client_collision_cback(BTA_SYS_CONN_OPEN, BTA_ID_HS, 0, client_cb->peer_addr);
+      return;
+    }
   }
 
   /* set role */
@@ -128,8 +138,7 @@ void bta_hf_client_start_open(tBTA_HF_CLIENT_DATA* p_data) {
  ******************************************************************************/
 void bta_hf_client_rfc_open(tBTA_HF_CLIENT_DATA* p_data) {
   log::verbose("");
-  tBTA_HF_CLIENT_CB* client_cb =
-      bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
+  tBTA_HF_CLIENT_CB* client_cb = bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
     log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
@@ -153,8 +162,7 @@ void bta_hf_client_rfc_open(tBTA_HF_CLIENT_DATA* p_data) {
  ******************************************************************************/
 void bta_hf_client_rfc_acp_open(tBTA_HF_CLIENT_DATA* p_data) {
   log::verbose("");
-  tBTA_HF_CLIENT_CB* client_cb =
-      bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
+  tBTA_HF_CLIENT_CB* client_cb = bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
     log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
@@ -206,8 +214,7 @@ void bta_hf_client_rfc_acp_open(tBTA_HF_CLIENT_DATA* p_data) {
  *
  ******************************************************************************/
 void bta_hf_client_rfc_fail(tBTA_HF_CLIENT_DATA* p_data) {
-  tBTA_HF_CLIENT_CB* client_cb =
-      bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
+  tBTA_HF_CLIENT_CB* client_cb = bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
     log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
@@ -235,8 +242,7 @@ void bta_hf_client_rfc_fail(tBTA_HF_CLIENT_DATA* p_data) {
  *
  ******************************************************************************/
 void bta_hf_client_disc_fail(tBTA_HF_CLIENT_DATA* p_data) {
-  tBTA_HF_CLIENT_CB* client_cb =
-      bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
+  tBTA_HF_CLIENT_CB* client_cb = bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
     log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
@@ -254,8 +260,7 @@ void bta_hf_client_disc_fail(tBTA_HF_CLIENT_DATA* p_data) {
  *
  ******************************************************************************/
 void bta_hf_client_open_fail(tBTA_HF_CLIENT_DATA* p_data) {
-  tBTA_HF_CLIENT_CB* client_cb =
-      bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
+  tBTA_HF_CLIENT_CB* client_cb = bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
     log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
@@ -273,8 +278,7 @@ void bta_hf_client_open_fail(tBTA_HF_CLIENT_DATA* p_data) {
  *
  ******************************************************************************/
 void bta_hf_client_rfc_close(tBTA_HF_CLIENT_DATA* p_data) {
-  tBTA_HF_CLIENT_CB* client_cb =
-      bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
+  tBTA_HF_CLIENT_CB* client_cb = bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
     log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
@@ -319,16 +323,14 @@ void bta_hf_client_disc_int_res(tBTA_HF_CLIENT_DATA* p_data) {
   uint16_t event = BTA_HF_CLIENT_DISC_FAIL_EVT;
 
   log::verbose("Status: {}", p_data->disc_result.status);
-  tBTA_HF_CLIENT_CB* client_cb =
-      bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
+  tBTA_HF_CLIENT_CB* client_cb = bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
     log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
   }
 
   /* if found service */
-  if (p_data->disc_result.status == SDP_SUCCESS ||
-      p_data->disc_result.status == SDP_DB_FULL) {
+  if (p_data->disc_result.status == SDP_SUCCESS || p_data->disc_result.status == SDP_DB_FULL) {
     /* get attributes */
     if (bta_hf_client_sdp_find_attr(client_cb)) {
       event = BTA_HF_CLIENT_DISC_OK_EVT;
@@ -353,16 +355,14 @@ void bta_hf_client_disc_int_res(tBTA_HF_CLIENT_DATA* p_data) {
  *
  ******************************************************************************/
 void bta_hf_client_disc_acp_res(tBTA_HF_CLIENT_DATA* p_data) {
-  tBTA_HF_CLIENT_CB* client_cb =
-      bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
+  tBTA_HF_CLIENT_CB* client_cb = bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
     log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
   }
 
   /* if found service */
-  if (p_data->disc_result.status == SDP_SUCCESS ||
-      p_data->disc_result.status == SDP_DB_FULL) {
+  if (p_data->disc_result.status == SDP_SUCCESS || p_data->disc_result.status == SDP_DB_FULL) {
     /* get attributes */
     bta_hf_client_sdp_find_attr(client_cb);
   }
@@ -382,8 +382,7 @@ void bta_hf_client_disc_acp_res(tBTA_HF_CLIENT_DATA* p_data) {
  *
  ******************************************************************************/
 void bta_hf_client_rfc_data(tBTA_HF_CLIENT_DATA* p_data) {
-  tBTA_HF_CLIENT_CB* client_cb =
-      bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
+  tBTA_HF_CLIENT_CB* client_cb = bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
     log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;
@@ -393,8 +392,8 @@ void bta_hf_client_rfc_data(tBTA_HF_CLIENT_DATA* p_data) {
   char buf[BTA_HF_CLIENT_RFC_READ_MAX];
   memset(buf, 0, sizeof(buf));
   /* read data from rfcomm; if bad status, we're done */
-  while (PORT_ReadData(client_cb->conn_handle, buf, BTA_HF_CLIENT_RFC_READ_MAX,
-                       &len) == PORT_SUCCESS) {
+  while (PORT_ReadData(client_cb->conn_handle, buf, BTA_HF_CLIENT_RFC_READ_MAX, &len) ==
+         PORT_SUCCESS) {
     /* if no data, we're done */
     if (len == 0) {
       break;
@@ -421,8 +420,7 @@ void bta_hf_client_rfc_data(tBTA_HF_CLIENT_DATA* p_data) {
  ******************************************************************************/
 void bta_hf_client_svc_conn_open(tBTA_HF_CLIENT_DATA* p_data) {
   log::verbose("");
-  tBTA_HF_CLIENT_CB* client_cb =
-      bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
+  tBTA_HF_CLIENT_CB* client_cb = bta_hf_client_find_cb_by_handle(p_data->hdr.layer_specific);
   if (client_cb == NULL) {
     log::error("cb not found for handle {}", p_data->hdr.layer_specific);
     return;

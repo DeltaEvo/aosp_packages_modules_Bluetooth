@@ -22,12 +22,12 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Object representation of message in bMessage format
- * <p>
- * This object will be received in {@link MasClient#EVENT_GET_MESSAGE}
- * callback message.
+ *
+ * <p>This object will be received in {@link MasClient#EVENT_GET_MESSAGE} callback message.
  */
 public class Bmessage {
 
@@ -43,12 +43,10 @@ public class Bmessage {
 
     String mMessage;
 
-    ArrayList<VCardEntry> mOriginators;
-    ArrayList<VCardEntry> mRecipients;
+    List<VCardEntry> mOriginators;
+    List<VCardEntry> mRecipients;
 
-    /**
-     * Constructs empty message object
-     */
+    /** Constructs empty message object */
     public Bmessage() {
         mOriginators = new ArrayList<VCardEntry>();
         mRecipients = new ArrayList<VCardEntry>();
@@ -62,7 +60,7 @@ public class Bmessage {
         }
     }
 
-    public ArrayList<VCardEntry> getOriginators() {
+    public List<VCardEntry> getOriginators() {
         return mOriginators;
     }
 
@@ -71,7 +69,7 @@ public class Bmessage {
         return this;
     }
 
-    public ArrayList<VCardEntry> getRecipients() {
+    public List<VCardEntry> getRecipients() {
         return mRecipients;
     }
 
@@ -161,10 +159,14 @@ public class Bmessage {
     }
 
     public enum Status {
-        READ, UNREAD
+        READ,
+        UNREAD
     }
 
     public enum Type {
-        EMAIL, SMS_GSM, SMS_CDMA, MMS
+        EMAIL,
+        SMS_GSM,
+        SMS_CDMA,
+        MMS
     }
 }

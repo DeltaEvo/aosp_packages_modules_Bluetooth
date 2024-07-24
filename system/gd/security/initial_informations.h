@@ -70,7 +70,8 @@ struct MyOobData {
   hci::Octet16 r;
 };
 
-/* This structure is filled and send to PairingHandlerLe to initiate the Pairing process with remote device */
+/* This structure is filled and send to PairingHandlerLe to initiate the Pairing process with remote
+ * device */
 struct InitialInformations {
   hci::Role my_role;
   hci::AddressWithType my_connection_address;

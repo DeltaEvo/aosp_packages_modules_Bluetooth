@@ -16,20 +16,24 @@
 
 #include "l2cap/internal/basic_mode_channel_data_controller.h"
 
+#include <bluetooth/log.h>
+
 #include "l2cap/l2cap_packets.h"
 
 namespace bluetooth {
 namespace l2cap {
 namespace internal {
 
-BasicModeDataController::BasicModeDataController(Cid cid, Cid remote_cid, UpperQueueDownEnd* channel_queue_end,
+BasicModeDataController::BasicModeDataController(Cid cid, Cid remote_cid,
+                                                 UpperQueueDownEnd* channel_queue_end,
                                                  os::Handler* handler, Scheduler* scheduler)
-    : cid_(cid), remote_cid_(remote_cid), enqueue_buffer_(channel_queue_end), handler_(handler), scheduler_(scheduler) {
-}
+    : cid_(cid),
+      remote_cid_(remote_cid),
+      enqueue_buffer_(channel_queue_end),
+      handler_(handler),
+      scheduler_(scheduler) {}
 
-BasicModeDataController::~BasicModeDataController() {
-  enqueue_buffer_.Clear();
-}
+BasicModeDataController::~BasicModeDataController() { enqueue_buffer_.Clear(); }
 
 void BasicModeDataController::OnSdu(std::unique_ptr<packet::BasePacketBuilder> sdu) {
   auto l2cap_information = BasicFrameBuilder::Create(remote_cid_, std::move(sdu));
@@ -40,10 +44,11 @@ void BasicModeDataController::OnSdu(std::unique_ptr<packet::BasePacketBuilder> s
 void BasicModeDataController::OnPdu(packet::PacketView<true> pdu) {
   auto basic_frame_view = BasicFrameView::Create(pdu);
   if (!basic_frame_view.IsValid()) {
-    LOG_WARN("Received invalid frame");
+    log::warn("Received invalid frame");
     return;
   }
-  enqueue_buffer_.Enqueue(std::make_unique<PacketView<kLittleEndian>>(basic_frame_view.GetPayload()), handler_);
+  enqueue_buffer_.Enqueue(
+          std::make_unique<PacketView<kLittleEndian>>(basic_frame_view.GetPayload()), handler_);
 }
 
 std::unique_ptr<packet::BasePacketBuilder> BasicModeDataController::GetNextPacket() {

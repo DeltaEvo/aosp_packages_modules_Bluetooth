@@ -92,15 +92,37 @@ filegroup {
 }
 
 filegroup {
-    name: "BluetoothLogRedactionSources",
+    name: "BluetoothOsSources_fake_timer",
     srcs: [
-        "logging/log_redaction.cc",
+        "fake_timer/fake_timerfd.cc",
     ],
 }
 
 filegroup {
-    name: "BluetoothOsSources_fake_timer",
+    name: "BluetoothOsSystemProperties_android",
     srcs: [
-        "fake_timer/fake_timerfd.cc",
+        "android/system_properties.cc",
+    ],
+}
+
+filegroup {
+    name: "BluetoothOsSystemProperties_host",
+    srcs: [
+        "host/system_properties.cc",
+    ],
+}
+
+filegroup {
+    name: "BluetoothOsTestSources_timerfd",
+    srcs: [
+        "handler.cc",
+        "linux_generic/alarm.cc",
+        "linux_generic/alarm_timerfd_unittest.cc",
+        "linux_generic/files.cc",
+        "linux_generic/reactive_semaphore.cc",
+        "linux_generic/reactor.cc",
+        "linux_generic/repeating_alarm.cc",
+        "linux_generic/thread.cc",
+        "system_properties_common.cc",
     ],
 }

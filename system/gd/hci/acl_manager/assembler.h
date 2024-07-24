@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <bluetooth/log.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -37,22 +39,18 @@ constexpr size_t kL2capBasicFrameHeaderSize = 4;
 namespace {
 // This is a helper class to keep the state of the assembler and expose PacketView<>::Append.
 class PacketViewForRecombination : public packet::PacketView<packet::kLittleEndian> {
- public:
+public:
   PacketViewForRecombination(const PacketView& packetView)
       : PacketView(packetView), received_first_(true) {}
 
   PacketViewForRecombination()
       : PacketView(PacketView<packet::kLittleEndian>(std::make_shared<std::vector<uint8_t>>())) {}
 
-  void AppendPacketView(packet::PacketView<packet::kLittleEndian> to_append) {
-    Append(to_append);
-  }
+  void AppendPacketView(packet::PacketView<packet::kLittleEndian> to_append) { Append(to_append); }
 
-  bool ReceivedFirstPacket() {
-    return received_first_;
-  }
+  bool ReceivedFirstPacket() { return received_first_; }
 
- private:
+private:
   bool received_first_{};
 };
 
@@ -69,7 +67,8 @@ size_t GetL2capPduSize(packet::PacketView<packet::kLittleEndian> pdu) {
 }  // namespace
 
 struct assembler {
-  assembler(AddressWithType address_with_type, AclConnection::QueueDownEnd* down_end, os::Handler* handler)
+  assembler(AddressWithType address_with_type, AclConnection::QueueDownEnd* down_end,
+            os::Handler* handler)
       : address_with_type_(address_with_type), down_end_(down_end), handler_(handler) {}
   AddressWithType address_with_type_;
   AclConnection::QueueDownEnd* down_end_;
@@ -98,30 +97,35 @@ struct assembler {
     PacketView<packet::kLittleEndian> payload = packet.GetPayload();
     auto broadcast_flag = packet.GetBroadcastFlag();
     if (broadcast_flag == BroadcastFlag::ACTIVE_PERIPHERAL_BROADCAST) {
-      LOG_WARN("Dropping broadcast from remote");
+      log::warn("Dropping broadcast from remote");
       return;
     }
     auto packet_boundary_flag = packet.GetPacketBoundaryFlag();
     if (packet_boundary_flag == PacketBoundaryFlag::FIRST_NON_AUTOMATICALLY_FLUSHABLE) {
-      LOG_ERROR("Controller is not allowed to send FIRST_NON_AUTOMATICALLY_FLUSHABLE to host except loopback mode");
+      log::error(
+              "Controller is not allowed to send FIRST_NON_AUTOMATICALLY_FLUSHABLE to host except "
+              "loopback mode");
       return;
     }
     if (packet_boundary_flag == PacketBoundaryFlag::CONTINUING_FRAGMENT) {
       if (!recombination_stage_.ReceivedFirstPacket()) {
-        LOG_ERROR("Continuing fragment received without previous first, dropping it.");
+        log::error("Continuing fragment received without previous first, dropping it.");
         return;
       }
       recombination_stage_.AppendPacketView(payload);
     } else if (packet_boundary_flag == PacketBoundaryFlag::FIRST_AUTOMATICALLY_FLUSHABLE) {
       if (recombination_stage_.ReceivedFirstPacket()) {
-        LOG_ERROR("Controller sent a starting packet without finishing previous packet. Drop previous one.");
+        log::error(
+                "Controller sent a starting packet without finishing previous packet. Drop "
+                "previous "
+                "one.");
       }
       recombination_stage_ = payload;
     }
     // Check the size of the packet
     size_t expected_size = GetL2capPduSize(recombination_stage_) + kL2capBasicFrameHeaderSize;
     if (expected_size < recombination_stage_.size()) {
-      LOG_INFO("Packet size doesn't match L2CAP header, dropping it.");
+      log::info("Packet size doesn't match L2CAP header, dropping it.");
       recombination_stage_ = PacketViewForRecombination();
       return;
     } else if (expected_size > recombination_stage_.size()) {
@@ -129,8 +133,7 @@ struct assembler {
       return;
     }
     if (incoming_queue_.size() > kMaxQueuedPacketsPerConnection) {
-      LOG_ERROR("Dropping packet from %s due to congestion",
-                 ADDRESS_TO_LOGGABLE_CSTR(address_with_type_));
+      log::error("Dropping packet from {} due to congestion", address_with_type_);
       recombination_stage_ = PacketViewForRecombination();
       return;
     }
@@ -138,8 +141,8 @@ struct assembler {
     incoming_queue_.push(recombination_stage_);
     recombination_stage_ = PacketViewForRecombination();
     if (!enqueue_registered_->exchange(true)) {
-      down_end_->RegisterEnqueue(
-          handler_, common::Bind(&assembler::on_data_ready, common::Unretained(this)));
+      down_end_->RegisterEnqueue(handler_,
+                                 common::Bind(&assembler::on_data_ready, common::Unretained(this)));
     }
   }
 };

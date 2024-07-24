@@ -3,6 +3,7 @@ container: "com.android.btservices"
 
 flag {
     name: "a2dp_offload_codec_extensibility"
+    is_exported: true
     namespace: "bluetooth"
     description: "Enable a2dp offload codec extensibility"
     bug: "308686081"
@@ -13,4 +14,124 @@ flag {
     namespace: "bluetooth"
     description: "Support for concurrent A2DP source and sink"
     bug : "321806163"
+}
+
+flag {
+    name: "a2dp_service_looper"
+    namespace: "bluetooth"
+    description: "Inject looper into A2dpService"
+    bug: "337348333"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "avdtp_error_codes"
+    namespace: "bluetooth"
+    description: "Use compliant error codes in AVDTP responses"
+    bug: "338139069"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "bta_av_use_peer_codec"
+    namespace: "bluetooth"
+    description: "Deprecate bta av codec state"
+    bug: "339264791"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "a2dp_async_allow_low_latency"
+    namespace: "bluetooth"
+    description: "Make allow_low_latency run on main thread"
+    bug : "339368380"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "a2dp_ignore_started_when_responder"
+    namespace: "bluetooth"
+    description: "Ignore the event BTA_AV_START_EVT when source and responder"
+    bug : "341178856"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "avrcp_sdp_records"
+    namespace: "bluetooth"
+    description: "Update SDP records for AVRC"
+    bug: "341353017"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "a2dp_check_lea_iso_channel"
+    namespace: "bluetooth"
+    description: "Prevent A2DP stream from starting when LEA ISO channels are in use"
+    bug: "346475618"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "stop_on_offload_fail"
+    namespace: "bluetooth"
+    description: "Stop instead of disconnecting AVDT when offload fails"
+    bug: "345709100"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "a2dp_aidl_encoding_interval"
+    namespace: "bluetooth"
+    description: "Configure the data interval in audio BT HAL's PcmConfig"
+    bug: "347781402"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "av_stream_reconfigure_fix"
+    namespace: "bluetooth"
+    description: "Handle AVDT stream reconfiguration in an event"
+    bug: "348351688"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "avdt_discover_seps_as_acceptor"
+    namespace: "bluetooth"
+    description: "Discover stream end points when in acceptor role."
+    bug: "351158317"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "avdt_prioritize_mandatory_codec"
+    namespace: "bluetooth"
+    description: "Reject remote peer HD codec configuration if mandatory codec is preferred in the stack"
+    bug: "350427803"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
 }

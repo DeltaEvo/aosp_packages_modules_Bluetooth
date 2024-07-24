@@ -25,7 +25,7 @@ use crate::dbus_iface::{
     BluetoothTelephonyDBus, SuspendDBus,
 };
 use crate::editor::AsyncEditor;
-use bt_topshim::topstack;
+use bt_topshim::{btif::RawAddress, topstack};
 use btstack::bluetooth::{BluetoothDevice, IBluetooth};
 use btstack::suspend::ISuspend;
 use manager_service::iface_bluetooth_manager::IBluetoothManager;
@@ -38,6 +38,14 @@ mod console;
 mod dbus_arg;
 mod dbus_iface;
 mod editor;
+
+#[derive(Clone)]
+pub(crate) struct GattRequest {
+    address: RawAddress,
+    id: i32,
+    offset: i32,
+    value: Vec<u8>,
+}
 
 /// Context structure for the client. Used to keep track details about the active adapter and its
 /// state.
@@ -56,7 +64,7 @@ pub(crate) struct ClientContext {
     pub(crate) adapter_ready: bool,
 
     /// Current adapter address if known.
-    pub(crate) adapter_address: Option<String>,
+    pub(crate) adapter_address: Option<RawAddress>,
 
     /// Currently active bonding attempt. If it is not none, we are currently attempting to bond
     /// this device.
@@ -155,6 +163,9 @@ pub(crate) struct ClientContext {
 
     /// A set of addresses whose battery changes are being tracked.
     pub(crate) battery_address_filter: HashSet<String>,
+
+    /// A request from a GATT client that is still being processed.
+    pending_gatt_request: Option<GattRequest>,
 }
 
 impl ClientContext {
@@ -207,6 +218,7 @@ impl ClientContext {
             mps_sdp_handle: None,
             client_commands_with_callbacks,
             battery_address_filter: HashSet::new(),
+            pending_gatt_request: None,
         }
     }
 
@@ -260,7 +272,7 @@ impl ClientContext {
         // Trigger callback registration in the foreground
         let fg = self.fg.clone();
         tokio::spawn(async move {
-            let adapter = String::from(format!("adapter{}", idx));
+            let adapter = format!("adapter{}", idx);
             // Floss won't export the interface until it is ready to be used.
             // Wait 1 second before registering the callbacks.
             sleep(Duration::from_millis(1000)).await;
@@ -269,9 +281,9 @@ impl ClientContext {
     }
 
     // Foreground-only: Updates the adapter address.
-    fn update_adapter_address(&mut self) -> String {
+    fn update_adapter_address(&mut self) -> RawAddress {
         let address = self.adapter_dbus.as_ref().unwrap().get_address();
-        self.adapter_address = Some(address.clone());
+        self.adapter_address = Some(address);
 
         address
     }
@@ -281,7 +293,7 @@ impl ClientContext {
         let bonded_devices = self.adapter_dbus.as_ref().unwrap().get_bonded_devices();
 
         for device in bonded_devices {
-            self.bonded_devices.insert(device.address.clone(), device.clone());
+            self.bonded_devices.insert(device.address.to_string(), device.clone());
         }
     }
 
@@ -302,14 +314,12 @@ impl ClientContext {
     fn get_devices(&self) -> Vec<String> {
         let mut result: Vec<String> = vec![];
 
-        result.extend(
-            self.found_devices.keys().map(|key| String::from(key)).collect::<Vec<String>>(),
-        );
+        result.extend(self.found_devices.keys().map(String::from).collect::<Vec<String>>());
         result.extend(
             self.bonded_devices
                 .keys()
                 .filter(|key| !self.found_devices.contains_key(&String::from(*key)))
-                .map(|key| String::from(key))
+                .map(String::from)
                 .collect::<Vec<String>>(),
         );
 
@@ -352,7 +362,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .help("Specify a timeout in seconds for a non-interactive command"),
         )
         .get_matches();
-    let command = value_t!(matches, "command", String);
+    let command = value_t!(matches, "command", String).ok();
     let is_restricted = matches.is_present("restricted");
     let timeout_secs = value_t!(matches, "timeout", u64);
 
@@ -423,28 +433,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // right away.
         let default_adapter = context.lock().unwrap().default_adapter;
 
-        {
+        let default_adapter_enabled = {
             let mut context_locked = context.lock().unwrap();
             match context_locked.manager_dbus.rpc.get_adapter_enabled(default_adapter).await {
-                Ok(ret) => {
-                    if ret {
+                Ok(enabled) => {
+                    if enabled {
                         context_locked.set_adapter_enabled(default_adapter, true);
                     }
+                    enabled
                 }
                 Err(e) => {
                     panic!("Bluetooth Manager is not available. Exiting. D-Bus error: {}", e);
                 }
             }
-        }
+        };
 
         let handler = CommandHandler::new(context.clone());
-        if let Ok(_) = command {
+        if command.is_some() {
             // Timeout applies only to non-interactive commands.
             if let Ok(timeout_secs) = timeout_secs {
                 let timeout_duration = Duration::from_secs(timeout_secs);
                 match timeout(
                     timeout_duration,
-                    handle_client_command(handler, tx, rx, context, command),
+                    handle_client_command(
+                        handler,
+                        tx,
+                        rx,
+                        context,
+                        command,
+                        default_adapter_enabled,
+                    ),
                 )
                 .await
                 {
@@ -460,31 +478,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // There are two scenarios in which handle_client_command is run without a timeout.
         // - Interactive commands: none of these commands require a timeout.
         // - Non-interactive commands that have not specified a timeout.
-        handle_client_command(handler, tx, rx, context, command).await?;
-        return Result::Ok(());
+        handle_client_command(handler, tx, rx, context, command, default_adapter_enabled).await?;
+        Result::Ok(())
     })
 }
 
-// If btclient runs without command arguments, the interactive shell
-// actions are performed.
-// If btclient runs with command arguments, the command is executed
-// once. There are two cases to exit.
-//   Case 1: if the command does not need a callback, e.g., "help",
-//           it will exit after running handler.process_cmd_line().
-//   Case 2: if the command needs a callback, e.g., "media log",
-//           it will exit after the callback has been run in the arm
-//           of ForegroundActions::RunCallback(callback).
+// If btclient runs without command arguments, the interactive shell actions are performed.
+// If btclient runs with command arguments, the command is executed once.
+// There are 2 cases to run the command and 2 cases to exit.
+// Run:
+//   Case 1: If |run_command_on_ready|, run the command after the callbacks are registered
+//           successfully.
+//   Case 2: If not |run_command_on_ready|, run the command immediately.
+// Exit:
+//   Case 1: if the command does not need a callback, e.g., "help", it will exit after running
+//           handler.process_cmd_line().
+//   Case 2: if the command needs a callback, e.g., "media log", it will exit after the callback
+//           has been run in the arm of ForegroundActions::RunCallback(callback).
 async fn handle_client_command(
     mut handler: CommandHandler,
     tx: mpsc::Sender<ForegroundActions>,
     mut rx: mpsc::Receiver<ForegroundActions>,
     context: Arc<Mutex<ClientContext>>,
-    command: Result<String, clap::Error>,
+    command: Option<String>,
+    run_command_on_ready: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if !run_command_on_ready {
+        if let Some(command) = command.as_ref() {
+            let mut iter = command.split(' ').map(String::from);
+            let first = iter.next().unwrap_or(String::from(""));
+            // Return immediately if the command fails to execute.
+            if !handler.process_cmd_line(&first, &iter.collect::<Vec<String>>()) {
+                return Err("failed process command".into());
+            }
+            // If there is no callback to wait for, we're done.
+            if !context.lock().unwrap().client_commands_with_callbacks.contains(&first) {
+                return Ok(());
+            }
+        }
+    }
+
     let semaphore_fg = Arc::new(tokio::sync::Semaphore::new(1));
 
     // If there are no command arguments, start the interactive shell.
-    if let Err(_) = command {
+    if command.is_none() {
         let command_rule_list = handler.get_command_rule_list().clone();
         let context_for_closure = context.clone();
 
@@ -509,7 +546,7 @@ async fn handle_client_command(
         });
     }
 
-    'readline: loop {
+    'foreground_actions: loop {
         let m = rx.recv().await;
 
         if m.is_none() {
@@ -534,7 +571,7 @@ async fn handle_client_command(
                 callback(context.clone());
 
                 // Break the loop as a non-interactive command is completed.
-                if let Ok(_) = command {
+                if command.is_some() {
                     break;
                 }
             }
@@ -747,22 +784,23 @@ async fn handle_client_command(
                 let adapter_address = context.lock().unwrap().update_adapter_address();
                 context.lock().unwrap().update_bonded_devices();
 
-                print_info!("Adapter {} is ready", adapter_address);
+                print_info!("Adapter {} is ready", adapter_address.to_string());
 
-                // Run the command with the command arguments as the client is
-                // non-interactive.
-                if let Some(command) = command.as_ref().ok() {
-                    let mut iter = command.split(' ').map(String::from);
-                    let first = iter.next().unwrap_or(String::from(""));
-                    if !handler.process_cmd_line(&first, &iter.collect::<Vec<String>>()) {
-                        // Break immediately if the command fails to execute.
-                        break;
-                    }
+                if run_command_on_ready {
+                    if let Some(command) = command.as_ref() {
+                        let mut iter = command.split(' ').map(String::from);
+                        let first = iter.next().unwrap_or(String::from(""));
+                        if !handler.process_cmd_line(&first, &iter.collect::<Vec<String>>()) {
+                            // Break immediately if the command fails to execute.
+                            break;
+                        }
 
-                    // Break the loop immediately if there is no callback
-                    // to wait for.
-                    if !context.lock().unwrap().client_commands_with_callbacks.contains(&first) {
-                        break;
+                        // Break the loop immediately if there is no callback
+                        // to wait for.
+                        if !context.lock().unwrap().client_commands_with_callbacks.contains(&first)
+                        {
+                            break;
+                        }
                     }
                 }
             }
@@ -776,31 +814,26 @@ async fn handle_client_command(
                     break;
                 }
                 Ok(line) => {
-                    // Currently Chrome OS uses Rust 1.60 so use the 1-time loop block to
-                    // workaround this.
-                    // With Rust 1.65 onwards we can convert this loop hack into a named block:
-                    // https://blog.rust-lang.org/2022/11/03/Rust-1.65.0.html#break-from-labeled-blocks
-                    // TODO: Use named block when Android and Chrome OS Rust upgrade Rust to 1.65.
-                    loop {
+                    'readline: {
                         let args = match shell_words::split(line.as_str()) {
                             Ok(words) => words,
                             Err(e) => {
                                 print_error!("Error parsing arguments: {}", e);
-                                break;
+                                break 'readline;
                             }
                         };
 
                         let (cmd, rest) = match args.split_first() {
                             Some(pair) => pair,
-                            None => break,
+                            None => break 'readline,
                         };
 
                         if cmd == "quit" {
-                            break 'readline;
+                            break 'foreground_actions;
                         }
 
-                        handler.process_cmd_line(cmd, &rest.to_vec());
-                        break;
+                        handler.process_cmd_line(cmd, rest);
+                        break 'readline;
                     }
 
                     // Ready to do readline again.

@@ -35,8 +35,8 @@ bool GetBootId(std::string* boot_id) {
   return true;
 }
 
-int GetArgumentTypeFromList(
-    std::vector<std::pair<os::ArgumentType, int>>& argument_list, os::ArgumentType argumentType) {
+int GetArgumentTypeFromList(std::vector<std::pair<os::ArgumentType, int>>& argument_list,
+                            os::ArgumentType argumentType) {
   for (std::pair<os::ArgumentType, int> argumentPair : argument_list) {
     if (argumentPair.first == argumentType) {
       return argumentPair.second;
@@ -46,7 +46,7 @@ int GetArgumentTypeFromList(
 }
 
 os::LeConnectionType GetLeConnectionTypeFromCID(int fixed_cid) {
-  switch(fixed_cid) {
+  switch (fixed_cid) {
     case 3: {
       return os::LeConnectionType::CONNECTION_TYPE_L2CAP_FIXED_CHNL_AMP;
     }
@@ -67,8 +67,6 @@ os::LeConnectionType GetLeConnectionTypeFromCID(int fixed_cid) {
     }
   }
 }
-
-
 
 }  // namespace metrics
 }  // namespace bluetooth

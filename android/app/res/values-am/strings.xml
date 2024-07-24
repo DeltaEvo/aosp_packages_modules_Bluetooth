@@ -16,6 +16,7 @@
 
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="app_name" msgid="2326164424236203271">"ብሉቱዝ"</string>
     <string name="permlab_bluetoothShareManager" msgid="5297865456717871041">"አውርድ አደራጅን ድረስ።"</string>
     <string name="permdesc_bluetoothShareManager" msgid="1588034776955941477">"የብሉቱዝ አጋራ አስተዳዳሪውን ለመድረስ እና ፋይሎች እንዲያስተላልፉ ለመጠቀም ለመተግበሪያው ይፈቅዳል።"</string>
     <string name="permlab_bluetoothAcceptlist" msgid="5785922051395856524">"የብሉቱዝ መሣሪያ መዳረሻን በመቀበያ ዝርዝር ያስገቡ።"</string>
@@ -100,7 +101,6 @@
     <string name="status_connection_error" msgid="8253709700568062220">"ተያያዥ አልተሳካም።"</string>
     <string name="status_protocol_error" msgid="3231573735130475654">"ጥየቃውን በትክክል መያዝ አይቻልም።"</string>
     <string name="status_unknown_error" msgid="314676481744304866">"ያልታወቀ ስህተት"</string>
-    <string name="btopp_live_folder" msgid="4859989703965326287">"ብሉቱዝ ተቀብሏል"</string>
     <string name="opp_notification_group" msgid="150067508422520653">"የብሉቱዝ ማጋሪያ"</string>
     <string name="download_success" msgid="3438268368708549686">"<xliff:g id="FILE_SIZE">%1$s</xliff:g> ተቀብሎ ተጠናቋል።"</string>
     <string name="upload_success" msgid="143787470859042049">"<xliff:g id="FILE_SIZE">%1$s</xliff:g> ልኮ ተጠናቋል።"</string>
@@ -130,9 +130,13 @@
     <string name="bluetooth_opp_file_limit_exceeded" msgid="6612109860149473930">"ከ4 ጊባ በላይ የሆኑ ፋይሎች ሊዛወሩ አይችሉም"</string>
     <string name="bluetooth_connect_action" msgid="2319449093046720209">"ከብሉቱዝ ጋር ተገናኝ"</string>
     <string name="bluetooth_enabled_apm_title" msgid="6914461147844949044">"ብሉቱዝ በአውሮፕላን ሁነታ ላይ በርቷል"</string>
-    <string name="bluetooth_enabled_apm_message" msgid="8409900562494838113">"ብሉቱዝን አብርተው ካቆዩ በቀጣይ ጊዜ በአውሮፕላን ሁነታ ውስጥ ሲሆኑ ስልክዎ እሱን አብርቶ ማቆየቱን ያስታውሳል"</string>
+    <string name="bluetooth_enabled_apm_message" msgid="6168686193308136881">"ብሉቱዝን አብርተው ካቆዩ በቀጣይ ጊዜ በአውሮፕላን ሁነታ ውስጥ ሲሆኑ መሣሪያዎ እሱን አብርቶ ማቆየቱን ያስታውሳል"</string>
     <string name="bluetooth_stays_on_title" msgid="39720820955212918">"ብሉቱዝ በርቶ ይቆያል"</string>
-    <string name="bluetooth_stays_on_message" msgid="7142453371222249965">"ስልክዎ ብሉቱዝን በአውሮፕላን ሁነታ ውስጥ አብርቶ ማቆየትን ያስታውሳል። በርቶ እንዲቆይ ካልፈለጉ ብሉቱዝን ያጥፉት።"</string>
+    <string name="bluetooth_stays_on_message" msgid="3669663452593157737">"መሣሪያዎ ብሉቱዝን በአውሮፕላን ሁነታ ውስጥ አብርቶ ማቆየትን ያስታውሳል። በርቶ እንዲቆይ ካልፈለጉ ብሉቱዝን ያጥፉት።"</string>
     <string name="bluetooth_and_wifi_stays_on_title" msgid="5821932798860821244">"Wi-Fi እና ብሉቱዝ በርተው ይቆያሉ"</string>
-    <string name="bluetooth_and_wifi_stays_on_message" msgid="2390749828997719812">"ስልክዎ Wi-Fiን እና ብሉቱዝን በአውሮፕላን ሁነታ ውስጥ አብርቶ ማቆየትን ያስታውሳል። በርተው እንዲቆዩ ካልፈለጉ Wi-Fi እና ብሉቱዝን ያጥፏቸው።"</string>
+    <string name="bluetooth_and_wifi_stays_on_message" msgid="7848565203843882558">"መሣሪያዎ Wi-Fiን እና ብሉቱዝን በአውሮፕላን ሁነታ ውስጥ አብርቶ ማቆየትን ያስታውሳል። በርተው እንዲቆዩ ካልፈለጉ Wi-Fi እና ብሉቱዝን ያጥፏቸው።"</string>
+    <string name="bluetooth_enabled_auto_on_title" msgid="1799541656310353393">"ብሉቱዝ በራስ-ሰር ነቅቷል"</string>
+    <string name="bluetooth_enabled_auto_on_message" msgid="1070556457440100730">"በራስ-ሰር ዳግም ማስጀመር በብሉቱዝ ቅንብሮች ውስጥ ሊቀያየር ይችላል።"</string>
+    <string name="bluetooth_disable_auto_on" msgid="1085026923461565937">"አጥፋ"</string>
+    <string name="bluetooth_notification_group" msgid="7251886707585872194">"ብሉቱዝ የራስ-ሰር ሁኔታ ለውጥ"</string>
 </resources>

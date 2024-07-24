@@ -33,19 +33,19 @@ import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.List;
 
 class BluetoothPbapVcardList {
     private static final String TAG = BluetoothPbapVcardList.class.getSimpleName();
     // {@link BufferedInputStream#DEFAULT_BUFFER_SIZE} is not public
     private static final int BIS_DEFAULT_BUFFER_SIZE = 8192;
 
-    private final ArrayList<VCardEntry> mCards = new ArrayList<VCardEntry>();
+    private final List<VCardEntry> mCards = new ArrayList<VCardEntry>();
     private final Account mAccount;
 
     class CardEntryHandler implements VCardEntryHandler {
         @Override
-        public void onStart() {
-        }
+        public void onStart() {}
 
         @Override
         public void onEntryCreated(VCardEntry entry) {
@@ -53,8 +53,7 @@ class BluetoothPbapVcardList {
         }
 
         @Override
-        public void onEnd() {
-        }
+        public void onEnd() {}
     }
 
     BluetoothPbapVcardList(Account account, InputStream in, byte format) throws IOException {
@@ -116,8 +115,8 @@ class BluetoothPbapVcardList {
      *
      * @param parser -- the {@link VCardParser} to use.
      * @param in -- the {@link InputStream} to parse.
-     * @return {@code true} if there was a {@link VCardVersionException}; {@code false} if there
-     *         is any other {@link VCardException} or succeeds (i.e., no {@link VCardException}).
+     * @return {@code true} if there was a {@link VCardVersionException}; {@code false} if there is
+     *     any other {@link VCardException} or succeeds (i.e., no {@link VCardException}).
      * @throws IOException if there's an issue reading the {@link InputStream}.
      */
     private boolean parsedWithVcardVersionException(VCardParser parser, InputStream in)
@@ -137,7 +136,7 @@ class BluetoothPbapVcardList {
         return mCards.size();
     }
 
-    public ArrayList<VCardEntry> getList() {
+    public List<VCardEntry> getList() {
         return mCards;
     }
 

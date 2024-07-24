@@ -23,6 +23,7 @@ import android.os.ParcelUuid;
 import android.util.Log;
 
 import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 
 class AdvertiseHelper {
 
@@ -42,7 +43,6 @@ class AdvertiseHelper {
     private static final int LIST_32_BIT_SERVICE_SOLICITATION_UUIDS = 0x1F;
     private static final int SERVICE_DATA_32_BIT_UUID = 0X20;
     private static final int SERVICE_DATA_128_BIT_UUID = 0X21;
-    private static final int TRANSPORT_DISCOVERY_DATA = 0X26;
     private static final int MANUFACTURER_SPECIFIC_DATA = 0XFF;
 
     public static byte[] advertiseDataToBytes(AdvertiseData data, String name) {
@@ -57,27 +57,23 @@ class AdvertiseHelper {
         ByteArrayOutputStream ret = new ByteArrayOutputStream();
 
         if (data.getIncludeDeviceName()) {
-            try {
-                byte[] nameBytes = name.getBytes("UTF-8");
+            byte[] nameBytes = name.getBytes(StandardCharsets.UTF_8);
 
-                int nameLength = nameBytes.length;
-                byte type;
+            int nameLength = nameBytes.length;
+            byte type;
 
-                // TODO(jpawlowski) put a better limit on device name!
-                if (nameLength > DEVICE_NAME_MAX) {
-                    nameLength = DEVICE_NAME_MAX;
-                    type = SHORTENED_LOCAL_NAME;
-                } else {
-                    type = COMPLETE_LOCAL_NAME;
-                }
-
-                check_length(type, nameLength + 1);
-                ret.write(nameLength + 1);
-                ret.write(type);
-                ret.write(nameBytes, 0, nameLength);
-            } catch (java.io.UnsupportedEncodingException e) {
-                Log.e(TAG, "Can't include name - encoding error!", e);
+            // TODO(jpawlowski) put a better limit on device name!
+            if (nameLength > DEVICE_NAME_MAX) {
+                nameLength = DEVICE_NAME_MAX;
+                type = SHORTENED_LOCAL_NAME;
+            } else {
+                type = COMPLETE_LOCAL_NAME;
             }
+
+            check_length(type, nameLength + 1);
+            ret.write(nameLength + 1);
+            ret.write(type);
+            ret.write(nameBytes, 0, nameLength);
         }
 
         for (int i = 0; i < data.getManufacturerSpecificData().size(); i++) {
@@ -179,7 +175,6 @@ class AdvertiseHelper {
             }
         }
 
-
         if (data.getServiceSolicitationUuids() != null) {
             ByteArrayOutputStream serviceUuids16 = new ByteArrayOutputStream();
             ByteArrayOutputStream serviceUuids32 = new ByteArrayOutputStream();
@@ -221,8 +216,7 @@ class AdvertiseHelper {
 
         for (TransportDiscoveryData transportDiscoveryData : data.getTransportDiscoveryData()) {
             ret.write(transportDiscoveryData.totalBytes());
-            ret.write(transportDiscoveryData.toByteArray(),
-                    0, transportDiscoveryData.totalBytes());
+            ret.write(transportDiscoveryData.toByteArray(), 0, transportDiscoveryData.totalBytes());
         }
         return ret.toByteArray();
     }
@@ -240,4 +234,3 @@ class AdvertiseHelper {
         }
     }
 }
-

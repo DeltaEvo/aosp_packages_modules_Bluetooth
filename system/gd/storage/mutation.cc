@@ -23,8 +23,8 @@ namespace storage {
 
 Mutation::Mutation(ConfigCache* config, ConfigCache* memory_only_config)
     : config_(config), memory_only_config_(memory_only_config) {
-  ASSERT(config_ != nullptr);
-  ASSERT(memory_only_config_ != nullptr);
+  log::assert_that(config_ != nullptr, "assert failed: config_ != nullptr");
+  log::assert_that(memory_only_config_ != nullptr, "assert failed: memory_only_config_ != nullptr");
 }
 
 void Mutation::Add(MutationEntry entry) {
@@ -39,7 +39,8 @@ void Mutation::Add(MutationEntry entry) {
     case MutationEntry::PropertyType::MEMORY_ONLY:
       memory_only_config_entries_.emplace(std::move(entry));
       break;
-      // do not write a default case so that when a new enum is defined, compilation would fail automatically
+      // do not write a default case so that when a new enum is defined, compilation would fail
+      // automatically
   }
 }
 

@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <bluetooth/log.h>
+
 #include "common/contextual_callback.h"
 #include "l2cap/psm.h"
 #include "os/handler.h"
@@ -30,7 +32,7 @@ class DynamicChannelServiceManagerImpl;
 }
 
 class DynamicChannelService {
- public:
+public:
   DynamicChannelService() = default;
   DynamicChannelService(const DynamicChannelService&) = delete;
   DynamicChannelService& operator=(const DynamicChannelService&) = delete;
@@ -49,15 +51,17 @@ class DynamicChannelService {
 
   Psm GetPsm() const;
 
- protected:
-  DynamicChannelService(Psm psm, internal::DynamicChannelServiceManagerImpl* manager, os::Handler* handler)
+protected:
+  DynamicChannelService(Psm psm, internal::DynamicChannelServiceManagerImpl* manager,
+                        os::Handler* handler)
       : psm_(psm), manager_(manager), l2cap_layer_handler_(handler) {
-    ASSERT(IsPsmValid(psm));
-    ASSERT(manager_ != nullptr);
-    ASSERT(l2cap_layer_handler_ != nullptr);
+    log::assert_that(IsPsmValid(psm), "assert failed: IsPsmValid(psm)");
+    log::assert_that(manager_ != nullptr, "assert failed: manager_ != nullptr");
+    log::assert_that(l2cap_layer_handler_ != nullptr,
+                     "assert failed: l2cap_layer_handler_ != nullptr");
   }
 
- private:
+private:
   Psm psm_ = kDefaultPsm;
   internal::DynamicChannelServiceManagerImpl* manager_ = nullptr;
   os::Handler* l2cap_layer_handler_;

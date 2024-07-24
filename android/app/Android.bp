@@ -101,7 +101,7 @@ cc_library_shared {
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
         "libFraunhoferAAC",
-        "libaudio-a2dp-hw-utils",
+        "libaconfig_storage_read_api_cc",
         "libbase",
         "libbluetooth",
         "libbluetooth-dumpsys",
@@ -130,10 +130,10 @@ cc_library_shared {
         "libbte",
         "libbtif",
         "libbtif-core",
-        "libc++fs",
         "libchrome",
         "libcutils",
         "libevent",
+        "libexpresslog",
         "libflatbuffers-cpp",
         "libfmq",
         "libg722codec",
@@ -144,6 +144,8 @@ cc_library_shared {
         "libosi",
         "libprotobuf-cpp-lite",
         "libstatslog_bt",
+        "libstatslog_express",
+        "libtextclassifier_hash_static",
         "libudrv-uipc",
         "libutils",
         "server_configurable_flags",
@@ -164,6 +166,9 @@ cc_library_shared {
         "com.android.btservices",
     ],
     min_sdk_version: "Tiramisu",
+
+    // TODO(b/346919576) Workaround LTO build breakage.
+    lto_O0: true,
 }
 
 cc_library {
@@ -190,7 +195,6 @@ cc_library {
         "libosi",
 
         "libbluetooth-types",
-        "libc++fs",
     ],
     cflags: [
         /* we export all classes, so change default visibility, instead of having EXPORT_SYMBOL on each class*/
@@ -214,7 +218,6 @@ cc_library {
 
 android_app {
     name: "Bluetooth",
-    defaults: ["bluetooth-module-sdk-version-defaults"],
 
     srcs: [
         ":statslog-bluetooth-java-gen",
@@ -244,6 +247,7 @@ android_app {
         "framework-bluetooth-pre-jarjar",
         "framework-configinfrastructure",
         "framework-connectivity.stubs.module_lib",
+        "framework-location.stubs.module_lib",
         "framework-mediaprovider",
         "framework-statsd.stubs.module_lib",
         "framework-tethering.stubs.module_lib",
@@ -280,6 +284,7 @@ android_app {
 
     plugins: [
         "androidx.room_room-compiler-plugin",
+        "error_prone_android_framework",
     ],
 
     // Export schemas to the test directory so that we have an history
@@ -289,16 +294,17 @@ android_app {
     javacflags: ["-Aroom.schemaLocation=packages/modules/Bluetooth/android/app/tests/unit/src/com/android/bluetooth/btservice/storage/schemas"],
 
     lint: {
+        // TODO(b/318814235): Add back ObsoleteSdkInt to this list.
         error_checks: [
             "ExtraText",
             "MissingClass",
             "NewApi",
-            "ObsoleteSdkInt",
             "Recycle",
             "RtlHardcoded",
             "UseSparseArrays",
             "UseValueOf",
         ],
+        extra_check_modules: ["BluetoothLintChecker"],
         baseline_filename: "lint-baseline.xml",
     },
 
@@ -314,9 +320,26 @@ android_app {
         "com.android.btservices",
     ],
     errorprone: {
+        enabled: true,
         javacflags: [
-            // "-Xep:AndroidFrameworkRequiresPermission:ERROR",
             "-Xep:AlmostJavadoc:ERROR",
+            "-Xep:AndroidFrameworkRequiresPermission:ERROR",
+            "-Xep:BadImport:ERROR",
+            "-Xep:ClassCanBeStatic:ERROR",
+            "-Xep:EmptyBlockTag:ERROR",
+            "-Xep:InlineMeInliner:ERROR",
+            "-Xep:InvalidBlockTag:ERROR",
+            "-Xep:InvalidParam:ERROR",
+            "-Xep:MockNotUsedInProduction:ERROR",
+            "-Xep:NonApiType:ERROR",
+            "-Xep:NonCanonicalType:ERROR",
+            "-Xep:NotJavadoc:ERROR",
+            "-Xep:ReturnAtTheEndOfVoidFunction:ERROR",
+            "-Xep:StringCaseLocaleUsage:ERROR",
+            "-Xep:StringCharset:ERROR",
+            "-Xep:UnusedMethod:ERROR",
+            "-Xep:UnusedVariable:ERROR",
+            "-XepExcludedPaths:.*/srcjars/.*", // Exclude generated files
         ],
     },
     min_sdk_version: "Tiramisu",

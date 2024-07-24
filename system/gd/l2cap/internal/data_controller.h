@@ -27,7 +27,7 @@ namespace l2cap {
 namespace internal {
 
 class DataController {
- public:
+public:
   virtual ~DataController() = default;
 
   // SDU -> PDUs and notify Scheduler
@@ -42,10 +42,10 @@ class DataController {
   // Set FCS mode. This only applies to some modes (ERTM).
   virtual void EnableFcs(bool enabled) = 0;
 
-  // Set retransmission and flow control. Ignore the mode option because each DataController only handles one mode.
-  // This only applies to some modes (ERTM).
+  // Set retransmission and flow control. Ignore the mode option because each DataController only
+  // handles one mode. This only applies to some modes (ERTM).
   virtual void SetRetransmissionAndFlowControlOptions(
-      const RetransmissionAndFlowControlConfigurationOption& option) = 0;
+          const RetransmissionAndFlowControlConfigurationOption& option) = 0;
 };
 
 }  // namespace internal

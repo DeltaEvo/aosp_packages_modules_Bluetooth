@@ -16,6 +16,7 @@
 
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="app_name" msgid="2326164424236203271">"බ්ලූටූත්"</string>
     <string name="permlab_bluetoothShareManager" msgid="5297865456717871041">"බාගැනීම් කළමනාකරු ප්‍රවේශ වන්න."</string>
     <string name="permdesc_bluetoothShareManager" msgid="1588034776955941477">"යෙදුමට බ්ලූටූත් බෙදා ගැනීම් කළමනාකරු වෙත ප්‍රවේශ වීමට ඉඩ දී එය ගොනු මාරු කිරීමට භාවිතා කරන්න."</string>
     <string name="permlab_bluetoothAcceptlist" msgid="5785922051395856524">"පිළිගත් ලැයිස්තු බ්ලූටූත් උපාංග ප්‍රවේශය."</string>
@@ -100,7 +101,6 @@
     <string name="status_connection_error" msgid="8253709700568062220">"සම්බන්ධය අසාර්ථකයි."</string>
     <string name="status_protocol_error" msgid="3231573735130475654">"ඉල්ලීම නිවැරදිව හැසිරවීමට නොහැකිය."</string>
     <string name="status_unknown_error" msgid="314676481744304866">"නොදන්නා දෝෂයකි."</string>
-    <string name="btopp_live_folder" msgid="4859989703965326287">"බ්ලූටූත් ලැබිණි"</string>
     <string name="opp_notification_group" msgid="150067508422520653">"බ්ලූටූත් බෙදා ගැනීම"</string>
     <string name="download_success" msgid="3438268368708549686">"<xliff:g id="FILE_SIZE">%1$s</xliff:g> ලැබීම සම්පූර්ණයි."</string>
     <string name="upload_success" msgid="143787470859042049">"<xliff:g id="FILE_SIZE">%1$s</xliff:g> යැවීම සම්පූර්ණයි."</string>
@@ -130,9 +130,13 @@
     <string name="bluetooth_opp_file_limit_exceeded" msgid="6612109860149473930">"4GBට වඩා විශාල ගොනු මාරු කළ නොහැකිය"</string>
     <string name="bluetooth_connect_action" msgid="2319449093046720209">"බ්ලූටූත් වෙත සබඳින්න"</string>
     <string name="bluetooth_enabled_apm_title" msgid="6914461147844949044">"අහස්යානා ආකාරයේ බ්ලූටූත් ක්‍රියාත්මකයි"</string>
-    <string name="bluetooth_enabled_apm_message" msgid="8409900562494838113">"ඔබ බ්ලූටූත් ක්‍රියාත්මක කර තබා ගන්නේ නම්, ඔබ අහස්යානා ආකාරයේ සිටින මීළඟ වතාවේ එය ක්‍රියාත්මක කිරීමට ඔබේ දුරකථනයට මතක තිබෙනු ඇත."</string>
+    <string name="bluetooth_enabled_apm_message" msgid="6168686193308136881">"ඔබ බ්ලූටූත් ක්‍රියාත්මක කර තබා ගන්නේ නම්, ඔබ අහස්යානා ආකාරයේ සිටින මීළඟ වතාවේ එය ක්‍රියාත්මක කිරීමට ඔබේ උපාංගයට මතක තිබෙනු ඇත."</string>
     <string name="bluetooth_stays_on_title" msgid="39720820955212918">"බ්ලූටූත් ක්‍රියාත්මකව පවතී"</string>
-    <string name="bluetooth_stays_on_message" msgid="7142453371222249965">"ඔබේ දුරකථනයට අහස්යානා ආකාරයේ බ්ලූටූත් ක්‍රියාත්මකව තබා ගැනීමට මතකයි. ඔබට බ්ලූටූත් ක්‍රියාත්මක වීමට අවශ්‍ය නොවේ නම් එය ක්‍රියාවිරහිත කරන්න."</string>
+    <string name="bluetooth_stays_on_message" msgid="3669663452593157737">"ඔබේ උපාංගයට අහස්යානා ආකාරයේ බ්ලූටූත් ක්‍රියාත්මකව තබා ගැනීමට මතකයි. ඔබට බ්ලූටූත් ක්‍රියාත්මක වීමට අවශ්‍ය නොවේ නම් එය ක්‍රියාවිරහිත කරන්න."</string>
     <string name="bluetooth_and_wifi_stays_on_title" msgid="5821932798860821244">"Wi-Fi සහ බ්ලූටූත් ක්‍රියාත්මකව පවතී"</string>
-    <string name="bluetooth_and_wifi_stays_on_message" msgid="2390749828997719812">"ඔබේ දුරකථනයට අහස්යානා ආකාරයේ Wi-Fi සහ බ්ලූටූත් ක්‍රියාත්මකව තබා ගැනීමට මතකයි. Wi-Fi සහ බ්ලූටූත් ඒවා ක්‍රියාත්මක වීමට ඔබට අවශ්‍ය නැතිනම් ක්‍රියා විරහිත කරන්න."</string>
+    <string name="bluetooth_and_wifi_stays_on_message" msgid="7848565203843882558">"ඔබේ උපාංගයට අහස්යානා ආකාරයේ Wi-Fi සහ බ්ලූටූත් ක්‍රියාත්මකව තබා ගැනීමට මතකයි. Wi-Fi සහ බ්ලූටූත් ඒවා ක්‍රියාත්මක වීමට ඔබට අවශ්‍ය නැතිනම් ක්‍රියා විරහිත කරන්න."</string>
+    <string name="bluetooth_enabled_auto_on_title" msgid="1799541656310353393">"බ්ලූටූත් ස්වයංක්‍රීයව සබල කර ඇත"</string>
+    <string name="bluetooth_enabled_auto_on_message" msgid="1070556457440100730">"බ්ලූටූත් සැකසීම් තුළ ස්වයංක්‍රීය නැවත ආරම්භ කිරීම ටොගල් කළ හැක."</string>
+    <string name="bluetooth_disable_auto_on" msgid="1085026923461565937">"අක්‍රිය කරන්න"</string>
+    <string name="bluetooth_notification_group" msgid="7251886707585872194">"බ්ලූටූත් ස්වයංක්‍රීය තත්ත්‍වය වෙනස් කිරීම"</string>
 </resources>

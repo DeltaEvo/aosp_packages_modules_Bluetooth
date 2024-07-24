@@ -26,11 +26,10 @@
 #include "le_audio_types.h"
 #include "types/raw_address.h"
 
-namespace le_audio {
+namespace bluetooth::le_audio {
 
 namespace metrics {
-using ClockTimePoint =
-    std::chrono::time_point<std::chrono::high_resolution_clock>;
+using ClockTimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 }
 
 enum ConnectionStatus : int32_t {
@@ -58,7 +57,7 @@ enum class LeAudioMetricsContextType : int32_t {
 };
 
 class GroupMetrics {
- public:
+public:
   GroupMetrics() {}
 
   virtual ~GroupMetrics() {}
@@ -68,7 +67,7 @@ class GroupMetrics {
                                     ConnectionStatus status) = 0;
 
   virtual void AddStreamStartedEvent(
-      le_audio::types::LeAudioContextType context_type) = 0;
+          bluetooth::le_audio::types::LeAudioContextType context_type) = 0;
 
   virtual void AddStreamEndedEvent() = 0;
 
@@ -82,7 +81,7 @@ class GroupMetrics {
 };
 
 class MetricsCollector {
- public:
+public:
   static MetricsCollector* Get();
 
   /**
@@ -113,7 +112,7 @@ class MetricsCollector {
    * @param group_id Group ID of the associated stream.
    */
   void OnStreamStarted(int32_t group_id,
-                       le_audio::types::LeAudioContextType context_type);
+                       bluetooth::le_audio::types::LeAudioContextType context_type);
 
   /**
    * When there is a change in LE Audio stream started
@@ -136,10 +135,10 @@ class MetricsCollector {
    */
   void Flush();
 
- protected:
+protected:
   MetricsCollector() {}
 
- private:
+private:
   static MetricsCollector* instance;
 
   std::unordered_map<int32_t, std::unique_ptr<GroupMetrics>> opened_groups_;
@@ -148,4 +147,4 @@ class MetricsCollector {
   metrics::ClockTimePoint broadcast_beginning_timepoint_;
 };
 
-}  // namespace le_audio
+}  // namespace bluetooth::le_audio

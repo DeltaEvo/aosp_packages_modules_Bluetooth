@@ -20,6 +20,7 @@
 #include <base/location.h>
 #include <base/run_loop.h>
 #include <base/threading/platform_thread.h>
+#include <bluetooth/log.h>
 #include <unistd.h>
 
 #include <future>
@@ -27,8 +28,7 @@
 #include <thread>
 
 #include "abstract_message_loop.h"
-#include "common/contextual_callback.h"
-#include "common/i_postable_context.h"
+#include "common/postable_context.h"
 
 namespace bluetooth {
 
@@ -37,8 +37,8 @@ namespace common {
 /**
  * An interface to various thread related functionality
  */
-class MessageLoopThread final : public IPostableContext {
- public:
+class MessageLoopThread final : public PostableContext {
+public:
   /**
    * Create a message loop thread with name. Thread won't be running until
    * StartUp is called.
@@ -165,47 +165,19 @@ class MessageLoopThread final : public IPostableContext {
    * @return true if task is successfully scheduled, false if task cannot be
    * scheduled
    */
-  bool DoInThreadDelayed(const base::Location& from_here,
-                         base::OnceClosure task,
+  bool DoInThreadDelayed(const base::Location& from_here, base::OnceClosure task,
                          std::chrono::microseconds delay);
   /**
    * Wrapper around DoInThread without a location.
    */
   void Post(base::OnceClosure closure) override;
 
-  template <typename Functor, typename... Args>
-  auto BindOnce(Functor&& functor, Args&&... args) {
-    return common::ContextualOnceCallback(
-        common::BindOnce(std::forward<Functor>(functor),
-                         std::forward<Args>(args)...),
-        this);
-  }
+  /**
+   * Returns a postable object
+   */
+  PostableContext* Postable();
 
-  template <typename Functor, typename T, typename... Args>
-  auto BindOnceOn(T* obj, Functor&& functor, Args&&... args) {
-    return common::ContextualOnceCallback(
-        common::BindOnce(std::forward<Functor>(functor),
-                         common::Unretained(obj), std::forward<Args>(args)...),
-        this);
-  }
-
-  template <typename Functor, typename... Args>
-  auto Bind(Functor&& functor, Args&&... args) {
-    return common::ContextualCallback(
-        common::Bind(std::forward<Functor>(functor),
-                     std::forward<Args>(args)...),
-        this);
-  }
-
-  template <typename Functor, typename T, typename... Args>
-  auto BindOn(T* obj, Functor&& functor, Args&&... args) {
-    return common::ContextualCallback(
-        common::Bind(std::forward<Functor>(functor), common::Unretained(obj),
-                     std::forward<Args>(args)...),
-        this);
-  }
-
- private:
+private:
   /**
    * Static method to run the thread
    *
@@ -215,8 +187,7 @@ class MessageLoopThread final : public IPostableContext {
    * @param start_up_promise a std::promise that is used to notify calling
    * thread the completion of message loop start-up
    */
-  static void RunThread(MessageLoopThread* context,
-                        std::promise<void> start_up_promise);
+  static void RunThread(MessageLoopThread* context, std::promise<void> start_up_promise);
 
   /**
    * Actual method to run the thread, blocking until ShutDown() is called
@@ -238,12 +209,15 @@ class MessageLoopThread final : public IPostableContext {
   bool shutting_down_;
 };
 
-inline std::ostream& operator<<(std::ostream& os,
-                                const bluetooth::common::MessageLoopThread& a) {
+inline std::ostream& operator<<(std::ostream& os, const bluetooth::common::MessageLoopThread& a) {
   os << a.ToString();
   return os;
 }
 
 }  // namespace common
-
 }  // namespace bluetooth
+
+namespace fmt {
+template <>
+struct formatter<bluetooth::common::MessageLoopThread> : ostream_formatter {};
+}  // namespace fmt

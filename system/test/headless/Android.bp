@@ -30,6 +30,7 @@ cc_binary {
     defaults: [
         "fluoride_defaults",
         "latest_android_hardware_audio_common_ndk_static",
+        "latest_android_hardware_bluetooth_audio_ndk_android_static",
         "latest_android_hardware_bluetooth_audio_ndk_static",
         "latest_android_media_audio_common_types_ndk_static",
     ],
@@ -74,7 +75,6 @@ cc_binary {
     ],
     static_libs: [
         "android.hardware.audio.common@5.0",
-        "android.hardware.bluetooth.a2dp@1.0",
         "android.hardware.common-V2-ndk",
         "android.hardware.common.fmq-V1-ndk",
         "avrcp-target-service",
@@ -82,7 +82,6 @@ cc_binary {
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
         "libFraunhoferAAC",
-        "libaudio-a2dp-hw-utils",
         "libbase",
         "libbluetooth-dumpsys",
         "libbluetooth-gdx",
@@ -111,7 +110,6 @@ cc_binary {
         "libbte",
         "libbtif",
         "libbtif-core",
-        "libc++fs",
         "libchrome",
         "libevent",
         "libflatbuffers-cpp",
@@ -128,6 +126,7 @@ cc_binary {
     ],
     shared_libs: [
         "libPlatformProperties",
+        "libaconfig_storage_read_api_cc",
         "libcrypto",
         "libcutils", // property_get_bool
         "libhidlbase",
@@ -140,12 +139,14 @@ cc_binary {
     target: {
         android: {
             static_libs: [
-                "android.hardware.bluetooth.audio-V4-ndk",
                 "android.hardware.bluetooth.audio@2.0",
                 "android.hardware.bluetooth.audio@2.1",
                 "android.hardware.bluetooth@1.0",
                 "android.hardware.bluetooth@1.1",
                 "android.system.suspend.control-V1-ndk",
+                "libexpresslog",
+                "libstatslog_express",
+                "libtextclassifier_hash_static",
             ],
             shared_libs: [
                 "android.system.suspend-V1-ndk",

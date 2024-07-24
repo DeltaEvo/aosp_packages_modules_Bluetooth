@@ -17,6 +17,7 @@
 package com.android.bluetooth.btservice;
 
 import android.bluetooth.OobData;
+import android.os.ParcelUuid;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -86,6 +87,10 @@ public class AdapterNativeInterface {
 
     boolean disable() {
         return disableNative();
+    }
+
+    boolean setScanMode(int mode) {
+        return setScanModeNative(mode);
     }
 
     boolean setAdapterProperty(int type, byte[] val) {
@@ -242,8 +247,16 @@ public class AdapterNativeInterface {
         return pbapPseDynamicVersionUpgradeIsEnabledNative();
     }
 
-    boolean isLogRedactionEnabled() {
-        return isLogRedactionEnabledNative();
+    int getSocketL2capLocalChannelId(ParcelUuid connectionUuid) {
+        return getSocketL2capLocalChannelIdNative(
+                connectionUuid.getUuid().getLeastSignificantBits(),
+                connectionUuid.getUuid().getMostSignificantBits());
+    }
+
+    int getSocketL2capRemoteChannelId(ParcelUuid connectionUuid) {
+        return getSocketL2capRemoteChannelIdNative(
+                connectionUuid.getUuid().getLeastSignificantBits(),
+                connectionUuid.getUuid().getMostSignificantBits());
     }
 
     /**********************************************************************************************/
@@ -269,6 +282,8 @@ public class AdapterNativeInterface {
     private native boolean enableNative();
 
     private native boolean disableNative();
+
+    private native boolean setScanModeNative(int mode);
 
     private native boolean setAdapterPropertyNative(int type, byte[] val);
 
@@ -351,5 +366,9 @@ public class AdapterNativeInterface {
 
     private native boolean pbapPseDynamicVersionUpgradeIsEnabledNative();
 
-    private native boolean isLogRedactionEnabledNative();
+    private native int getSocketL2capLocalChannelIdNative(
+            long connectionUuidLsb, long connectionUuidMsb);
+
+    private native int getSocketL2capRemoteChannelIdNative(
+            long connectionUuidLsb, long connectionUuidMsb);
 }

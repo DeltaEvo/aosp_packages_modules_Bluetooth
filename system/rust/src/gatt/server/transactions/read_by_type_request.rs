@@ -2,7 +2,7 @@ use crate::{
     core::uuid::Uuid,
     gatt::{ids::AttHandle, server::att_database::StableAttDatabase},
     packets::{
-        AttAttributeDataBuilder, AttChild, AttErrorCode, AttErrorResponseBuilder, AttOpcode,
+        AttChild, AttErrorCode, AttErrorResponseBuilder, AttOpcode,
         AttReadByTypeDataElementBuilder, AttReadByTypeRequestView, AttReadByTypeResponseBuilder,
         ParseError,
     },
@@ -54,7 +54,7 @@ pub async fn handle_read_by_type_request(
             for AttributeWithValue { attr, value } in attrs {
                 if !out.push(AttReadByTypeDataElementBuilder {
                     handle: attr.handle.into(),
-                    value: AttAttributeDataBuilder { _child_: value },
+                    value: value.into_boxed_slice(),
                 }) {
                     break;
                 }
@@ -86,8 +86,8 @@ mod test {
                 test::test_att_db::TestAttDatabase,
             },
         },
-        packets::{AttAttributeDataChild, AttReadByTypeRequestBuilder},
-        utils::packet::{build_att_data, build_view_or_crash},
+        packets::AttReadByTypeRequestBuilder,
+        utils::packet::build_view_or_crash,
     };
 
     const UUID: Uuid = Uuid::new(1234);
@@ -123,7 +123,7 @@ mod test {
             AttReadByTypeResponseBuilder {
                 data: [AttReadByTypeDataElementBuilder {
                     handle: AttHandle(3).into(),
-                    value: build_att_data(AttAttributeDataChild::RawData([4, 5].into()))
+                    value: [4, 5].into()
                 }]
                 .into()
             }
@@ -180,11 +180,11 @@ mod test {
                 data: [
                     AttReadByTypeDataElementBuilder {
                         handle: AttHandle(3).into(),
-                        value: build_att_data(AttAttributeDataChild::RawData([4, 5].into()))
+                        value: [4, 5].into()
                     },
                     AttReadByTypeDataElementBuilder {
                         handle: AttHandle(6).into(),
-                        value: build_att_data(AttAttributeDataChild::RawData([6, 7].into()))
+                        value: [6, 7].into()
                     }
                 ]
                 .into()
@@ -232,7 +232,7 @@ mod test {
             AttReadByTypeResponseBuilder {
                 data: [AttReadByTypeDataElementBuilder {
                     handle: AttHandle(3).into(),
-                    value: build_att_data(AttAttributeDataChild::RawData([4, 5, 6].into()))
+                    value: [4, 5, 6].into()
                 },]
                 .into()
             }
@@ -271,9 +271,7 @@ mod test {
             tokio_test::block_on(handle_read_by_type_request(att_view.view(), 31, &db)).unwrap();
 
         // assert: we return ATTRIBUTE_NOT_FOUND
-        let AttChild::AttErrorResponse(response) = response else {
-            unreachable!("{:?}", response)
-        };
+        let AttChild::AttErrorResponse(response) = response else { unreachable!("{:?}", response) };
         assert_eq!(
             response,
             AttErrorResponseBuilder {
@@ -299,9 +297,7 @@ mod test {
             tokio_test::block_on(handle_read_by_type_request(att_view.view(), 31, &db)).unwrap();
 
         // assert: we return an INVALID_HANDLE error
-        let AttChild::AttErrorResponse(response) = response else {
-            unreachable!("{:?}", response)
-        };
+        let AttChild::AttErrorResponse(response) = response else { unreachable!("{:?}", response) };
         assert_eq!(
             response,
             AttErrorResponseBuilder {

@@ -89,15 +89,13 @@ trait FlagHolder: Default {
     fn get_defaults_for_test() -> Self;
     fn parse(flags: Vec<String>) -> Self;
     fn dump(&self) -> BTreeMap<&'static str, String>;
-    fn reconcile(self) -> Self;
 }
 
 macro_rules! init_flags_struct {
     (
      name: $name:ident
      flags: { $($flag:ident $(: $type:ty)? $(= $default:tt)?,)* }
-     extra_parsed_flags: { $($extra_flag:tt => $extra_flag_fn:ident(_, _ $(,$extra_args:tt)*),)*}
-     dependencies: { $($parent:ident => $child:ident),* }) => {
+     extra_parsed_flags: { $($extra_flag:tt => $extra_flag_fn:ident(_, _ $(,$extra_args:tt)*),)*}) => {
 
         struct $name {
             $($flag : type_expand!($($type)?),)*
@@ -144,20 +142,7 @@ macro_rules! init_flags_struct {
                     }
                 }
 
-                init_flags.reconcile()
-            }
-
-            #[allow(unused_mut)]
-            fn reconcile(mut self) -> Self {
-                loop {
-                    // dependencies can be specified in any order
-                    $(if self.$parent && !self.$child {
-                        self.$child = true;
-                        continue;
-                    })*
-                    break;
-                }
-                self
+                init_flags
             }
         }
 
@@ -175,8 +160,7 @@ macro_rules! init_flags_struct {
 macro_rules! init_flags_getters {
     (
      flags: { $($flag:ident $(: $type:ty)? $(= $default:tt)?,)* }
-     extra_parsed_flags: { $($extra_flag:tt => $extra_flag_fn:ident(_, _ $(,$extra_args:tt)*),)*}
-     dependencies: { $($parent:ident => $child:ident),* }) => {
+     extra_parsed_flags: { $($extra_flag:tt => $extra_flag_fn:ident(_, _ $(,$extra_args:tt)*),)*}) => {
 
         $(create_getter_fn!($flag $($type)?);)*
 
@@ -223,48 +207,12 @@ pub fn set_all_for_testing() {
 init_flags!(
     name: InitFlags
     flags: {
-        asha_packet_drop_frequency_threshold: i32 = 60,
-        asha_phy_update_retry_limit: i32 = 5,
-        always_send_services_if_gatt_disc_done = true,
-        always_use_private_gatt_for_debugging,
-        bluetooth_power_telemetry = false,
-        bta_dm_clear_conn_id_on_client_close = true,
-        btm_dm_flush_discovery_queue_on_search_cancel,
-        bta_dm_stop_discovery_on_search_cancel,
         classic_discovery_only,
-        clear_hidd_interrupt_cid_on_disconnect = true,
-        delay_hidh_cleanup_until_hidh_ready_start = true,
-        device_iot_config_logging,
-        dynamic_avrcp_version_enhancement = true,
-        gatt_robust_caching_client = true,
-        gatt_robust_caching_server,
         hci_adapter: i32,
-        hfp_dynamic_version = true,
-        irk_rotation,
-        leaudio_targeted_announcement_reconnection_mode = true,
-        pbap_pse_dynamic_version_upgrade = false,
-        private_gatt = true,
-        redact_log = true,
-        rust_event_loop = true,
-        sco_codec_select_lc3 = true,
-        sco_codec_timeout_clear,
-        sdp_serialization = true,
-        sdp_skip_rnr_if_known = true,
-        bluetooth_quality_report_callback = true,
-        set_min_encryption = true,
-        subrating = true,
         use_unified_connection_manager,
-        sdp_return_classic_services_when_le_discovery_fails = true,
-        use_rsi_from_cached_inqiry_results = false,
-        att_mtu_default: i32 = 517,
-        encryption_in_busy_state = true,
     }
     extra_parsed_flags: {
         "--hci" => parse_hci_adapter(_, _),
-    }
-    dependencies: {
-        always_use_private_gatt_for_debugging => private_gatt,
-        private_gatt => rust_event_loop
     }
 );
 
@@ -306,43 +254,10 @@ mod tests {
     }
 
     #[test]
-    fn simple_flag() {
-        let _guard = ASYNC_LOCK.lock().unwrap();
-        test_load(vec![
-            "INIT_private_gatt=false", //override a default flag
-            "INIT_gatt_robust_caching_server=true",
-        ]);
-        assert!(!private_gatt_is_enabled());
-        assert!(gatt_robust_caching_server_is_enabled());
-    }
-    #[test]
-    fn parsing_failure() {
-        let _guard = ASYNC_LOCK.lock().unwrap();
-        test_load(vec![
-            "foo=bar=?",                                // vec length
-            "foo=bar",                                  // flag not save
-            "INIT_private_gatt=not_false",              // parse error but has default value
-            "INIT_gatt_robust_caching_server=not_true", // parse error
-        ]);
-        assert!(private_gatt_is_enabled());
-        assert!(!gatt_robust_caching_server_is_enabled());
-    }
-    #[test]
     fn int_flag() {
         let _guard = ASYNC_LOCK.lock().unwrap();
         test_load(vec!["--hci=2"]);
         assert_eq!(get_hci_adapter(), 2);
-    }
-    #[test]
-    fn test_redact_logging() {
-        let _guard = ASYNC_LOCK.lock().unwrap();
-        assert!(redact_log_is_enabled()); // default is true
-        test_load(vec!["INIT_redact_log=false"]);
-        assert!(!redact_log_is_enabled()); // turned off
-        test_load(vec!["INIT_redact_log=foo"]);
-        assert!(redact_log_is_enabled()); // invalid value, interpreted as default, true
-        test_load(vec!["INIT_redact_log=true"]);
-        assert!(redact_log_is_enabled()); // turned on
     }
 
     init_flags_struct!(
@@ -351,7 +266,6 @@ mod tests {
             cat,
         }
         extra_parsed_flags: {}
-        dependencies: {}
     );
 
     #[test]

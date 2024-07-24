@@ -27,47 +27,42 @@ import org.xmlpull.v1.XmlSerializer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
  * Represents the return value of a BIP GetImageProperties request, giving a detailed description of
  * an image and its available descriptors before download.
  *
- * Format is as described by version 1.2.1 of the Basic Image Profile Specification. The
+ * <p>Format is as described by version 1.2.1 of the Basic Image Profile Specification. The
  * specification describes three types of metadata that can arrive with an image -- native, variant
- * and attachment. Native describes which native formats a particular image is available in.
- * Variant describes which other types of encodings/sizes can be created from the native image using
- * various transformations. Attachments describes other items that can be downloaded that are
- * associated with the image (text, sounds, etc.)
+ * and attachment. Native describes which native formats a particular image is available in. Variant
+ * describes which other types of encodings/sizes can be created from the native image using various
+ * transformations. Attachments describes other items that can be downloaded that are associated
+ * with the image (text, sounds, etc.)
  *
- * The specification requires that
- *     1. The fixed version string of "1.0" is used
- *     2. There is an image handle
- *     3. The "imaging thumbnail format" is included. This is defined for BIP in section 4.4.3
- *        (160x120 JPEG) and redefined for AVRCP in section 5.14.2.2.1 I (200x200 JPEG). It can be
- *        either a native or variant format.
+ * <p>The specification requires that 1. The fixed version string of "1.0" is used 2. There is an
+ * image handle 3. The "imaging thumbnail format" is included. This is defined for BIP in section
+ * 4.4.3 (160x120 JPEG) and redefined for AVRCP in section 5.14.2.2.1 I (200x200 JPEG). It can be
+ * either a native or variant format.
  *
- * Example:
- *     <image-properties version="1.0" handle="123456789">
- *     <native encoding="JPEG" pixel="1280*1024" size="1048576"/>
- *     <variant encoding="JPEG" pixel="640*480" />
- *     <variant encoding="JPEG" pixel="160*120" />
- *     <variant encoding="GIF" pixel="80*60-640*480" transformation="stretch fill crop"/>
- *     <attachment content-type="text/plain" name="ABCD1234.txt" size="5120"/>
- *     <attachment content-type="audio/basic" name="ABCD1234.wav" size="102400"/>
- *     </image-properties>
+ * <p>Example: <image-properties version="1.0" handle="123456789"> <native encoding="JPEG"
+ * pixel="1280*1024" size="1048576"/> <variant encoding="JPEG" pixel="640*480" /> <variant
+ * encoding="JPEG" pixel="160*120" /> <variant encoding="GIF" pixel="80*60-640*480"
+ * transformation="stretch fill crop"/> <attachment content-type="text/plain" name="ABCD1234.txt"
+ * size="5120"/> <attachment content-type="audio/basic" name="ABCD1234.wav" size="102400"/>
+ * </image-properties>
  */
 public class BipImageProperties {
     private static final String TAG = "avrcpcontroller.BipImageProperties";
     private static final String sVersion = "1.0";
 
-    /**
-     * A Builder for a BipImageProperties object
-     */
+    /** A Builder for a BipImageProperties object */
     public static class Builder {
         private BipImageProperties mProperties = new BipImageProperties();
+
         /**
          * Set the image handle field for the object you're building
          *
@@ -133,14 +128,10 @@ public class BipImageProperties {
         }
     }
 
-    /**
-     * The image handle associated with this set of properties.
-     */
+    /** The image handle associated with this set of properties. */
     private String mImageHandle = null;
 
-    /**
-     * The version of the properties object, used to encode and decode.
-     */
+    /** The version of the properties object, used to encode and decode. */
     private String mVersion = null;
 
     /**
@@ -148,17 +139,14 @@ public class BipImageProperties {
      */
     private String mFriendlyName = null;
 
-    /**
-     * Whether we have the required imaging thumbnail format
-     */
+    /** Whether we have the required imaging thumbnail format */
     private boolean mHasThumbnailFormat = false;
 
-    /**
-     * The various sets of available formats.
-     */
-    private ArrayList<BipImageFormat> mNativeFormats;
-    private ArrayList<BipImageFormat> mVariantFormats;
-    private ArrayList<BipAttachmentFormat> mAttachments;
+    /** The various sets of available formats. */
+    private List<BipImageFormat> mNativeFormats;
+
+    private List<BipImageFormat> mVariantFormats;
+    private List<BipAttachmentFormat> mAttachments;
 
     private BipImageProperties() {
         mVersion = sVersion;
@@ -207,10 +195,10 @@ public class BipImageProperties {
                             String created = xpp.getAttributeValue(null, "created");
                             String modified = xpp.getAttributeValue(null, "modified");
                             addAttachment(
-                                    new BipAttachmentFormat(contentType, charset, name, size,
-                                            created, modified));
+                                    new BipAttachmentFormat(
+                                            contentType, charset, name, size, created, modified));
                         } else {
-                            warn("Unrecognized tag in x-bt/img-properties object: " + tag);
+                            Log.w(TAG, "Unrecognized tag in x-bt/img-properties object: " + tag);
                         }
                         break;
                     case XmlPullParser.END_TAG:
@@ -220,9 +208,9 @@ public class BipImageProperties {
             }
             return;
         } catch (XmlPullParserException e) {
-            error("XML parser error when parsing XML", e);
+            Log.e(TAG, "XML parser error when parsing XML", e);
         } catch (IOException e) {
-            error("I/O error when parsing XML", e);
+            Log.e(TAG, "I/O error when parsing XML", e);
         }
         throw new ParseException("Failed to parse image-properties from stream");
     }
@@ -239,23 +227,27 @@ public class BipImageProperties {
         return mFriendlyName;
     }
 
-    public ArrayList<BipImageFormat> getNativeFormats() {
+    public List<BipImageFormat> getNativeFormats() {
         return mNativeFormats;
     }
 
-    public ArrayList<BipImageFormat> getVariantFormats() {
+    public List<BipImageFormat> getVariantFormats() {
         return mVariantFormats;
     }
 
-    public ArrayList<BipAttachmentFormat> getAttachments() {
+    public List<BipAttachmentFormat> getAttachments() {
         return mAttachments;
     }
 
     private void addNativeFormat(BipImageFormat format) {
         Objects.requireNonNull(format);
         if (format.getType() != BipImageFormat.FORMAT_NATIVE) {
-            throw new IllegalArgumentException("Format type '" + format.getType()
-                    + "' but expected '" + BipImageFormat.FORMAT_NATIVE + "'");
+            throw new IllegalArgumentException(
+                    "Format type '"
+                            + format.getType()
+                            + "' but expected '"
+                            + BipImageFormat.FORMAT_NATIVE
+                            + "'");
         }
         mNativeFormats.add(format);
 
@@ -267,8 +259,12 @@ public class BipImageProperties {
     private void addVariantFormat(BipImageFormat format) {
         Objects.requireNonNull(format);
         if (format.getType() != BipImageFormat.FORMAT_VARIANT) {
-            throw new IllegalArgumentException("Format type '" + format.getType()
-                    + "' but expected '" + BipImageFormat.FORMAT_VARIANT + "'");
+            throw new IllegalArgumentException(
+                    "Format type '"
+                            + format.getType()
+                            + "' but expected '"
+                            + BipImageFormat.FORMAT_VARIANT
+                            + "'");
         }
         mVariantFormats.add(format);
 
@@ -321,7 +317,7 @@ public class BipImageProperties {
                 BipPixel pixel = format.getPixel();
                 int size = format.getSize();
                 if (encoding == null || pixel == null) {
-                    error("Native format " + format.toString() + " is invalid.");
+                    Log.e(TAG, "Native format " + format.toString() + " is invalid.");
                     continue;
                 }
                 xmlMsgElement.startTag(null, "native");
@@ -339,7 +335,7 @@ public class BipImageProperties {
                 int maxSize = format.getMaxSize();
                 BipTransformation trans = format.getTransformation();
                 if (encoding == null || pixel == null) {
-                    error("Variant format " + format.toString() + " is invalid.");
+                    Log.e(TAG, "Variant format " + format.toString() + " is invalid.");
                     continue;
                 }
                 xmlMsgElement.startTag(null, "variant");
@@ -362,7 +358,7 @@ public class BipImageProperties {
                 BipDateTime created = format.getCreatedDate();
                 BipDateTime modified = format.getModifiedDate();
                 if (contentType == null || name == null) {
-                    error("Attachment format " + format.toString() + " is invalid.");
+                    Log.e(TAG, "Attachment format " + format.toString() + " is invalid.");
                     continue;
                 }
                 xmlMsgElement.startTag(null, "attachment");
@@ -387,11 +383,11 @@ public class BipImageProperties {
             xmlMsgElement.endDocument();
             return writer.toString();
         } catch (IllegalArgumentException e) {
-            error("Falied to serialize ImageProperties", e);
+            Log.e(TAG, "Failed to serialize ImageProperties", e);
         } catch (IllegalStateException e) {
-            error("Falied to serialize ImageProperties", e);
+            Log.e(TAG, "Failed to serialize ImageProperties", e);
         } catch (IOException e) {
-            error("Falied to serialize ImageProperties", e);
+            Log.e(TAG, "Failed to serialize ImageProperties", e);
         }
         return null;
     }
@@ -399,42 +395,24 @@ public class BipImageProperties {
     /**
      * Serialize this object into a byte array
      *
-     * Objects that are not valid will fail to serialize and return null.
+     * <p>Objects that are not valid will fail to serialize and return null.
      *
      * @return Byte array representing this object, ready to send over OBEX, or null on error.
      */
     public byte[] serialize() {
         if (!isValid()) return null;
         String s = toString();
-        try {
-            return s != null ? s.getBytes("UTF-8") : null;
-        } catch (UnsupportedEncodingException e) {
-            return null;
-        }
+        return s != null ? s.getBytes(StandardCharsets.UTF_8) : null;
     }
 
     /**
      * Determine if the contents of this BipImageProperties object are valid and meet the
-     * specification requirements:
-     *     1. Include the fixed 1.0 version
-     *     2. Include an image handle
-     *     3. Have the thumbnail format as either the native or variant
+     * specification requirements: 1. Include the fixed 1.0 version 2. Include an image handle 3.
+     * Have the thumbnail format as either the native or variant
      *
      * @return True if our contents are valid, false otherwise
      */
     public boolean isValid() {
         return sVersion.equals(mVersion) && mImageHandle != null && mHasThumbnailFormat;
-    }
-
-    private static void warn(String msg) {
-        Log.w(TAG, msg);
-    }
-
-    private static void error(String msg) {
-        Log.e(TAG, msg);
-    }
-
-    private static void error(String msg, Throwable e) {
-        Log.e(TAG, msg, e);
     }
 }

@@ -46,8 +46,7 @@ void hfp_lc3_encoder_init() {
   const unsigned enc_size = lc3_encoder_size(dt_us, sr_pcm_hz);
 
   hfp_lc3_encoder_mem = osi_malloc(enc_size);
-  hfp_lc3_encoder =
-      lc3_setup_encoder(dt_us, sr_hz, sr_pcm_hz, hfp_lc3_encoder_mem);
+  hfp_lc3_encoder = lc3_setup_encoder(dt_us, sr_hz, sr_pcm_hz, hfp_lc3_encoder_mem);
 }
 
 void hfp_lc3_encoder_cleanup() {
@@ -63,10 +62,9 @@ uint32_t hfp_lc3_encode_frames(int16_t* input, uint8_t* output) {
   }
 
   /* Note this only fails when wrong parameters are supplied. */
-  int rc = lc3_encode(hfp_lc3_encoder, LC3_PCM_FORMAT_S16, input, 1,
-                      HFP_LC3_PKT_FRAME_LEN, output);
+  int rc = lc3_encode(hfp_lc3_encoder, LC3_PCM_FORMAT_S16, input, 1, HFP_LC3_PKT_FRAME_LEN, output);
 
-  ASSERT(rc == 0);
+  log::assert_that(rc == 0, "assert failed: rc == 0");
 
   return HFP_LC3_PCM_BYTES;
 }

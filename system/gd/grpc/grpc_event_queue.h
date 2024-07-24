@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <bluetooth/log.h>
 #include <grpc++/grpc++.h>
 
 #include <atomic>
@@ -31,17 +32,18 @@ namespace grpc {
 
 template <typename T>
 class GrpcEventQueue {
- public:
+public:
   /**
    * Create a GrpcEventQueue that can be used to shuffle event from one thread to another
    * @param log_name
    */
-  explicit GrpcEventQueue(std::string log_name) : log_name_(std::move(log_name)){};
+  explicit GrpcEventQueue(std::string log_name) : log_name_(std::move(log_name)) {}
 
   /**
    * Run the event loop and blocks until client cancels the stream request
-   * Event queue will be cleared before entering the loop. Hence, only events occurred after gRPC request will be
-   * delivered to the user. Hence user is advised to run the loop before generating pending events.
+   * Event queue will be cleared before entering the loop. Hence, only events occurred after gRPC
+   * request will be delivered to the user. Hence user is advised to run the loop before generating
+   * pending events.
    *
    * @param context client context
    * @param writer output writer
@@ -49,16 +51,16 @@ class GrpcEventQueue {
    */
   ::grpc::Status RunLoop(::grpc::ServerContext* context, ::grpc::ServerWriter<T>* writer) {
     using namespace std::chrono_literals;
-    LOG_INFO("%s: Entering Loop", log_name_.c_str());
+    log::info("{}: Entering Loop", log_name_);
     while (!context->IsCancelled()) {
       // Wait for 100 ms so that cancellation can be caught in amortized 50 ms latency
       if (pending_events_.wait_to_take(100ms)) {
-        LOG_INFO("%s: Got event from queue", log_name_.c_str());
+        log::info("{}: Got event from queue", log_name_);
         writer->Write(pending_events_.take());
       }
     }
     running_ = false;
-    LOG_INFO("%s: Exited Loop", log_name_.c_str());
+    log::info("{}: Exited Loop", log_name_);
     return ::grpc::Status::OK;
   }
 
@@ -68,14 +70,14 @@ class GrpcEventQueue {
    */
   void OnIncomingEvent(T event) {
     if (!running_) {
-      LOG_INFO("%s: Discarding an event while not running the loop", log_name_.c_str());
+      log::info("{}: Discarding an event while not running the loop", log_name_);
       return;
     }
-    LOG_INFO("%s: Got event, enqueuing", log_name_.c_str());
+    log::info("{}: Got event, enqueuing", log_name_);
     pending_events_.push(std::move(event));
   }
 
- private:
+private:
   std::string log_name_;
   std::atomic<bool> running_{true};
   common::BlockingQueue<T> pending_events_;

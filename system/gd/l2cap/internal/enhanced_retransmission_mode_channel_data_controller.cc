@@ -16,6 +16,8 @@
 
 #include "l2cap/internal/enhanced_retransmission_mode_channel_data_controller.h"
 
+#include <bluetooth/log.h>
+
 #include <map>
 #include <queue>
 #include <vector>
@@ -29,18 +31,25 @@
 namespace bluetooth {
 namespace l2cap {
 namespace internal {
-ErtmController::ErtmController(ILink* link, Cid cid, Cid remote_cid, UpperQueueDownEnd* channel_queue_end,
-                               os::Handler* handler, Scheduler* scheduler)
-    : link_(link), cid_(cid), remote_cid_(remote_cid), enqueue_buffer_(channel_queue_end), handler_(handler),
-      scheduler_(scheduler), pimpl_(std::make_unique<impl>(this, handler)) {}
+ErtmController::ErtmController(ILink* link, Cid cid, Cid remote_cid,
+                               UpperQueueDownEnd* channel_queue_end, os::Handler* handler,
+                               Scheduler* scheduler)
+    : link_(link),
+      cid_(cid),
+      remote_cid_(remote_cid),
+      enqueue_buffer_(channel_queue_end),
+      handler_(handler),
+      scheduler_(scheduler),
+      pimpl_(std::make_unique<impl>(this, handler)) {}
 
-ErtmController::~ErtmController() {
-  enqueue_buffer_.Clear();
-}
+ErtmController::~ErtmController() { enqueue_buffer_.Clear(); }
 
 struct ErtmController::impl {
   impl(ErtmController* controller, os::Handler* handler)
-      : controller_(controller), handler_(handler), retrans_timer_(handler), monitor_timer_(handler) {}
+      : controller_(controller),
+        handler_(handler),
+        retrans_timer_(handler),
+        monitor_timer_(handler) {}
 
   ErtmController* controller_;
   os::Handler* handler_;
@@ -80,9 +89,12 @@ struct ErtmController::impl {
   int unacked_frames_ = 0;
   // TODO: Instead of having a map, we may consider about a better data structure
   // Map from TxSeq to (SAR, SDU size for START packet, information payload)
-  std::map<uint8_t, std::tuple<SegmentationAndReassembly, uint16_t, std::shared_ptr<packet::RawBuilder>>> unacked_list_;
+  std::map<uint8_t,
+           std::tuple<SegmentationAndReassembly, uint16_t, std::shared_ptr<packet::RawBuilder>>>
+          unacked_list_;
   // Stores (SAR, SDU size for START packet, information payload)
-  std::queue<std::tuple<SegmentationAndReassembly, uint16_t, std::unique_ptr<packet::RawBuilder>>> pending_frames_;
+  std::queue<std::tuple<SegmentationAndReassembly, uint16_t, std::unique_ptr<packet::RawBuilder>>>
+          pending_frames_;
   int retry_count_ = 0;
   std::map<uint8_t /* tx_seq, */, int /* count */> retry_i_frames_;
   bool rnr_sent_ = false;
@@ -97,7 +109,8 @@ struct ErtmController::impl {
 
   // Events (@see 8.6.5.4)
 
-  void data_request(SegmentationAndReassembly sar, std::unique_ptr<packet::RawBuilder> pdu, uint16_t sdu_size = 0) {
+  void data_request(SegmentationAndReassembly sar, std::unique_ptr<packet::RawBuilder> pdu,
+                    uint16_t sdu_size = 0) {
     // Note: sdu_size only applies to START packet
     if (tx_state_ == TxState::XMIT && !remote_busy() && rem_window_not_full()) {
       send_data(sar, sdu_size, std::move(pdu));
@@ -108,9 +121,7 @@ struct ErtmController::impl {
     }
   }
 
-  void local_busy_detected() {
-    local_busy_ = true;
-  }
+  void local_busy_detected() { local_busy_ = true; }
 
   void local_busy_clear() {
     if (tx_state_ == TxState::XMIT && rnr_sent()) {
@@ -167,22 +178,22 @@ struct ErtmController::impl {
       send_rr_or_rnr(Poll::POLL);
       start_monitor_timer();
     } else if (tx_state_ == TxState::WAIT_F) {
-      LOG_INFO("Close channel because max transmit reached");
+      log::info("Close channel because max transmit reached");
       CloseChannel();
     }
   }
 
-  void recv_i_frame(Final f, uint8_t tx_seq, uint8_t req_seq, SegmentationAndReassembly sar, uint16_t sdu_size,
-                    const packet::PacketView<true>& payload) {
+  void recv_i_frame(Final f, uint8_t tx_seq, uint8_t req_seq, SegmentationAndReassembly sar,
+                    uint16_t sdu_size, const packet::PacketView<true>& payload) {
     if (rx_state_ == RxState::RECV) {
-      if (f == Final::NOT_SET && with_expected_tx_seq(tx_seq) && with_valid_req_seq(req_seq) && with_valid_f_bit(f) &&
-          !local_busy()) {
+      if (f == Final::NOT_SET && with_expected_tx_seq(tx_seq) && with_valid_req_seq(req_seq) &&
+          with_valid_f_bit(f) && !local_busy()) {
         increment_expected_tx_seq();
         pass_to_tx(req_seq, f);
         data_indication(sar, sdu_size, payload);
         send_ack(Final::NOT_SET);
-      } else if (f == Final::POLL_RESPONSE && with_expected_tx_seq(tx_seq) && with_valid_req_seq(req_seq) &&
-                 with_valid_f_bit(f) && !local_busy()) {
+      } else if (f == Final::POLL_RESPONSE && with_expected_tx_seq(tx_seq) &&
+                 with_valid_req_seq(req_seq) && with_valid_f_bit(f) && !local_busy()) {
         increment_expected_tx_seq();
         pass_to_tx(req_seq, f);
         data_indication(sar, sdu_size, payload);
@@ -193,10 +204,11 @@ struct ErtmController::impl {
           rej_actioned_ = false;
         }
         send_ack(Final::NOT_SET);
-      } else if (with_duplicate_tx_seq(tx_seq) && with_valid_req_seq(req_seq) && with_valid_f_bit(f) && !local_busy()) {
+      } else if (with_duplicate_tx_seq(tx_seq) && with_valid_req_seq(req_seq) &&
+                 with_valid_f_bit(f) && !local_busy()) {
         pass_to_tx(req_seq, f);
-      } else if (with_unexpected_tx_seq(tx_seq) && with_valid_req_seq(req_seq) && with_valid_f_bit(f) &&
-                 !local_busy()) {
+      } else if (with_unexpected_tx_seq(tx_seq) && with_valid_req_seq(req_seq) &&
+                 with_valid_f_bit(f) && !local_busy()) {
         if constexpr (kSendSrej) {
           // We don't support sending SREJ
         } else {
@@ -204,11 +216,12 @@ struct ErtmController::impl {
           send_rej();
           rx_state_ = RxState::REJ_SENT;
         }
-      } else if (with_expected_tx_seq(tx_seq) && with_valid_req_seq(req_seq) && with_valid_f_bit(f) && local_busy()) {
+      } else if (with_expected_tx_seq(tx_seq) && with_valid_req_seq(req_seq) &&
+                 with_valid_f_bit(f) && local_busy()) {
         pass_to_tx(req_seq, f);
         store_or_ignore();
-      } else if (with_valid_req_seq(req_seq) && not_with_expected_tx_seq(tx_seq) && with_valid_f_bit(f) &&
-                 local_busy()) {
+      } else if (with_valid_req_seq(req_seq) && not_with_expected_tx_seq(tx_seq) &&
+                 with_valid_f_bit(f) && local_busy()) {
         pass_to_tx(req_seq, f);
       } else if ((with_invalid_tx_seq(tx_seq) && controller_->local_tx_window_ > kMaxTxWin / 2) ||
                  with_invalid_req_seq(req_seq)) {
@@ -217,14 +230,15 @@ struct ErtmController::impl {
         // We decided to ignore
       }
     } else if (rx_state_ == RxState::REJ_SENT) {
-      if (f == Final::NOT_SET && with_expected_tx_seq(tx_seq) && with_valid_req_seq(req_seq) && with_valid_f_bit(f)) {
+      if (f == Final::NOT_SET && with_expected_tx_seq(tx_seq) && with_valid_req_seq(req_seq) &&
+          with_valid_f_bit(f)) {
         increment_expected_tx_seq();
         pass_to_tx(req_seq, f);
         data_indication(sar, sdu_size, payload);
         send_ack(Final::NOT_SET);
         rx_state_ = RxState::RECV;
-      } else if (f == Final::POLL_RESPONSE && with_expected_tx_seq(tx_seq) && with_valid_req_seq(req_seq) &&
-                 with_valid_f_bit(f)) {
+      } else if (f == Final::POLL_RESPONSE && with_expected_tx_seq(tx_seq) &&
+                 with_valid_req_seq(req_seq) && with_valid_f_bit(f)) {
         increment_expected_tx_seq();
         pass_to_tx(req_seq, f);
         data_indication(sar, sdu_size, payload);
@@ -236,7 +250,8 @@ struct ErtmController::impl {
         }
         send_ack(Final::NOT_SET);
         rx_state_ = RxState::RECV;
-      } else if (with_unexpected_tx_seq(tx_seq) && with_valid_req_seq(req_seq) && with_valid_f_bit(f)) {
+      } else if (with_unexpected_tx_seq(tx_seq) && with_valid_req_seq(req_seq) &&
+                 with_valid_f_bit(f)) {
         pass_to_tx(req_seq, f);
       }
     } else if (rx_state_ == RxState::SREJ_SENT) {
@@ -246,7 +261,8 @@ struct ErtmController::impl {
 
   void recv_rr(uint8_t req_seq, Poll p = Poll::NOT_SET, Final f = Final::NOT_SET) {
     if (rx_state_ == RxState::RECV) {
-      if (p == Poll::NOT_SET && f == Final::NOT_SET && with_valid_req_seq(req_seq) && with_valid_f_bit(f)) {
+      if (p == Poll::NOT_SET && f == Final::NOT_SET && with_valid_req_seq(req_seq) &&
+          with_valid_f_bit(f)) {
         pass_to_tx(req_seq, f);
         if (remote_busy() && unacked_frames_ > 0) {
           start_retrans_timer();
@@ -278,7 +294,8 @@ struct ErtmController::impl {
           rej_actioned_ = false;
         }
         send_pending_i_frames();
-      } else if (p == Poll::NOT_SET && f == Final::NOT_SET && with_valid_req_seq(req_seq) && with_valid_f_bit(f)) {
+      } else if (p == Poll::NOT_SET && f == Final::NOT_SET && with_valid_req_seq(req_seq) &&
+                 with_valid_f_bit(f)) {
         pass_to_tx(req_seq, f);
         if (remote_busy() && unacked_frames_ > 0) {
           start_retrans_timer();
@@ -321,7 +338,8 @@ struct ErtmController::impl {
           rej_actioned_ = false;
         }
         send_pending_i_frames();
-      } else if (with_valid_req_seq_retrans(req_seq) && !retry_i_frames_less_than_max_transmit(req_seq)) {
+      } else if (with_valid_req_seq_retrans(req_seq) &&
+                 !retry_i_frames_less_than_max_transmit(req_seq)) {
         CloseChannel();
       } else if (with_invalid_req_seq_retrans(req_seq)) {
         CloseChannel();
@@ -346,7 +364,8 @@ struct ErtmController::impl {
           rej_actioned_ = false;
         }
         send_pending_i_frames();
-      } else if (with_valid_req_seq_retrans(req_seq) && !retry_i_frames_less_than_max_transmit(req_seq)) {
+      } else if (with_valid_req_seq_retrans(req_seq) &&
+                 !retry_i_frames_less_than_max_transmit(req_seq)) {
         CloseChannel();
       } else if (with_invalid_req_seq_retrans(req_seq)) {
         CloseChannel();
@@ -417,7 +436,8 @@ struct ErtmController::impl {
           srej_actioned_ = true;
           srej_save_req_seq_ = req_seq;
         }
-      } else if (with_valid_req_seq_retrans(req_seq) && !retry_i_frames_less_than_max_transmit(req_seq)) {
+      } else if (with_valid_req_seq_retrans(req_seq) &&
+                 !retry_i_frames_less_than_max_transmit(req_seq)) {
         CloseChannel();
       } else if (with_invalid_req_seq_retrans(req_seq)) {
         CloseChannel();
@@ -451,7 +471,8 @@ struct ErtmController::impl {
           srej_actioned_ = true;
           srej_save_req_seq_ = req_seq;
         }
-      } else if (with_valid_req_seq_retrans(req_seq) && !retry_i_frames_less_than_max_transmit(req_seq)) {
+      } else if (with_valid_req_seq_retrans(req_seq) &&
+                 !retry_i_frames_less_than_max_transmit(req_seq)) {
         CloseChannel();
       } else if (with_invalid_req_seq_retrans(req_seq)) {
         CloseChannel();
@@ -462,25 +483,15 @@ struct ErtmController::impl {
   }
 
   // Conditions (@see 8.6.5.5)
-  bool remote_busy() {
-    return remote_busy_;
-  }
+  bool remote_busy() { return remote_busy_; }
 
-  bool local_busy() {
-    return local_busy_;
-  }
+  bool local_busy() { return local_busy_; }
 
-  bool rem_window_not_full() {
-    return unacked_frames_ < controller_->remote_tx_window_;
-  }
+  bool rem_window_not_full() { return unacked_frames_ < controller_->remote_tx_window_; }
 
-  bool rem_window_full() {
-    return unacked_frames_ == controller_->remote_tx_window_;
-  }
+  bool rem_window_full() { return unacked_frames_ == controller_->remote_tx_window_; }
 
-  bool rnr_sent() {
-    return rnr_sent_;
-  }
+  bool rnr_sent() { return rnr_sent_; }
 
   bool retry_i_frames_less_than_max_transmit(uint8_t req_seq) {
     return retry_i_frames_[req_seq] < controller_->local_max_transmit_;
@@ -492,19 +503,19 @@ struct ErtmController::impl {
 
   // Compares two sequence numbers (tx_seq or rx_seq)
   bool sequence_less_than(uint8_t x, uint8_t y) {
-    // Assuming the maximum overflow of sequence number is the same as local_tx_window_ (10 by default).
+    // Assuming the maximum overflow of sequence number is the same as local_tx_window_ (10 by
+    // default).
     return x < y || kMaxTxWin - (x - y) < controller_->local_tx_window_;
   }
 
   // Compares two sequence numbers (tx_seq or rx_seq)
   bool sequence_less_than_or_equal(uint8_t x, uint8_t y) {
-    // Assuming the maximum overflow of sequence number is the same as local_tx_window_ (10 by default).
+    // Assuming the maximum overflow of sequence number is the same as local_tx_window_ (10 by
+    // default).
     return x <= y || kMaxTxWin - (x - y) <= controller_->local_tx_window_;
   }
 
-  bool with_expected_tx_seq(uint8_t tx_seq) {
-    return tx_seq == expected_tx_seq_;
-  }
+  bool with_expected_tx_seq(uint8_t tx_seq) { return tx_seq == expected_tx_seq_; }
 
   bool with_valid_req_seq(uint8_t req_seq) {
     return sequence_less_than_or_equal(expected_ack_seq_, req_seq) &&
@@ -516,9 +527,7 @@ struct ErtmController::impl {
            sequence_less_than_or_equal(req_seq, next_tx_seq_);
   }
 
-  bool with_valid_f_bit(Final f) {
-    return f == Final::NOT_SET ^ tx_state_ == TxState::WAIT_F;
-  }
+  bool with_valid_f_bit(Final f) { return f == Final::NOT_SET ^ tx_state_ == TxState::WAIT_F; }
 
   bool with_unexpected_tx_seq(uint8_t tx_seq) {
     return sequence_less_than(expected_tx_seq_, tx_seq) &&
@@ -536,11 +545,13 @@ struct ErtmController::impl {
   }
 
   bool with_invalid_req_seq(uint8_t req_seq) {
-    return sequence_less_than(req_seq, expected_ack_seq_) || sequence_less_than(next_tx_seq_, req_seq);
+    return sequence_less_than(req_seq, expected_ack_seq_) ||
+           sequence_less_than(next_tx_seq_, req_seq);
   }
 
   bool with_invalid_req_seq_retrans(uint8_t req_seq) {
-    return sequence_less_than(req_seq, expected_ack_seq_) || sequence_less_than(next_tx_seq_, req_seq);
+    return sequence_less_than(req_seq, expected_ack_seq_) ||
+           sequence_less_than(next_tx_seq_, req_seq);
   }
 
   bool not_with_expected_tx_seq(uint8_t tx_seq) {
@@ -574,37 +585,39 @@ struct ErtmController::impl {
 
   // Actions (@see 8.6.5.6)
 
-  void _send_i_frame(SegmentationAndReassembly sar, std::unique_ptr<CopyablePacketBuilder> segment, uint8_t req_seq,
-                     uint8_t tx_seq, uint16_t sdu_size = 0, Final f = Final::NOT_SET) {
+  void _send_i_frame(SegmentationAndReassembly sar, std::unique_ptr<CopyablePacketBuilder> segment,
+                     uint8_t req_seq, uint8_t tx_seq, uint16_t sdu_size = 0,
+                     Final f = Final::NOT_SET) {
     std::unique_ptr<packet::BasePacketBuilder> builder;
     if (sar == SegmentationAndReassembly::START) {
       if (controller_->fcs_enabled_) {
-        builder = EnhancedInformationStartFrameWithFcsBuilder::Create(controller_->remote_cid_, tx_seq, f, req_seq,
-                                                                      sdu_size, std::move(segment));
+        builder = EnhancedInformationStartFrameWithFcsBuilder::Create(
+                controller_->remote_cid_, tx_seq, f, req_seq, sdu_size, std::move(segment));
       } else {
-        builder = EnhancedInformationStartFrameBuilder::Create(controller_->remote_cid_, tx_seq, f, req_seq, sdu_size,
-                                                               std::move(segment));
+        builder = EnhancedInformationStartFrameBuilder::Create(
+                controller_->remote_cid_, tx_seq, f, req_seq, sdu_size, std::move(segment));
       }
     } else {
       if (controller_->fcs_enabled_) {
-        builder = EnhancedInformationFrameWithFcsBuilder::Create(controller_->remote_cid_, tx_seq, f, req_seq, sar,
-                                                                 std::move(segment));
+        builder = EnhancedInformationFrameWithFcsBuilder::Create(
+                controller_->remote_cid_, tx_seq, f, req_seq, sar, std::move(segment));
       } else {
-        builder = EnhancedInformationFrameBuilder::Create(controller_->remote_cid_, tx_seq, f, req_seq, sar,
-                                                          std::move(segment));
+        builder = EnhancedInformationFrameBuilder::Create(controller_->remote_cid_, tx_seq, f,
+                                                          req_seq, sar, std::move(segment));
       }
     }
     controller_->send_pdu(std::move(builder));
   }
 
-  void send_data(SegmentationAndReassembly sar, uint16_t sdu_size, std::unique_ptr<packet::RawBuilder> segment,
-                 Final f = Final::NOT_SET) {
+  void send_data(SegmentationAndReassembly sar, uint16_t sdu_size,
+                 std::unique_ptr<packet::RawBuilder> segment, Final f = Final::NOT_SET) {
     std::shared_ptr<packet::RawBuilder> shared_segment(segment.release());
     unacked_list_.emplace(std::piecewise_construct, std::forward_as_tuple(next_tx_seq_),
                           std::forward_as_tuple(sar, sdu_size, shared_segment));
 
     std::unique_ptr<CopyablePacketBuilder> copyable_packet_builder =
-        std::make_unique<CopyablePacketBuilder>(std::get<2>(unacked_list_.find(next_tx_seq_)->second));
+            std::make_unique<CopyablePacketBuilder>(
+                    std::get<2>(unacked_list_.find(next_tx_seq_)->second));
     _send_i_frame(sar, std::move(copyable_packet_builder), buffer_seq_, next_tx_seq_, sdu_size, f);
     unacked_frames_++;
     frames_sent_++;
@@ -613,7 +626,8 @@ struct ErtmController::impl {
     start_retrans_timer();
   }
 
-  void pend_data(SegmentationAndReassembly sar, uint16_t sdu_size, std::unique_ptr<packet::RawBuilder> data) {
+  void pend_data(SegmentationAndReassembly sar, uint16_t sdu_size,
+                 std::unique_ptr<packet::RawBuilder> data) {
     pending_frames_.emplace(std::make_tuple(sar, sdu_size, std::move(data)));
   }
 
@@ -632,7 +646,8 @@ struct ErtmController::impl {
   void _send_s_frame(SupervisoryFunction s, uint8_t req_seq, Poll p, Final f) {
     std::unique_ptr<packet::BasePacketBuilder> builder;
     if (controller_->fcs_enabled_) {
-      builder = EnhancedSupervisoryFrameWithFcsBuilder::Create(controller_->remote_cid_, s, p, f, req_seq);
+      builder = EnhancedSupervisoryFrameWithFcsBuilder::Create(controller_->remote_cid_, s, p, f,
+                                                               req_seq);
     } else {
       builder = EnhancedSupervisoryFrameBuilder::Create(controller_->remote_cid_, s, p, f, req_seq);
     }
@@ -688,39 +703,32 @@ struct ErtmController::impl {
   }
 
   void start_retrans_timer() {
-    retrans_timer_.Schedule(common::BindOnce(&impl::retrans_timer_expires, common::Unretained(this)),
-                            std::chrono::milliseconds(controller_->local_retransmit_timeout_ms_));
+    retrans_timer_.Schedule(
+            common::BindOnce(&impl::retrans_timer_expires, common::Unretained(this)),
+            std::chrono::milliseconds(controller_->local_retransmit_timeout_ms_));
   }
 
   void start_monitor_timer() {
-    monitor_timer_.Schedule(common::BindOnce(&impl::monitor_timer_expires, common::Unretained(this)),
-                            std::chrono::milliseconds(controller_->local_monitor_timeout_ms_));
+    monitor_timer_.Schedule(
+            common::BindOnce(&impl::monitor_timer_expires, common::Unretained(this)),
+            std::chrono::milliseconds(controller_->local_monitor_timeout_ms_));
   }
 
-  void pass_to_tx(uint8_t req_seq, Final f) {
-    recv_req_seq_and_f_bit(req_seq, f);
-  }
+  void pass_to_tx(uint8_t req_seq, Final f) { recv_req_seq_and_f_bit(req_seq, f); }
 
-  void pass_to_tx_f_bit(Final f) {
-    recv_f_bit(f);
-  }
+  void pass_to_tx_f_bit(Final f) { recv_f_bit(f); }
 
-  void data_indication(SegmentationAndReassembly sar, uint16_t sdu_size, const packet::PacketView<true>& segment) {
+  void data_indication(SegmentationAndReassembly sar, uint16_t sdu_size,
+                       const packet::PacketView<true>& segment) {
     controller_->stage_for_reassembly(sar, sdu_size, segment);
     buffer_seq_ = (buffer_seq_ + 1) % kMaxTxWin;
   }
 
-  void increment_expected_tx_seq() {
-    expected_tx_seq_ = (expected_tx_seq_ + 1) % kMaxTxWin;
-  }
+  void increment_expected_tx_seq() { expected_tx_seq_ = (expected_tx_seq_ + 1) % kMaxTxWin; }
 
-  void stop_retrans_timer() {
-    retrans_timer_.Cancel();
-  }
+  void stop_retrans_timer() { retrans_timer_.Cancel(); }
 
-  void stop_monitor_timer() {
-    monitor_timer_.Cancel();
-  }
+  void stop_monitor_timer() { monitor_timer_.Cancel(); }
 
   void send_ack(Final f = Final::NOT_SET) {
     if (local_busy()) {
@@ -744,9 +752,7 @@ struct ErtmController::impl {
     // We choose to ignore.
   }
 
-  bool p_bit_outstanding() {
-    return tx_state_ == TxState::WAIT_F;
-  }
+  bool p_bit_outstanding() { return tx_state_ == TxState::WAIT_F; }
 
   void retransmit_i_frames(uint8_t req_seq, Poll p = Poll::NOT_SET) {
     uint8_t i = req_seq;
@@ -757,9 +763,9 @@ struct ErtmController::impl {
         return;
       }
       std::unique_ptr<CopyablePacketBuilder> copyable_packet_builder =
-          std::make_unique<CopyablePacketBuilder>(std::get<2>(unacked_list_.find(i)->second));
-      _send_i_frame(std::get<0>(unacked_list_.find(i)->second), std::move(copyable_packet_builder), buffer_seq_, i,
-                    std::get<1>(unacked_list_.find(i)->second), f);
+              std::make_unique<CopyablePacketBuilder>(std::get<2>(unacked_list_.find(i)->second));
+      _send_i_frame(std::get<0>(unacked_list_.find(i)->second), std::move(copyable_packet_builder),
+                    buffer_seq_, i, std::get<1>(unacked_list_.find(i)->second), f);
       retry_i_frames_[i]++;
       frames_sent_++;
       f = Final::NOT_SET;
@@ -773,13 +779,15 @@ struct ErtmController::impl {
   void retransmit_requested_i_frame(uint8_t req_seq, Poll p) {
     Final f = p == Poll::POLL ? Final::POLL_RESPONSE : Final::NOT_SET;
     if (unacked_list_.find(req_seq) == unacked_list_.end()) {
-      LOG_ERROR("Received invalid SREJ");
+      log::error("Received invalid SREJ");
       return;
     }
     std::unique_ptr<CopyablePacketBuilder> copyable_packet_builder =
-        std::make_unique<CopyablePacketBuilder>(std::get<2>(unacked_list_.find(req_seq)->second));
-    _send_i_frame(std::get<0>(unacked_list_.find(req_seq)->second), std::move(copyable_packet_builder), buffer_seq_,
-                  req_seq, std::get<1>(unacked_list_.find(req_seq)->second), f);
+            std::make_unique<CopyablePacketBuilder>(
+                    std::get<2>(unacked_list_.find(req_seq)->second));
+    _send_i_frame(std::get<0>(unacked_list_.find(req_seq)->second),
+                  std::move(copyable_packet_builder), buffer_seq_, req_seq,
+                  std::get<1>(unacked_list_.find(req_seq)->second), f);
     retry_i_frames_[req_seq]++;
     start_retrans_timer();
   }
@@ -796,9 +804,7 @@ struct ErtmController::impl {
     }
   }
 
-  void CloseChannel() {
-    controller_->close_channel();
-  }
+  void CloseChannel() { controller_->close_channel(); }
 
   void pop_srej_list() {
     // We don't support sending SREJ
@@ -813,9 +819,10 @@ struct ErtmController::impl {
 void ErtmController::OnSdu(std::unique_ptr<packet::BasePacketBuilder> sdu) {
   auto sdu_size = sdu->size();
   std::vector<std::unique_ptr<packet::RawBuilder>> segments;
-  auto size_each_packet = (remote_mps_ - 4 /* basic L2CAP header */ - 2 /* SDU length */ - 2 /* Enhanced control */ -
-                           (fcs_enabled_ ? 2 : 0));
-  packet::FragmentingInserter fragmenting_inserter(size_each_packet, std::back_insert_iterator(segments));
+  auto size_each_packet = (remote_mps_ - 4 /* basic L2CAP header */ - 2 /* SDU length */ -
+                           2 /* Enhanced control */ - (fcs_enabled_ ? 2 : 0));
+  packet::FragmentingInserter fragmenting_inserter(size_each_packet,
+                                                   std::back_insert_iterator(segments));
   sdu->Serialize(fragmenting_inserter);
   fragmenting_inserter.finalize();
   if (segments.size() == 1) {
@@ -844,14 +851,14 @@ void ErtmController::on_pdu_no_fcs(const packet::PacketView<true>& pdu) {
   }
   auto standard_frame_view = StandardFrameView::Create(basic_frame_view);
   if (!standard_frame_view.IsValid()) {
-    LOG_WARN("Received invalid frame");
+    log::warn("Received invalid frame");
     return;
   }
   auto type = standard_frame_view.GetFrameType();
   if (type == FrameType::I_FRAME) {
     auto i_frame_view = EnhancedInformationFrameView::Create(standard_frame_view);
     if (!i_frame_view.IsValid()) {
-      LOG_WARN("Received invalid frame");
+      log::warn("Received invalid frame");
       return;
     }
     Final f = i_frame_view.GetF();
@@ -861,7 +868,7 @@ void ErtmController::on_pdu_no_fcs(const packet::PacketView<true>& pdu) {
     if (sar == SegmentationAndReassembly::START) {
       auto i_frame_start_view = EnhancedInformationStartFrameView::Create(i_frame_view);
       if (!i_frame_start_view.IsValid()) {
-        LOG_WARN("Received invalid I-Frame START");
+        log::warn("Received invalid I-Frame START");
         return;
       }
       pimpl_->recv_i_frame(f, tx_seq, req_seq, sar, i_frame_start_view.GetL2capSduLength(),
@@ -872,7 +879,7 @@ void ErtmController::on_pdu_no_fcs(const packet::PacketView<true>& pdu) {
   } else if (type == FrameType::S_FRAME) {
     auto s_frame_view = EnhancedSupervisoryFrameView::Create(standard_frame_view);
     if (!s_frame_view.IsValid()) {
-      LOG_WARN("Received invalid frame");
+      log::warn("Received invalid frame");
       return;
     }
     auto req_seq = s_frame_view.GetReqSeq();
@@ -893,7 +900,7 @@ void ErtmController::on_pdu_no_fcs(const packet::PacketView<true>& pdu) {
         break;
     }
   } else {
-    LOG_WARN("Received invalid frame");
+    log::warn("Received invalid frame");
   }
 }
 
@@ -904,14 +911,14 @@ void ErtmController::on_pdu_fcs(const packet::PacketView<true>& pdu) {
   }
   auto standard_frame_view = StandardFrameWithFcsView::Create(basic_frame_view);
   if (!standard_frame_view.IsValid()) {
-    LOG_WARN("Received invalid frame");
+    log::warn("Received invalid frame");
     return;
   }
   auto type = standard_frame_view.GetFrameType();
   if (type == FrameType::I_FRAME) {
     auto i_frame_view = EnhancedInformationFrameWithFcsView::Create(standard_frame_view);
     if (!i_frame_view.IsValid()) {
-      LOG_WARN("Received invalid frame");
+      log::warn("Received invalid frame");
       return;
     }
     Final f = i_frame_view.GetF();
@@ -921,7 +928,7 @@ void ErtmController::on_pdu_fcs(const packet::PacketView<true>& pdu) {
     if (sar == SegmentationAndReassembly::START) {
       auto i_frame_start_view = EnhancedInformationStartFrameWithFcsView::Create(i_frame_view);
       if (!i_frame_start_view.IsValid()) {
-        LOG_WARN("Received invalid I-Frame START");
+        log::warn("Received invalid I-Frame START");
         return;
       }
       pimpl_->recv_i_frame(f, tx_seq, req_seq, sar, i_frame_start_view.GetL2capSduLength(),
@@ -932,7 +939,7 @@ void ErtmController::on_pdu_fcs(const packet::PacketView<true>& pdu) {
   } else if (type == FrameType::S_FRAME) {
     auto s_frame_view = EnhancedSupervisoryFrameWithFcsView::Create(standard_frame_view);
     if (!s_frame_view.IsValid()) {
-      LOG_WARN("Received invalid frame");
+      log::warn("Received invalid frame");
       return;
     }
     auto req_seq = s_frame_view.GetReqSeq();
@@ -953,7 +960,7 @@ void ErtmController::on_pdu_fcs(const packet::PacketView<true>& pdu) {
         break;
     }
   } else {
-    LOG_WARN("Received invalid frame");
+    log::warn("Received invalid frame");
   }
 }
 
@@ -970,20 +977,22 @@ void ErtmController::stage_for_reassembly(SegmentationAndReassembly sar, uint16_
   switch (sar) {
     case SegmentationAndReassembly::UNSEGMENTED:
       if (sar_state_ != SegmentationAndReassembly::END) {
-        LOG_WARN("Received invalid SAR");
+        log::warn("Received invalid SAR");
         close_channel();
         return;
       }
       // TODO: Enforce MTU
-      enqueue_buffer_.Enqueue(std::make_unique<packet::PacketView<kLittleEndian>>(payload), handler_);
+      enqueue_buffer_.Enqueue(std::make_unique<packet::PacketView<kLittleEndian>>(payload),
+                              handler_);
       if (enqueue_buffer_.Size() == kEnqueueBufferBusyThreshold) {
         pimpl_->local_busy_detected();
-        enqueue_buffer_.NotifyOnEmpty(common::BindOnce(&impl::local_busy_clear, common::Unretained(pimpl_.get())));
+        enqueue_buffer_.NotifyOnEmpty(
+                common::BindOnce(&impl::local_busy_clear, common::Unretained(pimpl_.get())));
       }
       break;
     case SegmentationAndReassembly::START:
       if (sar_state_ != SegmentationAndReassembly::END) {
-        LOG_WARN("Received invalid SAR");
+        log::warn("Received invalid SAR");
         close_channel();
         return;
       }
@@ -994,7 +1003,7 @@ void ErtmController::stage_for_reassembly(SegmentationAndReassembly sar, uint16_
       break;
     case SegmentationAndReassembly::CONTINUATION:
       if (sar_state_ == SegmentationAndReassembly::END) {
-        LOG_WARN("Received invalid SAR");
+        log::warn("Received invalid SAR");
         close_channel();
         return;
       }
@@ -1003,33 +1012,33 @@ void ErtmController::stage_for_reassembly(SegmentationAndReassembly sar, uint16_
       break;
     case SegmentationAndReassembly::END:
       if (sar_state_ == SegmentationAndReassembly::END) {
-        LOG_WARN("Received invalid SAR");
+        log::warn("Received invalid SAR");
         close_channel();
         return;
       }
       sar_state_ = SegmentationAndReassembly::END;
       remaining_sdu_continuation_packet_size_ -= payload.size();
       if (remaining_sdu_continuation_packet_size_ != 0) {
-        LOG_WARN("Received invalid END I-Frame");
-        reassembly_stage_ =
-            PacketViewForReassembly(PacketView<kLittleEndian>(std::make_shared<std::vector<uint8_t>>()));
+        log::warn("Received invalid END I-Frame");
+        reassembly_stage_ = PacketViewForReassembly(
+                PacketView<kLittleEndian>(std::make_shared<std::vector<uint8_t>>()));
         remaining_sdu_continuation_packet_size_ = 0;
         close_channel();
         return;
       }
       reassembly_stage_.AppendPacketView(payload);
-      enqueue_buffer_.Enqueue(std::make_unique<packet::PacketView<kLittleEndian>>(reassembly_stage_), handler_);
+      enqueue_buffer_.Enqueue(
+              std::make_unique<packet::PacketView<kLittleEndian>>(reassembly_stage_), handler_);
       if (enqueue_buffer_.Size() == kEnqueueBufferBusyThreshold) {
         pimpl_->local_busy_detected();
-        enqueue_buffer_.NotifyOnEmpty(common::BindOnce(&impl::local_busy_clear, common::Unretained(pimpl_.get())));
+        enqueue_buffer_.NotifyOnEmpty(
+                common::BindOnce(&impl::local_busy_clear, common::Unretained(pimpl_.get())));
       }
       break;
   }
 }
 
-void ErtmController::EnableFcs(bool enabled) {
-  fcs_enabled_ = enabled;
-}
+void ErtmController::EnableFcs(bool enabled) { fcs_enabled_ = enabled; }
 
 void ErtmController::send_pdu(std::unique_ptr<packet::BasePacketBuilder> pdu) {
   pdu_queue_.emplace(std::move(pdu));
@@ -1037,7 +1046,7 @@ void ErtmController::send_pdu(std::unique_ptr<packet::BasePacketBuilder> pdu) {
 }
 
 void ErtmController::SetRetransmissionAndFlowControlOptions(
-    const RetransmissionAndFlowControlConfigurationOption& option) {
+        const RetransmissionAndFlowControlConfigurationOption& option) {
   remote_tx_window_ = option.tx_window_size_;
   local_max_transmit_ = option.max_transmit_;
   local_retransmit_timeout_ms_ = option.retransmission_time_out_;
@@ -1045,13 +1054,9 @@ void ErtmController::SetRetransmissionAndFlowControlOptions(
   remote_mps_ = option.maximum_pdu_size_;
 }
 
-void ErtmController::close_channel() {
-  link_->SendDisconnectionRequest(cid_, remote_cid_);
-}
+void ErtmController::close_channel() { link_->SendDisconnectionRequest(cid_, remote_cid_); }
 
-size_t ErtmController::CopyablePacketBuilder::size() const {
-  return builder_->size();
-}
+size_t ErtmController::CopyablePacketBuilder::size() const { return builder_->size(); }
 
 void ErtmController::CopyablePacketBuilder::Serialize(BitInserter& it) const {
   builder_->Serialize(it);

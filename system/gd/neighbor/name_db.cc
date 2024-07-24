@@ -17,6 +17,8 @@
 
 #include "neighbor/name_db.h"
 
+#include <bluetooth/log.h>
+
 #include <memory>
 #include <unordered_map>
 #include <utility>
@@ -39,8 +41,8 @@ struct PendingRemoteNameRead {
 }  // namespace
 
 struct NameDbModule::impl {
-  void ReadRemoteNameRequest(
-      hci::Address address, ReadRemoteNameDbCallback callback, os::Handler* handler);
+  void ReadRemoteNameRequest(hci::Address address, ReadRemoteNameDbCallback callback,
+                             os::Handler* handler);
 
   bool IsNameCached(hci::Address address) const;
   RemoteName ReadCachedRemoteName(hci::Address address) const;
@@ -50,7 +52,7 @@ struct NameDbModule::impl {
   void Start();
   void Stop();
 
- private:
+private:
   std::unordered_map<hci::Address, std::list<PendingRemoteNameRead>> address_to_pending_read_map_;
   std::unordered_map<hci::Address, RemoteName> address_to_name_map_;
 
@@ -63,14 +65,15 @@ struct NameDbModule::impl {
 };
 
 const ModuleFactory neighbor::NameDbModule::Factory =
-    ModuleFactory([]() { return new neighbor::NameDbModule(); });
+        ModuleFactory([]() { return new neighbor::NameDbModule(); });
 
 neighbor::NameDbModule::impl::impl(const neighbor::NameDbModule& module) : module_(module) {}
 
-void neighbor::NameDbModule::impl::ReadRemoteNameRequest(
-    hci::Address address, ReadRemoteNameDbCallback callback, os::Handler* handler) {
+void neighbor::NameDbModule::impl::ReadRemoteNameRequest(hci::Address address,
+                                                         ReadRemoteNameDbCallback callback,
+                                                         os::Handler* handler) {
   if (address_to_pending_read_map_.find(address) != address_to_pending_read_map_.end()) {
-    LOG_WARN("Already have remote read db in progress; adding callback to callback list");
+    log::warn("Already have remote read db in progress; adding callback to callback list");
     address_to_pending_read_map_[address].push_back({std::move(callback), handler});
     return;
   }
@@ -84,19 +87,21 @@ void neighbor::NameDbModule::impl::ReadRemoteNameRequest(
   uint16_t clock_offset = 0;
   hci::ClockOffsetValid clock_offset_valid = hci::ClockOffsetValid::INVALID;
   name_module_->StartRemoteNameRequest(
-      address,
-      hci::RemoteNameRequestBuilder::Create(
-          address, page_scan_repetition_mode, clock_offset, clock_offset_valid),
-      handler_->BindOnce([](hci::ErrorCode /* status */) {}),
-      handler_->BindOnce([&](uint64_t /* features */) {
-        LOG_WARN("UNIMPLEMENTED: ignoring host supported features");
-      }),
-      handler_->BindOnceOn(this, &NameDbModule::impl::OnRemoteNameResponse, address));
+          address,
+          hci::RemoteNameRequestBuilder::Create(address, page_scan_repetition_mode, clock_offset,
+                                                clock_offset_valid),
+          handler_->BindOnce([](hci::ErrorCode /* status */) {}),
+          handler_->BindOnce([&](uint64_t /* features */) {
+            log::warn("UNIMPLEMENTED: ignoring host supported features");
+          }),
+          handler_->BindOnceOn(this, &NameDbModule::impl::OnRemoteNameResponse, address));
 }
 
-void neighbor::NameDbModule::impl::OnRemoteNameResponse(
-    hci::Address address, hci::ErrorCode status, RemoteName name) {
-  ASSERT(address_to_pending_read_map_.find(address) != address_to_pending_read_map_.end());
+void neighbor::NameDbModule::impl::OnRemoteNameResponse(hci::Address address, hci::ErrorCode status,
+                                                        RemoteName name) {
+  log::assert_that(address_to_pending_read_map_.find(address) != address_to_pending_read_map_.end(),
+                   "assert failed: address_to_pending_read_map_.find(address) != "
+                   "address_to_pending_read_map_.end()");
   if (status == hci::ErrorCode::SUCCESS) {
     address_to_name_map_[address] = name;
   }
@@ -112,7 +117,7 @@ bool neighbor::NameDbModule::impl::IsNameCached(hci::Address address) const {
 }
 
 RemoteName neighbor::NameDbModule::impl::ReadCachedRemoteName(hci::Address address) const {
-  ASSERT(IsNameCached(address));
+  log::assert_that(IsNameCached(address), "assert failed: IsNameCached(address)");
   return address_to_name_map_.at(address);
 }
 
@@ -121,18 +126,14 @@ RemoteName neighbor::NameDbModule::impl::ReadCachedRemoteName(hci::Address addre
  */
 neighbor::NameDbModule::NameDbModule() : pimpl_(std::make_unique<impl>(*this)) {}
 
-neighbor::NameDbModule::~NameDbModule() {
-  pimpl_.reset();
-}
+neighbor::NameDbModule::~NameDbModule() { pimpl_.reset(); }
 
-void neighbor::NameDbModule::ReadRemoteNameRequest(
-    hci::Address address, ReadRemoteNameDbCallback callback, os::Handler* handler) {
-  GetHandler()->Post(common::BindOnce(
-      &NameDbModule::impl::ReadRemoteNameRequest,
-      common::Unretained(pimpl_.get()),
-      address,
-      std::move(callback),
-      handler));
+void neighbor::NameDbModule::ReadRemoteNameRequest(hci::Address address,
+                                                   ReadRemoteNameDbCallback callback,
+                                                   os::Handler* handler) {
+  GetHandler()->Post(common::BindOnce(&NameDbModule::impl::ReadRemoteNameRequest,
+                                      common::Unretained(pimpl_.get()), address,
+                                      std::move(callback), handler));
 }
 
 bool neighbor::NameDbModule::IsNameCached(hci::Address address) const {
@@ -157,13 +158,9 @@ void neighbor::NameDbModule::ListDependencies(ModuleList* list) const {
   list->add<hci::RemoteNameRequestModule>();
 }
 
-void neighbor::NameDbModule::Start() {
-  pimpl_->Start();
-}
+void neighbor::NameDbModule::Start() { pimpl_->Start(); }
 
-void neighbor::NameDbModule::Stop() {
-  pimpl_->Stop();
-}
+void neighbor::NameDbModule::Stop() { pimpl_->Stop(); }
 
 }  // namespace neighbor
 }  // namespace bluetooth

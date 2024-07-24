@@ -32,7 +32,6 @@
 #include <bluetooth/log.h>
 
 #include "bta/hd/bta_hd_int.h"
-#include "common/init_flags.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/compat.h"
@@ -61,8 +60,7 @@ void BTA_HdEnable(tBTA_HD_CBACK* p_cback) {
 
   bta_sys_register(BTA_ID_HD, &bta_hd_reg);
 
-  tBTA_HD_API_ENABLE* p_buf =
-      (tBTA_HD_API_ENABLE*)osi_malloc((uint16_t)sizeof(tBTA_HD_API_ENABLE));
+  tBTA_HD_API_ENABLE* p_buf = (tBTA_HD_API_ENABLE*)osi_malloc((uint16_t)sizeof(tBTA_HD_API_ENABLE));
 
   memset(p_buf, 0, sizeof(tBTA_HD_API_ENABLE));
 
@@ -84,11 +82,6 @@ void BTA_HdEnable(tBTA_HD_CBACK* p_cback) {
 void BTA_HdDisable(void) {
   log::verbose("");
 
-  if (!bluetooth::common::init_flags::
-          delay_hidh_cleanup_until_hidh_ready_start_is_enabled()) {
-    bta_sys_deregister(BTA_ID_HD);
-  }
-
   BT_HDR_RIGID* p_buf = (BT_HDR_RIGID*)osi_malloc(sizeof(BT_HDR_RIGID));
   p_buf->event = BTA_HD_API_DISABLE_EVT;
   bta_sys_sendmsg(p_buf);
@@ -99,7 +92,7 @@ void BTA_HdDisable(void) {
  * Function         BTA_HdRegisterApp
  *
  * Description      This function is called when application should be
-*registered
+ *registered
  *
  * Returns          void
  *
@@ -108,8 +101,7 @@ void BTA_HdRegisterApp(tBTA_HD_APP_INFO* p_app_info, tBTA_HD_QOS_INFO* p_in_qos,
                        tBTA_HD_QOS_INFO* p_out_qos) {
   log::verbose("");
 
-  tBTA_HD_REGISTER_APP* p_buf =
-      (tBTA_HD_REGISTER_APP*)osi_malloc(sizeof(tBTA_HD_REGISTER_APP));
+  tBTA_HD_REGISTER_APP* p_buf = (tBTA_HD_REGISTER_APP*)osi_malloc(sizeof(tBTA_HD_REGISTER_APP));
   p_buf->hdr.event = BTA_HD_API_REGISTER_APP_EVT;
 
   if (p_app_info->p_name) {
@@ -119,8 +111,7 @@ void BTA_HdRegisterApp(tBTA_HD_APP_INFO* p_app_info, tBTA_HD_QOS_INFO* p_in_qos,
   }
 
   if (p_app_info->p_description) {
-    strlcpy(p_buf->description, p_app_info->p_description,
-            BTA_HD_APP_DESCRIPTION_LEN);
+    strlcpy(p_buf->description, p_app_info->p_description, BTA_HD_APP_DESCRIPTION_LEN);
   } else {
     p_buf->description[0] = '\0';
   }
@@ -137,8 +128,7 @@ void BTA_HdRegisterApp(tBTA_HD_APP_INFO* p_app_info, tBTA_HD_QOS_INFO* p_in_qos,
     p_app_info->descriptor.dl_len = BTA_HD_APP_DESCRIPTOR_LEN;
   }
   p_buf->d_len = p_app_info->descriptor.dl_len;
-  memcpy(p_buf->d_data, p_app_info->descriptor.dsc_list,
-         p_app_info->descriptor.dl_len);
+  memcpy(p_buf->d_data, p_app_info->descriptor.dsc_list, p_app_info->descriptor.dl_len);
 
   // copy qos data as-is
   memcpy(&p_buf->in_qos, p_in_qos, sizeof(tBTA_HD_QOS_INFO));
@@ -152,7 +142,7 @@ void BTA_HdRegisterApp(tBTA_HD_APP_INFO* p_app_info, tBTA_HD_QOS_INFO* p_in_qos,
  * Function         BTA_HdUnregisterApp
  *
  * Description      This function is called when application should be
-*unregistered
+ *unregistered
  *
  * Returns          void
  *
@@ -180,14 +170,13 @@ void BTA_HdSendReport(tBTA_HD_REPORT* p_report) {
 
   if (p_report->len > BTA_HD_REPORT_LEN) {
     log::warn(
-        "report len ({}) > MTU len ({}), can't send report. Increase value of "
-        "HID_DEV_MTU_SIZE to send larger reports",
-        p_report->len, BTA_HD_REPORT_LEN);
+            "report len ({}) > MTU len ({}), can't send report. Increase value of "
+            "HID_DEV_MTU_SIZE to send larger reports",
+            p_report->len, BTA_HD_REPORT_LEN);
     return;
   }
 
-  tBTA_HD_SEND_REPORT* p_buf =
-      (tBTA_HD_SEND_REPORT*)osi_malloc(sizeof(tBTA_HD_SEND_REPORT));
+  tBTA_HD_SEND_REPORT* p_buf = (tBTA_HD_SEND_REPORT*)osi_malloc(sizeof(tBTA_HD_SEND_REPORT));
   p_buf->hdr.event = BTA_HD_API_SEND_REPORT_EVT;
 
   p_buf->use_intr = p_report->use_intr;
@@ -222,7 +211,7 @@ void BTA_HdVirtualCableUnplug(void) {
  * Function         BTA_HdConnect
  *
  * Description      This function is called when connection to host shall be
-*made
+ *made
  *
  * Returns          void
  *
@@ -230,8 +219,7 @@ void BTA_HdVirtualCableUnplug(void) {
 void BTA_HdConnect(const RawAddress& addr) {
   log::verbose("");
 
-  tBTA_HD_DEVICE_CTRL* p_buf =
-      (tBTA_HD_DEVICE_CTRL*)osi_malloc(sizeof(tBTA_HD_DEVICE_CTRL));
+  tBTA_HD_DEVICE_CTRL* p_buf = (tBTA_HD_DEVICE_CTRL*)osi_malloc(sizeof(tBTA_HD_DEVICE_CTRL));
   p_buf->hdr.event = BTA_HD_API_CONNECT_EVT;
 
   p_buf->addr = addr;
@@ -267,8 +255,7 @@ void BTA_HdDisconnect(void) {
  ******************************************************************************/
 void BTA_HdAddDevice(const RawAddress& addr) {
   log::verbose("");
-  tBTA_HD_DEVICE_CTRL* p_buf =
-      (tBTA_HD_DEVICE_CTRL*)osi_malloc(sizeof(tBTA_HD_DEVICE_CTRL));
+  tBTA_HD_DEVICE_CTRL* p_buf = (tBTA_HD_DEVICE_CTRL*)osi_malloc(sizeof(tBTA_HD_DEVICE_CTRL));
   p_buf->hdr.event = BTA_HD_API_ADD_DEVICE_EVT;
 
   p_buf->addr = addr;
@@ -287,8 +274,7 @@ void BTA_HdAddDevice(const RawAddress& addr) {
  ******************************************************************************/
 void BTA_HdRemoveDevice(const RawAddress& addr) {
   log::verbose("");
-  tBTA_HD_DEVICE_CTRL* p_buf =
-      (tBTA_HD_DEVICE_CTRL*)osi_malloc(sizeof(tBTA_HD_DEVICE_CTRL));
+  tBTA_HD_DEVICE_CTRL* p_buf = (tBTA_HD_DEVICE_CTRL*)osi_malloc(sizeof(tBTA_HD_DEVICE_CTRL));
   p_buf->hdr.event = BTA_HD_API_REMOVE_DEVICE_EVT;
 
   p_buf->addr = addr;
@@ -307,8 +293,7 @@ void BTA_HdRemoveDevice(const RawAddress& addr) {
  ******************************************************************************/
 void BTA_HdReportError(uint8_t error) {
   log::verbose("");
-  tBTA_HD_REPORT_ERR* p_buf =
-      (tBTA_HD_REPORT_ERR*)osi_malloc(sizeof(tBTA_HD_REPORT_ERR));
+  tBTA_HD_REPORT_ERR* p_buf = (tBTA_HD_REPORT_ERR*)osi_malloc(sizeof(tBTA_HD_REPORT_ERR));
   p_buf->hdr.event = BTA_HD_API_REPORT_ERROR_EVT;
   p_buf->error = error;
 

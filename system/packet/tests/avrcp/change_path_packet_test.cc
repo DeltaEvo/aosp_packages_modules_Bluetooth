@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <base/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -39,8 +38,7 @@ TEST(ChangePathResponseBuilderTest, builderTest) {
 TEST(ChangePathResponseBuilderTest, builderErrorStatusTest) {
   // NOTE: The num items in folder field doesn't matter when the status is
   // not NO_ERROR
-  auto builder =
-      ChangePathResponseBuilder::MakeBuilder(Status::INVALID_DIRECTION, 2);
+  auto builder = ChangePathResponseBuilder::MakeBuilder(Status::INVALID_DIRECTION, 2);
   ASSERT_EQ(builder->size(), change_path_error_response.size());
 
   auto test_packet = TestChangePathReqPacket::Make();

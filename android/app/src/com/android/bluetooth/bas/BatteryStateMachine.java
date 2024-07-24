@@ -21,6 +21,7 @@ import static android.bluetooth.BluetoothDevice.PHY_LE_1M_MASK;
 import static android.bluetooth.BluetoothDevice.PHY_LE_2M_MASK;
 import static android.bluetooth.BluetoothDevice.TRANSPORT_LE;
 
+import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
@@ -44,11 +45,8 @@ import java.lang.ref.WeakReference;
 import java.util.Scanner;
 import java.util.UUID;
 
-/**
- * It manages Battery service of a BLE device
- */
+/** It manages Battery service of a BLE device */
 public class BatteryStateMachine extends StateMachine {
-    private static final boolean DBG = false;
     private static final String TAG = "BatteryStateMachine";
 
     static final UUID GATT_BATTERY_SERVICE_UUID =
@@ -64,8 +62,7 @@ public class BatteryStateMachine extends StateMachine {
     private static final int CONNECT_TIMEOUT = 201;
 
     // NOTE: the value is not "final" - it is modified in the unit tests
-    @VisibleForTesting
-    static int sConnectTimeoutMs = 30000;        // 30s
+    @VisibleForTesting static int sConnectTimeoutMs = 30000; // 30s
 
     private Disconnected mDisconnected;
     private Connecting mConnecting;
@@ -104,17 +101,14 @@ public class BatteryStateMachine extends StateMachine {
         return sm;
     }
 
-    /**
-     * Quits the state machine
-     */
+    /** Quits the state machine */
     public void doQuit() {
         log("doQuit for device " + mDevice);
         quitNow();
     }
 
-    /**
-     * Cleans up the resources the state machine held.
-     */
+    /** Cleans up the resources the state machine held. */
+    @SuppressLint("AndroidFrameworkRequiresPermission") // We should call internal gatt interface
     public void cleanup() {
         log("cleanup for device " + mDevice);
         if (mBluetoothGatt != null) {
@@ -164,9 +158,7 @@ public class BatteryStateMachine extends StateMachine {
         return Integer.toString(state);
     }
 
-    /**
-     * Dumps battery state machine state.
-     */
+    /** Dumps battery state machine state. */
     public void dump(StringBuilder sb) {
         ProfileService.println(sb, "mDevice: " + mDevice);
         ProfileService.println(sb, "  StateMachine: " + this);
@@ -174,7 +166,7 @@ public class BatteryStateMachine extends StateMachine {
         // Dump the state machine logs
         StringWriter stringWriter = new StringWriter();
         PrintWriter printWriter = new PrintWriter(stringWriter);
-        super.dump(new FileDescriptor(), printWriter, new String[]{});
+        super.dump(new FileDescriptor(), printWriter, new String[] {});
         printWriter.flush();
         stringWriter.flush();
         ProfileService.println(sb, "  StateMachineLog:");
@@ -205,8 +197,13 @@ public class BatteryStateMachine extends StateMachine {
     }
 
     void dispatchConnectionStateChanged(int fromState, int toState) {
-        log("Connection state " + mDevice + ": " + profileStateToString(fromState)
-                + "->" + profileStateToString(toState));
+        log(
+                "Connection state "
+                        + mDevice
+                        + ": "
+                        + profileStateToString(fromState)
+                        + "->"
+                        + profileStateToString(toState));
 
         BatteryService service = mServiceRef.get();
         if (service != null) {
@@ -220,6 +217,7 @@ public class BatteryStateMachine extends StateMachine {
      * @return {@code true} if it successfully connects to the GATT server.
      */
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    @SuppressLint("AndroidFrameworkRequiresPermission") // We should call internal gatt interface
     public boolean connectGatt() {
         BatteryService service = mServiceRef.get();
         if (service == null) {
@@ -233,9 +231,15 @@ public class BatteryStateMachine extends StateMachine {
             Log.w(TAG, "Trying connectGatt with existing BluetoothGatt instance.");
             mBluetoothGatt.close();
         }
-        mBluetoothGatt = mDevice.connectGatt(service, /*autoConnect=*/false,
-                mGattCallback, TRANSPORT_LE, /*opportunistic=*/true,
-                PHY_LE_1M_MASK | PHY_LE_2M_MASK, getHandler());
+        mBluetoothGatt =
+                mDevice.connectGatt(
+                        service,
+                        /* autoConnect= */ false,
+                        mGattCallback,
+                        TRANSPORT_LE,
+                        /* opportunistic= */ true,
+                        PHY_LE_1M_MASK | PHY_LE_2M_MASK,
+                        getHandler());
         return mBluetoothGatt != null;
     }
 
@@ -262,15 +266,11 @@ public class BatteryStateMachine extends StateMachine {
 
     @Override
     protected void log(String msg) {
-        if (DBG) {
-            super.log(msg);
-        }
+        super.log(msg);
     }
 
     static void log(String tag, String msg) {
-        if (DBG) {
-            Log.d(tag, msg);
-        }
+        Log.d(tag, msg);
     }
 
     @VisibleForTesting
@@ -279,8 +279,7 @@ public class BatteryStateMachine extends StateMachine {
 
         @Override
         public void enter() {
-            log(TAG, "Enter (" + mDevice + "): " + messageWhatToString(
-                        getCurrentMessage().what));
+            log(TAG, "Enter (" + mDevice + "): " + messageWhatToString(getCurrentMessage().what));
 
             if (mBluetoothGatt != null) {
                 mBluetoothGatt.close();
@@ -289,22 +288,20 @@ public class BatteryStateMachine extends StateMachine {
 
             if (mLastConnectionState != BluetoothProfile.STATE_DISCONNECTED) {
                 // Don't broadcast during startup
-                dispatchConnectionStateChanged(mLastConnectionState,
-                        BluetoothProfile.STATE_DISCONNECTED);
+                dispatchConnectionStateChanged(
+                        mLastConnectionState, BluetoothProfile.STATE_DISCONNECTED);
             }
         }
 
         @Override
         public void exit() {
-            log(TAG, "Exit (" + mDevice + "): " + messageWhatToString(
-                    getCurrentMessage().what));
+            log(TAG, "Exit (" + mDevice + "): " + messageWhatToString(getCurrentMessage().what));
             mLastConnectionState = BluetoothProfile.STATE_DISCONNECTED;
         }
 
         @Override
         public boolean processMessage(Message message) {
-            log(TAG, "Process message(" + mDevice + "): " + messageWhatToString(
-                    message.what));
+            log(TAG, "Process message(" + mDevice + "): " + messageWhatToString(message.what));
 
             BatteryService service = mServiceRef.get();
             switch (message.what) {
@@ -314,13 +311,15 @@ public class BatteryStateMachine extends StateMachine {
                         if (connectGatt()) {
                             transitionTo(mConnecting);
                         } else {
-                            Log.w(TAG, "Battery connecting request rejected due to "
-                                    + "GATT connection rejection: " + mDevice);
+                            Log.w(
+                                    TAG,
+                                    "Battery connecting request rejected due to "
+                                            + "GATT connection rejection: "
+                                            + mDevice);
                         }
                     } else {
                         // Reject the request and stay in Disconnected state
-                        Log.w(TAG, "Battery connecting request rejected: "
-                                + mDevice);
+                        Log.w(TAG, "Battery connecting request rejected: " + mDevice);
                     }
                     break;
                 case DISCONNECT:
@@ -351,24 +350,22 @@ public class BatteryStateMachine extends StateMachine {
     @VisibleForTesting
     class Connecting extends State {
         private static final String TAG = "BASM_Connecting";
+
         @Override
         public void enter() {
-            log(TAG, "Enter (" + mDevice + "): "
-                    + messageWhatToString(getCurrentMessage().what));
+            log(TAG, "Enter (" + mDevice + "): " + messageWhatToString(getCurrentMessage().what));
             dispatchConnectionStateChanged(mLastConnectionState, BluetoothProfile.STATE_CONNECTING);
         }
 
         @Override
         public void exit() {
-            log(TAG, "Exit (" + mDevice + "): "
-                    + messageWhatToString(getCurrentMessage().what));
+            log(TAG, "Exit (" + mDevice + "): " + messageWhatToString(getCurrentMessage().what));
             mLastConnectionState = BluetoothProfile.STATE_CONNECTING;
         }
 
         @Override
         public boolean processMessage(Message message) {
-            log(TAG, "process message(" + mDevice + "): "
-                    + messageWhatToString(message.what));
+            log(TAG, "process message(" + mDevice + "): " + messageWhatToString(message.what));
 
             switch (message.what) {
                 case CONNECT:
@@ -414,31 +411,29 @@ public class BatteryStateMachine extends StateMachine {
     @VisibleForTesting
     class Disconnecting extends State {
         private static final String TAG = "BASM_Disconnecting";
+
         @Override
         public void enter() {
-            log(TAG, "Enter (" + mDevice + "): "
-                    + messageWhatToString(getCurrentMessage().what));
+            log(TAG, "Enter (" + mDevice + "): " + messageWhatToString(getCurrentMessage().what));
             sendMessageDelayed(CONNECT_TIMEOUT, sConnectTimeoutMs);
-            dispatchConnectionStateChanged(mLastConnectionState,
-                    BluetoothProfile.STATE_DISCONNECTING);
+            dispatchConnectionStateChanged(
+                    mLastConnectionState, BluetoothProfile.STATE_DISCONNECTING);
         }
 
         @Override
         public void exit() {
-            log(TAG, "Exit (" + mDevice + "): "
-                    + messageWhatToString(getCurrentMessage().what));
+            log(TAG, "Exit (" + mDevice + "): " + messageWhatToString(getCurrentMessage().what));
             mLastConnectionState = BluetoothProfile.STATE_DISCONNECTING;
             removeMessages(CONNECT_TIMEOUT);
         }
 
         @Override
         public boolean processMessage(Message message) {
-            log(TAG, "Process message(" + mDevice + "): "
-                    + messageWhatToString(message.what));
+            log(TAG, "Process message(" + mDevice + "): " + messageWhatToString(message.what));
 
             switch (message.what) {
-                //TODO: Check if connect while disconnecting is okay.
-                // It is related to CONNECT_TIMEOUT as well.
+                    // TODO: Check if connect while disconnecting is okay.
+                    // It is related to CONNECT_TIMEOUT as well.
                 case CONNECT:
                     Log.w(TAG, "CONNECT ignored: " + mDevice);
                     break;
@@ -465,17 +460,17 @@ public class BatteryStateMachine extends StateMachine {
                     Log.i(TAG, "Disconnected: " + mDevice);
                     transitionTo(mDisconnected);
                     break;
-                case BluetoothGatt.STATE_CONNECTED: {
-                    // Reject the connection and stay in Disconnecting state
-                    Log.w(TAG, "Incoming Battery connected request rejected: "
-                            + mDevice);
-                    if (mBluetoothGatt != null) {
-                        mBluetoothGatt.disconnect();
-                    } else {
-                        transitionTo(mDisconnected);
+                case BluetoothGatt.STATE_CONNECTED:
+                    {
+                        // Reject the connection and stay in Disconnecting state
+                        Log.w(TAG, "Incoming Battery connected request rejected: " + mDevice);
+                        if (mBluetoothGatt != null) {
+                            mBluetoothGatt.disconnect();
+                        } else {
+                            transitionTo(mDisconnected);
+                        }
+                        break;
                     }
-                    break;
-                }
                 default:
                     Log.e(TAG, "Incorrect state: " + state);
                     break;
@@ -486,10 +481,10 @@ public class BatteryStateMachine extends StateMachine {
     @VisibleForTesting
     class Connected extends State {
         private static final String TAG = "BASM_Connected";
+
         @Override
         public void enter() {
-            log(TAG, "Enter (" + mDevice + "): "
-                    + messageWhatToString(getCurrentMessage().what));
+            log(TAG, "Enter (" + mDevice + "): " + messageWhatToString(getCurrentMessage().what));
             dispatchConnectionStateChanged(mLastConnectionState, BluetoothProfile.STATE_CONNECTED);
 
             if (mBluetoothGatt != null) {
@@ -499,8 +494,7 @@ public class BatteryStateMachine extends StateMachine {
 
         @Override
         public void exit() {
-            log(TAG, "Exit (" + mDevice + "): "
-                    + messageWhatToString(getCurrentMessage().what));
+            log(TAG, "Exit (" + mDevice + "): " + messageWhatToString(getCurrentMessage().what));
             // Reset the battery level only after connected
             resetBatteryLevel();
             mLastConnectionState = BluetoothProfile.STATE_CONNECTED;
@@ -508,8 +502,7 @@ public class BatteryStateMachine extends StateMachine {
 
         @Override
         public boolean processMessage(Message message) {
-            log(TAG, "Process message(" + mDevice + "): "
-                    + messageWhatToString(message.what));
+            log(TAG, "Process message(" + mDevice + "): " + messageWhatToString(message.what));
 
             switch (message.what) {
                 case CONNECT:
@@ -557,6 +550,7 @@ public class BatteryStateMachine extends StateMachine {
         }
 
         @Override
+        @SuppressLint("AndroidFrameworkRequiresPermission") // We should call internal gatt itf
         public void onServicesDiscovered(BluetoothGatt gatt, int status) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.e(TAG, "No gatt service");
@@ -582,16 +576,20 @@ public class BatteryStateMachine extends StateMachine {
         }
 
         @Override
-        public void onCharacteristicChanged(BluetoothGatt gatt,
-                BluetoothGattCharacteristic characteristic, byte[] value) {
+        public void onCharacteristicChanged(
+                BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, byte[] value) {
             if (GATT_BATTERY_LEVEL_CHARACTERISTIC_UUID.equals(characteristic.getUuid())) {
                 updateBatteryLevel(value);
             }
         }
 
         @Override
-        public void onCharacteristicRead(BluetoothGatt gatt,
-                BluetoothGattCharacteristic characteristic, byte[] value, int status) {
+        @SuppressLint("AndroidFrameworkRequiresPermission") // We should call internal gatt itf
+        public void onCharacteristicRead(
+                BluetoothGatt gatt,
+                BluetoothGattCharacteristic characteristic,
+                byte[] value,
+                int status) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.e(TAG, "Read characteristic failure on " + gatt + " " + characteristic);
                 return;
@@ -602,18 +600,19 @@ public class BatteryStateMachine extends StateMachine {
                 BluetoothGattDescriptor cccd =
                         characteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG_DESCRIPTOR_UUID);
                 if (cccd != null) {
-                    gatt.setCharacteristicNotification(characteristic, /*enable=*/true);
+                    gatt.setCharacteristicNotification(characteristic, /* enable= */ true);
                     gatt.writeDescriptor(cccd, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
                 } else {
-                    Log.w(TAG, "No CCCD for battery level characteristic, "
-                            + "it won't be notified");
+                    Log.w(
+                            TAG,
+                            "No CCCD for battery level characteristic, " + "it won't be notified");
                 }
             }
         }
 
         @Override
-        public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor,
-                int status) {
+        public void onDescriptorWrite(
+                BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.w(TAG, "Failed to write descriptor " + descriptor.getUuid());
             }

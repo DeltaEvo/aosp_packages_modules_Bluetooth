@@ -18,30 +18,28 @@
 
 #include <gtest/gtest.h>
 
+#include "ble_hci_link_interface.h"
 #include "bt_hdr.h"
 #include "btm_ble_api_types.h"
 #include "hci_error_code.h"
 #include "osi/include/allocator.h"
-#include "ble_hci_link_interface.h"
 
 namespace {
 
 class StackBTMRegressionTests : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {}
   void TearDown() override {}
 };
 
 // regression test for b/260078907
-TEST_F(StackBTMRegressionTests,
-       OOB_in_btm_ble_add_resolving_list_entry_complete) {
+TEST_F(StackBTMRegressionTests, OOB_in_btm_ble_add_resolving_list_entry_complete) {
   BT_HDR event{};
   btm_ble_add_resolving_list_entry_complete(event.data, 0);
 }
 
 // regression test for b/255304475
-TEST_F(StackBTMRegressionTests,
-       OOB_in_btm_ble_clear_resolving_list_complete) {
+TEST_F(StackBTMRegressionTests, OOB_in_btm_ble_clear_resolving_list_complete) {
   BT_HDR event{};
   btm_ble_clear_resolving_list_complete(event.data, 0);
 }

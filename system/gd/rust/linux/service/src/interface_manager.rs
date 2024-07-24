@@ -28,7 +28,7 @@ pub(crate) struct InterfaceManager {}
 
 impl InterfaceManager {
     fn make_object_name(idx: i32, name: &str) -> String {
-        String::from(format!("/org/chromium/bluetooth/hci{}/{}", idx, name))
+        format!("/org/chromium/bluetooth/hci{}/{}", idx, name)
     }
 
     /// Creates an mpsc channel for passing messages to the main dispatch loop.
@@ -48,7 +48,7 @@ impl InterfaceManager {
     /// * `disconnect_watcher` - DisconnectWatcher to monitor client disconnects
     /// * `bluetooth` - Implementation of the Bluetooth API
     /// other implementations follow.
-    ///
+    #[allow(clippy::too_many_arguments)]
     pub async fn dispatch(
         mut rx: Receiver<APIMessage>,
         tx: Sender<Message>,
@@ -81,7 +81,7 @@ impl InterfaceManager {
         // of the adapter APIs.
         cr.lock().unwrap().set_object_manager_support(Some(conn.clone()));
         let object_manager = cr.lock().unwrap().object_manager();
-        cr.lock().unwrap().insert("/", &[object_manager], {});
+        cr.lock().unwrap().insert("/", &[object_manager], ());
 
         // Set up handling of D-Bus methods. This must be done before exporting interfaces so that
         // clients that rely on InterfacesAdded signal can rely on us being ready to handle methods

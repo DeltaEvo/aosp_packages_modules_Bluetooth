@@ -19,12 +19,11 @@
 #include "hal/snoop_logger_socket_thread.h"
 
 #include <arpa/inet.h>
-#include <base/logging.h>
+#include <bluetooth/log.h>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <string.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
@@ -32,9 +31,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#include "common/init_flags.h"
 #include "hal/snoop_logger_common.h"
-#include "os/log.h"
 
 namespace bluetooth {
 namespace hal {
@@ -45,21 +42,20 @@ SnoopLoggerSocketThread::SnoopLoggerSocketThread(std::unique_ptr<SnoopLoggerSock
   listen_thread_running_ = false;
 }
 
-SnoopLoggerSocketThread::~SnoopLoggerSocketThread() {
-  Stop();
-}
+SnoopLoggerSocketThread::~SnoopLoggerSocketThread() { Stop(); }
 
 std::future<bool> SnoopLoggerSocketThread::Start() {
-  LOG_DEBUG("");
+  log::debug("");
   std::promise<bool> thread_started;
   auto future = thread_started.get_future();
-  listen_thread_ = std::make_unique<std::thread>(&SnoopLoggerSocketThread::Run, this, std::move(thread_started));
+  listen_thread_ = std::make_unique<std::thread>(&SnoopLoggerSocketThread::Run, this,
+                                                 std::move(thread_started));
   stop_thread_ = false;
   return std::move(future);
 }
 
 void SnoopLoggerSocketThread::Stop() {
-  LOG_DEBUG("");
+  log::debug("");
 
   stop_thread_ = true;
   socket_->NotifySocketListener();
@@ -74,16 +70,12 @@ void SnoopLoggerSocketThread::Write(const void* data, size_t length) {
   socket_->Write(data, length);
 }
 
-bool SnoopLoggerSocketThread::ThreadIsRunning() const {
-  return listen_thread_running_;
-}
+bool SnoopLoggerSocketThread::ThreadIsRunning() const { return listen_thread_running_; }
 
-SnoopLoggerSocket* SnoopLoggerSocketThread::GetSocket() {
-  return socket_.get();
-}
+SnoopLoggerSocket* SnoopLoggerSocketThread::GetSocket() { return socket_.get(); }
 
 void SnoopLoggerSocketThread::Run(std::promise<bool> thread_started) {
-  LOG_DEBUG("");
+  log::debug("");
 
   if (socket_->InitializeCommunications() != 0) {
     thread_started.set_value(false);

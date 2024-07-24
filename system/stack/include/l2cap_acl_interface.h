@@ -25,17 +25,13 @@
 
 // This header contains functions for L2cap-ACL to invoke
 //
-void acl_create_classic_connection(const RawAddress& bd_addr,
-                                   bool there_are_high_priority_channels,
-                                   bool is_bonding);
 bool acl_create_le_connection(const RawAddress& bd_addr);
 bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr);
 bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr,
                                       tBLE_ADDR_TYPE addr_type);
 void acl_send_data_packet_br_edr(const RawAddress& bd_addr, BT_HDR* p_buf);
 void acl_send_data_packet_ble(const RawAddress& bd_addr, BT_HDR* p_buf);
-void acl_write_automatic_flush_timeout(const RawAddress& bd_addr,
-                                       uint16_t flush_timeout);
+void acl_write_automatic_flush_timeout(const RawAddress& bd_addr, uint16_t flush_timeout);
 
 // ACL data received from HCI-ACL
 void l2c_rcv_acl_data(BT_HDR* p_msg);

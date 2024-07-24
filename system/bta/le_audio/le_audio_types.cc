@@ -22,15 +22,16 @@
 
 #include "le_audio_types.h"
 
-#include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
+#include <bluetooth/log.h>
 
 #include "audio_hal_client/audio_hal_client.h"
 #include "common/strings.h"
 #include "internal_include/bt_trace.h"
+#include "le_audio_utils.h"
 #include "stack/include/bt_types.h"
 
-namespace le_audio {
+namespace bluetooth::le_audio {
 using types::acs_ac_record;
 using types::LeAudioContextType;
 
@@ -42,45 +43,15 @@ using types::kLeAudioDirectionSink;
 using types::kLeAudioDirectionSource;
 using types::LeAudioCoreCodecConfig;
 
-static uint8_t min_req_devices_cnt(
-    const AudioSetConfiguration* audio_set_conf) {
-  std::pair<uint8_t /* sink */, uint8_t /* source */> snk_src_pair(0, 0);
-
-  for (auto ent : (*audio_set_conf).confs) {
-    if (ent.direction == kLeAudioDirectionSink)
-      snk_src_pair.first += ent.device_cnt;
-    if (ent.direction == kLeAudioDirectionSource)
-      snk_src_pair.second += ent.device_cnt;
-  }
-
-  return std::max(snk_src_pair.first, snk_src_pair.second);
-}
-
-static uint8_t min_req_devices_cnt(
-    const AudioSetConfigurations* audio_set_confs) {
-  uint8_t curr_min_req_devices_cnt = 0xff;
-
-  for (auto ent : *audio_set_confs) {
-    uint8_t req_devices_cnt = min_req_devices_cnt(ent);
-    if (req_devices_cnt < curr_min_req_devices_cnt)
-      curr_min_req_devices_cnt = req_devices_cnt;
-  }
-
-  return curr_min_req_devices_cnt;
-}
-
 void get_cis_count(LeAudioContextType context_type, int expected_device_cnt,
-                   types::LeAudioConfigurationStrategy strategy,
-                   int avail_group_ase_snk_cnt, int avail_group_ase_src_count,
-                   uint8_t& out_cis_count_bidir,
-                   uint8_t& out_cis_count_unidir_sink,
-                   uint8_t& out_cis_count_unidir_source) {
-  LOG_INFO(
-      " %s strategy %d, group avail sink ases: %d, group avail source ases %d "
-      "expected_device_count %d",
-      bluetooth::common::ToString(context_type).c_str(),
-      static_cast<int>(strategy), avail_group_ase_snk_cnt,
-      avail_group_ase_src_count, expected_device_cnt);
+                   types::LeAudioConfigurationStrategy strategy, int avail_group_ase_snk_cnt,
+                   int avail_group_ase_src_count, uint8_t& out_cis_count_bidir,
+                   uint8_t& out_cis_count_unidir_sink, uint8_t& out_cis_count_unidir_source) {
+  log::info(
+          "{} strategy {}, group avail sink ases: {}, group avail source ases {} "
+          "expected_device_count {}",
+          bluetooth::common::ToString(context_type), static_cast<int>(strategy),
+          avail_group_ase_snk_cnt, avail_group_ase_src_count, expected_device_cnt);
 
   bool is_bidirectional = types::kLeAudioContextAllBidir.test(context_type);
 
@@ -114,6 +85,9 @@ void get_cis_count(LeAudioContextType context_type, int expected_device_cnt,
       if (is_bidirectional) {
         if ((avail_group_ase_snk_cnt > 0) && (avail_group_ase_src_count) > 0) {
           /* Prepare CIG to enable all microphones per device */
+          /* TODO: Support TWS style device with two source ASEs - two
+           * bidirectional CISes
+           */
           out_cis_count_bidir = expected_device_cnt;
           out_cis_count_unidir_sink = expected_device_cnt;
         } else {
@@ -128,143 +102,41 @@ void get_cis_count(LeAudioContextType context_type, int expected_device_cnt,
       }
       break;
     case types::LeAudioConfigurationStrategy::RFU:
-      LOG_ERROR("Should not happen;");
+      log::error("Should not happen;");
       break;
   }
 
-  LOG_INFO(
-      "Required cis count: Bi-Directional: %d, Uni-Directional Sink: %d, "
-      "Uni-Directional Source: %d",
-      out_cis_count_bidir, out_cis_count_unidir_sink,
-      out_cis_count_unidir_source);
+  log::info(
+          "Required cis count: Bi-Directional: {}, Uni-Directional Sink: {}, "
+          "Uni-Directional Source: {}",
+          out_cis_count_bidir, out_cis_count_unidir_sink, out_cis_count_unidir_source);
 }
 
-bool check_if_may_cover_scenario(const AudioSetConfigurations* audio_set_confs,
-                                 uint8_t group_size) {
-  if (!audio_set_confs) {
-    LOG(ERROR) << __func__ << ", no audio requirements for group";
-    return false;
-  }
-
-  return group_size >= min_req_devices_cnt(audio_set_confs);
-}
-
-bool check_if_may_cover_scenario(const AudioSetConfiguration* audio_set_conf,
-                                 uint8_t group_size) {
-  if (!audio_set_conf) {
-    LOG(ERROR) << __func__ << ", no audio requirement for group";
-    return false;
-  }
-
-  return group_size >= min_req_devices_cnt(audio_set_conf);
-}
-
-uint8_t get_num_of_devices_in_configuration(
-    const AudioSetConfiguration* audio_set_conf) {
-  return min_req_devices_cnt(audio_set_conf);
-}
-
-static bool IsCodecConfigCoreSupported(const types::LeAudioLtvMap& pacs,
-                                       const types::LeAudioLtvMap& reqs) {
-  auto caps = pacs.GetAsCoreCodecCapabilities();
-  auto config = reqs.GetAsCoreCodecConfig();
-
-  /* Sampling frequency */
-  if (!caps.HasSupportedSamplingFrequencies() || !config.sampling_frequency) {
-    LOG_DEBUG("Missing supported sampling frequencies capability");
-    return false;
-  }
-  if (!caps.IsSamplingFrequencyConfigSupported(
-          config.sampling_frequency.value())) {
-    LOG_DEBUG("Cfg: SamplingFrequency= 0x%04x",
-              config.sampling_frequency.value());
-    LOG_DEBUG("Cap: SupportedSamplingFrequencies= 0x%04x",
-              caps.supported_sampling_frequencies.value());
-    LOG_DEBUG("Sampling frequency not supported");
-    return false;
-  }
-
-  /* Channel counts */
-  if (!caps.IsAudioChannelCountsSupported(
-          config.GetChannelCountPerIsoStream())) {
-    LOG_DEBUG("Cfg: Allocated channel count= 0x%04x",
-              config.GetChannelCountPerIsoStream());
-    LOG_DEBUG("Cap: Supported channel counts= 0x%04x",
-              caps.supported_audio_channel_counts.value_or(1));
-    LOG_DEBUG("Channel count not supported");
-    return false;
-  }
-
-  /* Frame duration */
-  if (!caps.HasSupportedFrameDurations() || !config.frame_duration) {
-    LOG_DEBUG("Missing supported frame durations capability");
-    return false;
-  }
-  if (!caps.IsFrameDurationConfigSupported(config.frame_duration.value())) {
-    LOG_DEBUG("Cfg: FrameDuration= 0x%04x", config.frame_duration.value());
-    LOG_DEBUG("Cap: SupportedFrameDurations= 0x%04x",
-              caps.supported_frame_durations.value());
-    LOG_DEBUG("Frame duration not supported");
-    return false;
-  }
-
-  /* Octets per frame */
-  if (!caps.HasSupportedOctetsPerCodecFrame() ||
-      !config.octets_per_codec_frame) {
-    LOG_DEBUG("Missing supported octets per codec frame");
-    return false;
-  }
-  if (!caps.IsOctetsPerCodecFrameConfigSupported(
-          config.octets_per_codec_frame.value())) {
-    LOG_DEBUG("Cfg: Octets per frame=%d",
-              config.octets_per_codec_frame.value());
-    LOG_DEBUG("Cap: Min octets per frame=%d",
-              caps.supported_min_octets_per_codec_frame.value());
-    LOG_DEBUG("Cap: Max octets per frame=%d",
-              caps.supported_max_octets_per_codec_frame.value());
-    LOG_DEBUG("Octets per codec frame outside the capabilities");
-    return false;
-  }
-
-  return true;
-}
-
-bool IsCodecConfigSettingSupported(
-    const acs_ac_record& pac, const CodecConfigSetting& codec_config_setting) {
-  const auto& codec_id = codec_config_setting.id;
-
-  if (codec_id != pac.codec_id) return false;
-
-  LOG_DEBUG(": Settings for format: 0x%02x ", codec_id.coding_format);
-
-  switch (codec_id.coding_format) {
+uint16_t CodecConfigSetting::GetOctetsPerFrame() const {
+  switch (id.coding_format) {
     case kLeAudioCodingFormatLC3:
-      return IsCodecConfigCoreSupported(pac.codec_spec_caps,
-                                        codec_config_setting.params);
+      return params.GetAsCoreCodecConfig().GetOctetsPerFrame();
     default:
-      return false;
+      log::warn(", invalid codec id: 0x{:02x}", id.coding_format);
+      return 0;
   }
 }
 
 uint32_t CodecConfigSetting::GetSamplingFrequencyHz() const {
-  switch (id.coding_format) {
-    case kLeAudioCodingFormatLC3:
-      return params.GetAsCoreCodecConfig().GetSamplingFrequencyHz();
-    default:
-      LOG_WARN(", invalid codec id: 0x%02x", id.coding_format);
-      return 0;
-  }
-};
+  // We also mandate the sampling frequency parameter for vendor spec. codecs
+  return params.GetAsCoreCodecConfig().GetSamplingFrequencyHz();
+}
 
 uint32_t CodecConfigSetting::GetDataIntervalUs() const {
   switch (id.coding_format) {
     case kLeAudioCodingFormatLC3:
-      return params.GetAsCoreCodecConfig().GetFrameDurationUs();
+      return params.GetAsCoreCodecConfig().GetFrameDurationUs() *
+             params.GetAsCoreCodecConfig().codec_frames_blocks_per_sdu.value_or(1);
     default:
-      LOG_WARN(", invalid codec id: 0x%02x", id.coding_format);
+      log::warn(", invalid codec id: 0x{:02x}", id.coding_format);
       return 0;
   }
-};
+}
 
 uint8_t CodecConfigSetting::GetBitsPerSample() const {
   switch (id.coding_format) {
@@ -272,34 +144,98 @@ uint8_t CodecConfigSetting::GetBitsPerSample() const {
       /* XXX LC3 supports 16, 24, 32 */
       return 16;
     default:
-      LOG_WARN(", invalid codec id: 0x%02x", id.coding_format);
+      log::warn(", invalid codec id: 0x{:02x}", id.coding_format);
       return 0;
   }
-};
+}
+
+std::ostream& operator<<(std::ostream& os, const QosConfigSetting& config) {
+  os << "QosConfigSetting{";
+  os << "targetLatency: " << (int)config.target_latency;
+  os << ", retransmissionNum: " << (int)config.retransmission_number;
+  os << ", maxTransportLatency: " << (int)config.max_transport_latency;
+  os << ", sduIntervalUs: " << (int)config.sduIntervalUs;
+  os << ", maxSdu: " << (int)config.maxSdu;
+  os << "}";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const AseConfiguration& config) {
+  os << "AseConfiguration{";
+  os << "dataPath: " << config.data_path_configuration;
+  os << ", codec: " << config.codec;
+  os << ", qos: " << config.qos;
+  os << "}";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const AudioSetConfiguration& config) {
+  os << "AudioSetConfiguration{";
+  os << "name: " << config.name;
+  os << ", packing: " << (int)config.packing;
+  os << ", sinkConfs: [";
+  for (auto const& conf : config.confs.sink) {
+    os << conf;
+    os << ", ";
+  }
+  os << "], sourceConfs: [";
+  for (auto const& conf : config.confs.source) {
+    os << conf;
+    os << ", ";
+  }
+  os << "]}";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const CodecConfigSetting& config) {
+  os << "CodecConfigSetting{";
+  os << ", id: " << config.id;
+  os << ", codecSpecParams: " << config.params.GetAsCoreCodecConfig();
+  os << ", bitsPerSample: " << (int)config.GetBitsPerSample();
+  os << ", channelCountPerIsoStream: " << (int)config.GetChannelCountPerIsoStream();
+  if (!config.vendor_params.empty()) {
+    os << ", vendorParams: "
+       << base::HexEncode(config.vendor_params.data(), config.vendor_params.size());
+  }
+  os << "}";
+  return os;
+}
+
 }  // namespace set_configurations
 
 namespace types {
 /* Helper map for matching various frequency notations */
 const std::map<uint8_t, uint32_t> LeAudioCoreCodecConfig::sampling_freq_map = {
-    {codec_spec_conf::kLeAudioSamplingFreq8000Hz,
-     LeAudioCodecConfiguration::kSampleRate8000},
-    {codec_spec_conf::kLeAudioSamplingFreq16000Hz,
-     LeAudioCodecConfiguration::kSampleRate16000},
-    {codec_spec_conf::kLeAudioSamplingFreq24000Hz,
-     LeAudioCodecConfiguration::kSampleRate24000},
-    {codec_spec_conf::kLeAudioSamplingFreq32000Hz,
-     LeAudioCodecConfiguration::kSampleRate32000},
-    {codec_spec_conf::kLeAudioSamplingFreq44100Hz,
-     LeAudioCodecConfiguration::kSampleRate44100},
-    {codec_spec_conf::kLeAudioSamplingFreq48000Hz,
-     LeAudioCodecConfiguration::kSampleRate48000}};
+        {codec_spec_conf::kLeAudioSamplingFreq8000Hz, LeAudioCodecConfiguration::kSampleRate8000},
+        {codec_spec_conf::kLeAudioSamplingFreq16000Hz, LeAudioCodecConfiguration::kSampleRate16000},
+        {codec_spec_conf::kLeAudioSamplingFreq24000Hz, LeAudioCodecConfiguration::kSampleRate24000},
+        {codec_spec_conf::kLeAudioSamplingFreq32000Hz, LeAudioCodecConfiguration::kSampleRate32000},
+        {codec_spec_conf::kLeAudioSamplingFreq44100Hz, LeAudioCodecConfiguration::kSampleRate44100},
+        {codec_spec_conf::kLeAudioSamplingFreq48000Hz,
+         LeAudioCodecConfiguration::kSampleRate48000}};
+
+/* Helper map for matching various frequency notations */
+const std::map<uint32_t, uint8_t> LeAudioCoreCodecConfig::sample_rate_map = {
+        {LeAudioCodecConfiguration::kSampleRate8000, codec_spec_conf::kLeAudioSamplingFreq8000Hz},
+        {LeAudioCodecConfiguration::kSampleRate16000, codec_spec_conf::kLeAudioSamplingFreq16000Hz},
+        {LeAudioCodecConfiguration::kSampleRate24000, codec_spec_conf::kLeAudioSamplingFreq24000Hz},
+        {LeAudioCodecConfiguration::kSampleRate32000, codec_spec_conf::kLeAudioSamplingFreq32000Hz},
+        {LeAudioCodecConfiguration::kSampleRate44100, codec_spec_conf::kLeAudioSamplingFreq44100Hz},
+        {LeAudioCodecConfiguration::kSampleRate48000, codec_spec_conf::kLeAudioSamplingFreq48000Hz},
+};
 
 /* Helper map for matching various frame durations notations */
 const std::map<uint8_t, uint32_t> LeAudioCoreCodecConfig::frame_duration_map = {
-    {codec_spec_conf::kLeAudioCodecFrameDur7500us,
-     LeAudioCodecConfiguration::kInterval7500Us},
-    {codec_spec_conf::kLeAudioCodecFrameDur10000us,
-     LeAudioCodecConfiguration::kInterval10000Us}};
+        {codec_spec_conf::kLeAudioCodecFrameDur7500us, LeAudioCodecConfiguration::kInterval7500Us},
+        {codec_spec_conf::kLeAudioCodecFrameDur10000us,
+         LeAudioCodecConfiguration::kInterval10000Us}};
+
+/* Helper map for matching various frame durations notations */
+const std::map<uint32_t, uint8_t> LeAudioCoreCodecConfig::data_interval_map = {
+        {LeAudioCodecConfiguration::kInterval7500Us, codec_spec_conf::kLeAudioCodecFrameDur7500us},
+        {LeAudioCodecConfiguration::kInterval10000Us,
+         codec_spec_conf::kLeAudioCodecFrameDur10000us},
+};
 
 std::string CapabilityTypeToStr(const uint8_t& type) {
   switch (type) {
@@ -318,8 +254,7 @@ std::string CapabilityTypeToStr(const uint8_t& type) {
   }
 }
 
-std::string CapabilityValueToStr(const uint8_t& type,
-                                 const std::vector<uint8_t>& value) {
+std::string CapabilityValueToStr(const uint8_t& type, const std::vector<uint8_t>& value) {
   std::string string = "";
 
   switch (type) {
@@ -334,40 +269,40 @@ std::string CapabilityValueToStr(const uint8_t& type,
         string += "8";
       }
       if (u16_val & codec_spec_caps::kLeAudioSamplingFreq11025Hz) {
-        string += std::string((string.empty() ? "" : "|")) + "11.025";
+        string += std::string(string.empty() ? "" : "|") + "11.025";
       }
       if (u16_val & codec_spec_caps::kLeAudioSamplingFreq16000Hz) {
-        string += std::string((string.empty() ? "" : "|")) + "16";
+        string += std::string(string.empty() ? "" : "|") + "16";
       }
       if (u16_val & codec_spec_caps::kLeAudioSamplingFreq22050Hz) {
-        string += std::string((string.empty() ? "" : "|")) + "22.050";
+        string += std::string(string.empty() ? "" : "|") + "22.050";
       }
       if (u16_val & codec_spec_caps::kLeAudioSamplingFreq24000Hz) {
-        string += std::string((string.empty() ? "" : "|")) + "24";
+        string += std::string(string.empty() ? "" : "|") + "24";
       }
       if (u16_val & codec_spec_caps::kLeAudioSamplingFreq32000Hz) {
-        string += std::string((string.empty() ? "" : "|")) + "32";
+        string += std::string(string.empty() ? "" : "|") + "32";
       }
       if (u16_val & codec_spec_caps::kLeAudioSamplingFreq44100Hz) {
-        string += std::string((string.empty() ? "" : "|")) + "44.1";
+        string += std::string(string.empty() ? "" : "|") + "44.1";
       }
       if (u16_val & codec_spec_caps::kLeAudioSamplingFreq48000Hz) {
-        string += std::string((string.empty() ? "" : "|")) + "48";
+        string += std::string(string.empty() ? "" : "|") + "48";
       }
       if (u16_val & codec_spec_caps::kLeAudioSamplingFreq88200Hz) {
-        string += std::string((string.empty() ? "" : "|")) + "88.2";
+        string += std::string(string.empty() ? "" : "|") + "88.2";
       }
       if (u16_val & codec_spec_caps::kLeAudioSamplingFreq96000Hz) {
-        string += std::string((string.empty() ? "" : "|")) + "96";
+        string += std::string(string.empty() ? "" : "|") + "96";
       }
       if (u16_val & codec_spec_caps::kLeAudioSamplingFreq176400Hz) {
-        string += std::string((string.empty() ? "" : "|")) + "176.4";
+        string += std::string(string.empty() ? "" : "|") + "176.4";
       }
       if (u16_val & codec_spec_caps::kLeAudioSamplingFreq192000Hz) {
-        string += std::string((string.empty() ? "" : "|")) + "192";
+        string += std::string(string.empty() ? "" : "|") + "192";
       }
       if (u16_val & codec_spec_caps::kLeAudioSamplingFreq384000Hz) {
-        string += std::string((string.empty() ? "" : "|")) + "384";
+        string += std::string(string.empty() ? "" : "|") + "384";
       }
 
       return string += " [kHz]\n";
@@ -383,13 +318,13 @@ std::string CapabilityValueToStr(const uint8_t& type,
         string += "7.5";
       }
       if (u8_val & codec_spec_caps::kLeAudioCodecFrameDur10000us) {
-        string += std::string((string.empty() ? "" : "|")) + "10";
+        string += std::string(string.empty() ? "" : "|") + "10";
       }
       if (u8_val & codec_spec_caps::kLeAudioCodecFrameDurPrefer7500us) {
-        string += std::string((string.empty() ? "" : "|")) + "7.5 preferred";
+        string += std::string(string.empty() ? "" : "|") + "7.5 preferred";
       }
       if (u8_val & codec_spec_caps::kLeAudioCodecFrameDurPrefer10000us) {
-        string += std::string((string.empty() ? "" : "|")) + "10 preferred";
+        string += std::string(string.empty() ? "" : "|") + "10 preferred";
       }
 
       return string += " [ms]\n";
@@ -405,28 +340,28 @@ std::string CapabilityValueToStr(const uint8_t& type,
         string += "0";
       }
       if (u8_val & codec_spec_caps::kLeAudioCodecChannelCountSingleChannel) {
-        string += std::string((string.empty() ? "" : "|")) + "1";
+        string += std::string(string.empty() ? "" : "|") + "1";
       }
       if (u8_val & codec_spec_caps::kLeAudioCodecChannelCountTwoChannel) {
-        string += std::string((string.empty() ? "" : "|")) + "2";
+        string += std::string(string.empty() ? "" : "|") + "2";
       }
       if (u8_val & codec_spec_caps::kLeAudioCodecChannelCountThreeChannel) {
-        string += std::string((string.empty() ? "" : "|")) + "3";
+        string += std::string(string.empty() ? "" : "|") + "3";
       }
       if (u8_val & codec_spec_caps::kLeAudioCodecChannelCountFourChannel) {
-        string += std::string((string.empty() ? "" : "|")) + "4";
+        string += std::string(string.empty() ? "" : "|") + "4";
       }
       if (u8_val & codec_spec_caps::kLeAudioCodecChannelCountFiveChannel) {
-        string += std::string((string.empty() ? "" : "|")) + "5";
+        string += std::string(string.empty() ? "" : "|") + "5";
       }
       if (u8_val & codec_spec_caps::kLeAudioCodecChannelCountSixChannel) {
-        string += std::string((string.empty() ? "" : "|")) + "6";
+        string += std::string(string.empty() ? "" : "|") + "6";
       }
       if (u8_val & codec_spec_caps::kLeAudioCodecChannelCountSevenChannel) {
-        string += std::string((string.empty() ? "" : "|")) + "7";
+        string += std::string(string.empty() ? "" : "|") + "7";
       }
       if (u8_val & codec_spec_caps::kLeAudioCodecChannelCountEightChannel) {
-        string += std::string((string.empty() ? "" : "|")) + "8";
+        string += std::string(string.empty() ? "" : "|") + "8";
       }
 
       return string += " channel/s\n";
@@ -438,7 +373,7 @@ std::string CapabilityValueToStr(const uint8_t& type,
 
       uint16_t u16_min_number_of_octets = VEC_UINT8_TO_UINT16(value);
       uint16_t u16_max_number_of_octets =
-          OFF_VEC_UINT8_TO_UINT16(value, sizeof(u16_min_number_of_octets));
+              OFF_VEC_UINT8_TO_UINT16(value, sizeof(u16_min_number_of_octets));
 
       string += "Minimum: " + std::to_string(u16_min_number_of_octets);
       string += ", Maximum: " + std::to_string(u16_max_number_of_octets) + "\n";
@@ -461,8 +396,7 @@ std::string CapabilityValueToStr(const uint8_t& type,
   }
 }
 
-std::string CodecCapabilitiesLtvFormat(const uint8_t& type,
-                                       const std::vector<uint8_t>& value) {
+std::string CodecCapabilitiesLtvFormat(const uint8_t& type, const std::vector<uint8_t>& value) {
   std::string string = "";
 
   string += CapabilityTypeToStr(type) + ": ";
@@ -472,11 +406,12 @@ std::string CodecCapabilitiesLtvFormat(const uint8_t& type,
 }
 
 std::optional<std::vector<uint8_t>> LeAudioLtvMap::Find(uint8_t type) const {
-  auto iter =
-      std::find_if(values.cbegin(), values.cend(),
-                   [type](const auto& value) { return value.first == type; });
+  auto iter = std::find_if(values.cbegin(), values.cend(),
+                           [type](const auto& value) { return value.first == type; });
 
-  if (iter == values.cend()) return std::nullopt;
+  if (iter == values.cend()) {
+    return std::nullopt;
+  }
 
   return iter->second;
 }
@@ -485,8 +420,7 @@ uint8_t* LeAudioLtvMap::RawPacket(uint8_t* p_buf) const {
   for (auto const& value : values) {
     UINT8_TO_STREAM(p_buf, value.second.size() + 1);
     UINT8_TO_STREAM(p_buf, value.first);
-    ARRAY_TO_STREAM(p_buf, value.second.data(),
-                    static_cast<int>(value.second.size()));
+    ARRAY_TO_STREAM(p_buf, value.second.data(), static_cast<int>(value.second.size()));
   }
 
   return p_buf;
@@ -503,12 +437,20 @@ void LeAudioLtvMap::Append(const LeAudioLtvMap& other) {
   for (auto& el : other.values) {
     values[el.first] = el.second;
   }
+
+  invalidate();
 }
 
-LeAudioLtvMap LeAudioLtvMap::Parse(const uint8_t* p_value, uint8_t len,
-                                   bool& success) {
+LeAudioLtvMap LeAudioLtvMap::Parse(const uint8_t* p_value, uint8_t len, bool& success) {
   LeAudioLtvMap ltv_map;
+  success = ltv_map.Parse(p_value, len);
+  if (!success) {
+    log::error("Error parsing LTV map");
+  }
+  return ltv_map;
+}
 
+bool LeAudioLtvMap::Parse(const uint8_t* p_value, uint8_t len) {
   if (len > 0) {
     const auto p_value_end = p_value + len;
 
@@ -517,13 +459,14 @@ LeAudioLtvMap LeAudioLtvMap::Parse(const uint8_t* p_value, uint8_t len,
       STREAM_TO_UINT8(ltv_len, p_value);
 
       // Unusual, but possible case
-      if (ltv_len == 0) continue;
+      if (ltv_len == 0) {
+        continue;
+      }
 
       if (p_value_end < (p_value + ltv_len)) {
-        LOG(ERROR) << __func__
-                   << " Invalid ltv_len: " << static_cast<int>(ltv_len);
-        success = false;
-        return LeAudioLtvMap();
+        log::error("Invalid ltv_len: {}", static_cast<int>(ltv_len));
+        invalidate();
+        return false;
       }
 
       uint8_t ltv_type;
@@ -534,12 +477,12 @@ LeAudioLtvMap LeAudioLtvMap::Parse(const uint8_t* p_value, uint8_t len,
       p_value += ltv_len;
 
       std::vector<uint8_t> ltv_value(p_temp, p_value);
-      ltv_map.values.emplace(ltv_type, std::move(ltv_value));
+      values.emplace(ltv_type, std::move(ltv_value));
     }
   }
+  invalidate();
 
-  success = true;
-  return ltv_map;
+  return true;
 }
 
 size_t LeAudioLtvMap::RawPacketSize() const {
@@ -552,9 +495,9 @@ size_t LeAudioLtvMap::RawPacketSize() const {
   return bytes;
 }
 
-std::string LeAudioLtvMap::ToString(
-    const std::string& indent_string,
-    std::string (*format)(const uint8_t&, const std::vector<uint8_t>&)) const {
+std::string LeAudioLtvMap::ToString(const std::string& indent_string,
+                                    std::string (*format)(const uint8_t&,
+                                                          const std::vector<uint8_t>&)) const {
   std::string debug_str;
 
   for (const auto& value : values) {
@@ -562,9 +505,8 @@ std::string LeAudioLtvMap::ToString(
 
     if (format == nullptr) {
       sstream << indent_string + "type: " << std::to_string(value.first)
-              << "\tlen: " << std::to_string(value.second.size()) << "\tdata: "
-              << base::HexEncode(value.second.data(), value.second.size()) +
-                     "\n";
+              << "\tlen: " << std::to_string(value.second.size())
+              << "\tdata: " << base::HexEncode(value.second.data(), value.second.size()) + "\n";
     } else {
       sstream << indent_string + format(value.first, value.second);
     }
@@ -575,9 +517,9 @@ std::string LeAudioLtvMap::ToString(
   return debug_str;
 }
 
-const struct LeAudioCoreCodecConfig& LeAudioLtvMap::GetAsCoreCodecConfig()
-    const {
-  ASSERT_LOG(!core_capabilities, "LTVs were already parsed for capabilities!");
+const struct LeAudioCoreCodecConfig& LeAudioLtvMap::GetAsCoreCodecConfig() const {
+  log::assert_that(!core_capabilities, "LTVs were already parsed for capabilities!");
+  log::assert_that(!metadata, "LTVs were already parsed for metadata!");
 
   if (!core_config) {
     core_config = LtvMapToCoreCodecConfig(*this);
@@ -585,9 +527,9 @@ const struct LeAudioCoreCodecConfig& LeAudioLtvMap::GetAsCoreCodecConfig()
   return *core_config;
 }
 
-const struct LeAudioCoreCodecCapabilities&
-LeAudioLtvMap::GetAsCoreCodecCapabilities() const {
-  ASSERT_LOG(!core_config, "LTVs were already parsed for configurations!");
+const struct LeAudioCoreCodecCapabilities& LeAudioLtvMap::GetAsCoreCodecCapabilities() const {
+  log::assert_that(!core_config, "LTVs were already parsed for configurations!");
+  log::assert_that(!metadata, "LTVs were already parsed for metadata!");
 
   if (!core_capabilities) {
     core_capabilities = LtvMapToCoreCodecCapabilities(*this);
@@ -595,34 +537,62 @@ LeAudioLtvMap::GetAsCoreCodecCapabilities() const {
   return *core_capabilities;
 }
 
+const struct LeAudioMetadata& LeAudioLtvMap::GetAsLeAudioMetadata() const {
+  log::assert_that(!core_config, "LTVs were already parsed for configurations!");
+  log::assert_that(!core_capabilities, "LTVs were already parsed for capabilities!");
+
+  if (!metadata) {
+    metadata = LtvMapToMetadata(*this);
+  }
+  return *metadata;
+}
+
+void LeAudioLtvMap::RemoveAllTypes(const LeAudioLtvMap& other) {
+  for (auto const& [key, _] : other.values) {
+    Remove(key);
+  }
+}
+
+LeAudioLtvMap LeAudioLtvMap::GetIntersection(const LeAudioLtvMap& other) const {
+  LeAudioLtvMap result;
+  for (auto const& [key, value] : values) {
+    auto entry = other.Find(key);
+    if (entry->size() != value.size()) {
+      continue;
+    }
+    if (memcmp(entry->data(), value.data(), value.size()) == 0) {
+      result.Add(key, value);
+    }
+  }
+  return result;
+}
+
 }  // namespace types
 
 void AppendMetadataLtvEntryForCcidList(std::vector<uint8_t>& metadata,
                                        const std::vector<uint8_t>& ccid_list) {
   if (ccid_list.size() == 0) {
-    LOG_WARN("Empty CCID list.");
+    log::warn("Empty CCID list.");
     return;
   }
 
-  metadata.push_back(
-      static_cast<uint8_t>(types::kLeAudioMetadataTypeLen + ccid_list.size()));
+  metadata.push_back(static_cast<uint8_t>(types::kLeAudioMetadataTypeLen + ccid_list.size()));
   metadata.push_back(static_cast<uint8_t>(types::kLeAudioMetadataTypeCcidList));
 
   metadata.insert(metadata.end(), ccid_list.begin(), ccid_list.end());
 }
 
-void AppendMetadataLtvEntryForStreamingContext(
-    std::vector<uint8_t>& metadata, types::AudioContexts context_type) {
+void AppendMetadataLtvEntryForStreamingContext(std::vector<uint8_t>& metadata,
+                                               types::AudioContexts context_type) {
   std::vector<uint8_t> streaming_context_ltv_entry;
 
-  streaming_context_ltv_entry.resize(
-      types::kLeAudioMetadataTypeLen + types::kLeAudioMetadataLenLen +
-      types::kLeAudioMetadataStreamingAudioContextLen);
+  streaming_context_ltv_entry.resize(types::kLeAudioMetadataTypeLen +
+                                     types::kLeAudioMetadataLenLen +
+                                     types::kLeAudioMetadataStreamingAudioContextLen);
   uint8_t* streaming_context_ltv_entry_buf = streaming_context_ltv_entry.data();
 
   UINT8_TO_STREAM(streaming_context_ltv_entry_buf,
-                  types::kLeAudioMetadataTypeLen +
-                      types::kLeAudioMetadataStreamingAudioContextLen);
+                  types::kLeAudioMetadataTypeLen + types::kLeAudioMetadataStreamingAudioContextLen);
   UINT8_TO_STREAM(streaming_context_ltv_entry_buf,
                   types::kLeAudioMetadataTypeStreamingAudioContext);
   UINT16_TO_STREAM(streaming_context_ltv_entry_buf, context_type.value());
@@ -632,62 +602,65 @@ void AppendMetadataLtvEntryForStreamingContext(
 }
 
 uint8_t GetMaxCodecFramesPerSduFromPac(const acs_ac_record* pac) {
-  auto tlv_ent = pac->codec_spec_caps.Find(
-      codec_spec_caps::kLeAudioLtvTypeSupportedMaxCodecFramesPerSdu);
+  if (utils::IsCodecUsingLtvFormat(pac->codec_id)) {
+    auto tlv_ent = pac->codec_spec_caps.Find(
+            codec_spec_caps::kLeAudioLtvTypeSupportedMaxCodecFramesPerSdu);
 
-  if (tlv_ent) return VEC_UINT8_TO_UINT8(tlv_ent.value());
+    if (tlv_ent) {
+      return VEC_UINT8_TO_UINT8(tlv_ent.value());
+    }
+  }
 
   return 1;
 }
 
 namespace types {
 std::ostream& operator<<(std::ostream& os, const CisState& state) {
-  static const char* char_value_[5] = {"IDLE", "ASSIGNED", "CONNECTING",
-                                       "CONNECTED", "DISCONNECTING"};
+  static const char* char_value_[5] = {"IDLE", "ASSIGNED", "CONNECTING", "CONNECTED",
+                                       "DISCONNECTING"};
 
-  os << char_value_[static_cast<uint8_t>(state)] << " ("
-     << "0x" << std::setfill('0') << std::setw(2) << static_cast<int>(state)
-     << ")";
+  os << char_value_[static_cast<uint8_t>(state)] << " (" << "0x" << std::setfill('0')
+     << std::setw(2) << static_cast<int>(state) << ")";
   return os;
 }
 std::ostream& operator<<(std::ostream& os, const DataPathState& state) {
-  static const char* char_value_[4] = {"IDLE", "CONFIGURING", "CONFIGURED",
-                                       "REMOVING"};
+  static const char* char_value_[4] = {"IDLE", "CONFIGURING", "CONFIGURED", "REMOVING"};
 
-  os << char_value_[static_cast<uint8_t>(state)] << " ("
-     << "0x" << std::setfill('0') << std::setw(2) << static_cast<int>(state)
-     << ")";
+  os << char_value_[static_cast<uint8_t>(state)] << " (" << "0x" << std::setfill('0')
+     << std::setw(2) << static_cast<int>(state) << ")";
   return os;
 }
 std::ostream& operator<<(std::ostream& os, const types::CigState& state) {
-  static const char* char_value_[5] = {"NONE", "CREATING", "CREATED",
-                                       "REMOVING", "RECOVERING"};
+  static const char* char_value_[5] = {"NONE", "CREATING", "CREATED", "REMOVING", "RECOVERING"};
 
-  os << char_value_[static_cast<uint8_t>(state)] << " ("
-     << "0x" << std::setfill('0') << std::setw(2) << static_cast<int>(state)
-     << ")";
+  os << char_value_[static_cast<uint8_t>(state)] << " (" << "0x" << std::setfill('0')
+     << std::setw(2) << static_cast<int>(state) << ")";
   return os;
 }
 std::ostream& operator<<(std::ostream& os, const types::AseState& state) {
   static const char* char_value_[7] = {
-      "IDLE",      "CODEC_CONFIGURED", "QOS_CONFIGURED", "ENABLING",
-      "STREAMING", "DISABLING",        "RELEASING",
+          "IDLE",      "CODEC_CONFIGURED", "QOS_CONFIGURED", "ENABLING",
+          "STREAMING", "DISABLING",        "RELEASING",
   };
 
-  os << char_value_[static_cast<uint8_t>(state)] << " ("
-     << "0x" << std::setfill('0') << std::setw(2) << static_cast<int>(state)
-     << ")";
+  os << char_value_[static_cast<uint8_t>(state)] << " (" << "0x" << std::setfill('0')
+     << std::setw(2) << static_cast<int>(state) << ")";
   return os;
 }
 
-std::ostream& operator<<(std::ostream& os,
-                         const types::LeAudioCoreCodecConfig& config) {
-  os << " LeAudioCoreCodecConfig(SamplFreq="
-     << loghex(*config.sampling_frequency)
-     << ", FrameDur=" << loghex(*config.frame_duration)
-     << ", OctetsPerFrame=" << int(*config.octets_per_codec_frame)
-     << ", CodecFramesBlocksPerSDU=" << int(*config.codec_frames_blocks_per_sdu)
-     << ", AudioChanLoc=" << loghex(*config.audio_channel_allocation) << ")";
+std::ostream& operator<<(std::ostream& os, const LeAudioCodecId& codec_id) {
+  os << "LeAudioCodecId{CodingFormat: " << loghex(codec_id.coding_format)
+     << ", CompanyId: " << loghex(codec_id.vendor_company_id)
+     << ", CodecId: " << loghex(codec_id.vendor_codec_id) << "}";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const types::LeAudioCoreCodecConfig& config) {
+  os << "LeAudioCoreCodecConfig{SamplFreq: " << loghex(*config.sampling_frequency)
+     << ", FrameDur: " << loghex(*config.frame_duration)
+     << ", OctetsPerFrame: " << int(*config.octets_per_codec_frame)
+     << ", CodecFramesBlocksPerSDU: " << int(*config.codec_frames_blocks_per_sdu)
+     << ", AudioChanLoc: " << loghex(*config.audio_channel_allocation) << "}";
   return os;
 }
 
@@ -752,9 +725,11 @@ std::string ToHexString(const LeAudioContextType& value) {
 
 std::string AudioContexts::to_string() const {
   std::stringstream s;
-  for (auto ctx : le_audio::types::kLeAudioContextAllTypesArray) {
+  for (auto ctx : bluetooth::le_audio::types::kLeAudioContextAllTypesArray) {
     if (test(ctx)) {
-      if (s.tellp() != 0) s << " | ";
+      if (s.tellp() != 0) {
+        s << " | ";
+      }
       s << ctx;
     }
   }
@@ -769,18 +744,17 @@ std::ostream& operator<<(std::ostream& os, const AudioContexts& contexts) {
 
 template <typename T>
 const T& BidirectionalPair<T>::get(uint8_t direction) const {
-  ASSERT_LOG(
-      direction < types::kLeAudioDirectionBoth,
-      "Unsupported complex direction. Consider using get_bidirectional<>() "
-      "instead.");
+  log::assert_that(direction < types::kLeAudioDirectionBoth,
+                   "Unsupported complex direction. Consider using "
+                   "get_bidirectional<>() instead.");
   return (direction == types::kLeAudioDirectionSink) ? sink : source;
 }
 
 template <typename T>
 T& BidirectionalPair<T>::get(uint8_t direction) {
-  ASSERT_LOG(direction < types::kLeAudioDirectionBoth,
-             "Unsupported complex direction. Reference to a single complex"
-             " direction value is not supported.");
+  log::assert_that(direction < types::kLeAudioDirectionBoth,
+                   "Unsupported complex direction. Reference to a single "
+                   "complex direction value is not supported.");
   return (direction == types::kLeAudioDirectionSink) ? sink : source;
 }
 
@@ -791,8 +765,7 @@ AudioContexts get_bidirectional(BidirectionalPair<AudioContexts> p) {
 }
 
 template <>
-std::vector<uint8_t> get_bidirectional(
-    BidirectionalPair<std::vector<uint8_t>> bidir) {
+std::vector<uint8_t> get_bidirectional(BidirectionalPair<std::vector<uint8_t>> bidir) {
   std::vector<uint8_t> res = bidir.sink;
   res.insert(std::end(res), std::begin(bidir.source), std::end(bidir.source));
   return res;
@@ -803,15 +776,88 @@ AudioLocations get_bidirectional(BidirectionalPair<AudioLocations> bidir) {
   return bidir.sink | bidir.source;
 }
 
+std::ostream& operator<<(std::ostream& os,
+                         const le_audio::types::IsoDataPathConfiguration& config) {
+  os << "IsoDataPathCfg{codecId: " << config.codecId << ", isTransparent: " << config.isTransparent
+     << ", controllerDelayUs: " << config.controllerDelayUs
+     << ", configuration.size: " << config.configuration.size() << "}";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const le_audio::types::DataPathConfiguration& config) {
+  os << "DataPathCfg{datapathId: " << +config.dataPathId
+     << ", dataPathCfg.size: " << +config.dataPathConfig.size()
+     << ", isoDataPathCfg: " << config.isoDataPathConfig << "}";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const LeAudioMetadata& config) {
+  os << "LeAudioMetadata{";
+  if (config.preferred_audio_context) {
+    os << "preferred_audio_context: ";
+    os << AudioContexts(config.preferred_audio_context.value());
+  }
+  if (config.streaming_audio_context) {
+    os << ", streaming_audio_context: ";
+    os << AudioContexts(config.streaming_audio_context.value());
+  }
+  if (config.program_info) {
+    os << ", program_info: ";
+    os << config.program_info.value();
+  }
+  if (config.language) {
+    os << ", language: ";
+    os << config.language.value();
+  }
+  if (config.ccid_list) {
+    os << ", ccid_list: ";
+    os << base::HexEncode(config.ccid_list.value().data(), config.ccid_list.value().size());
+  }
+  if (config.parental_rating) {
+    os << ", parental_rating: ";
+    os << (int)config.parental_rating.value();
+  }
+  if (config.program_info_uri) {
+    os << ", program_info_uri: ";
+    os << config.program_info_uri.value();
+  }
+  if (config.extended_metadata) {
+    os << ", extended_metadata: ";
+    os << base::HexEncode(config.extended_metadata.value().data(),
+                          config.extended_metadata.value().size());
+  }
+  if (config.vendor_specific) {
+    os << ", vendor_specific: ";
+    os << base::HexEncode(config.vendor_specific.value().data(),
+                          config.vendor_specific.value().size());
+  }
+  if (config.audio_active_state) {
+    os << ", audio_active_state: ";
+    os << config.audio_active_state.value();
+  }
+  if (config.broadcast_audio_immediate_rendering) {
+    os << ", broadcast_audio_immediate_rendering: ";
+    os << config.broadcast_audio_immediate_rendering.value();
+  }
+  os << "}";
+  return os;
+}
+
 template struct BidirectionalPair<AudioContexts>;
 template struct BidirectionalPair<AudioLocations>;
 template struct BidirectionalPair<CisType>;
+template struct BidirectionalPair<LeAudioConfigurationStrategy>;
 template struct BidirectionalPair<ase*>;
 template struct BidirectionalPair<std::string>;
 template struct BidirectionalPair<std::vector<uint8_t>>;
 template struct BidirectionalPair<stream_configuration>;
 template struct BidirectionalPair<stream_parameters>;
 template struct BidirectionalPair<uint16_t>;
+template struct BidirectionalPair<uint8_t>;
+template struct BidirectionalPair<bool>;
+template struct BidirectionalPair<int>;
+template struct BidirectionalPair<std::vector<set_configurations::AseConfiguration>>;
+template struct BidirectionalPair<set_configurations::QosConfigSetting>;
 
 }  // namespace types
-}  // namespace le_audio
+}  // namespace bluetooth::le_audio

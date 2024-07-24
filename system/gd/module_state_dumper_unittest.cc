@@ -20,6 +20,7 @@
 #include <base/functional/bind.h>
 #include <base/location.h>
 #include <base/threading/platform_thread.h>
+#include <bluetooth/log.h>
 #include <sys/syscall.h>
 
 #include <sstream>
@@ -27,7 +28,6 @@
 
 #include "gtest/gtest.h"
 #include "module_dumper.h"
-#include "module_state_dumper.h"
 #include "os/handler.h"
 #include "os/thread.h"
 #include "stack/include/main_thread.h"
@@ -44,9 +44,7 @@ constexpr char title[] = "module_state_dumper_test";
 // Module private implementation that is inaccessible externally
 struct StateDumperTestModule::PrivateImpl : public ModuleMainloop {};
 
-bool StateDumperTestModule::IsStarted() const {
-  return pimpl_ != nullptr;
-}
+bool StateDumperTestModule::IsStarted() const { return pimpl_ != nullptr; }
 
 void StateDumperTestModule::Start() {
   ASSERT_FALSE(IsStarted());
@@ -58,38 +56,22 @@ void StateDumperTestModule::Stop() {
   pimpl_.reset();
 }
 
-std::string StateDumperTestModule::ToString() const {
-  return std::string(__func__);
-}
+std::string StateDumperTestModule::ToString() const { return std::string(__func__); }
 
 const bluetooth::ModuleFactory StateDumperTestModule::Factory =
-    bluetooth::ModuleFactory([]() { return new StateDumperTestModule(); });
+        bluetooth::ModuleFactory([]() { return new StateDumperTestModule(); });
 
 DumpsysDataFinisher StateDumperTestModule::GetDumpsysData(
-    flatbuffers::FlatBufferBuilder* /* builder */) const {
-  LOG_INFO("flatbuffers");
+        flatbuffers::FlatBufferBuilder* /* builder */) const {
+  log::info("flatbuffers");
   return EmptyDumpsysDataFinisher;
-}
-
-void StateDumperTestModule::GetDumpsysData() const {
-  LOG_INFO("void");
-}
-
-void StateDumperTestModule::GetDumpsysData(int fd) const {
-  LOG_INFO("fd");
-  dprintf(fd, "GetDumpsysData(int fd)");
-}
-
-void StateDumperTestModule::GetDumpsysData(std::ostringstream& oss) const {
-  LOG_INFO("oss");
-  oss << "GetDumpsysData(std::ostringstream& oss)";
 }
 
 //
 // Module GDx Testing Below
 //
 class ModuleStateDumperTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
     test_framework_tid_ = base::PlatformThread::CurrentId();
     module_ = new StateDumperTestModule();
@@ -108,7 +90,7 @@ class ModuleStateDumperTest : public ::testing::Test {
     std::future future = promise.get_future();
     post_on_bt_main([&promise]() { promise.set_value(); });
     future.wait_for(std::chrono::milliseconds(sync_timeout_in_ms));
-  };
+  }
 
   static pid_t get_mainloop_tid() {
     std::promise<pid_t> pid_promise = std::promise<pid_t>();
@@ -124,11 +106,11 @@ class ModuleStateDumperTest : public ::testing::Test {
 };
 
 class ModuleStateDumperWithStackTest : public ModuleStateDumperTest {
- protected:
+protected:
   void SetUp() override {
     ModuleStateDumperTest::SetUp();
-    module_registry_.InjectTestModule(
-        &StateDumperTestModule::Factory, module_ /* pass ownership */);
+    module_registry_.InjectTestModule(&StateDumperTestModule::Factory,
+                                      module_ /* pass ownership */);
     module_ = nullptr;  // ownership is passed
   }
 
@@ -136,8 +118,10 @@ class ModuleStateDumperWithStackTest : public ModuleStateDumperTest {
     std::promise<pid_t> handler_tid_promise = std::promise<pid_t>();
     std::future<pid_t> future = handler_tid_promise.get_future();
     handler->Post(common::BindOnce(
-        [](std::promise<pid_t> promise) { promise.set_value(base::PlatformThread::CurrentId()); },
-        std::move(handler_tid_promise)));
+            [](std::promise<pid_t> promise) {
+              promise.set_value(base::PlatformThread::CurrentId());
+            },
+            std::move(handler_tid_promise)));
     return future.get();
   }
 
@@ -155,7 +139,7 @@ class ModuleStateDumperWithStackTest : public ModuleStateDumperTest {
 
 TEST_F(ModuleStateDumperTest, lifecycle) {
   ::bluetooth::os::Thread* thread =
-      new bluetooth::os::Thread("Name", bluetooth::os::Thread::Priority::REAL_TIME);
+          new bluetooth::os::Thread("Name", bluetooth::os::Thread::Priority::REAL_TIME);
   ASSERT_FALSE(module_registry_.IsStarted<StateDumperTestModule>());
   module_registry_.Start<StateDumperTestModule>(thread);
   ASSERT_TRUE(module_registry_.IsStarted<StateDumperTestModule>());
@@ -171,7 +155,7 @@ TEST_F(ModuleStateDumperWithStackTest, dump_state) {
   std::ostringstream oss;
   dumper.DumpState(&output, oss);
 
-  LOG_INFO("DUMP STATE");
-  LOG_INFO("%s", oss.str().c_str());
-  LOG_INFO("%s", output.c_str());
+  log::info("DUMP STATE");
+  log::info("{}", oss.str());
+  log::info("{}", output);
 }

@@ -22,7 +22,6 @@
 #include <chrono>
 
 #include "common/bidi_queue.h"
-#include "common/testing/log_capture.h"
 #include "hci/acl_manager/acl_scheduler.h"
 #include "hci/acl_manager/connection_callbacks_mock.h"
 #include "hci/acl_manager/connection_management_callbacks_mock.h"
@@ -43,7 +42,6 @@ using ::bluetooth::os::Handler;
 using ::bluetooth::os::Thread;
 using ::bluetooth::packet::BitInserter;
 using ::bluetooth::packet::RawBuilder;
-using ::bluetooth::testing::LogCapture;
 
 using ::testing::_;
 using ::testing::DoAll;
@@ -59,7 +57,7 @@ namespace {
 constexpr bool kCrashOnUnknownHandle = true;
 constexpr char kFixedAddress[] = "c0:aa:bb:cc:dd:ee";
 const bluetooth::hci::Address kRemoteAddress =
-    bluetooth::hci::Address({0x00, 0x11, 0x22, 0x33, 0x44, 0x55});
+        bluetooth::hci::Address({0x00, 0x11, 0x22, 0x33, 0x44, 0x55});
 [[maybe_unused]] constexpr uint16_t kHciHandle = 123;
 template <typename B>
 std::shared_ptr<std::vector<uint8_t>> Serialize(std::unique_ptr<B> build) {
@@ -94,24 +92,24 @@ T CreateEventView(std::shared_ptr<std::vector<uint8_t>> bytes) {
   return T::Create(hci::EventView::Create(hci::PacketView<hci::kLittleEndian>(bytes)));
 }
 
-[[maybe_unused]] hci::CommandCompleteView ReturnCommandComplete(
-    hci::OpCode op_code, hci::ErrorCode error_code) {
+[[maybe_unused]] hci::CommandCompleteView ReturnCommandComplete(hci::OpCode op_code,
+                                                                hci::ErrorCode error_code) {
   std::vector<uint8_t> success_vector{static_cast<uint8_t>(error_code)};
-  auto builder = hci::CommandCompleteBuilder::Create(
-      uint8_t{1}, op_code, std::make_unique<RawBuilder>(success_vector));
+  auto builder = hci::CommandCompleteBuilder::Create(uint8_t{1}, op_code,
+                                                     std::make_unique<RawBuilder>(success_vector));
   auto bytes = Serialize<hci::CommandCompleteBuilder>(std::move(builder));
   return hci::CommandCompleteView::Create(
-      hci::EventView::Create(hci::PacketView<hci::kLittleEndian>(bytes)));
+          hci::EventView::Create(hci::PacketView<hci::kLittleEndian>(bytes)));
 }
 
-[[maybe_unused]] hci::CommandStatusView ReturnCommandStatus(
-    hci::OpCode op_code, hci::ErrorCode error_code) {
+[[maybe_unused]] hci::CommandStatusView ReturnCommandStatus(hci::OpCode op_code,
+                                                            hci::ErrorCode error_code) {
   std::vector<uint8_t> success_vector{static_cast<uint8_t>(error_code)};
-  auto builder = hci::CommandStatusBuilder::Create(
-      hci::ErrorCode::SUCCESS, uint8_t{1}, op_code, std::make_unique<RawBuilder>(success_vector));
+  auto builder = hci::CommandStatusBuilder::Create(hci::ErrorCode::SUCCESS, uint8_t{1}, op_code,
+                                                   std::make_unique<RawBuilder>(success_vector));
   auto bytes = Serialize<hci::CommandStatusBuilder>(std::move(builder));
   return hci::CommandStatusView::Create(
-      hci::EventView::Create(hci::PacketView<hci::kLittleEndian>(bytes)));
+          hci::EventView::Create(hci::PacketView<hci::kLittleEndian>(bytes)));
 }
 
 bool handle_outgoing_connection_ = false;
@@ -124,21 +122,20 @@ namespace hci {
 namespace acl_manager {
 
 class MockAclScheduler : public AclScheduler {
- public:
+public:
   virtual void ReportAclConnectionCompletion(
-      Address /* address */,
-      common::ContextualOnceCallback<void()> handle_outgoing_connection,
-      common::ContextualOnceCallback<void()> handle_incoming_connection,
-      common::ContextualOnceCallback<void(std::string)> handle_unknown_connection) override {
+          Address /* address */, common::ContextualOnceCallback<void()> handle_outgoing_connection,
+          common::ContextualOnceCallback<void()> handle_incoming_connection,
+          common::ContextualOnceCallback<void(std::string)> handle_unknown_connection) override {
     if (handle_outgoing_connection_) {
-      handle_outgoing_connection.InvokeIfNotEmpty();
+      handle_outgoing_connection();
       return;
     }
 
     if (handle_incoming_connection_) {
-      handle_incoming_connection.InvokeIfNotEmpty();
+      handle_incoming_connection();
     } else {
-      handle_unknown_connection.InvokeIfNotEmpty("set_of_incoming_connecting_addresses()");
+      handle_unknown_connection("set_of_incoming_connecting_addresses()");
     }
   }
 };
@@ -152,9 +149,8 @@ PacketView<kLittleEndian> GetPacketView(std::unique_ptr<packet::BasePacketBuilde
 }
 
 class ClassicImplTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
-    bluetooth::common::InitFlags::SetAllForTesting();
     thread_ = new Thread("thread", Thread::Priority::NORMAL);
     handler_ = new Handler(thread_);
     hci_layer_ = new HciLayerFake();
@@ -167,19 +163,14 @@ class ClassicImplTest : public ::testing::Test {
     EXPECT_CALL(*controller_, UnregisterCompletedAclPacketsCallback);
 
     round_robin_scheduler_ =
-        new acl_manager::RoundRobinScheduler(handler_, controller_, hci_queue_.GetUpEnd());
+            new acl_manager::RoundRobinScheduler(handler_, controller_, hci_queue_.GetUpEnd());
     hci_queue_.GetDownEnd()->RegisterDequeue(
-        handler_, common::Bind(&ClassicImplTest::HciDownEndDequeue, common::Unretained(this)));
+            handler_, common::Bind(&ClassicImplTest::HciDownEndDequeue, common::Unretained(this)));
     acl_scheduler_ = new MockAclScheduler();
     rnr_ = new RemoteNameRequestModule();
-    classic_impl_ = new acl_manager::classic_impl(
-        hci_layer_,
-        controller_,
-        handler_,
-        round_robin_scheduler_,
-        kCrashOnUnknownHandle,
-        acl_scheduler_,
-        rnr_);
+    classic_impl_ =
+            new acl_manager::classic_impl(hci_layer_, controller_, handler_, round_robin_scheduler_,
+                                          kCrashOnUnknownHandle, acl_scheduler_, rnr_);
     classic_impl_->handle_register_callbacks(&mock_connection_callback_, handler_);
 
     Address address;
@@ -206,9 +197,7 @@ class ClassicImplTest : public ::testing::Test {
   MockAclScheduler* acl_scheduler_;
   RemoteNameRequestModule* rnr_;
 
-  void sync_handler() {
-    thread_->GetReactor()->WaitForIdle(2s);
-  }
+  void sync_handler() { thread_->GetReactor()->WaitForIdle(2s); }
 
   void HciDownEndDequeue() {
     auto packet = hci_queue_.GetDownEnd()->TryDequeue();
@@ -230,7 +219,7 @@ class ClassicImplTest : public ::testing::Test {
     }
   }
 
- protected:
+protected:
   Address remote_address_;
 
   uint16_t packet_count_;
@@ -259,12 +248,8 @@ TEST_F(ClassicImplTest, on_classic_event_CONNECTION_COMPLETE__SUCCESS) {
   EXPECT_CALL(mock_connection_callback_, OnConnectSuccess);
   handle_outgoing_connection_ = true;
 
-  auto command = ConnectionCompleteBuilder::Create(
-      ErrorCode::SUCCESS,
-      kHciHandle,
-      kRemoteAddress,
-      LinkType::ACL,
-      bluetooth::hci::Enable::ENABLED);
+  auto command = ConnectionCompleteBuilder::Create(ErrorCode::SUCCESS, kHciHandle, kRemoteAddress,
+                                                   LinkType::ACL, bluetooth::hci::Enable::ENABLED);
 
   auto bytes = Serialize<ConnectionCompleteBuilder>(std::move(command));
   auto view = CreateEventView<hci::ConnectionCompleteView>(bytes);

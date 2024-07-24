@@ -18,27 +18,24 @@ package com.android.bluetooth.avrcpcontroller;
 
 import android.util.SparseArray;
 
+import com.google.common.base.Ascii;
+
 import java.util.HashMap;
 
 /**
  * Represents an encoding method in which a BIP image is available.
  *
- * The encodings supported by this profile include:
- *   - JPEG
- *   - GIF
- *   - WBMP
- *   - PNG
- *   - JPEG2000
- *   - BMP
- *   - USR-xxx
+ * <p>The encodings supported by this profile include: - JPEG - GIF - WBMP - PNG - JPEG2000 - BMP -
+ * USR-xxx
  *
- * The tag USR-xxx is used to represent proprietary encodings. The tag shall begin with the string
- * “USR-” but the implementer assigns the characters of the second half of the string. This tag can
- * be used by a manufacturer to enable its devices to exchange images under a proprietary encoding.
+ * <p>The tag USR-xxx is used to represent proprietary encodings. The tag shall begin with the
+ * string “USR-” but the implementer assigns the characters of the second half of the string. This
+ * tag can be used by a manufacturer to enable its devices to exchange images under a proprietary
+ * encoding.
  *
- * Example proprietary encoding:
+ * <p>Example proprietary encoding:
  *
- *   - USR-NOKIA-FORMAT1
+ * <p>- USR-NOKIA-FORMAT1
  */
 public class BipEncoding {
     public static final int JPEG = 0;
@@ -51,6 +48,7 @@ public class BipEncoding {
     public static final int UNKNOWN = 7; // i.e 'not assigned' or 'not assigned anything valid'
 
     private static final HashMap sEncodingNamesToIds = new HashMap<String, Integer>();
+
     static {
         sEncodingNamesToIds.put("JPEG", JPEG);
         sEncodingNamesToIds.put("GIF", GIF);
@@ -61,6 +59,7 @@ public class BipEncoding {
     }
 
     private static final SparseArray sIdsToEncodingNames = new SparseArray<String>();
+
     static {
         sIdsToEncodingNames.put(JPEG, "JPEG");
         sIdsToEncodingNames.put(GIF, "GIF");
@@ -71,14 +70,10 @@ public class BipEncoding {
         sIdsToEncodingNames.put(UNKNOWN, "UNKNOWN");
     }
 
-    /**
-     * The integer ID of the type that this encoding is
-     */
+    /** The integer ID of the type that this encoding is */
     private final int mType;
 
-    /**
-     * If an encoding is type USR_XXX then it has an extension that defines the encoding
-     */
+    /** If an encoding is type USR_XXX then it has an extension that defines the encoding */
     private final String mProprietaryEncodingId;
 
     /**
@@ -90,12 +85,12 @@ public class BipEncoding {
         if (encoding == null) {
             throw new ParseException("Encoding input invalid");
         }
-        encoding = encoding.trim();
-        mType = determineEncoding(encoding.toUpperCase());
+        encoding = Ascii.toUpperCase(encoding.trim());
+        mType = determineEncoding(encoding);
 
         String proprietaryEncodingId = null;
         if (mType == USR_XXX) {
-            proprietaryEncodingId = encoding.substring(4).toUpperCase();
+            proprietaryEncodingId = encoding.substring(4);
         }
         mProprietaryEncodingId = proprietaryEncodingId;
 
@@ -109,8 +104,8 @@ public class BipEncoding {
      * Create an encoding object based on one of the constants for the available formats
      *
      * @param encoding A constant representing an available encoding
-     * @param proprietaryId A string representing the Id of a propreitary encoding. Only used if the
-     *                      encoding type is BipEncoding.USR_XXX
+     * @param proprietaryId A string representing the Id of a proprietary encoding. Only used if the
+     *     encoding type is BipEncoding.USR_XXX
      */
     public BipEncoding(int encoding, String proprietaryId) {
         if (encoding < 0 || encoding > USR_XXX) {
@@ -121,10 +116,10 @@ public class BipEncoding {
         String proprietaryEncodingId = null;
         if (mType == USR_XXX) {
             if (proprietaryId == null) {
-                throw new IllegalArgumentException("Received invalid user defined encoding id '"
-                        + proprietaryId + "'");
+                throw new IllegalArgumentException(
+                        "Received invalid user defined encoding id '" + proprietaryId + "'");
             }
-            proprietaryEncodingId = proprietaryId.toUpperCase();
+            proprietaryEncodingId = Ascii.toUpperCase(proprietaryId);
         }
         mProprietaryEncodingId = proprietaryEncodingId;
     }
@@ -154,18 +149,18 @@ public class BipEncoding {
     /**
      * Determines if an encoding is supported by Android's Graphics Framework
      *
-     * Android's Bitmap/BitmapFactory can handle BMP, GIF, JPEG, PNG, WebP, and HEIF formats.
+     * <p>Android's Bitmap/BitmapFactory can handle BMP, GIF, JPEG, PNG, WebP, and HEIF formats.
      *
      * @return True if the encoding is supported, False otherwise.
      */
     public boolean isAndroidSupported() {
-        return mType == BipEncoding.JPEG || mType == BipEncoding.PNG || mType == BipEncoding.BMP
+        return mType == BipEncoding.JPEG
+                || mType == BipEncoding.PNG
+                || mType == BipEncoding.BMP
                 || mType == BipEncoding.GIF;
     }
 
-    /**
-     * Determine the encoding type based on an input string
-     */
+    /** Determine the encoding type based on an input string */
     private static int determineEncoding(String encoding) {
         Integer type = (Integer) sEncodingNamesToIds.get(encoding);
         if (type != null) return type.intValue();

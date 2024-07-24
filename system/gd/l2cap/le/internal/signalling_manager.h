@@ -54,8 +54,8 @@ struct PendingCommand {
   uint16_t peripheral_latency_;
   uint16_t timeout_multiplier_;
 
-  static PendingCommand CreditBasedConnectionRequest(SignalId signal_id, Psm psm, Cid scid, Mtu mtu, uint16_t mps,
-                                                     uint16_t initial_credits) {
+  static PendingCommand CreditBasedConnectionRequest(SignalId signal_id, Psm psm, Cid scid, Mtu mtu,
+                                                     uint16_t mps, uint16_t initial_credits) {
     PendingCommand pending_command;
     pending_command.signal_id_ = signal_id;
     pending_command.command_code_ = LeCommandCode::LE_CREDIT_BASED_CONNECTION_REQUEST;
@@ -76,12 +76,10 @@ struct PendingCommand {
     return pending_command;
   }
 
-  static PendingCommand ConnectionParameterUpdate(
-      SignalId signal_id,
-      uint16_t interval_min,
-      uint16_t interval_max,
-      uint16_t peripheral_latency,
-      uint16_t timeout_multiplier) {
+  static PendingCommand ConnectionParameterUpdate(SignalId signal_id, uint16_t interval_min,
+                                                  uint16_t interval_max,
+                                                  uint16_t peripheral_latency,
+                                                  uint16_t timeout_multiplier) {
     PendingCommand pending_command;
     pending_command.signal_id_ = signal_id;
     pending_command.command_code_ = LeCommandCode::CONNECTION_PARAMETER_UPDATE_REQUEST;
@@ -96,8 +94,9 @@ struct PendingCommand {
 class Link;
 
 class LeSignallingManager {
- public:
-  LeSignallingManager(os::Handler* handler, Link* link, l2cap::internal::DataPipelineManager* data_pipeline_manager,
+public:
+  LeSignallingManager(os::Handler* handler, Link* link,
+                      l2cap::internal::DataPipelineManager* data_pipeline_manager,
                       DynamicChannelServiceManagerImpl* dynamic_service_manager,
                       l2cap::internal::DynamicChannelAllocator* channel_allocator);
 
@@ -108,10 +107,12 @@ class LeSignallingManager {
   void SendDisconnectRequest(Cid local_cid, Cid remote_cid);
 
   // Note: Since Core 4.1, LL peripheral can send this through HCI command.
-  void SendConnectionParameterUpdateRequest(
-      uint16_t interval_min, uint16_t interval_max, uint16_t peripheral_latency, uint16_t timeout_multiplier);
+  void SendConnectionParameterUpdateRequest(uint16_t interval_min, uint16_t interval_max,
+                                            uint16_t peripheral_latency,
+                                            uint16_t timeout_multiplier);
 
-  void SendConnectionParameterUpdateResponse(SignalId signal_id, ConnectionParameterUpdateResponseResult result);
+  void SendConnectionParameterUpdateResponse(SignalId signal_id,
+                                             ConnectionParameterUpdateResponseResult result);
 
   void SendCredit(Cid local_cid, uint16_t credits);
 
@@ -123,19 +124,17 @@ class LeSignallingManager {
 
   void OnCommandReject(LeCommandRejectView command_reject_view);
 
-  void OnConnectionParameterUpdateRequest(
-      SignalId signal_id,
-      uint16_t interval_min,
-      uint16_t interval_max,
-      uint16_t peripheral_latency,
-      uint16_t timeout_multiplier);
-  void OnConnectionParameterUpdateResponse(SignalId signal_id, ConnectionParameterUpdateResponseResult result);
+  void OnConnectionParameterUpdateRequest(SignalId signal_id, uint16_t interval_min,
+                                          uint16_t interval_max, uint16_t peripheral_latency,
+                                          uint16_t timeout_multiplier);
+  void OnConnectionParameterUpdateResponse(SignalId signal_id,
+                                           ConnectionParameterUpdateResponseResult result);
 
   void OnConnectionRequest(SignalId signal_id, Psm psm, Cid remote_cid, Mtu mtu, uint16_t mps,
                            uint16_t initial_credits);
 
-  void OnConnectionResponse(SignalId signal_id, Cid remote_cid, Mtu mtu, uint16_t mps, uint16_t initial_credits,
-                            LeCreditBasedConnectionResponseResult result);
+  void OnConnectionResponse(SignalId signal_id, Cid remote_cid, Mtu mtu, uint16_t mps,
+                            uint16_t initial_credits, LeCreditBasedConnectionResponseResult result);
 
   void OnDisconnectionRequest(SignalId signal_id, Cid cid, Cid remote_cid);
 
@@ -143,7 +142,7 @@ class LeSignallingManager {
 
   void OnCredit(Cid remote_cid, uint16_t credits);
 
- private:
+private:
   struct PendingConnection {
     Cid remote_cid;
     Mtu mtu;
@@ -153,7 +152,8 @@ class LeSignallingManager {
   };
 
   void on_incoming_packet();
-  void send_connection_response(SignalId signal_id, Cid local_cid, Mtu mtu, uint16_t mps, uint16_t initial_credit,
+  void send_connection_response(SignalId signal_id, Cid local_cid, Mtu mtu, uint16_t mps,
+                                uint16_t initial_credit,
                                 LeCreditBasedConnectionResponseResult result);
   void on_command_timeout();
   void handle_send_next_command();

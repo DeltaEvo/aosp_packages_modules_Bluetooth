@@ -15,12 +15,12 @@
  */
 #pragma once
 
+#include <gmock/gmock.h>
+
 #include "hci/acl_manager_mock.h"
 #include "hci/address_with_type.h"
 #include "l2cap/internal/scheduler_mock.h"
 #include "l2cap/le/internal/link.h"
-
-#include <gmock/gmock.h>
 
 // Unit test interfaces
 namespace bluetooth {
@@ -32,17 +32,19 @@ namespace testing {
 using hci::testing::MockLeAclConnection;
 
 class MockLink : public Link {
- public:
+public:
   explicit MockLink(os::Handler* handler, l2cap::internal::ParameterProvider* parameter_provider,
-                    std::unique_ptr<MockLeAclConnection> mock_acl_connection, LinkManager* link_manager)
-      : Link(handler, std::move(mock_acl_connection), parameter_provider, nullptr, nullptr, link_manager) {}
+                    std::unique_ptr<MockLeAclConnection> mock_acl_connection,
+                    LinkManager* link_manager)
+      : Link(handler, std::move(mock_acl_connection), parameter_provider, nullptr, nullptr,
+             link_manager) {}
 
   MOCK_METHOD(hci::AddressWithType, GetDevice, (), (const, override));
   MOCK_METHOD(hci::Role, GetRole, (), (override));
   MOCK_METHOD(void, OnAclDisconnected, (hci::ErrorCode status), (override));
   MOCK_METHOD(void, Disconnect, (), (override));
-  MOCK_METHOD(std::shared_ptr<FixedChannelImpl>, AllocateFixedChannel, (Cid cid, SecurityPolicy security_policy),
-              (override));
+  MOCK_METHOD(std::shared_ptr<FixedChannelImpl>, AllocateFixedChannel,
+              (Cid cid, SecurityPolicy security_policy), (override));
   MOCK_METHOD(bool, IsFixedChannelAllocated, (Cid cid), (override));
   MOCK_METHOD(void, RefreshRefCount, (), (override));
 };

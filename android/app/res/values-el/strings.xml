@@ -16,6 +16,7 @@
 
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="app_name" msgid="2326164424236203271">"Bluetooth"</string>
     <string name="permlab_bluetoothShareManager" msgid="5297865456717871041">"Πρόσβαση στη διαχείριση λήψεων."</string>
     <string name="permdesc_bluetoothShareManager" msgid="1588034776955941477">"Επιτρέπει στην εφαρμογή να αποκτά πρόσβαση στο πρόγραμμα διαχείρισης BluetoothShare και να το χρησιμοποιεί για τη μεταφορά αρχείων."</string>
     <string name="permlab_bluetoothAcceptlist" msgid="5785922051395856524">"Πρόσβαση συσκευής Bluetooth επιτρεπόμενης λίστας."</string>
@@ -100,7 +101,6 @@
     <string name="status_connection_error" msgid="8253709700568062220">"Η σύνδεση δεν ήταν επιτυχής."</string>
     <string name="status_protocol_error" msgid="3231573735130475654">"Δεν μπορεί να γίνει σωστός χειρισμός του αιτήματος."</string>
     <string name="status_unknown_error" msgid="314676481744304866">"Άγνωστο σφάλμα."</string>
-    <string name="btopp_live_folder" msgid="4859989703965326287">"Ελήφθη μέσω Bluetooth"</string>
     <string name="opp_notification_group" msgid="150067508422520653">"Μοιραστείτε μέσω Bluetooth"</string>
     <string name="download_success" msgid="3438268368708549686">"Ελήφθησαν πλήρως <xliff:g id="FILE_SIZE">%1$s</xliff:g>."</string>
     <string name="upload_success" msgid="143787470859042049">"Ολοκληρώθηκε η αποστολή <xliff:g id="FILE_SIZE">%1$s</xliff:g>."</string>
@@ -130,9 +130,13 @@
     <string name="bluetooth_opp_file_limit_exceeded" msgid="6612109860149473930">"Δεν είναι δυνατή η μεταφορά αρχείων που ξεπερνούν τα 4 GB"</string>
     <string name="bluetooth_connect_action" msgid="2319449093046720209">"Σύνδεση σε Bluetooth"</string>
     <string name="bluetooth_enabled_apm_title" msgid="6914461147844949044">"Bluetooth ενεργοποιημένο σε λειτουργία πτήσης"</string>
-    <string name="bluetooth_enabled_apm_message" msgid="8409900562494838113">"Αν διατηρήσετε το Bluetooth ενεργοποιημένο, το τηλέφωνό σας θα θυμάται να το διατηρήσει ενεργοποιημένο την επόμενη φορά που θα βρεθεί σε λειτουργία πτήσης"</string>
+    <string name="bluetooth_enabled_apm_message" msgid="6168686193308136881">"Αν διατηρήσετε το Bluetooth ενεργοποιημένο, η συσκευή σας θα θυμάται να το διατηρήσει ενεργοποιημένο την επόμενη φορά που θα βρεθεί σε λειτουργία πτήσης"</string>
     <string name="bluetooth_stays_on_title" msgid="39720820955212918">"Το Bluetooth παραμένει ενεργό"</string>
-    <string name="bluetooth_stays_on_message" msgid="7142453371222249965">"Το τηλέφωνο θυμάται να διατηρεί ενεργοποιημένο το Bluetooth σε λειτουργία πτήσης. Απενεργοποιήστε το Bluetooth αν δεν θέλετε να παραμένει ενεργοποιημένο."</string>
+    <string name="bluetooth_stays_on_message" msgid="3669663452593157737">"Η συσκευή σας θυμάται να διατηρεί ενεργοποιημένο το Bluetooth σε λειτουργία πτήσης. Απενεργοποιήστε το Bluetooth αν δεν θέλετε να παραμένει ενεργοποιημένο."</string>
     <string name="bluetooth_and_wifi_stays_on_title" msgid="5821932798860821244">"Το Wi-Fi και το Bluetooth παραμένουν ενεργοποιημένα"</string>
-    <string name="bluetooth_and_wifi_stays_on_message" msgid="2390749828997719812">"Το τηλέφωνο θυμάται να διατηρεί ενεργοποιημένο το Wi‑Fi και το Bluetooth σε λειτουργία πτήσης. Απενεργοποιήστε το Wi-Fi και το Bluetooth αν δεν θέλετε να παραμένουν ενεργοποιημένα."</string>
+    <string name="bluetooth_and_wifi_stays_on_message" msgid="7848565203843882558">"Η συσκευή θυμάται να διατηρεί ενεργοποιημένο το Wi‑Fi και το Bluetooth σε λειτουργία πτήσης. Απενεργοποιήστε το Wi-Fi και το Bluetooth αν δεν θέλετε να παραμένουν ενεργοποιημένα."</string>
+    <string name="bluetooth_enabled_auto_on_title" msgid="1799541656310353393">"Το Bluetooth ενεργοποιήθηκε αυτόματα"</string>
+    <string name="bluetooth_enabled_auto_on_message" msgid="1070556457440100730">"Η εναλλαγή της λειτουργίας αυτόματης επανεκκίνησης μπορεί να γίνει από τις Ρυθμίσεις Bluetooth."</string>
+    <string name="bluetooth_disable_auto_on" msgid="1085026923461565937">"Απενεργοποίηση"</string>
+    <string name="bluetooth_notification_group" msgid="7251886707585872194">"Αυτόματη αλλαγή κατάστασης Bluetooth"</string>
 </resources>

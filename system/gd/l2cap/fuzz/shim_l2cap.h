@@ -37,17 +37,14 @@ namespace bluetooth {
 namespace shim {
 namespace {
 class ShimL2capFuzz {
- public:
+public:
   uint16_t CreateConnection(uint16_t psm, hci::Address device_address) {
     std::promise<uint16_t> promise;
     auto future = promise.get_future();
 
     fuzz_l2cap_classic_module_->GetDynamicChannelManager()->ConnectChannel(
-        device_address,
-        {},
-        psm,
-        handler_->BindOn(this, &ShimL2capFuzz::OnConnectionComplete),
-        handler_->BindOnceOn(this, &ShimL2capFuzz::OnConnectionFail));
+            device_address, {}, psm, handler_->BindOn(this, &ShimL2capFuzz::OnConnectionComplete),
+            handler_->BindOnceOn(this, &ShimL2capFuzz::OnConnectionFail));
 
     return future.get();
   }
@@ -57,9 +54,11 @@ class ShimL2capFuzz {
   void OnConnectionFail(l2cap::classic::DynamicChannelManager::ConnectionResult result) {}
 
   ShimL2capFuzz(FuzzedDataProvider* fdp) {
-    hci::fuzz::FuzzHciLayer* fuzzHci = fake_registry_.Inject<hci::fuzz::FuzzHciLayer>(&hci::HciLayer::Factory);
+    hci::fuzz::FuzzHciLayer* fuzzHci =
+            fake_registry_.Inject<hci::fuzz::FuzzHciLayer>(&hci::HciLayer::Factory);
     fuzz_l2cap_classic_module_ = new FuzzL2capClassicModule();
-    fake_registry_.InjectTestModule(&l2cap::classic::L2capClassicModule::Factory, fuzz_l2cap_classic_module_);
+    fake_registry_.InjectTestModule(&l2cap::classic::L2capClassicModule::Factory,
+                                    fuzz_l2cap_classic_module_);
     fake_registry_.Start<l2cap::classic::L2capClassicModule>();
 
     // The autoreply is needed to prevent it from hanging.
@@ -69,22 +68,22 @@ class ShimL2capFuzz {
 
     // Create the LinkManager
     handler_ = std::unique_ptr<os::Handler>(new os::Handler(&thread_));
-    dynamic_channel_impl = std::unique_ptr<l2cap::classic::internal::DynamicChannelServiceManagerImpl>(
-        new l2cap::classic::internal::DynamicChannelServiceManagerImpl(handler_.get()));
+    dynamic_channel_impl =
+            std::unique_ptr<l2cap::classic::internal::DynamicChannelServiceManagerImpl>(
+                    new l2cap::classic::internal::DynamicChannelServiceManagerImpl(handler_.get()));
     fixed_channel_impl = std::unique_ptr<l2cap::classic::internal::FixedChannelServiceManagerImpl>(
-        new l2cap::classic::internal::FixedChannelServiceManagerImpl(handler_.get()));
-    parameter_provider = std::unique_ptr<l2cap::internal::ParameterProvider>(new l2cap::internal::ParameterProvider());
-    link_manager = std::unique_ptr<l2cap::classic::internal::LinkManager>(new l2cap::classic::internal::LinkManager(
-        handler_.get(), acl_manager_, fixed_channel_impl.get(), dynamic_channel_impl.get(), parameter_provider.get()));
+            new l2cap::classic::internal::FixedChannelServiceManagerImpl(handler_.get()));
+    parameter_provider = std::unique_ptr<l2cap::internal::ParameterProvider>(
+            new l2cap::internal::ParameterProvider());
+    link_manager = std::unique_ptr<l2cap::classic::internal::LinkManager>(
+            new l2cap::classic::internal::LinkManager(
+                    handler_.get(), acl_manager_, fixed_channel_impl.get(),
+                    dynamic_channel_impl.get(), parameter_provider.get()));
   }
 
-  ~ShimL2capFuzz() {
-    handler_->Clear();
-  }
+  ~ShimL2capFuzz() { handler_->Clear(); }
 
-  void stopRegistry() {
-    fake_registry_.WaitForIdleAndStopAll();
-  }
+  void stopRegistry() { fake_registry_.WaitForIdleAndStopAll(); }
 
   std::promise<void> connection_complete_promise_;
 
@@ -97,7 +96,7 @@ class ShimL2capFuzz {
   std::unique_ptr<l2cap::classic::internal::LinkManager> link_manager;
   std::unique_ptr<l2cap::internal::ParameterProvider> parameter_provider;
 
- private:
+private:
   FuzzTestModuleRegistry fake_registry_;
   os::Thread& thread_ = fake_registry_.GetTestThread();
 };

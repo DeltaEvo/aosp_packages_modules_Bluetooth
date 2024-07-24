@@ -29,14 +29,11 @@
 #include "hci/facade/le_advertising_manager_facade.h"
 #include "hci/facade/le_initiator_address_facade.h"
 #include "hci/facade/le_scanning_manager_facade.h"
-#include "iso/facade.h"
 #include "l2cap/classic/facade.h"
 #include "l2cap/le/facade.h"
 #include "neighbor/facade/facade.h"
 #include "os/log.h"
 #include "os/thread.h"
-#include "security/facade.h"
-#include "shim/facade/facade.h"
 #include "stack_manager.h"
 
 namespace bluetooth {
@@ -47,13 +44,12 @@ using ::bluetooth::grpc::GrpcModule;
 using ::bluetooth::os::Thread;
 
 class RootFacadeService : public ::blueberry::facade::RootFacade::Service {
- public:
+public:
   explicit RootFacadeService(int grpc_port) : grpc_port_(grpc_port) {}
 
-  ::grpc::Status StartStack(
-      ::grpc::ServerContext* /* context */,
-      const ::blueberry::facade::StartStackRequest* request,
-      ::blueberry::facade::StartStackResponse* /* response */) override {
+  ::grpc::Status StartStack(::grpc::ServerContext* /* context */,
+                            const ::blueberry::facade::StartStackRequest* request,
+                            ::blueberry::facade::StartStackResponse* /* response */) override {
     if (is_running_) {
       return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT, "stack is running");
     }
@@ -80,7 +76,6 @@ class RootFacadeService : public ::blueberry::facade::RootFacade::Service {
         modules.add<::bluetooth::hci::facade::LeInitiatorAddressFacadeModule>();
         modules.add<::bluetooth::hci::facade::LeScanningManagerFacadeModule>();
         modules.add<::bluetooth::neighbor::facade::NeighborFacadeModule>();
-        modules.add<::bluetooth::iso::IsoModuleFacadeModule>();
         break;
       case BluetoothModule::L2CAP:
         modules.add<::bluetooth::hci::facade::ControllerFacadeModule>();
@@ -91,21 +86,16 @@ class RootFacadeService : public ::blueberry::facade::RootFacade::Service {
         modules.add<::bluetooth::l2cap::classic::L2capClassicModuleFacadeModule>();
         modules.add<::bluetooth::l2cap::le::L2capLeModuleFacadeModule>();
         modules.add<::bluetooth::hci::facade::HciFacadeModule>();
-        modules.add<::bluetooth::iso::IsoModuleFacadeModule>();
         break;
       case BluetoothModule::SECURITY:
         modules.add<::bluetooth::facade::ReadOnlyPropertyServerModule>();
         modules.add<::bluetooth::hci::facade::ControllerFacadeModule>();
-        modules.add<::bluetooth::security::SecurityModuleFacadeModule>();
         modules.add<::bluetooth::neighbor::facade::NeighborFacadeModule>();
         modules.add<::bluetooth::l2cap::classic::L2capClassicModuleFacadeModule>();
         modules.add<::bluetooth::hci::facade::HciFacadeModule>();
         modules.add<::bluetooth::hci::facade::ControllerFacadeModule>();
         modules.add<::bluetooth::hci::facade::LeAdvertisingManagerFacadeModule>();
         modules.add<::bluetooth::hci::facade::LeScanningManagerFacadeModule>();
-        break;
-      case BluetoothModule::SHIM:
-        modules.add<::bluetooth::shim::facade::ShimFacadeModule>();
         break;
       default:
         return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT, "invalid module under test");
@@ -117,16 +107,16 @@ class RootFacadeService : public ::blueberry::facade::RootFacade::Service {
     GrpcModule* grpc_module = stack_manager_.GetInstance<GrpcModule>();
     grpc_module->StartServer("0.0.0.0", grpc_port_);
 
-    grpc_loop_thread_ = std::make_unique<std::thread>([grpc_module] { grpc_module->RunGrpcLoop(); });
+    grpc_loop_thread_ =
+            std::make_unique<std::thread>([grpc_module] { grpc_module->RunGrpcLoop(); });
     is_running_ = true;
 
     return ::grpc::Status::OK;
   }
 
-  ::grpc::Status StopStack(
-      ::grpc::ServerContext* /* context */,
-      const ::blueberry::facade::StopStackRequest* /* request */,
-      ::blueberry::facade::StopStackResponse* /* response */) override {
+  ::grpc::Status StopStack(::grpc::ServerContext* /* context */,
+                           const ::blueberry::facade::StopStackRequest* /* request */,
+                           ::blueberry::facade::StopStackResponse* /* response */) override {
     if (!is_running_) {
       return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT, "stack is not running");
     }
@@ -141,7 +131,7 @@ class RootFacadeService : public ::blueberry::facade::RootFacade::Service {
     return ::grpc::Status::OK;
   }
 
- private:
+private:
   std::unique_ptr<Thread> stack_thread_ = nullptr;
   bool is_running_ = false;
   std::unique_ptr<std::thread> grpc_loop_thread_ = nullptr;
@@ -159,8 +149,9 @@ GrpcRootServer::GrpcRootServer() : pimpl_(new impl()) {}
 
 GrpcRootServer::~GrpcRootServer() = default;
 
-void GrpcRootServer::StartServer(const std::string& address, int grpc_root_server_port, int grpc_port) {
-  ASSERT(!pimpl_->started_);
+void GrpcRootServer::StartServer(const std::string& address, int grpc_root_server_port,
+                                 int grpc_port) {
+  log::assert_that(!pimpl_->started_, "assert failed: !pimpl_->started_");
   pimpl_->started_ = true;
 
   std::string listening_port = address + ":" + std::to_string(grpc_root_server_port);
@@ -171,17 +162,17 @@ void GrpcRootServer::StartServer(const std::string& address, int grpc_root_serve
   builder.AddListeningPort(listening_port, ::grpc::InsecureServerCredentials());
   pimpl_->server_ = builder.BuildAndStart();
 
-  ASSERT(pimpl_->server_ != nullptr);
+  log::assert_that(pimpl_->server_ != nullptr, "assert failed: pimpl_->server_ != nullptr");
 }
 
 void GrpcRootServer::StopServer() {
-  ASSERT(pimpl_->started_);
+  log::assert_that(pimpl_->started_, "assert failed: pimpl_->started_");
   pimpl_->server_->Shutdown();
   pimpl_->started_ = false;
 }
 
 void GrpcRootServer::RunGrpcLoop() {
-  ASSERT(pimpl_->started_);
+  log::assert_that(pimpl_->started_, "assert failed: pimpl_->started_");
   pimpl_->server_->Wait();
 }
 

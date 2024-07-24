@@ -17,6 +17,9 @@
 
 package android.bluetooth;
 
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
+import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
+
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -387,7 +390,9 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
 
     /** @hide */
     public void close() {
-        if (VDBG) log("close()");
+        if (VDBG) {
+            Log.d(TAG, "close()");
+        }
 
         mAdapter.closeProfileProxy(this);
     }
@@ -475,7 +480,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
      * @hide
      */
     @SuppressLint("ExecutorRegistration")
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public boolean registerBearer(
             @Nullable String uci,
             @NonNull List<String> uriSchemes,
@@ -539,7 +544,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
      *
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void unregisterBearer() {
         if (DBG) {
             Log.d(TAG, "unregisterBearer");
@@ -570,7 +575,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
      * @return ccid Content Control ID value
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public int getContentControlId() {
         return mCcid;
     }
@@ -585,7 +590,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
      * @param call Newly added call
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void onCallAdded(@NonNull BluetoothLeCall call) {
         if (DBG) {
             Log.d(TAG, "onCallAdded: call=" + call);
@@ -618,7 +623,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
      * @param reason Call termination reason
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void onCallRemoved(@NonNull UUID callId, @TerminationReason int reason) {
         if (DBG) {
             Log.d(TAG, "callRemoved: callId=" + callId);
@@ -650,7 +655,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
      * @param state Call state
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void onCallStateChanged(@NonNull UUID callId, @BluetoothLeCall.State int state) {
         if (DBG) {
             Log.d(TAG, "callStateChanged: callId=" + callId + " state=" + state);
@@ -680,7 +685,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
      * @param calls current calls list
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void currentCallsList(@NonNull List<BluetoothLeCall> calls) {
         final IBluetoothLeCallControl service = getService();
         if (service == null) {
@@ -709,7 +714,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
      * @param technology Network technology
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void networkStateChanged(@NonNull String provider, int technology) {
         if (DBG) {
             Log.d(TAG, "networkStateChanged: provider=" + provider + ", technology=" + technology);
@@ -749,7 +754,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
      * @param requestId The ID of the request that was received with the callback
      * @param result The result of the request to be sent to the remote devices
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void requestResult(int requestId, @Result int result) {
         if (DBG) {
             Log.d(TAG, "requestResult: requestId=" + requestId + " result=" + result);
@@ -769,9 +774,5 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
         } catch (RemoteException e) {
             Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
         }
-    }
-
-    private static void log(String msg) {
-        Log.d(TAG, msg);
     }
 }

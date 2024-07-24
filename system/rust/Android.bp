@@ -23,8 +23,6 @@ rust_defaults {
     ],
     static_libs: [
         "libbt_shim_bridge",
-        "libbt_shim_ffi",
-
         "libchrome",
         "libevent",
         "libmodpb64",
@@ -36,14 +34,11 @@ rust_defaults {
     rustlibs: [
         "libanyhow",
         "libbitflags",
-        "libbt_common_only_init_flags",
+        "libbt_common",
+        "libbt_shim",
         "libcxx",
         "liblog_rust",
         "libscopeguard",
-
-        // needed to work around duplicate symbols
-        // caused by bug in Soong
-        "libbt_shim",
     ],
     whole_static_libs: [
         "libbluetooth_core_rs_bridge",

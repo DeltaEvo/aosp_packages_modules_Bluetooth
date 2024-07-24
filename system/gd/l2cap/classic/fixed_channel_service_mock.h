@@ -15,9 +15,9 @@
  */
 #pragma once
 
-#include "l2cap/classic/fixed_channel_service.h"
-
 #include <gmock/gmock.h>
+
+#include "l2cap/classic/fixed_channel_service.h"
 
 // Unit test interfaces
 namespace bluetooth {
@@ -26,9 +26,10 @@ namespace classic {
 namespace testing {
 
 class MockFixedChannelService : public FixedChannelService {
- public:
-  MockFixedChannelService() : FixedChannelService(){};
-  MOCK_METHOD(void, Unregister, (OnUnregisteredCallback on_unregistered, os::Handler* on_unregistered_handler));
+public:
+  MockFixedChannelService() : FixedChannelService() {}
+  MOCK_METHOD(void, Unregister,
+              (OnUnregisteredCallback on_unregistered, os::Handler* on_unregistered_handler));
 };
 
 }  // namespace testing

@@ -15,12 +15,12 @@
  */
 #pragma once
 
+#include <gmock/gmock.h>
+
 #include "hci/acl_manager_mock.h"
 #include "hci/address.h"
 #include "l2cap/classic/internal/link.h"
 #include "l2cap/internal/scheduler_mock.h"
-
-#include <gmock/gmock.h>
 
 // Unit test interfaces
 namespace bluetooth {
@@ -32,20 +32,19 @@ namespace testing {
 using hci::testing::MockClassicAclConnection;
 
 class MockLink : public Link {
- public:
+public:
   explicit MockLink(os::Handler* handler, l2cap::internal::ParameterProvider* parameter_provider)
-      : Link(handler, std::make_unique<MockClassicAclConnection>(), parameter_provider, nullptr, nullptr, nullptr){};
-  explicit MockLink(
-      os::Handler* handler,
-      l2cap::internal::ParameterProvider* parameter_provider,
-      std::unique_ptr<hci::acl_manager::ClassicAclConnection> acl_connection,
-      LinkManager* /* link_manager */)
-      : Link(handler, std::move(acl_connection), parameter_provider, nullptr, nullptr, nullptr){};
+      : Link(handler, std::make_unique<MockClassicAclConnection>(), parameter_provider, nullptr,
+             nullptr, nullptr) {}
+  explicit MockLink(os::Handler* handler, l2cap::internal::ParameterProvider* parameter_provider,
+                    std::unique_ptr<hci::acl_manager::ClassicAclConnection> acl_connection,
+                    LinkManager* /* link_manager */)
+      : Link(handler, std::move(acl_connection), parameter_provider, nullptr, nullptr, nullptr) {}
   MOCK_METHOD(hci::AddressWithType, GetDevice, (), (const, override));
   MOCK_METHOD(void, OnAclDisconnected, (hci::ErrorCode status), (override));
   MOCK_METHOD(void, Disconnect, (), (override));
-  MOCK_METHOD(std::shared_ptr<l2cap::internal::DynamicChannelImpl>, AllocateDynamicChannel, (Psm psm, Cid cid),
-              (override));
+  MOCK_METHOD(std::shared_ptr<l2cap::internal::DynamicChannelImpl>, AllocateDynamicChannel,
+              (Psm psm, Cid cid), (override));
 
   MOCK_METHOD(bool, IsFixedChannelAllocated, (Cid cid), (override));
   MOCK_METHOD(void, RefreshRefCount, (), (override));

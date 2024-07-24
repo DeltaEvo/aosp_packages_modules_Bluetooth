@@ -20,11 +20,13 @@ import static java.util.Objects.requireNonNull;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothDevice.AddressType;
 import android.bluetooth.BluetoothStatusCodes;
+import android.bluetooth.annotations.RequiresBluetoothScanPermission;
 import android.bluetooth.le.ScanRecord.AdvertisingDataType;
 import android.os.Parcel;
 import android.os.ParcelUuid;
@@ -490,7 +492,7 @@ public final class ScanFilter implements Parcelable {
         }
 
         // Manufacturer data match.
-        if (mManufacturerId >= 0) {
+        if (mManufacturerId >= 0 && mManufacturerData != null) {
             if (!matchesPartialData(
                     mManufacturerData,
                     mManufacturerDataMask,
@@ -885,7 +887,7 @@ public final class ScanFilter implements Parcelable {
          *     uuidMask} is not {@code null}.
          */
         public Builder setServiceUuid(ParcelUuid serviceUuid, ParcelUuid uuidMask) {
-            if (mUuidMask != null && mServiceUuid == null) {
+            if (uuidMask != null && serviceUuid == null) {
                 throw new IllegalArgumentException("uuid is null while uuidMask is not null!");
             }
             mServiceUuid = serviceUuid;
@@ -956,14 +958,14 @@ public final class ScanFilter implements Parcelable {
             if (serviceDataUuid == null) {
                 throw new IllegalArgumentException("serviceDataUuid is null");
             }
-            if (mServiceDataMask != null) {
-                if (mServiceData == null) {
+            if (serviceDataMask != null) {
+                if (serviceData == null) {
                     throw new IllegalArgumentException(
                             "serviceData is null while serviceDataMask is not null");
                 }
-                // Since the mServiceDataMask is a bit mask for mServiceData, the lengths of the two
-                // byte array need to be the same.
-                if (mServiceData.length != mServiceDataMask.length) {
+                // Since the serviceDataMask is a bit mask for serviceData, the lengths of the two
+                // byte arrays need to be the same.
+                if (serviceData.length != serviceDataMask.length) {
                     throw new IllegalArgumentException(
                             "size mismatch for service data and service data mask");
                 }
@@ -1005,14 +1007,14 @@ public final class ScanFilter implements Parcelable {
             if (manufacturerData != null && manufacturerId < 0) {
                 throw new IllegalArgumentException("invalid manufacture id");
             }
-            if (mManufacturerDataMask != null) {
-                if (mManufacturerData == null) {
+            if (manufacturerDataMask != null) {
+                if (manufacturerData == null) {
                     throw new IllegalArgumentException(
                             "manufacturerData is null while manufacturerDataMask is not null");
                 }
-                // Since the mManufacturerDataMask is a bit mask for mManufacturerData, the lengths
-                // of the two byte array need to be the same.
-                if (mManufacturerData.length != mManufacturerDataMask.length) {
+                // Since the manufacturerDataMask is a bit mask for manufacturerData, the lengths
+                // of the two byte arrays need to be the same.
+                if (manufacturerData.length != manufacturerDataMask.length) {
                     throw new IllegalArgumentException(
                             "size mismatch for manufacturerData and manufacturerDataMask");
                 }
@@ -1037,6 +1039,12 @@ public final class ScanFilter implements Parcelable {
          * @hide
          */
         @SystemApi
+        @RequiresBluetoothScanPermission
+        @RequiresPermission(
+                allOf = {
+                    android.Manifest.permission.BLUETOOTH_SCAN,
+                    android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                })
         @NonNull
         public Builder setTransportBlockFilter(@NonNull TransportBlockFilter transportBlockFilter) {
             BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
@@ -1075,16 +1083,16 @@ public final class ScanFilter implements Parcelable {
             if (advertisingDataType < 0) {
                 throw new IllegalArgumentException("invalid advertising data type");
             }
-            if (mAdvertisingDataMask != null) {
-                if (mAdvertisingData == null) {
+            if (advertisingDataMask != null) {
+                if (advertisingData == null) {
                     throw new IllegalArgumentException(
-                            "mAdvertisingData is null while mAdvertisingDataMask is not null");
+                            "advertisingData is null while advertisingDataMask is not null");
                 }
-                // Since the mAdvertisingDataMask is a bit mask for mAdvertisingData, the lengths
-                // of the two byte array need to be the same.
-                if (mAdvertisingData.length != mAdvertisingDataMask.length) {
+                // Since the advertisingDataMask is a bit mask for advertisingData, the lengths
+                // of the two byte arrays need to be the same.
+                if (advertisingData.length != advertisingDataMask.length) {
                     throw new IllegalArgumentException(
-                            "size mismatch for mAdvertisingData and mAdvertisingDataMask");
+                            "size mismatch for advertisingData and advertisingDataMask");
                 }
             }
             mAdvertisingDataType = advertisingDataType;

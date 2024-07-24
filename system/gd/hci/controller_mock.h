@@ -15,16 +15,14 @@
  */
 #pragma once
 
+#include <gmock/gmock.h>
+
 #include <cstdint>
 
-#include "common/contextual_callback.h"
 #include "hci/address.h"
 #include "hci/controller.h"
 #include "hci/hci_packets.h"
-#include "module.h"
-#include "os/handler.h"
-
-#include <gmock/gmock.h>
+#include "hci/le_rand_callback.h"
 
 // Unit test interfaces
 namespace bluetooth {
@@ -32,7 +30,7 @@ namespace hci {
 namespace testing {
 
 class MockController : public Controller {
- public:
+public:
   MOCK_METHOD(void, RegisterCompletedAclPacketsCallback, (CompletedAclPacketsCallback cb));
   MOCK_METHOD(void, UnregisterCompletedAclPacketsCallback, ());
   MOCK_METHOD(void, RegisterCompletedMonitorAclPacketsCallback, (CompletedAclPacketsCallback cb));
@@ -110,6 +108,7 @@ class MockController : public Controller {
   MOCK_METHOD(bool, SupportsBlePeriodicAdvertisingAdi, (), (const));
   MOCK_METHOD(bool, SupportsBleConnectionSubrating, (), (const));
   MOCK_METHOD(bool, SupportsBleConnectionSubratingHost, (), (const));
+  MOCK_METHOD(bool, SupportsBleChannelSounding, (), (const));
   MOCK_METHOD(uint16_t, GetAclPacketLength, (), (const));
   MOCK_METHOD(uint16_t, GetNumAclPacketBuffers, (), (const));
   MOCK_METHOD(uint8_t, GetScoPacketLength, (), (const));
@@ -120,25 +119,20 @@ class MockController : public Controller {
   MOCK_METHOD(void, LeRand, (LeRandCallback cb));
   MOCK_METHOD(void, SetEventFilterClearAll, ());
   MOCK_METHOD(void, SetEventFilterInquiryResultAllDevices, ());
-  MOCK_METHOD(
-      void,
-      SetEventFilterInquiryResultClassOfDevice,
-      (ClassOfDevice class_of_device, ClassOfDevice class_of_device_mask));
+  MOCK_METHOD(void, SetEventFilterInquiryResultClassOfDevice,
+              (ClassOfDevice class_of_device, ClassOfDevice class_of_device_mask));
   MOCK_METHOD(void, SetEventFilterInquiryResultAddress, (Address address));
   MOCK_METHOD(void, SetEventFilterConnectionSetupAllDevices, (AutoAcceptFlag auto_accept_flag));
-  MOCK_METHOD(
-      void,
-      SetEventFilterConnectionSetupClassOfDevice,
-      (ClassOfDevice class_of_device, ClassOfDevice class_of_device_mask, AutoAcceptFlag auto_accept_flag));
-  MOCK_METHOD(void, SetEventFilterConnectionSetupAddress, (Address address, AutoAcceptFlag auto_accept_flag));
+  MOCK_METHOD(void, SetEventFilterConnectionSetupClassOfDevice,
+              (ClassOfDevice class_of_device, ClassOfDevice class_of_device_mask,
+               AutoAcceptFlag auto_accept_flag));
+  MOCK_METHOD(void, SetEventFilterConnectionSetupAddress,
+              (Address address, AutoAcceptFlag auto_accept_flag));
   MOCK_METHOD(void, WriteLocalName, (std::string local_name));
-  MOCK_METHOD(
-      void,
-      HostBufferSize,
-      (uint16_t host_acl_data_packet_length,
-       uint8_t host_synchronous_data_packet_length,
-       uint16_t host_total_num_acl_data_packets,
-       uint16_t host_total_num_synchronous_data_packets));
+  MOCK_METHOD(void, HostBufferSize,
+              (uint16_t host_acl_data_packet_length, uint8_t host_synchronous_data_packet_length,
+               uint16_t host_total_num_acl_data_packets,
+               uint16_t host_total_num_synchronous_data_packets));
   // LE controller commands
   MOCK_METHOD(void, LeSetEventMask, (uint64_t le_event_mask));
   MOCK_METHOD(LeBufferSize, GetLeBufferSize, (), (const));
@@ -157,11 +151,8 @@ class MockController : public Controller {
   MOCK_METHOD(bool, IsSupported, (OpCode op_code), (const));
 
   MOCK_METHOD(uint32_t, GetDabSupportedCodecs, (), (const));
-  MOCK_METHOD(
-      (const std::array<DynamicAudioBufferCodecCapability, 32>&),
-      GetDabCodecCapabilities,
-      (),
-      (const));
+  MOCK_METHOD((const std::array<DynamicAudioBufferCodecCapability, 32>&), GetDabCodecCapabilities,
+              (), (const));
   MOCK_METHOD(void, SetDabAudioBufferTime, (uint16_t buffer_time_ms));
 };
 

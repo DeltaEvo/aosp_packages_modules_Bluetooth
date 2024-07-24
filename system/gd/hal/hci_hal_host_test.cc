@@ -16,6 +16,7 @@
 
 #include "hal/hci_hal_host.h"
 
+#include <bluetooth/log.h>
 #include <fcntl.h>
 #include <gtest/gtest.h>
 #include <netdb.h>
@@ -57,7 +58,7 @@ using H4Packet = std::vector<uint8_t>;
 std::queue<std::pair<uint8_t, HciPacket>> incoming_packets_queue_;
 
 class TestHciHalCallbacks : public HciHalCallbacks {
- public:
+public:
   void hciEventReceived(HciPacket packet) override {
     incoming_packets_queue_.emplace(kH4Event, packet);
   }
@@ -77,7 +78,7 @@ class TestHciHalCallbacks : public HciHalCallbacks {
 
 // An implementation of rootcanal desktop HCI server which listens on localhost:kListeningPort
 class FakeRootcanalDesktopHciServer {
- public:
+public:
   FakeRootcanalDesktopHciServer() {
     struct sockaddr_in listen_address;
     socklen_t sockaddr_in_size = sizeof(struct sockaddr_in);
@@ -85,7 +86,7 @@ class FakeRootcanalDesktopHciServer {
 
     RUN_NO_INTR(listen_fd_ = socket(AF_INET, SOCK_STREAM, 0));
     if (listen_fd_ < 0) {
-      LOG_WARN("Error creating socket for test channel.");
+      log::warn("Error creating socket for test channel.");
       return;
     }
 
@@ -94,21 +95,19 @@ class FakeRootcanalDesktopHciServer {
     listen_address.sin_addr.s_addr = htonl(INADDR_ANY);
 
     if (bind(listen_fd_, reinterpret_cast<sockaddr*>(&listen_address), sockaddr_in_size) < 0) {
-      LOG_WARN("Error binding test channel listener socket to address.");
+      log::warn("Error binding test channel listener socket to address.");
       close(listen_fd_);
       return;
     }
 
     if (listen(listen_fd_, 1) < 0) {
-      LOG_WARN("Error listening for test channel.");
+      log::warn("Error listening for test channel.");
       close(listen_fd_);
       return;
     }
   }
 
-  ~FakeRootcanalDesktopHciServer() {
-    close(listen_fd_);
-  }
+  ~FakeRootcanalDesktopHciServer() { close(listen_fd_); }
 
   int Accept() {
     int accept_fd;
@@ -118,15 +117,15 @@ class FakeRootcanalDesktopHciServer {
     int flags = fcntl(accept_fd, F_GETFL, NULL);
     int ret = fcntl(accept_fd, F_SETFL, flags | O_NONBLOCK);
     if (ret == -1) {
-      LOG_ERROR("Can't fcntl");
+      log::error("Can't fcntl");
       return -1;
     }
 
     if (accept_fd < 0) {
-      LOG_WARN("Error accepting test channel connection errno=%d (%s).", errno, strerror(errno));
+      log::warn("Error accepting test channel connection errno={} ({}).", errno, strerror(errno));
 
       if (errno != EAGAIN && errno != EWOULDBLOCK) {
-        LOG_ERROR("Closing listen_fd_ (won't try again).");
+        log::error("Closing listen_fd_ (won't try again).");
         close(listen_fd_);
         return -1;
       }
@@ -135,12 +134,12 @@ class FakeRootcanalDesktopHciServer {
     return accept_fd;
   }
 
- private:
+private:
   int listen_fd_ = -1;
 };
 
 class HciHalRootcanalTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
     thread_ = new Thread("test_thread", Thread::Priority::NORMAL);
 
@@ -148,7 +147,8 @@ class HciHalRootcanalTest : public ::testing::Test {
     fake_server_ = new FakeRootcanalDesktopHciServer;
     hal_ = fake_registry_.Start<HciHal>(thread_);
     hal_->registerIncomingPacketCallback(&callbacks_);
-    fake_server_socket_ = fake_server_->Accept();  // accept() after client is connected to avoid blocking
+    fake_server_socket_ =
+            fake_server_->Accept();  // accept() after client is connected to avoid blocking
     std::queue<std::pair<uint8_t, HciPacket>> empty;
     std::swap(incoming_packets_queue_, empty);
   }
@@ -175,11 +175,14 @@ class HciHalRootcanalTest : public ::testing::Test {
   Thread* thread_;
 };
 
-void check_packet_equal(std::pair<uint8_t, HciPacket> hci_packet1_type_data_pair, H4Packet h4_packet2) {
+void check_packet_equal(std::pair<uint8_t, HciPacket> hci_packet1_type_data_pair,
+                        H4Packet h4_packet2) {
   auto packet1_hci_size = hci_packet1_type_data_pair.second.size();
   ASSERT_EQ(packet1_hci_size + 1, h4_packet2.size());
   ASSERT_EQ(hci_packet1_type_data_pair.first, h4_packet2[0]);
-  ASSERT_EQ(memcmp(hci_packet1_type_data_pair.second.data(), h4_packet2.data() + 1, packet1_hci_size), 0);
+  ASSERT_EQ(
+          memcmp(hci_packet1_type_data_pair.second.data(), h4_packet2.data() + 1, packet1_hci_size),
+          0);
 }
 
 HciPacket make_sample_hci_cmd_pkt(uint8_t parameter_total_length) {
@@ -415,7 +418,8 @@ TEST_F(HciHalRootcanalTest, send_multiple_acl_sequential) {
 
 TEST(HciHalHidlTest, serialize) {
   std::vector<uint8_t> bytes = {1, 2, 3, 4, 5, 6, 7, 8, 9};
-  auto packet_bytes = hal::SerializePacket(std::unique_ptr<packet::BasePacketBuilder>(new packet::RawBuilder(bytes)));
+  auto packet_bytes = hal::SerializePacket(
+          std::unique_ptr<packet::BasePacketBuilder>(new packet::RawBuilder(bytes)));
   ASSERT_EQ(bytes, packet_bytes);
 }
 }  // namespace

@@ -8,7 +8,7 @@ use crate::{
     },
     packets::{
         AttChild, AttErrorCode, AttErrorResponseBuilder, AttFindByTypeValueRequestView,
-        AttFindByTypeValueResponseBuilder, AttOpcode, AttributeHandleRangeBuilder, Serializable,
+        AttFindByTypeValueResponseBuilder, AttOpcode, AttributeHandleRangeBuilder,
     },
 };
 
@@ -43,18 +43,16 @@ pub async fn handle_find_by_type_value_request(
             continue;
         }
         if let Ok(value) = db.read_attribute(handle).await {
-            if let Ok(data) = value.to_vec() {
-                if data == request.get_attribute_value().get_raw_payload().collect::<Vec<_>>() {
-                    // match found
-                    if !matches.push(AttributeHandleRangeBuilder {
-                        found_attribute_handle: handle.into(),
-                        group_end_handle: find_group_end(db, attr)
-                            .map(|attr| attr.handle)
-                            .unwrap_or(handle)
-                            .into(),
-                    }) {
-                        break;
-                    }
+            if value == request.get_attribute_value_iter().collect::<Vec<_>>() {
+                // match found
+                if !matches.push(AttributeHandleRangeBuilder {
+                    found_attribute_handle: handle.into(),
+                    group_end_handle: find_group_end(db, attr)
+                        .map(|attr| attr.handle)
+                        .unwrap_or(handle)
+                        .into(),
+                }) {
+                    break;
                 }
             }
         } else {
@@ -86,8 +84,8 @@ mod test {
                 test::test_att_db::TestAttDatabase,
             },
         },
-        packets::{AttAttributeDataChild, AttFindByTypeValueRequestBuilder},
-        utils::packet::{build_att_data, build_view_or_crash},
+        packets::AttFindByTypeValueRequestBuilder,
+        utils::packet::build_view_or_crash,
     };
 
     use super::*;
@@ -133,7 +131,7 @@ mod test {
             starting_handle: AttHandle(3).into(),
             ending_handle: AttHandle(5).into(),
             attribute_type: UUID.try_into().unwrap(),
-            attribute_value: build_att_data(AttAttributeDataChild::RawData(VALUE.into())),
+            attribute_value: VALUE.into(),
         });
         let response =
             tokio_test::block_on(handle_find_by_type_value_request(att_view.view(), 128, &db));
@@ -195,7 +193,7 @@ mod test {
             starting_handle: AttHandle(3).into(),
             ending_handle: AttHandle(5).into(),
             attribute_type: UUID.try_into().unwrap(),
-            attribute_value: build_att_data(AttAttributeDataChild::RawData(VALUE.into())),
+            attribute_value: VALUE.into(),
         });
         let response =
             tokio_test::block_on(handle_find_by_type_value_request(att_view.view(), 128, &db));
@@ -232,15 +230,13 @@ mod test {
             starting_handle: AttHandle(3).into(),
             ending_handle: AttHandle(1).into(),
             attribute_type: UUID.try_into().unwrap(),
-            attribute_value: build_att_data(AttAttributeDataChild::RawData(VALUE.into())),
+            attribute_value: VALUE.into(),
         });
         let response =
             tokio_test::block_on(handle_find_by_type_value_request(att_view.view(), 128, &db));
 
         // assert
-        let AttChild::AttErrorResponse(response) = response else {
-            unreachable!("{response:?}")
-        };
+        let AttChild::AttErrorResponse(response) = response else { unreachable!("{response:?}") };
         assert_eq!(
             response,
             AttErrorResponseBuilder {
@@ -268,15 +264,13 @@ mod test {
             starting_handle: AttHandle(4).into(),
             ending_handle: AttHandle(5).into(),
             attribute_type: UUID.try_into().unwrap(),
-            attribute_value: build_att_data(AttAttributeDataChild::RawData(VALUE.into())),
+            attribute_value: VALUE.into(),
         });
         let response =
             tokio_test::block_on(handle_find_by_type_value_request(att_view.view(), 128, &db));
 
         // assert: got ATTRIBUTE_NOT_FOUND erro
-        let AttChild::AttErrorResponse(response) = response else {
-            unreachable!("{response:?}")
-        };
+        let AttChild::AttErrorResponse(response) = response else { unreachable!("{response:?}") };
         assert_eq!(
             response,
             AttErrorResponseBuilder {
@@ -322,7 +316,7 @@ mod test {
             starting_handle: AttHandle(3).into(),
             ending_handle: AttHandle(4).into(),
             attribute_type: CHARACTERISTIC_UUID.try_into().unwrap(),
-            attribute_value: build_att_data(AttAttributeDataChild::RawData(VALUE.into())),
+            attribute_value: VALUE.into(),
         });
         let response =
             tokio_test::block_on(handle_find_by_type_value_request(att_view.view(), 128, &db));
@@ -370,7 +364,7 @@ mod test {
             starting_handle: AttHandle(3).into(),
             ending_handle: AttHandle(4).into(),
             attribute_type: UUID.try_into().unwrap(),
-            attribute_value: build_att_data(AttAttributeDataChild::RawData(VALUE.into())),
+            attribute_value: VALUE.into(),
         });
         let response =
             tokio_test::block_on(handle_find_by_type_value_request(att_view.view(), 5, &db));

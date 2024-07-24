@@ -18,7 +18,8 @@
 
 #include "test/headless/scan/scan.h"
 
-#include "base/logging.h"  // LOG() stdout and android log
+#include <bluetooth/log.h>
+
 #include "os/log.h"
 #include "test/headless/get_options.h"
 #include "test/headless/headless.h"
@@ -29,21 +30,24 @@
 #include "test/headless/stopwatch.h"
 
 using namespace bluetooth::test;
+using namespace bluetooth;
 using namespace std::chrono_literals;
 
 namespace {
 
 int start_scan([[maybe_unused]] unsigned int num_loops) {
-  LOG(INFO) << "Started Device Scan";
+  log::info("Started Device Scan");
 
-  ASSERT(bluetoothInterface.start_discovery() == BT_STATUS_SUCCESS);
+  log::assert_that(bluetoothInterface.start_discovery() == BT_STATUS_SUCCESS,
+                   "assert failed: bluetoothInterface.start_discovery() == "
+                   "BT_STATUS_SUCCESS");
   LOG_CONSOLE("Started inquiry - device discovery");
 
   headless::messenger::Context context{
-      .stop_watch = Stopwatch("Inquiry_timeout"),
-      .timeout = 1s,
-      .check_point = {},
-      .callbacks = {Callback::RemoteDeviceProperties, Callback::DeviceFound},
+          .stop_watch = Stopwatch("Inquiry_timeout"),
+          .timeout = 1s,
+          .check_point = {},
+          .callbacks = {Callback::RemoteDeviceProperties, Callback::DeviceFound},
   };
 
   while (context.stop_watch.LapMs() < 10000) {
@@ -55,23 +59,19 @@ int start_scan([[maybe_unused]] unsigned int num_loops) {
         switch (p->CallbackType()) {
           case Callback::RemoteDeviceProperties: {
             remote_device_properties_params_t* q =
-                static_cast<remote_device_properties_params_t*>(p.get());
+                    static_cast<remote_device_properties_params_t*>(p.get());
             for (const auto& p2 : q->properties()) {
-              LOG_CONSOLE("  %s prop:%s", p->Name().c_str(),
-                          p2->ToString().c_str());
+              LOG_CONSOLE("  %s prop:%s", p->Name().c_str(), p2->ToString().c_str());
             }
           } break;
           case Callback::DeviceFound: {
-            device_found_params_t* q =
-                static_cast<device_found_params_t*>(p.get());
+            device_found_params_t* q = static_cast<device_found_params_t*>(p.get());
             for (const auto& p2 : q->properties()) {
-              LOG_CONSOLE("  %s prop:%s", p->Name().c_str(),
-                          p2->ToString().c_str());
+              LOG_CONSOLE("  %s prop:%s", p->Name().c_str(), p2->ToString().c_str());
             }
           } break;
           default:
-            LOG_CONSOLE("WARN Received callback for unasked:%s",
-                        p->Name().c_str());
+            LOG_CONSOLE("WARN Received callback for unasked:%s", p->Name().c_str());
             break;
         }
       }
@@ -90,7 +90,5 @@ int bluetooth::test::headless::Scan::Run() {
     options_.Usage();
     return -1;
   }
-  return RunOnHeadlessStack<int>([this]() {
-    return start_scan(options_.loop_);
-  });
+  return RunOnHeadlessStack<int>([this]() { return start_scan(options_.loop_); });
 }

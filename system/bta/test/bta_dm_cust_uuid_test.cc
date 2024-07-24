@@ -19,54 +19,24 @@
 #include <gtest/gtest.h>
 
 #include "bta/dm/bta_dm_int.h"
-#include "bta/test/bta_base_test.h"
-#include "osi/include/allocator.h"
-#include "stack/include/bt_hdr.h"
-#include "stack/include/btm_status.h"
-#include "test/mock/mock_stack_btm_interface.h"
+#include "bta/test/bta_test_fixtures.h"
 #include "types/bluetooth/uuid.h"
 
 using bluetooth::Uuid;
 
-class BtaCustUuid : public BtaBaseTest {
- protected:
-  void SetUp() override {
-    BtaBaseTest::SetUp();
-    bta_dm_cb = {};
-    mock_btm_client_interface.eir.BTM_WriteEIR =
-        [](BT_HDR* p_buf) -> tBTM_STATUS {
-      osi_free(p_buf);
-      return BTM_SUCCESS;
-    };
-    mock_btm_client_interface.eir.BTM_GetEirSupportedServices =
-        [](uint32_t* p_eir_uuid, uint8_t** p, uint8_t max_num_uuid16,
-           uint8_t* p_num_uuid16) -> uint8_t { return 0; };
-    mock_btm_client_interface.eir.BTM_WriteEIR =
-        [](BT_HDR* p_buf) -> tBTM_STATUS {
-      osi_free(p_buf);
-      return BTM_SUCCESS;
-    };
-    mock_btm_client_interface.local.BTM_ReadLocalDeviceNameFromController =
-        [](tBTM_CMPL_CB* cb) -> tBTM_STATUS { return BTM_CMD_STARTED; };
-    mock_btm_client_interface.security.BTM_SecRegister =
-        [](const tBTM_APPL_INFO* p_cb_info) -> bool { return true; };
-  }
-  void TearDown() override { BtaBaseTest::TearDown(); }
-};
-
 namespace {
-  uint32_t handle1 = 1;
-  uint32_t handle2 = 2;
-  static const Uuid uuid1 = Uuid::From128BitBE(
-    Uuid::UUID128Bit{{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
-                      0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}});
-  static const Uuid uuid2 = Uuid::From128BitBE(
-    Uuid::UUID128Bit{{0x00, 0x00, 0x00, 0x00, 0x22, 0x22, 0x22, 0x22, 0x33,
-                      0x33, 0x55, 0x55, 0x55, 0x55, 0x55, 0x59}});
-}
+uint32_t handle1 = 1;
+uint32_t handle2 = 2;
+static const Uuid uuid1 =
+        Uuid::From128BitBE(Uuid::UUID128Bit{{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+                                             0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}});
+static const Uuid uuid2 =
+        Uuid::From128BitBE(Uuid::UUID128Bit{{0x00, 0x00, 0x00, 0x00, 0x22, 0x22, 0x22, 0x22, 0x33,
+                                             0x33, 0x55, 0x55, 0x55, 0x55, 0x55, 0x59}});
+}  // namespace
 
 // Test we can remove/add 128 bit custom UUID from/to bta_dm_cb.bta_custom_uuid
-TEST_F(BtaCustUuid, test_add_remove_cust_uuid) {
+TEST_F(BtaWithMocksTest, test_add_remove_cust_uuid) {
   tBTA_CUSTOM_UUID& curr0 = bta_dm_cb.bta_custom_uuid[0];
   tBTA_CUSTOM_UUID& curr1 = bta_dm_cb.bta_custom_uuid[1];
   tBTA_CUSTOM_UUID curr0_expect = {uuid1, handle1};

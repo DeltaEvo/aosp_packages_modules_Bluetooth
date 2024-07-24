@@ -11,6 +11,7 @@
 //!   all others
 
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::fs;
 use std::path::Path;
 
@@ -20,7 +21,7 @@ use glob::glob;
 use log::{debug, error, info, warn};
 
 const BT_LIBDIR: &str = "/var/lib/bluetooth";
-const FLOSS_CONF_FILE: &str = "/var/lib/bluetooth/bt_config.conf";
+pub const FLOSS_CONF_FILE: &str = "/var/lib/bluetooth/bt_config.conf";
 
 const ADAPTER_SECTION_NAME: &str = "Adapter";
 const GENERAL_SECTION_NAME: &str = "General";
@@ -47,6 +48,25 @@ struct LtkInfo {
 }
 
 impl LtkInfo {
+    // BlueZ has 5 valid possibilities of auth (b/329392926).
+    // For simplicity, we only map it to the 2 values Floss supported.
+    // This way we can't distinguish whether the device is using legacy or secure pairing.
+    fn auth_from_bluez(bluez_auth: u8) -> u8 {
+        match bluez_auth {
+            0 | 2 | 4 => 1, // unauthenticated
+            1 | 3 => 2,     // authenticated
+            _ => 0,         // invalid
+        }
+    }
+
+    fn auth_to_bluez(floss_auth: u8) -> u8 {
+        match floss_auth {
+            1 => 2, // unauthenticated, secure pairing
+            2 => 3, // authenticated, secure pairing
+            _ => 5, // invalid
+        }
+    }
+
     fn new_from_bluez(bluez_conf: &Ini, sec: &str) -> Self {
         LtkInfo {
             key: u128::from_str_radix(bluez_conf.get(sec, "Key").unwrap_or_default().as_str(), 16)
@@ -61,11 +81,13 @@ impl LtkInfo {
                 .unwrap_or_default()
                 .parse::<u16>()
                 .unwrap_or_default(),
-            auth: bluez_conf
-                .get(sec, "Authenticated")
-                .unwrap_or_default()
-                .parse::<u8>()
-                .unwrap_or_default(),
+            auth: LtkInfo::auth_from_bluez(
+                bluez_conf
+                    .get(sec, "Authenticated")
+                    .unwrap_or_default()
+                    .parse::<u8>()
+                    .unwrap_or_default(),
+            ),
             len: bluez_conf
                 .get(sec, "EncSize")
                 .unwrap_or_default()
@@ -166,7 +188,7 @@ struct DeviceKey {
 impl DeviceKey {
     /// Returns a DeviceKey with the key and action given
     fn new(key: &'static str, action: KeyAction) -> Self {
-        Self { key: key, action: action, section: "" }
+        Self { key, action, section: "" }
     }
 
     /// Performs the KeyAction stored and returns the result of the key conversion
@@ -184,8 +206,8 @@ impl DeviceKey {
                 Converter::AddrTypeF2B => floss_to_bluez_addr_type(value),
                 Converter::ReverseEndianLowercase => reverse_endianness(value, false),
                 Converter::ReverseEndianUppercase => reverse_endianness(value, true),
-                Converter::ReplaceSemiColonWithSpace => Ok(value.replace(";", " ")),
-                Converter::ReplaceSpaceWithSemiColon => Ok(value.replace(" ", ";")),
+                Converter::ReplaceSemiColonWithSpace => Ok(value.replace(';', " ")),
+                Converter::ReplaceSpaceWithSemiColon => Ok(value.replace(' ', ";")),
             }
         }
 
@@ -221,7 +243,10 @@ fn dec_str_to_hex_str(str: String) -> Result<String, String> {
 fn base64_str_to_hex_str(str: String) -> Result<String, String> {
     match base64::decode(str) {
         Ok(bytes) => {
-            let res: String = bytes.iter().map(|b| format!("{:02x}", b)).collect();
+            let res: String = bytes.iter().fold(String::new(), |mut res, b| {
+                let _ = write!(res, "{:02x}", b);
+                res
+            });
             Ok(res)
         }
         Err(err) => Err(format!("Error converting from base64 string to hex string: {}", err)),
@@ -350,7 +375,7 @@ fn convert_from_bluez_device(
                 floss_conf.set(
                     addr_lower.as_str(),
                     "LE_KEY_PID",
-                    Some(format!("{}{:02x}{}", irk, addr_type, addr_lower.replace(":", ""))),
+                    Some(format!("{}{:02x}{}", irk, addr_type, addr_lower.replace(':', ""))),
                 );
                 true
             }
@@ -553,13 +578,13 @@ pub fn migrate_bluez_devices() {
                 let devices = conf.sections();
                 for (sec, props) in ini {
                     // Drop devices that don't exist in BlueZ
-                    if sec.contains(":") && !devices.contains(&sec) {
+                    if sec.contains(':') && !devices.contains(&sec) {
                         info!("Dropping a device in Floss that doesn't exist in BlueZ");
                         continue;
                     }
                     // Keep keys that weren't transferrable
                     for (k, v) in props {
-                        if conf.get(sec.as_str(), k.as_str()) == None {
+                        if conf.get(sec.as_str(), k.as_str()).is_none() {
                             conf.set(sec.as_str(), k.as_str(), v);
                         }
                     }
@@ -595,19 +620,16 @@ pub fn migrate_bluez_devices() {
 fn merge_and_write_bluez_conf(filepath: String, conf: &mut Ini) {
     let mut existing_conf = Ini::new_cs();
     existing_conf.set_comment_symbols(&['!', '#']);
-    match existing_conf.load(filepath.clone()) {
+    if let Ok(ini) = existing_conf.load(filepath.clone()) {
         // Device already exists in BlueZ
-        Ok(ini) => {
-            for (sec, props) in ini {
-                // Keep keys that weren't transferrable
-                for (k, v) in props {
-                    if conf.get(sec.as_str(), k.as_str()) == None {
-                        conf.set(sec.as_str(), k.as_str(), v);
-                    }
+        for (sec, props) in ini {
+            // Keep keys that weren't transferrable
+            for (k, v) in props {
+                if conf.get(sec.as_str(), k.as_str()).is_none() {
+                    conf.set(sec.as_str(), k.as_str(), v);
                 }
             }
         }
-        Err(_) => {}
     }
     // Write BlueZ file
     match conf.write(filepath.clone()) {
@@ -727,7 +749,7 @@ fn convert_floss_conf(filename: &str) {
     let mut devices: Vec<String> = Vec::new();
     for (sec, props) in floss_map {
         // Skip all the non-adapter sections
-        if !sec.contains(":") {
+        if !sec.contains(':') {
             continue;
         }
         // Keep track of Floss devices we've seen so we can remove BlueZ devices that don't exist on Floss
@@ -776,7 +798,11 @@ fn convert_floss_conf(filename: &str) {
                 bluez_info.set(section_name, "Key", Some(format!("{:032X}", ltk.key)));
                 bluez_info.set(section_name, "Rand", Some(format!("{}", ltk.rand)));
                 bluez_info.set(section_name, "EDiv", Some(format!("{}", ltk.ediv)));
-                bluez_info.set(section_name, "Authenticated", Some(format!("{}", ltk.auth)));
+                bluez_info.set(
+                    section_name,
+                    "Authenticated",
+                    Some(format!("{}", LtkInfo::auth_to_bluez(ltk.auth))),
+                );
                 bluez_info.set(section_name, "EncSize", Some(format!("{}", ltk.len)));
                 continue;
             } else if k == "LE_KEY_LENC" {
@@ -791,7 +817,7 @@ fn convert_floss_conf(filename: &str) {
                 bluez_info.set(
                     BLUEZ_LOCAL_LTK_SECTION_NAME,
                     "Authenticated",
-                    Some(format!("{}", ltk.auth)),
+                    Some(format!("{}", LtkInfo::auth_to_bluez(ltk.auth))),
                 );
                 bluez_info.set(
                     BLUEZ_LOCAL_LTK_SECTION_NAME,
@@ -855,26 +881,20 @@ fn convert_floss_conf(filename: &str) {
     }
 
     // Delete devices that exist in BlueZ but not in Floss
-    match glob(format!("{}/{}/*:*", BT_LIBDIR, adapter_addr).as_str()) {
-        Ok(globbed) => {
-            for entry in globbed {
-                let pathbuf = entry.unwrap_or_default();
-                let addrs = pathbuf.to_str().unwrap_or_default().split('/').collect::<Vec<&str>>();
-                let device_addr: String = addrs[addrs.len() - 1].into();
-                if !devices.contains(&device_addr.to_lowercase()) {
-                    match fs::remove_dir_all(pathbuf) {
-                        Ok(_) => (),
-                        Err(err) => {
-                            warn!(
-                                "Error removing {} during Floss to BlueZ device migration: {}",
-                                device_addr, err
-                            );
-                        }
-                    }
+    if let Ok(globbed) = glob(format!("{}/{}/*:*", BT_LIBDIR, adapter_addr).as_str()) {
+        for entry in globbed {
+            let pathbuf = entry.unwrap_or_default();
+            let addrs = pathbuf.to_str().unwrap_or_default().split('/').collect::<Vec<&str>>();
+            let device_addr: String = addrs[addrs.len() - 1].into();
+            if !devices.contains(&device_addr.to_lowercase()) {
+                if let Err(err) = fs::remove_dir_all(pathbuf) {
+                    warn!(
+                        "Error removing {} during Floss to BlueZ device migration: {}",
+                        device_addr, err
+                    );
                 }
             }
         }
-        _ => (),
     }
 }
 
@@ -1112,24 +1132,18 @@ mod tests {
     fn test_convert_from_bluez_device() {
         let test_addr = "00:11:22:33:44:55";
         let mut conf = Ini::new_cs();
-        assert_eq!(
-            convert_from_bluez_device(
-                "test/migrate/fake_bluez_info.toml",
-                test_addr,
-                &mut conf,
-                false
-            ),
+        assert!(convert_from_bluez_device(
+            "test/migrate/fake_bluez_info.toml",
+            test_addr,
+            &mut conf,
+            false
+        ));
+        assert!(convert_from_bluez_device(
+            "test/migrate/fake_bluez_hid.toml",
+            test_addr,
+            &mut conf,
             true
-        );
-        assert_eq!(
-            convert_from_bluez_device(
-                "test/migrate/fake_bluez_hid.toml",
-                test_addr,
-                &mut conf,
-                true
-            ),
-            true
-        );
+        ));
 
         assert_eq!(conf.get(test_addr, "Name"), Some(String::from("Test Device")));
         assert_eq!(conf.get(test_addr, "DevClass"), Some(String::from("2360344")));
@@ -1166,7 +1180,7 @@ mod tests {
         );
         assert_eq!(
             conf.get(test_addr, "LE_KEY_PENC"),
-            Some(String::from("00112233445566778899aabbccddeeff8877665544332211bbaa0110"))
+            Some(String::from("00112233445566778899aabbccddeeff8877665544332211bbaa0210"))
         );
 
         assert_eq!(conf.get(test_addr, "HidAttrMask"), Some(String::from("0")));

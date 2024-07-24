@@ -27,6 +27,20 @@
 // Returns true on success, otherwise false.
 bool bta_av_co_set_active_peer(const RawAddress& peer_addr);
 
+/**
+ * Sets the active peer within the sink profile of the bta av co instance.
+ * @param peer_address peer address of the remote device.
+ * @return true on success, otherwise false.
+ */
+bool bta_av_co_set_active_sink_peer(const RawAddress& peer_address);
+
+/**
+ * Sets the active peer within the sink profile of the bta av co instance.
+ * @param peer_address peer address of the remote device.
+ * @return true on success, otherwise false.
+ */
+bool bta_av_co_set_active_source_peer(const RawAddress& peer_address);
+
 void bta_av_co_save_codec(const uint8_t* new_codec_config);
 
 // Gets the A2DP peer parameters that are used to initialize the encoder.
@@ -47,23 +61,21 @@ const tA2DP_ENCODER_INTERFACE* bta_av_co_get_encoder_interface(void);
 // |codec_user_config| contains the preferred codec configuration.
 // |restart_output| is used to know whether AV is reconfiguring with remote.
 // Returns true on success, otherwise false.
-bool bta_av_co_set_codec_user_config(
-    const RawAddress& peer_addr,
-    const btav_a2dp_codec_config_t& codec_user_config, bool* p_restart_output);
+bool bta_av_co_set_codec_user_config(const RawAddress& peer_addr,
+                                     const btav_a2dp_codec_config_t& codec_user_config,
+                                     bool* p_restart_output);
 
 // Sets the Audio HAL selected audio feeding parameters.
 // Those parameters are applied only to the currently selected codec.
 // |codec_audio_config| contains the selected audio feeding configuration.
 // Returns true on success, otherwise false.
-bool bta_av_co_set_codec_audio_config(
-    const btav_a2dp_codec_config_t& codec_audio_config);
+bool bta_av_co_set_codec_audio_config(const btav_a2dp_codec_config_t& codec_audio_config);
 
 // Initializes the control block.
 // |codec_priorities| contains the A2DP Source codec priorities to use.
 // |supported_codecs| returns the list of supported A2DP Source codecs.
-void bta_av_co_init(
-    const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
-    std::vector<btav_a2dp_codec_info_t>* supported_codecs);
+void bta_av_co_init(const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
+                    std::vector<btav_a2dp_codec_info_t>* supported_codecs);
 
 // Checks whether the codec for |codec_index| is supported.
 // Returns true if the codec is supported, otherwise false.
@@ -77,12 +89,16 @@ A2dpCodecConfig* bta_av_get_a2dp_current_codec(void);
 // Gets the current A2DP codec for a peer identified by |peer_address|.
 // Returns a pointer to the current |A2dpCodecConfig| if valid, otherwise
 // nullptr.
-A2dpCodecConfig* bta_av_get_a2dp_peer_current_codec(
-    const RawAddress& peer_address);
+A2dpCodecConfig* bta_av_get_a2dp_peer_current_codec(const RawAddress& peer_address);
 
 // Gets the A2DP effective frame size from the current encoder.
 // Returns the effective frame size if the encoder is configured, otherwise 0.
 int bta_av_co_get_encoder_effective_frame_size();
+
+// Gets the preferred encoding interval from the current encoder.
+// Returns the preferred encoding interval if the encoder is configured,
+// otherwise 0.
+int bta_av_co_get_encoder_preferred_interval_us();
 
 // Dump A2DP codec debug-related information for the A2DP module.
 // |fd| is the file descriptor to use for writing the ASCII formatted

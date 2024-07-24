@@ -17,21 +17,19 @@
 #pragma once
 
 #include <base/functional/callback.h>
-#include <base/location.h>
 #include <base/threading/thread.h>
 
 #include "common/message_loop_thread.h"
+#include "common/postable_context.h"
 #include "include/hardware/bluetooth.h"
 
 using BtMainClosure = std::function<void()>;
-using bluetooth::common::MessageLoopThread;
 
 bluetooth::common::MessageLoopThread* get_main_thread();
-bt_status_t do_in_main_thread(const base::Location& from_here,
-                              base::OnceClosure task);
-bt_status_t do_in_main_thread_delayed(const base::Location& from_here,
-                                      base::OnceClosure task,
-                                      std::chrono::microseconds delay);
+bluetooth::common::PostableContext* get_main();
+
+bt_status_t do_in_main_thread(base::OnceClosure task);
+bt_status_t do_in_main_thread_delayed(base::OnceClosure task, std::chrono::microseconds delay);
 void post_on_bt_main(BtMainClosure closure);
 void main_thread_start_up();
 void main_thread_shut_down();

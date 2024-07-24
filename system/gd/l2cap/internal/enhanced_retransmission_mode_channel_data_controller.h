@@ -39,21 +39,22 @@ namespace internal {
 class ILink;
 
 class ErtmController : public DataController {
- public:
+public:
   using UpperEnqueue = packet::PacketView<packet::kLittleEndian>;
   using UpperDequeue = packet::BasePacketBuilder;
   using UpperQueueDownEnd = common::BidiQueueEnd<UpperEnqueue, UpperDequeue>;
-  ErtmController(ILink* link, Cid cid, Cid remote_cid, UpperQueueDownEnd* channel_queue_end, os::Handler* handler,
-                 Scheduler* scheduler);
+  ErtmController(ILink* link, Cid cid, Cid remote_cid, UpperQueueDownEnd* channel_queue_end,
+                 os::Handler* handler, Scheduler* scheduler);
   ~ErtmController();
   // Segmentation is handled here
   void OnSdu(std::unique_ptr<packet::BasePacketBuilder> sdu) override;
   void OnPdu(packet::PacketView<true> pdu) override;
   std::unique_ptr<packet::BasePacketBuilder> GetNextPacket() override;
   void EnableFcs(bool enabled) override;
-  void SetRetransmissionAndFlowControlOptions(const RetransmissionAndFlowControlConfigurationOption& option) override;
+  void SetRetransmissionAndFlowControlOptions(
+          const RetransmissionAndFlowControlConfigurationOption& option) override;
 
- private:
+private:
   ILink* link_;
   Cid cid_;
   Cid remote_cid_;
@@ -73,26 +74,26 @@ class ErtmController : public DataController {
   uint16_t remote_mps_ = 1010;
 
   class PacketViewForReassembly : public packet::PacketView<kLittleEndian> {
-   public:
+  public:
     PacketViewForReassembly(const PacketView& packetView) : PacketView(packetView) {}
-    void AppendPacketView(packet::PacketView<kLittleEndian> to_append) {
-      Append(to_append);
-    }
+    void AppendPacketView(packet::PacketView<kLittleEndian> to_append) { Append(to_append); }
   };
 
   class CopyablePacketBuilder : public packet::BasePacketBuilder {
-   public:
-    CopyablePacketBuilder(std::shared_ptr<packet::RawBuilder> builder) : builder_(std::move(builder)) {}
+  public:
+    CopyablePacketBuilder(std::shared_ptr<packet::RawBuilder> builder)
+        : builder_(std::move(builder)) {}
 
     void Serialize(BitInserter& it) const override;
 
     size_t size() const override;
 
-   private:
+  private:
     std::shared_ptr<packet::RawBuilder> builder_;
   };
 
-  PacketViewForReassembly reassembly_stage_{PacketView<kLittleEndian>(std::make_shared<std::vector<uint8_t>>())};
+  PacketViewForReassembly reassembly_stage_{
+          PacketView<kLittleEndian>(std::make_shared<std::vector<uint8_t>>())};
   SegmentationAndReassembly sar_state_ = SegmentationAndReassembly::END;
   uint16_t remaining_sdu_continuation_packet_size_ = 0;
 

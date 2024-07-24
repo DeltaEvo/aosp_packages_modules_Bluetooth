@@ -28,12 +28,9 @@ class Link;
 }
 
 class DynamicChannel : public l2cap::DynamicChannel {
- public:
-  DynamicChannel(
-      std::shared_ptr<l2cap::internal::DynamicChannelImpl> impl,
-      os::Handler* l2cap_handler,
-      internal::Link* link,
-      Mtu mtu)
+public:
+  DynamicChannel(std::shared_ptr<l2cap::internal::DynamicChannelImpl> impl,
+                 os::Handler* l2cap_handler, internal::Link* link, Mtu mtu)
       : l2cap::DynamicChannel(impl, l2cap_handler), link_(link), mtu_(mtu) {}
 
   /**
@@ -45,7 +42,7 @@ class DynamicChannel : public l2cap::DynamicChannel {
 
   Mtu GetMtu() const;
 
- private:
+private:
   internal::Link* link_;
   Mtu mtu_;
 };

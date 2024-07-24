@@ -20,7 +20,6 @@
 
 #include <future>
 
-#include "base/logging.h"  // LOG() stdout and android log
 #include "btif/include/btif_api.h"
 #include "os/log.h"  // android log only
 #include "stack/include/sdp_api.h"
@@ -41,8 +40,7 @@ using namespace std::chrono_literals;
 
 namespace {
 
-int start_discovery([[maybe_unused]] unsigned int num_loops,
-                    const RawAddress& raw_address) {
+int start_discovery([[maybe_unused]] unsigned int num_loops, const RawAddress& raw_address) {
   RawAddress bd_addr{raw_address};
 
   Stopwatch acl_stopwatch("ACL_connection");
@@ -70,7 +68,6 @@ int bluetooth::test::headless::Discovery::Run() {
     options_.Usage();
     return -1;
   }
-  return RunOnHeadlessStack<int>([this]() {
-    return start_discovery(options_.loop_, options_.device_.front());
-  });
+  return RunOnHeadlessStack<int>(
+          [this]() { return start_discovery(options_.loop_, options_.device_.front()); });
 }

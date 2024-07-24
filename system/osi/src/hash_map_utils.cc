@@ -17,22 +17,26 @@
  ******************************************************************************/
 
 #include "osi/include/hash_map_utils.h"
-#include <base/logging.h>  // CHECK()
+
+#include <bluetooth/log.h>
+
 #include <cstring>
 #include <map>
 #include <string>
-#include "check.h"
+
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"
 
-std::unordered_map<std::string, std::string>
-hash_map_utils_new_from_string_params(const char* params) {
-  CHECK(params != NULL);
+std::unordered_map<std::string, std::string> hash_map_utils_new_from_string_params(
+        const char* params) {
+  bluetooth::log::assert_that(params != NULL, "assert failed: params != NULL");
 
   std::unordered_map<std::string, std::string> map;
 
   char* str = osi_strdup(params);
-  if (!str) return map;
+  if (!str) {
+    return map;
+  }
 
   // Parse |str| and add extracted key-and-value pair(s) in |map|.
   char* tmpstr;
@@ -40,7 +44,9 @@ hash_map_utils_new_from_string_params(const char* params) {
   while (kvpair && *kvpair) {
     char* eq = strchr(kvpair, '=');
 
-    if (eq == kvpair) goto next_pair;
+    if (eq == kvpair) {
+      goto next_pair;
+    }
 
     char* key;
     char* value;

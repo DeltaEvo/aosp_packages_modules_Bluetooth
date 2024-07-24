@@ -23,6 +23,7 @@
 
 #include "hal/mgmt.h"
 
+#include <bluetooth/log.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -52,19 +53,19 @@ constexpr static uint16_t HCI_DEV_NONE = 0xffff;
 static int btsocket_open_mgmt(uint16_t hci) {
   int fd = socket(PF_BLUETOOTH, SOCK_RAW | SOCK_NONBLOCK, BTPROTO_HCI);
   if (fd < 0) {
-    LOG_ERROR("Failed to open BT socket.");
+    log::error("Failed to open BT socket.");
     return -errno;
   }
 
   struct sockaddr_hci addr = {
-      .hci_family = AF_BLUETOOTH,
-      .hci_dev = HCI_DEV_NONE,
-      .hci_channel = HCI_CHANNEL_CONTROL,
+          .hci_family = AF_BLUETOOTH,
+          .hci_dev = HCI_DEV_NONE,
+          .hci_channel = HCI_CHANNEL_CONTROL,
   };
 
   int ret = bind(fd, (struct sockaddr*)&addr, sizeof(addr));
   if (ret < 0) {
-    LOG_ERROR("Failed to bind BT socket.");
+    log::error("Failed to bind BT socket.");
     close(fd);
     return -errno;
   }
@@ -86,7 +87,7 @@ uint16_t Mgmt::get_vs_opcode(uint16_t vendor_specification) {
   uint16_t ret_opcode = HCI_OP_NOP;
 
   if (fd < 0) {
-    LOG_ERROR("Failed to open mgmt channel for hci %d, error= %d.", hci, fd);
+    log::error("Failed to open mgmt channel for hci {}, error= {}.", hci, fd);
     return ret_opcode;
   }
 
@@ -109,18 +110,19 @@ uint16_t Mgmt::get_vs_opcode(uint16_t vendor_specification) {
     if (ret > 0) {
       RETRY_ON_INTR(ret = write(fd, &ev, MGMT_PKT_HDR_SIZE + ev.len));
       if (ret < 0) {
-        LOG_ERROR("Failed to call MGMT opcode 0x%4.4x, errno %d", ev.opcode, -errno);
+        log::error("Failed to call MGMT opcode 0x{:04x}, errno {}", ev.opcode, -errno);
         close(fd);
         return ret_opcode;
       };
       break;
     } else if (ret < 0) {
-      LOG_ERROR("msft poll ret %d errno %d", ret, -errno);
+      log::error("msft poll ret {} errno {}", ret, -errno);
     }
   } while (ret > 0);
 
   if (ret <= 0) {
-    LOG_INFO("Skip because mgmt socket is not writable: ev.opcode 0x%4.4x ret %d", ev.opcode, ret);
+    log::info("Skip because mgmt socket is not writable: ev.opcode 0x{:04x} ret {}", ev.opcode,
+              ret);
     close(fd);
     return ret_opcode;
   }
@@ -136,15 +138,17 @@ uint16_t Mgmt::get_vs_opcode(uint16_t vendor_specification) {
       if (fds[0].revents & POLLIN) {
         RETRY_ON_INTR(ret = read(fd, &cc_ev, sizeof(cc_ev)));
         if (ret < 0) {
-          LOG_ERROR("Failed to read mgmt socket: %d", -errno);
+          log::error("Failed to read mgmt socket: {}", -errno);
           close(fd);
           return ret_opcode;
         }
 
         if (cc_ev.opcode == MGMT_EV_COMMAND_COMPLETE) {
-          struct mgmt_ev_cmd_complete* cc = reinterpret_cast<struct mgmt_ev_cmd_complete*>(cc_ev.data);
+          struct mgmt_ev_cmd_complete* cc =
+                  reinterpret_cast<struct mgmt_ev_cmd_complete*>(cc_ev.data);
           if (cc->opcode == ev.opcode && cc->status == 0) {
-            struct mgmt_rp_get_vs_opcode* rp = reinterpret_cast<struct mgmt_rp_get_vs_opcode*>(cc->data);
+            struct mgmt_rp_get_vs_opcode* rp =
+                    reinterpret_cast<struct mgmt_rp_get_vs_opcode*>(cc->data);
             if (rp->hci_id == hci) {
               // If the controller supports the MSFT extension, the returned opcode
               // will not be HCI_OP_NOP.
@@ -158,7 +162,7 @@ uint16_t Mgmt::get_vs_opcode(uint16_t vendor_specification) {
         }
       }
     } else if (ret == 0) {
-      LOG_ERROR("Timeout while waiting for response of calling MGMT opcode: 0x%4.4x", ev.opcode);
+      log::error("Timeout while waiting for response of calling MGMT opcode: 0x{:04x}", ev.opcode);
       ret = -1;
     }
   } while (ret > 0);

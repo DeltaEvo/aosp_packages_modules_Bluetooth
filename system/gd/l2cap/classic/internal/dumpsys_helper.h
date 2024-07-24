@@ -29,18 +29,20 @@ namespace classic {
 namespace internal {
 
 class DumpsysHelper {
- public:
+public:
   DumpsysHelper(const LinkManager& link_manager);
 
   std::vector<flatbuffers::Offset<ChannelData>> DumpActiveDynamicChannels(
-      flatbuffers::FlatBufferBuilder* fb_builder,
-      const l2cap::internal::DynamicChannelAllocator& channel_allocator) const;
+          flatbuffers::FlatBufferBuilder* fb_builder,
+          const l2cap::internal::DynamicChannelAllocator& channel_allocator) const;
   std::vector<flatbuffers::Offset<ChannelData>> DumpActiveFixedChannels(
-      flatbuffers::FlatBufferBuilder* fb_builder,
-      const l2cap::internal::FixedChannelAllocator<FixedChannelImpl, Link>& channel_allocator) const;
-  std::vector<flatbuffers::Offset<LinkData>> DumpActiveLinks(flatbuffers::FlatBufferBuilder* fb_builder) const;
+          flatbuffers::FlatBufferBuilder* fb_builder,
+          const l2cap::internal::FixedChannelAllocator<FixedChannelImpl, Link>& channel_allocator)
+          const;
+  std::vector<flatbuffers::Offset<LinkData>> DumpActiveLinks(
+          flatbuffers::FlatBufferBuilder* fb_builder) const;
 
- private:
+private:
   const LinkManager& link_manager_;
 };
 

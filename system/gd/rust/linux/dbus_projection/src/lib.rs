@@ -103,7 +103,9 @@ impl DisconnectWatcher {
     pub async fn setup_watch(&mut self, conn: Arc<SyncConnection>) {
         let mr = MatchRule::new_signal("org.freedesktop.DBus", "NameOwnerChanged");
 
-        conn.add_match_no_cb(&mr.match_str()).await.unwrap();
+        conn.add_match_no_cb(&mr.match_str())
+            .await
+            .expect("Unable to add match to D-Bus for monitoring client disconnects");
         let callbacks_map = self.callbacks.clone();
         conn.start_receive(
             mr,
@@ -266,11 +268,11 @@ macro_rules! impl_dbus_arg_enum {
             ) -> Result<$enum_type, Box<dyn std::error::Error>> {
                 match <$enum_type>::from_u32(data) {
                     Some(x) => Ok(x),
-                    None => Err(Box::new(DBusArgError::new(String::from(format!(
+                    None => Err(Box::new(DBusArgError::new(format!(
                         "error converting {} to {}",
                         data,
                         stringify!($enum_type)
-                    ))))),
+                    )))),
                 }
             }
 
@@ -279,7 +281,7 @@ macro_rules! impl_dbus_arg_enum {
             }
 
             fn log(data: &$enum_type) -> String {
-                String::from(format!("{:?}", data))
+                format!("{:?}", data)
             }
         }
     };
@@ -300,28 +302,28 @@ macro_rules! impl_dbus_arg_from_into {
                 >,
             ) -> Result<$rust_type, Box<dyn std::error::Error>> {
                 match <$rust_type>::try_from(data.clone()) {
-                    Err(e) => Err(Box::new(DBusArgError::new(String::from(format!(
+                    Err(e) => Err(Box::new(DBusArgError::new(format!(
                         "error converting {:?} to {:?}",
                         data,
                         stringify!($rust_type),
-                    ))))),
+                    )))),
                     Ok(result) => Ok(result),
                 }
             }
 
             fn to_dbus(data: $rust_type) -> Result<$dbus_type, Box<dyn std::error::Error>> {
                 match data.clone().try_into() {
-                    Err(e) => Err(Box::new(DBusArgError::new(String::from(format!(
+                    Err(e) => Err(Box::new(DBusArgError::new(format!(
                         "error converting {:?} to {:?}",
                         data,
                         stringify!($dbus_type)
-                    ))))),
+                    )))),
                     Ok(result) => Ok(result),
                 }
             }
 
             fn log(data: &$rust_type) -> String {
-                String::from(format!("{:?}", data))
+                format!("{:?}", data)
             }
         }
     };

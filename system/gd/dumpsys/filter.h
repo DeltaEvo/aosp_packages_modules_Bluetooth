@@ -15,14 +15,13 @@
  */
 
 #include <string>
+
 #include "dumpsys/reflection_schema.h"
 
 namespace bluetooth {
 namespace dumpsys {
 
-enum FilterType { AS_USER = 0, AS_DEVELOPER };
-
-void FilterInPlace(FilterType filter_type, const ReflectionSchema& reflection_schema, std::string* dumpsys_data);
+void FilterSchema(const ReflectionSchema& reflection_schema, std::string* dumpsys_data);
 
 }  // namespace dumpsys
 }  // namespace bluetooth

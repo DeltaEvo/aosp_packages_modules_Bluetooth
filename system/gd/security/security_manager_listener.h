@@ -27,7 +27,7 @@ namespace security {
  * Callback interface from SecurityManager.
  */
 class ISecurityManagerListener {
- public:
+public:
   virtual ~ISecurityManagerListener() = 0;
 
   /**
@@ -49,7 +49,8 @@ class ISecurityManagerListener {
    *
    * @param address of the device that failed to bond
    */
-  virtual void OnDeviceBondFailed(bluetooth::hci::AddressWithType device, PairingFailure status) = 0;
+  virtual void OnDeviceBondFailed(bluetooth::hci::AddressWithType device,
+                                  PairingFailure status) = 0;
 
   /**
    * Called as a result of a failure during the bonding process.

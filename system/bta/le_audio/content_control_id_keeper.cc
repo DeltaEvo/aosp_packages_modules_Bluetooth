@@ -16,7 +16,7 @@
 
 #include "content_control_id_keeper.h"
 
-#include <base/logging.h>
+#include <bluetooth/log.h>
 
 #include <bitset>
 #include <map>
@@ -28,25 +28,24 @@
 namespace {
 
 using bluetooth::common::ToString;
-using le_audio::types::LeAudioContextType;
+using bluetooth::le_audio::types::LeAudioContextType;
 
 }  // namespace
 
-namespace le_audio {
+namespace bluetooth::le_audio {
 struct ccid_keeper {
- public:
+public:
   ccid_keeper() {}
 
   ~ccid_keeper() {}
 
   void SetCcid(types::LeAudioContextType context_type, int ccid) {
     if (context_type >= LeAudioContextType::RFU) {
-      LOG_ERROR("Unknownd context type %s", ToString(context_type).c_str());
+      log::error("Unknownd context type {}", ToString(context_type));
       return;
     }
 
-    LOG_DEBUG("Ccid: %d, context type %s", ccid,
-              ToString(context_type).c_str());
+    log::debug("Ccid: {}, context type {}", ccid, ToString(context_type));
     ccids_.insert_or_assign(context_type, ccid);
   }
 
@@ -57,12 +56,14 @@ struct ccid_keeper {
     }
 
     for (auto ctx : types::kLeAudioContextAllTypesArray) {
-      if (contexts.test(ctx)) SetCcid(ctx, ccid);
+      if (contexts.test(ctx)) {
+        SetCcid(ctx, ccid);
+      }
     }
   }
 
   void RemoveCcid(int ccid) {
-    LOG_DEBUG("Ccid: %d", ccid);
+    log::debug("Ccid: {}", ccid);
 
     auto iter = ccids_.begin();
     while (iter != ccids_.end()) {
@@ -76,19 +77,19 @@ struct ccid_keeper {
 
   int GetCcid(types::LeAudioContextType context_type) const {
     if (context_type >= LeAudioContextType::RFU) {
-      LOG_ERROR("Unknownd context type %s", ToString(context_type).c_str());
+      log::error("Unknownd context type {}", ToString(context_type));
       return -1;
     }
 
     if (ccids_.count(context_type) == 0) {
-      LOG_DEBUG("No CCID for context %s", ToString(context_type).c_str());
+      log::debug("No CCID for context {}", ToString(context_type));
       return -1;
     }
 
     return ccids_.at(context_type);
   }
 
- private:
+private:
   /* Ccid informations */
   std::map<LeAudioContextType /* context */, int /*ccid */> ccids_;
 };
@@ -97,12 +98,12 @@ struct ContentControlIdKeeper::impl {
   impl(const ContentControlIdKeeper& ccid_keeper) : ccid_keeper_(ccid_keeper) {}
 
   void Start() {
-    LOG_ASSERT(!ccid_keeper_impl_);
+    log::assert_that(ccid_keeper_impl_ == nullptr, "assert failed: ccid_keeper_impl_ == nullptr");
     ccid_keeper_impl_ = std::make_unique<ccid_keeper>();
   }
 
   void Stop() {
-    LOG_ASSERT(ccid_keeper_impl_);
+    log::assert_that(ccid_keeper_impl_ != nullptr, "assert failed: ccid_keeper_impl_ != nullptr");
     ccid_keeper_impl_.reset();
   }
 
@@ -112,19 +113,21 @@ struct ContentControlIdKeeper::impl {
   std::unique_ptr<ccid_keeper> ccid_keeper_impl_;
 };
 
-ContentControlIdKeeper::ContentControlIdKeeper()
-    : pimpl_(std::make_unique<impl>(*this)) {}
+ContentControlIdKeeper::ContentControlIdKeeper() : pimpl_(std::make_unique<impl>(*this)) {}
 
 void ContentControlIdKeeper::Start() {
-  if (!pimpl_->IsRunning()) pimpl_->Start();
+  if (!pimpl_->IsRunning()) {
+    pimpl_->Start();
+  }
 }
 
 void ContentControlIdKeeper::Stop() {
-  if (pimpl_->IsRunning()) pimpl_->Stop();
+  if (pimpl_->IsRunning()) {
+    pimpl_->Stop();
+  }
 }
 
-int ContentControlIdKeeper::GetCcid(
-    types::LeAudioContextType context_type) const {
+int ContentControlIdKeeper::GetCcid(types::LeAudioContextType context_type) const {
   if (!pimpl_->IsRunning()) {
     return -1;
   }
@@ -132,8 +135,7 @@ int ContentControlIdKeeper::GetCcid(
   return pimpl_->ccid_keeper_impl_->GetCcid(context_type);
 }
 
-void ContentControlIdKeeper::SetCcid(types::LeAudioContextType context_type,
-                                     int ccid) {
+void ContentControlIdKeeper::SetCcid(types::LeAudioContextType context_type, int ccid) {
   if (pimpl_->IsRunning()) {
     if (context_type == types::LeAudioContextType::UNINITIALIZED) {
       pimpl_->ccid_keeper_impl_->RemoveCcid(ccid);
@@ -143,16 +145,19 @@ void ContentControlIdKeeper::SetCcid(types::LeAudioContextType context_type,
   }
 }
 
-void ContentControlIdKeeper::SetCcid(const types::AudioContexts& contexts,
-                                     int ccid) {
-  if (pimpl_->IsRunning()) pimpl_->ccid_keeper_impl_->SetCcid(contexts, ccid);
+void ContentControlIdKeeper::SetCcid(const types::AudioContexts& contexts, int ccid) {
+  if (pimpl_->IsRunning()) {
+    pimpl_->ccid_keeper_impl_->SetCcid(contexts, ccid);
+  }
 }
 
 std::vector<uint8_t> ContentControlIdKeeper::GetAllCcids(
-    const types::AudioContexts& contexts) const {
+        const types::AudioContexts& contexts) const {
   std::vector<uint8_t> ccid_vec;
   for (LeAudioContextType context : types::kLeAudioContextAllTypesArray) {
-    if (!contexts.test(context)) continue;
+    if (!contexts.test(context)) {
+      continue;
+    }
     auto ccid = GetCcid(context);
     if (ccid != -1) {
       // Remove duplicates in case more than one context maps to the same CCID
@@ -165,4 +170,4 @@ std::vector<uint8_t> ContentControlIdKeeper::GetAllCcids(
   return ccid_vec;
 }
 
-}  // namespace le_audio
+}  // namespace bluetooth::le_audio

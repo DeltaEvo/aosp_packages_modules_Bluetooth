@@ -42,9 +42,6 @@ cc_library_static {
         "fluoride_defaults",
         "fluoride_osi_defaults",
     ],
-    whole_static_libs: [
-        "bluetooth_flags_c_lib",
-    ],
     // TODO(mcchou): Remove socket_utils sources after platform specific
     // dependencies are abstracted.
     srcs: [
@@ -57,7 +54,6 @@ cc_library_static {
         "src/hash_map_utils.cc",
         "src/list.cc",
         "src/mutex.cc",
-        "src/osi.cc",
         "src/properties.cc",
         "src/reactor.cc",
         "src/ringbuffer.cc",
@@ -92,9 +88,12 @@ cc_library_static {
     ],
     header_libs: ["libbluetooth_headers"],
     static_libs: [
+        "bluetooth_flags_c_lib",
+        "libaconfig_storage_read_api_cc",
         "libbluetooth_log",
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
+        "server_configurable_flags",
     ],
 }
 
@@ -116,7 +115,6 @@ cc_test {
         "test/hash_map_utils_test.cc",
         "test/list_test.cc",
         "test/properties_test.cc",
-        "test/rand_test.cc",
         "test/reactor_test.cc",
         "test/ringbuffer_test.cc",
         "test/stack_power_telemetry_test.cc",
@@ -126,6 +124,7 @@ cc_test {
         "test/internal/semaphore_test.cc",
     ],
     shared_libs: [
+        "libaconfig_storage_read_api_cc",
         "libbase",
         "libcrypto",
         "libcutils",
@@ -137,6 +136,7 @@ cc_test {
         "test",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
@@ -144,7 +144,6 @@ cc_test {
         "libbt-common",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
-        "libc++fs",
         "libchrome",
         "libevent",
         "libgmock",

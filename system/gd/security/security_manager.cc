@@ -26,8 +26,8 @@ namespace security {
 ISecurityManagerListener::~ISecurityManagerListener() {}
 
 void SecurityManager::Init() {
-  security_handler_->Post(
-      common::BindOnce(&internal::SecurityManagerImpl::Init, common::Unretained(security_manager_impl_)));
+  security_handler_->Post(common::BindOnce(&internal::SecurityManagerImpl::Init,
+                                           common::Unretained(security_manager_impl_)));
 }
 
 void SecurityManager::CreateBond(hci::AddressWithType device) {
@@ -36,21 +36,20 @@ void SecurityManager::CreateBond(hci::AddressWithType device) {
                                            std::forward<hci::AddressWithType>(device)));
 }
 
-void SecurityManager::CreateBondOutOfBand(
-    hci::AddressWithType device, pairing::OobData remote_p192_oob_data, pairing::OobData remote_p256_oob_data) {
-  security_handler_->Post(common::BindOnce(
-      &internal::SecurityManagerImpl::CreateBondOutOfBand,
-      common::Unretained(security_manager_impl_),
-      std::forward<hci::AddressWithType>(device),
-      remote_p192_oob_data,
-      remote_p256_oob_data));
+void SecurityManager::CreateBondOutOfBand(hci::AddressWithType device,
+                                          pairing::OobData remote_p192_oob_data,
+                                          pairing::OobData remote_p256_oob_data) {
+  security_handler_->Post(common::BindOnce(&internal::SecurityManagerImpl::CreateBondOutOfBand,
+                                           common::Unretained(security_manager_impl_),
+                                           std::forward<hci::AddressWithType>(device),
+                                           remote_p192_oob_data, remote_p256_oob_data));
 }
 
 void SecurityManager::GetOutOfBandData(channel::SecurityCommandStatusCallback callback) {
-  security_handler_->Post(common::BindOnce(
-      &internal::SecurityManagerImpl::GetOutOfBandData,
-      common::Unretained(security_manager_impl_),
-      std::forward<channel::SecurityCommandStatusCallback>(callback)));
+  security_handler_->Post(
+          common::BindOnce(&internal::SecurityManagerImpl::GetOutOfBandData,
+                           common::Unretained(security_manager_impl_),
+                           std::forward<channel::SecurityCommandStatusCallback>(callback)));
 }
 
 void SecurityManager::CreateBondLe(hci::AddressWithType device) {
@@ -73,54 +72,60 @@ void SecurityManager::RemoveBond(hci::AddressWithType device) {
 
 void SecurityManager::SetUserInterfaceHandler(UI* user_interface, os::Handler* handler) {
   security_handler_->Post(common::BindOnce(&internal::SecurityManagerImpl::SetUserInterfaceHandler,
-                                           common::Unretained(security_manager_impl_), user_interface, handler));
+                                           common::Unretained(security_manager_impl_),
+                                           user_interface, handler));
 }
 
 // TODO(jpawlowski): remove once we have config file abstraction in cert tests
 void SecurityManager::SetLeInitiatorAddressPolicyForTest(
-    hci::LeAddressManager::AddressPolicy address_policy,
-    hci::AddressWithType fixed_address,
-    hci::Octet16 rotation_irk,
-    std::chrono::milliseconds minimum_rotation_time,
-    std::chrono::milliseconds maximum_rotation_time) {
+        hci::LeAddressManager::AddressPolicy address_policy, hci::AddressWithType fixed_address,
+        hci::Octet16 rotation_irk, std::chrono::milliseconds minimum_rotation_time,
+        std::chrono::milliseconds maximum_rotation_time) {
   security_handler_->Post(common::BindOnce(
-      &internal::SecurityManagerImpl::SetLeInitiatorAddressPolicyForTest,
-      common::Unretained(security_manager_impl_),
-      address_policy,
-      fixed_address,
-      rotation_irk,
-      minimum_rotation_time,
-      maximum_rotation_time));
+          &internal::SecurityManagerImpl::SetLeInitiatorAddressPolicyForTest,
+          common::Unretained(security_manager_impl_), address_policy, fixed_address, rotation_irk,
+          minimum_rotation_time, maximum_rotation_time));
 }
 
-void SecurityManager::RegisterCallbackListener(ISecurityManagerListener* listener, os::Handler* handler) {
+void SecurityManager::RegisterCallbackListener(ISecurityManagerListener* listener,
+                                               os::Handler* handler) {
   security_handler_->Post(common::BindOnce(&internal::SecurityManagerImpl::RegisterCallbackListener,
-                                           common::Unretained(security_manager_impl_), listener, handler));
+                                           common::Unretained(security_manager_impl_), listener,
+                                           handler));
 }
 
 void SecurityManager::UnregisterCallbackListener(ISecurityManagerListener* listener) {
-  security_handler_->Post(common::BindOnce(&internal::SecurityManagerImpl::UnregisterCallbackListener,
-                                           common::Unretained(security_manager_impl_), listener));
+  security_handler_->Post(
+          common::BindOnce(&internal::SecurityManagerImpl::UnregisterCallbackListener,
+                           common::Unretained(security_manager_impl_), listener));
 }
 
-void SecurityManager::OnPairingPromptAccepted(const bluetooth::hci::AddressWithType& address, bool confirmed) {
+void SecurityManager::OnPairingPromptAccepted(const bluetooth::hci::AddressWithType& address,
+                                              bool confirmed) {
   security_handler_->Post(common::BindOnce(&internal::SecurityManagerImpl::OnPairingPromptAccepted,
-                                           common::Unretained(security_manager_impl_), address, confirmed));
+                                           common::Unretained(security_manager_impl_), address,
+                                           confirmed));
 }
 
-void SecurityManager::OnConfirmYesNo(const bluetooth::hci::AddressWithType& address, bool confirmed) {
+void SecurityManager::OnConfirmYesNo(const bluetooth::hci::AddressWithType& address,
+                                     bool confirmed) {
   security_handler_->Post(common::BindOnce(&internal::SecurityManagerImpl::OnConfirmYesNo,
-                                           common::Unretained(security_manager_impl_), address, confirmed));
+                                           common::Unretained(security_manager_impl_), address,
+                                           confirmed));
 }
 
-void SecurityManager::OnPasskeyEntry(const bluetooth::hci::AddressWithType& address, uint32_t passkey) {
+void SecurityManager::OnPasskeyEntry(const bluetooth::hci::AddressWithType& address,
+                                     uint32_t passkey) {
   security_handler_->Post(common::BindOnce(&internal::SecurityManagerImpl::OnPasskeyEntry,
-                                           common::Unretained(security_manager_impl_), address, passkey));
+                                           common::Unretained(security_manager_impl_), address,
+                                           passkey));
 }
 
-void SecurityManager::OnPinEntry(const bluetooth::hci::AddressWithType& address, std::vector<uint8_t> pin) {
-  security_handler_->Post(common::BindOnce(
-      &internal::SecurityManagerImpl::OnPinEntry, common::Unretained(security_manager_impl_), address, std::move(pin)));
+void SecurityManager::OnPinEntry(const bluetooth::hci::AddressWithType& address,
+                                 std::vector<uint8_t> pin) {
+  security_handler_->Post(common::BindOnce(&internal::SecurityManagerImpl::OnPinEntry,
+                                           common::Unretained(security_manager_impl_), address,
+                                           std::move(pin)));
 }
 
 }  // namespace security

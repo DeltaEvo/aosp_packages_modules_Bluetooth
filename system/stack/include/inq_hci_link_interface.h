@@ -19,12 +19,13 @@
 
 #include <cstdint>
 
-#include <cstdint>
-
+#include "stack/btm/neighbor_inquiry.h"
+#include "stack/include/bt_name.h"
+#include "stack/include/hci_error_code.h"
 #include "types/raw_address.h"
 
-void btm_process_remote_name(const RawAddress* bda, const BD_NAME name,
-                             uint16_t evt_len, tHCI_STATUS hci_status);
+void btm_process_remote_name(const RawAddress* bda, const BD_NAME name, uint16_t evt_len,
+                             tHCI_STATUS hci_status);
 
 void btm_process_inq_complete(tHCI_STATUS status, uint8_t mode);
 

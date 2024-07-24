@@ -16,6 +16,7 @@
 
 #include "os/thread.h"
 
+#include <bluetooth/log.h>
 #include <fcntl.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -42,19 +43,18 @@ void Thread::run(Priority priority) {
     int rc;
     RUN_NO_INTR(rc = sched_setscheduler(linux_tid, SCHED_FIFO, &rt_params));
     if (rc != 0) {
-      LOG_ERROR("unable to set SCHED_FIFO priority: %s", strerror(errno));
+      log::error("unable to set SCHED_FIFO priority: {}", strerror(errno));
     }
   }
   reactor_.Run();
 }
 
-Thread::~Thread() {
-  Stop();
-}
+Thread::~Thread() { Stop(); }
 
 bool Thread::Stop() {
   std::lock_guard<std::mutex> lock(mutex_);
-  ASSERT(std::this_thread::get_id() != running_thread_.get_id());
+  log::assert_that(std::this_thread::get_id() != running_thread_.get_id(),
+                   "assert failed: std::this_thread::get_id() != running_thread_.get_id()");
 
   if (!running_thread_.joinable()) {
     return false;
@@ -64,21 +64,13 @@ bool Thread::Stop() {
   return true;
 }
 
-bool Thread::IsSameThread() const {
-  return std::this_thread::get_id() == running_thread_.get_id();
-}
+bool Thread::IsSameThread() const { return std::this_thread::get_id() == running_thread_.get_id(); }
 
-Reactor* Thread::GetReactor() const {
-  return &reactor_;
-}
+Reactor* Thread::GetReactor() const { return &reactor_; }
 
-std::string Thread::GetThreadName() const {
-  return name_;
-}
+std::string Thread::GetThreadName() const { return name_; }
 
-std::string Thread::ToString() const {
-  return "Thread " + name_;
-}
+std::string Thread::ToString() const { return "Thread " + name_; }
 
 }  // namespace os
 }  // namespace bluetooth

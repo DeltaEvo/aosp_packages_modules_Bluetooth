@@ -27,7 +27,7 @@ namespace internal {
  * Common interface for link (Classic ACL and LE)
  */
 class ILink {
- public:
+public:
   virtual ~ILink() = default;
   virtual void SendDisconnectionRequest(Cid local_cid, Cid remote_cid) = 0;
   virtual hci::AddressWithType GetDevice() const = 0;

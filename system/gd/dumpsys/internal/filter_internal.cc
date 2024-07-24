@@ -14,10 +14,13 @@
  * limitations under the License.
  */
 
+#include "dumpsys/internal/filter_internal.h"
+
+#include <bluetooth/log.h>
+
 #include <algorithm>
 #include <string>
 
-#include "dumpsys/internal/filter_internal.h"
 #include "flatbuffers/flatbuffers.h"
 #include "flatbuffers/idl.h"
 #include "os/log.h"
@@ -33,7 +36,7 @@ constexpr bool kFieldHasBeenFiltered = true;
 constexpr bool kFieldContinueFiltering = false;
 
 void internal::ScrubFromTable(flatbuffers::Table* table, flatbuffers::voffset_t field_offset) {
-  ASSERT(table != nullptr);
+  log::assert_that(table != nullptr, "assert failed: table != nullptr");
   uint8_t* vtable = const_cast<uint8_t*>(table->GetVTable());
   vtable[field_offset] = kErasedFromTable;
 }
@@ -67,7 +70,7 @@ const char* internal::PrivacyLevelName(PrivacyLevel privacy_level) {
       return "Any";
       break;
   }
-};
+}
 internal::PrivacyLevel internal::GetPrivacyLevelAttribute(const std::string& string) {
   if (string == "Any") {
     return kAny;
@@ -94,9 +97,10 @@ internal::PrivacyLevel internal::FindFieldPrivacyLevel(const reflection::Field& 
 }
 
 const reflection::Object* internal::FindReflectionObject(
-    const flatbuffers::Vector<flatbuffers::Offset<reflection::Object>>* objects, const flatbuffers::String* name) {
-  ASSERT(objects != nullptr);
-  ASSERT(name != nullptr);
+        const flatbuffers::Vector<flatbuffers::Offset<reflection::Object>>* objects,
+        const flatbuffers::String* name) {
+  log::assert_that(objects != nullptr, "assert failed: objects != nullptr");
+  log::assert_that(name != nullptr, "assert failed: name != nullptr");
   for (auto it = objects->cbegin(); it != objects->cend(); ++it) {
     if (it->name()->str() == name->str()) {
       return *it;
@@ -105,8 +109,9 @@ const reflection::Object* internal::FindReflectionObject(
   return nullptr;
 }
 
-bool internal::FilterTypeBool(const reflection::Field& field, flatbuffers::Table* table, PrivacyLevel privacy_level) {
-  ASSERT(table != nullptr);
+bool internal::FilterTypeBool(const reflection::Field& field, flatbuffers::Table* table,
+                              PrivacyLevel privacy_level) {
+  log::assert_that(table != nullptr, "assert failed: table != nullptr");
 
   const bool default_val = flatbuffers::GetFieldDefaultI<int8_t>(field);
   flatbuffers::voffset_t field_offset = field.offset();
@@ -126,10 +131,11 @@ bool internal::FilterTypeBool(const reflection::Field& field, flatbuffers::Table
   return kFieldHasBeenFiltered;
 }
 
-bool internal::FilterTypeInteger(
-    const reflection::Field& field, flatbuffers::Table* table, PrivacyLevel privacy_level) {
-  ASSERT(table != nullptr);
-  ASSERT(flatbuffers::IsInteger(field.type()->base_type()));
+bool internal::FilterTypeInteger(const reflection::Field& field, flatbuffers::Table* table,
+                                 PrivacyLevel privacy_level) {
+  log::assert_that(table != nullptr, "assert failed: table != nullptr");
+  log::assert_that(flatbuffers::IsInteger(field.type()->base_type()),
+                   "assert failed: flatbuffers::IsInteger(field.type()->base_type())");
 
   int32_t default_val = flatbuffers::GetFieldDefaultI<int32_t>(field);
   flatbuffers::voffset_t field_offset = field.offset();
@@ -145,7 +151,8 @@ bool internal::FilterTypeInteger(
       break;
     case kAnonymized: {
       auto target_field = flatbuffers::GetFieldI<int32_t>(*table, field);
-      int32_t new_val = static_cast<int32_t>(std::hash<std::string>{}(std::to_string(target_field)));
+      int32_t new_val =
+              static_cast<int32_t>(std::hash<std::string>{}(std::to_string(target_field)));
       flatbuffers::SetField<int32_t>(table, field, new_val);
     } break;
     default:
@@ -154,20 +161,18 @@ bool internal::FilterTypeInteger(
   }
 
   if (DBG) {
-    LOG_INFO(
-        "Integer Field_name:%s privacy_level:%s old_value:%d / 0x%x ==> new_value:%d\n",
-        field.name()->c_str(),
-        PrivacyLevelName(privacy_level),
-        val,
-        val,
-        table->GetField<int32_t>(field_offset, default_val));
+    log::info("Integer Field_name:{} privacy_level:{} old_value:{} / 0x{:x} ==> new_value:{}",
+              field.name()->c_str(), PrivacyLevelName(privacy_level), val, val,
+              table->GetField<int32_t>(field_offset, default_val));
   }
   return kFieldHasBeenFiltered;
 }
 
-bool internal::FilterTypeFloat(const reflection::Field& field, flatbuffers::Table* table, PrivacyLevel privacy_level) {
-  ASSERT(table != nullptr);
-  ASSERT(flatbuffers::IsFloat(field.type()->base_type()));
+bool internal::FilterTypeFloat(const reflection::Field& field, flatbuffers::Table* table,
+                               PrivacyLevel privacy_level) {
+  log::assert_that(table != nullptr, "assert failed: table != nullptr");
+  log::assert_that(flatbuffers::IsFloat(field.type()->base_type()),
+                   "assert failed: flatbuffers::IsFloat(field.type()->base_type())");
 
   float default_val = flatbuffers::GetFieldDefaultI<float>(field);
   flatbuffers::voffset_t field_offset = field.offset();
@@ -190,18 +195,16 @@ bool internal::FilterTypeFloat(const reflection::Field& field, flatbuffers::Tabl
       break;
   }
   if (DBG) {
-    LOG_INFO(
-        "Float Field_name:%s privacy_level:%s old_value:%f ==> new_value:%f",
-        field.name()->c_str(),
-        PrivacyLevelName(privacy_level),
-        val,
-        table->GetField<float>(field_offset, default_val));
+    log::info("Float Field_name:{} privacy_level:{} old_value:{:f} ==> new_value:{:f}",
+              field.name()->c_str(), PrivacyLevelName(privacy_level), val,
+              table->GetField<float>(field_offset, default_val));
   }
   return kFieldHasBeenFiltered;
 }
 
-bool internal::FilterTypeLong(const reflection::Field& field, flatbuffers::Table* table, PrivacyLevel privacy_level) {
-  ASSERT(table != nullptr);
+bool internal::FilterTypeLong(const reflection::Field& field, flatbuffers::Table* table,
+                              PrivacyLevel privacy_level) {
+  log::assert_that(table != nullptr, "assert failed: table != nullptr");
 
   const int64_t default_val = flatbuffers::GetFieldDefaultI<int64_t>(field);
   flatbuffers::voffset_t field_offset = field.offset();
@@ -216,7 +219,8 @@ bool internal::FilterTypeLong(const reflection::Field& field, flatbuffers::Table
       break;
     case kAnonymized: {
       auto target_field = flatbuffers::GetFieldI<int64_t>(*table, field);
-      int64_t new_val = static_cast<int64_t>(std::hash<std::string>{}(std::to_string(target_field)));
+      int64_t new_val =
+              static_cast<int64_t>(std::hash<std::string>{}(std::to_string(target_field)));
       flatbuffers::SetField<int64_t>(table, field, new_val);
     } break;
     default:
@@ -226,9 +230,11 @@ bool internal::FilterTypeLong(const reflection::Field& field, flatbuffers::Table
   return kFieldHasBeenFiltered;
 }
 
-bool internal::FilterTypeString(const reflection::Field& field, flatbuffers::Table* table, PrivacyLevel privacy_level) {
-  ASSERT(table != nullptr);
-  ASSERT(field.type()->base_type() == reflection::BaseType::String);
+bool internal::FilterTypeString(const reflection::Field& field, flatbuffers::Table* table,
+                                PrivacyLevel privacy_level) {
+  log::assert_that(table != nullptr, "assert failed: table != nullptr");
+  log::assert_that(field.type()->base_type() == reflection::BaseType::String,
+                   "assert failed: field.type()->base_type() == reflection::BaseType::String");
 
   flatbuffers::voffset_t field_offset = field.offset();
 
@@ -237,7 +243,7 @@ bool internal::FilterTypeString(const reflection::Field& field, flatbuffers::Tab
     return kFieldIsNotPopulated;
     // Field is not populated
   }
-  ASSERT(string != nullptr);
+  log::assert_that(string != nullptr, "assert failed: string != nullptr");
   flatbuffers::String* mutable_string = const_cast<flatbuffers::String*>(string);
 
   [[maybe_unused]] std::string old_string(string->str());
@@ -257,21 +263,18 @@ bool internal::FilterTypeString(const reflection::Field& field, flatbuffers::Tab
       break;
   }
   if (DBG) {
-    LOG_INFO(
-        "%s Field_name:%s size:%u privacy_level:%s old_string:%s ==> new_string:%s",
-        __func__,
-        field.name()->c_str(),
-        string->size(),
-        PrivacyLevelName(privacy_level),
-        old_string.c_str(),
-        string->c_str());
+    log::info("Field_name:{} size:{} privacy_level:{} old_string:{} ==> new_string:{}",
+              field.name()->c_str(), string->size(), PrivacyLevelName(privacy_level), old_string,
+              string->c_str());
   }
   return kFieldHasBeenFiltered;
 }
 
-bool internal::FilterTypeStruct(const reflection::Field& field, flatbuffers::Table* table, PrivacyLevel privacy_level) {
-  ASSERT(table != nullptr);
-  ASSERT(!flatbuffers::IsScalar(field.type()->base_type()));
+bool internal::FilterTypeStruct(const reflection::Field& field, flatbuffers::Table* table,
+                                PrivacyLevel privacy_level) {
+  log::assert_that(table != nullptr, "assert failed: table != nullptr");
+  log::assert_that(!flatbuffers::IsScalar(field.type()->base_type()),
+                   "assert failed: !flatbuffers::IsScalar(field.type()->base_type())");
 
   flatbuffers::voffset_t field_offset = field.offset();
 
@@ -279,8 +282,8 @@ bool internal::FilterTypeStruct(const reflection::Field& field, flatbuffers::Tab
     flatbuffers::SetFieldT(table, field, nullptr);
     internal::ScrubFromTable(table, field_offset);
     if (DBG) {
-      LOG_INFO(
-          " Table Removing field name:%s privacy_level:%s", field.name()->c_str(), PrivacyLevelName(privacy_level));
+      log::info("Table Removing field name:{} privacy_level:{}", field.name()->c_str(),
+                PrivacyLevelName(privacy_level));
     }
   }
   return kFieldContinueFiltering;

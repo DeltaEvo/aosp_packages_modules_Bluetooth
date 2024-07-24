@@ -30,6 +30,7 @@
 #include "stack/include/bt_octets.h"
 #include "stack/include/hcidefs.h"
 #include "stack/include/smp_api_types.h"
+#include "stack/include/smp_status.h"
 #include "types/bt_transport.h"
 #include "types/raw_address.h"
 
@@ -98,7 +99,7 @@ enum : uint16_t {
 };
 
 /* Security Flags [bit mask] (BTM_GetSecurityFlags)
-*/
+ */
 #define BTM_SEC_FLAG_AUTHENTICATED 0x02
 #define BTM_SEC_FLAG_ENCRYPTED 0x04
 #define BTM_SEC_FLAG_LKEY_KNOWN 0x10
@@ -106,7 +107,7 @@ enum : uint16_t {
 
 /* Link Key types used to generate the new link key.
  * returned in link key notification callback function
-*/
+ */
 #define BTM_LKEY_TYPE_COMBINATION HCI_LKEY_TYPE_COMBINATION
 #define BTM_LKEY_TYPE_REMOTE_UNIT HCI_LKEY_TYPE_REMOTE_UNIT
 #define BTM_LKEY_TYPE_DEBUG_COMB HCI_LKEY_TYPE_DEBUG_COMB
@@ -299,21 +300,20 @@ typedef struct {
 
 /* data type for BTM_SP_IO_RSP_EVT */
 typedef struct {
-  RawAddress bd_addr; /* peer address */
-  tBTM_IO_CAP io_cap; /* peer IO capabilities */
-  tBTM_OOB_DATA
-      oob_data; /* OOB data present at peer device for the local device */
+  RawAddress bd_addr;     /* peer address */
+  tBTM_IO_CAP io_cap;     /* peer IO capabilities */
+  tBTM_OOB_DATA oob_data; /* OOB data present at peer device for the local device */
   tBTM_AUTH_REQ auth_req; /* Authentication required for peer device */
 } tBTM_SP_IO_RSP;
 
 /* data type for BTM_SP_CFM_REQ_EVT */
 typedef struct {
-  RawAddress bd_addr;   /* peer address */
-  DEV_CLASS dev_class;  /* peer CoD */
-  tBTM_BD_NAME bd_name; /* peer device name */
-  uint32_t num_val; /* the numeric value for comparison. If just_works, do not
-                       show this number to UI */
-  bool just_works;  /* true, if "Just Works" association model */
+  RawAddress bd_addr;         /* peer address */
+  DEV_CLASS dev_class;        /* peer CoD */
+  BD_NAME bd_name;            /* peer device name */
+  uint32_t num_val;           /* the numeric value for comparison. If just_works, do not
+                                 show this number to UI */
+  bool just_works;            /* true, if "Just Works" association model */
   tBTM_AUTH_REQ loc_auth_req; /* Authentication required for local device */
   tBTM_AUTH_REQ rmt_auth_req; /* Authentication required for peer device */
   tBTM_IO_CAP loc_io_caps;    /* IO Capabilities of the local device */
@@ -322,31 +322,33 @@ typedef struct {
 
 /* data type for BTM_SP_KEY_REQ_EVT */
 typedef struct {
-  RawAddress bd_addr;   /* peer address */
-  DEV_CLASS dev_class;  /* peer CoD */
-  tBTM_BD_NAME bd_name; /* peer device name */
+  RawAddress bd_addr;  /* peer address */
+  DEV_CLASS dev_class; /* peer CoD */
+  BD_NAME bd_name;     /* peer device name */
 } tBTM_SP_KEY_REQ;
 
 /* data type for BTM_SP_KEY_NOTIF_EVT */
 typedef struct {
-  RawAddress bd_addr;   /* peer address */
-  DEV_CLASS dev_class;  /* peer CoD */
-  tBTM_BD_NAME bd_name; /* peer device name */
-  uint32_t passkey;     /* passkey */
+  RawAddress bd_addr;  /* peer address */
+  DEV_CLASS dev_class; /* peer CoD */
+  BD_NAME bd_name;     /* peer device name */
+  uint32_t passkey;    /* passkey */
 } tBTM_SP_KEY_NOTIF;
 
 /* data type for BTM_SP_LOC_OOB_EVT */
 typedef struct {
   tBTM_STATUS status; /* */
-  Octet16 c;          /* Simple Pairing Hash C */
-  Octet16 r;          /* Simple Pairing Randomnizer R */
+  Octet16 c_192;      /* Simple Pairing Hash C from P-192 public key */
+  Octet16 r_192;      /* Simple Pairing Randomnizer R from P-192 public key */
+  Octet16 c_256;      /* Simple Pairing Hash C from P-256 public key */
+  Octet16 r_256;      /* Simple Pairing Randomnizer R from P-256 public key */
 } tBTM_SP_LOC_OOB;
 
 /* data type for BTM_SP_RMT_OOB_EVT */
 typedef struct {
-  RawAddress bd_addr;   /* peer address */
-  DEV_CLASS dev_class;  /* peer CoD */
-  tBTM_BD_NAME bd_name; /* peer device name */
+  RawAddress bd_addr;  /* peer address */
+  DEV_CLASS dev_class; /* peer CoD */
+  BD_NAME bd_name;     /* peer device name */
 } tBTM_SP_RMT_OOB;
 
 typedef union {
@@ -361,12 +363,10 @@ typedef union {
 
 /* Simple Pairing Events.  Called by the stack when Simple Pairing related
  * events occur.
-*/
-typedef tBTM_STATUS(tBTM_SP_CALLBACK)(tBTM_SP_EVT event,
-                                      tBTM_SP_EVT_DATA* p_data);
+ */
+typedef tBTM_STATUS(tBTM_SP_CALLBACK)(tBTM_SP_EVT event, tBTM_SP_EVT_DATA* p_data);
 
-typedef void(tBTM_MKEY_CALLBACK)(const RawAddress& bd_addr, uint8_t status,
-                                 uint8_t key_flag);
+typedef void(tBTM_MKEY_CALLBACK)(const RawAddress& bd_addr, uint8_t status, uint8_t key_flag);
 
 /* Encryption enabled/disabled complete: Optionally passed with
  * BTM_SetEncryption.
@@ -374,16 +374,15 @@ typedef void(tBTM_MKEY_CALLBACK)(const RawAddress& bd_addr, uint8_t status,
  *              BD Address of remote
  *              optional data passed in by BTM_SetEncryption
  *              tBTM_STATUS - result of the operation
-*/
-typedef void(tBTM_SEC_CALLBACK)(const RawAddress* bd_addr,
-                                tBT_TRANSPORT trasnport, void* p_ref_data,
+ */
+typedef void(tBTM_SEC_CALLBACK)(RawAddress bd_addr, tBT_TRANSPORT transport, void* p_ref_data,
                                 tBTM_STATUS result);
 typedef tBTM_SEC_CALLBACK tBTM_SEC_CALLBACK;
 
 /* Bond Cancel complete. Parameters are
  *              Result of the cancel operation
  *
-*/
+ */
 typedef void(tBTM_BOND_CANCEL_CMPL_CALLBACK)(tBTM_STATUS result);
 
 typedef enum : uint8_t {
@@ -493,7 +492,7 @@ typedef struct {
 
 /* data type for tBTM_LE_COMPLT */
 typedef struct {
-  uint8_t reason;
+  tSMP_STATUS reason;
   uint8_t sec_level;
   bool is_pair_cancel;
   bool smp_over_br;

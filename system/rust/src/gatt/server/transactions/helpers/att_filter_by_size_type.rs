@@ -4,17 +4,15 @@
 use crate::{
     core::uuid::Uuid,
     gatt::server::att_database::{AttAttribute, StableAttDatabase},
-    packets::{AttAttributeDataChild, AttErrorCode, Serializable},
+    packets::AttErrorCode,
 };
-
-use super::truncate_att_data::truncate_att_data;
 
 /// An attribute and the value
 #[derive(Debug, PartialEq, Eq)]
 pub struct AttributeWithValue {
     /// The attribute
     pub attr: AttAttribute,
-    pub value: AttAttributeDataChild,
+    pub value: Vec<u8>,
 }
 
 /// Takes a StableAttDatabase, a range of handles, a target type, and a
@@ -39,9 +37,9 @@ pub async fn filter_read_attributes_by_size_type(
 
     for attr @ AttAttribute { handle, .. } in target_attrs {
         match db.read_attribute(handle).await {
-            Ok(value) => {
-                let value = truncate_att_data(value, size_limit);
-                let value_size = value.size_in_bits().unwrap_or(0);
+            Ok(mut value) => {
+                value.truncate(size_limit);
+                let value_size = value.len();
                 if let Some(curr_elem_size) = curr_elem_size {
                     if curr_elem_size != value_size {
                         // no more attributes of the same size
@@ -79,7 +77,6 @@ mod test {
                 test::test_att_db::TestAttDatabase,
             },
         },
-        packets::AttAttributeDataChild,
     };
 
     const UUID: Uuid = Uuid::new(1234);
@@ -111,7 +108,7 @@ mod test {
             response.collect::<Vec<_>>(),
             vec![AttributeWithValue {
                 attr: db.find_attribute(AttHandle(3)).unwrap(),
-                value: AttAttributeDataChild::RawData([4, 5].into())
+                value: vec![4, 5]
             }]
         )
     }
@@ -161,11 +158,11 @@ mod test {
             vec![
                 AttributeWithValue {
                     attr: db.find_attribute(AttHandle(3)).unwrap(),
-                    value: AttAttributeDataChild::RawData([4, 5].into())
+                    value: vec![4, 5],
                 },
                 AttributeWithValue {
                     attr: db.find_attribute(AttHandle(6)).unwrap(),
-                    value: AttAttributeDataChild::RawData([6, 7].into())
+                    value: vec![6, 7],
                 }
             ]
         );
@@ -215,7 +212,7 @@ mod test {
             response.collect::<Vec<_>>(),
             vec![AttributeWithValue {
                 attr: db.find_attribute(AttHandle(3)).unwrap(),
-                value: AttAttributeDataChild::RawData([4, 5].into())
+                value: vec![4, 5],
             },]
         );
     }
@@ -246,7 +243,7 @@ mod test {
             response.collect::<Vec<_>>(),
             vec![AttributeWithValue {
                 attr: db.find_attribute(AttHandle(3)).unwrap(),
-                value: AttAttributeDataChild::RawData([4, 5].into())
+                value: vec![4, 5],
             },]
         );
     }
@@ -339,7 +336,7 @@ mod test {
             response.collect::<Vec<_>>(),
             vec![AttributeWithValue {
                 attr: db.find_attribute(AttHandle(3)).unwrap(),
-                value: AttAttributeDataChild::RawData([4, 5, 6].into())
+                value: vec![4, 5, 6],
             },]
         );
     }
@@ -390,11 +387,11 @@ mod test {
             vec![
                 AttributeWithValue {
                     attr: db.find_attribute(AttHandle(3)).unwrap(),
-                    value: AttAttributeDataChild::RawData([4, 5, 6].into())
+                    value: vec![4, 5, 6],
                 },
                 AttributeWithValue {
                     attr: db.find_attribute(AttHandle(5)).unwrap(),
-                    value: AttAttributeDataChild::RawData([6, 7, 8].into())
+                    value: vec![6, 7, 8],
                 }
             ]
         );

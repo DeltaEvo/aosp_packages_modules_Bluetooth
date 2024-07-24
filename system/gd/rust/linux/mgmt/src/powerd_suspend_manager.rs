@@ -125,6 +125,11 @@ impl ISuspendCallback for SuspendCallback {
         {
             let context = self.context.lock().unwrap();
 
+            if context.powerd_session.is_none() {
+                log::warn!("No powerd session!");
+                return;
+            }
+
             if let (Some(pending_suspend_imminent), Some(powerd_session)) =
                 (&context.pending_suspend_imminent, &context.powerd_session)
             {
@@ -133,8 +138,21 @@ impl ISuspendCallback for SuspendCallback {
                     powerd_session.delay_id,
                     pending_suspend_imminent.get_suspend_id(),
                 );
+            } else if let (Some(adapter_suspend_dbus), None) =
+                (&context.adapter_suspend_dbus, &context.pending_suspend_imminent)
+            {
+                log::info!("Suspend was aborted (imminent signal missing), so calling resume");
+                let mut suspend_dbus_rpc = adapter_suspend_dbus.rpc.clone();
+                tokio::spawn(async move {
+                    let result = suspend_dbus_rpc.resume().await;
+                    log::debug!("Adapter resume call, success = {}", result.unwrap_or(false));
+                });
             } else {
-                log::warn!("Suspend ready but no SuspendImminent signal or powerd session");
+                log::warn!(
+                    "Suspend ready but powerd session valid={}, adapter available={}.",
+                    context.powerd_session.is_some(),
+                    context.adapter_suspend_dbus.is_some()
+                );
             }
         }
     }
@@ -201,7 +219,7 @@ impl PowerdSuspendManager {
     }
 
     pub fn get_suspend_manager_context(&mut self) -> Arc<Mutex<SuspendManagerContext>> {
-        return self.context.clone();
+        self.context.clone()
     }
 
     /// Sets up all required D-Bus listeners.
@@ -278,7 +296,9 @@ impl PowerdSuspendManager {
         let mr = MatchRule::new_signal(POWERD_INTERFACE, SUSPEND_IMMINENT_SIGNAL)
             .with_sender(POWERD_SERVICE)
             .with_path(POWERD_PATH);
-        self.conn.add_match_no_cb(&mr.match_str()).await.unwrap();
+        self.conn.add_match_no_cb(&mr.match_str()).await.expect(
+            "Unable to add match to D-Bus for monitoring SuspendImminent signal from powerd",
+        );
 
         let tx = self.tx.clone();
         self.conn.start_receive(
@@ -312,7 +332,10 @@ impl PowerdSuspendManager {
         let mr = MatchRule::new_signal(POWERD_INTERFACE, SUSPEND_DONE_SIGNAL)
             .with_sender(POWERD_SERVICE)
             .with_path(POWERD_PATH);
-        self.conn.add_match_no_cb(&mr.match_str()).await.unwrap();
+        self.conn
+            .add_match_no_cb(&mr.match_str())
+            .await
+            .expect("Unable to add match to D-Bus for monitoring SuspendDone signal from powerd");
         let tx = self.tx.clone();
         self.conn.start_receive(
             mr,
@@ -498,11 +521,13 @@ impl PowerdSuspendManager {
     fn on_suspend_done(&mut self, suspend_done: SuspendDone) {
         // powerd is telling us that suspend is done (system has resumed), so we tell btadapterd
         // to resume too.
+        // powerd also sends the suspend done signal when the suspend is aborted. The suspend
+        // imminent signal is cancelled here, so the cleanup is done after the suspend is ready.
 
         log::debug!("SuspendDone received: {:?}", suspend_done);
 
         if self.context.lock().unwrap().pending_suspend_imminent.is_none() {
-            log::warn!("Receveid SuspendDone signal when there is no pending SuspendImminent");
+            log::warn!("Received SuspendDone signal when there is no pending SuspendImminent");
         }
 
         self.context.lock().unwrap().pending_suspend_imminent = None;
@@ -532,7 +557,7 @@ impl PowerdSuspendManager {
             let context = self.context.clone();
             tokio::spawn(async move {
                 let suspend_cb_objpath: String =
-                    format!("/org/chromium/bluetooth/Manager/suspend_callback");
+                    "/org/chromium/bluetooth/Manager/suspend_callback".to_string();
                 let status = suspend_dbus_rpc
                     .register_callback(Box::new(SuspendCallback::new(
                         suspend_cb_objpath,
