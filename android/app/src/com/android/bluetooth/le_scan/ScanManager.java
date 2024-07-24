@@ -677,24 +677,35 @@ public class ScanManager {
             if (mScanNative.isOpportunisticScanClient(client)) {
                 return false;
             }
+            int updatedScanMode = client.scanModeApp;
             if (!isAppForeground(client) || mScanNative.isForceDowngradedScanClient(client)) {
-                return client.updateScanMode(ScanSettings.SCAN_MODE_SCREEN_OFF);
+                updatedScanMode = ScanSettings.SCAN_MODE_SCREEN_OFF;
+            } else {
+                // The following codes are effectively only for services
+                // Apps are either already or will be soon handled by handleImportanceChange().
+                switch (client.scanModeApp) {
+                    case ScanSettings.SCAN_MODE_LOW_POWER:
+                        updatedScanMode = ScanSettings.SCAN_MODE_SCREEN_OFF;
+                        break;
+                    case ScanSettings.SCAN_MODE_BALANCED:
+                    case ScanSettings.SCAN_MODE_AMBIENT_DISCOVERY:
+                        updatedScanMode = ScanSettings.SCAN_MODE_SCREEN_OFF_BALANCED;
+                        break;
+                    case ScanSettings.SCAN_MODE_LOW_LATENCY:
+                        updatedScanMode = ScanSettings.SCAN_MODE_LOW_LATENCY;
+                        break;
+                    case ScanSettings.SCAN_MODE_OPPORTUNISTIC:
+                    default:
+                        return false;
+                }
             }
-
-            // The following codes are effectively only for services
-            // Apps are either already or will be soon handled by handleImportanceChange().
-            switch (client.scanModeApp) {
-                case ScanSettings.SCAN_MODE_LOW_POWER:
-                    return client.updateScanMode(ScanSettings.SCAN_MODE_SCREEN_OFF);
-                case ScanSettings.SCAN_MODE_BALANCED:
-                case ScanSettings.SCAN_MODE_AMBIENT_DISCOVERY:
-                    return client.updateScanMode(ScanSettings.SCAN_MODE_SCREEN_OFF_BALANCED);
-                case ScanSettings.SCAN_MODE_LOW_LATENCY:
-                    return client.updateScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY);
-                case ScanSettings.SCAN_MODE_OPPORTUNISTIC:
-                default:
-                    return false;
-            }
+            Log.d(
+                    TAG,
+                    "Scan mode update during screen off from "
+                            + client.scanModeApp
+                            + " to "
+                            + updatedScanMode);
+            return client.updateScanMode(updatedScanMode);
         }
 
         /**
