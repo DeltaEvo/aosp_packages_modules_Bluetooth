@@ -16,14 +16,19 @@
 
 #include "hci/acl_manager/acl_scheduler.h"
 
+#include <com_android_bluetooth_flags.h>
+#include <flag_macros.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <chrono>
 #include <future>
+#include <utility>
 
 #include "hci/address.h"
 #include "os/thread.h"
+
+#define TEST_BT com::android::bluetooth::flags
 
 namespace bluetooth {
 namespace hci {
@@ -262,7 +267,7 @@ TEST_F(AclSchedulerTest, DoNothingWhileIncomingConnectionsExist) {
   // an incoming connection arrives
   acl_scheduler_->RegisterPendingIncomingConnection(address1);
 
-  // try to start an outgoing connection
+  // try to start an outgoing connection to another device
   acl_scheduler_->EnqueueOutgoingAclConnection(address2, promiseCallback(std::move(promise)));
 
   // the outgoing_connection callback should not have executed yet
@@ -284,6 +289,40 @@ TEST_F(AclSchedulerTest, DoNothingWhileIncomingConnectionsExist) {
 
   // only now does the outgoing connection start
   EXPECT_THAT(future, IsSet());
+}
+
+TEST_F_WITH_FLAGS(AclSchedulerTest, IncomingConnectionPendingWithOutgoingRemoteNameRequest,
+                  REQUIRES_FLAGS_ENABLED(
+                          ACONFIG_FLAG(TEST_BT, progress_acl_scheduler_upon_incoming_connection))) {
+  auto promise = std::promise<void>{};
+  auto future = promise.get_future();
+
+  // an incoming connection arrives
+  acl_scheduler_->RegisterPendingIncomingConnection(address1);
+
+  // start an outgoing RNR
+  acl_scheduler_->EnqueueRemoteNameRequest(address1, promiseCallback(std::move(promise)),
+                                           emptyCallback());
+
+  // we expect the outgoing RNR to queue while incoming pending connection from same device
+  EXPECT_THAT(future, IsSet());
+}
+
+TEST_F_WITH_FLAGS(AclSchedulerTest, ConnectionToSameDeviceIncomingConnectionPending,
+                  REQUIRES_FLAGS_ENABLED(
+                          ACONFIG_FLAG(TEST_BT, progress_acl_scheduler_upon_incoming_connection))) {
+  auto promise = std::promise<void>{};
+  auto future = promise.get_future();
+
+  // an incoming connection arrives
+  acl_scheduler_->RegisterPendingIncomingConnection(address1);
+
+  // try to start an outgoing connection to same device
+  acl_scheduler_->EnqueueOutgoingAclConnection(address1, promiseCallback(std::move(promise)));
+
+  // we expect the outgoing connection to wait and then dropped once connection
+  // established
+  EXPECT_EQ(future.wait_for(timeout), std::future_status::timeout);
 }
 
 TEST_F(AclSchedulerTest, CancelOutgoingConnection) {
