@@ -30,6 +30,7 @@
 #include "hal/hci_hal.h"
 #include "hci/class_of_device.h"
 #include "hci/hci_metrics_logging.h"
+#include "hci/inquiry_interface.h"
 #include "os/alarm.h"
 #include "os/metrics.h"
 #include "os/queue.h"
@@ -791,6 +792,21 @@ DistanceMeasurementInterface* HciLayer::GetDistanceMeasurementInterface(
     RegisterLeEventHandler(subevent, event_handler);
   }
   return &distance_measurement_interface;
+}
+
+std::unique_ptr<InquiryInterface> HciLayer::GetInquiryInterface(
+        ContextualCallback<void(EventView)> event_handler) {
+  for (const auto event : InquiryEvents) {
+    RegisterEventHandler(event, event_handler);
+  }
+  auto cleanup = common::BindOnce(
+          [](HciLayer* hci) {
+            for (const auto event : InquiryEvents) {
+              hci->UnregisterEventHandler(event);
+            }
+          },
+          common::Unretained(this));
+  return std::make_unique<CommandInterfaceImpl<DiscoveryCommandBuilder>>(this, std::move(cleanup));
 }
 
 const ModuleFactory HciLayer::Factory = ModuleFactory([]() { return new HciLayer(); });
