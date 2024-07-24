@@ -337,17 +337,21 @@ public:
       AdvanceRequest();
       return;
     }
-    periodic_sync->sync_handle = event_view.GetSyncHandle();
-    periodic_sync->sync_state = PERIODIC_SYNC_STATE_ESTABLISHED;
-    callbacks_->OnPeriodicSyncStarted(periodic_sync->request_id, (uint8_t)event_view.GetStatus(),
-                                      event_view.GetSyncHandle(), event_view.GetAdvertisingSid(),
-                                      address_with_type, (uint16_t)event_view.GetAdvertiserPhy(),
-                                      event_view.GetPeriodicAdvertisingInterval());
+    if (periodic_sync->sync_state == PERIODIC_SYNC_STATE_PENDING) {
+      periodic_sync->sync_handle = event_view.GetSyncHandle();
+      periodic_sync->sync_state = PERIODIC_SYNC_STATE_ESTABLISHED;
+      callbacks_->OnPeriodicSyncStarted(periodic_sync->request_id, (uint8_t)event_view.GetStatus(),
+                                        event_view.GetSyncHandle(), event_view.GetAdvertisingSid(),
+                                        address_with_type, (uint16_t)event_view.GetAdvertiserPhy(),
+                                        event_view.GetPeriodicAdvertisingInterval());
 
-    if (com::android::bluetooth::flags::leaudio_broadcast_feature_support()) {
-      if (event_view.GetStatus() != ErrorCode::SUCCESS) {
-        periodic_syncs_.erase(periodic_sync);
+      if (com::android::bluetooth::flags::leaudio_broadcast_feature_support()) {
+        if (event_view.GetStatus() != ErrorCode::SUCCESS) {
+          periodic_syncs_.erase(periodic_sync);
+        }
       }
+    } else {
+      log::debug("[PSync]: Wrong sync state={}", (uint8_t)(periodic_sync->sync_state));
     }
 
     AdvanceRequest();
