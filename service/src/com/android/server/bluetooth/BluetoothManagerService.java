@@ -1479,15 +1479,7 @@ class BluetoothManagerService {
                         if (mAdapter == null && !isBinding()) {
                             Log.d(TAG, "Binding to service to get name and address");
                             mGetNameAddressOnly = true;
-                            mHandler.sendEmptyMessageDelayed(MESSAGE_TIMEOUT_BIND, TIMEOUT_BIND_MS);
-                            Intent i = new Intent(IBluetooth.class.getName());
-                            if (!doBind(
-                                    i,
-                                    mConnection,
-                                    Context.BIND_AUTO_CREATE | Context.BIND_IMPORTANT,
-                                    UserHandle.CURRENT)) {
-                                mHandler.removeMessages(MESSAGE_TIMEOUT_BIND);
-                            }
+                            bindToAdapter();
                         } else if (mAdapter != null) {
                             try {
                                 storeNameAndAddress(
@@ -1974,23 +1966,33 @@ class BluetoothManagerService {
         }
     }
 
+    private void bindToAdapter() {
+        UserHandle user = UserHandle.CURRENT;
+        int flags = Context.BIND_AUTO_CREATE | Context.BIND_IMPORTANT;
+        Intent intent = new Intent(IBluetooth.class.getName());
+        ComponentName comp = resolveSystemService(intent);
+        if (comp == null) {
+            Log.e(TAG, "No ComponentName found for intent=" + intent);
+            return;
+        }
+        intent.setComponent(comp);
+
+        mHandler.sendEmptyMessageDelayed(MESSAGE_TIMEOUT_BIND, TIMEOUT_BIND_MS);
+        Log.d(TAG, "Start binding to the Bluetooth service with intent=" + intent);
+        if (!mContext.bindServiceAsUser(intent, mConnection, flags, user)) {
+            Log.e(TAG, "Fail to bind to intent=" + intent);
+            mContext.unbindService(mConnection);
+            mHandler.removeMessages(MESSAGE_TIMEOUT_BIND);
+        }
+    }
+
     private void handleEnable(boolean quietMode) {
         mQuietEnable = quietMode;
 
         mAdapterLock.writeLock().lock();
         try {
             if (mAdapter == null && !isBinding()) {
-                Log.d(TAG, "binding Bluetooth service");
-                // Start bind timeout and bind
-                mHandler.sendEmptyMessageDelayed(MESSAGE_TIMEOUT_BIND, TIMEOUT_BIND_MS);
-                Intent i = new Intent(IBluetooth.class.getName());
-                if (!doBind(
-                        i,
-                        mConnection,
-                        Context.BIND_AUTO_CREATE | Context.BIND_IMPORTANT,
-                        UserHandle.CURRENT)) {
-                    mHandler.removeMessages(MESSAGE_TIMEOUT_BIND);
-                }
+                bindToAdapter();
             } else if (!Flags.fastBindToApp() && mAdapter != null) {
                 // Enable bluetooth
                 try {
@@ -2002,16 +2004,6 @@ class BluetoothManagerService {
         } finally {
             mAdapterLock.writeLock().unlock();
         }
-    }
-
-    boolean doBind(Intent intent, ServiceConnection conn, int flags, UserHandle user) {
-        ComponentName comp = resolveSystemService(intent);
-        intent.setComponent(comp);
-        if (comp == null || !mContext.bindServiceAsUser(intent, conn, flags, user)) {
-            Log.e(TAG, "Fail to bind to: " + intent);
-            return false;
-        }
-        return true;
     }
 
     private void handleDisable() {
