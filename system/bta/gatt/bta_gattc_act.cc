@@ -944,8 +944,9 @@ void bta_gattc_disc_cmpl(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* /* p_da
   }
 
   if (p_clcb->p_rcb->p_cback) {
-    tBTA_GATTC bta_gattc;
-    bta_gattc.remote_bda = p_clcb->p_srcb->server_bda;
+    tBTA_GATTC bta_gattc = {
+            .service_discovery_done.remote_bda = p_clcb->p_srcb->server_bda,
+    };
     (*p_clcb->p_rcb->p_cback)(BTA_GATTC_SRVC_DISC_DONE_EVT, &bta_gattc);
   }
 }
@@ -1477,9 +1478,10 @@ static bool bta_gattc_process_srvc_chg_ind(uint16_t conn_id, tBTA_GATTC_RCB* p_c
 
   /* notify applicationf or service change */
   if (p_clrcb->p_cback) {
-    tBTA_GATTC bta_gattc;
-    bta_gattc.service_changed.remote_bda = p_srcb->server_bda;
-    bta_gattc.service_changed.conn_id = conn_id;
+    tBTA_GATTC bta_gattc = {.service_changed = {
+                                    .remote_bda = p_srcb->server_bda,
+                                    .conn_id = conn_id,
+                            }};
     (*p_clrcb->p_cback)(BTA_GATTC_SRVC_CHG_EVT, &bta_gattc);
   }
 
