@@ -199,7 +199,7 @@ void bta_hh_disc_cmpl(void) {
  * Returns          void
  *
  ******************************************************************************/
-static void bta_hh_sdp_cback(uint16_t result, uint16_t attr_mask, tHID_DEV_SDP_INFO* sdp_rec) {
+static void bta_hh_sdp_cback(tSDP_STATUS result, uint16_t attr_mask, tHID_DEV_SDP_INFO* sdp_rec) {
   tBTA_HH_DEV_CB* p_cb = bta_hh_cb.p_cur;
   uint8_t hdl = 0;
   tBTA_HH_STATUS status = BTA_HH_ERR_SDP;
