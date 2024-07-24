@@ -15,7 +15,6 @@ aconfig("bluetooth_flags_c_lib") {
     "connectivity.aconfig",
     "device_iot_config.aconfig",
     "did.aconfig",
-    "discovery_service.aconfig",
     "dumpsys.aconfig",
     "framework.aconfig",
     "gap.aconfig",
