@@ -28,10 +28,13 @@
 #include <unordered_set>
 #include <vector>
 
+#include "common/circular_buffer.h"
 #include "common/init_flags.h"
+#include "common/strings.h"
 #include "gatt_api.h"
 #include "internal_include/bt_target.h"
 #include "macros.h"
+#include "main/shim/dumpsys.h"
 #include "osi/include/fixed_queue.h"
 #include "stack/include/bt_hdr.h"
 #include "types/bluetooth/uuid.h"
@@ -465,6 +468,34 @@ extern tGATT_CB gatt_cb;
 void gatt_set_err_rsp(bool enable, uint8_t req_op_code, uint8_t err_status);
 #endif
 
+namespace {
+constexpr char kTimeFormatString[] = "%Y-%m-%d %H:%M:%S";
+
+constexpr unsigned MillisPerSecond = 1000;
+inline std::string EpochMillisToString(long long time_ms) {
+  time_t time_sec = time_ms / MillisPerSecond;
+  struct tm tm;
+  localtime_r(&time_sec, &tm);
+  std::string s = bluetooth::common::StringFormatTime(kTimeFormatString, tm);
+  return base::StringPrintf("%s.%03u", s.c_str(),
+                            static_cast<unsigned int>(time_ms % MillisPerSecond));
+}
+}  // namespace
+
+struct tTCB_STATE_HISTORY {
+  RawAddress address;
+  tBT_TRANSPORT transport;
+  tGATT_CH_STATE state;
+  std::string holders_info;
+  std::string ToString() const {
+    return base::StringPrintf("%s, %s, state: %s, %s", ADDRESS_TO_LOGGABLE_CSTR(address),
+                              bt_transport_text(transport).c_str(),
+                              gatt_channel_state_text(state).c_str(), holders_info.c_str());
+  }
+};
+
+extern bluetooth::common::TimestampedCircularBuffer<tTCB_STATE_HISTORY> tcb_state_history_;
+
 /* from gatt_main.cc */
 bool gatt_disconnect(tGATT_TCB* p_tcb);
 void gatt_cancel_connect(const RawAddress& bd_addr, tBT_TRANSPORT transport);
@@ -584,6 +615,7 @@ bool gatt_tcb_get_cid_available_for_indication(tGATT_TCB* p_tcb, bool eatt_suppo
 bool gatt_tcb_find_indicate_handle(tGATT_TCB& tcb, uint16_t cid, uint16_t* indicated_handle_p);
 uint16_t gatt_tcb_get_att_cid(tGATT_TCB& tcb, bool eatt_support);
 uint16_t gatt_tcb_get_payload_size(tGATT_TCB& tcb, uint16_t cid);
+std::string gatt_tcb_get_holders_info_string(const tGATT_TCB* p_tcb);
 void gatt_clcb_invalidate(tGATT_TCB* p_tcb, const tGATT_CLCB* p_clcb);
 uint16_t gatt_get_mtu(const RawAddress& bda, tBT_TRANSPORT transport);
 bool gatt_is_pending_mtu_exchange(tGATT_TCB* p_tcb);

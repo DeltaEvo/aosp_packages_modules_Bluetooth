@@ -21,6 +21,9 @@
 
 static bluetooth::gatt::MockGattInterface* gatt_interface = nullptr;
 
+bluetooth::common::TimestampedCircularBuffer<tTCB_STATE_HISTORY> tcb_state_history_(
+        100 /*history size*/);
+
 void bluetooth::gatt::SetMockGattInterface(MockGattInterface* mock_gatt_interface) {
   gatt_interface = mock_gatt_interface;
 }
