@@ -2523,7 +2523,7 @@ void btif_dm_cancel_bond(const RawAddress bd_addr) {
   if (is_bonding_or_sdp()) {
     if (pairing_cb.is_ssp) {
       if (pairing_cb.is_le_only) {
-        BTA_DmBleSecurityGrant(bd_addr, BTA_DM_SEC_PAIR_NOT_SPT);
+        BTA_DmBleSecurityGrant(bd_addr, tBTA_DM_BLE_SEC_GRANT::BTA_DM_SEC_PAIR_NOT_SPT);
       } else {
         BTA_DmConfirm(bd_addr, false);
         BTA_DmBondCancel(bd_addr);
@@ -2645,9 +2645,9 @@ void btif_dm_ssp_reply(const RawAddress bd_addr, bt_ssp_variant_t variant, uint8
       BTA_DmBleConfirmReply(bd_addr, accept);
     } else {
       if (accept) {
-        BTA_DmBleSecurityGrant(bd_addr, BTA_DM_SEC_GRANTED);
+        BTA_DmBleSecurityGrant(bd_addr, tBTA_DM_BLE_SEC_GRANT::BTA_DM_SEC_GRANTED);
       } else {
-        BTA_DmBleSecurityGrant(bd_addr, BTA_DM_SEC_PAIR_NOT_SPT);
+        BTA_DmBleSecurityGrant(bd_addr, tBTA_DM_BLE_SEC_GRANT::BTA_DM_SEC_PAIR_NOT_SPT);
       }
     }
   } else {
