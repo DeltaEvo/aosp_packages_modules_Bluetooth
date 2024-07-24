@@ -96,22 +96,6 @@ struct BTM_IsInquiryActive {
 };
 extern struct BTM_IsInquiryActive BTM_IsInquiryActive;
 
-// Name: BTM_ReadRemoteDeviceName
-// Params: const RawAddress& remote_bda, tBTM_NAME_CMPL_CB* p_cb, tBT_TRANSPORT
-// transport Return: tBTM_STATUS
-struct BTM_ReadRemoteDeviceName {
-  static tBTM_STATUS return_value;
-  std::function<tBTM_STATUS(const RawAddress& remote_bda, tBTM_NAME_CMPL_CB* p_cb,
-                            tBT_TRANSPORT transport)>
-          body{[](const RawAddress& /* remote_bda */, tBTM_NAME_CMPL_CB* /* p_cb */,
-                  tBT_TRANSPORT /* transport */) { return return_value; }};
-  tBTM_STATUS operator()(const RawAddress& remote_bda, tBTM_NAME_CMPL_CB* p_cb,
-                         tBT_TRANSPORT transport) {
-    return body(remote_bda, p_cb, transport);
-  }
-};
-extern struct BTM_ReadRemoteDeviceName BTM_ReadRemoteDeviceName;
-
 // Name: BTM_RemoveEirService
 // Params: uint32_t* p_eir_uuid, uint16_t uuid16
 // Return: void
