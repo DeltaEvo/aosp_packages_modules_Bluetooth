@@ -570,17 +570,6 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
     }
 
     /**
-     * Get the Content Control ID (CCID) value.
-     *
-     * @return ccid Content Control ID value
-     * @hide
-     */
-    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
-    public int getContentControlId() {
-        return mCcid;
-    }
-
-    /**
      * Notify about the newly added call.
      *
      * <p>This shall be called as early as possible after the call has been added.
