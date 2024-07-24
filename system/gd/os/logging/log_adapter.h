@@ -20,16 +20,7 @@
 
 #include <string>
 
-// as RawAddress does not implement IRedactableLoggable
-// here we use a template function as a tricky workaround.
-// in the future. we want to convert it into a function
-// that takes a reference to IRedactableLoggable
-template <typename Loggable>
-std::string ToLoggableStr(const Loggable& loggable) {
-  return loggable.ToRedactedStringForLogging();
-}
-
-#define ADDRESS_TO_LOGGABLE_STR(addr) ToLoggableStr(addr)
+#define ADDRESS_TO_LOGGABLE_STR(addr) (addr).ToRedactedStringForLogging()
 #define ADDRESS_TO_LOGGABLE_CSTR(addr) ADDRESS_TO_LOGGABLE_STR(addr).c_str()
 
 #define PRIVATE_CELL(number)                                        \
