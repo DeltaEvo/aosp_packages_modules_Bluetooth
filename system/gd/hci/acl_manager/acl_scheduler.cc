@@ -163,8 +163,10 @@ struct AclScheduler::impl {
 
 private:
   bool is_ready_to_send_next_operation() const {
-    return incoming_connecting_address_set_.empty() && !outgoing_entry_.has_value() &&
-           !pending_outgoing_operations_.empty();
+    if (pending_outgoing_operations_.empty()) {
+      return false;
+    }
+    return incoming_connecting_address_set_.empty() && !outgoing_entry_.has_value();
   }
 
   void try_dequeue_next_operation() {
