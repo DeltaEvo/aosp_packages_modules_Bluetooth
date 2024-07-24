@@ -1688,8 +1688,8 @@ tBTM_STATUS btm_sec_mx_access_request(const RawAddress& bd_addr, bool is_origina
                                       void* p_ref_data) {
   tBTM_SEC_DEV_REC* p_dev_rec;
   tBTM_STATUS rc;
-  bool transport = false; /* should check PSM range in LE connection oriented
-                             L2CAP connection */
+  tBT_TRANSPORT transport = BT_TRANSPORT_AUTO; /* should check PSM range in LE connection oriented
+                                                  L2CAP connection */
   log::debug("Multiplex access request device:{}", bd_addr);
 
   /* Find or get oldest record */
