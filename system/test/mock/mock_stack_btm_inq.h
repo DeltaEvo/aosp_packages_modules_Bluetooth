@@ -96,16 +96,6 @@ struct BTM_IsInquiryActive {
 };
 extern struct BTM_IsInquiryActive BTM_IsInquiryActive;
 
-// Name: BTM_RemoveEirService
-// Params: uint32_t* p_eir_uuid, uint16_t uuid16
-// Return: void
-struct BTM_RemoveEirService {
-  std::function<void(uint32_t* p_eir_uuid, uint16_t uuid16)> body{
-          [](uint32_t* /* p_eir_uuid */, uint16_t /* uuid16 */) {}};
-  void operator()(uint32_t* p_eir_uuid, uint16_t uuid16) { body(p_eir_uuid, uuid16); }
-};
-extern struct BTM_RemoveEirService BTM_RemoveEirService;
-
 // Name: BTM_SetConnectability
 // Params: uint16_t page_mode
 // Return: tBTM_STATUS
