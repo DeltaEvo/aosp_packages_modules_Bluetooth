@@ -25,6 +25,7 @@
 #include <bluetooth/log.h>
 #include <stdint.h>
 
+#include <bit>
 #include <bitset>
 #include <map>
 #include <optional>
@@ -100,6 +101,25 @@ static const bluetooth::Uuid kTelephonyMediaAudioProfileRoleCharacteristicUuid =
 }  // namespace uuid
 
 namespace codec_spec_conf {
+constexpr uint8_t SingleCapaToConfigHelper(uint16_t single_capability, uint8_t offset = 0) {
+  if (!single_capability || std::popcount(single_capability) > 1) {
+    return 0;
+  }
+  return std::countr_zero(single_capability) + offset;
+}
+
+constexpr uint8_t SingleSamplingFreqCapability2Config(uint16_t single_capability) {
+  return SingleCapaToConfigHelper(single_capability, 1);
+}
+
+constexpr uint8_t SingleFrameDurationCapability2Config(uint16_t single_capability) {
+  return SingleCapaToConfigHelper(single_capability);
+}
+
+constexpr uint8_t SingleChannelCountCapability2Config(uint16_t single_capability) {
+  return SingleCapaToConfigHelper(single_capability, 1);
+}
+
 /* LTV Types */
 constexpr uint8_t kLeAudioLtvTypeSamplingFreq = 0x01;
 constexpr uint8_t kLeAudioLtvTypeFrameDuration = 0x02;
@@ -185,9 +205,21 @@ constexpr uint16_t kLeAudioCodecFrameLen120 = 120;
 constexpr uint8_t kInvalidCisId = 0xFF;
 
 namespace codec_spec_caps {
-uint16_t constexpr SamplingFreqConfig2Capability(uint8_t conf) { return 1 << (conf - 1); }
+uint16_t constexpr SamplingFreqConfig2Capability(uint8_t conf) {
+  if (!conf) {
+    return 0;
+  }
+  return 0x01 << (conf - 1);
+}
 
 uint8_t constexpr FrameDurationConfig2Capability(uint8_t conf) { return 0x01 << (conf); }
+
+uint16_t constexpr ChannelCountConfig2Capability(uint8_t conf) {
+  if (!conf) {
+    return 0;
+  }
+  return 0x01 << (conf - 1);
+}
 
 /* LTV Types - same values as in Codec Specific Configurations but 0x03 is
  * named differently.
