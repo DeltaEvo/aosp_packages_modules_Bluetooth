@@ -54,6 +54,7 @@ import android.util.Log;
 
 import androidx.annotation.VisibleForTesting;
 
+import com.android.bluetooth.Utils;
 import com.android.bluetooth.hfp.BluetoothHeadsetProxy;
 import com.android.bluetooth.tbs.BluetoothLeCallControlProxy;
 
@@ -887,7 +888,7 @@ public class BluetoothInCallService extends InCallService {
                 }
                 Log.i(
                         TAG,
-                        String.format(
+                        Utils.formatSimple(
                                 "sending inferred clcc for BluetoothCall: index %d, direction"
                                         + " %d, state %d, isPartOfConference %b, addressType %d",
                                 (int) response[0],

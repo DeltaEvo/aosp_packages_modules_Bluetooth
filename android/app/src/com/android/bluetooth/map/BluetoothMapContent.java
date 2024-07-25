@@ -140,7 +140,7 @@ public class BluetoothMapContent {
     Only m-send-req (128) m-retrieve-conf (132), m-notification-ind (130)
     are interested by user */
     private static final String INTERESTED_MESSAGE_TYPE_CLAUSE =
-            String.format(
+            Utils.formatSimple(
                     "( %s = %d OR %s = %d OR %s = %d )",
                     Mms.MESSAGE_TYPE,
                     PduHeaders.MESSAGE_TYPE_SEND_REQ,

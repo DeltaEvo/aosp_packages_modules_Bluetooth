@@ -14,6 +14,8 @@
  */
 package com.android.bluetooth.map;
 
+import static com.android.bluetooth.Utils.formatSimple;
+
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothProtoEnums;
 import android.database.Cursor;
@@ -588,7 +590,7 @@ public class BluetoothMapUtils {
                         && ((b2 >= '0' && b2 <= '9')
                                 || (b2 >= 'A' && b2 <= 'F')
                                 || (b2 >= 'a' && b2 <= 'f'))) {
-                    Log.v(TAG, "Found hex number: " + String.format("%c%c", b1, b2));
+                    Log.v(TAG, "Found hex number: " + formatSimple("%c%c", b1, b2));
                     if (b1 <= '9') {
                         b1 = (byte) (b1 - '0');
                     } else if (b1 <= 'F') {

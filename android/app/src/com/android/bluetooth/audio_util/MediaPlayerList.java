@@ -629,7 +629,8 @@ public class MediaPlayerList {
                 int id = mMediaPlayerIds.get(browser.getPackageName());
 
                 Log.d(TAG, "getFolderItemsMediaPlayerList: Adding player " + displayName);
-                Folder playerFolder = new Folder(String.format("%02d", id), false, displayName);
+                Folder playerFolder =
+                        new Folder(Utils.formatSimple("%02d", id), false, displayName);
                 playerList.add(new ListItem(playerFolder));
             }
         } else {
@@ -639,7 +640,8 @@ public class MediaPlayerList {
                 int id = mMediaPlayerIds.get(player.getPackageName());
 
                 Log.d(TAG, "getFolderItemsMediaPlayerList: Adding player " + displayName);
-                Folder playerFolder = new Folder(String.format("%02d", id), false, displayName);
+                Folder playerFolder =
+                        new Folder(Utils.formatSimple("%02d", id), false, displayName);
                 playerList.add(new ListItem(playerFolder));
             }
         }
@@ -722,7 +724,7 @@ public class MediaPlayerList {
                                 return;
                             }
 
-                            String playerPrefix = String.format("%02d", playerIndex);
+                            String playerPrefix = Utils.formatSimple("%02d", playerIndex);
                             for (ListItem item : results) {
                                 if (item.isFolder) {
                                     item.folder.mediaId = playerPrefix.concat(item.folder.mediaId);
