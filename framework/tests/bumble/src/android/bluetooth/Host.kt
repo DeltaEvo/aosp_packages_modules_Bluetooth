@@ -127,6 +127,6 @@ public class Host(context: Context) : Closeable {
         }
 
     companion object {
-        private val TIMEOUT = 10.seconds
+        private val TIMEOUT = 20.seconds
     }
 }
