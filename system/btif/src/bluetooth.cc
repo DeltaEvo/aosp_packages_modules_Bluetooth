@@ -61,28 +61,26 @@
 #include "bta/include/bta_le_audio_broadcaster_api.h"
 #include "bta/include/bta_vc_api.h"
 #include "btif/avrcp/avrcp_service.h"
+#include "btif/include/btif_a2dp.h"
+#include "btif/include/btif_api.h"
+#include "btif/include/btif_av.h"
+#include "btif/include/btif_bqr.h"
+#include "btif/include/btif_config.h"
+#include "btif/include/btif_debug_conn.h"
+#include "btif/include/btif_dm.h"
+#include "btif/include/btif_hd.h"
+#include "btif/include/btif_hf.h"
+#include "btif/include/btif_hh.h"
+#include "btif/include/btif_keystore.h"
+#include "btif/include/btif_metrics_logging.h"
+#include "btif/include/btif_pan.h"
+#include "btif/include/btif_profile_storage.h"
+#include "btif/include/btif_rc.h"
 #include "btif/include/btif_sock.h"
 #include "btif/include/btif_sock_logging.h"
+#include "btif/include/btif_storage.h"
 #include "btif/include/core_callbacks.h"
 #include "btif/include/stack_manager_t.h"
-#include "btif_a2dp.h"
-#include "btif_api.h"
-#include "btif_av.h"
-#include "btif_bqr.h"
-#include "btif_config.h"
-#include "btif_debug_conn.h"
-#include "btif_dm.h"
-#include "btif_hd.h"
-#include "btif_hf.h"
-#include "btif_hh.h"
-#include "btif_keystore.h"
-#include "btif_metrics_logging.h"
-#include "btif_pan.h"
-#include "btif_profile_storage.h"
-#include "btif_rc.h"
-#include "btif_sock.h"
-#include "btif_sock_logging.h"
-#include "btif_storage.h"
 #include "common/address_obfuscator.h"
 #include "common/init_flags.h"
 #include "common/metrics.h"
@@ -121,6 +119,24 @@ using bluetooth::le_audio::LeAudioBroadcasterInterface;
 using bluetooth::le_audio::LeAudioClientInterface;
 using bluetooth::vc::VolumeControlInterface;
 using namespace bluetooth;
+
+namespace {
+tBT_TRANSPORT to_bt_transport(int val) {
+  switch (val) {
+    case 0:
+      return BT_TRANSPORT_AUTO;
+    case 1:
+      return BT_TRANSPORT_BR_EDR;
+    case 2:
+      return BT_TRANSPORT_LE;
+    default:
+      break;
+  }
+  log::warn("Passed unexpected transport value:{}", val);
+  return BT_TRANSPORT_AUTO;
+}
+
+}  // namespace
 
 /*******************************************************************************
  *  Static variables
@@ -364,7 +380,6 @@ static bluetooth::core::CoreInterface* CreateInterfaceToProfiles() {
   };
   static bluetooth::core::HACK_ProfileInterface profileInterface{
           // HID
-          .btif_hh_connect = btif_hh_connect,
           .btif_hh_virtual_unplug = btif_hh_virtual_unplug,
           .bta_hh_read_ssr_param = bta_hh_read_ssr_param,
 
@@ -592,7 +607,8 @@ int get_remote_services(RawAddress* remote_addr, int transport) {
     return BT_STATUS_NOT_READY;
   }
 
-  do_in_main_thread(base::BindOnce(btif_dm_get_remote_services, *remote_addr, transport));
+  do_in_main_thread(
+          base::BindOnce(btif_dm_get_remote_services, *remote_addr, to_bt_transport(transport)));
   return BT_STATUS_SUCCESS;
 }
 
@@ -622,7 +638,7 @@ static int create_bond(const RawAddress* bd_addr, int transport) {
     return BT_STATUS_BUSY;
   }
 
-  do_in_main_thread(base::BindOnce(btif_dm_create_bond, *bd_addr, transport));
+  do_in_main_thread(base::BindOnce(btif_dm_create_bond, *bd_addr, to_bt_transport(transport)));
   return BT_STATUS_SUCCESS;
 }
 
@@ -647,8 +663,8 @@ static int create_bond_out_of_band(const RawAddress* bd_addr, int transport,
     return BT_STATUS_BUSY;
   }
 
-  do_in_main_thread(base::BindOnce(btif_dm_create_bond_out_of_band, *bd_addr, transport, *p192_data,
-                                   *p256_data));
+  do_in_main_thread(base::BindOnce(btif_dm_create_bond_out_of_band, *bd_addr,
+                                   to_bt_transport(transport), *p192_data, *p256_data));
   return BT_STATUS_SUCCESS;
 }
 
@@ -898,10 +914,7 @@ static int get_remote_pbap_pce_version(const RawAddress* bd_addr) {
 }
 
 static bool pbap_pse_dynamic_version_upgrade_is_enabled() {
-  if (bluetooth::common::init_flags::pbap_pse_dynamic_version_upgrade_is_enabled()) {
-    return true;
-  }
-  log::warn("PBAP PSE dynamic version upgrade is not enabled");
+  log::info("PBAP PSE dynamic version upgrade is not enabled");
   return false;
 }
 

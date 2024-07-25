@@ -34,7 +34,6 @@
 #include "btif/include/btif_util.h"
 #include "btif_bqr.h"
 #include "btif_jni_task.h"
-#include "btm_api_types.h"
 #include "common/bind.h"
 #include "common/contextual_callback.h"
 #include "common/postable_context.h"
@@ -44,7 +43,6 @@
 #include "hci/hci_layer_mock.h"
 #include "include/hardware/bluetooth.h"
 #include "include/hardware/bt_av.h"
-#include "main/shim/entry.h"
 #include "main_thread.h"
 #include "packet/base_packet_builder.h"
 #include "packet/bit_inserter.h"
@@ -661,6 +659,8 @@ TEST_F(BtifCoreWithConnectionTest, btif_dm_get_connection_state__connected_no_en
   test::mock::stack_btm_sec::BTM_IsEncrypted.body = [](const RawAddress& /* bd_addr */,
                                                        tBT_TRANSPORT transport) {
     switch (transport) {
+      case BT_TRANSPORT_AUTO:
+        return false;
       case BT_TRANSPORT_BR_EDR:
         return false;
       case BT_TRANSPORT_LE:
@@ -676,6 +676,8 @@ TEST_F(BtifCoreWithConnectionTest, btif_dm_get_connection_state__connected_class
   test::mock::stack_btm_sec::BTM_IsEncrypted.body = [](const RawAddress& /* bd_addr */,
                                                        tBT_TRANSPORT transport) {
     switch (transport) {
+      case BT_TRANSPORT_AUTO:
+        return false;
       case BT_TRANSPORT_BR_EDR:
         return true;
       case BT_TRANSPORT_LE:
@@ -692,6 +694,8 @@ TEST_F(BtifCoreWithConnectionTest, btif_dm_get_connection_state__connected_le_en
   test::mock::stack_btm_sec::BTM_IsEncrypted.body = [](const RawAddress& /* bd_addr */,
                                                        tBT_TRANSPORT transport) {
     switch (transport) {
+      case BT_TRANSPORT_AUTO:
+        return false;
       case BT_TRANSPORT_BR_EDR:
         return false;
       case BT_TRANSPORT_LE:
@@ -707,6 +711,8 @@ TEST_F(BtifCoreWithConnectionTest, btif_dm_get_connection_state__connected_both_
   test::mock::stack_btm_sec::BTM_IsEncrypted.body = [](const RawAddress& /* bd_addr */,
                                                        tBT_TRANSPORT transport) {
     switch (transport) {
+      case BT_TRANSPORT_AUTO:
+        return false;
       case BT_TRANSPORT_BR_EDR:
         return true;
       case BT_TRANSPORT_LE:
@@ -722,6 +728,8 @@ TEST_F(BtifCoreWithConnectionTest, btif_dm_get_connection_state_sync) {
   test::mock::stack_btm_sec::BTM_IsEncrypted.body = [](const RawAddress& /* bd_addr */,
                                                        tBT_TRANSPORT transport) {
     switch (transport) {
+      case BT_TRANSPORT_AUTO:
+        return false;
       case BT_TRANSPORT_BR_EDR:
         return true;
       case BT_TRANSPORT_LE:

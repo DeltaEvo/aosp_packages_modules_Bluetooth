@@ -22,11 +22,9 @@
 #include <array>
 #include <queue>
 
-#include "common/init_flags.h"
 #include "gap_api.h"
 #include "gatt_api.h"
 #include "hardware/bt_gatt_types.h"
-#include "os/log.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/btm_client_interface.h"

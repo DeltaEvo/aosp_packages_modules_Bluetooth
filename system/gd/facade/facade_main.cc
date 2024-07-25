@@ -20,7 +20,6 @@
 
 #include <csignal>
 #include <cstring>
-#include <memory>
 #include <optional>
 #include <string>
 #include <thread>
@@ -32,11 +31,9 @@
 #include <unwindstack/AndroidUnwinder.h>
 // clang-format on
 
-#include "common/init_flags.h"
 #include "facade/grpc_root_server.h"
 #include "hal/hci_hal_host.h"
 #include "hal/snoop_logger.h"
-#include "os/log.h"
 #include "os/parameter_provider.h"
 #include "os/system_properties.h"
 
@@ -116,8 +113,6 @@ int main(int argc, const char** argv) {
 
   int root_server_port = 8897;
   int grpc_port = 8899;
-
-  bluetooth::common::InitFlags::SetAllForTesting();
 
   const std::string arg_grpc_root_server_port = "--root-server-port=";
   const std::string arg_grpc_server_port = "--grpc-port=";

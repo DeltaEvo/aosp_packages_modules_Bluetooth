@@ -256,7 +256,7 @@ void sdpu_dump_all_ccb();
 
 uint8_t* sdpu_build_attrib_seq(uint8_t* p_out, uint16_t* p_attr, uint16_t num_attrs);
 uint8_t* sdpu_build_attrib_entry(uint8_t* p_out, const tSDP_ATTRIBUTE* p_attr);
-void sdpu_build_n_send_error(tCONN_CB* p_ccb, uint16_t trans_num, uint16_t error_code,
+void sdpu_build_n_send_error(tCONN_CB* p_ccb, uint16_t trans_num, tSDP_STATUS error_code,
                              char* p_error_text);
 
 uint8_t* sdpu_extract_attr_seq(uint8_t* p, uint16_t param_len, tSDP_ATTR_SEQ* p_seq);

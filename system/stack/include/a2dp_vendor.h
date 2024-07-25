@@ -72,7 +72,7 @@ bool A2DP_IsVendorPeerSinkCodecValid(const uint8_t* p_codec_info);
 // |p_codec_info| contains information about the codec capabilities.
 // Returns true if the vendor-specific A2DP Sink codec is supported,
 // otherwise false.
-bool A2DP_IsVendorSinkCodecSupported(const uint8_t* p_codec_info);
+tA2DP_STATUS A2DP_IsVendorSinkCodecSupported(const uint8_t* p_codec_info);
 
 // Gets the Vendor ID for the vendor-specific A2DP codec.
 // |p_codec_info| contains information about the codec capabilities.

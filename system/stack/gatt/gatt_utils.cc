@@ -99,9 +99,8 @@ const char* const op_code_name[] = {"UNKNOWN",
 uint16_t gatt_get_local_mtu(void) {
   /* Default ATT MTU must not be greater than GATT_MAX_MTU_SIZE, nor smaller
    * than GATT_DEF_BLE_MTU_SIZE */
-  static const uint16_t ATT_MTU_DEFAULT = std::max(
-          std::min(bluetooth::common::init_flags::get_att_mtu_default(), GATT_MAX_MTU_SIZE),
-          GATT_DEF_BLE_MTU_SIZE);
+  static const uint16_t ATT_MTU_DEFAULT =
+          std::max(std::min(517, GATT_MAX_MTU_SIZE), GATT_DEF_BLE_MTU_SIZE);
   return ATT_MTU_DEFAULT;
 }
 

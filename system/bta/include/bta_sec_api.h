@@ -24,16 +24,13 @@
 
 #include <cstdint>
 
-#include "bta_api_data_types.h"
-#include "internal_include/bt_target.h"
+#include "bta/include/bta_api_data_types.h"
 #include "stack/include/bt_device_type.h"
 #include "stack/include/bt_name.h"
 #include "stack/include/bt_octets.h"
 #include "stack/include/btm_ble_sec_api_types.h"
 #include "stack/include/btm_sec_api_types.h"
 #include "stack/include/hci_error_code.h"
-#include "types/ble_address_with_type.h"
-#include "types/bt_transport.h"
 #include "types/raw_address.h"
 
 /* Security Setting Mask */
@@ -117,9 +114,10 @@ typedef struct {
   Octet16 dhk;
 } tBTA_BLE_LOCAL_ID_KEYS;
 
-#define BTA_DM_SEC_GRANTED BTA_SUCCESS
-#define BTA_DM_SEC_PAIR_NOT_SPT BTA_DM_AUTH_SMP_PAIR_NOT_SUPPORT
-typedef uint8_t tBTA_DM_BLE_SEC_GRANT;
+enum class tBTA_DM_BLE_SEC_GRANT {
+  BTA_DM_SEC_GRANTED = BTA_SUCCESS,
+  BTA_DM_SEC_PAIR_NOT_SPT = BTA_DM_AUTH_SMP_PAIR_NOT_SUPPORT
+};
 
 /* Structure associated with BTA_DM_BLE_SEC_REQ_EVT */
 typedef struct {

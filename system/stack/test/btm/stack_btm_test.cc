@@ -21,7 +21,6 @@
 #include <iostream>
 #include <sstream>
 
-#include "common/init_flags.h"
 #include "hci/controller_interface_mock.h"
 #include "hci/hci_layer_mock.h"
 #include "stack/btm/btm_dev.h"
@@ -136,7 +135,6 @@ TEST_F(StackBtmWithQueuesTest, InitFree) {
 
 TEST_F(StackBtmWithQueuesTest, tSCO_CB) {
   EXPECT_CALL(mock_hci_, GetScoQueueEnd()).WillOnce(Return(sco_queue_.GetUpEnd()));
-  bluetooth::common::InitFlags::SetAllForTesting();
   tSCO_CB* p_sco = &btm_cb.sco_cb;
   p_sco->Init();
   p_sco->Free();
@@ -220,8 +218,6 @@ struct {
 } btm_test;
 
 TEST_F(StackBtmWithInitFreeTest, btm_sec_rmt_name_request_complete) {
-  bluetooth::common::InitFlags::SetAllForTesting();
-
   ASSERT_TRUE(BTM_SecAddRmtNameNotifyCallback(
           [](const RawAddress& bd_addr, DEV_CLASS dc, BD_NAME bd_name) {
             btm_test.bd_addr = bd_addr;

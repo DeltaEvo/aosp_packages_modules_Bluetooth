@@ -17,7 +17,6 @@
 
 package com.android.bluetooth.vc;
 
-import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 
 import android.annotation.RequiresPermission;
@@ -30,7 +29,6 @@ import android.bluetooth.IBluetoothVolumeControl;
 import android.bluetooth.IBluetoothVolumeControlCallback;
 import android.content.AttributionSource;
 import android.content.Context;
-import android.content.Intent;
 import android.media.AudioManager;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -1127,16 +1125,6 @@ public class VolumeControlService extends ProfileService {
 
         Objects.requireNonNull(
                 stackEvent.device, "Device should never be null, event: " + stackEvent);
-
-        Intent intent = null;
-
-        if (intent != null) {
-            intent.addFlags(
-                    Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
-                            | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
-            sendBroadcast(intent, BLUETOOTH_CONNECT);
-            return;
-        }
 
         BluetoothDevice device = stackEvent.device;
         if (stackEvent.type == VolumeControlStackEvent.EVENT_TYPE_DEVICE_AVAILABLE) {

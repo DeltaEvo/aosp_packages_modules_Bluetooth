@@ -233,6 +233,10 @@ typedef struct {
 } tBTA_GATTC_SERVICE_CHANGED;
 
 typedef struct {
+  RawAddress remote_bda;
+} tBTA_GATTC_SERVICE_DISCOVERY_DONE;
+
+typedef struct {
   tGATT_IF server_if;
   uint16_t conn_id;
   uint16_t subrate_factor;
@@ -255,12 +259,12 @@ typedef union {
   tBTA_GATTC_EXEC_CMPL exec_cmpl; /*  execute complete */
   tBTA_GATTC_NOTIFY notify;       /* notification/indication event data */
   tBTA_GATTC_ENC_CMPL_CB enc_cmpl;
-  RawAddress remote_bda;      /* service change event */
   tBTA_GATTC_CFG_MTU cfg_mtu; /* configure MTU operation */
   tBTA_GATTC_CONGEST congest;
   tBTA_GATTC_PHY_UPDATE phy_update;
   tBTA_GATTC_CONN_UPDATE conn_update;
   tBTA_GATTC_SERVICE_CHANGED service_changed;
+  tBTA_GATTC_SERVICE_DISCOVERY_DONE service_discovery_done;
   tBTA_GATTC_SUBRATE_CHG subrate_chg;
 } tBTA_GATTC;
 

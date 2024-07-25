@@ -57,27 +57,6 @@ struct BTM_CancelInquiry {
 };
 extern struct BTM_CancelInquiry BTM_CancelInquiry;
 
-// Name: BTM_CancelRemoteDeviceName
-// Params: void
-// Return: tBTM_STATUS
-struct BTM_CancelRemoteDeviceName {
-  static tBTM_STATUS return_value;
-  std::function<tBTM_STATUS(void)> body{[](void) { return return_value; }};
-  tBTM_STATUS operator()(void) { return body(); }
-};
-extern struct BTM_CancelRemoteDeviceName BTM_CancelRemoteDeviceName;
-
-// Name: BTM_ClearInqDb
-// Params: const RawAddress* p_bda
-// Return: tBTM_STATUS
-struct BTM_ClearInqDb {
-  static tBTM_STATUS return_value;
-  std::function<tBTM_STATUS(const RawAddress* p_bda)> body{
-          [](const RawAddress* /* p_bda */) { return return_value; }};
-  tBTM_STATUS operator()(const RawAddress* p_bda) { return body(p_bda); }
-};
-extern struct BTM_ClearInqDb BTM_ClearInqDb;
-
 // Name: BTM_EnableInterlacedInquiryScan
 // Params:
 // Return: void
@@ -96,39 +75,6 @@ struct BTM_EnableInterlacedPageScan {
 };
 extern struct BTM_EnableInterlacedPageScan BTM_EnableInterlacedPageScan;
 
-// Name: BTM_GetEirSupportedServices
-// Params: uint32_t* p_eir_uuid, uint8_t** p, uint8_t max_num_uuid16, uint8_t*
-// p_num_uuid16 Return: uint8_t
-struct BTM_GetEirSupportedServices {
-  static uint8_t return_value;
-  std::function<uint8_t(uint32_t* p_eir_uuid, uint8_t** p, uint8_t max_num_uuid16,
-                        uint8_t* p_num_uuid16)>
-          body{[](uint32_t* /* p_eir_uuid */, uint8_t** /* p */, uint8_t /* max_num_uuid16 */,
-                  uint8_t* /* p_num_uuid16 */) { return return_value; }};
-  uint8_t operator()(uint32_t* p_eir_uuid, uint8_t** p, uint8_t max_num_uuid16,
-                     uint8_t* p_num_uuid16) {
-    return body(p_eir_uuid, p, max_num_uuid16, p_num_uuid16);
-  }
-};
-extern struct BTM_GetEirSupportedServices BTM_GetEirSupportedServices;
-
-// Name: BTM_GetEirUuidList
-// Params: const uint8_t* p_eir, size_t eir_len, uint8_t uuid_size, uint8_t*
-// p_num_uuid, uint8_t* p_uuid_list, uint8_t max_num_uuid Return: uint8_t
-struct BTM_GetEirUuidList {
-  static uint8_t return_value;
-  std::function<uint8_t(const uint8_t* p_eir, size_t eir_len, uint8_t uuid_size,
-                        uint8_t* p_num_uuid, uint8_t* p_uuid_list, uint8_t max_num_uuid)>
-          body{[](const uint8_t* /* p_eir */, size_t /* eir_len */, uint8_t /* uuid_size */,
-                  uint8_t* /* p_num_uuid */, uint8_t* /* p_uuid_list */,
-                  uint8_t /* max_num_uuid */) { return return_value; }};
-  uint8_t operator()(const uint8_t* p_eir, size_t eir_len, uint8_t uuid_size, uint8_t* p_num_uuid,
-                     uint8_t* p_uuid_list, uint8_t max_num_uuid) {
-    return body(p_eir, eir_len, uuid_size, p_num_uuid, p_uuid_list, max_num_uuid);
-  }
-};
-extern struct BTM_GetEirUuidList BTM_GetEirUuidList;
-
 // Name: BTM_HasEirService
 // Params: const uint32_t* p_eir_uuid, uint16_t uuid16
 // Return: bool
@@ -140,38 +86,6 @@ struct BTM_HasEirService {
 };
 extern struct BTM_HasEirService BTM_HasEirService;
 
-// Name: BTM_InqDbFirst
-// Params: void
-// Return: tBTM_INQ_INFO*
-struct BTM_InqDbFirst {
-  static tBTM_INQ_INFO* return_value;
-  std::function<tBTM_INQ_INFO*(void)> body{[](void) { return return_value; }};
-  tBTM_INQ_INFO* operator()(void) { return body(); }
-};
-extern struct BTM_InqDbFirst BTM_InqDbFirst;
-
-// Name: BTM_InqDbNext
-// Params: tBTM_INQ_INFO* p_cur
-// Return: tBTM_INQ_INFO*
-struct BTM_InqDbNext {
-  static tBTM_INQ_INFO* return_value;
-  std::function<tBTM_INQ_INFO*(tBTM_INQ_INFO* p_cur)> body{
-          [](tBTM_INQ_INFO* /* p_cur */) { return return_value; }};
-  tBTM_INQ_INFO* operator()(tBTM_INQ_INFO* p_cur) { return body(p_cur); }
-};
-extern struct BTM_InqDbNext BTM_InqDbNext;
-
-// Name: BTM_InqDbRead
-// Params: const RawAddress& p_bda
-// Return: tBTM_INQ_INFO*
-struct BTM_InqDbRead {
-  static tBTM_INQ_INFO* return_value;
-  std::function<tBTM_INQ_INFO*(const RawAddress& p_bda)> body{
-          [](const RawAddress& /* p_bda */) { return return_value; }};
-  tBTM_INQ_INFO* operator()(const RawAddress& p_bda) { return body(p_bda); }
-};
-extern struct BTM_InqDbRead BTM_InqDbRead;
-
 // Name: BTM_IsInquiryActive
 // Params: void
 // Return: uint16_t
@@ -181,32 +95,6 @@ struct BTM_IsInquiryActive {
   uint16_t operator()(void) { return body(); }
 };
 extern struct BTM_IsInquiryActive BTM_IsInquiryActive;
-
-// Name: BTM_ReadRemoteDeviceName
-// Params: const RawAddress& remote_bda, tBTM_NAME_CMPL_CB* p_cb, tBT_TRANSPORT
-// transport Return: tBTM_STATUS
-struct BTM_ReadRemoteDeviceName {
-  static tBTM_STATUS return_value;
-  std::function<tBTM_STATUS(const RawAddress& remote_bda, tBTM_NAME_CMPL_CB* p_cb,
-                            tBT_TRANSPORT transport)>
-          body{[](const RawAddress& /* remote_bda */, tBTM_NAME_CMPL_CB* /* p_cb */,
-                  tBT_TRANSPORT /* transport */) { return return_value; }};
-  tBTM_STATUS operator()(const RawAddress& remote_bda, tBTM_NAME_CMPL_CB* p_cb,
-                         tBT_TRANSPORT transport) {
-    return body(remote_bda, p_cb, transport);
-  }
-};
-extern struct BTM_ReadRemoteDeviceName BTM_ReadRemoteDeviceName;
-
-// Name: BTM_RemoveEirService
-// Params: uint32_t* p_eir_uuid, uint16_t uuid16
-// Return: void
-struct BTM_RemoveEirService {
-  std::function<void(uint32_t* p_eir_uuid, uint16_t uuid16)> body{
-          [](uint32_t* /* p_eir_uuid */, uint16_t /* uuid16 */) {}};
-  void operator()(uint32_t* p_eir_uuid, uint16_t uuid16) { body(p_eir_uuid, uuid16); }
-};
-extern struct BTM_RemoveEirService BTM_RemoveEirService;
 
 // Name: BTM_SetConnectability
 // Params: uint16_t page_mode

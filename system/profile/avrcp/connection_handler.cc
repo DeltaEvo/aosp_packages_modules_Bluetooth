@@ -35,6 +35,7 @@
 #include "packet/avrcp/avrcp_packet.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_uuid16.h"
+#include "stack/include/sdp_status.h"
 #include "types/raw_address.h"
 
 extern bool btif_av_peer_is_connected_sink(const RawAddress& peer_address);
@@ -134,9 +135,9 @@ bool ConnectionHandler::ConnectDevice(const RawAddress& bdaddr) {
   }
 
   auto connection_lambda = [](ConnectionHandler* instance_, const RawAddress& bdaddr,
-                              uint16_t status, uint16_t version, uint16_t features) {
+                              tSDP_STATUS status, uint16_t version, uint16_t features) {
     log::info("SDP Completed features=0x{:x}", features);
-    if (status != AVRC_SUCCESS || !(features & BTA_AV_FEAT_RCCT)) {
+    if (status != SDP_SUCCESS || !(features & BTA_AV_FEAT_RCCT)) {
       log::error(
               "Failed to do SDP: status=0x{:x} features=0x{:x} supports "
               "controller: {}",
@@ -367,7 +368,7 @@ void ConnectionHandler::AcceptorControlCb(uint8_t handle, uint8_t event, uint16_
       connection_cb_.Run(newDevice);
 
       log::info("Performing SDP on connected device. address={}", *peer_addr);
-      auto sdp_lambda = [](ConnectionHandler* instance_, uint8_t handle, uint16_t status,
+      auto sdp_lambda = [](ConnectionHandler* instance_, uint8_t handle, tSDP_STATUS status,
                            uint16_t version, uint16_t features) {
         if (instance_->device_map_.find(handle) == instance_->device_map_.end()) {
           log::warn("No device found for handle: 0x{:x}", handle);
@@ -473,7 +474,7 @@ void ConnectionHandler::MessageCb(uint8_t handle, uint8_t label, uint8_t opcode,
 }
 
 void ConnectionHandler::SdpCb(RawAddress bdaddr, SdpCallback cb, tSDP_DISCOVERY_DB* disc_db,
-                              bool retry, uint16_t status) {
+                              bool retry, tSDP_STATUS status) {
   log::verbose("SDP lookup callback received");
 
   if (status == SDP_CONN_FAILED && !retry) {

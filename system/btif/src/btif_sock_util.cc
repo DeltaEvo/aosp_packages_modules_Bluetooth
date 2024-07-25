@@ -34,7 +34,6 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#include "os/log.h"
 #include "osi/include/osi.h"
 
 #define asrt(s)                                 \

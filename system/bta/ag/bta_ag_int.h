@@ -36,6 +36,7 @@
 #include "internal_include/bt_target.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_api_types.h"
+#include "stack/include/sdp_status.h"
 #include "stack/sdp/sdp_discovery_db.h"
 #include "types/raw_address.h"
 
@@ -171,7 +172,7 @@ typedef struct {
 
 /* data type for BTA_AG_DISC_RESULT_EVT */
 typedef struct {
-  uint16_t status;
+  tSDP_STATUS status;
 } tBTA_AG_DISC_RESULT;
 
 /* data type for RFCOMM events */

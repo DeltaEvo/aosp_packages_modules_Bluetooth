@@ -23,9 +23,8 @@
 #include "btif/include/btif_storage.h"
 #include "btm_ble_api.h"
 #include "device/include/device_iot_config.h"
-#include "internal_include/bt_target.h"
-#include "os/log.h"
 #include "stack/acl/acl.h"
+#include "stack/include/btm_client_interface.h"
 
 using namespace bluetooth;
 
@@ -64,7 +63,7 @@ void btm_iot_save_remote_properties(tACL_CONN* p_acl_cb) {
 
   DEVICE_IOT_CONFIG_ADDR_SET_INT(p_acl_cb->remote_addr, IOT_CONF_KEY_DEVCLASS, (int)cod);
 
-  BTM_ReadDevInfo(p_acl_cb->remote_addr, &dev_type, &addr_type);
+  get_btm_client_interface().peer.BTM_ReadDevInfo(p_acl_cb->remote_addr, &dev_type, &addr_type);
 
   // save remote dev type to iot conf file
   DEVICE_IOT_CONFIG_ADDR_SET_INT(p_acl_cb->remote_addr, IOT_CONF_KEY_DEVTYPE, (int)dev_type);

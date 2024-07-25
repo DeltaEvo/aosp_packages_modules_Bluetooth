@@ -1551,6 +1551,12 @@ public class AdapterService extends Service {
                 addProfile(profileService);
                 profileService.start();
                 profileService.setAvailable(true);
+                // With `Flags.scanManagerRefactor()` GattService initialization is pushed back to
+                // `ON` state instead of `BLE_ON`. Here we ensure mGattService is set prior
+                // to other Profiles using it.
+                if (profileId == BluetoothProfile.GATT && Flags.scanManagerRefactor()) {
+                    mGattService = GattService.getGattService();
+                }
                 onProfileServiceStateChanged(profileService, BluetoothAdapter.STATE_ON);
             } else {
                 Log.e(
@@ -1997,9 +2003,6 @@ public class AdapterService extends Service {
         mLeAudioService = LeAudioService.getLeAudioService();
         mBassClientService = BassClientService.getBassClientService();
         mBatteryService = BatteryService.getBatteryService();
-        if (Flags.scanManagerRefactor()) {
-            mGattService = GattService.getGattService();
-        }
     }
 
     @BluetoothAdapter.RfcommListenerResult
@@ -2376,15 +2379,6 @@ public class AdapterService extends Service {
         }
 
         @Override
-        public boolean isLogRedactionEnabled() {
-            AdapterService service = getService();
-            if (service == null) {
-                return true;
-            }
-            return service.mNativeInterface.isLogRedactionEnabled();
-        }
-
-        @Override
         public List<ParcelUuid> getUuids(AttributionSource source) {
             AdapterService service = getService();
             if (service == null
@@ -2712,7 +2706,7 @@ public class AdapterService extends Service {
             if (deviceProp == null || deviceProp.getBondState() != BluetoothDevice.BOND_BONDED) {
                 Log.w(
                         TAG,
-                        device.getAddressForLogging()
+                        device
                                 + " cannot be removed since "
                                 + ((deviceProp == null)
                                         ? "properties are empty"
@@ -4311,7 +4305,7 @@ public class AdapterService extends Service {
      * @return whether the preferences were successfully requested
      */
     private int setPreferredAudioProfiles(BluetoothDevice device, Bundle modeToProfileBundle) {
-        Log.i(TAG, "setPreferredAudioProfiles for device=" + device.getAddressForLogging());
+        Log.i(TAG, "setPreferredAudioProfiles for device=" + device);
         if (!isDualModeAudioEnabled()) {
             Log.e(TAG, "setPreferredAudioProfiles called while sysprop is disabled");
             return BluetoothStatusCodes.FEATURE_NOT_SUPPORTED;
@@ -4780,6 +4774,11 @@ public class AdapterService extends Service {
             return deviceProp.getBondState() == BluetoothDevice.BOND_BONDING;
         }
 
+        if (!isEnabled()) {
+            Log.e(TAG, "Impossible to call createBond when Bluetooth is not enabled");
+            return false;
+        }
+
         if (!isPackageNameAccurate(this, callingPackage, Binder.getCallingUid())) {
             return false;
         }
@@ -5015,6 +5014,10 @@ public class AdapterService extends Service {
      * @return false if profiles value is not one of the constants we accept, true otherwise
      */
     public boolean setActiveDevice(BluetoothDevice device, @ActiveDeviceUse int profiles) {
+        if (getState() != BluetoothAdapter.STATE_ON) {
+            Log.e(TAG, "setActiveDevice: Bluetooth is not enabled");
+            return false;
+        }
         boolean setA2dp = false;
         boolean setHeadset = false;
 

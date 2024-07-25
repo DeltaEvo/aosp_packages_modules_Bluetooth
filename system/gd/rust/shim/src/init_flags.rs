@@ -13,20 +13,8 @@ mod ffi {
         fn dump() -> Vec<InitFlagWithValue>;
 
         fn classic_discovery_only_is_enabled() -> bool;
-        fn dynamic_avrcp_version_enhancement_is_enabled() -> bool;
         fn get_hci_adapter() -> i32;
-        fn leaudio_targeted_announcement_reconnection_mode_is_enabled() -> bool;
-        fn pbap_pse_dynamic_version_upgrade_is_enabled() -> bool;
-        fn redact_log_is_enabled() -> bool;
-        fn sco_codec_timeout_clear_is_enabled() -> bool;
-        fn sdp_serialization_is_enabled() -> bool;
-        fn sdp_skip_rnr_if_known_is_enabled() -> bool;
-        fn set_min_encryption_is_enabled() -> bool;
-        fn subrating_is_enabled() -> bool;
         fn use_unified_connection_manager_is_enabled() -> bool;
-        fn sdp_return_classic_services_when_le_discovery_fails_is_enabled() -> bool;
-        fn use_rsi_from_cached_inqiry_results_is_enabled() -> bool;
-        fn get_att_mtu_default() -> i32;
     }
 }
 

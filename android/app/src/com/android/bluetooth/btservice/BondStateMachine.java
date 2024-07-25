@@ -393,7 +393,7 @@ final class BondStateMachine extends StateMachine {
 
         Log.w(
                 TAG,
-                dev.getAddressForLogging()
+                dev
                         + " cannot be removed since "
                         + ((devProp == null)
                                 ? "properties are empty"

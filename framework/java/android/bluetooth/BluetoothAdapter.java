@@ -926,17 +926,18 @@ public final class BluetoothAdapter {
                 public void onMetadataChanged(BluetoothDevice device, int key, byte[] value) {
                     Attributable.setAttributionSource(device, mAttributionSource);
                     synchronized (mMetadataListeners) {
-                        if (mMetadataListeners.containsKey(device)) {
-                            List<Pair<OnMetadataChangedListener, Executor>> list =
-                                    mMetadataListeners.get(device);
-                            for (Pair<OnMetadataChangedListener, Executor> pair : list) {
-                                OnMetadataChangedListener listener = pair.first;
-                                Executor executor = pair.second;
-                                executor.execute(
-                                        () -> {
-                                            listener.onMetadataChanged(device, key, value);
-                                        });
-                            }
+                        if (!mMetadataListeners.containsKey(device)) {
+                            return;
+                        }
+                        List<Pair<OnMetadataChangedListener, Executor>> list =
+                                mMetadataListeners.get(device);
+                        for (Pair<OnMetadataChangedListener, Executor> pair : list) {
+                            OnMetadataChangedListener listener = pair.first;
+                            Executor executor = pair.second;
+                            executor.execute(
+                                    () -> {
+                                        listener.onMetadataChanged(device, key, value);
+                                    });
                         }
                     }
                 }
@@ -4088,7 +4089,6 @@ public final class BluetoothAdapter {
             if (mService != null) {
                 return IBluetoothGatt.Stub.asInterface(mService.getBluetoothGatt());
             }
-
         } catch (RemoteException e) {
             Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
         } finally {
@@ -4148,25 +4148,26 @@ public final class BluetoothAdapter {
         final boolean isRegistered = sServiceRegistered;
         final boolean wantRegistered = !sProxyServiceStateCallbacks.isEmpty();
 
-        if (isRegistered != wantRegistered) {
-            if (wantRegistered) {
-                try {
-                    sService =
-                            IBluetooth.Stub.asInterface(
-                                    mManagerService.registerAdapter(sManagerCallback));
-                } catch (RemoteException e) {
-                    throw e.rethrowAsRuntimeException();
-                }
-            } else {
-                try {
-                    mManagerService.unregisterAdapter(sManagerCallback);
-                    sService = null;
-                } catch (RemoteException e) {
-                    throw e.rethrowAsRuntimeException();
-                }
-            }
-            sServiceRegistered = wantRegistered;
+        if (isRegistered == wantRegistered) {
+            return;
         }
+        if (wantRegistered) {
+            try {
+                sService =
+                        IBluetooth.Stub.asInterface(
+                                mManagerService.registerAdapter(sManagerCallback));
+            } catch (RemoteException e) {
+                throw e.rethrowAsRuntimeException();
+            }
+        } else {
+            try {
+                mManagerService.unregisterAdapter(sManagerCallback);
+                sService = null;
+            } catch (RemoteException e) {
+                throw e.rethrowAsRuntimeException();
+            }
+        }
+        sServiceRegistered = wantRegistered;
     }
 
     /**

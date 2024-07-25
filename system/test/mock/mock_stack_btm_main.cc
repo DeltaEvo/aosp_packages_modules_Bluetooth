@@ -41,5 +41,3 @@ void BTM_LogHistory(const std::string& /* tag */, const tBLE_BD_ADDR& /* ble_bd_
                     const std::string& /* msg */, const std::string& /* extra */) {
   inc_func_call_count(__func__);
 }
-void btm_free(void) { inc_func_call_count(__func__); }
-void btm_init(void) { inc_func_call_count(__func__); }

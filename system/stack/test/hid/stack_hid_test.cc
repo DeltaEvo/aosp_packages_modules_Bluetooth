@@ -28,7 +28,6 @@
 bluetooth::common::MessageLoopThread* get_main_thread() { return nullptr; }
 tHCI_REASON btm_get_acl_disc_reason_code(void) { return HCI_SUCCESS; }
 
-bool BTM_IsAclConnectionUp(const RawAddress& remote_bda, tBT_TRANSPORT transport) { return true; }
 namespace {
 
 using testing::_;

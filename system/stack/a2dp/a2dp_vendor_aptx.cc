@@ -531,8 +531,9 @@ static bool select_audio_channel_mode(const btav_a2dp_codec_config_t* p_codec_au
   return false;
 }
 
-bool A2dpCodecConfigAptx::setCodecConfig(const uint8_t* p_peer_codec_info, bool is_capability,
-                                         uint8_t* p_result_codec_config) {
+tA2DP_STATUS A2dpCodecConfigAptx::setCodecConfig(const uint8_t* p_peer_codec_info,
+                                                 bool is_capability,
+                                                 uint8_t* p_result_codec_config) {
   std::lock_guard<std::recursive_mutex> lock(codec_mutex_);
   tA2DP_APTX_CIE peer_info_cie;
   tA2DP_APTX_CIE result_config_cie;
@@ -643,6 +644,7 @@ bool A2dpCodecConfigAptx::setCodecConfig(const uint8_t* p_peer_codec_info, bool 
   if (codec_config_.sample_rate == BTAV_A2DP_CODEC_SAMPLE_RATE_NONE) {
     log::error("cannot match sample frequency: local caps = 0x{:x} peer info = 0x{:x}",
                a2dp_aptx_source_caps.sampleRate, peer_info_cie.sampleRate);
+    status = A2DP_NOT_SUPPORTED_SAMPLING_FREQUENCY;
     goto fail;
   }
 
@@ -696,6 +698,7 @@ bool A2dpCodecConfigAptx::setCodecConfig(const uint8_t* p_peer_codec_info, bool 
   if (codec_config_.bits_per_sample == BTAV_A2DP_CODEC_BITS_PER_SAMPLE_NONE) {
     log::error("cannot match bits per sample: user preference = 0x{:x}",
                codec_user_config_.bits_per_sample);
+    status = A2DP_NOT_SUPPORTED_BIT_RATE;
     goto fail;
   }
 
@@ -767,6 +770,7 @@ bool A2dpCodecConfigAptx::setCodecConfig(const uint8_t* p_peer_codec_info, bool 
   if (codec_config_.channel_mode == BTAV_A2DP_CODEC_CHANNEL_MODE_NONE) {
     log::error("cannot match channel mode: local caps = 0x{:x} peer info = 0x{:x}",
                a2dp_aptx_source_caps.channelMode, peer_info_cie.channelMode);
+    status = A2DP_NOT_SUPPORTED_CHANNEL_MODE;
     goto fail;
   }
 
@@ -777,6 +781,7 @@ bool A2dpCodecConfigAptx::setCodecConfig(const uint8_t* p_peer_codec_info, bool 
   result_config_cie.future2 = a2dp_aptx_source_caps.future2 & peer_info_cie.future2;
 
   if (!A2DP_BuildInfoAptx(AVDT_MEDIA_TYPE_AUDIO, &result_config_cie, p_result_codec_config)) {
+    status = AVDTP_UNSUPPORTED_CONFIGURATION;
     goto fail;
   }
 
@@ -810,7 +815,7 @@ bool A2dpCodecConfigAptx::setCodecConfig(const uint8_t* p_peer_codec_info, bool 
   log::assert_that(A2DP_BuildInfoAptx(AVDT_MEDIA_TYPE_AUDIO, &result_config_cie, ota_codec_config_),
                    "Failed to build media codec capabilities");
 
-  return true;
+  return A2DP_SUCCESS;
 
 fail:
   // Restore the internal state
@@ -823,7 +828,7 @@ fail:
   memcpy(ota_codec_peer_capability_, saved_ota_codec_peer_capability,
          sizeof(ota_codec_peer_capability_));
   memcpy(ota_codec_peer_config_, saved_ota_codec_peer_config, sizeof(ota_codec_peer_config_));
-  return false;
+  return status;
 }
 
 bool A2dpCodecConfigAptx::setPeerCodecCapabilities(const uint8_t* p_peer_codec_capabilities) {

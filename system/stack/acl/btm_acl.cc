@@ -1571,7 +1571,7 @@ tBTM_STATUS BTM_ReadRSSI(const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb) {
     return BTM_BUSY;
   }
 
-  BTM_ReadDevInfo(remote_bda, &dev_type, &addr_type);
+  get_btm_client_interface().peer.BTM_ReadDevInfo(remote_bda, &dev_type, &addr_type);
 
   if (dev_type & BT_DEVICE_TYPE_BLE) {
     p = internal_.btm_bda_to_acl(remote_bda, BT_TRANSPORT_LE);
@@ -1617,7 +1617,7 @@ tBTM_STATUS BTM_ReadFailedContactCounter(const RawAddress& remote_bda, tBTM_CMPL
     return BTM_BUSY;
   }
 
-  BTM_ReadDevInfo(remote_bda, &dev_type, &addr_type);
+  get_btm_client_interface().peer.BTM_ReadDevInfo(remote_bda, &dev_type, &addr_type);
   if (dev_type == BT_DEVICE_TYPE_BLE) {
     transport = BT_TRANSPORT_LE;
   }

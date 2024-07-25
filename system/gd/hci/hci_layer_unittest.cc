@@ -24,12 +24,9 @@
 #include <memory>
 
 #include "common/bind.h"
-#include "common/init_flags.h"
 #include "hal/hci_hal_fake.h"
 #include "hci/address.h"
-#include "hci/address_with_type.h"
 #include "hci/class_of_device.h"
-#include "hci/controller.h"
 #include "module.h"
 #include "os/fake_timer/fake_timerfd.h"
 #include "os/handler.h"
@@ -67,7 +64,6 @@ namespace hci {
 
 using common::BidiQueue;
 using common::BidiQueueEnd;
-using common::InitFlags;
 using os::fake_timer::fake_timerfd_advance;
 using packet::kLittleEndian;
 using packet::PacketView;
@@ -104,7 +100,6 @@ protected:
     hci_handler_ = fake_registry_.GetTestModuleHandler(&HciLayer::Factory);
     ASSERT_TRUE(fake_registry_.IsStarted<HciLayer>());
     ::testing::FLAGS_gtest_death_test_style = "threadsafe";
-    InitFlags::SetAllForTesting();
     sync_handler();
   }
 

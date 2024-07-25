@@ -456,18 +456,18 @@ TEST_F(StackA2dpTest, test_a2dp_get_codec_type) {
 }
 
 TEST_F(StackA2dpTest, test_a2dp_is_sink_codec_supported) {
-  EXPECT_TRUE(A2DP_IsSinkCodecSupported(codec_info_sbc));
-  EXPECT_FALSE(A2DP_IsSinkCodecSupported(codec_info_sbc_capability));
-  EXPECT_FALSE(A2DP_IsSinkCodecSupported(codec_info_sbc_sink_capability));
+  EXPECT_EQ(A2DP_IsSinkCodecSupported(codec_info_sbc), A2DP_SUCCESS);
+  EXPECT_NE(A2DP_IsSinkCodecSupported(codec_info_sbc_capability), A2DP_SUCCESS);
+  EXPECT_NE(A2DP_IsSinkCodecSupported(codec_info_sbc_sink_capability), A2DP_SUCCESS);
 
-  EXPECT_TRUE(A2DP_IsSinkCodecSupported(codec_info_aac));
+  EXPECT_EQ(A2DP_IsSinkCodecSupported(codec_info_aac), A2DP_SUCCESS);
   // NOTE: The test below should be EXPECT_FALSE.
   // However, codec_info_aac_capability is practically same as codec_info_aac,
   // therefore we cannot differentiate it as a capability.
-  EXPECT_TRUE(A2DP_IsSinkCodecSupported(codec_info_aac_capability));
-  EXPECT_FALSE(A2DP_IsSinkCodecSupported(codec_info_aac_sink_capability));
+  EXPECT_EQ(A2DP_IsSinkCodecSupported(codec_info_aac_capability), A2DP_SUCCESS);
+  EXPECT_NE(A2DP_IsSinkCodecSupported(codec_info_aac_sink_capability), A2DP_SUCCESS);
 
-  EXPECT_FALSE(A2DP_IsSinkCodecSupported(codec_info_non_a2dp));
+  EXPECT_NE(A2DP_IsSinkCodecSupported(codec_info_non_a2dp), A2DP_SUCCESS);
 }
 
 TEST_F(StackA2dpTest, test_init_default_codec) {

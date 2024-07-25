@@ -43,8 +43,10 @@
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/l2c_api.h"
 #include "stack/include/sdp_api.h"
+#include "stack/include/sdp_status.h"
 #include "types/raw_address.h"
 
 using namespace bluetooth::legacy::stack::sdp;
@@ -198,7 +200,7 @@ static void bta_av_del_sdp_rec(uint32_t* p_sdp_handle) {
  * Returns          void
  *
  ******************************************************************************/
-static void bta_av_avrc_sdp_cback(uint16_t /* status */) {
+static void bta_av_avrc_sdp_cback(tSDP_STATUS /* status */) {
   BT_HDR_RIGID* p_msg = (BT_HDR_RIGID*)osi_malloc(sizeof(BT_HDR_RIGID));
 
   p_msg->event = BTA_AV_SDP_AVRC_DISC_EVT;
@@ -1349,7 +1351,7 @@ void bta_av_conn_chg(tBTA_AV_DATA* p_data) {
     if (p_cb->audio_open_cnt == 1) {
       /* one audio channel goes down and there's one audio channel remains open.
        * restore the switch role in default link policy */
-      BTM_default_unblock_role_switch();
+      get_btm_client_interface().link_policy.BTM_default_unblock_role_switch();
       bta_av_restore_switch();
     }
     if (p_cb->audio_open_cnt) {

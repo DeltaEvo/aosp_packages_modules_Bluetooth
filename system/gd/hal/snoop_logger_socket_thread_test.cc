@@ -23,7 +23,6 @@
 
 #include <future>
 
-#include "common/init_flags.h"
 #include "hal/snoop_logger_common.h"
 #include "hal/syscall_wrapper_impl.h"
 #include "os/utils.h"

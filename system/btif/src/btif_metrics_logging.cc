@@ -19,10 +19,7 @@
 #include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
 #include <frameworks/proto_logging/stats/enums/bluetooth/hci/enums.pb.h>
 
-#include "common/metric_id_allocator.h"
-#include "common/metrics.h"
 #include "main/shim/metrics_api.h"
-#include "main/shim/shim.h"
 #include "types/raw_address.h"
 
 void log_a2dp_audio_underrun_event(const RawAddress& address, uint64_t encoding_interval_millis,

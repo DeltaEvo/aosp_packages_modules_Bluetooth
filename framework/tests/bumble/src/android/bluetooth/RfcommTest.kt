@@ -16,26 +16,18 @@
 package android.bluetooth
 
 import android.Manifest
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.util.Log
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.android.compatibility.common.util.AdoptShellPermissionsRule
 import com.google.common.truth.Truth
 import com.google.protobuf.ByteString
-import io.grpc.stub.StreamObserver
 import java.time.Duration
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.*
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.consumeAsFlow
-import kotlinx.coroutines.flow.first
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -44,69 +36,9 @@ import org.junit.runner.RunWith
 import pandora.RfcommProto
 import pandora.RfcommProto.ServerId
 import pandora.RfcommProto.StartServerRequest
-import pandora.SecurityProto.PairingEvent
-import pandora.SecurityProto.PairingEventAnswer
-
-@kotlinx.coroutines.ExperimentalCoroutinesApi
-fun bondingFlow(context: Context, peer: BluetoothDevice, state: Int): Flow<Intent> {
-    val channel = Channel<Intent>(Channel.UNLIMITED)
-    val receiver: BroadcastReceiver =
-        object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                if (
-                    peer ==
-                        intent.getParcelableExtra(
-                            BluetoothDevice.EXTRA_DEVICE,
-                            BluetoothDevice::class.java
-                        )
-                ) {
-                    if (intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, -1) == state) {
-                        channel.trySendBlocking(intent)
-                    }
-                }
-            }
-        }
-    context.registerReceiver(receiver, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
-    channel.invokeOnClose { context.unregisterReceiver(receiver) }
-    return channel.consumeAsFlow()
-}
-
-class PairingResponder(
-    private val mPeer: BluetoothDevice,
-    private val mPairingEventIterator: Iterator<PairingEvent>,
-    private val mPairingEventAnswerObserver: StreamObserver<PairingEventAnswer>
-) : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        when (intent.action) {
-            BluetoothDevice.ACTION_PAIRING_REQUEST -> {
-                if (
-                    mPeer ==
-                        intent.getParcelableExtra(
-                            BluetoothDevice.EXTRA_DEVICE,
-                            BluetoothDevice::class.java
-                        )
-                ) {
-                    if (
-                        BluetoothDevice.PAIRING_VARIANT_CONSENT ==
-                            intent.getIntExtra(BluetoothDevice.EXTRA_PAIRING_VARIANT, -1)
-                    ) {
-                        mPeer.setPairingConfirmation(true)
-                        val pairingEvent: PairingEvent = mPairingEventIterator.next()
-                        Truth.assertThat(pairingEvent.hasJustWorks()).isTrue()
-                        mPairingEventAnswerObserver.onNext(
-                            PairingEventAnswer.newBuilder()
-                                .setEvent(pairingEvent)
-                                .setConfirm(true)
-                                .build()
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
 
 @RunWith(AndroidJUnit4::class)
+@kotlinx.coroutines.ExperimentalCoroutinesApi
 class RfcommTest {
     private val mContext = ApplicationProvider.getApplicationContext<Context>()
     private val mManager = mContext.getSystemService(BluetoothManager::class.java)
@@ -126,63 +58,38 @@ class RfcommTest {
     @Rule @JvmField val mBumble = PandoraDevice()
 
     private lateinit var mBumbleDevice: BluetoothDevice
-    private lateinit var mPairingResponder: PairingResponder
-    private lateinit var mPairingEventAnswerObserver: StreamObserver<PairingEventAnswer>
-    private val mPairingEventStreamObserver: StreamObserverSpliterator<PairingEvent> =
-        StreamObserverSpliterator()
+    private lateinit var host: Host
     private var mConnectionCounter = 1
 
     @Before
     fun setUp() {
         mBumbleDevice = mBumble.remoteDevice
-        mPairingEventAnswerObserver =
-            mBumble
-                .security()
-                .withDeadlineAfter(GRPC_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
-                .onPairing(mPairingEventStreamObserver)
-
-        val pairingFilter = IntentFilter(BluetoothDevice.ACTION_PAIRING_REQUEST)
-        mPairingResponder =
-            PairingResponder(
-                mBumbleDevice,
-                mPairingEventStreamObserver.iterator(),
-                mPairingEventAnswerObserver
-            )
-        mContext.registerReceiver(mPairingResponder, pairingFilter)
-
-        // TODO: Ideally we shouldn't need this, remove
-        runBlocking { removeBondIfBonded(mBumbleDevice) }
+        host = Host(mContext)
+        host.createBondAndVerify(mBumbleDevice)
     }
 
     @After
     fun tearDown() {
-        mContext.unregisterReceiver(mPairingResponder)
+        if (mAdapter.bondedDevices.contains(mBumbleDevice)) {
+            host.removeBondAndVerify(mBumbleDevice)
+        }
+        host.close()
     }
 
     @Test
     fun clientConnectToOpenServerSocketBondedInsecure() {
-        startServer { serverId ->
-            runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
-
-            createAndConnectSocket(isSecure = false, serverId)
-        }
+        startServer { serverId -> createConnectAcceptSocket(isSecure = false, serverId) }
     }
 
     @Test
     fun clientConnectToOpenServerSocketBondedSecure() {
-        startServer { serverId ->
-            runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
-
-            createAndConnectSocket(isSecure = true, serverId)
-        }
+        startServer { serverId -> createConnectAcceptSocket(isSecure = true, serverId) }
     }
 
     @Test
     fun clientSendDataOverInsecureSocket() {
         startServer { serverId ->
-            runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
-
-            val (insecureSocket, connection) = createAndConnectSocket(isSecure = false, serverId)
+            val (insecureSocket, connection) = createConnectAcceptSocket(isSecure = false, serverId)
             val data: ByteArray = "Test data for clientSendDataOverInsecureSocket".toByteArray()
             val socketOs = insecureSocket.outputStream
 
@@ -199,9 +106,7 @@ class RfcommTest {
     @Test
     fun clientSendDataOverSecureSocket() {
         startServer { serverId ->
-            runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
-
-            val (secureSocket, connection) = createAndConnectSocket(isSecure = true, serverId)
+            val (secureSocket, connection) = createConnectAcceptSocket(isSecure = true, serverId)
             val data: ByteArray = "Test data for clientSendDataOverSecureSocket".toByteArray()
             val socketOs = secureSocket.outputStream
 
@@ -218,9 +123,7 @@ class RfcommTest {
     @Test
     fun clientReceiveDataOverInsecureSocket() {
         startServer { serverId ->
-            runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
-
-            val (insecureSocket, connection) = createAndConnectSocket(isSecure = false, serverId)
+            val (insecureSocket, connection) = createConnectAcceptSocket(isSecure = false, serverId)
             val buffer = ByteArray(64)
             val socketIs = insecureSocket.inputStream
             val data: ByteString =
@@ -238,9 +141,7 @@ class RfcommTest {
     @Test
     fun clientReceiveDataOverSecureSocket() {
         startServer { serverId ->
-            runBlocking { withTimeout(BOND_TIMEOUT.toMillis()) { bondDevice(mBumbleDevice) } }
-
-            val (secureSocket, connection) = createAndConnectSocket(isSecure = true, serverId)
+            val (secureSocket, connection) = createConnectAcceptSocket(isSecure = true, serverId)
             val buffer = ByteArray(64)
             val socketIs = secureSocket.inputStream
             val data: ByteString =
@@ -255,19 +156,35 @@ class RfcommTest {
         }
     }
 
-    private fun createAndConnectSocket(
+    private fun createConnectAcceptSocket(
         isSecure: Boolean,
         server: ServerId,
         uuid: String = TEST_UUID
     ): Pair<BluetoothSocket, RfcommProto.RfcommConnection> {
+        val socket = createSocket(mBumbleDevice, isSecure, uuid)
+
+        val connection = acceptSocket(server)
+        Truth.assertThat(socket.isConnected).isTrue()
+
+        return Pair(socket, connection)
+    }
+
+    private fun createSocket(
+        device: BluetoothDevice,
+        isSecure: Boolean,
+        uuid: String
+    ): BluetoothSocket {
         val socket =
             if (isSecure) {
-                mBumbleDevice.createRfcommSocketToServiceRecord(UUID.fromString(uuid))
+                device.createRfcommSocketToServiceRecord(UUID.fromString(uuid))
             } else {
-                mBumbleDevice.createInsecureRfcommSocketToServiceRecord(UUID.fromString(uuid))
+                device.createInsecureRfcommSocketToServiceRecord(UUID.fromString(uuid))
             }
         socket.connect()
+        return socket
+    }
 
+    private fun acceptSocket(server: ServerId): RfcommProto.RfcommConnection {
         val connectionResponse =
             mBumble
                 .rfcommBlocking()
@@ -276,43 +193,17 @@ class RfcommTest {
                     RfcommProto.AcceptConnectionRequest.newBuilder().setServer(server).build()
                 )
         Truth.assertThat(connectionResponse.connection.id).isEqualTo(mConnectionCounter)
-        Truth.assertThat(socket.isConnected).isTrue()
 
         mConnectionCounter += 1
-        val connection = connectionResponse.connection
-        return Pair(socket, connection)
+        return connectionResponse.connection
     }
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private suspend fun bondDevice(remoteDevice: BluetoothDevice) {
-        if (mAdapter.bondedDevices.contains(remoteDevice)) {
-            Log.d(TAG, "bondDevice(): The device is already bonded")
-            return
-        }
-
-        val flow = bondingFlow(mContext, remoteDevice, BluetoothDevice.BOND_BONDED)
-
-        Truth.assertThat(remoteDevice.createBond()).isTrue()
-
-        flow.first()
-    }
-
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private suspend fun removeBondIfBonded(deviceToRemove: BluetoothDevice) {
-        if (!mAdapter.bondedDevices.contains(deviceToRemove)) {
-            Log.d(TAG, "removeBondIfBonded(): Tried to remove a device that isn't bonded")
-            return
-        }
-        val flow = bondingFlow(mContext, deviceToRemove, BluetoothDevice.BOND_NONE)
-
-        Truth.assertThat(deviceToRemove.removeBond()).isTrue()
-
-        flow.first()
-    }
-
-    private fun startServer(block: (ServerId) -> Unit) {
-        val request =
-            StartServerRequest.newBuilder().setName(TEST_SERVER_NAME).setUuid(TEST_UUID).build()
+    private fun startServer(
+        name: String = TEST_SERVER_NAME,
+        uuid: String = TEST_UUID,
+        block: (ServerId) -> Unit
+    ) {
+        val request = StartServerRequest.newBuilder().setName(name).setUuid(uuid).build()
         val response = mBumble.rfcommBlocking().startServer(request)
 
         try {
@@ -324,15 +215,14 @@ class RfcommTest {
                 .stopServer(
                     RfcommProto.StopServerRequest.newBuilder().setServer(response.server).build()
                 )
-            runBlocking { removeBondIfBonded(mBumbleDevice) }
         }
     }
 
     companion object {
         private val TAG = RfcommTest::class.java.getSimpleName()
         private val GRPC_TIMEOUT = Duration.ofSeconds(10)
-        private val BOND_TIMEOUT = Duration.ofSeconds(20)
-        private const val TEST_UUID = "00001101-0000-1000-8000-00805F9B34FB"
+        private const val TEST_UUID = "2ac5d8f1-f58d-48ac-a16b-cdeba0892d65"
+        private const val SERIAL_PORT_UUID = "00001101-0000-1000-8000-00805F9B34FB"
         private const val TEST_SERVER_NAME = "RFCOMM Server"
     }
 }

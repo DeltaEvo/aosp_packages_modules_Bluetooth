@@ -31,7 +31,6 @@
 #include <thread>
 
 #include "internal_include/bt_target.h"
-#include "os/log.h"
 
 using namespace android;
 using namespace bluetooth;
@@ -85,7 +84,7 @@ void BtifAvrcpAudioErrorHandle() {
   s_AudioEngine.thread = nullptr;
 }
 
-void ErrorCallback(AAudioStream* stream, void* userdata, aaudio_result_t error) {
+void ErrorCallback(AAudioStream* /* stream */, void* /* userdata */, aaudio_result_t error) {
   if (error == AAUDIO_ERROR_DISCONNECTED) {
     if (s_AudioEngine.thread == nullptr) {
       s_AudioEngine.thread = new std::thread(BtifAvrcpAudioErrorHandle);

@@ -19,7 +19,6 @@
 #include <bluetooth/log.h>
 #include <com_android_bluetooth_flags.h>
 
-#include "common/init_flags.h"
 #include "hci/octets.h"
 #include "include/macros.h"
 #include "os/rand.h"

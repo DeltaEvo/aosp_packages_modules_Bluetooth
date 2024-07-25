@@ -28,11 +28,10 @@
 
 #include <cstdint>
 
-#include "internal_include/bt_target.h"
 #include "stack/include/avct_api.h"
 #include "stack/include/avrc_defs.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/sdp_api.h"
+#include "stack/include/sdp_status.h"
 #include "stack/sdp/sdp_discovery_db.h"
 #include "types/raw_address.h"
 
@@ -212,7 +211,7 @@ typedef struct {
  * implementation of this callback function must copy the p_service_name
  * and p_provider_name parameters passed to it as they are not guaranteed
  * to remain after the callback function exits. */
-using tAVRC_FIND_CBACK = base::Callback<void(uint16_t status)>;
+using tAVRC_FIND_CBACK = base::Callback<void(tSDP_STATUS status)>;
 
 /* This is the control callback function.  This function passes events
  * listed in Table 20 to the application. */

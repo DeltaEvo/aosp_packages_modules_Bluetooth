@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The Android Open Source Project
+ * Copyright 2024 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,29 +13,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #pragma once
 
-#include <grpc++/grpc++.h>
-
-#include "grpc/grpc_module.h"
+#include "hci/command_interface.h"
+#include "hci/hci_packets.h"
 
 namespace bluetooth {
-namespace security {
+namespace hci {
 
-class SecurityModuleFacadeService;
-
-class SecurityModuleFacadeModule : public ::bluetooth::grpc::GrpcFacadeModule {
-public:
-  static const ModuleFactory Factory;
-
-  void ListDependencies(ModuleList* list) const override;
-  void Start() override;
-  void Stop() override;
-  ::grpc::Service* GetService() const override;
-
-private:
-  SecurityModuleFacadeService* service_;
+constexpr hci::EventCode InquiryEvents[] = {
+        hci::EventCode::INQUIRY_COMPLETE,
+        hci::EventCode::INQUIRY_RESULT,
+        hci::EventCode::INQUIRY_RESULT_WITH_RSSI,
+        hci::EventCode::EXTENDED_INQUIRY_RESULT,
 };
 
-}  // namespace security
+typedef CommandInterface<DiscoveryCommandBuilder> InquiryInterface;
+
+}  // namespace hci
 }  // namespace bluetooth

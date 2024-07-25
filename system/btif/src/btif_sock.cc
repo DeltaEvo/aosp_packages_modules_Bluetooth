@@ -28,15 +28,12 @@
 #include <atomic>
 
 #include "bta/include/bta_api.h"
-#include "bta_sec_api.h"
-#include "btif_metrics_logging.h"
 #include "btif_sock_l2cap.h"
 #include "btif_sock_logging.h"
 #include "btif_sock_rfc.h"
 #include "btif_sock_sco.h"
 #include "btif_sock_thread.h"
 #include "btif_uid.h"
-#include "os/log.h"
 #include "osi/include/osi.h"  // INVALID_FD
 #include "osi/include/thread.h"
 #include "types/bluetooth/uuid.h"

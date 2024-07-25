@@ -21,7 +21,6 @@
 #include <sys/socket.h>
 
 #include "bt_psm_types.h"
-#include "common/init_flags.h"
 #include "hci/controller_interface_mock.h"
 #include "osi/include/allocator.h"
 #include "stack/btm/btm_int_types.h"
@@ -50,7 +49,6 @@ constexpr uint16_t kAclBufferSizeBle = 45;
 class StackL2capTest : public ::testing::Test {
 protected:
   void SetUp() override {
-    bluetooth::common::InitFlags::SetAllForTesting();
     bluetooth::hci::testing::mock_controller_ = &controller_interface_;
     ON_CALL(controller_interface_, GetNumAclPacketBuffers)
             .WillByDefault(Return(kAclBufferCountClassic));

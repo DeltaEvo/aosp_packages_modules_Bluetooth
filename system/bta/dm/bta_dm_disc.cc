@@ -34,7 +34,6 @@
 #include "bta/include/bta_gatt_api.h"
 #include "com_android_bluetooth_flags.h"
 #include "common/circular_buffer.h"
-#include "common/init_flags.h"
 #include "common/strings.h"
 #include "internal_include/bt_target.h"
 #include "main/shim/dumpsys.h"

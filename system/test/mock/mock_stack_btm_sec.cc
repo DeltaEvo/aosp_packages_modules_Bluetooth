@@ -41,7 +41,6 @@ namespace stack_btm_sec {
 // Function state capture and return values, if needed
 struct BTM_CanReadDiscoverableCharacteristics BTM_CanReadDiscoverableCharacteristics;
 struct BTM_ConfirmReqReply BTM_ConfirmReqReply;
-struct BTM_GetPeerDeviceTypeFromFeatures BTM_GetPeerDeviceTypeFromFeatures;
 struct BTM_IsAuthenticated BTM_IsAuthenticated;
 struct BTM_IsEncrypted BTM_IsEncrypted;
 struct BTM_IsLinkKeyAuthed BTM_IsLinkKeyAuthed;
@@ -113,7 +112,6 @@ namespace mock {
 namespace stack_btm_sec {
 
 bool BTM_CanReadDiscoverableCharacteristics::return_value = false;
-tBT_DEVICE_TYPE BTM_GetPeerDeviceTypeFromFeatures::return_value = 0;
 bool BTM_IsAuthenticated::return_value = false;
 bool BTM_IsEncrypted::return_value = false;
 bool BTM_IsLinkKeyAuthed::return_value = false;
@@ -152,10 +150,6 @@ bool BTM_CanReadDiscoverableCharacteristics(const RawAddress& bd_addr) {
 void BTM_ConfirmReqReply(tBTM_STATUS res, const RawAddress& bd_addr) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_sec::BTM_ConfirmReqReply(res, bd_addr);
-}
-tBT_DEVICE_TYPE BTM_GetPeerDeviceTypeFromFeatures(const RawAddress& bd_addr) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_btm_sec::BTM_GetPeerDeviceTypeFromFeatures(bd_addr);
 }
 bool BTM_IsAuthenticated(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
   inc_func_call_count(__func__);

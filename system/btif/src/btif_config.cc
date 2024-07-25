@@ -37,7 +37,6 @@
 #include "common/metric_id_allocator.h"
 #include "main/shim/config.h"
 #include "main/shim/shim.h"
-#include "os/log.h"
 #include "raw_address.h"
 #include "storage/config_keys.h"
 
@@ -128,7 +127,8 @@ static void init_metric_id_allocator() {
   MetricIdAllocator::Callback save_device_callback = [](const RawAddress& address, const int id) {
     return btif_config_set_int(address.ToString(), BTIF_STORAGE_KEY_METRICS_ID_KEY, id);
   };
-  MetricIdAllocator::Callback forget_device_callback = [](const RawAddress& address, const int id) {
+  MetricIdAllocator::Callback forget_device_callback = [](const RawAddress& address,
+                                                          const int /* id */) {
     return btif_config_remove(address.ToString(), BTIF_STORAGE_KEY_METRICS_ID_KEY);
   };
   if (!init_metric_id_allocator(paired_device_map, std::move(save_device_callback),

@@ -24,10 +24,10 @@
 #include <vector>
 
 #include "avrcp_internal.h"
-#include "packet/avrcp/avrcp_packet.h"
 #include "packet/base/packet.h"
 #include "profile/avrcp/device.h"
 #include "raw_address.h"
+#include "stack/include/sdp_status.h"
 
 namespace bluetooth {
 namespace avrcp {
@@ -144,10 +144,10 @@ private:
 
   static ConnectionHandler* instance_;
 
-  using SdpCallback = base::Callback<void(uint16_t status, uint16_t version, uint16_t features)>;
+  using SdpCallback = base::Callback<void(tSDP_STATUS status, uint16_t version, uint16_t features)>;
   virtual bool SdpLookup(const RawAddress& bdaddr, SdpCallback cb, bool retry);
   void SdpCb(RawAddress bdaddr, SdpCallback cb, tSDP_DISCOVERY_DB* disc_db, bool retry,
-             uint16_t status);
+             tSDP_STATUS status);
 
   virtual bool AvrcpConnect(bool initiator, const RawAddress& bdaddr);
 

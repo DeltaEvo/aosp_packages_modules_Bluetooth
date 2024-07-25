@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "common/init_flags.h"
 #include "osi/include/alarm.h"
 #include "osi/test/alarm_mock.h"
 #include "stack/btm/neighbor_inquiry.h"

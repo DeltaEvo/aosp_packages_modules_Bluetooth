@@ -440,8 +440,10 @@ GetStackBroadcastConfigurationFromAidlFormat(
       stack_config.params = GetStackLeAudioLtvMapFromAidlFormat(ase_config->codecConfiguration);
       auto cfg = stack_config.params.GetAsCoreCodecConfig();
       if (cfg.audio_channel_allocation.has_value()) {
+        auto allocation_bitset = std::bitset<32>(cfg.audio_channel_allocation.value());
+        // Value of 0x00000000 means MonoAudio - one channel per iso stream
         stack_config.channel_count_per_iso_stream =
-                std::bitset<32>(cfg.audio_channel_allocation.value()).count();
+                allocation_bitset.any() ? allocation_bitset.count() : 1;
       }
     }
   }

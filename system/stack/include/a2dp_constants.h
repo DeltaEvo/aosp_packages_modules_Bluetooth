@@ -36,7 +36,10 @@
 // cf. Assigned Numbers § 6.5.1 Audio Codec ID
 enum tA2DP_CODEC_TYPE : uint8_t {
   A2DP_MEDIA_CT_SBC = 0x00,
+  A2DP_MEDIA_CT_MPEG_AUDIO = 0x01,
   A2DP_MEDIA_CT_AAC = 0x02,
+  A2DP_MEDIA_CT_MPEG_USAC = 0x03,
+  A2DP_MEDIA_CT_ATRAC = 0x04,
   A2DP_MEDIA_CT_NON_A2DP = 0xff,
 };
 

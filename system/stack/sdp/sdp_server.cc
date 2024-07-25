@@ -29,17 +29,13 @@
 
 #include <cstdint>
 
-#include "btif/include/btif_profile_storage.h"
 #include "btif/include/btif_storage.h"
-#include "common/init_flags.h"
 #include "device/include/interop.h"
 #include "device/include/interop_config.h"
 #include "internal_include/bt_target.h"
 #include "osi/include/allocator.h"
 #include "osi/include/properties.h"
-#include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sco_hfp_hal.h"
-#include "stack/btm/btm_sec.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
@@ -303,116 +299,6 @@ static void process_service_search(tCONN_CB* p_ccb, uint16_t trans_num, uint16_t
   }
 }
 
-/*************************************************************************************
-**
-** Function        is_device_in_allowlist_for_pbap
-**
-** Description     Checks if given PBAP device is in allowlist for PBAP PSE.
-**
-** Returns         BOOLEAN
-**
-***************************************************************************************/
-static bool is_device_in_allowlist_for_pbap(RawAddress remote_address, bool check_for_1_2) {
-  if (!check_for_1_2 && interop_match_addr_or_name(INTEROP_ADV_PBAP_VER_1_1, &remote_address,
-                                                   &btif_storage_get_remote_device_property)) {
-    log::verbose("device is in allowlist for pbap version < 1.2");
-    return true;
-  }
-  if (check_for_1_2) {
-    if (btm_sec_is_a_bonded_dev(remote_address)) {
-      if (interop_match_addr_or_name(INTEROP_ADV_PBAP_VER_1_2, &remote_address,
-                                     &btif_storage_get_remote_device_property)) {
-        log::verbose("device is in allowlist for pbap version 1.2");
-        return true;
-      }
-    } else {
-      const char* p_name = BTM_SecReadDevName(remote_address);
-      if ((p_name != NULL) && interop_match_name(INTEROP_ADV_PBAP_VER_1_2, p_name)) {
-        log::verbose("device is not paired & in allowlist for pbap version 1.2");
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-/*************************************************************************************
-**
-** Function        sdp_upgrade_pbap_pse_record
-**
-** Description     updates pbap record to pbap 1.2 record if remote supports
-*pbap 1.2
-**
-** Returns         the address of updated record
-**
-***************************************************************************************/
-static const tSDP_RECORD* sdp_upgrade_pse_record(const tSDP_RECORD* p_rec,
-                                                 RawAddress remote_address) {
-  static bool is_pbap_102_supported = FALSE;
-  tSDP_ATTRIBUTE attr = p_rec->attribute[1];
-  if (!((attr.id == ATTR_ID_SERVICE_CLASS_ID_LIST) &&
-        (((attr.value_ptr[1] << 8) | (attr.value_ptr[2])) == UUID_SERVCLASS_PBAP_PSE))) {
-    // Not a PBAP PSE Record
-    return p_rec;
-  }
-
-  /* Check if remote supports PBAP 1.2 */
-  is_pbap_102_supported = btif_storage_is_pce_version_102(remote_address);
-  bool is_pbap_101_allowlisted = is_device_in_allowlist_for_pbap(remote_address, false);
-  bool is_pbap_102_allowlisted = is_device_in_allowlist_for_pbap(remote_address, true);
-  bool running_pts = osi_property_get_bool(SDP_ENABLE_PTS_PBAP, false);
-
-  log::verbose(
-          "remote BD Addr : {} is_pbap_102_supported : {} is_pbap_101_allowlisted "
-          "= {} is_pbap_102_allowlisted = {} running_pts = {}",
-          remote_address, is_pbap_102_supported, is_pbap_101_allowlisted, is_pbap_102_allowlisted,
-          running_pts);
-
-  if (is_pbap_101_allowlisted ||
-      (!is_pbap_102_supported && !is_pbap_102_allowlisted && !running_pts)) {
-    // Send 1.1 SDP Record
-    return p_rec;
-  }
-
-  static tSDP_RECORD pbap_102_sdp_rec = {};
-  const tSDP_ATTRIBUTE* p_attr = &p_rec->attribute[0];
-  uint8_t temp[4], j;
-  uint8_t* p_temp = temp;
-  bool status = true;
-
-  /* Copying contents of the PBAP 1.1 PSE record to a new 1.2 record */
-  for (j = 0; j < p_rec->num_attributes; j++, p_attr++) {
-    SDP_AddAttributeToRecord(&pbap_102_sdp_rec, p_attr->id, p_attr->type, p_attr->len,
-                             p_attr->value_ptr);
-  }
-
-  /* Add supported repositories 1 byte */
-  status &= SDP_AddAttributeToRecord(&pbap_102_sdp_rec, ATTR_ID_SUPPORTED_REPOSITORIES,
-                                     UINT_DESC_TYPE, (uint32_t)1,
-                                     (uint8_t*)&sdpPseLocalRecord.supported_repositories);
-
-  /* Add in the Bluetooth Profile Descriptor List */
-  status &= SDP_AddProfileDescriptorListToRecord(&pbap_102_sdp_rec, UUID_SERVCLASS_PHONE_ACCESS,
-                                                 sdpPseLocalRecord.profile_version);
-
-  /* Add PBAP 1.2 supported features 4 */
-  UINT32_TO_BE_STREAM(p_temp, sdpPseLocalRecord.supported_features);
-  status &= SDP_AddAttributeToRecord(&pbap_102_sdp_rec, ATTR_ID_PBAP_SUPPORTED_FEATURES,
-                                     UINT_DESC_TYPE, (uint32_t)4, temp);
-
-  /* Add the L2CAP PSM */
-  p_temp = temp;  // The macro modifies p_temp, hence rewind.
-  UINT16_TO_BE_STREAM(p_temp, sdpPseLocalRecord.l2cap_psm);
-  status &= SDP_AddAttributeToRecord(&pbap_102_sdp_rec, ATTR_ID_GOEP_L2CAP_PSM, UINT_DESC_TYPE,
-                                     (uint32_t)2, temp);
-
-  if (!status) {
-    log::error("FAILED");
-    return p_rec;
-  }
-  return &pbap_102_sdp_rec;
-}
-
 /*******************************************************************************
  *
  * Function         process_service_attr_req
@@ -476,12 +362,6 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num, uint16
     return;
   }
 
-  if (bluetooth::common::init_flags::pbap_pse_dynamic_version_upgrade_is_enabled()) {
-    p_rec = sdp_upgrade_pse_record(p_rec, p_ccb->device_address);
-  } else {
-    log::warn("PBAP PSE dynamic version upgrade is not enabled");
-  }
-
   /* Free and reallocate buffer */
   osi_free(p_ccb->rsp_list);
   p_ccb->rsp_list = (uint8_t*)osi_malloc(max_list_len);
@@ -536,8 +416,7 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num, uint16
     if (p_attr) {
       if (is_service_avrc_target) {
         sdpu_set_avrc_target_version(p_attr, &(p_ccb->device_address));
-        if (p_attr->id == ATTR_ID_SUPPORTED_FEATURES &&
-            bluetooth::common::init_flags::dynamic_avrcp_version_enhancement_is_enabled()) {
+        if (p_attr->id == ATTR_ID_SUPPORTED_FEATURES) {
           avrc_sdp_version = sdpu_is_avrcp_profile_description_list(p_attr_profile_desc_list_id);
           log::error("avrc_sdp_version in SDP records {:x}", avrc_sdp_version);
           sdpu_set_avrc_target_features(p_attr, &(p_ccb->device_address), avrc_sdp_version);
@@ -676,94 +555,6 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num, uint16
   }
 }
 
-/*************************************************************************************
-**
-** Function        sdp_pbap_pse_dynamic_attributes_len_update
-**
-** Description      length of the attributes need to be added in final sdp
-*response len
-**
-** Returns         returns the length of denylisted attributes.
-**
-***************************************************************************************/
-static uint16_t sdp_pbap_pse_dynamic_attributes_len_update(tCONN_CB* p_ccb, tSDP_ATTR_SEQ* attr_seq,
-                                                           tSDP_UUID_SEQ* uid_seq) {
-  if (!p_ccb || !attr_seq || !uid_seq) {
-    return 0;
-  }
-  const tSDP_RECORD* p_rec;
-
-  p_ccb->pse_dynamic_attributes_len = 0;
-
-  // Check to validate if 1.2 record is getting sent
-  bool is_pbap_102_supported = btif_storage_is_pce_version_102(p_ccb->device_address);
-  bool is_pbap_101_allowlisted = is_device_in_allowlist_for_pbap(p_ccb->device_address, false);
-  bool is_pbap_102_allowlisted = is_device_in_allowlist_for_pbap(p_ccb->device_address, true);
-  bool running_pts = osi_property_get_bool(SDP_ENABLE_PTS_PBAP, false);
-
-  log::verbose(
-          "remote BD Addr : {} is_pbap_102_supported = {} is_pbap_101_allowlisted "
-          "= {} is_pbap_102_allowlisted = {} running_pts = {}",
-          p_ccb->device_address, is_pbap_102_supported, is_pbap_101_allowlisted,
-          is_pbap_102_allowlisted, running_pts);
-
-  if (is_pbap_101_allowlisted ||
-      (!is_pbap_102_supported && !is_pbap_102_allowlisted && !running_pts)) {
-    // Send Length without any update
-    return p_ccb->pse_dynamic_attributes_len;
-  }
-
-  int xx;
-  tSDP_ATTRIBUTE attr;
-  for (p_rec = (tSDP_RECORD*)sdp_db_service_search(NULL, uid_seq); p_rec;
-       p_rec = (tSDP_RECORD*)sdp_db_service_search(p_rec, uid_seq)) {
-    attr = p_rec->attribute[1];
-    if ((attr.id == ATTR_ID_SERVICE_CLASS_ID_LIST) &&
-        (((attr.value_ptr[1] << 8) | (attr.value_ptr[2])) == UUID_SERVCLASS_PBAP_PSE)) {
-      // PBAP PSE Record
-      p_rec = sdp_upgrade_pse_record(p_rec, p_ccb->device_address);
-      log::verbose("response has PBAP PSE record for allowlist device");
-
-      int att_index;
-      bool l2cap_psm_len_included = false, supp_attr_len_included = false;
-      for (xx = p_ccb->cont_info.next_attr_index; xx < attr_seq->num_attr; xx++) {
-        log::verbose(
-                "xx = {} attr_seq->num_attr = {}, attr_seq->attr_entry[xx].start = "
-                "{} , attr_seq->attr_entry[xx].end = {}",
-                xx, attr_seq->num_attr, attr_seq->attr_entry[xx].start,
-                attr_seq->attr_entry[xx].end);
-
-        for (att_index = 0; att_index < p_rec->num_attributes; att_index++) {
-          tSDP_ATTRIBUTE cur_attr = p_rec->attribute[att_index];
-          if (cur_attr.id == ATTR_ID_GOEP_L2CAP_PSM && !l2cap_psm_len_included &&
-              cur_attr.id >= attr_seq->attr_entry[xx].start &&
-              cur_attr.id <= attr_seq->attr_entry[xx].end) {
-            l2cap_psm_len_included = true;
-            p_ccb->pse_dynamic_attributes_len += PBAP_GOEP_L2CAP_PSM_LEN;
-            log::error("ATTR_ID_GOEP_L2CAP_PSM requested, need to change length by {}",
-                       p_ccb->pse_dynamic_attributes_len);
-          } else if (cur_attr.id == ATTR_ID_PBAP_SUPPORTED_FEATURES && !supp_attr_len_included &&
-                     cur_attr.id >= attr_seq->attr_entry[xx].start &&
-                     cur_attr.id <= attr_seq->attr_entry[xx].end) {
-            supp_attr_len_included = true;
-            p_ccb->pse_dynamic_attributes_len += PBAP_SUPP_FEA_LEN;
-            log::verbose(
-                    "ATTR_ID_PBAP_SUPPORTED_FEATURES requested, need to change "
-                    "length by {}",
-                    p_ccb->pse_dynamic_attributes_len);
-          }
-        }
-        if (p_ccb->pse_dynamic_attributes_len == PBAP_1_2_BL_LEN) {
-          break;
-        }
-      }
-      break;
-    }
-  }
-  log::verbose("pse_dynamic_attributes_len = {}", p_ccb->pse_dynamic_attributes_len);
-  return p_ccb->pse_dynamic_attributes_len;
-}
-
 /*******************************************************************************
  *
  * Function         process_service_search_attr_req
@@ -865,11 +656,6 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
        p_rec = sdp_db_service_search(p_rec, &uid_seq)) {
     /* Store the actual record pointer which would be reused later */
     p_prev_rec = (tSDP_RECORD*)p_rec;
-    if (bluetooth::common::init_flags::pbap_pse_dynamic_version_upgrade_is_enabled()) {
-      p_rec = sdp_upgrade_pse_record(p_rec, p_ccb->device_address);
-    } else {
-      log::warn("PBAP PSE dynamic version upgrade is not enabled");
-    }
     /* Allow space for attribute sequence type and length */
     p_seq_start = p_rsp;
     if (!p_ccb->cont_info.last_attr_seq_desc_sent) {
@@ -904,9 +690,7 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
       if (p_attr) {
         if (is_service_avrc_target) {
           sdpu_set_avrc_target_version(p_attr, &(p_ccb->device_address));
-          if (p_attr->id == ATTR_ID_SUPPORTED_FEATURES &&
-              bluetooth::common::init_flags::dynamic_avrcp_version_enhancement_is_enabled() &&
-              p_attr_profile_desc_list_id != nullptr) {
+          if (p_attr->id == ATTR_ID_SUPPORTED_FEATURES && p_attr_profile_desc_list_id != nullptr) {
             avrc_sdp_version = sdpu_is_avrcp_profile_description_list(p_attr_profile_desc_list_id);
             log::error("avrc_sdp_version in SDP records {:x}", avrc_sdp_version);
             sdpu_set_avrc_target_features(p_attr, &(p_ccb->device_address), avrc_sdp_version);
@@ -1047,13 +831,7 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
 
     /* Get the length of denylisted attributes to be updated if device is
      * denylisted */
-    if (bluetooth::common::init_flags::pbap_pse_dynamic_version_upgrade_is_enabled()) {
-      p_ccb->pse_dynamic_attributes_len =
-              sdp_pbap_pse_dynamic_attributes_len_update(p_ccb, &attr_seq_sav, &uid_seq);
-    } else {
-      log::warn("PBAP PSE dynamic version upgrade is not enabled");
-      p_ccb->pse_dynamic_attributes_len = 0;
-    }
+    p_ccb->pse_dynamic_attributes_len = 0;
 
     log::verbose("p_ccb->list_len = {} pse_dynamic_attributes_len = {}", p_ccb->list_len,
                  p_ccb->pse_dynamic_attributes_len);

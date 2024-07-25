@@ -23,7 +23,6 @@
 #include <future>
 #include <string>
 
-#include "common/init_flags.h"
 #include "common/time_util.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
@@ -67,7 +66,6 @@ static std::promise<void> promise;
 class A2dpSbcTest : public ::testing::Test {
 protected:
   void SetUp() override {
-    common::InitFlags::SetAllForTesting();
     SetCodecConfig();
     encoder_iface_ = const_cast<tA2DP_ENCODER_INTERFACE*>(
             A2DP_GetEncoderInterfaceSbc(kCodecInfoSbcCapability));
@@ -98,7 +96,7 @@ protected:
 
     // Create the codec capability - SBC Sink
     memset(codec_info_result, 0, sizeof(codec_info_result));
-    ASSERT_TRUE(A2DP_IsSinkCodecSupportedSbc(kCodecInfoSbcCapability));
+    ASSERT_EQ(A2DP_IsSinkCodecSupportedSbc(kCodecInfoSbcCapability), A2DP_SUCCESS);
     peer_codec_index = A2DP_SinkCodecIndex(kCodecInfoSbcCapability);
     ASSERT_NE(peer_codec_index, BTAV_A2DP_CODEC_INDEX_MAX);
     sink_codec_config_ = a2dp_codecs_->findSinkCodecConfig(kCodecInfoSbcCapability);
@@ -242,7 +240,7 @@ TEST_F(A2dpSbcTest, set_source_codec_config_works) {
 }
 
 TEST_F(A2dpSbcTest, sink_supports_sbc) {
-  ASSERT_TRUE(A2DP_IsSinkCodecSupportedSbc(kCodecInfoSbcCapability));
+  ASSERT_EQ(A2DP_IsSinkCodecSupportedSbc(kCodecInfoSbcCapability), A2DP_SUCCESS);
 }
 
 TEST_F(A2dpSbcTest, effective_mtu_when_peer_supports_3mbps) {
