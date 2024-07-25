@@ -44,10 +44,6 @@ tBTM_STATUS BTM_CreateSco(const RawAddress* /* remote_bda */, bool /* is_orig */
   inc_func_call_count(__func__);
   return BTM_SUCCESS;
 }
-tBTM_STATUS BTM_RegForEScoEvts(uint16_t /* sco_inx */, tBTM_ESCO_CBACK* /* p_esco_cback */) {
-  inc_func_call_count(__func__);
-  return BTM_SUCCESS;
-}
 tBTM_STATUS BTM_RemoveSco(uint16_t /* sco_inx */) {
   inc_func_call_count(__func__);
   return BTM_SUCCESS;

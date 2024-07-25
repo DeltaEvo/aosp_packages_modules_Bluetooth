@@ -109,6 +109,8 @@ public:
   LeAudioSourceAudioHalClient::Callbacks* audioSourceCallbacks_ = nullptr;
   std::mutex audioSourceCallbacksMutex_;
   std::unique_ptr<bluetooth::audio::asrc::SourceAudioHalAsrc> asrc_;
+
+  base::WeakPtrFactory<SourceImpl> weak_factory_{this};
 };
 
 bool SourceImpl::Acquire() {
@@ -258,7 +260,7 @@ void SourceImpl::StartAudioTicks() {
   }
   audio_timer_.SchedulePeriodic(
           worker_thread_->GetWeakPtr(), FROM_HERE,
-          base::BindRepeating(&SourceImpl::SendAudioData, base::Unretained(this)),
+          base::BindRepeating(&SourceImpl::SendAudioData, weak_factory_.GetWeakPtr()),
           std::chrono::microseconds(source_codec_config_.data_interval_us));
 }
 
@@ -273,7 +275,7 @@ bool SourceImpl::OnSuspendReq() {
   if (CodecManager::GetInstance()->GetCodecLocation() == types::CodecLocation::HOST) {
     if (com::android::bluetooth::flags::run_ble_audio_ticks_in_worker_thread()) {
       worker_thread_->DoInThread(
-              FROM_HERE, base::BindOnce(&SourceImpl::StopAudioTicks, base::Unretained(this)));
+              FROM_HERE, base::BindOnce(&SourceImpl::StopAudioTicks, weak_factory_.GetWeakPtr()));
     } else {
       StopAudioTicks();
     }
@@ -372,7 +374,7 @@ void SourceImpl::Stop() {
   if (CodecManager::GetInstance()->GetCodecLocation() == types::CodecLocation::HOST) {
     if (com::android::bluetooth::flags::run_ble_audio_ticks_in_worker_thread()) {
       worker_thread_->DoInThread(
-              FROM_HERE, base::BindOnce(&SourceImpl::StopAudioTicks, base::Unretained(this)));
+              FROM_HERE, base::BindOnce(&SourceImpl::StopAudioTicks, weak_factory_.GetWeakPtr()));
     } else {
       StopAudioTicks();
     }
@@ -400,7 +402,7 @@ void SourceImpl::ConfirmStreamingRequest() {
 
   if (com::android::bluetooth::flags::run_ble_audio_ticks_in_worker_thread()) {
     worker_thread_->DoInThread(
-            FROM_HERE, base::BindOnce(&SourceImpl::StartAudioTicks, base::Unretained(this)));
+            FROM_HERE, base::BindOnce(&SourceImpl::StartAudioTicks, weak_factory_.GetWeakPtr()));
   } else {
     StartAudioTicks();
   }

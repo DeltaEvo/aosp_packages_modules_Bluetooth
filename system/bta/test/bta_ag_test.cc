@@ -351,17 +351,24 @@ TEST_F_WITH_FLAGS(BtaAgCmdTest, handle_swb_at_event__qcs_ev_codec_q1_fallback_to
   ASSERT_TRUE(enable_aptx_voice_property(false));
 }
 
+namespace {
+uint8_t data[3] = {1, 2, 3};
+}  // namespace
+
 class BtaAgScoTest : public BtaAgTest {
 protected:
   void SetUp() override {
     BtaAgTest::SetUp();
-    test::mock::stack_acl::BTM_ReadRemoteFeatures.body = [this](const RawAddress& addr) {
-      return this->data;
+    reset_mock_btm_client_interface();
+    mock_btm_client_interface.peer.BTM_ReadRemoteFeatures = [](const RawAddress& addr) {
+      inc_func_call_count("BTM_ReadRemoteFeatures");
+      return data;
     };
   }
-  void TearDown() override { BtaAgTest::TearDown(); }
-
-  uint8_t data[3] = {1, 2, 3};
+  void TearDown() override {
+    reset_mock_btm_client_interface();
+    BtaAgTest::TearDown();
+  }
 };
 
 TEST_F_WITH_FLAGS(BtaAgScoTest, codec_negotiate__aptx_state_on,

@@ -638,7 +638,7 @@ static void bta_ag_codec_negotiation_timer_cback(void* data) {
  ******************************************************************************/
 void bta_ag_codec_negotiate(tBTA_AG_SCB* p_scb) {
   bta_ag_cb.sco.p_curr_scb = p_scb;
-  uint8_t* p_rem_feat = BTM_ReadRemoteFeatures(p_scb->peer_addr);
+  uint8_t* p_rem_feat = get_btm_client_interface().peer.BTM_ReadRemoteFeatures(p_scb->peer_addr);
   bool sdp_wbs_support = p_scb->peer_sdp_features & BTA_AG_FEAT_WBS_SUPPORT;
 
   if (p_rem_feat == nullptr) {

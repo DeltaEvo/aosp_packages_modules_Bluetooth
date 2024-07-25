@@ -52,14 +52,14 @@ public:
   // object is still owned by the channel allocator, NOT the client.
   virtual std::shared_ptr<FixedChannelImplType> AllocateChannel(Cid cid) {
     log::assert_that(!IsChannelAllocated(cid), "Cid 0x{:x} for link {} is already in use", cid,
-                     ToLoggableStr(*link_));
+                     link_->ToRedactedStringForLogging());
 
     log::assert_that(cid >= kFirstFixedChannel && cid <= kLastFixedChannel, "Cid {} out of bound",
                      cid);
     auto elem = channels_.try_emplace(
             cid, std::make_shared<FixedChannelImplType>(cid, link_, l2cap_handler_));
     log::assert_that(elem.second, "Failed to create channel for cid 0x{:x} link {}", cid,
-                     ToLoggableStr(*link_));  // TODO RENAME ADDRESS_TO_LOGGABLE_CSTR
+                     link_->ToRedactedStringForLogging());
     log::assert_that(elem.first->second != nullptr, "assert failed: elem.first->second != nullptr");
     return elem.first->second;
   }
@@ -67,7 +67,7 @@ public:
   // Frees a channel. If cid doesn't exist, it will crash
   virtual void FreeChannel(Cid cid) {
     log::assert_that(IsChannelAllocated(cid), "Channel is not in use: cid {}, link {}", cid,
-                     ToLoggableStr(*link_));
+                     link_->ToRedactedStringForLogging());
 
     channels_.erase(cid);
   }
@@ -76,7 +76,7 @@ public:
 
   virtual std::shared_ptr<FixedChannelImplType> FindChannel(Cid cid) {
     log::assert_that(IsChannelAllocated(cid), "Channel is not in use: cid {}, link {}", cid,
-                     ToLoggableStr(*link_));
+                     link_->ToRedactedStringForLogging());
 
     return channels_.find(cid)->second;
   }

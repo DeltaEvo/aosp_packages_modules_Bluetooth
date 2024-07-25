@@ -49,6 +49,7 @@
 #include "stack/include/acl_api.h"
 #include "stack/include/acl_api_types.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/btm_client_interface.h"
 #include "types/raw_address.h"
 
 using bluetooth::audio::a2dp::BluetoothAudioStatus;
@@ -914,7 +915,8 @@ static bool btif_a2dp_source_enqueue_callback(BT_HDR* p_buf, size_t frames_n,
 
     // Request additional debug info if we had to flush buffers
     RawAddress peer_bda = btif_av_source_active_peer();
-    tBTM_STATUS status = BTM_ReadRSSI(peer_bda, btm_read_rssi_cb);
+    tBTM_STATUS status =
+            get_btm_client_interface().link_controller.BTM_ReadRSSI(peer_bda, btm_read_rssi_cb);
     if (status != BTM_CMD_STARTED) {
       log::warn("Cannot read RSSI: status {}", status);
     }

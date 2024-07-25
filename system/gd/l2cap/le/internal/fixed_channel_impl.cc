@@ -80,12 +80,12 @@ void FixedChannelImpl::Acquire() {
   log::assert_that(user_handler_ != nullptr,
                    "Must register OnCloseCallback before calling any methods");
   if (closed_) {
-    log::warn("{} is already closed", ToLoggableStr(*this));
+    log::warn("{} is already closed", ToRedactedStringForLogging());
     log::assert_that(!acquired_, "assert failed: !acquired_");
     return;
   }
   if (acquired_) {
-    log::info("{} was already acquired", ToLoggableStr(*this));
+    log::info("{} was already acquired", ToRedactedStringForLogging());
     return;
   }
   acquired_ = true;
@@ -96,12 +96,12 @@ void FixedChannelImpl::Release() {
   log::assert_that(user_handler_ != nullptr,
                    "Must register OnCloseCallback before calling any methods");
   if (closed_) {
-    log::warn("{} is already closed", ToLoggableStr(*this));
+    log::warn("{} is already closed", ToRedactedStringForLogging());
     log::assert_that(!acquired_, "assert failed: !acquired_");
     return;
   }
   if (!acquired_) {
-    log::info("{} was already released", ToLoggableStr(*this));
+    log::info("{} was already released", ToRedactedStringForLogging());
     return;
   }
   acquired_ = false;
