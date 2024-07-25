@@ -33,30 +33,15 @@ namespace test {
 namespace mock {
 namespace stack_btm_devctl {
 
-struct BTM_IsDeviceUp BTM_IsDeviceUp;
-
 }
 }  // namespace mock
 }  // namespace test
-
-bool BTM_IsDeviceUp(void) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_btm_devctl::BTM_IsDeviceUp();
-}
 
 tBTM_STATUS BTM_DeleteStoredLinkKey(const RawAddress* /* bd_addr */, tBTM_CMPL_CB* /* p_cb */) {
   inc_func_call_count(__func__);
   return BTM_SUCCESS;
 }
 tBTM_STATUS BTM_EnableTestMode(void) {
-  inc_func_call_count(__func__);
-  return BTM_SUCCESS;
-}
-tBTM_STATUS BTM_ReadLocalDeviceName(const char** /* p_name */) {
-  inc_func_call_count(__func__);
-  return BTM_SUCCESS;
-}
-tBTM_STATUS BTM_ReadLocalDeviceNameFromController(tBTM_CMPL_CB* /* p_rln_cmpl_cback */) {
   inc_func_call_count(__func__);
   return BTM_SUCCESS;
 }

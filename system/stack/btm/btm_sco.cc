@@ -1747,7 +1747,7 @@ tBTM_SCO_DEBUG_DUMP BTM_GetScoDebugDump() {
 }
 
 bool btm_peer_supports_esco_2m_phy(RawAddress remote_bda) {
-  uint8_t* features = BTM_ReadRemoteFeatures(remote_bda);
+  uint8_t* features = get_btm_client_interface().peer.BTM_ReadRemoteFeatures(remote_bda);
   if (features == nullptr) {
     log::warn("Checking remote features but remote feature read is incomplete");
     return false;
@@ -1756,7 +1756,7 @@ bool btm_peer_supports_esco_2m_phy(RawAddress remote_bda) {
 }
 
 bool btm_peer_supports_esco_3m_phy(RawAddress remote_bda) {
-  uint8_t* features = BTM_ReadRemoteFeatures(remote_bda);
+  uint8_t* features = get_btm_client_interface().peer.BTM_ReadRemoteFeatures(remote_bda);
   if (features == nullptr) {
     log::warn("Checking remote features but remote feature read is incomplete");
     return false;
@@ -1765,7 +1765,7 @@ bool btm_peer_supports_esco_3m_phy(RawAddress remote_bda) {
 }
 
 bool btm_peer_supports_esco_ev3(RawAddress remote_bda) {
-  uint8_t* features = BTM_ReadRemoteFeatures(remote_bda);
+  uint8_t* features = get_btm_client_interface().peer.BTM_ReadRemoteFeatures(remote_bda);
   if (features == nullptr) {
     log::warn("Checking remote features but remote feature read is incomplete");
     return false;

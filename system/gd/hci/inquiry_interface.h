@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The Android Open Source Project
+ * Copyright 2024 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,22 @@
  * limitations under the License.
  */
 
-#include <functional>
-namespace test {
-namespace mock {
-namespace stack_btm_devctl {
+#pragma once
 
-}  // namespace stack_btm_devctl
-}  // namespace mock
-}  // namespace test
+#include "hci/command_interface.h"
+#include "hci/hci_packets.h"
+
+namespace bluetooth {
+namespace hci {
+
+constexpr hci::EventCode InquiryEvents[] = {
+        hci::EventCode::INQUIRY_COMPLETE,
+        hci::EventCode::INQUIRY_RESULT,
+        hci::EventCode::INQUIRY_RESULT_WITH_RSSI,
+        hci::EventCode::EXTENDED_INQUIRY_RESULT,
+};
+
+typedef CommandInterface<DiscoveryCommandBuilder> InquiryInterface;
+
+}  // namespace hci
+}  // namespace bluetooth

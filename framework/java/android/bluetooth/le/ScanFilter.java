@@ -492,7 +492,7 @@ public final class ScanFilter implements Parcelable {
         }
 
         // Manufacturer data match.
-        if (mManufacturerId >= 0) {
+        if (mManufacturerId >= 0 && mManufacturerData != null) {
             if (!matchesPartialData(
                     mManufacturerData,
                     mManufacturerDataMask,

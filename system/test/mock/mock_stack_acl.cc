@@ -43,10 +43,7 @@ namespace stack_acl {
 struct BTM_BLE_IS_RESOLVE_BDA BTM_BLE_IS_RESOLVE_BDA;
 struct BTM_IsAclConnectionUp BTM_IsAclConnectionUp;
 struct BTM_IsBleConnection BTM_IsBleConnection;
-struct BTM_IsPhy2mSupported BTM_IsPhy2mSupported;
 struct BTM_ReadRemoteConnectionAddr BTM_ReadRemoteConnectionAddr;
-struct BTM_IsRemoteVersionReceived BTM_IsRemoteVersionReceived;
-struct BTM_ReadRemoteVersion BTM_ReadRemoteVersion;
 struct BTM_is_sniff_allowed_for BTM_is_sniff_allowed_for;
 struct acl_create_le_connection acl_create_le_connection;
 struct acl_create_le_connection_with_id acl_create_le_connection_with_id;
@@ -69,7 +66,6 @@ struct acl_get_connection_from_address acl_get_connection_from_address;
 struct btm_acl_for_bda btm_acl_for_bda;
 struct acl_get_connection_from_handle acl_get_connection_from_handle;
 struct BTM_ReadFailedContactCounter BTM_ReadFailedContactCounter;
-struct BTM_ReadRSSI BTM_ReadRSSI;
 struct BTM_ReadTxPower BTM_ReadTxPower;
 struct BTM_SetLinkSuperTout BTM_SetLinkSuperTout;
 struct BTM_SwitchRoleToCentral BTM_SwitchRoleToCentral;
@@ -80,7 +76,6 @@ struct BTM_GetNumAclLinks BTM_GetNumAclLinks;
 struct acl_get_supported_packet_types acl_get_supported_packet_types;
 struct acl_link_role_from_handle acl_link_role_from_handle;
 struct btm_handle_to_acl_index btm_handle_to_acl_index;
-struct BTM_ReadRemoteFeatures BTM_ReadRemoteFeatures;
 struct BTM_ReadConnectionAddr BTM_ReadConnectionAddr;
 struct BTM_RequestPeerSCA BTM_RequestPeerSCA;
 struct BTM_acl_after_controller_started BTM_acl_after_controller_started;
@@ -149,25 +144,11 @@ bool BTM_IsBleConnection(uint16_t hci_handle) {
   inc_func_call_count(__func__);
   return test::mock::stack_acl::BTM_IsBleConnection(hci_handle);
 }
-bool BTM_IsPhy2mSupported(const RawAddress& remote_bda, tBT_TRANSPORT transport) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_acl::BTM_IsPhy2mSupported(remote_bda, transport);
-}
 bool BTM_ReadRemoteConnectionAddr(const RawAddress& pseudo_addr, RawAddress& conn_addr,
                                   tBLE_ADDR_TYPE* p_addr_type, bool ota_address) {
   inc_func_call_count(__func__);
   return test::mock::stack_acl::BTM_ReadRemoteConnectionAddr(pseudo_addr, conn_addr, p_addr_type,
                                                              ota_address);
-}
-bool BTM_IsRemoteVersionReceived(const RawAddress& addr) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_acl::BTM_IsRemoteVersionReceived(addr);
-}
-bool BTM_ReadRemoteVersion(const RawAddress& addr, uint8_t* lmp_version, uint16_t* manufacturer,
-                           uint16_t* lmp_sub_version) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_acl::BTM_ReadRemoteVersion(addr, lmp_version, manufacturer,
-                                                      lmp_sub_version);
 }
 bool BTM_is_sniff_allowed_for(const RawAddress& peer_addr) {
   inc_func_call_count(__func__);
@@ -257,10 +238,6 @@ tBTM_STATUS BTM_ReadFailedContactCounter(const RawAddress& remote_bda, tBTM_CMPL
   inc_func_call_count(__func__);
   return test::mock::stack_acl::BTM_ReadFailedContactCounter(remote_bda, p_cb);
 }
-tBTM_STATUS BTM_ReadRSSI(const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_acl::BTM_ReadRSSI(remote_bda, p_cb);
-}
 tBTM_STATUS BTM_ReadTxPower(const RawAddress& remote_bda, tBT_TRANSPORT transport,
                             tBTM_CMPL_CB* p_cb) {
   inc_func_call_count(__func__);
@@ -301,10 +278,6 @@ uint8_t acl_link_role_from_handle(uint16_t handle) {
 uint8_t btm_handle_to_acl_index(uint16_t hci_handle) {
   inc_func_call_count(__func__);
   return test::mock::stack_acl::btm_handle_to_acl_index(hci_handle);
-}
-uint8_t* BTM_ReadRemoteFeatures(const RawAddress& addr) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_acl::BTM_ReadRemoteFeatures(addr);
 }
 void BTM_ReadConnectionAddr(const RawAddress& remote_bda, RawAddress& local_conn_addr,
                             tBLE_ADDR_TYPE* p_addr_type, bool ota_address) {

@@ -1857,7 +1857,7 @@ private:
         break;
 
       case BTA_GATTC_SRVC_DISC_DONE_EVT:
-        OnGattServiceDiscoveryDoneEvent(p_data->remote_bda);
+        OnGattServiceDiscoveryDoneEvent(p_data->service_discovery_done.remote_bda);
         break;
 
       default:

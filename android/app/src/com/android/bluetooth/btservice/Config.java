@@ -92,6 +92,9 @@ public class Config {
         if (Flags.leaudioSynchronizeStart()) {
             PROFILE_SERVICES_AND_FLAGS =
                     new ProfileConfig[] {
+                        // Prioritize GattService startup by making it the first Profile to
+                        // boot. This resolves dependency issues for some Profiles.
+                        new ProfileConfig(GattService.isEnabled(), BluetoothProfile.GATT),
                         new ProfileConfig(A2dpService.isEnabled(), BluetoothProfile.A2DP),
                         new ProfileConfig(A2dpSinkService.isEnabled(), BluetoothProfile.A2DP_SINK),
                         new ProfileConfig(AvrcpTargetService.isEnabled(), BluetoothProfile.AVRCP),
@@ -115,7 +118,6 @@ public class Config {
                         new ProfileConfig(
                                 HidDeviceService.isEnabled(), BluetoothProfile.HID_DEVICE),
                         new ProfileConfig(HidHostService.isEnabled(), BluetoothProfile.HID_HOST),
-                        new ProfileConfig(GattService.isEnabled(), BluetoothProfile.GATT),
                         new ProfileConfig(TbsService.isEnabled(), BluetoothProfile.LE_CALL_CONTROL),
                         new ProfileConfig(BluetoothMapService.isEnabled(), BluetoothProfile.MAP),
                         new ProfileConfig(
@@ -137,6 +139,9 @@ public class Config {
         } else {
             PROFILE_SERVICES_AND_FLAGS =
                     new ProfileConfig[] {
+                        // Prioritize GattService startup by making it the first Profile to
+                        // boot. This resolves dependency issues for some Profiles.
+                        new ProfileConfig(GattService.isEnabled(), BluetoothProfile.GATT),
                         new ProfileConfig(A2dpService.isEnabled(), BluetoothProfile.A2DP),
                         new ProfileConfig(A2dpSinkService.isEnabled(), BluetoothProfile.A2DP_SINK),
                         new ProfileConfig(AvrcpTargetService.isEnabled(), BluetoothProfile.AVRCP),
@@ -160,7 +165,6 @@ public class Config {
                         new ProfileConfig(
                                 HidDeviceService.isEnabled(), BluetoothProfile.HID_DEVICE),
                         new ProfileConfig(HidHostService.isEnabled(), BluetoothProfile.HID_HOST),
-                        new ProfileConfig(GattService.isEnabled(), BluetoothProfile.GATT),
                         new ProfileConfig(LeAudioService.isEnabled(), BluetoothProfile.LE_AUDIO),
                         new ProfileConfig(
                                 LeAudioService.isBroadcastEnabled(),

@@ -1484,7 +1484,7 @@ static void btif_hh_transport_select(tAclLinkSpec& link_spec) {
   // Find the device type
   tBT_DEVICE_TYPE dev_type;
   tBLE_ADDR_TYPE addr_type;
-  BTM_ReadDevInfo(bd_addr, &dev_type, &addr_type);
+  get_btm_client_interface().peer.BTM_ReadDevInfo(bd_addr, &dev_type, &addr_type);
 
   // Find which transports are already connected
   bool bredr_acl =

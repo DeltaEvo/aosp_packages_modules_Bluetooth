@@ -228,34 +228,6 @@ struct BTM_GetDeviceIDRoot {
 };
 extern struct BTM_GetDeviceIDRoot BTM_GetDeviceIDRoot;
 
-// Name: BTM_ReadConnectedTransportAddress
-// Params: RawAddress* remote_bda, tBT_TRANSPORT transport
-// Return: bool
-struct BTM_ReadConnectedTransportAddress {
-  static bool return_value;
-  std::function<bool(RawAddress* remote_bda, tBT_TRANSPORT transport)> body{
-          [](RawAddress* /* remote_bda */, tBT_TRANSPORT /* transport */) { return return_value; }};
-  bool operator()(RawAddress* remote_bda, tBT_TRANSPORT transport) {
-    return body(remote_bda, transport);
-  }
-};
-extern struct BTM_ReadConnectedTransportAddress BTM_ReadConnectedTransportAddress;
-
-// Name: BTM_ReadDevInfo
-// Params: const RawAddress& remote_bda, tBT_DEVICE_TYPE* p_dev_type,
-// tBLE_ADDR_TYPE* p_addr_type Return: void
-struct BTM_ReadDevInfo {
-  std::function<void(const RawAddress& remote_bda, tBT_DEVICE_TYPE* p_dev_type,
-                     tBLE_ADDR_TYPE* p_addr_type)>
-          body{[](const RawAddress& /* remote_bda */, tBT_DEVICE_TYPE* /* p_dev_type */,
-                  tBLE_ADDR_TYPE* /* p_addr_type */) {}};
-  void operator()(const RawAddress& remote_bda, tBT_DEVICE_TYPE* p_dev_type,
-                  tBLE_ADDR_TYPE* p_addr_type) {
-    body(remote_bda, p_dev_type, p_addr_type);
-  }
-};
-extern struct BTM_ReadDevInfo BTM_ReadDevInfo;
-
 // Name: BTM_SecAddBleDevice
 // Params: const RawAddress& bd_addr, tBT_DEVICE_TYPE dev_type, tBLE_ADDR_TYPE
 // addr_type Return: void

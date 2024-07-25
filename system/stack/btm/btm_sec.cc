@@ -1688,8 +1688,8 @@ tBTM_STATUS btm_sec_mx_access_request(const RawAddress& bd_addr, bool is_origina
                                       void* p_ref_data) {
   tBTM_SEC_DEV_REC* p_dev_rec;
   tBTM_STATUS rc;
-  bool transport = false; /* should check PSM range in LE connection oriented
-                             L2CAP connection */
+  tBT_TRANSPORT transport = BT_TRANSPORT_AUTO; /* should check PSM range in LE connection oriented
+                                                  L2CAP connection */
   log::debug("Multiplex access request device:{}", bd_addr);
 
   /* Find or get oldest record */
@@ -2112,7 +2112,7 @@ static void call_registered_rmt_name_callbacks(const RawAddress* p_bd_addr,
  *
  ******************************************************************************/
 void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr, const uint8_t* p_bd_name,
-                                       tHCI_STATUS status) {
+                                       tHCI_STATUS hci_status) {
   log::info("btm_sec_rmt_name_request_complete for {}",
             p_bd_addr ? ADDRESS_TO_LOGGABLE_CSTR(*p_bd_addr) : "null");
 
@@ -2142,27 +2142,28 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr, const uint8_
     p_bd_name = (const uint8_t*)kBtmBdNameEmpty;
   }
 
-  BTM_LogHistory(kBtmLogTag, (p_bd_addr) ? *p_bd_addr : RawAddress::kEmpty, "RNR complete",
-                 base::StringPrintf("status:%s name:%s", hci_error_code_text(status).c_str(),
-                                    PRIVATE_NAME(p_bd_name)));
+  BTM_LogHistory(
+          kBtmLogTag, (p_bd_addr) ? *p_bd_addr : RawAddress::kEmpty, "RNR complete",
+          base::StringPrintf("hci_status:%s name:%s", hci_error_code_text(hci_status).c_str(),
+                             PRIVATE_NAME(p_bd_name)));
 
   if (p_dev_rec == nullptr) {
     log::debug(
             "Remote read request complete for unknown device peer:{} "
             "pairing_state:{} "
-            "status:{} name:{}",
+            "hci_status:{} name:{}",
             (p_bd_addr) ? ADDRESS_TO_LOGGABLE_CSTR(*p_bd_addr) : "null",
             tBTM_SEC_CB::btm_pair_state_descr(btm_sec_cb.pairing_state),
-            hci_status_code_text(status), reinterpret_cast<char const*>(p_bd_name));
+            hci_status_code_text(hci_status), reinterpret_cast<char const*>(p_bd_name));
 
-    call_registered_rmt_name_callbacks(p_bd_addr, kDevClassEmpty, nullptr, status);
+    call_registered_rmt_name_callbacks(p_bd_addr, kDevClassEmpty, nullptr, hci_status);
     return;
   }
 
   // We are guaranteed to have an address at this point
   const RawAddress bd_addr(*p_bd_addr);
 
-  if (status == HCI_SUCCESS) {
+  if (hci_status == HCI_SUCCESS) {
     log::debug(
             "Remote read request complete for known device pairing_state:{} "
             "name:{} classic_link:{}",
@@ -2175,9 +2176,9 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr, const uint8_
   } else {
     log::warn(
             "Remote read request failed for known device pairing_state:{} "
-            "status:{} name:{} classic_link:{}",
+            "hci_status:{} name:{} classic_link:{}",
             tBTM_SEC_CB::btm_pair_state_descr(btm_sec_cb.pairing_state),
-            hci_status_code_text(status), reinterpret_cast<char const*>(p_bd_name),
+            hci_status_code_text(hci_status), reinterpret_cast<char const*>(p_bd_name),
             p_dev_rec->sec_rec.classic_link);
 
     /* Notify all clients waiting for name to be resolved even if it failed so
@@ -2187,7 +2188,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr, const uint8_
 
   /* Notify all clients waiting for name to be resolved */
   call_registered_rmt_name_callbacks(&bd_addr, p_dev_rec->dev_class, p_dev_rec->sec_bd_name,
-                                     status);
+                                     hci_status);
 
   // Security procedure resumes
   const bool is_security_state_getting_name =
@@ -2234,17 +2235,18 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr, const uint8_
       return;
     }
 
-    log::verbose("continue bonding sm4: 0x{:04x}, status:0x{:x}", p_dev_rec->sm4, status);
+    log::verbose("continue bonding sm4: 0x{:04x}, hci_status:{}", p_dev_rec->sm4,
+                 hci_error_code_text(hci_status));
     if (btm_sec_cb.pairing_flags & BTM_PAIR_FLAGS_WE_CANCEL_DD) {
       btm_sec_bond_cancel_complete();
       return;
     }
 
-      if (status != HCI_SUCCESS) {
-        btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_IDLE);
+    if (hci_status != HCI_SUCCESS) {
+      btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_IDLE);
 
-        return NotifyBondingChange(*p_dev_rec, status);
-      }
+      return NotifyBondingChange(*p_dev_rec, hci_status);
+    }
 
       /* if peer is very old legacy devices, HCI_RMT_HOST_SUP_FEAT_NOTIFY_EVT is
        * not reported */
@@ -2323,7 +2325,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr, const uint8_
   }
 
   /* If get name failed, notify the waiting layer */
-  if (status != HCI_SUCCESS) {
+  if (hci_status != HCI_SUCCESS) {
     btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_PROCESSING, false);
     return;
   }

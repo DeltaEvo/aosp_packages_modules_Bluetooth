@@ -890,10 +890,10 @@ static void bta_hh_le_get_protocol_mode(tBTA_HH_DEV_CB* p_cb) {
  *
  ******************************************************************************/
 static void bta_hh_le_dis_cback(const RawAddress& addr, tDIS_VALUE* p_dis_value) {
-  tAclLinkSpec link_spec;
-  link_spec.addrt.bda = addr;
-  link_spec.addrt.type = BLE_ADDR_PUBLIC;
-  link_spec.transport = BT_TRANSPORT_LE;
+  tAclLinkSpec link_spec = {
+          .addrt = {.type = BLE_ADDR_PUBLIC, .bda = addr},
+          .transport = BT_TRANSPORT_LE,
+  };
   tBTA_HH_DEV_CB* p_cb = bta_hh_le_find_dev_cb_by_bda(link_spec);
 
   if (p_cb == nullptr) {
@@ -963,10 +963,10 @@ static void bta_hh_le_pri_service_discovery(tBTA_HH_DEV_CB* p_cb) {
  ******************************************************************************/
 static void bta_hh_le_encrypt_cback(RawAddress bd_addr, tBT_TRANSPORT transport,
                                     void* /* p_ref_data */, tBTM_STATUS result) {
-  tAclLinkSpec link_spec;
-  link_spec.addrt.bda = bd_addr;
-  link_spec.addrt.type = BLE_ADDR_PUBLIC;
-  link_spec.transport = transport;
+  tAclLinkSpec link_spec = {
+          .addrt = {.type = BLE_ADDR_PUBLIC, .bda = bd_addr},
+          .transport = transport,
+  };
 
   tBTA_HH_DEV_CB* p_dev_cb = bta_hh_get_cb(link_spec);
   if (p_dev_cb == nullptr) {
@@ -1169,10 +1169,10 @@ void bta_hh_gatt_open(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_buf) {
  *
  ******************************************************************************/
 static void bta_hh_le_close(const tBTA_GATTC_CLOSE& gattc_data) {
-  tAclLinkSpec link_spec;
-  link_spec.addrt.bda = gattc_data.remote_bda;
-  link_spec.addrt.type = BLE_ADDR_PUBLIC;
-  link_spec.transport = BT_TRANSPORT_LE;
+  tAclLinkSpec link_spec = {
+          .addrt = {.type = BLE_ADDR_PUBLIC, .bda = gattc_data.remote_bda},
+          .transport = BT_TRANSPORT_LE,
+  };
 
   tBTA_HH_DEV_CB* p_cb = bta_hh_le_find_dev_cb_by_bda(link_spec);
   if (p_cb == nullptr) {
@@ -2181,9 +2181,7 @@ static void bta_hh_le_service_discovery_done(tAclLinkSpec link_spec) {
  ******************************************************************************/
 static void bta_hh_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
   tBTA_HH_DEV_CB* p_dev_cb;
-  tAclLinkSpec link_spec;
-  link_spec.addrt.type = BLE_ADDR_PUBLIC;
-  link_spec.transport = BT_TRANSPORT_LE;
+  tAclLinkSpec link_spec = {.addrt.type = BLE_ADDR_PUBLIC, .transport = BT_TRANSPORT_LE};
 
   log::verbose("event:{}", gatt_client_event_text(event));
   if (p_data == NULL) {
@@ -2217,12 +2215,12 @@ static void bta_hh_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
       break;
 
     case BTA_GATTC_SRVC_CHG_EVT:
-      link_spec.addrt.bda = p_data->remote_bda;
+      link_spec.addrt.bda = p_data->service_changed.remote_bda;
       bta_hh_le_service_changed(link_spec);
       break;
 
     case BTA_GATTC_SRVC_DISC_DONE_EVT:
-      link_spec.addrt.bda = p_data->remote_bda;
+      link_spec.addrt.bda = p_data->service_discovery_done.remote_bda;
       bta_hh_le_service_discovery_done(link_spec);
       break;
 
@@ -2288,9 +2286,7 @@ static bool bta_hh_le_iso_data_callback(const RawAddress& addr, uint16_t cis_con
     return false;
   }
 
-  tAclLinkSpec link_spec{};
-  link_spec.addrt.bda = addr;
-  link_spec.transport = BT_TRANSPORT_LE;
+  tAclLinkSpec link_spec = {.addrt.bda = addr, .transport = BT_TRANSPORT_LE};
 
   tBTA_HH_DEV_CB* p_dev_cb = bta_hh_le_find_dev_cb_by_bda(link_spec);
   if (p_dev_cb == nullptr) {

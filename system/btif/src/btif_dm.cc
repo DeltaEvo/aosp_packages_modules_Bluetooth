@@ -731,7 +731,7 @@ bool is_device_le_audio_capable(const RawAddress bd_addr) {
 
   tBT_DEVICE_TYPE tmp_dev_type;
   tBLE_ADDR_TYPE addr_type = BLE_ADDR_PUBLIC;
-  BTM_ReadDevInfo(bd_addr, &tmp_dev_type, &addr_type);
+  get_btm_client_interface().peer.BTM_ReadDevInfo(bd_addr, &tmp_dev_type, &addr_type);
   if (tmp_dev_type & BT_DEVICE_TYPE_BLE) {
     /* LE Audio capable device is discoverable over both LE and Classic using
      * same address. Prefer to use LE transport, as we don't know if it can do
@@ -793,7 +793,7 @@ static void btif_dm_cb_create_bond(const RawAddress bd_addr, tBT_TRANSPORT trans
       // didn't store it, it defaults to BLE_ADDR_PUBLIC
       uint8_t tmp_dev_type;
       tBLE_ADDR_TYPE tmp_addr_type = BLE_ADDR_PUBLIC;
-      BTM_ReadDevInfo(bd_addr, &tmp_dev_type, &tmp_addr_type);
+      get_btm_client_interface().peer.BTM_ReadDevInfo(bd_addr, &tmp_dev_type, &tmp_addr_type);
       addr_type = tmp_addr_type;
 
       btif_storage_set_remote_addr_type(&bd_addr, addr_type);
@@ -1714,14 +1714,14 @@ static void btif_on_service_discovery_results(RawAddress bd_addr,
 }
 
 void btif_on_gatt_results(RawAddress bd_addr, BD_NAME bd_name,
-                          std::vector<bluetooth::Uuid>& services, bool transport_le) {
+                          std::vector<bluetooth::Uuid>& services, bool is_transport_le) {
   std::vector<bt_property_t> prop;
   std::vector<uint8_t> property_value;
   std::set<Uuid> uuids;
   RawAddress static_addr_copy = pairing_cb.static_bdaddr;
   bool lea_supported = is_le_audio_capable_during_service_discovery(bd_addr);
 
-  if (transport_le) {
+  if (is_transport_le) {
     log::info("New GATT over LE UUIDs for {}:", bd_addr);
     BTM_LogHistory(kBtmLogTag, bd_addr, "Discovered GATT services using LE transport");
     if (btif_is_gatt_service_discovery_post_pairing(bd_addr)) {
@@ -1769,7 +1769,7 @@ void btif_on_gatt_results(RawAddress bd_addr, BD_NAME bd_name,
      * immediately send them with rest of SDP results in
      * on_service_discovery_results
      */
-    if (!transport_le) {
+    if (!is_transport_le) {
       return;
     }
 
@@ -1835,7 +1835,7 @@ void btif_on_gatt_results(RawAddress bd_addr, BD_NAME bd_name,
     ASSERTC(ret == BT_STATUS_SUCCESS, "failed to save remote device property", ret);
   }
 
-  if (!transport_le) {
+  if (!is_transport_le) {
     /* If services were returned as part of SDP discovery, we will immediately
      * send them with rest of SDP results in on_service_discovery_results */
     return;
@@ -2365,7 +2365,7 @@ bool btif_dm_pairing_is_busy() { return pairing_cb.state != BT_BOND_STATE_NONE; 
  * Description      Initiate bonding with the specified device
  *
  ******************************************************************************/
-void btif_dm_create_bond(const RawAddress bd_addr, int transport) {
+void btif_dm_create_bond(const RawAddress bd_addr, tBT_TRANSPORT transport) {
   log::verbose("bd_addr={}, transport={}", bd_addr, transport);
 
   BTM_LogHistory(kBtmLogTag, bd_addr, "Create bond",
@@ -2523,7 +2523,7 @@ void btif_dm_cancel_bond(const RawAddress bd_addr) {
   if (is_bonding_or_sdp()) {
     if (pairing_cb.is_ssp) {
       if (pairing_cb.is_le_only) {
-        BTA_DmBleSecurityGrant(bd_addr, BTA_DM_SEC_PAIR_NOT_SPT);
+        BTA_DmBleSecurityGrant(bd_addr, tBTA_DM_BLE_SEC_GRANT::BTA_DM_SEC_PAIR_NOT_SPT);
       } else {
         BTA_DmConfirm(bd_addr, false);
         BTA_DmBondCancel(bd_addr);
@@ -2645,9 +2645,9 @@ void btif_dm_ssp_reply(const RawAddress bd_addr, bt_ssp_variant_t variant, uint8
       BTA_DmBleConfirmReply(bd_addr, accept);
     } else {
       if (accept) {
-        BTA_DmBleSecurityGrant(bd_addr, BTA_DM_SEC_GRANTED);
+        BTA_DmBleSecurityGrant(bd_addr, tBTA_DM_BLE_SEC_GRANT::BTA_DM_SEC_GRANTED);
       } else {
-        BTA_DmBleSecurityGrant(bd_addr, BTA_DM_SEC_PAIR_NOT_SPT);
+        BTA_DmBleSecurityGrant(bd_addr, tBTA_DM_BLE_SEC_GRANT::BTA_DM_SEC_PAIR_NOT_SPT);
       }
     }
   } else {
@@ -2823,7 +2823,7 @@ static void btif_on_name_read_legacy(RawAddress bd_addr, tHCI_ERROR_CODE hci_sta
  * Returns          bt_status_t
  *
  ******************************************************************************/
-void btif_dm_get_remote_services(RawAddress remote_addr, const int transport) {
+void btif_dm_get_remote_services(RawAddress remote_addr, const tBT_TRANSPORT transport) {
   log::verbose("transport={}, remote_addr={}", bt_transport_text(transport), remote_addr);
 
   BTM_LogHistory(kBtmLogTag, remote_addr, "Service discovery",

@@ -2101,7 +2101,7 @@ void l2cu_create_conn_br_edr(tL2C_LCB* p_lcb) {
     if (!p_lcb_cur->in_use) {
       continue;
     }
-    if (BTM_IsScoActiveByBdaddr(p_lcb_cur->remote_bd_addr)) {
+    if (get_btm_client_interface().sco.BTM_IsScoActiveByBdaddr(p_lcb_cur->remote_bd_addr)) {
       log::verbose("Central peripheral switch not allowed when SCO active");
       continue;
     }

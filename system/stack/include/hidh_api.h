@@ -22,7 +22,7 @@
 
 #include "stack/include/bt_hdr.h"
 #include "stack/include/hiddefs.h"
-#include "stack/include/sdp_api.h"
+#include "stack/include/sdp_status.h"
 #include "types/raw_address.h"
 
 /*****************************************************************************
@@ -47,7 +47,7 @@
  *  Type Definitions
  ****************************************************************************/
 
-typedef void(tHID_HOST_SDP_CALLBACK)(uint16_t result, uint16_t attr_mask,
+typedef void(tHID_HOST_SDP_CALLBACK)(tSDP_STATUS result, uint16_t attr_mask,
                                      tHID_DEV_SDP_INFO* sdp_rec);
 
 /* HID-HOST returns the events in the following table to the application via

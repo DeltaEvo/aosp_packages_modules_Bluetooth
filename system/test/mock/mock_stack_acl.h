@@ -65,17 +65,6 @@ struct BTM_IsBleConnection {
   bool operator()(uint16_t hci_handle) { return body(hci_handle); }
 };
 extern struct BTM_IsBleConnection BTM_IsBleConnection;
-// Name: BTM_IsPhy2mSupported
-// Params: const RawAddress& remote_bda, tBT_TRANSPORT transport
-// Returns: bool
-struct BTM_IsPhy2mSupported {
-  std::function<bool(const RawAddress& remote_bda, tBT_TRANSPORT transport)> body{
-          [](const RawAddress& /* remote_bda */, tBT_TRANSPORT /* transport */) { return false; }};
-  bool operator()(const RawAddress& remote_bda, tBT_TRANSPORT transport) {
-    return body(remote_bda, transport);
-  }
-};
-extern struct BTM_IsPhy2mSupported BTM_IsPhy2mSupported;
 // Name: BTM_ReadRemoteConnectionAddr
 // Params: const RawAddress& pseudo_addr, RawAddress& conn_addr, bool
 // ota_address tBLE_ADDR_TYPE* p_addr_type Returns: bool
@@ -90,30 +79,6 @@ struct BTM_ReadRemoteConnectionAddr {
   }
 };
 extern struct BTM_ReadRemoteConnectionAddr BTM_ReadRemoteConnectionAddr;
-// Name: BTM_IsRemoteVersionReceived
-// Params: const RawAddress& addr
-// Returns: bool
-struct BTM_IsRemoteVersionReceived {
-  std::function<bool(const RawAddress& addr)> body{
-          [](const RawAddress& /* addr */) { return false; }};
-  bool operator()(const RawAddress& addr) { return body(addr); }
-};
-extern struct BTM_IsRemoteVersionReceived BTM_IsRemoteVersionReceived;
-// Name: BTM_ReadRemoteVersion
-// Params: const RawAddress& addr, uint8_t* lmp_version, uint16_t*
-// manufacturer, uint16_t* lmp_sub_version
-// Returns: bool
-struct BTM_ReadRemoteVersion {
-  std::function<bool(const RawAddress& addr, uint8_t* lmp_version, uint16_t* manufacturer,
-                     uint16_t* lmp_sub_version)>
-          body{[](const RawAddress& /* addr */, uint8_t* /* lmp_version */,
-                  uint16_t* /* manufacturer */, uint16_t* /* lmp_sub_version */) { return false; }};
-  bool operator()(const RawAddress& addr, uint8_t* lmp_version, uint16_t* manufacturer,
-                  uint16_t* lmp_sub_version) {
-    return body(addr, lmp_version, manufacturer, lmp_sub_version);
-  }
-};
-extern struct BTM_ReadRemoteVersion BTM_ReadRemoteVersion;
 // Name: BTM_is_sniff_allowed_for
 // Params: const RawAddress& peer_addr
 // Returns: bool
@@ -319,17 +284,6 @@ struct BTM_ReadFailedContactCounter {
   }
 };
 extern struct BTM_ReadFailedContactCounter BTM_ReadFailedContactCounter;
-// Name: BTM_ReadRSSI
-// Params: const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb
-// Returns: tBTM_STATUS
-struct BTM_ReadRSSI {
-  std::function<tBTM_STATUS(const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb)> body{
-          [](const RawAddress& /* remote_bda */, tBTM_CMPL_CB* /* p_cb */) { return BTM_SUCCESS; }};
-  tBTM_STATUS operator()(const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb) {
-    return body(remote_bda, p_cb);
-  }
-};
-extern struct BTM_ReadRSSI BTM_ReadRSSI;
 // Name: BTM_ReadTxPower
 // Params: const RawAddress& remote_bda, tBT_TRANSPORT transport,
 // tBTM_CMPL_CB* p_cb Returns: tBTM_STATUS
@@ -425,15 +379,6 @@ struct btm_handle_to_acl_index {
   uint8_t operator()(uint16_t hci_handle) { return body(hci_handle); }
 };
 extern struct btm_handle_to_acl_index btm_handle_to_acl_index;
-// Name: BTM_ReadRemoteFeatures
-// Params: const RawAddress& addr
-// Returns: uint8_t*
-struct BTM_ReadRemoteFeatures {
-  std::function<uint8_t*(const RawAddress& addr)> body{
-          [](const RawAddress& /* addr */) { return nullptr; }};
-  uint8_t* operator()(const RawAddress& addr) { return body(addr); }
-};
-extern struct BTM_ReadRemoteFeatures BTM_ReadRemoteFeatures;
 // Name: BTM_ReadConnectionAddr
 // Params: const RawAddress& remote_bda, RawAddress& local_conn_addr, bool
 // ota_address tBLE_ADDR_TYPE* p_addr_type Returns: void

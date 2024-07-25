@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package android.bluetooth;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -38,6 +37,9 @@ import org.junit.runner.RunWith;
 
 import pandora.HostProto.ConnectRequest;
 
+import java.util.Arrays;
+import java.util.List;
+
 /** Test cases for {@link ServiceDiscoveryManager}. */
 @RunWith(AndroidJUnit4.class)
 public class SdpClientTest {
@@ -47,7 +49,7 @@ public class SdpClientTest {
     private final BluetoothManager mManager = mContext.getSystemService(BluetoothManager.class);
     private final BluetoothAdapter mAdapter = mManager.getAdapter();
 
-    private SettableFuture<ParcelUuid[]> mFutureIntent;
+    private SettableFuture<List<ParcelUuid>> mFutureIntent;
 
     @Rule public final AdoptShellPermissionsRule mPermissionRule = new AdoptShellPermissionsRule();
 
@@ -61,7 +63,7 @@ public class SdpClientTest {
                         ParcelUuid[] parcelUuids =
                                 intent.getParcelableArrayExtra(
                                         BluetoothDevice.EXTRA_UUID, ParcelUuid.class);
-                        mFutureIntent.set(parcelUuids);
+                        mFutureIntent.set(Arrays.asList(parcelUuids));
                     }
                 }
             };
@@ -76,21 +78,22 @@ public class SdpClientTest {
         String local_addr = mAdapter.getAddress();
         byte[] local_bytes_addr = Utils.addressBytesFromString(local_addr);
 
-        // Initiate connect from remote
         mBumble.hostBlocking()
                 .connect(
                         ConnectRequest.newBuilder()
                                 .setAddress(ByteString.copyFrom(local_bytes_addr))
                                 .build());
 
-        // Get the remote device
         BluetoothDevice device = mBumble.getRemoteDevice();
 
-        // Execute service discovery procedure
         assertThat(device.fetchUuidsWithSdp()).isTrue();
 
-        ParcelUuid[] arr = mFutureIntent.get();
-        assertThat(arr).asList().contains(BluetoothUuid.HFP);
+        assertThat(mFutureIntent.get())
+                .containsExactly(
+                        BluetoothUuid.HFP,
+                        BluetoothUuid.A2DP_SOURCE,
+                        BluetoothUuid.A2DP_SINK,
+                        BluetoothUuid.AVRCP);
 
         mContext.unregisterReceiver(mConnectionStateReceiver);
     }
