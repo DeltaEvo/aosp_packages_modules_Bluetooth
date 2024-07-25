@@ -122,6 +122,8 @@ void SyspropsModule::parse_config(std::string file_path) {
           // Profile
           "bluetooth.hid.wait_ms_after_uhid_open",
           "persist.bluetooth.avrcpcontrolversion",
+          // btsnoop logger
+          "persist.bluetooth.btsnooplogmode",
   };
 
   auto config = storage::LegacyConfigFile::FromPath(file_path).Read(kDefaultCapacity);
