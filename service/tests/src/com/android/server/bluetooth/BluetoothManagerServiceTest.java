@@ -219,8 +219,10 @@ public class BluetoothManagerServiceTest {
                         any(ServiceConnection.class),
                         anyInt(),
                         any(UserHandle.class));
+        doNothing().when(mContext).unbindService(any());
         mManagerService.enableBle("enable_bindFailure_removesTimeout", mBinder);
         syncHandler(MESSAGE_ENABLE);
+        verify(mContext).unbindService(any());
 
         // TODO(b/280518177): Failed to start should be noted / reported in metrics
         // Maybe show a popup or a crash notification
