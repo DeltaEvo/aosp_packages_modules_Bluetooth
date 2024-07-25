@@ -24,13 +24,15 @@ from bumble_experimental.asha import AshaService
 from bumble_experimental.dck import DckService
 from bumble_experimental.gatt import GATTService
 from bumble_experimental.rfcomm import RFCOMMService
+from bumble_experimental.avrcp import AvrcpService
 
 from pandora_experimental.asha_grpc_aio import add_AshaServicer_to_server
 from pandora_experimental.dck_grpc_aio import add_DckServicer_to_server
 from pandora_experimental.gatt_grpc_aio import add_GATTServicer_to_server
 from pandora_experimental.rfcomm_grpc_aio import add_RFCOMMServicer_to_server
+from pandora_experimental.avrcp_grpc_aio import add_AVRCPServicer_to_server
 
-from typing import Dict, Any
+from typing import Any, Dict
 
 BUMBLE_SERVER_GRPC_PORT = 7999
 ROOTCANAL_PORT_CUTTLEFISH = 7300
@@ -68,7 +70,9 @@ def args_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def register_experimental_services():
+def register_experimental_services() -> None:
+    bumble_server.register_servicer_hook(
+        lambda bumble, _, server: add_AVRCPServicer_to_server(AvrcpService(bumble.device), server))
     bumble_server.register_servicer_hook(
         lambda bumble, _, server: add_AshaServicer_to_server(AshaService(bumble.device), server))
     bumble_server.register_servicer_hook(
