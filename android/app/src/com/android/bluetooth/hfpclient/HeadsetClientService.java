@@ -16,6 +16,7 @@
 
 package com.android.bluetooth.hfpclient;
 
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.content.pm.PackageManager.FEATURE_WATCH;
 
 import android.annotation.RequiresPermission;
@@ -289,7 +290,7 @@ public class HeadsetClientService extends ProfileService {
             mService = null;
         }
 
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+        @RequiresPermission(BLUETOOTH_CONNECT)
         private HeadsetClientService getService(AttributionSource source) {
             // Cache mService because it can change while getService is called
             HeadsetClientService service = mService;

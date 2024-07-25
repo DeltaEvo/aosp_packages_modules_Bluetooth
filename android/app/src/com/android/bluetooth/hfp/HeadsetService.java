@@ -512,7 +512,7 @@ public class HeadsetService extends ProfileService {
             mService = null;
         }
 
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+        @RequiresPermission(BLUETOOTH_CONNECT)
         private HeadsetService getService(AttributionSource source) {
             // Cache mService because it can change while getService is called
             HeadsetService service = mService;
