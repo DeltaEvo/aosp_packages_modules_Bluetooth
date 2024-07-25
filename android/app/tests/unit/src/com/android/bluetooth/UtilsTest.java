@@ -336,6 +336,8 @@ public class UtilsTest {
 
         expect.that(formatSimple("%x", 42)).isEqualTo("2a");
         expect.that(formatSimple("%x", 281474976710656L)).isEqualTo("1000000000000");
+        byte myByte = 0x42;
+        expect.that(formatSimple("%x", myByte)).isEqualTo("42");
 
         expect.that(formatSimple("%%")).isEqualTo("%");
     }

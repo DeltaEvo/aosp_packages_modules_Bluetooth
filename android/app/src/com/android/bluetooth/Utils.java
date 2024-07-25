@@ -333,7 +333,7 @@ public final class Utils {
             if (idx != 0) {
                 sb.append(" ");
             }
-            sb.append(String.format("%02x", valueBuf[idx]));
+            sb.append(formatSimple("%02x", valueBuf[idx]));
         }
         return sb.toString();
     }
@@ -1317,7 +1317,7 @@ public final class Utils {
      *   <li>{@code %d} for {@code int} or {@code long}
      *   <li>{@code %f} for {@code float} or {@code double}
      *   <li>{@code %s} for {@code String}
-     *   <li>{@code %x} for hex representation of {@code int} or {@code long}
+     *   <li>{@code %x} for hex representation of {@code int} or {@code long} or {@code byte}
      *   <li>{@code %%} for literal {@code %}
      *   <li>{@code %04d} style grammar to specify the argument width, such as {@code %04d} to
      *       prefix an {@code int} with zeros or {@code %10b} to prefix a {@code boolean} with
@@ -1382,6 +1382,8 @@ public final class Utils {
                             repl = Integer.toHexString((int) arg);
                         } else if (arg instanceof Long) {
                             repl = Long.toHexString((long) arg);
+                        } else if (arg instanceof Byte) {
+                            repl = Integer.toHexString(Byte.toUnsignedInt((byte) arg));
                         } else {
                             throw new IllegalArgumentException(
                                     "Unsupported hex type " + arg.getClass());
