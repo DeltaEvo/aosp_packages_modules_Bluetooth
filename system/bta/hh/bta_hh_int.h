@@ -223,6 +223,8 @@ typedef struct {
 #define BTA_HH_LE_SCPS_NOTIFY_ENB 0x02
   uint8_t scps_notify; /* scan refresh supported/notification enabled */
   bool security_pending;
+
+  tSDP_DISCOVERY_DB* p_disc_db;
 } tBTA_HH_DEV_CB;
 
 /******************************************************************************
@@ -230,15 +232,12 @@ typedef struct {
  ******************************************************************************/
 typedef struct {
   tBTA_HH_DEV_CB kdev[BTA_HH_MAX_DEVICE];   /* device control block */
-  tBTA_HH_DEV_CB* p_cur;                    /* current device control
-                                                   block idx, used in sdp */
   uint8_t cb_index[BTA_HH_MAX_KNOWN];       /* maintain a CB index
                                           map to dev handle */
   uint8_t le_cb_index[BTA_HH_LE_MAX_KNOWN]; /* maintain a CB index map to LE dev
                                              handle */
   tGATT_IF gatt_if;
   tBTA_HH_CBACK* p_cback; /* Application callbacks */
-  tSDP_DISCOVERY_DB* p_disc_db;
   uint8_t cnt_num; /* connected device number */
   bool w4_disable; /* w4 disable flag */
 } tBTA_HH_CB;
