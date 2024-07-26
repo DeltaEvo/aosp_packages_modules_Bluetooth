@@ -3660,9 +3660,13 @@ public class BassClientService extends ProfileService {
 
             sService.localNotifyReceiveStateChanged(sink);
 
-            String subgroupState = " / SUB GROUPS: ";
+            StringBuilder subgroupState = new StringBuilder(" / SUB GROUPS: ");
             for (int i = 0; i < state.getNumSubgroups(); i++) {
-                subgroupState += "IDX: " + i + ", SYNC: " + state.getBisSyncState().get(i);
+                subgroupState
+                        .append("IDX: ")
+                        .append(i)
+                        .append(", SYNC: ")
+                        .append(state.getBisSyncState().get(i));
             }
 
             sEventLogger.logd(
@@ -3686,7 +3690,7 @@ public class BassClientService extends ProfileService {
                             + state.getBigEncryptionState()
                             + " / BAD CODE: "
                             + Arrays.toString(state.getBadCode())
-                            + subgroupState);
+                            + subgroupState.toString());
             obtainMessage(MSG_RECEIVESTATE_CHANGED, 0, sourceId, param).sendToTarget();
         }
 

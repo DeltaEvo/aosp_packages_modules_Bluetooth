@@ -59,14 +59,15 @@ public class BluetoothMapbMessageSms extends BluetoothMapbMessage {
                 throw new IllegalArgumentException("Only submit PDUs are supported");
             }
 
-            mSmsBody +=
-                    BluetoothMapSmsPdu.decodePdu(
-                            msgBytes,
-                            mType == TYPE.SMS_CDMA
-                                    ? BluetoothMapSmsPdu.SMS_TYPE_CDMA
-                                    : BluetoothMapSmsPdu.SMS_TYPE_GSM);
+            mSmsBody =
+                    mSmsBody
+                            + BluetoothMapSmsPdu.decodePdu(
+                                    msgBytes,
+                                    mType == TYPE.SMS_CDMA
+                                            ? BluetoothMapSmsPdu.SMS_TYPE_CDMA
+                                            : BluetoothMapSmsPdu.SMS_TYPE_GSM);
         } else {
-            mSmsBody += msgPart;
+            mSmsBody = mSmsBody + msgPart;
         }
     }
 

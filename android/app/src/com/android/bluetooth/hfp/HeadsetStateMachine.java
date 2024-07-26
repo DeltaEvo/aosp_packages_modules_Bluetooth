@@ -2692,7 +2692,7 @@ class HeadsetStateMachine extends StateMachine {
     void processSendVendorSpecificResultCode(HeadsetVendorSpecificResultCode resultCode) {
         String stringToSend = resultCode.mCommand + ": ";
         if (resultCode.mArg != null) {
-            stringToSend += resultCode.mArg;
+            stringToSend = stringToSend + resultCode.mArg;
         }
         mNativeInterface.atResponseString(resultCode.mDevice, stringToSend);
     }

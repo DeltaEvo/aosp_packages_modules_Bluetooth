@@ -1204,20 +1204,20 @@ public final class Utils {
      * @return String value representing CCC state
      */
     public static String cccIntToStr(Short cccValue) {
-        String string = "";
-
         if (cccValue == 0) {
-            return string += "NO SUBSCRIPTION";
+            return "NO SUBSCRIPTION";
         }
 
+        if (BigInteger.valueOf(cccValue).testBit(0) && BigInteger.valueOf(cccValue).testBit(1)) {
+            return "NOTIFICATION|INDICATION";
+        }
         if (BigInteger.valueOf(cccValue).testBit(0)) {
-            string += "NOTIFICATION";
+            return "NOTIFICATION";
         }
         if (BigInteger.valueOf(cccValue).testBit(1)) {
-            string += string.isEmpty() ? "INDICATION" : "|INDICATION";
+            return "INDICATION";
         }
-
-        return string;
+        return "";
     }
 
     /**

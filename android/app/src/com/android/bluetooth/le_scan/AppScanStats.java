@@ -102,7 +102,7 @@ public class AppScanStats {
         public int scannerId;
         public int scanMode;
         public int scanCallbackType;
-        public String filterString;
+        public StringBuilder filterString;
 
         LastScan(
                 long timestamp,
@@ -130,7 +130,7 @@ public class AppScanStats {
             this.suspendDuration = 0;
             this.suspendStartTime = 0;
             this.isSuspended = false;
-            this.filterString = "";
+            this.filterString = new StringBuilder();
         }
     }
 
@@ -283,7 +283,9 @@ public class AppScanStats {
 
         if (isFilterScan) {
             for (ScanFilter filter : filters) {
-                scan.filterString += "\n      └ " + filterToStringWithoutNullParam(filter);
+                scan.filterString
+                        .append("\n      └ ")
+                        .append(filterToStringWithoutNullParam(filter));
             }
         }
 
@@ -830,47 +832,57 @@ public class AppScanStats {
     }
 
     private static String filterToStringWithoutNullParam(ScanFilter filter) {
-        String filterString = "BluetoothLeScanFilter [";
+        StringBuilder filterString = new StringBuilder("BluetoothLeScanFilter [");
         if (filter.getDeviceName() != null) {
-            filterString += " DeviceName=" + filter.getDeviceName();
+            filterString.append(" DeviceName=").append(filter.getDeviceName());
         }
         if (filter.getDeviceAddress() != null) {
-            filterString += " DeviceAddress=" + filter.getDeviceAddress();
+            filterString.append(" DeviceAddress=").append(filter.getDeviceAddress());
         }
         if (filter.getServiceUuid() != null) {
-            filterString += " ServiceUuid=" + filter.getServiceUuid();
+            filterString.append(" ServiceUuid=").append(filter.getServiceUuid());
         }
         if (filter.getServiceUuidMask() != null) {
-            filterString += " ServiceUuidMask=" + filter.getServiceUuidMask();
+            filterString.append(" ServiceUuidMask=").append(filter.getServiceUuidMask());
         }
         if (filter.getServiceSolicitationUuid() != null) {
-            filterString += " ServiceSolicitationUuid=" + filter.getServiceSolicitationUuid();
+            filterString
+                    .append(" ServiceSolicitationUuid=")
+                    .append(filter.getServiceSolicitationUuid());
         }
         if (filter.getServiceSolicitationUuidMask() != null) {
-            filterString +=
-                    " ServiceSolicitationUuidMask=" + filter.getServiceSolicitationUuidMask();
+            filterString
+                    .append(" ServiceSolicitationUuidMask=")
+                    .append(filter.getServiceSolicitationUuidMask());
         }
         if (filter.getServiceDataUuid() != null) {
-            filterString += " ServiceDataUuid=" + Objects.toString(filter.getServiceDataUuid());
+            filterString
+                    .append(" ServiceDataUuid=")
+                    .append(Objects.toString(filter.getServiceDataUuid()));
         }
         if (filter.getServiceData() != null) {
-            filterString += " ServiceData=" + Arrays.toString(filter.getServiceData());
+            filterString.append(" ServiceData=").append(Arrays.toString(filter.getServiceData()));
         }
         if (filter.getServiceDataMask() != null) {
-            filterString += " ServiceDataMask=" + Arrays.toString(filter.getServiceDataMask());
+            filterString
+                    .append(" ServiceDataMask=")
+                    .append(Arrays.toString(filter.getServiceDataMask()));
         }
         if (filter.getManufacturerId() >= 0) {
-            filterString += " ManufacturerId=" + filter.getManufacturerId();
+            filterString.append(" ManufacturerId=").append(filter.getManufacturerId());
         }
         if (filter.getManufacturerData() != null) {
-            filterString += " ManufacturerData=" + Arrays.toString(filter.getManufacturerData());
+            filterString
+                    .append(" ManufacturerData=")
+                    .append(Arrays.toString(filter.getManufacturerData()));
         }
         if (filter.getManufacturerDataMask() != null) {
-            filterString +=
-                    " ManufacturerDataMask=" + Arrays.toString(filter.getManufacturerDataMask());
+            filterString
+                    .append(" ManufacturerDataMask=")
+                    .append(Arrays.toString(filter.getManufacturerDataMask()));
         }
-        filterString += " ]";
-        return filterString;
+        filterString.append(" ]");
+        return filterString.toString();
     }
 
     private static String scanModeToString(int scanMode) {

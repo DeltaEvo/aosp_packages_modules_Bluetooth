@@ -220,29 +220,29 @@ public class HapClientStackEvent {
     }
 
     private String featuresToString(int value) {
-        String features_str = "";
+        StringBuilder features_sb = new StringBuilder();
         if (BigInteger.valueOf(value).testBit(FEATURE_BIT_NUM_TYPE_MONAURAL)) {
-            features_str += "TYPE_MONAURAL";
+            features_sb.append("TYPE_MONAURAL");
         } else if (BigInteger.valueOf(value).testBit(FEATURE_BIT_NUM_TYPE_BANDED)) {
-            features_str += "TYPE_BANDED";
+            features_sb.append("TYPE_BANDED");
         } else {
-            features_str += "TYPE_BINAURAL";
+            features_sb.append("TYPE_BINAURAL");
         }
 
         if (BigInteger.valueOf(value).testBit(FEATURE_BIT_NUM_SYNCHRONIZATED_PRESETS)) {
-            features_str += ", SYNCHRONIZATED_PRESETS";
+            features_sb.append(", SYNCHRONIZATED_PRESETS");
         }
         if (BigInteger.valueOf(value).testBit(FEATURE_BIT_NUM_INDEPENDENT_PRESETS)) {
-            features_str += ", INDEPENDENT_PRESETS";
+            features_sb.append(", INDEPENDENT_PRESETS");
         }
         if (BigInteger.valueOf(value).testBit(FEATURE_BIT_NUM_DYNAMIC_PRESETS)) {
-            features_str += ", DYNAMIC_PRESETS";
+            features_sb.append(", DYNAMIC_PRESETS");
         }
         if (BigInteger.valueOf(value).testBit(FEATURE_BIT_NUM_WRITABLE_PRESETS)) {
-            features_str += ", WRITABLE_PRESETS";
+            features_sb.append(", WRITABLE_PRESETS");
         }
 
-        return features_str;
+        return features_sb.toString();
     }
 
     private static String eventTypeToString(int type) {

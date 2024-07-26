@@ -470,12 +470,14 @@ class MapClientContent {
         Log.d(TAG, "[AllDevices] clearMessages(subscriptionId=" + subscriptionId);
 
         ContentResolver resolver = context.getContentResolver();
-        String threads = new String();
+        StringBuilder threadsBuilder = new StringBuilder();
 
         Uri uri = Threads.CONTENT_URI.buildUpon().appendQueryParameter("simple", "true").build();
         try (Cursor threadCursor = resolver.query(uri, null, null, null, null)) {
             while (threadCursor.moveToNext()) {
-                threads += threadCursor.getInt(threadCursor.getColumnIndex(Threads._ID)) + ", ";
+                threadsBuilder
+                        .append(threadCursor.getInt(threadCursor.getColumnIndex(Threads._ID)))
+                        .append(", ");
             }
         }
 
@@ -487,8 +489,8 @@ class MapClientContent {
                 Mms.CONTENT_URI,
                 Mms.SUBSCRIPTION_ID + " =? ",
                 new String[] {Integer.toString(subscriptionId)});
-        if (threads.length() > 2) {
-            threads = threads.substring(0, threads.length() - 2);
+        if (threadsBuilder.length() > 2) {
+            String threads = threadsBuilder.substring(0, threadsBuilder.length() - 2);
             resolver.delete(Threads.CONTENT_URI, Threads._ID + " IN (" + threads + ")", null);
         }
     }
