@@ -1512,6 +1512,7 @@ public class HidHostService extends ProfileService {
         super.dump(sb);
         println(sb, "mTargetDevice: " + mTargetDevice);
         println(sb, "mInputDevices:");
-        mInputDevices.forEach((k, v) -> sb.append(" " + k + " : " + v + "\n"));
+        mInputDevices.forEach(
+                (k, v) -> sb.append(" ").append(k).append(" : ").append(v).append("\n"));
     }
 }

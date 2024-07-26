@@ -365,7 +365,7 @@ public class BrowseTree {
             for (int i = 0; i <= depth; i++) {
                 sb.append("  ");
             }
-            sb.append(toString() + "\n");
+            sb.append(toString()).append("\n");
             for (BrowseNode node : mChildren) {
                 node.toTreeString(depth + 1, sb);
             }
@@ -520,9 +520,9 @@ public class BrowseTree {
     /** Dump the state of the AVRCP browse tree */
     public void dump(StringBuilder sb) {
         mRootNode.toTreeString(0, sb);
-        sb.append("\n  Image handles in use (" + mCoverArtMap.size() + "):");
+        sb.append("\n  Image handles in use (").append(mCoverArtMap.size()).append("):");
         for (String handle : mCoverArtMap.keySet()) {
-            sb.append("\n    " + handle);
+            sb.append("\n    ").append(handle);
         }
         sb.append("\n");
     }

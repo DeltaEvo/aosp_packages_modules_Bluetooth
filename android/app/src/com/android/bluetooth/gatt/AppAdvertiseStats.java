@@ -467,36 +467,31 @@ class AppAdvertiseStats {
     }
 
     private static void dumpAppAdvertiserData(StringBuilder sb, AppAdvertiserData advData) {
-        sb.append(
-                "\n          └Include Device Name                          : "
-                        + advData.includeDeviceName);
-        sb.append(
-                "\n          └Include Tx Power Level                       : "
-                        + advData.includeTxPowerLevel);
+        sb.append("\n          └Include Device Name                          : ")
+                .append(advData.includeDeviceName);
+        sb.append("\n          └Include Tx Power Level                       : ")
+                .append(advData.includeTxPowerLevel);
 
         if (advData.manufacturerData.size() > 0) {
-            sb.append(
-                    "\n          └Manufacturer Data (length of data)           : "
-                            + advData.manufacturerData.size());
+            sb.append("\n          └Manufacturer Data (length of data)           : ")
+                    .append(advData.manufacturerData.size());
         }
 
         if (!advData.serviceData.isEmpty()) {
             sb.append("\n          └Service Data(UUID, length of data)           : ");
             for (ParcelUuid uuid : advData.serviceData.keySet()) {
-                sb.append(
-                        "\n            ["
-                                + uuid.toString().substring(0, UUID_STRING_FILTER_LEN)
-                                + "-xxxx-xxxx-xxxx-xxxxxxxxxxxx, "
-                                + advData.serviceData.get(uuid).length
-                                + "]");
+                sb.append("\n            [")
+                        .append(uuid.toString().substring(0, UUID_STRING_FILTER_LEN))
+                        .append("-xxxx-xxxx-xxxx-xxxxxxxxxxxx, ")
+                        .append(advData.serviceData.get(uuid).length)
+                        .append("]");
             }
         }
 
         if (!advData.serviceUuids.isEmpty()) {
-            sb.append(
-                    "\n          └Service Uuids                                : \n            "
-                            + advData.serviceUuids.toString().substring(0, UUID_STRING_FILTER_LEN)
-                            + "-xxxx-xxxx-xxxx-xxxxxxxxxxxx");
+            sb.append("\n          └Service Uuids                                : \n            ")
+                    .append(advData.serviceUuids.toString().substring(0, UUID_STRING_FILTER_LEN))
+                    .append("-xxxx-xxxx-xxxx-xxxxxxxxxxxx");
         }
     }
 
@@ -510,24 +505,22 @@ class AppAdvertiseStats {
 
     private static void dumpAppAdvertiseStats(StringBuilder sb, AppAdvertiseStats stats) {
         sb.append("\n      └Advertising:");
-        sb.append("\n        └Interval(0.625ms)                              : " + stats.mInterval);
-        sb.append(
-                "\n        └TX POWER(dbm)                                  : "
-                        + stats.mTxPowerLevel);
-        sb.append(
-                "\n        └Primary Phy                                    : "
-                        + dumpPhyString(stats.mPrimaryPhy));
-        sb.append(
-                "\n        └Secondary Phy                                  : "
-                        + dumpPhyString(stats.mSecondaryPhy));
-        sb.append("\n        └Legacy                                         : " + stats.mLegacy);
-        sb.append(
-                "\n        └Anonymous                                      : " + stats.mAnonymous);
-        sb.append(
-                "\n        └Connectable                                    : "
-                        + stats.mConnectable);
-        sb.append(
-                "\n        └Scannable                                      : " + stats.mScannable);
+        sb.append("\n        └Interval(0.625ms)                              : ")
+                .append(stats.mInterval);
+        sb.append("\n        └TX POWER(dbm)                                  : ")
+                .append(stats.mTxPowerLevel);
+        sb.append("\n        └Primary Phy                                    : ")
+                .append(dumpPhyString(stats.mPrimaryPhy));
+        sb.append("\n        └Secondary Phy                                  : ")
+                .append(dumpPhyString(stats.mSecondaryPhy));
+        sb.append("\n        └Legacy                                         : ")
+                .append(stats.mLegacy);
+        sb.append("\n        └Anonymous                                      : ")
+                .append(stats.mAnonymous);
+        sb.append("\n        └Connectable                                    : ")
+                .append(stats.mConnectable);
+        sb.append("\n        └Scannable                                      : ")
+                .append(stats.mScannable);
 
         if (stats.mAdvertisingData != null) {
             sb.append("\n        └Advertise Data:");
@@ -540,15 +533,12 @@ class AppAdvertiseStats {
         }
 
         if (stats.mPeriodicInterval > 0) {
-            sb.append(
-                    "\n      └Periodic Advertising Enabled                     : "
-                            + stats.mPeriodicAdvertisingEnabled);
-            sb.append(
-                    "\n        └Periodic Include TxPower                       : "
-                            + stats.mPeriodicIncludeTxPower);
-            sb.append(
-                    "\n        └Periodic Interval(1.25ms)                      : "
-                            + stats.mPeriodicInterval);
+            sb.append("\n      └Periodic Advertising Enabled                     : ")
+                    .append(stats.mPeriodicAdvertisingEnabled);
+            sb.append("\n        └Periodic Include TxPower                       : ")
+                    .append(stats.mPeriodicIncludeTxPower);
+            sb.append("\n        └Periodic Interval(1.25ms)                      : ")
+                    .append(stats.mPeriodicInterval);
         }
 
         if (stats.mPeriodicAdvertisingData != null) {
@@ -562,32 +552,27 @@ class AppAdvertiseStats {
     static void dumpToString(StringBuilder sb, AppAdvertiseStats stats) {
         Instant currentTime = Instant.now();
 
-        sb.append("\n    " + stats.mAppName);
-        sb.append("\n     Advertising ID                                     : " + stats.mId);
+        sb.append("\n    ").append(stats.mAppName);
+        sb.append("\n     Advertising ID                                     : ").append(stats.mId);
         for (int i = 0; i < stats.mAdvertiserRecords.size(); i++) {
             AppAdvertiserRecord record = stats.mAdvertiserRecords.get(i);
 
-            sb.append("\n      " + (i + 1) + ":");
-            sb.append(
-                    "\n        └Start time                                     : "
-                            + sDateFormat.format(record.startTime));
+            sb.append("\n      ").append((i + 1)).append(":");
+            sb.append("\n        └Start time                                     : ")
+                    .append(sDateFormat.format(record.startTime));
             if (record.stopTime == null) {
                 Duration timeElapsed = Duration.between(record.startTime, currentTime);
-                sb.append(
-                        "\n        └Elapsed time                                   : "
-                                + timeElapsed.toMillis()
-                                + "ms");
+                sb.append("\n        └Elapsed time                                   : ")
+                        .append(timeElapsed.toMillis())
+                        .append("ms");
             } else {
-                sb.append(
-                        "\n        └Stop time                                      : "
-                                + sDateFormat.format(record.stopTime));
+                sb.append("\n        └Stop time                                      : ")
+                        .append(sDateFormat.format(record.stopTime));
             }
-            sb.append(
-                    "\n        └Duration(10ms unit)                            : "
-                            + record.duration);
-            sb.append(
-                    "\n        └Maximum number of extended advertising events  : "
-                            + record.maxExtendedAdvertisingEvents);
+            sb.append("\n        └Duration(10ms unit)                            : ")
+                    .append(record.duration);
+            sb.append("\n        └Maximum number of extended advertising events  : ")
+                    .append(record.maxExtendedAdvertisingEvents);
         }
 
         dumpAppAdvertiseStats(sb, stats);

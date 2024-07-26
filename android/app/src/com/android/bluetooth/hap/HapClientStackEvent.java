@@ -94,12 +94,12 @@ public class HapClientStackEvent {
     public String toString() {
         // event dump
         StringBuilder result = new StringBuilder();
-        result.append("HearingAccessStackEvent {type:" + eventTypeToString(type));
-        result.append(", device: " + device);
-        result.append(", value1: " + eventTypeValueInt1ToString(type, valueInt1));
-        result.append(", value2: " + eventTypeValueInt2ToString(type, valueInt2));
-        result.append(", value3: " + eventTypeValueInt3ToString(type, valueInt3));
-        result.append(", list: " + eventTypeValueListToString(type, valueList));
+        result.append("HearingAccessStackEvent {type:").append(eventTypeToString(type));
+        result.append(", device: ").append(device);
+        result.append(", value1: ").append(eventTypeValueInt1ToString(type, valueInt1));
+        result.append(", value2: ").append(eventTypeValueInt2ToString(type, valueInt2));
+        result.append(", value3: ").append(eventTypeValueInt3ToString(type, valueInt3));
+        result.append(", list: ").append(eventTypeValueListToString(type, valueList));
 
         result.append("}");
         return result.toString();

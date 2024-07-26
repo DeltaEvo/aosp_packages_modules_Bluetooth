@@ -54,13 +54,13 @@ public class VolumeControlStackEvent {
     public String toString() {
         // event dump
         StringBuilder result = new StringBuilder();
-        result.append("VolumeControlStackEvent {type:" + eventTypeToString(type));
-        result.append(", device:" + device);
-        result.append(", valueInt1:" + eventTypeValue1ToString(type, valueInt1));
-        result.append(", valueInt2:" + eventTypeValue2ToString(type, valueInt2));
-        result.append(", valueBool1:" + eventTypeValueBool1ToString(type, valueBool1));
-        result.append(", valueBool2:" + eventTypeValueBool2ToString(type, valueBool2));
-        result.append(", valueString1:" + eventTypeString1ToString(type, valueString1));
+        result.append("VolumeControlStackEvent {type:").append(eventTypeToString(type));
+        result.append(", device:").append(device);
+        result.append(", valueInt1:").append(eventTypeValue1ToString(type, valueInt1));
+        result.append(", valueInt2:").append(eventTypeValue2ToString(type, valueInt2));
+        result.append(", valueBool1:").append(eventTypeValueBool1ToString(type, valueBool1));
+        result.append(", valueBool2:").append(eventTypeValueBool2ToString(type, valueBool2));
+        result.append(", valueString1:").append(eventTypeString1ToString(type, valueString1));
         result.append("}");
         return result.toString();
     }

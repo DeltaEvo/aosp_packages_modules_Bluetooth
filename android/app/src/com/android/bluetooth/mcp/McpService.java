@@ -148,7 +148,10 @@ public class McpService extends ProfileService {
             } else {
                 accessString = "ACCESS_UNKNOWN";
             }
-            sb.append("\n\t\tDevice: " + entry.getKey() + ", access: " + accessString);
+            sb.append("\n\t\tDevice: ")
+                    .append(entry.getKey())
+                    .append(", access: ")
+                    .append(accessString);
         }
     }
 

@@ -2421,9 +2421,9 @@ public class HeadsetClientStateMachine extends StateMachine {
     private String createMaskString(BluetoothSinkAudioPolicy policies) {
         StringBuilder mask = new StringBuilder();
         mask.append(BluetoothSinkAudioPolicy.HFP_SET_SINK_AUDIO_POLICY_ID);
-        mask.append("," + policies.getCallEstablishPolicy());
-        mask.append("," + policies.getActiveDevicePolicyAfterConnection());
-        mask.append("," + policies.getInBandRingtonePolicy());
+        mask.append(",").append(policies.getCallEstablishPolicy());
+        mask.append(",").append(policies.getActiveDevicePolicyAfterConnection());
+        mask.append(",").append(policies.getInBandRingtonePolicy());
         return mask.toString();
     }
 
