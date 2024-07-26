@@ -60,6 +60,8 @@ bool hal_ucast_capability_to_stack_format(const UnicastCapability& ucast_capabil
                                           CodecConfigSetting& stack_capability);
 AudioConfiguration offload_config_to_hal_audio_config(
         const ::bluetooth::le_audio::offload_config& offload_config);
+AudioConfiguration broadcast_config_to_hal_audio_config(
+        const LeAudioBroadcastConfiguration& bcast_config);
 
 bluetooth::audio::le_audio::OffloadCapabilities get_offload_capabilities();
 
