@@ -1239,7 +1239,7 @@ void l2cble_send_peer_disc_req(tL2C_CCB* p_ccb) {
  *
  ******************************************************************************/
 void l2cble_sec_comp(RawAddress bda, tBT_TRANSPORT transport, void* /* p_ref_data */,
-                     tBTM_STATUS status) {
+                     tBTM_STATUS btm_status) {
   tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(bda, BT_TRANSPORT_LE);
   tL2CAP_SEC_DATA* p_buf = NULL;
   uint8_t sec_act;
@@ -1259,13 +1259,13 @@ void l2cble_sec_comp(RawAddress bda, tBT_TRANSPORT transport, void* /* p_ref_dat
       return;
     }
 
-    if (status != BTM_SUCCESS) {
-      (*(p_buf->p_callback))(bda, BT_TRANSPORT_LE, p_buf->p_ref_data, status);
+    if (btm_status != BTM_SUCCESS) {
+      (*(p_buf->p_callback))(bda, BT_TRANSPORT_LE, p_buf->p_ref_data, btm_status);
       osi_free(p_buf);
     } else {
       if (sec_act == BTM_SEC_ENCRYPT_MITM) {
         if (BTM_IsLinkKeyAuthed(bda, transport)) {
-          (*(p_buf->p_callback))(bda, BT_TRANSPORT_LE, p_buf->p_ref_data, status);
+          (*(p_buf->p_callback))(bda, BT_TRANSPORT_LE, p_buf->p_ref_data, btm_status);
         } else {
           log::verbose("MITM Protection Not present");
           (*(p_buf->p_callback))(bda, BT_TRANSPORT_LE, p_buf->p_ref_data, BTM_FAILED_ON_SECURITY);
@@ -1273,7 +1273,7 @@ void l2cble_sec_comp(RawAddress bda, tBT_TRANSPORT transport, void* /* p_ref_dat
       } else {
         log::verbose("MITM Protection not required sec_act = {}", p_lcb->sec_act);
 
-        (*(p_buf->p_callback))(bda, BT_TRANSPORT_LE, p_buf->p_ref_data, status);
+        (*(p_buf->p_callback))(bda, BT_TRANSPORT_LE, p_buf->p_ref_data, btm_status);
       }
       osi_free(p_buf);
     }
@@ -1285,8 +1285,8 @@ void l2cble_sec_comp(RawAddress bda, tBT_TRANSPORT transport, void* /* p_ref_dat
   while (!fixed_queue_is_empty(p_lcb->le_sec_pending_q)) {
     p_buf = (tL2CAP_SEC_DATA*)fixed_queue_dequeue(p_lcb->le_sec_pending_q);
 
-    if (status != BTM_SUCCESS) {
-      (*(p_buf->p_callback))(bda, BT_TRANSPORT_LE, p_buf->p_ref_data, status);
+    if (btm_status != BTM_SUCCESS) {
+      (*(p_buf->p_callback))(bda, BT_TRANSPORT_LE, p_buf->p_ref_data, btm_status);
       osi_free(p_buf);
     } else {
       l2ble_sec_access_req(bda, p_buf->psm, p_buf->is_originator, p_buf->p_callback,
