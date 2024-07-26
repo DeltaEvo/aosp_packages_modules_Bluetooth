@@ -1085,12 +1085,13 @@ public class ScanManager {
                     mNativeInterface.gattSetScanParameters(
                             client.scannerId, scanInterval, scanWindow, scanPhyMask);
                     mNativeInterface.gattClientScan(true);
-                    if (!AppScanStats.recordScanRadioStart(
-                            client.scanModeApp,
-                            client.scannerId,
-                            client.stats,
-                            scanWindowMs,
-                            scanIntervalMs)) {
+                    if (client.stats != null
+                            && !AppScanStats.recordScanRadioStart(
+                                    client.scanModeApp,
+                                    client.scannerId,
+                                    client.stats,
+                                    scanWindowMs,
+                                    scanIntervalMs)) {
                         Log.w(TAG, "Scan radio already started");
                     }
                     mLastConfiguredScanSetting = curScanSetting;
@@ -1130,12 +1131,13 @@ public class ScanManager {
                 Log.d(TAG, "start gattClientScanNative from startRegularScan()");
                 mNativeInterface.gattClientScan(true);
                 if (!Flags.bleScanAdvMetricsRedesign()) {
-                    if (!AppScanStats.recordScanRadioStart(
-                            client.settings.getScanMode(),
-                            client.scannerId,
-                            client.stats,
-                            getScanWindowMillis(client.settings),
-                            getScanIntervalMillis(client.settings))) {
+                    if (client.stats != null
+                            && !AppScanStats.recordScanRadioStart(
+                                    client.settings.getScanMode(),
+                                    client.scannerId,
+                                    client.stats,
+                                    getScanWindowMillis(client.settings),
+                                    getScanIntervalMillis(client.settings))) {
                         Log.w(TAG, "Scan radio already started");
                     }
                 }
