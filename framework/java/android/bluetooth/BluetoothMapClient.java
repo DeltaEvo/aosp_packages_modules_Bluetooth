@@ -18,7 +18,6 @@ package android.bluetooth;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
-import static android.Manifest.permission.READ_SMS;
 import static android.Manifest.permission.RECEIVE_SMS;
 import static android.Manifest.permission.SEND_SMS;
 
@@ -273,30 +272,6 @@ public final class BluetoothMapClient implements BluetoothProfile, AutoCloseable
     @Override
     public BluetoothAdapter getAdapter() {
         return mAdapter;
-    }
-
-    /**
-     * Returns true if the specified Bluetooth device is connected. Returns false if not connected,
-     * or if this proxy object is not currently connected to the Map service.
-     *
-     * @hide
-     */
-    @RequiresBluetoothConnectPermission
-    @RequiresPermission(BLUETOOTH_CONNECT)
-    public boolean isConnected(BluetoothDevice device) {
-        if (VDBG) Log.d(TAG, "isConnected(" + device + ")");
-        final IBluetoothMapClient service = getService();
-        if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) Log.d(TAG, Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled()) {
-            try {
-                return service.isConnected(device, mAttributionSource);
-            } catch (RemoteException e) {
-                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
-            }
-        }
-        return false;
     }
 
     /**
@@ -638,106 +613,6 @@ public final class BluetoothMapClient implements BluetoothProfile, AutoCloseable
             try {
                 return service.sendMessage(
                         device, contacts, message, sentIntent, deliveredIntent, mAttributionSource);
-            } catch (RemoteException e) {
-                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Get unread messages. Unread messages will be published via {@link #ACTION_MESSAGE_RECEIVED}.
-     *
-     * @param device Bluetooth device
-     * @return true if the message is enqueued, false on error
-     * @hide
-     */
-    @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                BLUETOOTH_CONNECT,
-                READ_SMS,
-            })
-    public boolean getUnreadMessages(BluetoothDevice device) {
-        if (DBG) Log.d(TAG, "getUnreadMessages(" + device + ")");
-        final IBluetoothMapClient service = getService();
-        if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) Log.d(TAG, Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled() && isValidDevice(device)) {
-            try {
-                return service.getUnreadMessages(device, mAttributionSource);
-            } catch (RemoteException e) {
-                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Returns the "Uploading" feature bit value from the SDP record's MapSupportedFeatures field
-     * (see Bluetooth MAP 1.4 spec, page 114).
-     *
-     * @param device The Bluetooth device to get this value for.
-     * @return Returns true if the Uploading bit value in SDP record's MapSupportedFeatures field is
-     *     set. False is returned otherwise.
-     * @hide
-     */
-    @RequiresBluetoothConnectPermission
-    @RequiresPermission(BLUETOOTH_CONNECT)
-    public boolean isUploadingSupported(BluetoothDevice device) {
-        if (DBG) Log.d(TAG, "isUploadingSupported(" + device + ")");
-        final IBluetoothMapClient service = getService();
-        if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) Log.d(TAG, Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled() && isValidDevice(device)) {
-            try {
-                return (service.getSupportedFeatures(device, mAttributionSource)
-                                & UPLOADING_FEATURE_BITMASK)
-                        > 0;
-            } catch (RemoteException e) {
-                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Set message status of message on MSE
-     *
-     * <p>When read status changed, the result will be published via {@link
-     * #ACTION_MESSAGE_READ_STATUS_CHANGED} When deleted status changed, the result will be
-     * published via {@link #ACTION_MESSAGE_DELETED_STATUS_CHANGED}
-     *
-     * @param device Bluetooth device
-     * @param handle message handle
-     * @param status <code>UNREAD</code> for "unread", <code>READ</code> for "read", <code>UNDELETED
-     *     </code> for "undeleted", <code>DELETED</code> for "deleted", otherwise return error
-     * @return <code>true</code> if request has been sent, <code>false</code> on error
-     * @hide
-     */
-    @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                BLUETOOTH_CONNECT,
-                READ_SMS,
-            })
-    public boolean setMessageStatus(BluetoothDevice device, String handle, int status) {
-        if (DBG) Log.d(TAG, "setMessageStatus(" + device + ", " + handle + ", " + status + ")");
-        final IBluetoothMapClient service = getService();
-        if (service == null) {
-            Log.w(TAG, "Proxy not attached to service");
-            if (DBG) Log.d(TAG, Log.getStackTraceString(new Throwable()));
-        } else if (isEnabled()
-                && isValidDevice(device)
-                && handle != null
-                && (status == READ
-                        || status == UNREAD
-                        || status == UNDELETED
-                        || status == DELETED)) {
-            try {
-                return service.setMessageStatus(device, handle, status, mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
             }
