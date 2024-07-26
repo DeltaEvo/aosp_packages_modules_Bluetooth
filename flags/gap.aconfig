@@ -230,4 +230,12 @@ flag {
     }
 }
 
-
+flag {
+    name: "gatt_cleanup_jni_thread"
+    namespace: "bluetooth"
+    description: "Clean up gatt inside jni thread to prevent a race"
+    bug: "354831506"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}

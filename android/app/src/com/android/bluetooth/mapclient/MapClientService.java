@@ -16,6 +16,7 @@
 
 package com.android.bluetooth.mapclient;
 
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 
 import android.Manifest;
@@ -425,11 +426,10 @@ public class MapClientService extends ProfileService {
         private MapClientService mService;
 
         Binder(MapClientService service) {
-            Log.v(TAG, "Binder()");
             mService = service;
         }
 
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+        @RequiresPermission(BLUETOOTH_CONNECT)
         private MapClientService getService(AttributionSource source) {
             if (Utils.isInstrumentationTestMode()) {
                 return mService;
@@ -446,18 +446,6 @@ public class MapClientService extends ProfileService {
         @Override
         public void cleanup() {
             mService = null;
-        }
-
-        @Override
-        public boolean isConnected(BluetoothDevice device, AttributionSource source) {
-            Log.v(TAG, "isConnected()");
-
-            MapClientService service = getService(source);
-            if (service == null) {
-                return false;
-            }
-
-            return service.getConnectionState(device) == BluetoothProfile.STATE_CONNECTED;
         }
 
         @Override
@@ -574,46 +562,6 @@ public class MapClientService extends ProfileService {
 
             return service.sendMessage(device, contacts, message, sentIntent, deliveredIntent);
         }
-
-        @Override
-        public boolean getUnreadMessages(BluetoothDevice device, AttributionSource source) {
-            Log.v(TAG, "getUnreadMessages()");
-
-            MapClientService service = getService(source);
-            if (service == null) {
-                return false;
-            }
-
-            mService.enforceCallingOrSelfPermission(
-                    Manifest.permission.READ_SMS, "Need READ_SMS permission");
-            return service.getUnreadMessages(device);
-        }
-
-        @Override
-        public int getSupportedFeatures(BluetoothDevice device, AttributionSource source) {
-            Log.v(TAG, "getSupportedFeatures()");
-
-            MapClientService service = getService(source);
-            if (service == null) {
-                Log.d(TAG, "in MapClientService getSupportedFeatures stub, returning 0");
-                return 0;
-            }
-            return service.getSupportedFeatures(device);
-        }
-
-        @Override
-        public boolean setMessageStatus(
-                BluetoothDevice device, String handle, int status, AttributionSource source) {
-            Log.v(TAG, "setMessageStatus()");
-
-            MapClientService service = getService(source);
-            if (service == null) {
-                return false;
-            }
-            mService.enforceCallingOrSelfPermission(
-                    Manifest.permission.READ_SMS, "Need READ_SMS permission");
-            return service.setMessageStatus(device, handle, status);
-        }
     }
 
     public void aclDisconnected(BluetoothDevice device, int transport) {
@@ -623,16 +571,13 @@ public class MapClientService extends ProfileService {
     private void handleAclDisconnected(BluetoothDevice device, int transport) {
         MceStateMachine stateMachine = mMapInstanceMap.get(device);
         if (stateMachine == null) {
-            Log.e(TAG, "No Statemachine found for the device=" + device.toString());
+            Log.e(TAG, "No Statemachine found for the device=" + device);
             return;
         }
 
         Log.i(
                 TAG,
-                "Received ACL disconnection event, device="
-                        + device.toString()
-                        + ", transport="
-                        + transport);
+                "Received ACL disconnection event, device=" + device + ", transport=" + transport);
 
         if (transport != BluetoothDevice.TRANSPORT_BREDR) {
             return;
@@ -651,9 +596,9 @@ public class MapClientService extends ProfileService {
     private void handleSdpSearchRecordReceived(
             BluetoothDevice device, int status, Parcelable record, ParcelUuid uuid) {
         MceStateMachine stateMachine = mMapInstanceMap.get(device);
-        Log.d(TAG, "Received SDP Record, device=" + device.toString() + ", uuid=" + uuid);
+        Log.d(TAG, "Received SDP Record, device=" + device + ", uuid=" + uuid);
         if (stateMachine == null) {
-            Log.e(TAG, "No Statemachine found for the device=" + device.toString());
+            Log.e(TAG, "No Statemachine found for the device=" + device);
             return;
         }
         if (uuid.equals(BluetoothUuid.MAS)) {

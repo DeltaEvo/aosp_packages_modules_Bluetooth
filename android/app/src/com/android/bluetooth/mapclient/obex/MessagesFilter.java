@@ -15,6 +15,7 @@ public final class MessagesFilter {
     public static final byte MESSAGE_TYPE_SMS_CDMA = 0x02;
     public static final byte MESSAGE_TYPE_EMAIL = 0x04;
     public static final byte MESSAGE_TYPE_MMS = 0x08;
+    public static final byte MESSAGE_TYPE_IM = 0x10;
 
     public static final byte READ_STATUS_ANY = 0x00;
     public static final byte READ_STATUS_UNREAD = 0x01;

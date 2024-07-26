@@ -74,14 +74,14 @@ void Stack::StartEverything() {
   log::info("Starting Gd stack");
   ModuleList modules;
 
+#if TARGET_FLOSS
+  modules.add<sysprops::SyspropsModule>();
+#endif
   modules.add<metrics::CounterMetrics>();
   modules.add<hal::HciHal>();
   modules.add<hci::HciLayer>();
   modules.add<storage::StorageModule>();
   modules.add<shim::Dumpsys>();
-#if TARGET_FLOSS
-  modules.add<sysprops::SyspropsModule>();
-#endif
 
   modules.add<hci::Controller>();
   modules.add<hci::acl_manager::AclScheduler>();

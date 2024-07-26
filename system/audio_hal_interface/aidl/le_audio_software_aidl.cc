@@ -769,6 +769,11 @@ AudioConfiguration offload_config_to_hal_audio_config(
   return AudioConfiguration(ucast_config);
 }
 
+AudioConfiguration broadcast_config_to_hal_audio_config(
+        const LeAudioBroadcastConfiguration& bcast_config) {
+  return AudioConfiguration(bcast_config);
+}
+
 }  // namespace le_audio
 }  // namespace aidl
 }  // namespace audio

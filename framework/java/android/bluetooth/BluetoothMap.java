@@ -16,7 +16,9 @@
 
 package android.bluetooth;
 
-import android.Manifest;
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
+import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
+
 import android.annotation.NonNull;
 import android.annotation.RequiresNoPermission;
 import android.annotation.RequiresPermission;
@@ -57,7 +59,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
     @SuppressLint("ActionValue")
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    @RequiresPermission(BLUETOOTH_CONNECT)
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_CONNECTION_STATE_CHANGED =
             "android.bluetooth.map.profile.action.CONNECTION_STATE_CHANGED";
@@ -150,7 +152,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
      * @hide
      */
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    @RequiresPermission(BLUETOOTH_CONNECT)
     public int getState() {
         if (VDBG) log("getState()");
         final IBluetoothMap service = getService();
@@ -175,7 +177,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
      * @hide
      */
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    @RequiresPermission(BLUETOOTH_CONNECT)
     public BluetoothDevice getClient() {
         if (VDBG) log("getClient()");
         final IBluetoothMap service = getService();
@@ -200,7 +202,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
      * @hide
      */
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    @RequiresPermission(BLUETOOTH_CONNECT)
     public boolean isConnected(BluetoothDevice device) {
         if (VDBG) log("isConnected(" + device + ")");
         final IBluetoothMap service = getService();
@@ -237,7 +239,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    @RequiresPermission(BLUETOOTH_CONNECT)
     public boolean disconnect(BluetoothDevice device) {
         if (DBG) log("disconnect(" + device + ")");
         final IBluetoothMap service = getService();
@@ -285,8 +287,8 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public @NonNull List<BluetoothDevice> getConnectedDevices() {
         if (DBG) log("getConnectedDevices()");
@@ -312,7 +314,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
      * @hide
      */
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    @RequiresPermission(BLUETOOTH_CONNECT)
     public List<BluetoothDevice> getDevicesMatchingConnectionStates(int[] states) {
         if (DBG) log("getDevicesMatchingStates()");
         final IBluetoothMap service = getService();
@@ -366,7 +368,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
             sBluetoothConnectionQuery =
                     new IpcDataCache.QueryHandler<>() {
                         @RequiresBluetoothConnectPermission
-                        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+                        @RequiresPermission(BLUETOOTH_CONNECT)
                         @Override
                         public Integer apply(
                                 Pair<IBinder, Pair<AttributionSource, BluetoothDevice>> pairQuery) {
@@ -401,7 +403,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
      * @hide
      */
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    @RequiresPermission(BLUETOOTH_CONNECT)
     public int getConnectionState(BluetoothDevice device) {
         if (DBG) log("getConnectionState(" + device + ")");
         final IBluetoothMap service = getService();
@@ -435,8 +437,8 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public boolean setPriority(BluetoothDevice device, int priority) {
         if (DBG) log("setPriority(" + device + ", " + priority + ")");
@@ -459,8 +461,8 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public boolean setConnectionPolicy(
             @NonNull BluetoothDevice device, @ConnectionPolicy int connectionPolicy) {
@@ -495,8 +497,8 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public int getPriority(BluetoothDevice device) {
         if (VDBG) log("getPriority(" + device + ")");
@@ -517,8 +519,8 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public @ConnectionPolicy int getConnectionPolicy(@NonNull BluetoothDevice device) {
         if (VDBG) log("getConnectionPolicy(" + device + ")");

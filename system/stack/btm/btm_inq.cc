@@ -1861,6 +1861,8 @@ tBTM_STATUS btm_initiate_rem_name(const RawAddress& remote_bda, uint64_t timeout
   }
 
   uint16_t clock_offset = get_clock_offset_from_storage(remote_bda);
+  uint8_t page_scan_rep_mode = HCI_PAGE_SCAN_REP_MODE_R1;
+  uint8_t page_scan_mode = HCI_MANDATARY_PAGE_SCAN_MODE;
 
   /* If the database entry exists for the device, use its clock offset */
   tINQ_DB_ENT* p_i = btm_inq_db_find(remote_bda);
@@ -1870,7 +1872,7 @@ tBTM_STATUS btm_initiate_rem_name(const RawAddress& remote_bda, uint64_t timeout
     if (0 == (p_cur->results.clock_offset & BTM_CLOCK_OFFSET_VALID)) {
       clock_offset = get_clock_offset_from_storage(remote_bda);
     }
-    uint8_t page_scan_rep_mode = p_cur->results.page_scan_rep_mode;
+    page_scan_rep_mode = p_cur->results.page_scan_rep_mode;
     if (com::android::bluetooth::flags::rnr_validate_page_scan_repetition_mode() &&
         page_scan_rep_mode >= HCI_PAGE_SCAN_REP_MODE_RESERVED_START) {
       log::info(
@@ -1879,12 +1881,11 @@ tBTM_STATUS btm_initiate_rem_name(const RawAddress& remote_bda, uint64_t timeout
               page_scan_rep_mode, remote_bda);
       page_scan_rep_mode = HCI_PAGE_SCAN_REP_MODE_R1;
     }
-    bluetooth::shim::ACL_RemoteNameRequest(remote_bda, page_scan_rep_mode,
-                                           p_cur->results.page_scan_mode, clock_offset);
-  } else {
-    bluetooth::shim::ACL_RemoteNameRequest(remote_bda, HCI_PAGE_SCAN_REP_MODE_R1,
-                                           HCI_MANDATARY_PAGE_SCAN_MODE, clock_offset);
+    page_scan_mode = p_cur->results.page_scan_mode;
   }
+
+  bluetooth::shim::ACL_RemoteNameRequest(remote_bda, page_scan_rep_mode, page_scan_mode,
+                                         clock_offset);
 
   btm_cb.rnr.p_remname_cmpl_cb = p_cb;
   btm_cb.rnr.remname_bda = remote_bda;

@@ -17,7 +17,9 @@
 
 package android.bluetooth;
 
-import android.Manifest;
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
+import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
+
 import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -120,7 +122,7 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      * #STATE_DISCONNECTED}, {@link #STATE_CONNECTING}, {@link #STATE_CONNECTED}, {@link
      * #STATE_DISCONNECTING}.
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    @RequiresPermission(BLUETOOTH_CONNECT)
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_CSIS_CONNECTION_STATE_CHANGED =
             "android.bluetooth.action.CSIS_CONNECTION_STATE_CHANGED";
@@ -140,7 +142,7 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      * @hide
      */
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(BLUETOOTH_PRIVILEGED)
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_CSIS_DEVICE_AVAILABLE =
             "android.bluetooth.action.CSIS_DEVICE_AVAILABLE";
@@ -186,7 +188,7 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      * @hide
      */
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(BLUETOOTH_PRIVILEGED)
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_CSIS_SET_MEMBER_AVAILABLE =
             "android.bluetooth.action.CSIS_SET_MEMBER_AVAILABLE";
@@ -266,7 +268,7 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      * @hide
      */
     @SystemApi
-    @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(BLUETOOTH_PRIVILEGED)
     public @Nullable UUID lockGroup(
             int groupId,
             @NonNull @CallbackExecutor Executor executor,
@@ -300,7 +302,7 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      * @hide
      */
     @SystemApi
-    @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(BLUETOOTH_PRIVILEGED)
     public boolean unlockGroup(@NonNull UUID lockUuid) {
         if (VDBG) log("unlockGroup()");
         Objects.requireNonNull(lockUuid, "lockUuid cannot be null");
@@ -327,7 +329,7 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      * @hide
      */
     @SystemApi
-    @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(BLUETOOTH_PRIVILEGED)
     @NonNull
     public Map<Integer, ParcelUuid> getGroupUuidMapByDevice(@Nullable BluetoothDevice device) {
         if (VDBG) log("getGroupUuidMapByDevice()");
@@ -352,7 +354,7 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      * @hide
      */
     @SystemApi
-    @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(BLUETOOTH_PRIVILEGED)
     public @NonNull List<Integer> getAllGroupIds(@Nullable ParcelUuid uuid) {
         if (VDBG) log("getAllGroupIds()");
         final IBluetoothCsipSetCoordinator service = getService();
@@ -438,7 +440,7 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      * @hide
      */
     @SystemApi
-    @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(BLUETOOTH_PRIVILEGED)
     public boolean setConnectionPolicy(
             @Nullable BluetoothDevice device, @ConnectionPolicy int connectionPolicy) {
         if (DBG) log("setConnectionPolicy(" + device + ", " + connectionPolicy + ")");
@@ -470,7 +472,7 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      * @hide
      */
     @SystemApi
-    @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(BLUETOOTH_PRIVILEGED)
     public @ConnectionPolicy int getConnectionPolicy(@Nullable BluetoothDevice device) {
         if (VDBG) log("getConnectionPolicy(" + device + ")");
         final IBluetoothCsipSetCoordinator service = getService();

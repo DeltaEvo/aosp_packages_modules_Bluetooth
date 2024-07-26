@@ -35,7 +35,6 @@
 #include <cstdint>
 #include <string>
 
-#include "bt_dev_class.h"
 #include "btif/include/btif_storage.h"
 #include "common/metrics.h"
 #include "common/time_util.h"
@@ -43,7 +42,6 @@
 #include "device/include/interop.h"
 #include "hci/controller_interface.h"
 #include "internal_include/bt_target.h"
-#include "l2c_api.h"
 #include "main/shim/acl_api.h"
 #include "main/shim/entry.h"
 #include "main/shim/helpers.h"
@@ -57,6 +55,7 @@
 #include "stack/btm/btm_sec_int_types.h"
 #include "stack/btm/security_device_record.h"
 #include "stack/include/acl_api.h"
+#include "stack/include/bt_dev_class.h"
 #include "stack/include/bt_psm_types.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/btm_api.h"
@@ -68,6 +67,7 @@
 #include "stack/include/btm_sec_api.h"
 #include "stack/include/btm_status.h"
 #include "stack/include/hci_error_code.h"
+#include "stack/include/l2c_api.h"
 #include "stack/include/l2cap_security_interface.h"
 #include "stack/include/l2cdefs.h"
 #include "stack/include/main_thread.h"
@@ -2075,6 +2075,16 @@ static tBTM_STATUS btm_sec_dd_create_conn(tBTM_SEC_DEV_REC* p_dev_rec) {
   return BTM_CMD_STARTED;
 }
 
+/*******************************************************************************
+ *
+ * Function         call_registered_rmt_name_callbacks
+ *
+ * Description      When an RNR event is received from the controller execute
+ *                  the registered RNR callbacks.
+ *
+ * Returns          None
+ *
+ ******************************************************************************/
 static void call_registered_rmt_name_callbacks(const RawAddress* p_bd_addr,
                                                const DEV_CLASS& dev_class, uint8_t* p_bd_name,
                                                tHCI_STATUS status) {
@@ -2103,26 +2113,20 @@ static void call_registered_rmt_name_callbacks(const RawAddress* p_bd_addr,
 
 /*******************************************************************************
  *
- * Function         btm_sec_rmt_name_request_complete
+ * Function         btm_rnr_add_name_to_security_record
  *
- * Description      This function is called when remote name was obtained from
- *                  the peer device
+ * Description      When an RNR event is received from the controller,
+ *                  if valid, add the name to the device record.
  *
- * Returns          void
+ * Returns          SecurityDeviceRecord pointer if record is found for
+ *                    given bluetooth device address.  If hci status was
+ *                    successful bd_name is updated in security device record.
+ *                  nullptr if record is not found
  *
  ******************************************************************************/
-void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr, const uint8_t* p_bd_name,
-                                       tHCI_STATUS hci_status) {
-  log::info("btm_sec_rmt_name_request_complete for {}",
-            p_bd_addr ? ADDRESS_TO_LOGGABLE_CSTR(*p_bd_addr) : "null");
-
-  if ((!p_bd_addr && !get_btm_client_interface().peer.BTM_IsAclConnectionUp(
-                             btm_sec_cb.connecting_bda, BT_TRANSPORT_BR_EDR)) ||
-      (p_bd_addr &&
-       !get_btm_client_interface().peer.BTM_IsAclConnectionUp(*p_bd_addr, BT_TRANSPORT_BR_EDR))) {
-    log::warn("Remote read request complete with no underlying link connection");
-  }
-
+tBTM_SEC_DEV_REC* btm_rnr_add_name_to_security_record(const RawAddress* p_bd_addr,
+                                                      const uint8_t* p_bd_name,
+                                                      tHCI_STATUS hci_status) {
   /* If remote name request failed, p_bd_addr is null and we need to search */
   /* based on state assuming that we are doing 1 at a time */
   tBTM_SEC_DEV_REC* p_dev_rec = nullptr;
@@ -2148,16 +2152,9 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr, const uint8_
                              PRIVATE_NAME(p_bd_name)));
 
   if (p_dev_rec == nullptr) {
-    log::debug(
-            "Remote read request complete for unknown device peer:{} "
-            "pairing_state:{} "
-            "hci_status:{} name:{}",
-            (p_bd_addr) ? ADDRESS_TO_LOGGABLE_CSTR(*p_bd_addr) : "null",
-            tBTM_SEC_CB::btm_pair_state_descr(btm_sec_cb.pairing_state),
-            hci_status_code_text(hci_status), reinterpret_cast<char const*>(p_bd_name));
-
+    // We need to send the callbacks to complete the RNR cycle despite failure
     call_registered_rmt_name_callbacks(p_bd_addr, kDevClassEmpty, nullptr, hci_status);
-    return;
+    return nullptr;
   }
 
   // We are guaranteed to have an address at this point
@@ -2189,6 +2186,44 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr, const uint8_
   /* Notify all clients waiting for name to be resolved */
   call_registered_rmt_name_callbacks(&bd_addr, p_dev_rec->dev_class, p_dev_rec->sec_bd_name,
                                      hci_status);
+  return p_dev_rec;
+}
+
+/*******************************************************************************
+ *
+ * Function         btm_sec_rmt_name_request_complete
+ *
+ * Description      This function is called when remote name was obtained from
+ *                  the peer device
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr, const uint8_t* p_bd_name,
+                                       tHCI_STATUS hci_status) {
+  log::info("btm_sec_rmt_name_request_complete for {}",
+            p_bd_addr ? ADDRESS_TO_LOGGABLE_CSTR(*p_bd_addr) : "null");
+
+  if ((!p_bd_addr && !get_btm_client_interface().peer.BTM_IsAclConnectionUp(
+                             btm_sec_cb.connecting_bda, BT_TRANSPORT_BR_EDR)) ||
+      (p_bd_addr &&
+       !get_btm_client_interface().peer.BTM_IsAclConnectionUp(*p_bd_addr, BT_TRANSPORT_BR_EDR))) {
+    log::warn("Remote read request complete with no underlying link connection");
+  }
+
+  tBTM_SEC_DEV_REC* p_dev_rec =
+          btm_rnr_add_name_to_security_record(p_bd_addr, p_bd_name, hci_status);
+  if (p_dev_rec == nullptr) {
+    log::warn(
+            "Remote read request complete for unknown device peer:{} "
+            "pairing_state:{} "
+            "hci_status:{} name:{}",
+            (p_bd_addr) ? ADDRESS_TO_LOGGABLE_CSTR(*p_bd_addr) : "null",
+            tBTM_SEC_CB::btm_pair_state_descr(btm_sec_cb.pairing_state),
+            hci_status_code_text(hci_status), reinterpret_cast<char const*>(p_bd_name));
+    return;
+  }
+  const RawAddress bd_addr(p_dev_rec->RemoteAddress());
 
   // Security procedure resumes
   const bool is_security_state_getting_name =
