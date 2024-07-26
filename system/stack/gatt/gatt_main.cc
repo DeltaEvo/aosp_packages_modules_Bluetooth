@@ -235,6 +235,39 @@ bool gatt_connect(const RawAddress& rem_bda, tGATT_TCB* p_tcb, tBT_TRANSPORT tra
                   uint8_t initiating_phys, tGATT_IF gatt_if) {
   return gatt_connect(rem_bda, BLE_ADDR_PUBLIC, p_tcb, transport, initiating_phys, gatt_if);
 }
+
+/*******************************************************************************
+ *
+ * Function         gatt_cancel_connect
+ *
+ * Description      This will remove device from allow list and cancel connection
+ *
+ * Parameter        bd_addr: peer device address.
+ *                  transport: transport
+ *
+ *
+ ******************************************************************************/
+void gatt_cancel_connect(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
+  /* This shall be call only when device is not connected */
+  log::debug("{}, transport {}", bd_addr, transport);
+
+  if (bluetooth::common::init_flags::use_unified_connection_manager_is_enabled()) {
+    // TODO(aryarahul): this might not be necessary now that the connection
+    // manager handles GATT client closure correctly in GATT_Deregister
+    bluetooth::connection::GetConnectionManager().stop_all_connections_to_device(
+            bluetooth::connection::ResolveRawAddress(bd_addr));
+  } else {
+    if (!connection_manager::direct_connect_remove(CONN_MGR_ID_L2CAP, bd_addr)) {
+      BTM_AcceptlistRemove(bd_addr);
+      log::info(
+              "GATT connection manager has no record but removed filter "
+              "acceptlist gatt_if:{} peer:{}",
+              static_cast<uint8_t>(CONN_MGR_ID_L2CAP), bd_addr);
+    }
+  }
+  gatt_cleanup_upon_disc(bd_addr, GATT_CONN_TERMINATE_LOCAL_HOST, transport);
+}
+
 /*******************************************************************************
  *
  * Function         gatt_disconnect
@@ -269,22 +302,7 @@ bool gatt_disconnect(tGATT_TCB* p_tcb) {
       }
       gatt_set_ch_state(p_tcb, GATT_CH_CLOSING);
     } else {
-      if (bluetooth::common::init_flags::use_unified_connection_manager_is_enabled()) {
-        // TODO(aryarahul): this might not be necessary now that the connection
-        // manager handles GATT client closure correctly in GATT_Deregister
-        bluetooth::connection::GetConnectionManager().stop_all_connections_to_device(
-                bluetooth::connection::ResolveRawAddress(p_tcb->peer_bda));
-      } else {
-        if (!connection_manager::direct_connect_remove(CONN_MGR_ID_L2CAP, p_tcb->peer_bda)) {
-          BTM_AcceptlistRemove(p_tcb->peer_bda);
-          log::info(
-                  "GATT connection manager has no record but removed filter "
-                  "acceptlist gatt_if:{} peer:{}",
-                  static_cast<uint8_t>(CONN_MGR_ID_L2CAP), p_tcb->peer_bda);
-        }
-      }
-
-      gatt_cleanup_upon_disc(p_tcb->peer_bda, GATT_CONN_TERMINATE_LOCAL_HOST, p_tcb->transport);
+      gatt_cancel_connect(p_tcb->peer_bda, p_tcb->transport);
     }
   } else {
     if ((ch_state == GATT_CH_OPEN) || (ch_state == GATT_CH_CFG)) {
