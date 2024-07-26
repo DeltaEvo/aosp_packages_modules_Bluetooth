@@ -920,7 +920,7 @@ public class A2dpService extends ProfileService {
 
     // Handle messages from native (JNI) to Java
     void messageFromNative(A2dpStackEvent stackEvent) {
-        requireNonNull(stackEvent.device, "Device should never be null, event: " + stackEvent);
+        requireNonNull(stackEvent.device);
         synchronized (mStateMachines) {
             BluetoothDevice device = stackEvent.device;
             A2dpStateMachine sm = mStateMachines.get(device);
