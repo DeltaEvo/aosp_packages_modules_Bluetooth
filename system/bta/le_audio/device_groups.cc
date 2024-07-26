@@ -828,6 +828,21 @@ LeAudioDeviceGroup::GetAudioSetConfigurationRequirements(types::LeAudioContextTy
         continue;
       }
 
+      if (com::android::bluetooth::flags::le_audio_support_unidirectional_voice_assistant() &&
+          ctx_type == types::LeAudioContextType::VOICEASSISTANTS) {
+        // For GAME and VOICE ASSISTANT, ignore direction if it is not supported only on a single
+        // direction.
+        auto group_contexts = GetSupportedContexts(types::kLeAudioDirectionBoth);
+        if (group_contexts.test(ctx_type)) {
+          auto direction_contexs = device->GetSupportedContexts(direction);
+          if (!direction_contexs.test(ctx_type)) {
+            log::warn("Device {} has no {} context support", device->address_,
+                      common::ToString(ctx_type));
+            continue;
+          }
+        }
+      }
+
       auto& dev_locations = (direction == types::kLeAudioDirectionSink)
                                     ? device->snk_audio_locations_
                                     : device->src_audio_locations_;
@@ -1397,6 +1412,21 @@ bool LeAudioDeviceGroup::IsAudioSetConfigurationSupported(
     if (ase_confs.empty()) {
       log::debug("No configurations for direction {}, skip it.", (int)direction);
       continue;
+    }
+
+    if (com::android::bluetooth::flags::le_audio_support_unidirectional_voice_assistant()) {
+      // Verify the direction requirements.
+      if (direction == types::kLeAudioDirectionSink &&
+          requirements.sink_requirements->size() == 0) {
+        log::debug("There is no requirement for Sink direction.");
+        return false;
+      }
+
+      if (direction == types::kLeAudioDirectionSource &&
+          requirements.source_requirements->size() == 0) {
+        log::debug("There is no requirement for source direction.");
+        return false;
+      }
     }
 
     // In some tests we expect the configuration to be there even when the
