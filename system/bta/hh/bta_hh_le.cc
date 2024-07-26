@@ -241,19 +241,16 @@ void bta_hh_le_deregister(void) { BTA_GATTC_AppDeregister(bta_hh_cb.gatt_if); }
  *
  ******************************************************************************/
 static uint8_t bta_hh_le_get_le_dev_hdl(uint8_t cb_index) {
-  uint8_t i;
-  for (i = 0; i < ARRAY_SIZE(bta_hh_cb.le_cb_index); i++) {
+  uint8_t available_handle = BTA_HH_IDX_INVALID;
+  for (uint8_t i = 0; i < ARRAY_SIZE(bta_hh_cb.le_cb_index); i++) {
     if (bta_hh_cb.le_cb_index[i] == cb_index) {
       return BTA_HH_GET_LE_DEV_HDL(i);
+    } else if (available_handle == BTA_HH_IDX_INVALID &&
+               bta_hh_cb.le_cb_index[i] == BTA_HH_IDX_INVALID) {
+      available_handle = BTA_HH_GET_LE_DEV_HDL(i);
     }
   }
-
-  for (i = 0; i < ARRAY_SIZE(bta_hh_cb.le_cb_index); i++) {
-    if (bta_hh_cb.le_cb_index[i] == BTA_HH_IDX_INVALID) {
-      return BTA_HH_GET_LE_DEV_HDL(i);
-    }
-  }
-  return BTA_HH_IDX_INVALID;
+  return available_handle;
 }
 
 /*******************************************************************************
@@ -265,21 +262,17 @@ static uint8_t bta_hh_le_get_le_dev_hdl(uint8_t cb_index) {
  * Parameters:
  *
  ******************************************************************************/
-void bta_hh_le_open_conn(tBTA_HH_DEV_CB* p_cb, const tAclLinkSpec& link_spec) {
-  tBTA_HH_STATUS status = BTA_HH_ERR_NO_RES;
-
-  /* update cb_index[] map */
+void bta_hh_le_open_conn(tBTA_HH_DEV_CB* p_cb) {
   p_cb->hid_handle = bta_hh_le_get_le_dev_hdl(p_cb->index);
   if (p_cb->hid_handle == BTA_HH_IDX_INVALID) {
+    tBTA_HH_STATUS status = BTA_HH_ERR_NO_RES;
     bta_hh_sm_execute(p_cb, BTA_HH_SDP_CMPL_EVT, (tBTA_HH_DATA*)&status);
     return;
   }
 
-  p_cb->link_spec = link_spec;
-  bta_hh_cb.le_cb_index[BTA_HH_GET_LE_CB_IDX(p_cb->hid_handle)] = p_cb->index;
-  p_cb->in_use = true;
+  bta_hh_cb.le_cb_index[BTA_HH_GET_LE_CB_IDX(p_cb->hid_handle)] = p_cb->index;  // Update index map
 
-  BTA_GATTC_Open(bta_hh_cb.gatt_if, link_spec.addrt.bda, BTM_BLE_DIRECT_CONNECTION, false);
+  BTA_GATTC_Open(bta_hh_cb.gatt_if, p_cb->link_spec.addrt.bda, BTM_BLE_DIRECT_CONNECTION, false);
 }
 
 /*******************************************************************************
@@ -291,15 +284,13 @@ void bta_hh_le_open_conn(tBTA_HH_DEV_CB* p_cb, const tAclLinkSpec& link_spec) {
  *
  ******************************************************************************/
 static tBTA_HH_DEV_CB* bta_hh_le_find_dev_cb_by_conn_id(uint16_t conn_id) {
-  uint8_t i;
-  tBTA_HH_DEV_CB* p_dev_cb = &bta_hh_cb.kdev[0];
-
-  for (i = 0; i < BTA_HH_MAX_DEVICE; i++, p_dev_cb++) {
+  for (uint8_t i = 0; i < BTA_HH_MAX_DEVICE; i++) {
+    tBTA_HH_DEV_CB* p_dev_cb = &bta_hh_cb.kdev[i];
     if (p_dev_cb->in_use && p_dev_cb->conn_id == conn_id) {
       return p_dev_cb;
     }
   }
-  return NULL;
+  return nullptr;
 }
 
 /*******************************************************************************
@@ -311,16 +302,14 @@ static tBTA_HH_DEV_CB* bta_hh_le_find_dev_cb_by_conn_id(uint16_t conn_id) {
  *
  ******************************************************************************/
 static tBTA_HH_DEV_CB* bta_hh_le_find_dev_cb_by_bda(const tAclLinkSpec& link_spec) {
-  uint8_t i;
-  tBTA_HH_DEV_CB* p_dev_cb = &bta_hh_cb.kdev[0];
-
-  for (i = 0; i < BTA_HH_MAX_DEVICE; i++, p_dev_cb++) {
+  for (uint8_t i = 0; i < BTA_HH_MAX_DEVICE; i++) {
+    tBTA_HH_DEV_CB* p_dev_cb = &bta_hh_cb.kdev[i];
     if (p_dev_cb->in_use && p_dev_cb->link_spec.addrt.bda == link_spec.addrt.bda &&
         p_dev_cb->link_spec.transport == BT_TRANSPORT_LE) {
       return p_dev_cb;
     }
   }
-  return NULL;
+  return nullptr;
 }
 
 /*******************************************************************************
@@ -968,9 +957,9 @@ static void bta_hh_le_encrypt_cback(RawAddress bd_addr, tBT_TRANSPORT transport,
           .transport = transport,
   };
 
-  tBTA_HH_DEV_CB* p_dev_cb = bta_hh_get_cb(link_spec);
+  tBTA_HH_DEV_CB* p_dev_cb = bta_hh_find_cb(link_spec);
   if (p_dev_cb == nullptr) {
-    log::error("unexpected encryption callback, ignore");
+    log::error("Unexpected encryption callback for {}", bd_addr);
     return;
   }
 

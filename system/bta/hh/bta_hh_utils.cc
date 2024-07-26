@@ -51,59 +51,124 @@ constexpr uint16_t kSsrMaxLatency = 18; /* slots * 0.625ms */
 
 /*******************************************************************************
  *
- * Function         bta_hh_find_cb
+ * Function         bta_hh_get_cb_index
  *
- * Description      Find best available control block according to ACL link
- *                  specification.
- *
+ * Description      Find suitable control block index for ACL link specification
  *
  * Returns          void
  *
  ******************************************************************************/
-uint8_t bta_hh_find_cb(const tAclLinkSpec& link_spec) {
-  uint8_t xx;
-
-  /* See how many active devices there are. */
-  for (xx = 0; xx < BTA_HH_MAX_DEVICE; xx++) {
-    /* check if any active/known devices is a match */
-    if (link_spec == bta_hh_cb.kdev[xx].link_spec && !link_spec.addrt.bda.IsEmpty()) {
-#if (BTA_HH_DEBUG == TRUE)
-      log::verbose("found kdev_cb[{}] hid_handle={}", xx, bta_hh_cb.kdev[xx].hid_handle);
-#endif
-      return xx;
-    }
-#if (BTA_HH_DEBUG == TRUE)
-    else
-      log::verbose("in_use ? [{}] kdev[{}].hid_handle={} state=[{}]", bta_hh_cb.kdev[xx].in_use, xx,
-                   bta_hh_cb.kdev[xx].hid_handle, bta_hh_cb.kdev[xx].state);
-#endif
+static uint8_t bta_hh_get_cb_index(const tAclLinkSpec& link_spec) {
+  if (link_spec.addrt.bda.IsEmpty()) {
+    return BTA_HH_IDX_INVALID;
   }
 
-  /* if no active device match, find a spot for it */
-  for (xx = 0; xx < BTA_HH_MAX_DEVICE; xx++) {
-    if (!bta_hh_cb.kdev[xx].in_use) {
-      bta_hh_cb.kdev[xx].link_spec = link_spec;
-      break;
+  uint8_t available_handle = BTA_HH_IDX_INVALID;
+  for (uint8_t i = 0; i < BTA_HH_MAX_DEVICE; i++) {
+    /* Check if any active/known devices is a match */
+    tBTA_HH_DEV_CB& dev = bta_hh_cb.kdev[i];
+    if (link_spec == dev.link_spec) {
+      log::verbose("Reusing handle {} for {}, ", i, link_spec);
+      return i;
+    } else if (available_handle == BTA_HH_IDX_INVALID && !dev.in_use) {
+      available_handle = i;
     }
   }
-/* If device list full, report BTA_HH_IDX_INVALID */
-#if (BTA_HH_DEBUG == TRUE)
-  log::verbose("index={} while max={}", xx, BTA_HH_MAX_DEVICE);
-#endif
 
-  if (xx == BTA_HH_MAX_DEVICE) {
-    xx = BTA_HH_IDX_INVALID;
+  if (available_handle != BTA_HH_IDX_INVALID) {
+    log::verbose("Using unused handle {} for {}", available_handle, link_spec);
   }
-
-  return xx;
+  return available_handle;
 }
 
+/*******************************************************************************
+ *
+ * Function         bta_hh_get_cb
+ *
+ * Description      Find or allocate control block for ACL link specification
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
 tBTA_HH_DEV_CB* bta_hh_get_cb(const tAclLinkSpec& link_spec) {
-  uint8_t idx = bta_hh_find_cb(link_spec);
+  uint8_t idx = bta_hh_get_cb_index(link_spec);
   if (idx == BTA_HH_IDX_INVALID) {
+    log::error("No handle available for {}", link_spec);
     return nullptr;
   }
-  return &bta_hh_cb.kdev[idx];
+
+  tBTA_HH_DEV_CB& dev = bta_hh_cb.kdev[idx];
+  dev.link_spec = link_spec;
+  dev.in_use = true;
+  return &dev;
+}
+
+/*******************************************************************************
+ *
+ * Function         bta_hh_find_cb
+ *
+ * Description      Find the existing control block for ACL link specification
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+tBTA_HH_DEV_CB* bta_hh_find_cb(const tAclLinkSpec& link_spec) {
+  if (link_spec.addrt.bda.IsEmpty()) {
+    return nullptr;
+  }
+
+  for (uint8_t i = 0; i < BTA_HH_MAX_DEVICE; i++) {
+    /* check if any active/known devices is a match */
+    if (link_spec == bta_hh_cb.kdev[i].link_spec) {
+      return &bta_hh_cb.kdev[i];
+    }
+  }
+  return nullptr;
+}
+
+/*******************************************************************************
+ *
+ * Function         bta_hh_dev_handle_to_cb_idx
+ *
+ * Description      convert a HID device handle to the device control block
+ *                  index.
+ *
+ *
+ * Returns          uint8_t: index of the device control block.
+ *
+ ******************************************************************************/
+static uint8_t bta_hh_dev_handle_to_cb_idx(uint8_t dev_handle) {
+  uint8_t index = BTA_HH_IDX_INVALID;
+
+  if (BTA_HH_IS_LE_DEV_HDL(dev_handle)) {
+    if (BTA_HH_IS_LE_DEV_HDL_VALID(dev_handle)) {
+      index = bta_hh_cb.le_cb_index[BTA_HH_GET_LE_CB_IDX(dev_handle)];
+    }
+  } else
+    /* regular HID device checking */
+    if (dev_handle < BTA_HH_MAX_KNOWN) {
+      index = bta_hh_cb.cb_index[dev_handle];
+    }
+
+  return index;
+}
+
+/*******************************************************************************
+ *
+ * Function         bta_hh_find_cb
+ *
+ * Description      Find the existing control block for handle
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+tBTA_HH_DEV_CB* bta_hh_find_cb_by_handle(uint8_t hid_handle) {
+  uint8_t index = bta_hh_dev_handle_to_cb_idx(hid_handle);
+  if (index == BTA_HH_IDX_INVALID) {
+    return nullptr;
+  }
+
+  return &bta_hh_cb.kdev[index];
 }
 
 /*******************************************************************************
@@ -244,7 +309,7 @@ bool bta_hh_tod_spt(tBTA_HH_DEV_CB* p_cb, uint8_t sub_class) {
  ******************************************************************************/
 tBTA_HH_STATUS bta_hh_read_ssr_param(const tAclLinkSpec& link_spec, uint16_t* p_max_ssr_lat,
                                      uint16_t* p_min_ssr_tout) {
-  tBTA_HH_DEV_CB* p_cb = bta_hh_get_cb(link_spec);
+  tBTA_HH_DEV_CB* p_cb = bta_hh_find_cb(link_spec);
   if (p_cb == nullptr) {
     log::warn("Unable to find device:{}", link_spec);
     return BTA_HH_ERR;
@@ -326,35 +391,6 @@ void bta_hh_cleanup_disable(tBTA_HH_STATUS status) {
   }
 }
 
-/*******************************************************************************
- *
- * Function         bta_hh_dev_handle_to_cb_idx
- *
- * Description      convert a HID device handle to the device control block
- *                  index.
- *
- *
- * Returns          uint8_t: index of the device control block.
- *
- ******************************************************************************/
-uint8_t bta_hh_dev_handle_to_cb_idx(uint8_t dev_handle) {
-  uint8_t index = BTA_HH_IDX_INVALID;
-
-  if (BTA_HH_IS_LE_DEV_HDL(dev_handle)) {
-    if (BTA_HH_IS_LE_DEV_HDL_VALID(dev_handle)) {
-      index = bta_hh_cb.le_cb_index[BTA_HH_GET_LE_CB_IDX(dev_handle)];
-    }
-#if (BTA_HH_DEBUG == TRUE)
-    log::verbose("dev_handle={} index={}", dev_handle, index);
-#endif
-  } else
-    /* regular HID device checking */
-    if (dev_handle < BTA_HH_MAX_KNOWN) {
-      index = bta_hh_cb.cb_index[dev_handle];
-    }
-
-  return index;
-}
 #if (BTA_HH_DEBUG == TRUE)
 /*******************************************************************************
  *
