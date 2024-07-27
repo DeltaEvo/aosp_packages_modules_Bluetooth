@@ -587,7 +587,9 @@ public class TransitionalScanHelper {
             return;
         }
         client.appDied = true;
-        client.stats.isAppDead = true;
+        if (client.stats != null) {
+            client.stats.isAppDead = true;
+        }
         stopScanInternal(client.scannerId);
     }
 
@@ -1474,7 +1476,9 @@ public class TransitionalScanHelper {
                     handleDeadScanClient(client);
                 } else {
                     client.appDied = true;
-                    client.stats.isAppDead = true;
+                    if (client.stats != null) {
+                        client.stats.isAppDead = true;
+                    }
                     stopScanInternal(client.scannerId);
                 }
             }
