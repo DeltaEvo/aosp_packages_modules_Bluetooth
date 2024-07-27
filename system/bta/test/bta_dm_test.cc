@@ -478,6 +478,12 @@ TEST_F_WITH_FLAGS(BtaDmCustomAlarmTest, sniff_offload_feature__enable_flag,
   is_property_enabled = false;
   bluetooth::legacy::testing::BTA_dm_on_hw_on();
   ASSERT_EQ((uint8_t)BTA_ID_MAX, bta_dm_cb.pm_timer[0].srvc_id[0]);
+
+  // Shouldn't crash even there's no active timer when calling
+  // bta_dm_disable_pm.
+  bta_dm_cb.pm_timer[0].in_use = false;
+  bta_dm_cb.pm_timer[0].srvc_id[0] = kUnusedTimer;
+  bta_dm_disable_pm();
 }
 
 TEST_F_WITH_FLAGS(BtaDmCustomAlarmTest, sniff_offload_feature__disable_flag,
