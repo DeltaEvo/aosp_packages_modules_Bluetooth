@@ -31,7 +31,6 @@
 
 #include <cstdint>
 
-#include "internal_include/bt_target.h"
 #include "internal_include/bt_trace.h"
 #include "os/logging/log_adapter.h"
 #include "osi/include/allocator.h"
@@ -40,6 +39,7 @@
 #include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/btm_log_history.h"
+#include "stack/include/rfcdefs.h"
 #include "stack/rfcomm/rfc_int.h"
 #include "types/raw_address.h"
 
