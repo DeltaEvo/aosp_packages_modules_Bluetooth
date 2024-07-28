@@ -322,8 +322,8 @@ android_app {
     errorprone: {
         enabled: true,
         javacflags: [
-            // "-Xep:AndroidFrameworkRequiresPermission:ERROR",
             "-Xep:AlmostJavadoc:ERROR",
+            "-Xep:AndroidFrameworkRequiresPermission:ERROR",
             "-Xep:BadImport:ERROR",
             "-Xep:ClassCanBeStatic:ERROR",
             "-Xep:EmptyBlockTag:ERROR",

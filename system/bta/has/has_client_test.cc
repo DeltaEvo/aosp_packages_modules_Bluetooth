@@ -39,6 +39,7 @@
 #include "mock_csis_client.h"
 #include "stack/include/bt_uuid16.h"
 #include "test/common/mock_functions.h"
+#include "types/bt_transport.h"
 
 bool gatt_profile_get_eatt_support(const RawAddress& addr) { return true; }
 void osi_property_set_bool(const char* key, bool value);
@@ -788,7 +789,7 @@ protected:
             .conn_id = conn_id,
             .client_if = gatt_if,
             .remote_bda = address,
-            .transport = GATT_TRANSPORT_LE,
+            .transport = BT_TRANSPORT_LE,
             .mtu = 240,
     };
 

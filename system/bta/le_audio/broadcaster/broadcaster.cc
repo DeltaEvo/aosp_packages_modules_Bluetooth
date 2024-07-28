@@ -492,6 +492,14 @@ public:
     LeAudioLtvMap public_ltv;
     std::vector<LeAudioLtvMap> subgroup_ltvs;
 
+    if (broadcast_code && std::all_of(broadcast_code->begin(), broadcast_code->end(),
+                                      [](uint8_t byte) { return byte == 0xFF; })) {
+      // As suggested by BASS ES-23366, all 0xFF broadcast code should be avoided for security
+      log::error("Invalid all 0xFF broadcast code provided.");
+      callbacks_->OnBroadcastCreated(bluetooth::le_audio::kBroadcastIdInvalid, false);
+      return;
+    }
+
     if (queued_create_broadcast_request_) {
       log::error("Not processed yet queued broadcast");
       callbacks_->OnBroadcastCreated(bluetooth::le_audio::kBroadcastIdInvalid, false);

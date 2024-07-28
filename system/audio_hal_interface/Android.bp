@@ -28,6 +28,7 @@ cc_library_static {
         "libutils",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libbluetooth_log",
         "libbt-common",
         "libbt_shim_bridge",
@@ -302,6 +303,7 @@ cc_test {
         "libfmq",
         "liblog",
         "libstatslog",
+        "libcutils",
         "libutils",
         "server_configurable_flags",
     ],
@@ -318,6 +320,7 @@ cc_test {
         "libchrome",
         "libevent",
         "libgmock",
+        "server_configurable_flags",
     ],
     cflags: [
         "-DBUILDCFG",
@@ -350,7 +353,9 @@ cc_test {
     static_libs: [
         "libbt-bta",
         "libbt-platform-protos-lite",
+        "libcutils",
         "libgmock",
+        "server_configurable_flags",
     ],
     header_libs: ["libbluetooth_headers"],
     cflags: [

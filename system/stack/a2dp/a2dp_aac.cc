@@ -233,7 +233,7 @@ static tA2DP_STATUS A2DP_ParseInfoAac(tA2DP_AAC_CIE* p_ie, const uint8_t* p_code
       return A2DP_INVALID_SAMPLING_FREQUENCY;
     }
     if (A2DP_BitsSet(p_ie->channelMode) == A2DP_SET_ZERO_BIT) {
-      return A2DP_INVALID_CHANNEL_MODE;
+      return A2DP_INVALID_CHANNELS;
     }
 
     return A2DP_SUCCESS;
@@ -246,7 +246,7 @@ static tA2DP_STATUS A2DP_ParseInfoAac(tA2DP_AAC_CIE* p_ie, const uint8_t* p_code
     return A2DP_INVALID_SAMPLING_FREQUENCY;
   }
   if (A2DP_BitsSet(p_ie->channelMode) != A2DP_SET_ONE_BIT) {
-    return A2DP_INVALID_CHANNEL_MODE;
+    return A2DP_INVALID_CHANNELS;
   }
 
   return A2DP_SUCCESS;
@@ -260,9 +260,8 @@ bool A2DP_IsCodecValidAac(const uint8_t* p_codec_info) {
          (A2DP_ParseInfoAac(&cfg_cie, p_codec_info, true) == A2DP_SUCCESS);
 }
 
-bool A2DP_IsSinkCodecSupportedAac(const uint8_t* p_codec_info) {
-  return A2DP_CodecInfoMatchesCapabilityAac(&a2dp_aac_sink_caps, p_codec_info, false) ==
-         A2DP_SUCCESS;
+tA2DP_STATUS A2DP_IsSinkCodecSupportedAac(const uint8_t* p_codec_info) {
+  return A2DP_CodecInfoMatchesCapabilityAac(&a2dp_aac_sink_caps, p_codec_info, false);
 }
 
 // Checks whether A2DP AAC codec configuration matches with a device's codec
@@ -297,17 +296,17 @@ static tA2DP_STATUS A2DP_CodecInfoMatchesCapabilityAac(const tA2DP_AAC_CIE* p_ca
 
   /* Object Type */
   if ((cfg_cie.objectType & p_cap->objectType) == 0) {
-    return A2DP_INVALID_OBJECT_TYPE;
+    return A2DP_NOT_SUPPORTED_OBJECT_TYPE;
   }
 
   /* Sample Rate */
   if ((cfg_cie.sampleRate & p_cap->sampleRate) == 0) {
-    return A2DP_INVALID_SAMPLING_FREQUENCY;
+    return A2DP_NOT_SUPPORTED_SAMPLING_FREQUENCY;
   }
 
   /* Channel Mode */
   if ((cfg_cie.channelMode & p_cap->channelMode) == 0) {
-    return A2DP_NOT_SUPPORTED_CHANNEL_MODE;
+    return A2DP_NOT_SUPPORTED_CHANNELS;
   }
 
   return A2DP_SUCCESS;
@@ -930,8 +929,9 @@ static bool select_audio_channel_mode(const btav_a2dp_codec_config_t* p_codec_au
   return false;
 }
 
-bool A2dpCodecConfigAacBase::setCodecConfig(const uint8_t* p_peer_codec_info, bool is_capability,
-                                            uint8_t* p_result_codec_config) {
+tA2DP_STATUS A2dpCodecConfigAacBase::setCodecConfig(const uint8_t* p_peer_codec_info,
+                                                    bool is_capability,
+                                                    uint8_t* p_result_codec_config) {
   std::lock_guard<std::recursive_mutex> lock(codec_mutex_);
   tA2DP_AAC_CIE peer_info_cie;
   tA2DP_AAC_CIE result_config_cie;
@@ -965,8 +965,13 @@ bool A2dpCodecConfigAacBase::setCodecConfig(const uint8_t* p_peer_codec_info, bo
   //
   memset(&result_config_cie, 0, sizeof(result_config_cie));
 
+  if ((peer_info_cie.objectType & p_a2dp_aac_caps->objectType) == 0) {
+    return A2DP_NOT_SUPPORTED_OBJECT_TYPE;
+  }
+
   // NOTE: Always assign the Object Type and Variable Bit Rate Support.
   result_config_cie.objectType = p_a2dp_aac_caps->objectType;
+
   // The Variable Bit Rate Support is disabled if either side disables it
   result_config_cie.variableBitRateSupport =
           p_a2dp_aac_caps->variableBitRateSupport & peer_info_cie.variableBitRateSupport;
@@ -1094,6 +1099,7 @@ bool A2dpCodecConfigAacBase::setCodecConfig(const uint8_t* p_peer_codec_info, bo
             "cannot match sample frequency: source caps = 0x{:x} peer info = "
             "0x{:x}",
             p_a2dp_aac_caps->sampleRate, peer_info_cie.sampleRate);
+    status = A2DP_NOT_SUPPORTED_SAMPLING_FREQUENCY;
     goto fail;
   }
 
@@ -1168,6 +1174,7 @@ bool A2dpCodecConfigAacBase::setCodecConfig(const uint8_t* p_peer_codec_info, bo
             "cannot match bits per sample: default = 0x{:x} user preference = "
             "0x{:x}",
             a2dp_aac_default_config.bits_per_sample, codec_user_config_.bits_per_sample);
+    status = A2DP_NOT_SUPPORTED_BIT_RATE;
     goto fail;
   }
 
@@ -1239,6 +1246,7 @@ bool A2dpCodecConfigAacBase::setCodecConfig(const uint8_t* p_peer_codec_info, bo
   if (codec_config_.channel_mode == BTAV_A2DP_CODEC_CHANNEL_MODE_NONE) {
     log::error("cannot match channel mode: source caps = 0x{:x} peer info = 0x{:x}",
                p_a2dp_aac_caps->channelMode, peer_info_cie.channelMode);
+    status = A2DP_NOT_SUPPORTED_CHANNELS;
     goto fail;
   }
 
@@ -1286,6 +1294,7 @@ bool A2dpCodecConfigAacBase::setCodecConfig(const uint8_t* p_peer_codec_info, bo
   }
 
   if (!A2DP_BuildInfoAac(AVDT_MEDIA_TYPE_AUDIO, &result_config_cie, p_result_codec_config)) {
+    status = AVDTP_UNSUPPORTED_CONFIGURATION;
     goto fail;
   }
 
@@ -1302,7 +1311,7 @@ bool A2dpCodecConfigAacBase::setCodecConfig(const uint8_t* p_peer_codec_info, bo
   }
   log::assert_that(A2DP_BuildInfoAac(AVDT_MEDIA_TYPE_AUDIO, &result_config_cie, ota_codec_config_),
                    "Failed to build media codec capabilities");
-  return true;
+  return A2DP_SUCCESS;
 
 fail:
   // Restore the internal state
@@ -1315,7 +1324,7 @@ fail:
   memcpy(ota_codec_peer_capability_, saved_ota_codec_peer_capability,
          sizeof(ota_codec_peer_capability_));
   memcpy(ota_codec_peer_config_, saved_ota_codec_peer_config, sizeof(ota_codec_peer_config_));
-  return false;
+  return status;
 }
 
 bool A2dpCodecConfigAacBase::setPeerCodecCapabilities(const uint8_t* p_peer_codec_capabilities) {

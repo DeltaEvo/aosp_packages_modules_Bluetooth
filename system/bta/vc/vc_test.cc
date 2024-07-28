@@ -435,7 +435,7 @@ protected:
             .conn_id = conn_id,
             .client_if = gatt_if,
             .remote_bda = address,
-            .transport = GATT_TRANSPORT_LE,
+            .transport = BT_TRANSPORT_LE,
             .mtu = 240,
     };
 

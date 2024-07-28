@@ -26,6 +26,7 @@
 #include "hci/class_of_device.h"
 #include "hci/distance_measurement_interface.h"
 #include "hci/hci_packets.h"
+#include "hci/inquiry_interface.h"
 #include "hci/le_acl_connection_interface.h"
 #include "hci/le_advertising_interface.h"
 #include "hci/le_iso_interface.h"
@@ -41,13 +42,13 @@ public:
   HciInterface() = default;
   virtual ~HciInterface() = default;
 
-  virtual void EnqueueCommand(
+  void EnqueueCommand(
           std::unique_ptr<CommandBuilder> command,
           common::ContextualOnceCallback<void(CommandCompleteView)> on_complete) override = 0;
 
-  virtual void EnqueueCommand(
-          std::unique_ptr<CommandBuilder> command,
-          common::ContextualOnceCallback<void(CommandStatusView)> on_status) override = 0;
+  void EnqueueCommand(std::unique_ptr<CommandBuilder> command,
+                      common::ContextualOnceCallback<void(CommandStatusView)> on_status) override =
+          0;
 
   virtual common::BidiQueueEnd<AclBuilder, AclView>* GetAclQueueEnd() = 0;
 
@@ -112,25 +113,33 @@ public:
   virtual DistanceMeasurementInterface* GetDistanceMeasurementInterface(
           common::ContextualCallback<void(LeMetaEventView)> event_handler) = 0;
 
+  virtual std::unique_ptr<InquiryInterface> GetInquiryInterface(
+          common::ContextualCallback<void(EventView)> event_handler) = 0;
+
 protected:
   template <typename T>
   class CommandInterfaceImpl : public CommandInterface<T> {
   public:
-    explicit CommandInterfaceImpl(HciInterface& hci) : hci_(hci) {}
-    virtual ~CommandInterfaceImpl() = default;
+    explicit CommandInterfaceImpl(HciInterface* hci, common::OnceCallback<void()> cleanup)
+        : hci_(hci), cleanup_(std::move(cleanup)) {}
+    explicit CommandInterfaceImpl(HciInterface* hci) : hci_(hci) {
+      cleanup_ = common::BindOnce([]() {});
+    }
+    ~CommandInterfaceImpl() { std::move(cleanup_).Run(); }
 
     void EnqueueCommand(
             std::unique_ptr<T> command,
             common::ContextualOnceCallback<void(CommandCompleteView)> on_complete) override {
-      hci_.EnqueueCommand(std::move(command), std::move(on_complete));
+      hci_->EnqueueCommand(std::move(command), std::move(on_complete));
     }
 
     void EnqueueCommand(
             std::unique_ptr<T> command,
             common::ContextualOnceCallback<void(CommandStatusView)> on_status) override {
-      hci_.EnqueueCommand(std::move(command), std::move(on_status));
+      hci_->EnqueueCommand(std::move(command), std::move(on_status));
     }
-    HciInterface& hci_;
+    HciInterface* hci_;
+    common::OnceCallback<void()> cleanup_;
   };
 };
 

@@ -16,6 +16,9 @@
 
 package android.bluetooth.le;
 
+import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
+import static android.Manifest.permission.BLUETOOTH_SCAN;
+
 import static java.util.Objects.requireNonNull;
 
 import android.annotation.NonNull;
@@ -492,7 +495,7 @@ public final class ScanFilter implements Parcelable {
         }
 
         // Manufacturer data match.
-        if (mManufacturerId >= 0) {
+        if (mManufacturerId >= 0 && mManufacturerData != null) {
             if (!matchesPartialData(
                     mManufacturerData,
                     mManufacturerDataMask,
@@ -1042,8 +1045,8 @@ public final class ScanFilter implements Parcelable {
         @RequiresBluetoothScanPermission
         @RequiresPermission(
                 allOf = {
-                    android.Manifest.permission.BLUETOOTH_SCAN,
-                    android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                    BLUETOOTH_SCAN,
+                    BLUETOOTH_PRIVILEGED,
                 })
         @NonNull
         public Builder setTransportBlockFilter(@NonNull TransportBlockFilter transportBlockFilter) {

@@ -519,9 +519,15 @@ public class HidHostService extends ProfileService {
 
     private void handleMessageOnVirtualUnplug(Message msg) {
         BluetoothDevice device = mAdapterService.getDeviceFromByte((byte[]) msg.obj);
-        int transport = msg.arg1;
-        if (!checkTransport(device, transport, msg.what)) {
-            return;
+        if (Flags.removeInputDeviceOnVup()) {
+            updateConnectionState(
+                    device, getTransport(device), BluetoothProfile.STATE_DISCONNECTED);
+            mInputDevices.remove(device);
+        } else {
+            int transport = msg.arg1;
+            if (!checkTransport(device, transport, msg.what)) {
+                return;
+            }
         }
         int status = msg.arg2;
         broadcastVirtualUnplugStatus(device, status);
@@ -806,7 +812,7 @@ public class HidHostService extends ProfileService {
             mService = null;
         }
 
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+        @RequiresPermission(BLUETOOTH_CONNECT)
         private HidHostService getService(AttributionSource source) {
             // Cache mService because it can change while getService is called
             HidHostService service = mService;
@@ -1506,7 +1512,6 @@ public class HidHostService extends ProfileService {
         super.dump(sb);
         println(sb, "mTargetDevice: " + mTargetDevice);
         println(sb, "mInputDevices:");
-        mInputDevices.forEach(
-                (k, v) -> sb.append(" " + k.getAddressForLogging() + " : " + v + "\n"));
+        mInputDevices.forEach((k, v) -> sb.append(" " + k + " : " + v + "\n"));
     }
 }

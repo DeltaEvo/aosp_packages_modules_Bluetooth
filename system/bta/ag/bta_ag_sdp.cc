@@ -31,11 +31,9 @@
 #include "bta/include/bta_hfp_api.h"
 #include "bta/include/bta_rfcomm_scn.h"
 #include "btif/include/btif_config.h"
-#include "common/init_flags.h"
 #include "device/include/interop.h"
 #include "device/include/interop_config.h"
 #include "internal_include/bt_target.h"
-#include "os/logging/log_adapter.h"
 #include "osi/include/allocator.h"
 #include "stack/btm/btm_sco_hfp_hal.h"
 #include "stack/include/bt_types.h"
@@ -84,7 +82,7 @@ const tBTA_AG_SDP_CBACK bta_ag_sdp_cback_tbl[] = {bta_ag_sdp_cback_1, bta_ag_sdp
  * Returns          void
  *
  ******************************************************************************/
-static void bta_ag_sdp_cback(uint16_t status, uint8_t idx) {
+static void bta_ag_sdp_cback(tSDP_STATUS status, uint8_t idx) {
   log::verbose("status:0x{:x}", status);
   tBTA_AG_SCB* p_scb = bta_ag_scb_by_idx(idx);
   if (p_scb) {

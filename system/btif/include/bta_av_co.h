@@ -452,9 +452,9 @@ private:
    * @param t_local_sep the profile for which ota config needs to be set.
    * @return true on success, otherwise false
    */
-  bool SetCodecOtaConfig(BtaAvCoPeer* p_peer, const uint8_t* p_ota_codec_config,
-                         uint8_t num_protect, const uint8_t* p_protect_info,
-                         const uint8_t t_local_sep);
+  tA2DP_STATUS SetCodecOtaConfig(BtaAvCoPeer* p_peer, const uint8_t* p_ota_codec_config,
+                                 uint8_t num_protect, const uint8_t* p_protect_info,
+                                 const uint8_t t_local_sep);
 
   /**
    * Update all selectable Source codecs with the corresponding codec

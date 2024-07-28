@@ -23,10 +23,10 @@
 
 #include <cstdint>
 #include <cstring>
+#include <mutex>
 
 #include "bta/include/bta_jv_api.h"
 #include "btif/include/btif_dm.h"
-#include "btif/include/btif_metrics_logging.h"
 #include "btif/include/btif_sock.h"
 #include "btif/include/btif_sock_logging.h"
 #include "btif/include/btif_sock_thread.h"
@@ -695,7 +695,7 @@ static void on_l2cap_write_done(uint16_t len, uint32_t id) {
   uid_set_add_tx(uid_set, app_uid, len);
 }
 
-static void on_l2cap_data_ind(tBTA_JV* evt, uint32_t id) {
+static void on_l2cap_data_ind(tBTA_JV* /* evt */, uint32_t id) {
   l2cap_socket* sock;
 
   int app_uid = -1;

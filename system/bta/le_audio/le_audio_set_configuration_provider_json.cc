@@ -352,7 +352,8 @@ private:
       subconfig.qos.maxSdu = subconfig.codec.GetChannelCountPerIsoStream() *
                              core_config.octets_per_codec_frame.value_or(0) *
                              core_config.codec_frames_blocks_per_sdu.value_or(1);
-      subconfig.qos.sduIntervalUs = core_config.GetFrameDurationUs();
+      subconfig.qos.sduIntervalUs = core_config.GetFrameDurationUs() *
+                                    core_config.codec_frames_blocks_per_sdu.value_or(1);
     }
   }
 

@@ -38,7 +38,6 @@
 
 // Original usings
 using bluetooth::Uuid;
-using namespace bluetooth::legacy::stack::sdp;
 
 // Mocked compile conditionals, if any
 

@@ -29,12 +29,10 @@
 #include <cstdint>
 
 #include "bta/gatt/bta_gattc_int.h"
-#include "common/init_flags.h"
 #include "hci/controller_interface.h"
 #include "internal_include/bt_target.h"
 #include "internal_include/bt_trace.h"
 #include "main/shim/entry.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "types/bt_transport.h"
 #include "types/hci_role.h"
@@ -262,7 +260,7 @@ void bta_gattc_clcb_dealloc(tBTA_GATTC_CLCB* p_clcb) {
    * p_q_cmd. */
   p_clcb->bta_conn_id = 0;
   p_clcb->bda = {};
-  p_clcb->transport = 0;
+  p_clcb->transport = BT_TRANSPORT_AUTO;
   p_clcb->p_rcb = NULL;
   p_clcb->p_srcb = NULL;
   p_clcb->request_during_discovery = 0;

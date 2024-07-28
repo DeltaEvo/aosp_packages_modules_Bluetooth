@@ -34,7 +34,6 @@
 #include "neighbor/facade/facade.h"
 #include "os/log.h"
 #include "os/thread.h"
-#include "security/facade.h"
 #include "stack_manager.h"
 
 namespace bluetooth {
@@ -91,7 +90,6 @@ public:
       case BluetoothModule::SECURITY:
         modules.add<::bluetooth::facade::ReadOnlyPropertyServerModule>();
         modules.add<::bluetooth::hci::facade::ControllerFacadeModule>();
-        modules.add<::bluetooth::security::SecurityModuleFacadeModule>();
         modules.add<::bluetooth::neighbor::facade::NeighborFacadeModule>();
         modules.add<::bluetooth::l2cap::classic::L2capClassicModuleFacadeModule>();
         modules.add<::bluetooth::hci::facade::HciFacadeModule>();

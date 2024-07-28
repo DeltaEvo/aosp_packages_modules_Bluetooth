@@ -32,7 +32,6 @@
 #include "hci/hci_packets.h"
 #include "hci/octets.h"
 #include "os/handler.h"
-#include "os/log.h"
 #include "packet/bit_inserter.h"
 #include "packet/raw_builder.h"
 
@@ -238,7 +237,6 @@ public:
 class LeImplTest : public ::testing::Test {
 protected:
   void SetUp() override {
-    bluetooth::common::InitFlags::SetAllForTesting();
     thread_ = new Thread("thread", Thread::Priority::NORMAL);
     handler_ = new Handler(thread_);
     controller_ = new TestController();

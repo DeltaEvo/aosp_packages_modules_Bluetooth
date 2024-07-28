@@ -28,8 +28,6 @@
 #include "bta_gatt_api.h"
 #include "bta_groups.h"
 #include "btif/include/btif_storage.h"
-#include "common/init_flags.h"
-#include "common/strings.h"
 #include "crypto_toolbox/crypto_toolbox.h"
 #include "gap_api.h"
 
@@ -437,9 +435,7 @@ public:
       auto inst2 = dev2->GetCsisInstanceByGroupId(id);
       if (!inst1 || !inst2) {
         /* One of the device is not connected */
-        log::debug("Device  {} is not connected.", inst1 == nullptr
-                                                           ? ADDRESS_TO_LOGGABLE_CSTR(dev1->addr)
-                                                           : ADDRESS_TO_LOGGABLE_CSTR(dev2->addr));
+        log::debug("Device  {} is not connected.", inst1 == nullptr ? dev1->addr : dev2->addr);
         return dev1->IsConnected();
       }
       return inst1->GetRank() < inst2->GetRank();

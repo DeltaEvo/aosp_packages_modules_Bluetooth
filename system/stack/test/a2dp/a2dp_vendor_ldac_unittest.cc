@@ -18,7 +18,6 @@
 
 #include <gtest/gtest.h>
 
-#include "common/init_flags.h"
 #include "common/time_util.h"
 #include "osi/include/allocator.h"
 #include "stack/include/a2dp_vendor_ldac_constants.h"
@@ -54,7 +53,6 @@ static WavReader wav_reader = WavReader(GetWavFilePath(kWavFile).c_str());
 class A2dpLdacTest : public ::testing::Test {
 protected:
   void SetUp() override {
-    common::InitFlags::SetAllForTesting();
     SetCodecConfig();
     encoder_iface_ = const_cast<tA2DP_ENCODER_INTERFACE*>(
             A2DP_VendorGetEncoderInterfaceLdac(kCodecInfoLdacCapability));

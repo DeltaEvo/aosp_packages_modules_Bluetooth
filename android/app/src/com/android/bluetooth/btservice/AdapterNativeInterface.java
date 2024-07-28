@@ -247,10 +247,6 @@ public class AdapterNativeInterface {
         return pbapPseDynamicVersionUpgradeIsEnabledNative();
     }
 
-    boolean isLogRedactionEnabled() {
-        return isLogRedactionEnabledNative();
-    }
-
     int getSocketL2capLocalChannelId(ParcelUuid connectionUuid) {
         return getSocketL2capLocalChannelIdNative(
                 connectionUuid.getUuid().getLeastSignificantBits(),
@@ -369,8 +365,6 @@ public class AdapterNativeInterface {
     private native int getRemotePbapPceVersionNative(String address);
 
     private native boolean pbapPseDynamicVersionUpgradeIsEnabledNative();
-
-    private native boolean isLogRedactionEnabledNative();
 
     private native int getSocketL2capLocalChannelIdNative(
             long connectionUuidLsb, long connectionUuidMsb);

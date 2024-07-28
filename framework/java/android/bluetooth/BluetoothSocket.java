@@ -16,6 +16,9 @@
 
 package android.bluetooth;
 
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
+import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
+
 import android.annotation.FlaggedApi;
 import android.annotation.RequiresNoPermission;
 import android.annotation.RequiresPermission;
@@ -434,7 +437,7 @@ public final class BluetoothSocket implements Closeable {
      * @throws IOException for other errors (eg: InputStream read failures etc.).
      */
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    @RequiresPermission(BLUETOOTH_CONNECT)
     public void connect() throws IOException {
         IBluetooth bluetoothProxy = BluetoothAdapter.getDefaultAdapter().getBluetoothService();
         long socketConnectionTimeNanos = System.nanoTime();
@@ -526,7 +529,7 @@ public final class BluetoothSocket implements Closeable {
      * Currently returns unix errno instead of throwing IOException, so that BluetoothAdapter can
      * check the error code for EADDRINUSE
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    @RequiresPermission(BLUETOOTH_CONNECT)
     /*package*/ int bindListen() {
         int ret;
         if (mSocketState == SocketState.CLOSED) return EBADFD;
@@ -814,7 +817,7 @@ public final class BluetoothSocket implements Closeable {
      * @hide
      */
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    @RequiresPermission(BLUETOOTH_CONNECT)
     public void requestMaximumTxDataLength() throws IOException {
         if (mDevice == null) {
             throw new IOException("requestMaximumTxDataLength is called on null device");
@@ -850,8 +853,8 @@ public final class BluetoothSocket implements Closeable {
     @FlaggedApi(Flags.FLAG_BT_SOCKET_API_L2CAP_CID)
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public int getL2capLocalChannelId() throws IOException {
         if (mType != TYPE_L2CAP_LE) {
@@ -894,8 +897,8 @@ public final class BluetoothSocket implements Closeable {
     @FlaggedApi(Flags.FLAG_BT_SOCKET_API_L2CAP_CID)
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public int getL2capRemoteChannelId() throws IOException {
         if (mType != TYPE_L2CAP_LE) {

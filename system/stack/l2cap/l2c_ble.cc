@@ -35,7 +35,7 @@
 #include "btif/include/core_callbacks.h"
 #include "btif/include/stack_manager_t.h"
 #include "hci/controller_interface.h"
-#include "hci/hci_layer.h"
+#include "hci/hci_interface.h"
 #include "internal_include/bt_target.h"
 #include "main/shim/entry.h"
 #include "osi/include/allocator.h"
@@ -48,6 +48,7 @@
 #include "stack/include/bt_psm_types.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/btm_ble_api.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_log_history.h"
 #include "stack/include/l2c_api.h"
 #include "stack/include/l2cap_acl_interface.h"
@@ -65,8 +66,6 @@ constexpr char kBtmLogTag[] = "L2CAP";
 }
 
 extern tBTM_CB btm_cb;
-
-using base::StringPrintf;
 
 void l2cble_start_conn_update(tL2C_LCB* p_lcb);
 
@@ -104,7 +103,8 @@ void l2cble_notify_le_connection(const RawAddress& bda) {
     return;
   }
 
-  if (BTM_IsAclConnectionUp(bda, BT_TRANSPORT_LE) && p_lcb->link_state != LST_CONNECTED) {
+  if (get_btm_client_interface().peer.BTM_IsAclConnectionUp(bda, BT_TRANSPORT_LE) &&
+      p_lcb->link_state != LST_CONNECTED) {
     /* update link status */
     // TODO Move this back into acl layer
     btm_establish_continue_from_address(bda, BT_TRANSPORT_LE);
@@ -1026,10 +1026,15 @@ void l2c_ble_link_adjust_allocation(void) {
       /* There is a special case where we have readjusted the link quotas and */
       /* this link may have sent anything but some other link sent packets so */
       /* so we may need a timer to kick off this link's transmissions. */
-      if ((p_lcb->link_state == LST_CONNECTED) && (!list_is_empty(p_lcb->link_xmit_data_q)) &&
-          (p_lcb->sent_not_acked < p_lcb->link_xmit_quota)) {
-        alarm_set_on_mloop(p_lcb->l2c_lcb_timer, L2CAP_LINK_FLOW_CONTROL_TIMEOUT_MS,
+      if (p_lcb->link_xmit_data_q != nullptr) {
+        if ((p_lcb->link_state == LST_CONNECTED) &&
+            !list_is_empty(p_lcb->link_xmit_data_q) &&
+            (p_lcb->sent_not_acked < p_lcb->link_xmit_quota)) {
+              alarm_set_on_mloop(p_lcb->l2c_lcb_timer, L2CAP_LINK_FLOW_CONTROL_TIMEOUT_MS,
                            l2c_lcb_timer_timeout, p_lcb);
+        }
+      } else {
+        log::warn("link_xmit_data_q is null");
       }
     }
   }
@@ -1423,6 +1428,9 @@ void L2CA_SetEcosystemBaseInterval(uint32_t base_interval) {
         bool ret = L2CA_UpdateBleConnParams(p_lcb->remote_bd_addr, p_lcb->min_interval,
                                             p_lcb->max_interval, p_lcb->latency, p_lcb->timeout,
                                             p_lcb->min_ce_len, p_lcb->max_ce_len);
+        if (!ret) {
+          log::warn("Unable to update BLE connection parameters peer:{}", p_lcb->remote_bd_addr);
+        }
       }
     }
   }

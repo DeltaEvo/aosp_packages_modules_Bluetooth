@@ -22,11 +22,8 @@
 #include <chrono>
 #include <deque>
 #include <future>
-#include <list>
-#include <map>
 
 #include "common/bind.h"
-#include "common/init_flags.h"
 #include "hci/acl_manager/le_connection_management_callbacks_mock.h"
 #include "hci/address.h"
 #include "hci/address_with_type.h"
@@ -152,7 +149,6 @@ public:
 class AclManagerBaseTest : public ::testing::Test {
 protected:
   void SetUp() override {
-    common::InitFlags::SetAllForTesting();
     test_hci_layer_ = new HciLayerFake;  // Ownership is transferred to registry
     test_controller_ = new TestController;
     fake_registry_.InjectTestModule(&HciLayer::Factory, test_hci_layer_);

@@ -734,15 +734,12 @@ class MceStateMachine extends StateMachine {
                     // Get the 50 most recent messages from the last week
                     Calendar calendar = Calendar.getInstance();
                     calendar.add(Calendar.DATE, -7);
-                    byte messageType;
+                    // bit mask - messageType discludes unsupported message types
+                    byte messageType =
+                            MessagesFilter.MESSAGE_TYPE_EMAIL | MessagesFilter.MESSAGE_TYPE_IM;
                     if (Utils.isPtsTestMode()) {
                         messageType =
-                                (byte)
-                                        SystemProperties.getInt(
-                                                FETCH_MESSAGE_TYPE,
-                                                MessagesFilter.MESSAGE_TYPE_ALL);
-                    } else {
-                        messageType = MessagesFilter.MESSAGE_TYPE_ALL;
+                                (byte) SystemProperties.getInt(FETCH_MESSAGE_TYPE, messageType);
                     }
 
                     mMasClient.makeRequest(
@@ -1161,6 +1158,9 @@ class MceStateMachine extends StateMachine {
                         if (smsReceiverPackageName != null && !smsReceiverPackageName.isEmpty()) {
                             // Clone intent and broadcast to SMS receiver package if one exists
                             Intent messageNotificationIntent = (Intent) intent.clone();
+                            // Repeat action for easier static analyze of the intent
+                            messageNotificationIntent.setAction(
+                                    BluetoothMapClient.ACTION_MESSAGE_RECEIVED);
                             messageNotificationIntent.setPackage(smsReceiverPackageName);
                             mService.sendBroadcast(messageNotificationIntent, RECEIVE_SMS);
                         }

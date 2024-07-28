@@ -24,7 +24,6 @@
 
 #include <string>
 
-#include "common/init_flags.h"
 #include "common/strings.h"
 #include "hal/hci_hal.h"
 #include "hci/acl_manager.h"
@@ -47,7 +46,6 @@
 #include "main/shim/le_advertising_manager.h"
 #include "main/shim/le_scanning_manager.h"
 #include "metrics/counter_metrics.h"
-#include "os/log.h"
 #include "shim/dumpsys.h"
 #include "storage/storage_module.h"
 #if TARGET_FLOSS
@@ -57,7 +55,6 @@
 namespace bluetooth {
 namespace shim {
 
-using ::bluetooth::common::InitFlags;
 using ::bluetooth::common::StringFormat;
 
 struct Stack::impl {
@@ -77,14 +74,14 @@ void Stack::StartEverything() {
   log::info("Starting Gd stack");
   ModuleList modules;
 
+#if TARGET_FLOSS
+  modules.add<sysprops::SyspropsModule>();
+#endif
   modules.add<metrics::CounterMetrics>();
   modules.add<hal::HciHal>();
   modules.add<hci::HciLayer>();
   modules.add<storage::StorageModule>();
   modules.add<shim::Dumpsys>();
-#if TARGET_FLOSS
-  modules.add<sysprops::SyspropsModule>();
-#endif
 
   modules.add<hci::Controller>();
   modules.add<hci::acl_manager::AclScheduler>();

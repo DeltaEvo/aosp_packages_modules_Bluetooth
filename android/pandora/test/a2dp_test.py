@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,8 +20,10 @@ import math
 import numpy as np
 import os
 
-from avatar import BumblePandoraDevice, PandoraDevice, PandoraDevices
-from bumble import avdtp
+from avatar import BumblePandoraDevice, PandoraDevice, PandoraDevices, pandora
+from avatar.pandora_server import AndroidPandoraServer
+from bumble import l2cap
+from bumble.avctp import AVCTP_PSM
 from bumble.a2dp import (
     A2DP_SBC_CODEC_TYPE,
     SBC_DUAL_CHANNEL_MODE,
@@ -54,6 +56,7 @@ from pandora.security_pb2 import LEVEL2
 from threading import Thread
 from typing import Optional
 
+AVRCP_CONNECT_A2DP_DELAYED = 'persist.device_config.aconfig_flags.bluetooth.com.android.bluetooth.flags.avrcp_connect_a2dp_delayed'
 
 async def initiate_pairing(device, address) -> Connection:
     """Connect and pair a remote device."""
@@ -189,6 +192,12 @@ class A2dpTest(base_test.BaseTestClass):  # type: ignore[misc]
                 device.config.setdefault('classic_smp_enabled', False)
                 device.server_config.io_capability = PairingDelegate.NO_OUTPUT_NO_INPUT
 
+    def teardown_class(self) -> None:
+        if self.devices:
+            self.devices.stop_all()
+
+    @avatar.asynchronous
+    async def setup_test(self) -> None:
         await asyncio.gather(self.dut.reset(), self.ref1.reset(), self.ref2.reset())
 
         self.dut.a2dp = A2DP(channel=self.dut.aio.channel)
@@ -210,14 +219,6 @@ class A2dpTest(base_test.BaseTestClass):  # type: ignore[misc]
 
         self.ref1.a2dp.on('connection', on_ref1_avdtp_connection)
         self.ref2.a2dp.on('connection', on_ref2_avdtp_connection)
-
-    def teardown_class(self) -> None:
-        if self.devices:
-            self.devices.stop_all()
-
-    @avatar.asynchronous
-    async def setup_test(self) -> None:
-        pass
 
     @avatar.asynchronous
     async def test_connect_and_stream(self) -> None:
@@ -251,6 +252,47 @@ class A2dpTest(base_test.BaseTestClass):  # type: ignore[misc]
         await self.dut.a2dp.Suspend(source=dut_ref1_source)
         assert_equal(self.ref1.a2dp_sink.stream.state, AVDTP_OPEN_STATE)
 
+    @avatar.asynchronous
+    async def test_avdtp_autoconnect_when_only_avctp_connected(self) -> None:
+        """Test AVDTP automatically connects if peer device connects only AVCTP.
+
+        1. Pair and Connect RD1 -> DUT
+        2. Connect AVCTP RD1 -> DUT
+        3. Check AVDTP status on RD1
+        """
+
+        # Enable AVRCP connect A2DP delayed feature
+        for server in self.devices._servers:
+            if isinstance(server, AndroidPandoraServer):
+                server.device.adb.shell(['setprop', AVRCP_CONNECT_A2DP_DELAYED, 'true'])  # type: ignore
+                break
+
+        # Connect and pair RD1.
+        ref1_dut, dut_ref1 = await asyncio.gather(
+            initiate_pairing(self.ref1, self.dut.address),
+            accept_pairing(self.dut, self.ref1.address),
+        )
+
+        # Create a listener to wait for AVDTP connections
+        avdtp_future = asyncio.get_running_loop().create_future()
+
+        def on_avdtp_connection(server):
+            nonlocal avdtp_future
+            self.ref1.a2dp_sink = server.add_sink(codec_capabilities())
+            self.ref1.log.info(f'Sink: {self.ref1.a2dp_sink}')
+            avdtp_future.set_result(None)
+
+        self.ref1.a2dp.on('connection', on_avdtp_connection)
+
+        # Retrieve Bumble connection object from Pandora connection token
+        connection = pandora.get_raw_connection(device=self.ref1, connection=ref1_dut)
+
+        # Open AVCTP L2CAP channel
+        avctp = await connection.create_l2cap_channel(spec=l2cap.ClassicChannelSpec(AVCTP_PSM))
+        self.ref1.log.info(f'AVCTP: {avctp}')
+
+        # Wait for AVDTP L2CAP channel
+        await asyncio.wait_for(avdtp_future, timeout=10.0)
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)

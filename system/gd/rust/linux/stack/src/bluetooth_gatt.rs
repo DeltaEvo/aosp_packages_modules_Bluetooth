@@ -31,7 +31,7 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::cast::{FromPrimitive, ToPrimitive};
 use rand::rngs::SmallRng;
 use rand::{RngCore, SeedableRng};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::convert::{TryFrom, TryInto};
 use std::sync::{Arc, Mutex, MutexGuard};
 use tokio::sync::mpsc::Sender;
@@ -1448,6 +1448,9 @@ pub struct BluetoothGatt {
 
     gatt_async: Arc<tokio::sync::Mutex<GattAsyncIntf>>,
     enabled: bool,
+
+    // For sending messages to the main event loop.
+    tx: Sender<Message>,
 }
 
 impl BluetoothGatt {
@@ -1480,17 +1483,30 @@ impl BluetoothGatt {
                 async_helper_msft_adv_monitor_enable,
             })),
             enabled: false,
+            tx: tx.clone(),
         }
     }
 
     pub fn init_profiles(&mut self, tx: Sender<Message>, api_tx: Sender<APIMessage>) {
         self.gatt = Gatt::new(&self.intf.lock().unwrap()).map(|gatt| Arc::new(Mutex::new(gatt)));
 
+        // TODO(b/353643607): Make this dispatch_queue design more general for all profiles.
         let tx_clone = tx.clone();
+        let async_mutex = Arc::new(tokio::sync::Mutex::new(()));
+        let dispatch_queue = Arc::new(Mutex::new(VecDeque::new()));
         let gatt_client_callbacks_dispatcher = GattClientCallbacksDispatcher {
             dispatch: Box::new(move |cb| {
                 let tx_clone = tx_clone.clone();
+                let async_mutex = async_mutex.clone();
+                let dispatch_queue = dispatch_queue.clone();
+                // Enqueue the callbacks at the synchronized block to ensure the order.
+                dispatch_queue.lock().unwrap().push_back(cb);
                 topstack::get_runtime().spawn(async move {
+                    // Acquire the lock first to ensure |pop_front| and |tx_clone.send| not
+                    // interrupted by the other async threads.
+                    let _guard = async_mutex.lock().await;
+                    // Consume exactly one callback.
+                    let cb = dispatch_queue.lock().unwrap().pop_front().unwrap();
                     let _ = tx_clone.send(Message::GattClient(cb)).await;
                 });
             }),
@@ -2445,6 +2461,10 @@ impl IBluetoothGatt for BluetoothGatt {
         };
 
         self.gatt.as_ref().unwrap().lock().unwrap().client.disconnect(client_id, &addr, conn_id);
+        let tx = self.tx.clone();
+        tokio::spawn(async move {
+            let _ = tx.send(Message::GattClientDisconnected(addr)).await;
+        });
     }
 
     fn refresh_device(&self, client_id: i32, addr: RawAddress) {

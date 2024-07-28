@@ -464,6 +464,9 @@ void LeAudioClientInterface::Sink::UpdateBroadcastAudioConfigToHal(
   }
 
   get_aidl_transport_instance(is_broadcaster_)->LeAudioSetBroadcastConfig(offload_config);
+  get_aidl_client_interface(is_broadcaster_)
+          ->UpdateAudioConfig(aidl::le_audio::broadcast_config_to_hal_audio_config(
+                  get_aidl_transport_instance(is_broadcaster_)->LeAudioGetBroadcastConfig()));
 }
 
 void LeAudioClientInterface::Sink::SuspendedForReconfiguration() {

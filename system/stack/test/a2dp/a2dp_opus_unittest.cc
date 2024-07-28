@@ -21,9 +21,7 @@
 #include <future>
 #include <string>
 
-#include "common/init_flags.h"
 #include "common/time_util.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "stack/include/a2dp_vendor_opus.h"
 #include "stack/include/a2dp_vendor_opus_constants.h"
@@ -64,7 +62,6 @@ static std::promise<void> promise;
 class A2dpOpusTest : public ::testing::Test {
 protected:
   void SetUp() override {
-    common::InitFlags::SetAllForTesting();
     SetCodecConfig();
     encoder_iface_ = const_cast<tA2DP_ENCODER_INTERFACE*>(
             A2DP_VendorGetEncoderInterfaceOpus(kCodecInfoOpusCapability));

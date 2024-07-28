@@ -145,7 +145,6 @@ cc_defaults {
         ":BluetoothHalSources",
         ":BluetoothHciSources",
         ":BluetoothL2capSources",
-        ":BluetoothLogRedactionSources",
         ":BluetoothMetricsSources",
         ":BluetoothNeighborSources",
         ":BluetoothOsSources",
@@ -169,13 +168,13 @@ cc_defaults {
         "libflatbuffers-cpp",
     ],
     whole_static_libs: [
-        "bluetooth_flags_c_lib",
         "libbluetooth_hci_pdl",
         "libbluetooth_l2cap_pdl",
         "libbluetooth_ras_pdl",
         "libbluetooth_smp_pdl",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libaconfig_storage_read_api_cc",
         "libbase",
         "libbluetooth-dumpsys",
@@ -295,7 +294,6 @@ cc_binary {
         ":BluetoothFacade_hci_layer",
         ":BluetoothFacade_l2cap_layer",
         ":BluetoothFacade_neighbor",
-        ":BluetoothFacade_security_layer",
         ":TestMockMainShimStack",
         "facade/facade_main.cc",
         "facade/grpc_root_server.cc",
@@ -314,6 +312,7 @@ cc_binary {
         "BlueberryFacadeGeneratedStub_cc",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "breakpad_client",
         "libPlatformProperties",
         "libbluetooth-dumpsys",
@@ -488,6 +487,7 @@ cc_test {
         "BluetoothGeneratedDumpsysTestData_h",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libbase",
         "libbluetooth-protos",
         "libbluetooth-types",
@@ -555,6 +555,7 @@ cc_test {
         "BluetoothGeneratedDumpsysTestData_h",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libbase",
         "libbluetooth-dumpsys",
         "libbluetooth-dumpsys-test",
@@ -643,6 +644,7 @@ cc_defaults {
         ":BluetoothHciFuzzHelperSources",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libbluetooth-protos",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",

@@ -16,6 +16,8 @@
 
 package com.android.bluetooth.avrcpcontroller;
 
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
+
 import static java.util.Objects.requireNonNull;
 
 import android.annotation.RequiresPermission;
@@ -380,7 +382,7 @@ public class AvrcpControllerService extends ProfileService {
             mService = null;
         }
 
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+        @RequiresPermission(BLUETOOTH_CONNECT)
         private AvrcpControllerService getService(AttributionSource source) {
             // Cache mService because it can change while getService is called
             AvrcpControllerService service = mService;

@@ -109,7 +109,7 @@ class AdapterProperties {
     private int mMaxConnectedAudioDevices = 1;
     private boolean mA2dpOffloadEnabled = false;
 
-    private AdapterService mService;
+    private final AdapterService mService;
     private boolean mDiscovering;
     private long mDiscoveryEndMs; // < Time (ms since epoch) that discovery ended or will end.
     private RemoteDevices mRemoteDevices;
@@ -281,7 +281,6 @@ class AdapterProperties {
             mService.unregisterReceiver(mReceiver);
             mReceiverRegistered = false;
         }
-        mService = null;
         mBondedDevices.clear();
         invalidateBluetoothCaches();
     }

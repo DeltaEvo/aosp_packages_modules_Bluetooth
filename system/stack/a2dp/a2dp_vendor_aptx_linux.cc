@@ -98,9 +98,10 @@ bool A2dpCodecConfigAptx::useRtpHeaderMarkerBit() const { return false; }
 
 void A2dpCodecConfigAptx::debug_codec_dump(int fd) {}
 
-bool A2dpCodecConfigAptx::setCodecConfig(const uint8_t* p_peer_codec_info, bool is_capability,
-                                         uint8_t* p_result_codec_config) {
-  return false;
+tA2DP_STATUS A2dpCodecConfigAptx::setCodecConfig(const uint8_t* p_peer_codec_info,
+                                                 bool is_capability,
+                                                 uint8_t* p_result_codec_config) {
+  return AVDTP_UNSUPPORTED_CONFIGURATION;
 }
 
 bool A2dpCodecConfigAptx::setPeerCodecCapabilities(const uint8_t* p_peer_codec_capabilities) {

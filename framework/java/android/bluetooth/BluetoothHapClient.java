@@ -17,6 +17,9 @@
 
 package android.bluetooth;
 
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
+import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
+
 import android.annotation.CallbackExecutor;
 import android.annotation.FlaggedApi;
 import android.annotation.IntDef;
@@ -334,11 +337,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_HAP_CONNECTION_STATE_CHANGED =
             "android.bluetooth.action.HAP_CONNECTION_STATE_CHANGED";
@@ -358,11 +357,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      * @hide
      */
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_HAP_DEVICE_AVAILABLE =
             "android.bluetooth.action.HAP_DEVICE_AVAILABLE";
@@ -569,11 +564,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void registerCallback(
             @NonNull @CallbackExecutor Executor executor, @NonNull Callback callback) {
         Objects.requireNonNull(executor, "executor cannot be null");
@@ -624,11 +615,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void unregisterCallback(@NonNull Callback callback) {
         Objects.requireNonNull(callback, "callback cannot be null");
 
@@ -667,11 +654,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public boolean setConnectionPolicy(
             @NonNull BluetoothDevice device, @ConnectionPolicy int connectionPolicy) {
         if (DBG) log("setConnectionPolicy(" + device + ", " + connectionPolicy + ")");
@@ -706,11 +689,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public @ConnectionPolicy int getConnectionPolicy(@Nullable BluetoothDevice device) {
         if (VDBG) log("getConnectionPolicy(" + device + ")");
         final IBluetoothHapClient service = getService();
@@ -734,11 +713,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     @Override
     public @NonNull List<BluetoothDevice> getConnectedDevices() {
         if (VDBG) Log.d(TAG, "getConnectedDevices()");
@@ -764,11 +739,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     @Override
     @NonNull
     public List<BluetoothDevice> getDevicesMatchingConnectionStates(@NonNull int[] states) {
@@ -796,11 +767,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     @Override
     @BluetoothProfile.BtProfileState
     public int getConnectionState(@NonNull BluetoothDevice device) {
@@ -838,8 +805,8 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public int getHapGroup(@NonNull BluetoothDevice device) {
         final IBluetoothHapClient service = getService();
@@ -866,11 +833,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     @SystemApi
     @FlaggedApi(Flags.FLAG_SETTINGS_CAN_CONTROL_HAP_PRESET)
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public int getActivePresetIndex(@NonNull BluetoothDevice device) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
@@ -896,11 +859,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public @Nullable BluetoothHapPresetInfo getActivePresetInfo(@NonNull BluetoothDevice device) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
@@ -930,11 +889,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void selectPreset(@NonNull BluetoothDevice device, int presetIndex) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
@@ -966,11 +921,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void selectPresetForGroup(int groupId, int presetIndex) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
@@ -997,11 +948,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     @SystemApi
     @FlaggedApi(Flags.FLAG_SETTINGS_CAN_CONTROL_HAP_PRESET)
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void switchToNextPreset(@NonNull BluetoothDevice device) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
@@ -1031,11 +978,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     @SystemApi
     @FlaggedApi(Flags.FLAG_SETTINGS_CAN_CONTROL_HAP_PRESET)
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void switchToNextPresetForGroup(int groupId) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
@@ -1062,11 +1005,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     @SystemApi
     @FlaggedApi(Flags.FLAG_SETTINGS_CAN_CONTROL_HAP_PRESET)
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void switchToPreviousPreset(@NonNull BluetoothDevice device) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
@@ -1096,11 +1035,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     @SystemApi
     @FlaggedApi(Flags.FLAG_SETTINGS_CAN_CONTROL_HAP_PRESET)
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void switchToPreviousPresetForGroup(int groupId) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
@@ -1126,11 +1061,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     @SystemApi
     @FlaggedApi(Flags.FLAG_SETTINGS_CAN_CONTROL_HAP_PRESET)
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     @Nullable
     public BluetoothHapPresetInfo getPresetInfo(@NonNull BluetoothDevice device, int presetIndex) {
         final IBluetoothHapClient service = getService();
@@ -1156,11 +1087,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public @NonNull List<BluetoothHapPresetInfo> getAllPresetInfo(@NonNull BluetoothDevice device) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
@@ -1184,11 +1111,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      * @hide
      */
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public int getFeatures(@NonNull BluetoothDevice device) {
         final IBluetoothHapClient service = getService();
         if (service == null) {
@@ -1213,11 +1136,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     @HearingAidType
     public int getHearingAidType(@NonNull BluetoothDevice device) {
         return getFeatures(device) & FEATURE_HEARING_AID_TYPE_MASK;
@@ -1232,11 +1151,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public boolean supportsSynchronizedPresets(@NonNull BluetoothDevice device) {
         return (getFeatures(device) & FEATURE_SYNCHRONIZATED_PRESETS_MASK)
                 == FEATURE_SYNCHRONIZATED_PRESETS_MASK;
@@ -1251,11 +1166,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public boolean supportsIndependentPresets(@NonNull BluetoothDevice device) {
         return (getFeatures(device) & FEATURE_INDEPENDENT_PRESETS_MASK)
                 == FEATURE_INDEPENDENT_PRESETS_MASK;
@@ -1270,11 +1181,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public boolean supportsDynamicPresets(@NonNull BluetoothDevice device) {
         return (getFeatures(device) & FEATURE_DYNAMIC_PRESETS_MASK) == FEATURE_DYNAMIC_PRESETS_MASK;
     }
@@ -1288,11 +1195,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public boolean supportsWritablePresets(@NonNull BluetoothDevice device) {
         return (getFeatures(device) & FEATURE_WRITABLE_PRESETS_MASK)
                 == FEATURE_WRITABLE_PRESETS_MASK;
@@ -1314,11 +1217,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void setPresetName(
             @NonNull BluetoothDevice device, int presetIndex, @NonNull String name) {
         final IBluetoothHapClient service = getService();
@@ -1351,11 +1250,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      */
     @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED
-            })
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void setPresetNameForGroup(int groupId, int presetIndex, @NonNull String name) {
         final IBluetoothHapClient service = getService();
         if (service == null) {

@@ -79,7 +79,6 @@ static auto mockLc3CodecInterface = MockLc3CodecInterface{};
 
 struct bluetooth::core::HACK_ProfileInterface HACK_profileInterface = {
         // HID
-        .btif_hh_connect = nullptr,
         .btif_hh_virtual_unplug = nullptr,
         .bta_hh_read_ssr_param = nullptr,
 

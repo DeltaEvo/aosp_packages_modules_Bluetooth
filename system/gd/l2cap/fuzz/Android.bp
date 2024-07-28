@@ -33,6 +33,7 @@ cc_fuzz {
         "fuzz_l2cap.cc",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libbte",
     ],
     fuzz_config: {

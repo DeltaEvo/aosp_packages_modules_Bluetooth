@@ -31,10 +31,8 @@
 #include "stack/include/inq_hci_link_interface.h"
 #include "stack/include/main_thread.h"
 #include "stack/test/btm/btm_test_fixtures.h"
-#include "test/fake/fake_looper.h"
+#include "test/common/mock_functions.h"
 #include "test/mock/mock_main_shim_entry.h"
-#include "test/mock/mock_osi_allocator.h"
-#include "test/mock/mock_osi_thread.h"
 #include "types/raw_address.h"
 
 extern tBTM_CB btm_cb;

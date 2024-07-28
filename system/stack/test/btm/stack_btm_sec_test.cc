@@ -20,7 +20,6 @@
 
 #include <vector>
 
-#include "common/init_flags.h"
 #include "common/strings.h"
 #include "hci/hci_layer_mock.h"
 #include "internal_include/bt_target.h"
@@ -112,8 +111,6 @@ protected:
 };
 
 TEST_F(StackBtmSecWithInitFreeTest, btm_sec_encrypt_change) {
-  bluetooth::common::InitFlags::SetAllForTesting();
-
   RawAddress bd_addr = RawAddress({0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6});
   const uint16_t classic_handle = 0x1234;
   const uint16_t ble_handle = 0x9876;
@@ -248,8 +245,6 @@ TEST_F(StackBtmSecTest, bond_type_text) {
 }
 
 TEST_F(StackBtmSecWithInitFreeTest, wipe_secrets_and_remove) {
-  bluetooth::common::InitFlags::SetAllForTesting();
-
   RawAddress bd_addr = RawAddress({0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6});
   const uint16_t classic_handle = 0x1234;
   const uint16_t ble_handle = 0x9876;

@@ -52,8 +52,6 @@ struct BTM_BleVerifySignature BTM_BleVerifySignature;
 struct BTM_GetDeviceDHK BTM_GetDeviceDHK;
 struct BTM_GetDeviceEncRoot BTM_GetDeviceEncRoot;
 struct BTM_GetDeviceIDRoot BTM_GetDeviceIDRoot;
-struct BTM_ReadConnectedTransportAddress BTM_ReadConnectedTransportAddress;
-struct BTM_ReadDevInfo BTM_ReadDevInfo;
 struct BTM_GetRemoteDeviceName BTM_GetRemoteDeviceName;
 struct BTM_SecAddBleDevice BTM_SecAddBleDevice;
 struct BTM_SecAddBleKey BTM_SecAddBleKey;
@@ -102,7 +100,6 @@ const Octet16 BTM_GetDeviceEncRoot::return_value{0xd5, 0xcb, 0x84, 0x54, 0xd1, 0
                                                  0xff, 0xff, 0xb2, 0xec, 0x71, 0x2b, 0xae, 0xab};
 const Octet16 BTM_GetDeviceIDRoot::return_value{0xd5, 0xcb, 0x84, 0x54, 0xd1, 0x77, 0x73, 0x3e,
                                                 0xff, 0xff, 0xb2, 0xec, 0x71, 0x2b, 0xae, 0xab};
-bool BTM_ReadConnectedTransportAddress::return_value = false;
 tBTM_STATUS BTM_SetBleDataLength::return_value = BTM_SUCCESS;
 bool BTM_UseLeLink::return_value = false;
 bool btm_ble_get_acl_remote_addr::return_value = false;
@@ -179,15 +176,6 @@ const Octet16& BTM_GetDeviceEncRoot() {
 const Octet16& BTM_GetDeviceIDRoot() {
   inc_func_call_count(__func__);
   return test::mock::stack_btm_ble::BTM_GetDeviceIDRoot();
-}
-bool BTM_ReadConnectedTransportAddress(RawAddress* remote_bda, tBT_TRANSPORT transport) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_btm_ble::BTM_ReadConnectedTransportAddress(remote_bda, transport);
-}
-void BTM_ReadDevInfo(const RawAddress& remote_bda, tBT_DEVICE_TYPE* p_dev_type,
-                     tBLE_ADDR_TYPE* p_addr_type) {
-  inc_func_call_count(__func__);
-  test::mock::stack_btm_ble::BTM_ReadDevInfo(remote_bda, p_dev_type, p_addr_type);
 }
 bool BTM_GetRemoteDeviceName(const RawAddress& bd_addr, BD_NAME bd_name) {
   inc_func_call_count(__func__);

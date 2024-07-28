@@ -31,8 +31,8 @@ protected:
                           btav_a2dp_codec_priority_t codec_priority, bool is_source)
       : A2dpCodecConfig(codec_index, A2DP_CODEC_ID_OPUS, name, codec_priority),
         is_source_(is_source) {}
-  bool setCodecConfig(const uint8_t* p_peer_codec_info, bool is_capability,
-                      uint8_t* p_result_codec_config) override;
+  tA2DP_STATUS setCodecConfig(const uint8_t* p_peer_codec_info, bool is_capability,
+                              uint8_t* p_result_codec_config) override;
   bool setPeerCodecCapabilities(const uint8_t* p_peer_codec_capabilities) override;
 
 private:
@@ -80,7 +80,7 @@ bool A2DP_IsCodecValidOpus(const uint8_t* p_codec_info);
 // Checks whether A2DP Opus Sink codec is supported.
 // |p_codec_info| contains information about the codec capabilities.
 // Returns true if the A2DP Opus Sink codec is supported, otherwise false.
-bool A2DP_IsVendorSinkCodecSupportedOpus(const uint8_t* p_codec_info);
+tA2DP_STATUS A2DP_IsVendorSinkCodecSupportedOpus(const uint8_t* p_codec_info);
 
 // Checks whether the A2DP data packets should contain RTP header.
 // |content_protection_enabled| is true if Content Protection is

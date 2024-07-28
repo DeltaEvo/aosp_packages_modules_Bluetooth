@@ -911,7 +911,7 @@ public class HearingAidService extends ProfileService {
             mService = null;
         }
 
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+        @RequiresPermission(BLUETOOTH_CONNECT)
         private HearingAidService getService(AttributionSource source) {
             // Cache mService because it can change while getService is called
             HearingAidService service = mService;

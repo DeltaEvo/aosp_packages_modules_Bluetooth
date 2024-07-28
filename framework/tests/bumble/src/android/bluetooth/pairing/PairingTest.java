@@ -462,9 +462,7 @@ public class PairingTest {
         // so that ACTION_UUID is received here.
         verifyIntentReceived(
                 hasAction(BluetoothDevice.ACTION_UUID),
-                hasExtra(
-                        BluetoothDevice.EXTRA_UUID,
-                        Matchers.arrayContainingInAnyOrder(BATTERY_UUID)));
+                hasExtra(BluetoothDevice.EXTRA_UUID, Matchers.hasItemInArray(BATTERY_UUID)));
 
         unregisterIntentActions(
                 BluetoothDevice.ACTION_BOND_STATE_CHANGED,

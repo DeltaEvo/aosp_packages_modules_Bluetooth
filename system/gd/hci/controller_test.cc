@@ -27,7 +27,6 @@
 #include <sstream>
 
 #include "common/bind.h"
-#include "common/init_flags.h"
 #include "hci/address.h"
 #include "hci/hci_layer_fake.h"
 #include "module_dumper.h"
@@ -282,7 +281,6 @@ class ControllerTest : public ::testing::Test {
 protected:
   void SetUp() override {
     feature_spec_version = feature_spec_version_;
-    bluetooth::common::InitFlags::SetAllForTesting();
     test_hci_layer_ = new HciLayerFakeForController;
     test_hci_layer_->vendor_capabilities_ = std::move(vendor_capabilities_);
     vendor_capabilities_.reset();
