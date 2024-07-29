@@ -19,6 +19,7 @@ import static com.android.bluetooth.BtRestrictedStatsLog.RESTRICTED_BLUETOOTH_DE
 
 import android.app.AlarmManager;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothProtoEnums;
 import android.content.Context;
 import android.os.Build;
 import android.os.SystemClock;
@@ -334,7 +335,51 @@ public class MetricsLogger {
                 BluetoothRemoteDeviceInformation.OUI_FIELD_NUMBER,
                 getOui(device));
 
+        // write deviceTypeMetaData
+        writeFieldIfNotNull(
+                proto,
+                ProtoOutputStream.FIELD_TYPE_INT32,
+                ProtoOutputStream.FIELD_COUNT_SINGLE,
+                BluetoothRemoteDeviceInformation.DEVICE_TYPE_METADATA_FIELD_NUMBER,
+                getDeviceTypeMetaData(device));
+
         return proto.getBytes();
+    }
+
+    private int getDeviceTypeMetaData(BluetoothDevice device) {
+        byte[] deviceTypeMetaDataBytes =
+                mAdapterService.getMetadata(device, BluetoothDevice.METADATA_DEVICE_TYPE);
+
+        if (deviceTypeMetaDataBytes == null) {
+            return BluetoothProtoEnums.NOT_AVAILABLE;
+        }
+        String deviceTypeMetaData = new String(deviceTypeMetaDataBytes, StandardCharsets.UTF_8);
+
+        switch (deviceTypeMetaData) {
+            case "Watch":
+                return BluetoothProtoEnums.WATCH;
+
+            case "Untethered Headset":
+                return BluetoothProtoEnums.UNTETHERED_HEADSET;
+
+            case "Stylus":
+                return BluetoothProtoEnums.STYLUS;
+
+            case "Speaker":
+                return BluetoothProtoEnums.SPEAKER;
+
+            case "Headset":
+                return BluetoothProtoEnums.HEADSET;
+
+            case "Carkit":
+                return BluetoothProtoEnums.CARKIT;
+
+            case "Default":
+                return BluetoothProtoEnums.DEFAULT;
+
+            default:
+                return BluetoothProtoEnums.NOT_AVAILABLE;
+        }
     }
 
     private int getOui(BluetoothDevice device) {

@@ -321,7 +321,15 @@ void bta_dm_disable() {
     log::warn("Unable to disable classic BR/EDR connectability");
   }
 
-  bta_dm_disable_pm();
+  /* if sniff is offload, no need to handle it in the stack */
+  if (com::android::bluetooth::flags::enable_sniff_offload() &&
+      osi_property_get_bool(kPropertySniffOffloadEnabled, false)) {
+    log::info("Sniff offloading. Skip bta_dm_disable_pm.");
+  } else {
+    /* Disable bluetooth low power manager */
+    bta_dm_disable_pm();
+  }
+
   if (com::android::bluetooth::flags::separate_service_and_device_discovery()) {
     bta_dm_disc_disable_search();
     bta_dm_disc_disable_disc();

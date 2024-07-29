@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-#include "acl_scheduler.h"
+#include "hci/acl_manager/acl_scheduler.h"
 
 #include <bluetooth/log.h>
 
+#include <deque>
 #include <optional>
 #include <unordered_set>
+#include <utility>
 #include <variant>
 
 namespace bluetooth {
@@ -160,12 +162,17 @@ struct AclScheduler::impl {
   void Stop() { stopped_ = true; }
 
 private:
+  bool is_ready_to_send_next_operation() const {
+    return incoming_connecting_address_set_.empty() && !outgoing_entry_.has_value() &&
+           !pending_outgoing_operations_.empty();
+  }
+
   void try_dequeue_next_operation() {
     if (stopped_) {
       return;
     }
-    if (incoming_connecting_address_set_.empty() && !outgoing_entry_.has_value() &&
-        !pending_outgoing_operations_.empty()) {
+
+    if (is_ready_to_send_next_operation()) {
       log::info("Pending connections is not empty; so sending next connection");
       auto entry = std::move(pending_outgoing_operations_.front());
       pending_outgoing_operations_.pop_front();

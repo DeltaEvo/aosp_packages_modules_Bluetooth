@@ -73,10 +73,6 @@ public class BluetoothLeCallControlProxy {
         mBluetoothLeCallControl.unregisterBearer();
     }
 
-    public int getContentControlId() {
-        return mBluetoothLeCallControl.getContentControlId();
-    }
-
     public void requestResult(int requestId, int result) {
         mBluetoothLeCallControl.requestResult(requestId, result);
     }

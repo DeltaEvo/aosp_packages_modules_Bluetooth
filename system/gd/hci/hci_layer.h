@@ -29,6 +29,7 @@
 #include "hci/distance_measurement_interface.h"
 #include "hci/hci_interface.h"
 #include "hci/hci_packets.h"
+#include "hci/inquiry_interface.h"
 #include "hci/le_acl_connection_interface.h"
 #include "hci/le_advertising_interface.h"
 #include "hci/le_iso_interface.h"
@@ -118,6 +119,9 @@ public:
 
   virtual DistanceMeasurementInterface* GetDistanceMeasurementInterface(
           common::ContextualCallback<void(LeMetaEventView)> event_handler);
+
+  std::unique_ptr<InquiryInterface> GetInquiryInterface(
+          common::ContextualCallback<void(EventView)> event_handler) override;
 
   std::string ToString() const override { return "Hci Layer"; }
 

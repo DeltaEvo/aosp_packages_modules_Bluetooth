@@ -172,10 +172,11 @@ struct btm_client_interface_t default_btm_client_interface = {
         .ble = {
                 .BTM_BleGetEnergyInfo = [](tBTM_BLE_ENERGY_INFO_CBACK* /* p_ener_cback */)
                         -> tBTM_STATUS { return BTM_SUCCESS; },
-                .BTM_BleObserve =
-                        [](bool /* start */, uint8_t /* duration */,
-                           tBTM_INQ_RESULTS_CB* /* p_results_cb */, tBTM_CMPL_CB* /* p_cmpl_cb */,
-                           bool /* low_latency_scan */) -> tBTM_STATUS { return BTM_SUCCESS; },
+                .BTM_BleObserve = [](bool /* start */, uint8_t /* duration */,
+                                     tBTM_INQ_RESULTS_CB* /* p_results_cb */,
+                                     tBTM_CMPL_CB* /* p_cmpl_cb */) -> tBTM_STATUS {
+                  return BTM_SUCCESS;
+                },
                 .BTM_SetBleDataLength = [](const RawAddress& /* bd_addr */,
                                            uint16_t /* tx_pdu_length */) -> tBTM_STATUS {
                   return BTM_SUCCESS;

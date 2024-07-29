@@ -867,6 +867,10 @@ static void process_ind_evt(tBTA_HF_CLIENT_IND* ind) {
 static void btif_hf_client_upstreams_evt(uint16_t event, char* p_param) {
   tBTA_HF_CLIENT* p_data = (tBTA_HF_CLIENT*)p_param;
 
+  if (p_data == nullptr) {
+    log::error("event={} ({})'s param is null", dump_hf_client_event(event), event);
+    return;
+  }
   btif_hf_client_cb_t* cb = btif_hf_client_get_cb_by_bda(p_data->bd_addr);
   if (cb == NULL && event == BTA_HF_CLIENT_OPEN_EVT) {
     log::verbose("event BTA_HF_CLIENT_OPEN_EVT allocating block");
