@@ -64,28 +64,30 @@ import java.util.Map;
 
 /** Provides Bluetooth Hearing Access profile, as a service. */
 public class HapClientService extends ProfileService {
-    private static final String TAG = "HapClientService";
+    private static final String TAG = HapClientService.class.getSimpleName();
 
     // Upper limit of all HearingAccess devices: Bonded or Connected
     private static final int MAX_HEARING_ACCESS_STATE_MACHINES = 10;
     private static final int SM_THREAD_JOIN_TIMEOUT_MS = 1000;
-    private static HapClientService sHapClient;
-    private final Map<BluetoothDevice, HapClientStateMachine> mStateMachines = new HashMap<>();
-    @VisibleForTesting HapClientNativeInterface mHapClientNativeInterface;
-    private AdapterService mAdapterService;
-    private DatabaseManager mDatabaseManager;
-    private HandlerThread mStateMachinesThread;
-    private Handler mHandler;
 
+    private static HapClientService sHapClient;
+
+    private final Map<BluetoothDevice, HapClientStateMachine> mStateMachines = new HashMap<>();
     private final Map<BluetoothDevice, Integer> mDeviceCurrentPresetMap = new HashMap<>();
     private final Map<BluetoothDevice, Integer> mDeviceFeaturesMap = new HashMap<>();
     private final Map<BluetoothDevice, List<BluetoothHapPresetInfo>> mPresetsMap = new HashMap<>();
+    private final AdapterService mAdapterService;
+    private final HapClientNativeInterface mHapClientNativeInterface;
 
     @VisibleForTesting
     @GuardedBy("mCallbacks")
     final RemoteCallbackList<IBluetoothHapClientCallback> mCallbacks = new RemoteCallbackList<>();
 
     @VisibleForTesting ServiceFactory mFactory = new ServiceFactory();
+
+    private DatabaseManager mDatabaseManager;
+    private HandlerThread mStateMachinesThread;
+    private Handler mHandler;
 
     public static boolean isEnabled() {
         return BluetoothProperties.isProfileHapClientEnabled().orElse(false);
