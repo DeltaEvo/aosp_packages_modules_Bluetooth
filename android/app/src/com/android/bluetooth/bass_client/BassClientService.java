@@ -2560,11 +2560,21 @@ public class BassClientService extends ProfileService {
                 if (broadcastId != BassConstants.INVALID_BROADCAST_ID
                         && getCachedBroadcast(broadcastId) != null) {
                     // If the source has been synced before, try to re-sync
-                    // with the source by previously cached scan result
-                    addSelectSourceRequest(getCachedBroadcast(broadcastId), true);
+                    // with the source by previously cached scan result.
+                    // Check if not added already
+                    boolean alreadyAdded = false;
                     synchronized (mPendingSourcesToAdd) {
+                        for (AddSourceData pendingSourcesToAdd : mPendingSourcesToAdd) {
+                            if (pendingSourcesToAdd.mSourceMetadata.getBroadcastId()
+                                    == broadcastId) {
+                                alreadyAdded = true;
+                            }
+                        }
                         mPendingSourcesToAdd.add(
                                 new AddSourceData(sink, sourceMetadata, isGroupOp));
+                        if (!alreadyAdded) {
+                            addSelectSourceRequest(getCachedBroadcast(broadcastId), true);
+                        }
                     }
                 } else {
                     log("AddSource: broadcast not cached or invalid, broadcastId: " + broadcastId);
