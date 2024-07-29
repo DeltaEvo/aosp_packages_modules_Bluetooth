@@ -72,3 +72,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "initiate_multiple_hid_connections"
+    namespace: "bluetooth"
+    description: "Allow HID host to initiate multiple HID connections at a time"
+    bug: "356141637"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
