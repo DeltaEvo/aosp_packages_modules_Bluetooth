@@ -78,16 +78,13 @@ import java.util.function.Predicate;
 /**
  * A helper class which contains all scan related functions extracted from {@link
  * com.android.bluetooth.gatt.GattService}. The purpose of this class is to preserve scan
- * functionality within GattService and provide the same functionality in a new scan dedicated
- * {@link com.android.bluetooth.btservice.ProfileService} when introduced.
+ * functionality within GattService and provide the same functionality in {@link ScanController}.
  */
 public class TransitionalScanHelper {
     private static final String TAG = GattServiceConfig.TAG_PREFIX + "ScanHelper";
 
     // Batch scan related constants.
     private static final int TRUNCATED_RESULT_SIZE = 11;
-    static final int SCAN_FILTER_ENABLED = 1;
-    static final int SCAN_FILTER_MODIFIED = 2;
 
     /** The default floor value for LE batch scan report delays greater than 0 */
     @VisibleForTesting static final long DEFAULT_REPORT_DELAY_FLOOR = 5000;
