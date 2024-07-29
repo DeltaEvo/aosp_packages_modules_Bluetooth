@@ -226,15 +226,6 @@ public class HapClientTest {
         Assert.assertEquals(mService, HapClientService.getHapClientService());
     }
 
-    /** Test stop HA Service Client */
-    @Test
-    public void testStopHapService() {
-        Assert.assertEquals(mService, HapClientService.getHapClientService());
-
-        InstrumentationRegistry.getInstrumentation().runOnMainSync(mService::stop);
-        InstrumentationRegistry.getInstrumentation().runOnMainSync(mService::start);
-    }
-
     /** Test get/set policy for BluetoothDevice */
     @Test
     public void testGetSetPolicy() throws Exception {

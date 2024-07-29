@@ -77,6 +77,9 @@ public class HapClientService extends ProfileService {
     private final Map<BluetoothDevice, Integer> mDeviceFeaturesMap = new HashMap<>();
     private final Map<BluetoothDevice, List<BluetoothHapPresetInfo>> mPresetsMap = new HashMap<>();
     private final AdapterService mAdapterService;
+    private final DatabaseManager mDatabaseManager;
+    private final Handler mHandler;
+    private final HandlerThread mStateMachinesThread;
     private final HapClientNativeInterface mHapClientNativeInterface;
 
     @VisibleForTesting
@@ -84,10 +87,6 @@ public class HapClientService extends ProfileService {
     final RemoteCallbackList<IBluetoothHapClientCallback> mCallbacks = new RemoteCallbackList<>();
 
     @VisibleForTesting ServiceFactory mFactory = new ServiceFactory();
-
-    private DatabaseManager mDatabaseManager;
-    private HandlerThread mStateMachinesThread;
-    private Handler mHandler;
 
     public static boolean isEnabled() {
         return BluetoothProperties.isProfileHapClientEnabled().orElse(false);
@@ -126,31 +125,7 @@ public class HapClientService extends ProfileService {
         super(adapterService);
         mAdapterService = requireNonNull(adapterService);
         mHapClientNativeInterface = requireNonNull(nativeInterface);
-    }
-
-    @Override
-    public void cleanup() {
-        Log.d(TAG, "cleanup()");
-    }
-
-    @Override
-    protected IProfileServiceBinder initBinder() {
-        return new BluetoothHapClientBinder(this);
-    }
-
-    @Override
-    public void start() {
-        Log.d(TAG, "start()");
-
-        if (sHapClient != null) {
-            throw new IllegalStateException("start() called twice");
-        }
-
-        // Get DatabaseManager
-        mDatabaseManager =
-                requireNonNull(
-                        mAdapterService.getDatabase(),
-                        "DatabaseManager cannot be null when HapClientService starts");
+        mDatabaseManager = requireNonNull(mAdapterService.getDatabase());
 
         // Start handler thread for state machines
         mHandler = new Handler(Looper.getMainLooper());
@@ -163,6 +138,11 @@ public class HapClientService extends ProfileService {
 
         // Mark service as started
         setHapClient(this);
+    }
+
+    @Override
+    protected IProfileServiceBinder initBinder() {
+        return new BluetoothHapClientBinder(this);
     }
 
     @Override
@@ -185,21 +165,15 @@ public class HapClientService extends ProfileService {
             mStateMachines.clear();
         }
 
-        if (mStateMachinesThread != null) {
-            try {
-                mStateMachinesThread.quitSafely();
-                mStateMachinesThread.join(SM_THREAD_JOIN_TIMEOUT_MS);
-                mStateMachinesThread = null;
-            } catch (InterruptedException e) {
-                // Do not rethrow as we are shutting down anyway
-            }
+        try {
+            mStateMachinesThread.quitSafely();
+            mStateMachinesThread.join(SM_THREAD_JOIN_TIMEOUT_MS);
+        } catch (InterruptedException e) {
+            // Do not rethrow as we are shutting down anyway
         }
 
         // Unregister Handler and stop all queued messages.
-        if (mHandler != null) {
-            mHandler.removeCallbacksAndMessages(null);
-            mHandler = null;
-        }
+        mHandler.removeCallbacksAndMessages(null);
 
         // Cleanup GATT interface
         mHapClientNativeInterface.cleanup();
