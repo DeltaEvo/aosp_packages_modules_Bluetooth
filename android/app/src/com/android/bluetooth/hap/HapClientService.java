@@ -23,7 +23,6 @@ import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 import static java.util.Objects.requireNonNull;
 
 import android.annotation.Nullable;
-import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothCsipSetCoordinator;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHapClient;
@@ -32,9 +31,7 @@ import android.bluetooth.BluetoothLeAudio;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothStatusCodes;
 import android.bluetooth.BluetoothUuid;
-import android.bluetooth.IBluetoothHapClient;
 import android.bluetooth.IBluetoothHapClientCallback;
-import android.content.AttributionSource;
 import android.content.Intent;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -142,7 +139,7 @@ public class HapClientService extends ProfileService {
 
     @Override
     protected IProfileServiceBinder initBinder() {
-        return new BluetoothHapClientBinder(this);
+        return new HapClientBinder(this);
     }
 
     @Override
@@ -1011,305 +1008,15 @@ public class HapClientService extends ProfileService {
         }
     }
 
-    /** Binder object: must be a static class or memory leak may occur */
-    @VisibleForTesting
-    static class BluetoothHapClientBinder extends IBluetoothHapClient.Stub
-            implements IProfileServiceBinder {
-        private HapClientService mService;
-
-        BluetoothHapClientBinder(HapClientService svc) {
-            mService = svc;
+    void registerCallback(IBluetoothHapClientCallback callback) {
+        synchronized (mCallbacks) {
+            mCallbacks.register(callback);
         }
+    }
 
-        @Override
-        public void cleanup() {
-            mService = null;
-        }
-
-        @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
-        private HapClientService getService(AttributionSource source) {
-            requireNonNull(source);
-            // Cache mService because it can change while getService is called
-            HapClientService service = mService;
-
-            if (Utils.isInstrumentationTestMode()) {
-                return service;
-            }
-
-            if (!Utils.checkServiceAvailable(service, TAG)
-                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG)
-                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
-                Log.w(TAG, "Hearing Access call not allowed for non-active user");
-                return null;
-            }
-
-            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
-            return service;
-        }
-
-        @Override
-        public List<BluetoothDevice> getConnectedDevices(AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                return Collections.emptyList();
-            }
-
-            return service.getConnectedDevices();
-        }
-
-        @Override
-        public List<BluetoothDevice> getDevicesMatchingConnectionStates(
-                int[] states, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                return Collections.emptyList();
-            }
-
-            return service.getDevicesMatchingConnectionStates(states);
-        }
-
-        @Override
-        public int getConnectionState(BluetoothDevice device, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                return BluetoothProfile.STATE_DISCONNECTED;
-            }
-
-            requireNonNull(device);
-
-            return service.getConnectionState(device);
-        }
-
-        @Override
-        public boolean setConnectionPolicy(
-                BluetoothDevice device, int connectionPolicy, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                return false;
-            }
-
-            requireNonNull(device);
-
-            return service.setConnectionPolicy(device, connectionPolicy);
-        }
-
-        @Override
-        public int getConnectionPolicy(BluetoothDevice device, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                return BluetoothProfile.CONNECTION_POLICY_UNKNOWN;
-            }
-
-            requireNonNull(device);
-
-            return service.getConnectionPolicy(device);
-        }
-
-        @Override
-        public int getActivePresetIndex(BluetoothDevice device, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                return BluetoothHapClient.PRESET_INDEX_UNAVAILABLE;
-            }
-
-            requireNonNull(device);
-
-            return service.getActivePresetIndex(device);
-        }
-
-        @Override
-        public BluetoothHapPresetInfo getActivePresetInfo(
-                BluetoothDevice device, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                return null;
-            }
-
-            requireNonNull(device);
-
-            return service.getActivePresetInfo(device);
-        }
-
-        @Override
-        public int getHapGroup(BluetoothDevice device, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                return BluetoothCsipSetCoordinator.GROUP_ID_INVALID;
-            }
-
-            requireNonNull(device);
-
-            return service.getHapGroup(device);
-        }
-
-        @Override
-        public void selectPreset(
-                BluetoothDevice device, int presetIndex, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                Log.w(TAG, "service is null");
-                return;
-            }
-
-            requireNonNull(device);
-
-            service.selectPreset(device, presetIndex);
-        }
-
-        @Override
-        public void selectPresetForGroup(int groupId, int presetIndex, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                Log.w(TAG, "service is null");
-                return;
-            }
-
-            service.selectPresetForGroup(groupId, presetIndex);
-        }
-
-        @Override
-        public void switchToNextPreset(BluetoothDevice device, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                Log.w(TAG, "service is null");
-                return;
-            }
-
-            requireNonNull(device);
-
-            service.switchToNextPreset(device);
-        }
-
-        @Override
-        public void switchToNextPresetForGroup(int groupId, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                Log.w(TAG, "service is null");
-                return;
-            }
-
-            service.switchToNextPresetForGroup(groupId);
-        }
-
-        @Override
-        public void switchToPreviousPreset(BluetoothDevice device, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                Log.w(TAG, "service is null");
-                return;
-            }
-
-            requireNonNull(device);
-
-            service.switchToPreviousPreset(device);
-        }
-
-        @Override
-        public void switchToPreviousPresetForGroup(int groupId, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                Log.w(TAG, "service is null");
-                return;
-            }
-
-            service.switchToPreviousPresetForGroup(groupId);
-        }
-
-        @Override
-        public BluetoothHapPresetInfo getPresetInfo(
-                BluetoothDevice device, int presetIndex, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                return null;
-            }
-
-            requireNonNull(device);
-
-            return service.getPresetInfo(device, presetIndex);
-        }
-
-        @Override
-        public List<BluetoothHapPresetInfo> getAllPresetInfo(
-                BluetoothDevice device, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                return Collections.emptyList();
-            }
-
-            requireNonNull(device);
-
-            return service.getAllPresetInfo(device);
-        }
-
-        @Override
-        public int getFeatures(BluetoothDevice device, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                return 0x00;
-            }
-
-            requireNonNull(device);
-
-            return service.getFeatures(device);
-        }
-
-        @Override
-        public void setPresetName(
-                BluetoothDevice device, int presetIndex, String name, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                Log.w(TAG, "service is null");
-                return;
-            }
-
-            requireNonNull(device);
-            requireNonNull(name);
-
-            service.setPresetName(device, presetIndex, name);
-        }
-
-        @Override
-        public void setPresetNameForGroup(
-                int groupId, int presetIndex, String name, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                Log.w(TAG, "service is null");
-                return;
-            }
-
-            requireNonNull(name);
-
-            service.setPresetNameForGroup(groupId, presetIndex, name);
-        }
-
-        @Override
-        public void registerCallback(
-                IBluetoothHapClientCallback callback, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                return;
-            }
-
-            requireNonNull(callback);
-
-            synchronized (service.mCallbacks) {
-                service.mCallbacks.register(callback);
-            }
-        }
-
-        @Override
-        public void unregisterCallback(
-                IBluetoothHapClientCallback callback, AttributionSource source) {
-            HapClientService service = getService(source);
-            if (service == null) {
-                return;
-            }
-
-            requireNonNull(callback);
-
-            synchronized (service.mCallbacks) {
-                service.mCallbacks.unregister(callback);
-            }
+    void unregisterCallback(IBluetoothHapClientCallback callback) {
+        synchronized (mCallbacks) {
+            mCallbacks.unregister(callback);
         }
     }
 }
