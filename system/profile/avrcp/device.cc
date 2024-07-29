@@ -1505,8 +1505,8 @@ void Device::SetBrowsedPlayerResponse(uint8_t label, std::shared_ptr<SetBrowsedP
   current_path_ = std::stack<std::string>();
   current_path_.push(root_id);
 
-  auto response =
-          SetBrowsedPlayerResponseBuilder::MakeBuilder(Status::NO_ERROR, 0x0000, num_items, 0, "");
+  auto response = SetBrowsedPlayerResponseBuilder::MakeBuilder(Status::NO_ERROR, 0x0000, num_items,
+                                                               0, root_id);
   send_message(label, true, std::move(response));
 }
 
