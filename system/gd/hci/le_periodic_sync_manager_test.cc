@@ -753,6 +753,67 @@ TEST_F_WITH_FLAGS(PeriodicSyncManagerTest,
   sync_handler();
 }
 
+TEST_F(PeriodicSyncManagerTest, onStartSyncTimeout_callWithoutPendingRequestsAndPeriodicSyncs) {
+  periodic_sync_manager_->OnStartSyncTimeout();
+  sync_handler();
+}
+
+TEST_F(PeriodicSyncManagerTest, onStartSyncTimeout_callWithoutPeriodicSyncs) {
+  uint16_t sync_handle = 0x12;
+  Address address;
+  Address::FromString("00:11:22:33:44:55", address);
+  AddressWithType address_with_type = AddressWithType(address, AddressType::PUBLIC_DEVICE_ADDRESS);
+
+  uint8_t advertiser_sid_1 = 0x02;
+  int request_id_1 = 0x01;
+  PeriodicSyncStates request{
+          .request_id = request_id_1,
+          .advertiser_sid = advertiser_sid_1,
+          .address_with_type = address_with_type,
+          .sync_handle = sync_handle,
+          .sync_state = PeriodicSyncState::PERIODIC_SYNC_STATE_IDLE,
+  };
+  ASSERT_NO_FATAL_FAILURE(test_le_scanning_interface_->SetCommandFuture());
+  periodic_sync_manager_->StartSync(request, 0x04, 0x0A);
+
+  // First timeout to erase periodic_syncs_
+  periodic_sync_manager_->OnStartSyncTimeout();
+  // Second to actual check
+  periodic_sync_manager_->OnStartSyncTimeout();
+  sync_handler();
+}
+
+TEST_F(PeriodicSyncManagerTest,
+       handlePeriodicAdvertisingCreateSyncStatus_callWithoutPeriodicSyncs) {
+  uint16_t sync_handle = 0x12;
+  Address address;
+  Address::FromString("00:11:22:33:44:55", address);
+  AddressWithType address_with_type = AddressWithType(address, AddressType::PUBLIC_DEVICE_ADDRESS);
+
+  int request_id_1 = 0x01;
+  uint8_t advertiser_sid_1 = 0x02;
+  PeriodicSyncStates request{
+          .request_id = request_id_1,
+          .advertiser_sid = advertiser_sid_1,
+          .address_with_type = address_with_type,
+          .sync_handle = sync_handle,
+          .sync_state = PeriodicSyncState::PERIODIC_SYNC_STATE_IDLE,
+  };
+  ASSERT_NO_FATAL_FAILURE(test_le_scanning_interface_->SetCommandFuture());
+  periodic_sync_manager_->StartSync(request, 0x04, 0x0A);
+
+  // Timeout to erase periodic_syncs_
+  periodic_sync_manager_->OnStartSyncTimeout();
+
+  auto packet =
+          test_le_scanning_interface_->GetCommand(OpCode::LE_PERIODIC_ADVERTISING_CREATE_SYNC);
+  LePeriodicAdvertisingCreateSyncView::Create(LeScanningCommandView::Create(packet));
+  test_le_scanning_interface_->CommandStatusCallback(
+          LePeriodicAdvertisingCreateSyncStatusBuilder::Create(ErrorCode::MEMORY_CAPACITY_EXCEEDED,
+                                                               0x00));
+  sync_handler();
+}
+
 TEST_F(PeriodicSyncManagerTest, handle_periodic_advertising_report_test) {
   uint16_t sync_handle = 0x12;
   uint8_t advertiser_sid = 0x02;
