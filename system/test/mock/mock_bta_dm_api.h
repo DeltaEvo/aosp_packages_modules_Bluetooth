@@ -177,14 +177,12 @@ struct BTA_DmBleResetId {
 extern struct BTA_DmBleResetId BTA_DmBleResetId;
 
 // Name: BTA_DmBleScan
-// Params: bool start, uint8_t duration_sec, bool low_latency_scan
+// Params: bool start, uint8_t duration_sec
 // Return: void
 struct BTA_DmBleScan {
-  std::function<void(bool start, uint8_t duration_sec, bool low_latency_scan)> body{
-          [](bool /* start */, uint8_t /* duration_sec */, bool /* low_latency_scan */) {}};
-  void operator()(bool start, uint8_t duration_sec, bool low_latency_scan) {
-    body(start, duration_sec, low_latency_scan);
-  }
+  std::function<void(bool start, uint8_t duration_sec)> body{
+          [](bool /* start */, uint8_t /* duration_sec */) {}};
+  void operator()(bool start, uint8_t duration_sec) { body(start, duration_sec); }
 };
 extern struct BTA_DmBleScan BTA_DmBleScan;
 

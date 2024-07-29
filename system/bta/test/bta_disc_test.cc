@@ -61,7 +61,7 @@ void bta_dm_observe_results_cb(tBTM_INQ_RESULTS* p_inq, const uint8_t* p_eir, ui
 void bta_dm_opportunistic_observe_results_cb(tBTM_INQ_RESULTS* p_inq, const uint8_t* p_eir,
                                              uint16_t eir_len);
 void bta_dm_queue_search(tBTA_DM_API_SEARCH& search);
-void bta_dm_start_scan(uint8_t duration_sec, bool low_latency_scan = false);
+void bta_dm_start_scan(uint8_t duration_sec);
 }  // namespace testing
 }  // namespace legacy
 }  // namespace bluetooth
@@ -92,18 +92,13 @@ TEST_F(BtaInitializedTest, bta_dm_ble_csis_observe__false) {
 }
 
 TEST_F(BtaInitializedTest, bta_dm_ble_scan) {
-  // bool start, uint8_t duration_sec, bool low_latency_scan
+  // bool start, uint8_t duration_sec
   constexpr bool kStartLeScan = true;
   constexpr bool kStopLeScan = false;
   const uint8_t duration_in_seconds = 5;
-  constexpr bool kLowLatencyScan = true;
-  constexpr bool kHighLatencyScan = false;
 
-  bta_dm_ble_scan(kStartLeScan, duration_in_seconds, kLowLatencyScan);
-  bta_dm_ble_scan(kStopLeScan, duration_in_seconds, kLowLatencyScan);
-
-  bta_dm_ble_scan(kStartLeScan, duration_in_seconds, kHighLatencyScan);
-  bta_dm_ble_scan(kStopLeScan, duration_in_seconds, kHighLatencyScan);
+  bta_dm_ble_scan(kStartLeScan, duration_in_seconds);
+  bta_dm_ble_scan(kStopLeScan, duration_in_seconds);
 }
 
 TEST_F(BtaInitializedTest, bta_dm_disc_discover_next_device) { bta_dm_disc_discover_next_device(); }
@@ -162,11 +157,9 @@ TEST_F(BtaInitializedTest, bta_dm_read_remote_device_name) {
 }
 
 TEST_F(BtaInitializedTest, bta_dm_start_scan) {
-  constexpr bool kLowLatencyScan = true;
-  constexpr bool kHighLatencyScan = false;
   const uint8_t duration_sec = 5;
-  bluetooth::legacy::testing::bta_dm_start_scan(duration_sec, kLowLatencyScan);
-  bluetooth::legacy::testing::bta_dm_start_scan(duration_sec, kHighLatencyScan);
+  bluetooth::legacy::testing::bta_dm_start_scan(duration_sec);
+  bluetooth::legacy::testing::bta_dm_start_scan(duration_sec);
 }
 
 TEST_F(BtaInitializedTest, bta_dm_disc_start_device_discovery) {

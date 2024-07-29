@@ -148,9 +148,9 @@ void BTA_DmBleResetId(void) {
   inc_func_call_count(__func__);
   test::mock::bta_dm_api::BTA_DmBleResetId();
 }
-void BTA_DmBleScan(bool start, uint8_t duration_sec, bool low_latency_scan) {
+void BTA_DmBleScan(bool start, uint8_t duration_sec) {
   inc_func_call_count(__func__);
-  test::mock::bta_dm_api::BTA_DmBleScan(start, duration_sec, low_latency_scan);
+  test::mock::bta_dm_api::BTA_DmBleScan(start, duration_sec);
 }
 void BTA_DmBleSecurityGrant(const RawAddress& bd_addr, tBTA_DM_BLE_SEC_GRANT res) {
   inc_func_call_count(__func__);
