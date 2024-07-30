@@ -6,6 +6,9 @@ flag {
     namespace: "bluetooth"
     description: "Fallback to other connected device when wired audio device disconnects"
     bug: "348124361"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
 }
 
 flag {
