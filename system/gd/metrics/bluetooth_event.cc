@@ -41,6 +41,11 @@ State MapErrorCodeToState(ErrorCode reason) {
       return State::CONNECTION_ACCEPT_TIMEOUT;
     case ErrorCode::TRANSACTION_RESPONSE_TIMEOUT:
       return State::TRANSACTION_RESPONSE_TIMEOUT;
+    case ErrorCode::AUTHENTICATION_FAILURE:
+      return State::AUTH_FAILURE;
+    case ErrorCode::REMOTE_DEVICE_TERMINATED_CONNECTION_LOW_RESOURCES:
+    case ErrorCode::REMOTE_DEVICE_TERMINATED_CONNECTION_POWER_OFF:
+      return State::REMOTE_USER_TERMINATED_CONNECTION;
     case ErrorCode::CONNECTION_ALREADY_EXISTS:
       return State::ALREADY_CONNECTED;
     case ErrorCode::REPEATED_ATTEMPTS:
