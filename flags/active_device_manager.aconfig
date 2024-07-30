@@ -16,4 +16,7 @@ flag {
     namespace: "bluetooth"
     description: "Fix audio path and always fallback to available device"
     bug: "351820274"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
 }
