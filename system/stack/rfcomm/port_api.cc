@@ -925,9 +925,7 @@ int PORT_WriteDataCO(uint16_t handle, int* p_len) {
     // if(recv(fd, (uint8_t *)(p_buf + 1) + p_buf->offset + p_buf->len,
     // available, 0) != available)
     if (!p_port->p_data_co_callback(handle, (uint8_t*)(p_buf + 1) + p_buf->offset + p_buf->len,
-                                    available, DATA_CO_CALLBACK_TYPE_OUTGOING))
-
-    {
+                                    available, DATA_CO_CALLBACK_TYPE_OUTGOING)) {
       log::error("p_data_co_callback DATA_CO_CALLBACK_TYPE_OUTGOING failed, available:{}",
                  available);
       mutex_global_unlock();
