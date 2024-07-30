@@ -130,5 +130,8 @@ void LogMetricBluetoothLEConnectionMetricEvent(
 
 void LogMetricBluetoothLEConnection(os::LEConnectionSessionOptions /* session_options */) {}
 
+void LogMetricBluetoothEvent(const Address& /* address */,
+                             android::bluetooth::EventType /* event type */,
+                             android::bluetooth::State /* state */) {}
 }  // namespace os
 }  // namespace bluetooth
