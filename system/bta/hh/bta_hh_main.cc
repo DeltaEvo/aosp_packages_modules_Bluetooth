@@ -30,6 +30,7 @@
 #include <cstdint>
 
 #include "bta/hh/bta_hh_int.h"
+#include "main/shim/dumpsys.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
 #include "stack/include/bt_hdr.h"
@@ -425,3 +426,15 @@ bool bta_hh_hdl_event(const BT_HDR_RIGID* p_msg) {
 
   return true;
 }
+
+#define DUMPSYS_TAG "shim::legacy::hid"
+void bta_hh_dump(int fd) {
+  for (auto dev : bta_hh_cb.kdev) {
+    if (dev.in_use) {
+      LOG_DUMPSYS(fd, "[%d] Device:%s, handle:%d, state:%s, sub class:%d, ", dev.index,
+                  dev.link_spec.ToRedactedStringForLogging().c_str(), dev.hid_handle,
+                  bta_hh_state_code(dev.state), dev.sub_class);
+    }
+  }
+}
+#undef DUMPSYS_TAG
