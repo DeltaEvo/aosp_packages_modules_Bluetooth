@@ -22,7 +22,6 @@ import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 
 import static java.util.Objects.requireNonNull;
 
-import android.annotation.Nullable;
 import android.bluetooth.BluetoothCsipSetCoordinator;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHapClient;
@@ -335,15 +334,8 @@ public class HapClientService extends ProfileService {
         return mDatabaseManager.getProfileConnectionPolicy(device, BluetoothProfile.HAP_CLIENT);
     }
 
-    /**
-     * Check whether can connect to a peer device. The check considers a number of factors during
-     * the evaluation.
-     *
-     * @param device the peer device to connect to
-     * @return true if connection is allowed, otherwise false
-     */
-    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
-    public boolean okToConnect(BluetoothDevice device) {
+    /** Check whether it can connect to a peer device. */
+    boolean okToConnect(BluetoothDevice device) {
         // Check if this is an incoming connection in Quiet mode.
         if (mAdapterService.isQuietModeEnabled()) {
             Log.e(TAG, "okToConnect: cannot connect to " + device + " : quiet mode enabled");
@@ -366,8 +358,7 @@ public class HapClientService extends ProfileService {
         return true;
     }
 
-    @VisibleForTesting
-    synchronized void connectionStateChanged(BluetoothDevice device, int fromState, int toState) {
+    void connectionStateChanged(BluetoothDevice device, int fromState, int toState) {
         if ((device == null) || (fromState == toState)) {
             Log.e(
                     TAG,
@@ -484,13 +475,8 @@ public class HapClientService extends ProfileService {
         }
     }
 
-    /**
-     * Gets the hearing access device group of the passed device
-     *
-     * @param device is the device with which we want to get the group identifier for
-     * @return group ID if device is part of the coordinated group, 0 otherwise
-     */
-    public int getHapGroup(BluetoothDevice device) {
+    @VisibleForTesting
+    int getHapGroup(BluetoothDevice device) {
         CsipSetCoordinatorService csipClient = mFactory.getCsipSetCoordinatorService();
 
         if (csipClient != null) {
@@ -504,24 +490,14 @@ public class HapClientService extends ProfileService {
         return BluetoothCsipSetCoordinator.GROUP_ID_INVALID;
     }
 
-    /**
-     * Gets the currently active preset index for a HA device
-     *
-     * @param device is the device for which we want to get the currently active preset
-     * @return active preset index
-     */
-    public int getActivePresetIndex(BluetoothDevice device) {
+    @VisibleForTesting
+    int getActivePresetIndex(BluetoothDevice device) {
         return mDeviceCurrentPresetMap.getOrDefault(
                 device, BluetoothHapClient.PRESET_INDEX_UNAVAILABLE);
     }
 
-    /**
-     * Gets the currently active preset info for a HA device
-     *
-     * @param device is the device for which we want to get the currently active preset info
-     * @return active preset info or null if not available
-     */
-    public @Nullable BluetoothHapPresetInfo getActivePresetInfo(BluetoothDevice device) {
+    @VisibleForTesting
+    BluetoothHapPresetInfo getActivePresetInfo(BluetoothDevice device) {
         int index = getActivePresetIndex(device);
         if (index == BluetoothHapClient.PRESET_INDEX_UNAVAILABLE) {
             return null;
@@ -552,13 +528,8 @@ public class HapClientService extends ProfileService {
         }
     }
 
-    /**
-     * Selects the currently active preset for a HA device
-     *
-     * @param device is the device for which we want to set the active preset
-     * @param presetIndex is an index of one of the available presets
-     */
-    public void selectPreset(BluetoothDevice device, int presetIndex) {
+    @VisibleForTesting
+    void selectPreset(BluetoothDevice device, int presetIndex) {
         if (presetIndex == BluetoothHapClient.PRESET_INDEX_UNAVAILABLE) {
             int status = BluetoothStatusCodes.ERROR_HAP_INVALID_PRESET_INDEX;
             broadcastToClient(cb -> cb.onPresetSelectionFailed(device, status));
@@ -568,13 +539,8 @@ public class HapClientService extends ProfileService {
         mHapClientNativeInterface.selectActivePreset(device, presetIndex);
     }
 
-    /**
-     * Selects the currently active preset for a HA device group.
-     *
-     * @param groupId is the device group identifier for which want to set the active preset
-     * @param presetIndex is an index of one of the available presets
-     */
-    public void selectPresetForGroup(int groupId, int presetIndex) {
+    @VisibleForTesting
+    void selectPresetForGroup(int groupId, int presetIndex) {
         if (!isGroupIdValid(groupId)) {
             int status = BluetoothStatusCodes.ERROR_CSIP_INVALID_GROUP_ID;
             broadcastToClient(cb -> cb.onPresetSelectionForGroupFailed(groupId, status));
@@ -589,50 +555,23 @@ public class HapClientService extends ProfileService {
         mHapClientNativeInterface.groupSelectActivePreset(groupId, presetIndex);
     }
 
-    /**
-     * Sets the next preset as a currently active preset for a HA device
-     *
-     * @param device is the device for which we want to set the active preset
-     */
-    public void switchToNextPreset(BluetoothDevice device) {
+    void switchToNextPreset(BluetoothDevice device) {
         mHapClientNativeInterface.nextActivePreset(device);
     }
 
-    /**
-     * Sets the next preset as a currently active preset for a HA device group
-     *
-     * @param groupId is the device group identifier for which want to set the active preset
-     */
-    public void switchToNextPresetForGroup(int groupId) {
+    void switchToNextPresetForGroup(int groupId) {
         mHapClientNativeInterface.groupNextActivePreset(groupId);
     }
 
-    /**
-     * Sets the previous preset as a currently active preset for a HA device
-     *
-     * @param device is the device for which we want to set the active preset
-     */
-    public void switchToPreviousPreset(BluetoothDevice device) {
+    void switchToPreviousPreset(BluetoothDevice device) {
         mHapClientNativeInterface.previousActivePreset(device);
     }
 
-    /**
-     * Sets the previous preset as a currently active preset for a HA device group
-     *
-     * @param groupId is the device group identifier for which want to set the active preset
-     */
-    public void switchToPreviousPresetForGroup(int groupId) {
+    void switchToPreviousPresetForGroup(int groupId) {
         mHapClientNativeInterface.groupPreviousActivePreset(groupId);
     }
 
-    /**
-     * Requests the preset name
-     *
-     * @param device is the device for which we want to get the preset name
-     * @param presetIndex is an index of one of the available presets
-     * @return a preset Info corresponding to the requested preset index or null if not available
-     */
-    public @Nullable BluetoothHapPresetInfo getPresetInfo(BluetoothDevice device, int presetIndex) {
+    BluetoothHapPresetInfo getPresetInfo(BluetoothDevice device, int presetIndex) {
         BluetoothHapPresetInfo defaultValue = null;
         if (presetIndex == BluetoothHapClient.PRESET_INDEX_UNAVAILABLE) return defaultValue;
 
@@ -654,26 +593,14 @@ public class HapClientService extends ProfileService {
         return defaultValue;
     }
 
-    /**
-     * Requests all presets info
-     *
-     * @param device is the device for which we want to get all presets info
-     * @return a list of all presets Info
-     */
-    public List<BluetoothHapPresetInfo> getAllPresetInfo(BluetoothDevice device) {
+    List<BluetoothHapPresetInfo> getAllPresetInfo(BluetoothDevice device) {
         if (mPresetsMap.containsKey(device)) {
             return mPresetsMap.get(device);
         }
         return Collections.emptyList();
     }
 
-    /**
-     * Requests features
-     *
-     * @param device is the device for which we want to get features
-     * @return integer with feature bits set
-     */
-    public int getFeatures(BluetoothDevice device) {
+    int getFeatures(BluetoothDevice device) {
         if (mDeviceFeaturesMap.containsKey(device)) {
             return mDeviceFeaturesMap.get(device);
         }
@@ -774,14 +701,8 @@ public class HapClientService extends ProfileService {
         return groups.contains(groupId);
     }
 
-    /**
-     * Sets the preset name
-     *
-     * @param device is the device for which we want to get the preset name
-     * @param presetIndex is an index of one of the available presets
-     * @param name is a new name for a preset
-     */
-    public void setPresetName(BluetoothDevice device, int presetIndex, String name) {
+    @VisibleForTesting
+    void setPresetName(BluetoothDevice device, int presetIndex, String name) {
         if (!isPresetIndexValid(device, presetIndex)) {
             int status = BluetoothStatusCodes.ERROR_HAP_INVALID_PRESET_INDEX;
             broadcastToClient(cb -> cb.onSetPresetNameFailed(device, status));
@@ -793,14 +714,8 @@ public class HapClientService extends ProfileService {
         mHapClientNativeInterface.setPresetName(device, presetIndex, name);
     }
 
-    /**
-     * Sets the preset name
-     *
-     * @param groupId is the device group identifier
-     * @param presetIndex is an index of one of the available presets
-     * @param name is a new name for a preset
-     */
-    public void setPresetNameForGroup(int groupId, int presetIndex, String name) {
+    @VisibleForTesting
+    void setPresetNameForGroup(int groupId, int presetIndex, String name) {
         if (!isGroupIdValid(groupId)) {
             int status = BluetoothStatusCodes.ERROR_CSIP_INVALID_GROUP_ID;
             broadcastToClient(cb -> cb.onSetPresetNameForGroupFailed(groupId, status));
@@ -880,12 +795,7 @@ public class HapClientService extends ProfileService {
         return csipClient.getGroupDevicesOrdered(groupId);
     }
 
-    /**
-     * Handle messages from native (JNI) to Java
-     *
-     * @param stackEvent the event that need to be handled
-     */
-    public void messageFromNative(HapClientStackEvent stackEvent) {
+    void messageFromNative(HapClientStackEvent stackEvent) {
         // Decide which event should be sent to the state machine
         if (stackEvent.type == HapClientStackEvent.EVENT_TYPE_CONNECTION_STATE_CHANGED) {
             resendToStateMachine(stackEvent);
