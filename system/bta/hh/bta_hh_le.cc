@@ -1074,11 +1074,6 @@ static void bta_hh_clear_service_cache(tBTA_HH_DEV_CB* p_cb) {
  ******************************************************************************/
 void bta_hh_start_security(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* /* p_buf */) {
   log::verbose("addr:{}", p_cb->link_spec.addrt.bda);
-  if (BTM_SecIsSecurityPending(p_cb->link_spec.addrt.bda)) {
-    /* if security collision happened, wait for encryption done */
-    p_cb->security_pending = true;
-    return;
-  }
 
   /* if link has been encrypted */
   if (BTM_IsEncrypted(p_cb->link_spec.addrt.bda, BT_TRANSPORT_LE)) {
@@ -1092,9 +1087,12 @@ void bta_hh_start_security(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* /* p_buf */
     p_cb->status = BTA_HH_ERR_AUTH_FAILED;
     BTM_SetEncryption(p_cb->link_spec.addrt.bda, BT_TRANSPORT_LE, bta_hh_le_encrypt_cback, NULL,
                       BTM_BLE_SEC_ENCRYPT);
-  }
-  /* unbonded device, report security error here */
-  else {
+  } else if (BTM_SecIsSecurityPending(p_cb->link_spec.addrt.bda)) {
+    /* if security collision happened, wait for encryption done */
+    log::debug("addr:{} security collision", p_cb->link_spec.addrt.bda);
+    p_cb->security_pending = true;
+  } else {
+    /* unbonded device, report security error here */
     log::debug("addr:{} not bonded", p_cb->link_spec.addrt.bda);
     p_cb->status = BTA_HH_ERR_AUTH_FAILED;
     bta_hh_clear_service_cache(p_cb);
