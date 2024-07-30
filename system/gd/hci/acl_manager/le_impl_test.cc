@@ -19,6 +19,7 @@
 #include <bluetooth/log.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <log/log.h>
 
 #include <chrono>
 #include <future>
@@ -237,6 +238,7 @@ public:
 class LeImplTest : public ::testing::Test {
 protected:
   void SetUp() override {
+    __android_log_set_minimum_priority(ANDROID_LOG_VERBOSE);
     thread_ = new Thread("thread", Thread::Priority::NORMAL);
     handler_ = new Handler(thread_);
     controller_ = new TestController();
