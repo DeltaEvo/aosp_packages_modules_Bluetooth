@@ -374,3 +374,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "unbonded_profile_forbid_fix"
+    namespace: "bluetooth"
+    description: "Do not mark profiles as forbidden for unbonded devices"
+    bug: "356325069"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
