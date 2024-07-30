@@ -703,9 +703,9 @@ static void bta_dm_observe_cmpl_cb(void* p_result) {
   }
 }
 
-static void bta_dm_start_scan(uint8_t duration_sec, bool low_latency_scan = false) {
+static void bta_dm_start_scan(uint8_t duration_sec) {
   tBTM_STATUS status = get_btm_client_interface().ble.BTM_BleObserve(
-          true, duration_sec, bta_dm_observe_results_cb, bta_dm_observe_cmpl_cb, low_latency_scan);
+          true, duration_sec, bta_dm_observe_results_cb, bta_dm_observe_cmpl_cb);
 
   if (status != BTM_CMD_STARTED) {
     log::warn("BTM_BleObserve  failed. status {}", status);
@@ -716,16 +716,15 @@ static void bta_dm_start_scan(uint8_t duration_sec, bool low_latency_scan = fals
   }
 }
 
-void bta_dm_ble_scan(bool start, uint8_t duration_sec, bool low_latency_scan = false) {
+void bta_dm_ble_scan(bool start, uint8_t duration_sec) {
   if (!start) {
-    if (get_btm_client_interface().ble.BTM_BleObserve(false, 0, NULL, NULL, false) !=
-        BTM_CMD_STARTED) {
+    if (get_btm_client_interface().ble.BTM_BleObserve(false, 0, NULL, NULL) != BTM_CMD_STARTED) {
       log::warn("Unable to start ble observe");
     }
     return;
   }
 
-  bta_dm_start_scan(duration_sec, low_latency_scan);
+  bta_dm_start_scan(duration_sec);
 }
 
 void bta_dm_ble_csis_observe(bool observe, tBTA_DM_SEARCH_CBACK* p_cback) {
@@ -973,9 +972,7 @@ void bta_dm_opportunistic_observe_results_cb(tBTM_INQ_RESULTS* p_inq, const uint
 }
 void bta_dm_queue_search(tBTA_DM_API_SEARCH& search) { ::bta_dm_queue_search(search); }
 
-void bta_dm_start_scan(uint8_t duration_sec, bool low_latency_scan = false) {
-  ::bta_dm_start_scan(duration_sec, low_latency_scan);
-}
+void bta_dm_start_scan(uint8_t duration_sec) { ::bta_dm_start_scan(duration_sec); }
 
 }  // namespace testing
 }  // namespace legacy

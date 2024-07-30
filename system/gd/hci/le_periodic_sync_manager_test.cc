@@ -20,6 +20,7 @@
 #include <flag_macros.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <log/log.h>
 
 #include "hci/le_scanning_callback.h"
 #include "hci/le_scanning_interface.h"
@@ -136,6 +137,7 @@ private:
 class PeriodicSyncManagerTest : public ::testing::Test {
 protected:
   void SetUp() override {
+    __android_log_set_minimum_priority(ANDROID_LOG_VERBOSE);
     thread_ = new os::Thread("thread", os::Thread::Priority::NORMAL);
     handler_ = new os::Handler(thread_);
     test_le_scanning_interface_ = new TestLeScanningInterface();
@@ -750,6 +752,128 @@ TEST_F_WITH_FLAGS(PeriodicSyncManagerTest,
           LeMetaEventView::Create(EventView::Create(GetPacketView(std::move(builder2)))));
   periodic_sync_manager_->HandleLePeriodicAdvertisingSyncEstablished(event_view);
 
+  sync_handler();
+}
+
+TEST_F(PeriodicSyncManagerTest, onStartSyncTimeout_callWithoutPendingRequestsAndPeriodicSyncs) {
+  periodic_sync_manager_->OnStartSyncTimeout();
+  sync_handler();
+}
+
+TEST_F(PeriodicSyncManagerTest, onStartSyncTimeout_callWithoutPeriodicSyncs) {
+  uint16_t sync_handle = 0x12;
+  Address address;
+  Address::FromString("00:11:22:33:44:55", address);
+  AddressWithType address_with_type = AddressWithType(address, AddressType::PUBLIC_DEVICE_ADDRESS);
+
+  uint8_t advertiser_sid_1 = 0x02;
+  int request_id_1 = 0x01;
+  PeriodicSyncStates request{
+          .request_id = request_id_1,
+          .advertiser_sid = advertiser_sid_1,
+          .address_with_type = address_with_type,
+          .sync_handle = sync_handle,
+          .sync_state = PeriodicSyncState::PERIODIC_SYNC_STATE_IDLE,
+  };
+  ASSERT_NO_FATAL_FAILURE(test_le_scanning_interface_->SetCommandFuture());
+  periodic_sync_manager_->StartSync(request, 0x04, 0x0A);
+
+  // First timeout to erase periodic_syncs_
+  periodic_sync_manager_->OnStartSyncTimeout();
+  // Second to actual check
+  periodic_sync_manager_->OnStartSyncTimeout();
+  sync_handler();
+}
+
+TEST_F(PeriodicSyncManagerTest,
+       handlePeriodicAdvertisingCreateSyncStatus_callWithoutPeriodicSyncs) {
+  uint16_t sync_handle = 0x12;
+  Address address;
+  Address::FromString("00:11:22:33:44:55", address);
+  AddressWithType address_with_type = AddressWithType(address, AddressType::PUBLIC_DEVICE_ADDRESS);
+
+  int request_id_1 = 0x01;
+  uint8_t advertiser_sid_1 = 0x02;
+  PeriodicSyncStates request{
+          .request_id = request_id_1,
+          .advertiser_sid = advertiser_sid_1,
+          .address_with_type = address_with_type,
+          .sync_handle = sync_handle,
+          .sync_state = PeriodicSyncState::PERIODIC_SYNC_STATE_IDLE,
+  };
+  ASSERT_NO_FATAL_FAILURE(test_le_scanning_interface_->SetCommandFuture());
+  periodic_sync_manager_->StartSync(request, 0x04, 0x0A);
+
+  // Timeout to erase periodic_syncs_
+  periodic_sync_manager_->OnStartSyncTimeout();
+
+  auto packet =
+          test_le_scanning_interface_->GetCommand(OpCode::LE_PERIODIC_ADVERTISING_CREATE_SYNC);
+  LePeriodicAdvertisingCreateSyncView::Create(LeScanningCommandView::Create(packet));
+  test_le_scanning_interface_->CommandStatusCallback(
+          LePeriodicAdvertisingCreateSyncStatusBuilder::Create(ErrorCode::MEMORY_CAPACITY_EXCEEDED,
+                                                               0x00));
+  sync_handler();
+}
+
+TEST_F(PeriodicSyncManagerTest, syncEstablished_pendingCheckToCorrectTheOrder) {
+  uint16_t sync_handle = 0x12;
+  uint8_t advertiser_sid = 0x02;
+  Address address;
+  Address::FromString("00:11:22:33:44:55", address);
+  AddressWithType address_with_type = AddressWithType(address, AddressType::PUBLIC_DEVICE_ADDRESS);
+
+  // start scan
+  int request_id_1 = 0x01;
+  PeriodicSyncStates request{
+          .request_id = request_id_1,
+          .advertiser_sid = advertiser_sid,
+          .address_with_type = address_with_type,
+          .sync_handle = sync_handle,
+          .sync_state = PeriodicSyncState::PERIODIC_SYNC_STATE_IDLE,
+  };
+  periodic_sync_manager_->StartSync(request, 0x04, 0x0A);
+
+  EXPECT_CALL(
+          mock_callbacks_,
+          OnPeriodicSyncStarted(request_id_1, static_cast<uint8_t>(ErrorCode::ADVERTISING_TIMEOUT),
+                                _, _, _, _, _))
+          .Times(1);
+
+  // First timeout
+  periodic_sync_manager_->OnStartSyncTimeout();
+
+  // Second request with the same data but different id
+  int request_id_2 = 0x02;
+  request.request_id = request_id_2;
+  periodic_sync_manager_->StartSync(request, 0x04, 0x0A);
+
+  // Get LePeriodicAdvertisingSyncEstablished for the first request
+  auto builder = LePeriodicAdvertisingSyncEstablishedBuilder::Create(
+          ErrorCode::OPERATION_CANCELLED_BY_HOST, sync_handle, advertiser_sid,
+          address_with_type.GetAddressType(), address_with_type.GetAddress(),
+          SecondaryPhyType::LE_1M, 0xFF, ClockAccuracy::PPM_250);
+  auto event_view = LePeriodicAdvertisingSyncEstablishedView::Create(
+          LeMetaEventView::Create(EventView::Create(GetPacketView(std::move(builder)))));
+  periodic_sync_manager_->HandleLePeriodicAdvertisingSyncEstablished(event_view);
+
+  EXPECT_CALL(
+          mock_callbacks_,
+          OnPeriodicSyncStarted(request_id_2, static_cast<uint8_t>(ErrorCode::ADVERTISING_TIMEOUT),
+                                _, _, _, _, _))
+          .Times(1);
+
+  // Second timeout
+  periodic_sync_manager_->OnStartSyncTimeout();
+
+  // Get LePeriodicAdvertisingSyncEstablished for the second request
+  auto builder2 = LePeriodicAdvertisingSyncEstablishedBuilder::Create(
+          ErrorCode::OPERATION_CANCELLED_BY_HOST, sync_handle, advertiser_sid,
+          address_with_type.GetAddressType(), address_with_type.GetAddress(),
+          SecondaryPhyType::LE_1M, 0xFF, ClockAccuracy::PPM_250);
+  event_view = LePeriodicAdvertisingSyncEstablishedView::Create(
+          LeMetaEventView::Create(EventView::Create(GetPacketView(std::move(builder2)))));
+  periodic_sync_manager_->HandleLePeriodicAdvertisingSyncEstablished(event_view);
   sync_handler();
 }
 

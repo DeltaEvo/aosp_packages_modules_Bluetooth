@@ -31,6 +31,7 @@ import org.junit.rules.ExternalResource;
 
 import pandora.DckGrpc;
 import pandora.GATTGrpc;
+import pandora.HIDGrpc;
 import pandora.HostGrpc;
 import pandora.HostProto;
 import pandora.RFCOMMGrpc;
@@ -116,6 +117,16 @@ public final class PandoraDevice extends ExternalResource {
     /** Get Pandora Host service */
     public HostGrpc.HostBlockingStub hostBlocking() {
         return HostGrpc.newBlockingStub(mChannel);
+    }
+
+    /** Get Pandora HID service */
+    public HIDGrpc.HIDStub hid() {
+        return HIDGrpc.newStub(mChannel);
+    }
+
+    /** Get Pandora HID blocking service */
+    public HIDGrpc.HIDBlockingStub hidBlocking() {
+        return HIDGrpc.newBlockingStub(mChannel);
     }
 
     /** Get Pandora Dck service */

@@ -344,6 +344,15 @@ void LogMetricBluetoothLEConnectionMetricEvent(
 // Upload LE Session
 void LogMetricBluetoothLEConnection(os::LEConnectionSessionOptions session_options);
 
+/**
+ * Logs a Bluetooth Event
+ *
+ * @param address address of associated device
+ * @param event_type type of event where this is getting logged from
+ * @param state state associated with the event
+ */
+void LogMetricBluetoothEvent(const hci::Address& address, android::bluetooth::EventType event_type,
+                             android::bluetooth::State state);
 }  // namespace os
    //
 }  // namespace bluetooth
