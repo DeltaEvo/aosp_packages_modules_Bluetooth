@@ -612,7 +612,7 @@ public class AdapterService extends Service {
     }
 
     final @NonNull <T> T getNonNullSystemService(@NonNull Class<T> clazz) {
-        return requireNonNull(getSystemService(clazz), clazz.getSimpleName() + " cannot be null");
+        return requireNonNull(getSystemService(clazz));
     }
 
     @Override

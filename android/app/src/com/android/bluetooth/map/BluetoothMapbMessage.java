@@ -721,19 +721,17 @@ public abstract class BluetoothMapbMessage {
                  * the length field.*/
 
                 // Read until we receive END:MSG as some carkits send bad message lengths
-                String data = "";
+                StringBuilder data = new StringBuilder();
                 String messageLine = "";
                 while (!messageLine.equals("END:MSG")) {
-                    data += messageLine;
+                    data.append(messageLine);
                     messageLine = reader.getLineEnforce();
                 }
 
                 // The MAP spec says that all END:MSG strings in the body
                 // of the message must be escaped upon encoding and the
                 // escape removed upon decoding
-                data = data.replaceAll("([/]*)/END\\:MSG", "$1END:MSG").trim();
-
-                parseMsgPart(data);
+                parseMsgPart(data.toString().replaceAll("([/]*)/END\\:MSG", "$1END:MSG").trim());
             }
             line = reader.getLineEnforce();
         }

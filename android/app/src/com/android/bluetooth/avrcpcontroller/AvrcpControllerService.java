@@ -809,11 +809,11 @@ public class AvrcpControllerService extends ProfileService {
         sb.append("\n  BrowseTree:\n");
         sBrowseTree.dump(sb);
 
-        sb.append("\n  Cover Artwork Enabled: " + (mCoverArtEnabled ? "True" : "False"));
+        sb.append("\n  Cover Artwork Enabled: ").append((mCoverArtEnabled ? "True" : "False"));
         if (mCoverArtManager != null) {
-            sb.append("\n  " + mCoverArtManager.toString());
+            sb.append("\n  ").append(mCoverArtManager.toString());
         }
 
-        sb.append("\n  " + BluetoothMediaBrowserService.dump() + "\n");
+        sb.append("\n  ").append(BluetoothMediaBrowserService.dump()).append("\n");
     }
 }

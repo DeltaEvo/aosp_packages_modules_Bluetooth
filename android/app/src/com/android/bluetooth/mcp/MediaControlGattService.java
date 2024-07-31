@@ -2493,28 +2493,26 @@ public class MediaControlGattService implements MediaControlGattServiceInterface
 
     public void dump(StringBuilder sb) {
         sb.append("\tMediaControlService instance current state:");
-        sb.append("\n\t\tCcid = " + mCcid);
-        sb.append("\n\t\tFeatures:" + ServiceFeature.featuresToString(mFeatures, "\n\t\t\t"));
+        sb.append("\n\t\tCcid = ").append(mCcid);
+        sb.append("\n\t\tFeatures:").append(ServiceFeature.featuresToString(mFeatures, "\n\t\t\t"));
 
         BluetoothGattCharacteristic characteristic = mCharacteristics.get(CharId.PLAYER_NAME);
         if (characteristic == null) {
             sb.append("\n\t\tPlayer name: <No Player>");
         } else {
-            sb.append("\n\t\tPlayer name: " + characteristic.getStringValue(0));
+            sb.append("\n\t\tPlayer name: ").append(characteristic.getStringValue(0));
         }
 
-        sb.append("\n\t\tCurrentPlaybackState = " + mCurrentMediaState);
+        sb.append("\n\t\tCurrentPlaybackState = ").append(mCurrentMediaState);
         for (Map.Entry<String, Map<UUID, Short>> deviceEntry : mCccDescriptorValues.entrySet()) {
-            sb.append(
-                    "\n\t\tCCC states for device: "
-                            + "xx:xx:xx:xx:"
-                            + deviceEntry.getKey().substring(12));
+            sb.append("\n\t\tCCC states for device: ")
+                    .append("xx:xx:xx:xx:")
+                    .append(deviceEntry.getKey().substring(12));
             for (Map.Entry<UUID, Short> entry : deviceEntry.getValue().entrySet()) {
-                sb.append(
-                        "\n\t\t\tCharacteristic: "
-                                + mcsUuidToString(entry.getKey())
-                                + ", value: "
-                                + Utils.cccIntToStr(entry.getValue()));
+                sb.append("\n\t\t\tCharacteristic: ")
+                        .append(mcsUuidToString(entry.getKey()))
+                        .append(", value: ")
+                        .append(Utils.cccIntToStr(entry.getValue()));
             }
         }
 

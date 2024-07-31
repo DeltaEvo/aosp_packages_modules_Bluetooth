@@ -427,7 +427,10 @@ public class TbsService extends ProfileService {
             } else {
                 accessString = "ACCESS_UNKNOWN";
             }
-            sb.append("\n\tDevice: " + entry.getKey() + ", access: " + accessString);
+            sb.append("\n\tDevice: ")
+                    .append(entry.getKey())
+                    .append(", access: ")
+                    .append(accessString);
         }
     }
 }

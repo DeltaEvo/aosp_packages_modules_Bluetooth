@@ -45,7 +45,7 @@ public class BluetoothMapbMessageEmail extends BluetoothMapbMessage {
         if (mEmailBody == null) {
             mEmailBody = msgPart;
         } else {
-            mEmailBody += msgPart;
+            mEmailBody = mEmailBody + msgPart;
         }
     }
 

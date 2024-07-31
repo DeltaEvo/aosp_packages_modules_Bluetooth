@@ -1199,18 +1199,17 @@ class AdapterProperties {
                                 + " ] "
                                 + Utils.getName(device));
             } else {
-                sb.append(
-                        "    "
-                                + address
-                                + " => "
-                                + brEdrAddress
-                                + " ["
-                                + dumpDeviceType(mRemoteDevices.getType(device))
-                                + "][ 0x"
-                                + String.format("%06X", mRemoteDevices.getBluetoothClass(device))
-                                + " ] "
-                                + Utils.getName(device)
-                                + "\n");
+                sb.append("    ")
+                        .append(address)
+                        .append(" => ")
+                        .append(brEdrAddress)
+                        .append(" [")
+                        .append(dumpDeviceType(mRemoteDevices.getType(device)))
+                        .append("][ 0x")
+                        .append(String.format("%06X", mRemoteDevices.getBluetoothClass(device)))
+                        .append(" ] ")
+                        .append(Utils.getName(device))
+                        .append("\n");
             }
         }
         writer.println(sb.toString());

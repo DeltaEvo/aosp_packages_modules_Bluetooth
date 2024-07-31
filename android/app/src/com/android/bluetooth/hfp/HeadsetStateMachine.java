@@ -1892,7 +1892,8 @@ class HeadsetStateMachine extends StateMachine {
                     atCommand.append('"');
                     break;
                 }
-                atCommand.append(atString.substring(i, j + 1));
+                String atSubString = atString.substring(i, j + 1);
+                atCommand.append(atSubString);
                 i = j;
             } else if (c != ' ') {
                 atCommand.append(Character.toUpperCase(c));
@@ -2692,7 +2693,7 @@ class HeadsetStateMachine extends StateMachine {
     void processSendVendorSpecificResultCode(HeadsetVendorSpecificResultCode resultCode) {
         String stringToSend = resultCode.mCommand + ": ";
         if (resultCode.mArg != null) {
-            stringToSend += resultCode.mArg;
+            stringToSend = stringToSend + resultCode.mArg;
         }
         mNativeInterface.atResponseString(resultCode.mDevice, stringToSend);
     }

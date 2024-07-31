@@ -361,8 +361,7 @@ public class HeadsetService extends ProfileService {
      * @param stackEvent event from native stack
      */
     void messageFromNative(HeadsetStackEvent stackEvent) {
-        Objects.requireNonNull(
-                stackEvent.device, "Device should never be null, event: " + stackEvent);
+        requireNonNull(stackEvent.device);
         synchronized (mStateMachines) {
             HeadsetStateMachine stateMachine = mStateMachines.get(stackEvent.device);
             if (stackEvent.type == HeadsetStackEvent.EVENT_TYPE_CONNECTION_STATE_CHANGED) {

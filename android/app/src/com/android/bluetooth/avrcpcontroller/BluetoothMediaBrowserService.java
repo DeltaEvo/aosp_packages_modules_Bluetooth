@@ -540,7 +540,7 @@ public class BluetoothMediaBrowserService extends MediaBrowserServiceCompat {
     /** Get the state of the BluetoothMediaBrowserService as a debug string */
     public static synchronized String dump() {
         StringBuilder sb = new StringBuilder();
-        sb.append(TAG + ":");
+        sb.append(TAG).append(":");
         BluetoothMediaBrowserService service = BluetoothMediaBrowserService.getInstance();
         if (service != null) {
             MediaSessionCompat session = service.getSession();
@@ -552,33 +552,30 @@ public class BluetoothMediaBrowserService extends MediaBrowserServiceCompat {
                     controller == null ? null : controller.getQueue();
             if (metadata != null) {
                 sb.append("\n    track={");
-                sb.append("title=" + metadata.getString(MediaMetadataCompat.METADATA_KEY_TITLE));
-                sb.append(
-                        ", artist=" + metadata.getString(MediaMetadataCompat.METADATA_KEY_ARTIST));
-                sb.append(", album=" + metadata.getString(MediaMetadataCompat.METADATA_KEY_ALBUM));
-                sb.append(
-                        ", duration="
-                                + metadata.getString(MediaMetadataCompat.METADATA_KEY_DURATION));
-                sb.append(
-                        ", track_number="
-                                + metadata.getLong(MediaMetadataCompat.METADATA_KEY_TRACK_NUMBER));
-                sb.append(
-                        ", total_tracks="
-                                + metadata.getLong(MediaMetadataCompat.METADATA_KEY_NUM_TRACKS));
-                sb.append(", genre=" + metadata.getString(MediaMetadataCompat.METADATA_KEY_GENRE));
-                sb.append(
-                        ", album_art="
-                                + metadata.getString(
-                                        MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI));
+                sb.append("title=")
+                        .append(metadata.getString(MediaMetadataCompat.METADATA_KEY_TITLE));
+                sb.append(", artist=")
+                        .append(metadata.getString(MediaMetadataCompat.METADATA_KEY_ARTIST));
+                sb.append(", album=")
+                        .append(metadata.getString(MediaMetadataCompat.METADATA_KEY_ALBUM));
+                sb.append(", duration=")
+                        .append(metadata.getString(MediaMetadataCompat.METADATA_KEY_DURATION));
+                sb.append(", track_number=")
+                        .append(metadata.getLong(MediaMetadataCompat.METADATA_KEY_TRACK_NUMBER));
+                sb.append(", total_tracks=")
+                        .append(metadata.getLong(MediaMetadataCompat.METADATA_KEY_NUM_TRACKS));
+                sb.append(", genre=")
+                        .append(metadata.getString(MediaMetadataCompat.METADATA_KEY_GENRE));
+                sb.append(", album_art=")
+                        .append(metadata.getString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI));
                 sb.append("}");
             } else {
-                sb.append("\n    track=" + metadata);
+                sb.append("\n    track=").append(metadata);
             }
-            sb.append(
-                    "\n    playbackState="
-                            + AvrcpControllerUtils.playbackStateCompatToString(playbackState));
-            sb.append("\n    queue=" + queue);
-            sb.append("\n    internal_queue=" + service.mMediaQueue);
+            sb.append("\n    playbackState=")
+                    .append(AvrcpControllerUtils.playbackStateCompatToString(playbackState));
+            sb.append("\n    queue=").append(queue);
+            sb.append("\n    internal_queue=").append(service.mMediaQueue);
             sb.append("\n    session active state=").append(isActive());
         } else {
             Log.w(TAG, "dump Unavailable");
