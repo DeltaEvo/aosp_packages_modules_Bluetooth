@@ -191,7 +191,7 @@ public class LeAudioStateMachineTest {
                 .isInstanceOf(LeAudioStateMachine.Connecting.class);
 
         // Verify that one connection state change is notified
-        verify(mLeAudioService, timeout(LeAudioStateMachine.sConnectTimeoutMs * 2))
+        verify(mLeAudioService, timeout(LeAudioStateMachine.sConnectTimeoutMs * 2L))
                 .notifyConnectionStateChanged(
                         any(), eq(BluetoothProfile.STATE_DISCONNECTED), anyInt());
 
@@ -224,7 +224,7 @@ public class LeAudioStateMachineTest {
                 .isInstanceOf(LeAudioStateMachine.Connecting.class);
 
         // Verify that one connection state change is notified
-        verify(mLeAudioService, timeout(LeAudioStateMachine.sConnectTimeoutMs * 2))
+        verify(mLeAudioService, timeout(LeAudioStateMachine.sConnectTimeoutMs * 2L))
                 .notifyConnectionStateChanged(
                         any(), eq(BluetoothProfile.STATE_DISCONNECTED), anyInt());
 

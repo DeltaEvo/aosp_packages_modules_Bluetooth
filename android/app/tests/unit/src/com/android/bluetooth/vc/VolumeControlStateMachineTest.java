@@ -28,7 +28,6 @@ import static org.mockito.Mockito.verify;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
-import android.content.Context;
 import android.content.Intent;
 import android.os.HandlerThread;
 import android.os.Message;
@@ -216,7 +215,7 @@ public class VolumeControlStateMachineTest {
         ArgumentCaptor<Intent> intentArgument2 = ArgumentCaptor.forClass(Intent.class);
         verify(
                         mVolumeControlService,
-                        timeout(VolumeControlStateMachine.sConnectTimeoutMs * 2).times(2))
+                        timeout(VolumeControlStateMachine.sConnectTimeoutMs * 2L).times(2))
                 .sendBroadcast(intentArgument2.capture(), anyString());
         Assert.assertEquals(
                 BluetoothProfile.STATE_DISCONNECTED,
@@ -265,7 +264,7 @@ public class VolumeControlStateMachineTest {
         ArgumentCaptor<Intent> intentArgument2 = ArgumentCaptor.forClass(Intent.class);
         verify(
                         mVolumeControlService,
-                        timeout(VolumeControlStateMachine.sConnectTimeoutMs * 2).times(2))
+                        timeout(VolumeControlStateMachine.sConnectTimeoutMs * 2L).times(2))
                 .sendBroadcast(intentArgument2.capture(), anyString());
         Assert.assertEquals(
                 BluetoothProfile.STATE_DISCONNECTED,
