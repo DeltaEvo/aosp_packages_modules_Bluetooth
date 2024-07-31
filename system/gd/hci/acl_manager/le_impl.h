@@ -658,9 +658,11 @@ public:
   }
 
   void direct_connect_add(AddressWithType address_with_type) {
+    log::debug("{}", address_with_type);
     direct_connections_.insert(address_with_type);
     if (create_connection_timeout_alarms_.find(address_with_type) !=
         create_connection_timeout_alarms_.end()) {
+      log::verbose("Timer already added for {}", address_with_type);
       return;
     }
 
@@ -678,6 +680,7 @@ public:
   }
 
   void direct_connect_remove(AddressWithType address_with_type) {
+    log::debug("{}", address_with_type);
     auto it = create_connection_timeout_alarms_.find(address_with_type);
     if (it != create_connection_timeout_alarms_.end()) {
       it->second.Cancel();
@@ -697,6 +700,7 @@ public:
       return;
     }
 
+    log::debug("Adding device to accept list {}", address_with_type);
     accept_list.insert(address_with_type);
     register_with_address_manager();
     le_address_manager_->AddDeviceToFilterAcceptList(
@@ -969,6 +973,10 @@ public:
       arm_on_resume_ = true;
       return;
     }
+
+    log::verbose("{}, already_in_accept_list: {}, pause_connection {}, state: {}",
+                 address_with_type, already_in_accept_list, pause_connection,
+                 connectability_state_machine_text(connectability_state_));
 
     switch (connectability_state_) {
       case ConnectabilityState::ARMED:
