@@ -68,7 +68,7 @@ public class AudioRoutingManager extends ActiveDeviceManager {
     private AudioRoutingHandler mHandler = null;
     private final AudioManager mAudioManager;
     private final MediaSessionManager mSessionManager;
-    private final AudioManagerAudioDeviceCallback mAudioManagerAudioDeviceCallback;
+    private final AudioManagerAudioDeviceCallback mAudioRoutingManagerAudioDeviceCallback;
 
     @Override
     public void onBluetoothStateChange(int prevState, int newState) {
@@ -144,7 +144,7 @@ public class AudioRoutingManager extends ActiveDeviceManager {
         mFactory = factory;
         mAudioManager = service.getSystemService(AudioManager.class);
         mSessionManager = service.getSystemService(MediaSessionManager.class);
-        mAudioManagerAudioDeviceCallback = new AudioManagerAudioDeviceCallback();
+        mAudioRoutingManagerAudioDeviceCallback = new AudioManagerAudioDeviceCallback();
     }
 
     @Override
@@ -157,7 +157,8 @@ public class AudioRoutingManager extends ActiveDeviceManager {
         mHandler = new AudioRoutingHandler(mp.handlerThreadGetLooper(mHandlerThread));
 
         mAudioManager.addOnModeChangedListener(cmd -> mHandler.post(cmd), mHandler);
-        mAudioManager.registerAudioDeviceCallback(mAudioManagerAudioDeviceCallback, mHandler);
+        mAudioManager.registerAudioDeviceCallback(
+                mAudioRoutingManagerAudioDeviceCallback, mHandler);
         mAdapterService.registerBluetoothStateCallback((command) -> mHandler.post(command), this);
     }
 
@@ -166,7 +167,7 @@ public class AudioRoutingManager extends ActiveDeviceManager {
         Log.d(TAG, "cleanup()");
 
         mAudioManager.removeOnModeChangedListener(mHandler);
-        mAudioManager.unregisterAudioDeviceCallback(mAudioManagerAudioDeviceCallback);
+        mAudioManager.unregisterAudioDeviceCallback(mAudioRoutingManagerAudioDeviceCallback);
         mAdapterService.unregisterBluetoothStateCallback(this);
         if (mHandlerThread != null) {
             mHandlerThread.quit();
