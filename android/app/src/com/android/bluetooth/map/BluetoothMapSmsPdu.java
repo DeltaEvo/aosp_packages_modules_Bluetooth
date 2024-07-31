@@ -438,7 +438,7 @@ public class BluetoothMapSmsPdu {
                                 | TP_MMS_NO_MORE
                                 | TP_RP_NO_REPLY_PATH
                                 | TP_SRI_NO_REPORT
-                                | (mData[0] & 0xff) & TP_UDHI_MASK);
+                                | ((mData[0] & 0xff) & TP_UDHI_MASK));
                 encodedAddress =
                         PhoneNumberUtils.networkPortionToCalledPartyBCDWithLength(originator);
                 if (encodedAddress != null) {

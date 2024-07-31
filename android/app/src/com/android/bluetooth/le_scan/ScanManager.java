@@ -369,6 +369,7 @@ public class ScanManager {
                     break;
                 case MSG_BT_PROFILE_CONN_STATE_CHANGED:
                     handleProfileConnectionStateChanged(msg);
+                    break;
                 default:
                     // Shouldn't happen.
                     Log.e(TAG, "received an unknown message : " + msg.what);

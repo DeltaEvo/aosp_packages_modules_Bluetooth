@@ -16,6 +16,7 @@
 
 package com.android.bluetooth.avrcpcontroller;
 
+import android.annotation.SuppressLint;
 import android.util.Log;
 
 import com.google.common.base.Ascii;
@@ -152,6 +153,7 @@ public class BipTransformation {
     }
 
     @Override
+    @SuppressLint("ToStringReturnsNull")
     public String toString() {
         if (!supportsAny()) return null;
         StringBuilder transformations = new StringBuilder();

@@ -2568,6 +2568,7 @@ public class LeAudioService extends ProfileService {
                     groupDescriptor.mInactivatedDueToContextType = true;
                     setActiveGroupWithDevice(null, false);
                 }
+                break;
             default:
                 break;
         }

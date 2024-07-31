@@ -774,7 +774,7 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
                  * contains an entry that's not in the array, insert a new entry
                  * in the array, move to next cursor row and next array entry.
                  */
-                while (!isAfterLast || arrayPos < mShares.size() && mListenStarted) {
+                while (!isAfterLast || (arrayPos < mShares.size() && mListenStarted)) {
                     if (isAfterLast) {
                         // We're beyond the end of the cursor but there's still some
                         // stuff in the local array, which can only be junk

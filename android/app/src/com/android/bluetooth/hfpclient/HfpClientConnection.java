@@ -281,7 +281,7 @@ public class HfpClientConnection extends Connection {
             return false;
         }
         Uri otherAddr = ((HfpClientConnection) o).getAddress();
-        return getAddress() == otherAddr || otherAddr != null && otherAddr.equals(getAddress());
+        return getAddress() == otherAddr || (otherAddr != null && otherAddr.equals(getAddress()));
     }
 
     @Override
