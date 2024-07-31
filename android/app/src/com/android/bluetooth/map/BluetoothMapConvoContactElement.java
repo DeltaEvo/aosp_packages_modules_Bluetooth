@@ -279,13 +279,9 @@ public class BluetoothMapConvoContactElement
         if (this == obj) {
             return true;
         }
-        if (obj == null) {
+        if (!(obj instanceof BluetoothMapConvoContactElement other)) {
             return false;
         }
-        if (getClass() != obj.getClass()) {
-            return false;
-        }
-        BluetoothMapConvoContactElement other = (BluetoothMapConvoContactElement) obj;
         /*      As we use equals only for test, we don't compare auto assigned values
         *      if (mBtUid == null) {
                    if (other.mBtUid != null) {

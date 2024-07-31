@@ -941,10 +941,9 @@ public class ScanManager {
             if (this == obj) {
                 return true;
             }
-            if (obj == null || getClass() != obj.getClass()) {
+            if (!(obj instanceof BatchScanParams other)) {
                 return false;
             }
-            BatchScanParams other = (BatchScanParams) obj;
             return scanMode == other.scanMode
                     && fullScanscannerId == other.fullScanscannerId
                     && truncatedScanscannerId == other.truncatedScanscannerId;

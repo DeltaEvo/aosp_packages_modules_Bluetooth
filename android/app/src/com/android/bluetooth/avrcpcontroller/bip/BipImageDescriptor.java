@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 
 /**
  * Contains the metadata that describes either (1) the desired size of a image to be downloaded or
@@ -251,13 +252,16 @@ public class BipImageDescriptor {
 
     @Override
     public boolean equals(Object o) {
-        if (o == this) return true;
-        if (!(o instanceof BipImageDescriptor)) return false;
+        if (o == this) {
+            return true;
+        }
+        if (!(o instanceof BipImageDescriptor d)) {
+            return false;
+        }
 
-        BipImageDescriptor d = (BipImageDescriptor) o;
-        return d.getEncoding() == getEncoding()
-                && d.getPixel() == getPixel()
-                && d.getTransformation() == getTransformation()
+        return Objects.equals(d.getEncoding(), getEncoding())
+                && Objects.equals(d.getPixel(), getPixel())
+                && Objects.equals(d.getTransformation(), getTransformation())
                 && d.getSize() == getSize()
                 && d.getMaxSize() == getMaxSize();
     }

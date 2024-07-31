@@ -167,14 +167,17 @@ public class BipImageFormat {
 
     @Override
     public boolean equals(Object o) {
-        if (o == this) return true;
-        if (!(o instanceof BipImageFormat)) return false;
+        if (o == this) {
+            return true;
+        }
+        if (!(o instanceof BipImageFormat f)) {
+            return false;
+        }
 
-        BipImageFormat f = (BipImageFormat) o;
         return f.getType() == getType()
-                && f.getEncoding() == getEncoding()
-                && f.getPixel() == getPixel()
-                && f.getTransformation() == getTransformation()
+                && Objects.equals(f.getEncoding(), getEncoding())
+                && Objects.equals(f.getPixel(), getPixel())
+                && Objects.equals(f.getTransformation(), getTransformation())
                 && f.getSize() == getSize()
                 && f.getMaxSize() == getMaxSize();
     }
