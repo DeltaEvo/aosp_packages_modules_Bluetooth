@@ -51,6 +51,7 @@ static std::shared_timed_mutex interface_mutex;
 
 static jobject mCallbacksObj = nullptr;
 static std::shared_timed_mutex callbacks_mutex;
+static jfieldID sCallbacksField;
 
 static struct {
   jclass clazz;
@@ -299,7 +300,7 @@ public:
 
 static HasClientCallbacksImpl sHasClientCallbacks;
 
-static void initNative(JNIEnv* env, jobject object) {
+static void initNative(JNIEnv* env, jobject obj) {
   std::unique_lock<std::shared_timed_mutex> interface_lock(interface_mutex);
   std::unique_lock<std::shared_timed_mutex> callbacks_lock(callbacks_mutex);
 
@@ -321,7 +322,7 @@ static void initNative(JNIEnv* env, jobject object) {
     mCallbacksObj = nullptr;
   }
 
-  if ((mCallbacksObj = env->NewGlobalRef(object)) == nullptr) {
+  if ((mCallbacksObj = env->NewGlobalRef(env->GetObjectField(obj, sCallbacksField))) == nullptr) {
     log::error("Failed to allocate Global Ref for Hearing Access Callbacks");
     return;
   }
@@ -581,6 +582,12 @@ int register_com_android_bluetooth_hap_client(JNIEnv* env) {
     return result;
   }
 
+  jclass jniHapClientNativeInterfaceClass =
+          env->FindClass("com/android/bluetooth/hap/HapClientNativeInterface");
+  sCallbacksField = env->GetFieldID(jniHapClientNativeInterfaceClass, "mHapClientNativeCallback",
+                                    "Lcom/android/bluetooth/hap/HapClientNativeCallback;");
+  env->DeleteLocalRef(jniHapClientNativeInterfaceClass);
+
   const JNIJavaMethod javaMethods[] = {
           {"onConnectionStateChanged", "(I[B)V", &method_onConnectionStateChanged},
           {"onDeviceAvailable", "([BI)V", &method_onDeviceAvailable},
@@ -598,7 +605,7 @@ int register_com_android_bluetooth_hap_client(JNIEnv* env) {
           {"onPresetInfoError", "([BII)V", &method_onPresetInfoError},
           {"onGroupPresetInfoError", "(III)V", &method_onGroupPresetInfoError},
   };
-  GET_JAVA_METHODS(env, "com/android/bluetooth/hap/HapClientNativeInterface", javaMethods);
+  GET_JAVA_METHODS(env, "com/android/bluetooth/hap/HapClientNativeCallback", javaMethods);
 
   const JNIJavaMethod javaHapPresetMethods[] = {
           {"<init>", "(ILjava/lang/String;ZZ)V",
