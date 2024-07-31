@@ -78,6 +78,7 @@ java_defaults {
             "-Xep:ReturnAtTheEndOfVoidFunction:ERROR",
             "-Xep:StringCaseLocaleUsage:ERROR",
             "-Xep:StringCharset:ERROR",
+            "-Xep:TruthConstantAsserts:ERROR",
             "-Xep:TruthIncompatibleType:ERROR",
             "-Xep:UnnecessaryAssignment:ERROR",
             "-Xep:UnnecessaryAsync:ERROR",

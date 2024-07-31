@@ -1279,9 +1279,8 @@ public class BassClientServiceTest {
     private void verifyConnectionStateIntent(
             int timeoutMs, BluetoothDevice device, int newState, int prevState) {
         Intent intent = TestUtils.waitForIntent(timeoutMs, mIntentQueue.get(device));
-        assertThat(intent).isNotNull();
-        assertThat(BluetoothLeBroadcastAssistant.ACTION_CONNECTION_STATE_CHANGED)
-                .isEqualTo(intent.getAction());
+        assertThat(intent.getAction())
+                .isEqualTo(BluetoothLeBroadcastAssistant.ACTION_CONNECTION_STATE_CHANGED);
         assertThat(device).isEqualTo(intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE));
         assertThat(newState).isEqualTo(intent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1));
         assertThat(prevState)
