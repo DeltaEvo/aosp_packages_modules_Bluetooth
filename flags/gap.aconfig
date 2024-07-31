@@ -249,3 +249,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "gatt_callback_on_failure"
+    namespace: "bluetooth"
+    description: "Invoke callbacks on early failure from the native stack"
+    bug: "356550596"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
