@@ -65,7 +65,9 @@ public class SdpClientTest {
                         ParcelUuid[] parcelUuids =
                                 intent.getParcelableArrayExtra(
                                         BluetoothDevice.EXTRA_UUID, ParcelUuid.class);
-                        mFutureIntent.set(Arrays.asList(parcelUuids));
+                        if (parcelUuids != null) {
+                            mFutureIntent.set(Arrays.asList(parcelUuids));
+                        }
                     }
                 }
             };

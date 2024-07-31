@@ -347,7 +347,7 @@ def on_hid_control_point_write(_connection, value):
 
 # -----------------------------------------------------------------------------
 def sdp_records():
-    service_record_handle = 0x00010002
+    service_record_handle = 0x00010006
     return {
         service_record_handle: [
             ServiceAttribute(
