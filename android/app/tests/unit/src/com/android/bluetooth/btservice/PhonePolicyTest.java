@@ -116,8 +116,6 @@ public class PhonePolicyTest {
         mHandlerThread.start();
         // Mock the looper
         when(mAdapterService.getMainLooper()).thenReturn(mHandlerThread.getLooper());
-        // Tell the AdapterService that it is a mock (see isMock documentation)
-        doReturn(true).when(mAdapterService).isMock();
         // Must be called to initialize services
         mAdapter = BluetoothAdapter.getDefaultAdapter();
         PhonePolicy.sConnectOtherProfilesTimeoutMillis = CONNECT_OTHER_PROFILES_TIMEOUT_MILLIS;
