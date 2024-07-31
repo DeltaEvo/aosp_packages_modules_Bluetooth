@@ -676,9 +676,6 @@ public class ActiveDeviceManagerTest {
         Assume.assumeTrue(
                 "Ignore test when HearingAidService is not enabled", HearingAidService.isEnabled());
 
-        List<BluetoothDevice> connectedHearingAidDevices = new ArrayList<>();
-        connectedHearingAidDevices.add(mHearingAidDevice);
-        connectedHearingAidDevices.add(mSecondaryAudioDevice);
         when(mHearingAidService.getHiSyncId(mSecondaryAudioDevice)).thenReturn(mHearingAidHiSyncId);
 
         hearingAidConnected(mHearingAidDevice);
