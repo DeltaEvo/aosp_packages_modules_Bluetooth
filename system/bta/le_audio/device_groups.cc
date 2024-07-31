@@ -828,8 +828,10 @@ LeAudioDeviceGroup::GetAudioSetConfigurationRequirements(types::LeAudioContextTy
         continue;
       }
 
-      if (com::android::bluetooth::flags::le_audio_support_unidirectional_voice_assistant() &&
-          ctx_type == types::LeAudioContextType::VOICEASSISTANTS) {
+      if ((com::android::bluetooth::flags::le_audio_support_unidirectional_voice_assistant() &&
+           ctx_type == types::LeAudioContextType::VOICEASSISTANTS) ||
+          (com::android::bluetooth::flags::leaudio_multicodec_aidl_support() &&
+           ctx_type == types::LeAudioContextType::GAME)) {
         // For GAME and VOICE ASSISTANT, ignore direction if it is not supported only on a single
         // direction.
         auto group_contexts = GetSupportedContexts(types::kLeAudioDirectionBoth);
@@ -1414,7 +1416,8 @@ bool LeAudioDeviceGroup::IsAudioSetConfigurationSupported(
       continue;
     }
 
-    if (com::android::bluetooth::flags::le_audio_support_unidirectional_voice_assistant()) {
+    if (com::android::bluetooth::flags::le_audio_support_unidirectional_voice_assistant() ||
+        com::android::bluetooth::flags::leaudio_multicodec_aidl_support()) {
       // Verify the direction requirements.
       if (direction == types::kLeAudioDirectionSink &&
           requirements.sink_requirements->size() == 0) {
