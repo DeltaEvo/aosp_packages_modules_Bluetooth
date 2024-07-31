@@ -66,8 +66,8 @@ class RequestGetMessagesListing extends Request {
         ObexAppParameters oap = new ObexAppParameters();
 
         if (filter != null) {
-            if (filter.messageType != MessagesFilter.MESSAGE_TYPE_ALL) {
-                oap.add(OAP_TAGID_FILTER_MESSAGE_TYPE, filter.messageType);
+            if (filter.excludedMessageTypes != MessagesFilter.MESSAGE_TYPE_NONE) {
+                oap.add(OAP_TAGID_FILTER_MESSAGE_TYPE, filter.excludedMessageTypes);
             }
 
             if (filter.periodBegin != null) {
