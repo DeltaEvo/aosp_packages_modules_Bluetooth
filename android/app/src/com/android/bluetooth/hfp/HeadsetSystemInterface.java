@@ -260,7 +260,7 @@ class HeadsetSystemInterface {
             if (address == null) address = "";
         }
 
-        Log.i(TAG, String.format("get phone number -> '%s'", address));
+        Log.i(TAG, "get phone number -> '" + address + "'");
 
         return address;
     }

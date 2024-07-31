@@ -2544,7 +2544,7 @@ class HeadsetStateMachine extends StateMachine {
     @VisibleForTesting
     void processAtCgmr(BluetoothDevice device) {
         mNativeInterface.atResponseString(
-                device, String.format("%s (%s)", Build.VERSION.RELEASE, Build.VERSION.INCREMENTAL));
+                device, Build.VERSION.RELEASE + " (" + Build.VERSION.INCREMENTAL + ")");
     }
 
     /**

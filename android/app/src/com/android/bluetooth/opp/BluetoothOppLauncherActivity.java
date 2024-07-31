@@ -390,7 +390,7 @@ public class BluetoothOppLauncherActivity extends Activity {
                     link = "tel:" + matchStr;
                 }
                 if (link != null) {
-                    String href = String.format("<a href=\"%s\">%s</a>", link, matchStr);
+                    String href = "<a href=\"" + link + "\">" + matchStr + "</a>";
                     m.appendReplacement(sb, href);
                 }
             }

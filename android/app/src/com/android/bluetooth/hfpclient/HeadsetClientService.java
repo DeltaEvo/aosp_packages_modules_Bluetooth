@@ -1030,7 +1030,7 @@ public class HeadsetClientService extends ProfileService {
                 SystemProperties.getBoolean(
                         "bluetooth.headset_client.three_way_calling.enabled", true);
         if (!support_three_way_calling && !getCurrentCalls(device).isEmpty()) {
-            Log.e(TAG, String.format("dial(%s): Line is busy, reject dialing", device));
+            Log.e(TAG, "dial(" + device + "): Line is busy, reject dialing");
             return null;
         }
 
