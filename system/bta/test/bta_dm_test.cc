@@ -461,20 +461,19 @@ TEST_F(BtaDmCustomAlarmTest, bta_dm_sniff_cback) {
   ASSERT_EQ(2, get_func_call_count("alarm_set_on_mloop"));
 }
 
-TEST_F_WITH_FLAGS(BtaDmCustomAlarmTest, sniff_offload_feature__enable_flag,
-                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(TEST_BT, enable_sniff_offload))) {
+TEST_F(BtaDmCustomAlarmTest, sniff_offload_feature__test_sysprop) {
   bool is_property_enabled = true;
   test::mock::osi_properties::osi_property_get_bool.body =
           [&](const char* key, bool default_value) -> int { return is_property_enabled; };
 
-  // Expect not to trigger bta_dm_init_pm due to both flag and prop are enabled
+  // Expect not to trigger bta_dm_init_pm due to sysprop enabled
   // and reset the value of .srvc_id.
   is_property_enabled = true;
   bluetooth::legacy::testing::BTA_dm_on_hw_on();
   ASSERT_EQ(0, bta_dm_cb.pm_timer[0].srvc_id[0]);
 
   // Expect to trigger bta_dm_init_pm and init the value of .srvc_id to
-  // BTA_ID_MAX.
+  // BTA_ID_MAX due to sysprop disabled.
   is_property_enabled = false;
   bluetooth::legacy::testing::BTA_dm_on_hw_on();
   ASSERT_EQ((uint8_t)BTA_ID_MAX, bta_dm_cb.pm_timer[0].srvc_id[0]);
@@ -484,23 +483,4 @@ TEST_F_WITH_FLAGS(BtaDmCustomAlarmTest, sniff_offload_feature__enable_flag,
   bta_dm_cb.pm_timer[0].in_use = false;
   bta_dm_cb.pm_timer[0].srvc_id[0] = kUnusedTimer;
   bta_dm_disable_pm();
-}
-
-TEST_F_WITH_FLAGS(BtaDmCustomAlarmTest, sniff_offload_feature__disable_flag,
-                  REQUIRES_FLAGS_DISABLED(ACONFIG_FLAG(TEST_BT, enable_sniff_offload))) {
-  bool is_property_enabled = true;
-  test::mock::osi_properties::osi_property_get_bool.body =
-          [&](const char* key, bool default_value) -> int { return is_property_enabled; };
-
-  // Expect to trigger bta_dm_init_pm and init the value of .srvc_id to
-  // BTA_ID_MAX.
-  is_property_enabled = true;
-  bluetooth::legacy::testing::BTA_dm_on_hw_on();
-  ASSERT_EQ((uint8_t)BTA_ID_MAX, bta_dm_cb.pm_timer[0].srvc_id[0]);
-
-  // Expect to trigger bta_dm_init_pm and init the value of .srvc_id to
-  // BTA_ID_MAX.
-  is_property_enabled = false;
-  bluetooth::legacy::testing::BTA_dm_on_hw_on();
-  ASSERT_EQ((uint8_t)BTA_ID_MAX, bta_dm_cb.pm_timer[0].srvc_id[0]);
 }
