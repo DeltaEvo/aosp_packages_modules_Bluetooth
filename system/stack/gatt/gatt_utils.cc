@@ -1518,6 +1518,22 @@ void gatt_sr_update_prep_cnt(tGATT_TCB& tcb, tGATT_IF gatt_if, bool is_inc, bool
   }
 }
 
+static bool gatt_is_anybody_interested_in_connection(const RawAddress& bda) {
+  if (connection_manager::is_background_connection(bda)) {
+    log::debug("{} is in background connection", bda);
+    return true;
+  }
+
+  for (size_t i = 1; i <= GATT_MAX_APPS; i++) {
+    tGATT_REG* p_reg = &gatt_cb.cl_rcb[i - 1];
+    if (p_reg->in_use && p_reg->direct_connect_request.count(bda) > 0) {
+      log::debug("gatt_if {} interested in connection to {}", i, bda);
+      return true;
+    }
+  }
+  return false;
+}
+
 /** Cancel LE Create Connection request */
 bool gatt_cancel_open(tGATT_IF gatt_if, const RawAddress& bda) {
   tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(bda, BT_TRANSPORT_LE);
@@ -1534,6 +1550,9 @@ bool gatt_cancel_open(tGATT_IF gatt_if, const RawAddress& bda) {
       } else {
         log::info("Removing {} from direct list", bda);
         p_reg->direct_connect_request.erase(bda);
+      }
+      if (!gatt_is_anybody_interested_in_connection(bda)) {
+        gatt_cancel_connect(bda, static_cast<tBT_TRANSPORT>(BT_TRANSPORT_LE));
       }
       return true;
     }
