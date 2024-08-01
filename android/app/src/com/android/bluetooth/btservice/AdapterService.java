@@ -612,7 +612,7 @@ public class AdapterService extends Service {
     }
 
     final @NonNull <T> T getNonNullSystemService(@NonNull Class<T> clazz) {
-        return requireNonNull(getSystemService(clazz), clazz.getSimpleName() + " cannot be null");
+        return requireNonNull(getSystemService(clazz));
     }
 
     @Override
@@ -2011,11 +2011,7 @@ public class AdapterService extends Service {
     private int startRfcommListener(
             String name, ParcelUuid uuid, PendingIntent pendingIntent, AttributionSource source) {
         if (mBluetoothServerSockets.containsKey(uuid.getUuid())) {
-            Log.d(
-                    TAG,
-                    String.format(
-                            "Cannot start RFCOMM listener: UUID %s already in use.",
-                            uuid.getUuid()));
+            Log.d(TAG, "Cannot start RFCOMM listener: UUID " + uuid.getUuid() + "already in use.");
             return BluetoothStatusCodes.RFCOMM_LISTENER_START_FAILED_UUID_IN_USE;
         }
 
@@ -2034,11 +2030,7 @@ public class AdapterService extends Service {
         RfcommListenerData listenerData = mBluetoothServerSockets.get(uuid.getUuid());
 
         if (listenerData == null) {
-            Log.d(
-                    TAG,
-                    String.format(
-                            "Cannot stop RFCOMM listener: UUID %s is not registered.",
-                            uuid.getUuid()));
+            Log.d(TAG, "Cannot stop RFCOMM listener: UUID " + uuid.getUuid() + "is not registered");
             return BluetoothStatusCodes.RFCOMM_LISTENER_OPERATION_FAILED_NO_MATCHING_SERVICE_RECORD;
         }
 
@@ -6208,7 +6200,7 @@ public class AdapterService extends Service {
                         + (" rxTime = " + rxTime)
                         + (" idleTime = " + idleTime)
                         + (" energyUsed = " + energyUsed)
-                        + (" ctrlState = " + String.format("0x%08x", ctrlState))
+                        + (" ctrlState = " + Utils.formatSimple("0x%08x", ctrlState))
                         + (" traffic = " + Arrays.toString(data)));
     }
 
@@ -6377,8 +6369,7 @@ public class AdapterService extends Service {
         ArrayList<String> initFlags = new ArrayList<>();
         for (String property : properties.getKeyset()) {
             if (property.startsWith("INIT_")) {
-                initFlags.add(
-                        String.format("%s=%s", property, properties.getString(property, null)));
+                initFlags.add(property + "=" + properties.getString(property, null));
             }
         }
         return initFlags.toArray(new String[0]);

@@ -15,8 +15,11 @@
  */
 package com.android.bluetooth;
 
+import static com.android.bluetooth.Utils.formatSimple;
+
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -36,6 +39,9 @@ import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.btservice.ProfileService;
 
+import com.google.common.truth.Expect;
+
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
@@ -54,6 +60,9 @@ import java.util.UUID;
 @SmallTest
 @RunWith(AndroidJUnit4.class)
 public class UtilsTest {
+
+    @Rule public Expect expect = Expect.create();
+
     @Test
     public void byteArrayToShort() {
         byte[] valueBuf = new byte[] {0x01, 0x02};
@@ -305,5 +314,48 @@ public class UtilsTest {
     @Test(expected = IndexOutOfBoundsException.class)
     public void truncateUtf8_toNegativeSize_ThrowsException() {
         Utils.truncateStringForUtf8Storage("abc", -1);
+    }
+
+    @Test
+    public void testFormatSimple_Types() {
+        expect.that(formatSimple("%b", true)).isEqualTo("true");
+        expect.that(formatSimple("%b", false)).isEqualTo("false");
+        expect.that(formatSimple("%b", this)).isEqualTo("true");
+        expect.that(formatSimple("%b", new Object[] {null})).isEqualTo("false");
+
+        expect.that(formatSimple("%c", '!')).isEqualTo("!");
+
+        expect.that(formatSimple("%d", 42)).isEqualTo("42");
+        expect.that(formatSimple("%d", 281474976710656L)).isEqualTo("281474976710656");
+
+        expect.that(formatSimple("%f", 3.14159)).isEqualTo("3.14159");
+        expect.that(formatSimple("%f", Float.NaN)).isEqualTo("NaN");
+
+        expect.that(formatSimple("%s", "example")).isEqualTo("example");
+        expect.that(formatSimple("%s", new Object[] {null})).isEqualTo("null");
+
+        expect.that(formatSimple("%x", 42)).isEqualTo("2a");
+        expect.that(formatSimple("%x", 281474976710656L)).isEqualTo("1000000000000");
+        byte myByte = 0x42;
+        expect.that(formatSimple("%x", myByte)).isEqualTo("42");
+
+        expect.that(formatSimple("%%")).isEqualTo("%");
+    }
+
+    @Test
+    public void testFormatSimple_Empty() {
+        expect.that(formatSimple("")).isEqualTo("");
+    }
+
+    @Test
+    public void testFormatSimple_Typical() {
+        assertThat(formatSimple("String %s%s and %%%% number %d%d together", "foo", "bar", -4, 2))
+                .isEqualTo("String foobar and %% number -42 together");
+    }
+
+    @Test
+    public void testFormatSimple_Mismatch() {
+        assertThrows(IllegalArgumentException.class, () -> formatSimple("%s"));
+        assertThrows(IllegalArgumentException.class, () -> formatSimple("%s", "foo", "bar"));
     }
 }

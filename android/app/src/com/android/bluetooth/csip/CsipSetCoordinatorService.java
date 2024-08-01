@@ -818,7 +818,7 @@ public class CsipSetCoordinatorService extends ProfileService {
         Intent intent = null;
         int groupId = stackEvent.valueInt1;
         if (stackEvent.type == CsipSetCoordinatorStackEvent.EVENT_TYPE_DEVICE_AVAILABLE) {
-            Objects.requireNonNull(device, "Device should never be null, event: " + stackEvent);
+            Objects.requireNonNull(device);
 
             intent = new Intent(BluetoothCsipSetCoordinator.ACTION_CSIS_DEVICE_AVAILABLE);
             intent.putExtra(BluetoothDevice.EXTRA_DEVICE, stackEvent.device);
@@ -836,7 +836,7 @@ public class CsipSetCoordinatorService extends ProfileService {
                     stackEvent.valueInt2);
         } else if (stackEvent.type
                 == CsipSetCoordinatorStackEvent.EVENT_TYPE_SET_MEMBER_AVAILABLE) {
-            Objects.requireNonNull(device, "Device should never be null, event: " + stackEvent);
+            Objects.requireNonNull(device);
             if (!mFoundSetMemberToGroupId.containsKey(device)) {
                 mFoundSetMemberToGroupId.put(device, groupId);
             }

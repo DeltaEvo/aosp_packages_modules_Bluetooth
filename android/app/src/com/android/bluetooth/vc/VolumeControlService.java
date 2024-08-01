@@ -1124,8 +1124,7 @@ public class VolumeControlService extends ProfileService {
             return;
         }
 
-        Objects.requireNonNull(
-                stackEvent.device, "Device should never be null, event: " + stackEvent);
+        Objects.requireNonNull(stackEvent.device);
 
         BluetoothDevice device = stackEvent.device;
         if (stackEvent.type == VolumeControlStackEvent.EVENT_TYPE_DEVICE_AVAILABLE) {

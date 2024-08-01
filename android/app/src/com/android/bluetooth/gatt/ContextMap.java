@@ -362,7 +362,7 @@ public class ContextMap<C> {
     /** Logs debug information. */
     protected void dump(StringBuilder sb) {
         synchronized (mAppsLock) {
-            sb.append("  Entries: " + mApps.size() + "\n\n");
+            sb.append("  Entries: ").append(mApps.size()).append("\n\n");
         }
     }
 }

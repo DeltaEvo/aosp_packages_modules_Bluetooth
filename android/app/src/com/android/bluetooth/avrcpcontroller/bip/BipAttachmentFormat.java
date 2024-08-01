@@ -161,12 +161,12 @@ public class BipAttachmentFormat {
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("<attachment");
-        sb.append(" content-type=\"" + mContentType + "\"");
-        if (mCharset != null) sb.append(" charset=\"" + mCharset + "\"");
-        sb.append(" name=\"" + mName + "\"");
-        if (mSize > -1) sb.append(" size=\"" + mSize + "\"");
-        if (mCreated != null) sb.append(" created=\"" + mCreated.toString() + "\"");
-        if (mModified != null) sb.append(" modified=\"" + mModified.toString() + "\"");
+        sb.append(" content-type=\"").append(mContentType).append("\"");
+        if (mCharset != null) sb.append(" charset=\"").append(mCharset).append("\"");
+        sb.append(" name=\"").append(mName).append("\"");
+        if (mSize > -1) sb.append(" size=\"").append(mSize).append("\"");
+        if (mCreated != null) sb.append(" created=\"").append(mCreated.toString()).append("\"");
+        if (mModified != null) sb.append(" modified=\"").append(mModified.toString()).append("\"");
         sb.append(" />");
         return sb.toString();
     }

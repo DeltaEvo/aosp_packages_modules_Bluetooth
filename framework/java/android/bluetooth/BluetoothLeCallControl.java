@@ -55,8 +55,6 @@ import java.util.concurrent.Executor;
  */
 public final class BluetoothLeCallControl implements BluetoothProfile {
     private static final String TAG = "BluetoothLeCallControl";
-    private static final boolean DBG = true;
-    private static final boolean VDBG = false;
 
     /** @hide */
     @IntDef(
@@ -296,6 +294,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
         @Override
         public void onBearerRegistered(int ccid) {
             if (mCallback != null) {
+                Log.d(TAG, "onBearerRegistered: ccid is " + ccid);
                 mCcid = ccid;
             } else {
                 // registration timeout
@@ -390,9 +389,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
 
     /** @hide */
     public void close() {
-        if (VDBG) {
-            Log.d(TAG, "close()");
-        }
+        Log.v(TAG, "close()");
 
         mAdapter.closeProfileProxy(this);
     }
@@ -489,13 +486,12 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
             int technology,
             @NonNull Executor executor,
             @NonNull Callback callback) {
-        if (DBG) {
-            Log.d(TAG, "registerBearer");
-        }
+        Log.d(TAG, "registerBearer");
         if (callback == null) {
             throw new IllegalArgumentException("null parameter: " + callback);
         }
         if (mCcid != 0) {
+            Log.e(TAG, "Ccid is already set to " + mCcid);
             return false;
         }
 
@@ -546,9 +542,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
      */
     @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void unregisterBearer() {
-        if (DBG) {
-            Log.d(TAG, "unregisterBearer");
-        }
+        Log.d(TAG, "unregisterBearer");
         if (mCcid == 0) {
             return;
         }
@@ -581,9 +575,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
      */
     @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void onCallAdded(@NonNull BluetoothLeCall call) {
-        if (DBG) {
-            Log.d(TAG, "onCallAdded: call=" + call);
-        }
+        Log.d(TAG, "onCallAdded: call=" + call);
         if (mCcid == 0) {
             return;
         }
@@ -614,9 +606,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
      */
     @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void onCallRemoved(@NonNull UUID callId, @TerminationReason int reason) {
-        if (DBG) {
-            Log.d(TAG, "callRemoved: callId=" + callId);
-        }
+        Log.d(TAG, "callRemoved: callId=" + callId);
         if (mCcid == 0) {
             return;
         }
@@ -646,9 +636,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
      */
     @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void onCallStateChanged(@NonNull UUID callId, @BluetoothLeCall.State int state) {
-        if (DBG) {
-            Log.d(TAG, "callStateChanged: callId=" + callId + " state=" + state);
-        }
+        Log.d(TAG, "callStateChanged: callId=" + callId + " state=" + state);
         if (mCcid == 0) {
             return;
         }
@@ -705,9 +693,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
      */
     @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void networkStateChanged(@NonNull String provider, int technology) {
-        if (DBG) {
-            Log.d(TAG, "networkStateChanged: provider=" + provider + ", technology=" + technology);
-        }
+        Log.d(TAG, "networkStateChanged: provider=" + provider + ", technology=" + technology);
         if (mCcid == 0) {
             return;
         }
@@ -745,9 +731,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
      */
     @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
     public void requestResult(int requestId, @Result int result) {
-        if (DBG) {
-            Log.d(TAG, "requestResult: requestId=" + requestId + " result=" + result);
-        }
+        Log.d(TAG, "requestResult: requestId=" + requestId + " result=" + result);
         if (mCcid == 0) {
             return;
         }

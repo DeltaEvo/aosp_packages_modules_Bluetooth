@@ -54,6 +54,7 @@ import android.util.Log;
 
 import androidx.annotation.VisibleForTesting;
 
+import com.android.bluetooth.Utils;
 import com.android.bluetooth.hfp.BluetoothHeadsetProxy;
 import com.android.bluetooth.tbs.BluetoothLeCallControlProxy;
 
@@ -155,6 +156,7 @@ public class BluetoothInCallService extends InCallService {
                 @Override
                 @RequiresPermission(allOf = {BLUETOOTH_CONNECT, MODIFY_PHONE_STATE})
                 public void onServiceConnected(int profile, BluetoothProfile proxy) {
+                    Log.d(TAG, "onServiceConnected for profile: " + profile);
                     synchronized (LOCK) {
                         if (profile == BluetoothProfile.HEADSET) {
                             mBluetoothHeadset = new BluetoothHeadsetProxy((BluetoothHeadset) proxy);
@@ -163,17 +165,20 @@ public class BluetoothInCallService extends InCallService {
                             mBluetoothLeCallControl =
                                     new BluetoothLeCallControlProxy((BluetoothLeCallControl) proxy);
 
-                            mBluetoothLeCallControl.registerBearer(
-                                    TAG,
-                                    List.of("tel"),
-                                    BluetoothLeCallControl.CAPABILITY_HOLD_CALL,
-                                    getNetworkOperator(),
-                                    getBearerTechnology(),
-                                    mExecutor,
-                                    mBluetoothLeCallControlCallback);
+                            boolean isBearerRegistered =
+                                    mBluetoothLeCallControl.registerBearer(
+                                            TAG,
+                                            List.of("tel"),
+                                            BluetoothLeCallControl.CAPABILITY_HOLD_CALL,
+                                            getNetworkOperator(),
+                                            getBearerTechnology(),
+                                            mExecutor,
+                                            mBluetoothLeCallControlCallback);
+                            Log.d(TAG, "isBearerRegistered: " + isBearerRegistered);
                             sendTbsCurrentCallsList();
                         }
                     }
+                    Log.d(TAG, "Calls updated for profile: " + profile);
                 }
 
                 @Override
@@ -783,6 +788,7 @@ public class BluetoothInCallService extends InCallService {
         if (mBluetoothLeCallControl != null) {
             mBluetoothLeCallControl.unregisterBearer();
             mBluetoothLeCallControl.closeBluetoothLeCallControlProxy(mAdapter);
+            mBluetoothLeCallControl = null;
         }
         sInstance = null;
         mCallbacks.clear();
@@ -887,7 +893,7 @@ public class BluetoothInCallService extends InCallService {
                 }
                 Log.i(
                         TAG,
-                        String.format(
+                        Utils.formatSimple(
                                 "sending inferred clcc for BluetoothCall: index %d, direction"
                                         + " %d, state %d, isPartOfConference %b, addressType %d",
                                 (int) response[0],

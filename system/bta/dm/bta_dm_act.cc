@@ -89,7 +89,7 @@ static void bta_dm_adjust_roles(bool delay_role_switch);
 tBTM_CONTRL_STATE bta_dm_pm_obtain_controller_state(void);
 static void bta_dm_ctrl_features_rd_cmpl_cback(tHCI_STATUS result);
 
-static const char kPropertySniffOffloadEnabled[] = "bluetooth.sniff_offload.enabled";
+static const char kPropertySniffOffloadEnabled[] = "persist.bluetooth.sniff_offload.enabled";
 
 #ifndef BTA_DM_BLE_ADV_CHNL_MAP
 #define BTA_DM_BLE_ADV_CHNL_MAP (BTM_BLE_ADV_CHNL_37 | BTM_BLE_ADV_CHNL_38 | BTM_BLE_ADV_CHNL_39)
@@ -288,8 +288,8 @@ void BTA_dm_on_hw_on() {
   bta_sys_rm_register(bta_dm_rm_cback);
 
   /* if sniff is offload, no need to handle it in the stack */
-  if (com::android::bluetooth::flags::enable_sniff_offload() &&
-      osi_property_get_bool(kPropertySniffOffloadEnabled, false)) {
+  if (osi_property_get_bool(kPropertySniffOffloadEnabled, false)) {
+    log::info("Sniff offloaded. Skip bta_dm_init_pm.");
   } else {
     /* initialize bluetooth low power manager */
     bta_dm_init_pm();
@@ -322,9 +322,8 @@ void bta_dm_disable() {
   }
 
   /* if sniff is offload, no need to handle it in the stack */
-  if (com::android::bluetooth::flags::enable_sniff_offload() &&
-      osi_property_get_bool(kPropertySniffOffloadEnabled, false)) {
-    log::info("Sniff offloading. Skip bta_dm_disable_pm.");
+  if (osi_property_get_bool(kPropertySniffOffloadEnabled, false)) {
+    log::info("Sniff offloaded. Skip bta_dm_disable_pm.");
   } else {
     /* Disable bluetooth low power manager */
     bta_dm_disable_pm();

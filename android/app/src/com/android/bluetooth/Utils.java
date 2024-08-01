@@ -59,6 +59,7 @@ import android.os.Build;
 import android.os.ParcelUuid;
 import android.os.PowerExemptionManager;
 import android.os.Process;
+import android.os.RemoteException;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -92,6 +93,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 public final class Utils {
     private static final String TAG = "BluetoothUtils";
@@ -333,7 +335,7 @@ public final class Utils {
             if (idx != 0) {
                 sb.append(" ");
             }
-            sb.append(String.format("%02x", valueBuf[idx]));
+            sb.append(formatSimple("%02x", valueBuf[idx]));
         }
         return sb.toString();
     }
@@ -1204,20 +1206,20 @@ public final class Utils {
      * @return String value representing CCC state
      */
     public static String cccIntToStr(Short cccValue) {
-        String string = "";
-
         if (cccValue == 0) {
-            return string += "NO SUBSCRIPTION";
+            return "NO SUBSCRIPTION";
         }
 
+        if (BigInteger.valueOf(cccValue).testBit(0) && BigInteger.valueOf(cccValue).testBit(1)) {
+            return "NOTIFICATION|INDICATION";
+        }
         if (BigInteger.valueOf(cccValue).testBit(0)) {
-            string += "NOTIFICATION";
+            return "NOTIFICATION";
         }
         if (BigInteger.valueOf(cccValue).testBit(1)) {
-            string += string.isEmpty() ? "INDICATION" : "|INDICATION";
+            return "INDICATION";
         }
-
-        return string;
+        return "";
     }
 
     /**
@@ -1258,6 +1260,23 @@ public final class Utils {
                 || pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK);
     }
 
+    /** A {@link Consumer} that automatically ignores any {@link RemoteException}s. */
+    @FunctionalInterface
+    @SuppressWarnings("FunctionalInterfaceMethodChanged")
+    public interface RemoteExceptionIgnoringConsumer<T> extends Consumer<T> {
+        /** Called by {@code accept}. */
+        void acceptOrThrow(T t) throws RemoteException;
+
+        @Override
+        default void accept(T t) {
+            try {
+                acceptOrThrow(t);
+            } catch (RemoteException ex) {
+                // Ignore RemoteException
+            }
+        }
+    }
+
     /**
      * Returns the longest prefix of a string for which the UTF-8 encoding fits into the given
      * number of bytes, with the additional guarantee that the string is not truncated in the middle
@@ -1268,6 +1287,8 @@ public final class Utils {
      * by the UTF-8 implementation.
      *
      * <p>(copied from framework/base/core/java/android/text/TextUtils.java)
+     *
+     * <p>(See {@code android.text.TextUtils.truncateStringForUtf8Storage}
      *
      * @param str a string
      * @param maxbytes the maximum number of UTF-8 encoded bytes
@@ -1299,5 +1320,117 @@ public final class Utils {
             }
         }
         return str;
+    }
+
+    /**
+     * Simple alternative to {@link String#format} which purposefully supports only a small handful
+     * of substitutions to improve execution speed. Benchmarking reveals this optimized alternative
+     * performs 6.5x faster for a typical format string.
+     *
+     * <p>Below is a summary of the limited grammar supported by this method; if you need advanced
+     * features, please continue using {@link String#format}.
+     *
+     * <ul>
+     *   <li>{@code %b} for {@code boolean}
+     *   <li>{@code %c} for {@code char}
+     *   <li>{@code %d} for {@code int} or {@code long}
+     *   <li>{@code %f} for {@code float} or {@code double}
+     *   <li>{@code %s} for {@code String}
+     *   <li>{@code %x} for hex representation of {@code int} or {@code long} or {@code byte}
+     *   <li>{@code %%} for literal {@code %}
+     *   <li>{@code %04d} style grammar to specify the argument width, such as {@code %04d} to
+     *       prefix an {@code int} with zeros or {@code %10b} to prefix a {@code boolean} with
+     *       spaces
+     * </ul>
+     *
+     * <p>(copied from framework/base/core/java/android/text/TextUtils.java)
+     *
+     * <p>See {@code android.text.TextUtils.formatSimple}
+     *
+     * @throws IllegalArgumentException if the format string or arguments don't match the supported
+     *     grammar described above.
+     * @hide
+     */
+    public static @NonNull String formatSimple(@NonNull String format, Object... args) {
+        final StringBuilder sb = new StringBuilder(format);
+        int j = 0;
+        for (int i = 0; i < sb.length(); ) {
+            if (sb.charAt(i) == '%') {
+                char code = sb.charAt(i + 1);
+
+                // Decode any argument width request
+                char prefixChar = '\0';
+                int prefixLen = 0;
+                int consume = 2;
+                while ('0' <= code && code <= '9') {
+                    if (prefixChar == '\0') {
+                        prefixChar = (code == '0') ? '0' : ' ';
+                    }
+                    prefixLen *= 10;
+                    prefixLen += Character.digit(code, 10);
+                    consume += 1;
+                    code = sb.charAt(i + consume - 1);
+                }
+
+                final String repl;
+                switch (code) {
+                    case 'b' -> {
+                        if (j == args.length) {
+                            throw new IllegalArgumentException("Too few arguments");
+                        }
+                        final Object arg = args[j++];
+                        if (arg instanceof Boolean) {
+                            repl = Boolean.toString((boolean) arg);
+                        } else {
+                            repl = Boolean.toString(arg != null);
+                        }
+                    }
+                    case 'c', 'd', 'f', 's' -> {
+                        if (j == args.length) {
+                            throw new IllegalArgumentException("Too few arguments");
+                        }
+                        final Object arg = args[j++];
+                        repl = String.valueOf(arg);
+                    }
+                    case 'x' -> {
+                        if (j == args.length) {
+                            throw new IllegalArgumentException("Too few arguments");
+                        }
+                        final Object arg = args[j++];
+                        if (arg instanceof Integer) {
+                            repl = Integer.toHexString((int) arg);
+                        } else if (arg instanceof Long) {
+                            repl = Long.toHexString((long) arg);
+                        } else if (arg instanceof Byte) {
+                            repl = Integer.toHexString(Byte.toUnsignedInt((byte) arg));
+                        } else {
+                            throw new IllegalArgumentException(
+                                    "Unsupported hex type " + arg.getClass());
+                        }
+                    }
+                    case '%' -> {
+                        repl = "%";
+                    }
+                    default -> {
+                        throw new IllegalArgumentException("Unsupported format code " + code);
+                    }
+                }
+
+                sb.replace(i, i + consume, repl);
+
+                // Apply any argument width request
+                final int prefixInsert = (prefixChar == '0' && repl.charAt(0) == '-') ? 1 : 0;
+                for (int k = repl.length(); k < prefixLen; k++) {
+                    sb.insert(i + prefixInsert, prefixChar);
+                }
+                i += Math.max(repl.length(), prefixLen);
+            } else {
+                i++;
+            }
+        }
+        if (j != args.length) {
+            throw new IllegalArgumentException("Too many arguments");
+        }
+        return sb.toString();
     }
 }

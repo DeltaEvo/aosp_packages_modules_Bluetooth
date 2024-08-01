@@ -42,7 +42,7 @@ from pandora_experimental.rfcomm_pb2 import (
     TxResponse,
 )
 
-FIRST_SERVICE_RECORD_HANDLE = 0x00010000
+FIRST_SERVICE_RECORD_HANDLE = 0x00010010
 
 
 class RFCOMMService(RFCOMMServicer):

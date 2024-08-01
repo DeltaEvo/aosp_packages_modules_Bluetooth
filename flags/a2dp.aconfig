@@ -87,6 +87,13 @@ flag {
 }
 
 flag {
+    name: "a2dp_variable_aac_capability"
+    namespace: "bluetooth"
+    description: "Enable AAC 48 kHz sampling rate for sink devices in the allow list"
+    bug: "38443632"
+}
+
+flag {
     name: "stop_on_offload_fail"
     namespace: "bluetooth"
     description: "Stop instead of disconnecting AVDT when offload fails"
