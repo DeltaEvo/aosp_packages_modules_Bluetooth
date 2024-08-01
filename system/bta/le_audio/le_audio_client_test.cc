@@ -989,10 +989,15 @@ protected:
                                   types::BidirectionalPair<types::AudioContexts>
                                           metadata_context_types,
                                   types::BidirectionalPair<std::vector<uint8_t>> ccid_lists) {
+              auto group_state = group->GetState();
+              log::info("group {} state {}, context type {}", group->group_id_,
+                        bluetooth::common::ToString(group_state),
+                        bluetooth::common::ToString(context_type));
+
               /* Do nothing if already streaming - the implementation would
                * probably update the metadata.
                */
-              if (group->GetState() == types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
+              if (group_state == types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
                 return true;
               }
 
@@ -1012,7 +1017,8 @@ protected:
                 return false;
               }
 
-              if (group->GetState() == types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {
+              if (group_state == types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE ||
+                  group_state == types::AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED) {
                 group->cig.GenerateCisIds(context_type);
 
                 std::vector<uint16_t> conn_handles;
@@ -6570,7 +6576,7 @@ TEST_F(UnicastTest, TwoEarbudsStreamingContextSwitchReconfigure_SpeedUpReconfigF
   constexpr int gmcs_ccid = 1;
   constexpr int gtbs_ccid = 2;
 
-  // Start streaming MEDIA
+  log::info("Start streaming MEDIA");
   EXPECT_CALL(*mock_le_audio_source_hal_client_, Start(_, _, _)).Times(1);
   EXPECT_CALL(*mock_le_audio_sink_hal_client_, Start(_, _, _)).Times(1);
   LeAudioClient::Get()->SetCcidInformation(gmcs_ccid, 4 /* Media */);
@@ -6592,15 +6598,21 @@ TEST_F(UnicastTest, TwoEarbudsStreamingContextSwitchReconfigure_SpeedUpReconfigF
   uint8_t cis_count_in = 0;
   TestAudioDataTransfer(group_id, cis_count_out, cis_count_in, 1920);
 
-  // Stop
-  StopStreaming(group_id);
-  // simulate suspend timeout passed, alarm executing
-  fake_osi_alarm_set_on_mloop_.cb(fake_osi_alarm_set_on_mloop_.data);
-  SyncOnMainLoop();
-  Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
+  log::info("Simulate incoming call");
 
+  EXPECT_CALL(mock_state_machine_, StopStream(_)).Times(1);
+  Expectation reconfigure =
+          EXPECT_CALL(*mock_le_audio_source_hal_client_, SuspendedForReconfiguration()).Times(1);
+  EXPECT_CALL(*mock_le_audio_source_hal_client_, CancelStreamingRequest()).Times(1);
+  EXPECT_CALL(*mock_le_audio_source_hal_client_, ReconfigurationComplete())
+          .Times(1)
+          .After(reconfigure);
+  EXPECT_CALL(mock_state_machine_, ConfigureStream(_, _, _, _)).Times(1);
   // SetInCall is used by GTBS - and only then we can expect CCID to be set.
   LeAudioClient::Get()->SetInCall(true);
+  SyncOnMainLoop();
+  Mock::VerifyAndClearExpectations(&mock_state_machine_);
+  Mock::VerifyAndClearExpectations(mock_le_audio_source_hal_client_);
 
   // Conversational is a bidirectional scenario so expect GTBS CCID
   // in the metadata for both directions. Can be called twice when one
@@ -6624,13 +6636,13 @@ TEST_F(UnicastTest, TwoEarbudsStreamingContextSwitchReconfigure_SpeedUpReconfigF
 
   // Stop stream will be called by SetInCall
   EXPECT_CALL(mock_state_machine_, StopStream(_)).Times(1);
-  Expectation reconfigure =
+  reconfigure =
           EXPECT_CALL(*mock_le_audio_source_hal_client_, SuspendedForReconfiguration()).Times(1);
   EXPECT_CALL(*mock_le_audio_source_hal_client_, CancelStreamingRequest()).Times(1);
   EXPECT_CALL(*mock_le_audio_source_hal_client_, ReconfigurationComplete())
           .Times(1)
           .After(reconfigure);
-  EXPECT_CALL(mock_state_machine_, ConfigureStream(_, _, _, _)).Times(0);
+  EXPECT_CALL(mock_state_machine_, ConfigureStream(_, _, _, _)).Times(1);
 
   LeAudioClient::Get()->SetInCall(false);
   SyncOnMainLoop();
@@ -7931,7 +7943,7 @@ TEST_F(UnicastTest, MicrophoneAttachToCurrentMediaScenario) {
   int group_id = bluetooth::groups::kGroupUnknown;
 
   SetSampleDatabaseEarbudsValid(1, test_address0, codec_spec_conf::kLeAudioLocationStereo,
-                                codec_spec_conf::kLeAudioLocationStereo, default_channel_cnt,
+                                codec_spec_conf::kLeAudioLocationFrontLeft, default_channel_cnt,
                                 default_channel_cnt, 0x0024, false /*add_csis*/, true /*add_cas*/,
                                 true /*add_pacs*/, default_ase_cnt /*add_ascs_cnt*/, 1 /*set_size*/,
                                 0 /*rank*/);
@@ -7994,6 +8006,9 @@ TEST_F(UnicastTest, MicrophoneAttachToCurrentMediaScenario) {
           base::BindOnce([](LeAudioSinkAudioHalClient::Callbacks* cb) { cb->OnAudioResume(); },
                          unicast_sink_hal_cb_));
   SyncOnMainLoop();
+
+  auto group = streaming_groups.at(group_id);
+  group->PrintDebugState();
 
   // Verify Data transfer on one audio source and sink cis
   cis_count_out = 1;
@@ -8124,19 +8139,7 @@ TEST_F(UnicastTest, UpdateNotSupportedContextTypeUnspecifiedAvailable_SpeedUpRec
   uint8_t cis_count_out = 1;
   uint8_t cis_count_in = 0;
 
-  log::info(
-          " SetInCall = true, there is no stream so there should be no operations on state "
-          "machine");
-  EXPECT_CALL(mock_state_machine_, StopStream(_)).Times(0);
-  EXPECT_CALL(*mock_le_audio_source_hal_client_, SuspendedForReconfiguration()).Times(0);
-  EXPECT_CALL(*mock_le_audio_source_hal_client_, CancelStreamingRequest()).Times(0);
-  EXPECT_CALL(*mock_le_audio_source_hal_client_, ReconfigurationComplete()).Times(0);
-  EXPECT_CALL(mock_state_machine_, ConfigureStream(_, _, _, _)).Times(0);
-
   LeAudioClient::Get()->SetInCall(true);
-  SyncOnMainLoop();
-  Mock::VerifyAndClearExpectations(&mock_state_machine_);
-  Mock::VerifyAndClearExpectations(mock_le_audio_source_hal_client_);
 
   // Audio sessions are started only when device gets active
   EXPECT_CALL(*mock_le_audio_source_hal_client_, Start(_, _, _)).Times(1);
@@ -8147,31 +8150,15 @@ TEST_F(UnicastTest, UpdateNotSupportedContextTypeUnspecifiedAvailable_SpeedUpRec
   StartStreaming(AUDIO_USAGE_NOTIFICATION_TELEPHONY_RINGTONE, AUDIO_CONTENT_TYPE_UNKNOWN, group_id);
   LocalAudioSourceResume();
   LocalAudioSinkResume();
-  SyncOnMainLoop();
 
   Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
   Mock::VerifyAndClearExpectations(mock_le_audio_source_hal_client_);
+  SyncOnMainLoop();
 
   // Verify Data transfer on one audio source cis
   TestAudioDataTransfer(group_id, cis_count_out, cis_count_in, 1920);
 
-  // Stop stream will be called by SetInCall
-  log::info(" SetInCall = false, there is  stream so it should be stopped");
-  EXPECT_CALL(mock_state_machine_, StopStream(_)).Times(1);
-  Expectation reconfigure =
-          EXPECT_CALL(*mock_le_audio_source_hal_client_, SuspendedForReconfiguration()).Times(1);
-  EXPECT_CALL(*mock_le_audio_source_hal_client_, CancelStreamingRequest()).Times(1);
-  EXPECT_CALL(*mock_le_audio_source_hal_client_, ReconfigurationComplete())
-          .Times(1)
-          .After(reconfigure);
-  EXPECT_CALL(mock_state_machine_, ConfigureStream(_, _, _, _)).Times(0);
   LeAudioClient::Get()->SetInCall(false);
-  SyncOnMainLoop();
-
-  Mock::VerifyAndClearExpectations(&mock_state_machine_);
-  Mock::VerifyAndClearExpectations(mock_le_audio_source_hal_client_);
-
-  log::info("Offloader called suspend");
   LocalAudioSinkSuspend();
 
   /* We should use GAME configuration, but do not send the GAME context type, as
@@ -8183,7 +8170,7 @@ TEST_F(UnicastTest, UpdateNotSupportedContextTypeUnspecifiedAvailable_SpeedUpRec
           .source = types::AudioContexts(types::LeAudioContextType::UNSPECIFIED)};
   EXPECT_CALL(mock_state_machine_, StartStream(_, types::LeAudioContextType::GAME, contexts, _))
           .Times(1);
-  StartStreaming(AUDIO_USAGE_GAME, AUDIO_CONTENT_TYPE_UNKNOWN, group_id);
+  UpdateLocalSourceMetadata(AUDIO_USAGE_GAME, AUDIO_CONTENT_TYPE_UNKNOWN, false);
   SyncOnMainLoop();
 }
 
@@ -8401,13 +8388,14 @@ TEST_F(UnicastTest, UpdateMultipleBidirContextTypes_SpeedUpReconfigFlagEnabled) 
   uint8_t cis_count_in = 1;
   TestAudioDataTransfer(group_id, cis_count_out, cis_count_in, 1920, 40);
 
-  // Stop
-  StopStreaming(group_id);
-  SyncOnMainLoop();
-  Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
-
   log::info("Step 2 Now set in call preference to get CONVERSATIONAL into the mix");
   // -----------------------------------------------------------------
+
+  EXPECT_CALL(*mock_le_audio_source_hal_client_, SuspendedForReconfiguration()).Times(0);
+  EXPECT_CALL(*mock_le_audio_source_hal_client_, CancelStreamingRequest()).Times(0);
+  EXPECT_CALL(*mock_le_audio_source_hal_client_, ReconfigurationComplete()).Times(0);
+  EXPECT_CALL(mock_state_machine_, ConfigureStream(_, _, _, _)).Times(0);
+  EXPECT_CALL(mock_state_machine_, StopStream(_)).Times(0);
   LeAudioClient::Get()->SetInCall(true);
   SyncOnMainLoop();
 
@@ -8438,14 +8426,11 @@ TEST_F(UnicastTest, UpdateMultipleBidirContextTypes_SpeedUpReconfigFlagEnabled) 
 
   log::info("Step 3 Disable call so we could go to GAME");
   // ---------------------------------------
-  Expectation reconfigure =
-          EXPECT_CALL(*mock_le_audio_source_hal_client_, SuspendedForReconfiguration()).Times(1);
-  EXPECT_CALL(*mock_le_audio_source_hal_client_, CancelStreamingRequest()).Times(1);
-  EXPECT_CALL(*mock_le_audio_source_hal_client_, ReconfigurationComplete())
-          .Times(1)
-          .After(reconfigure);
+  EXPECT_CALL(*mock_le_audio_source_hal_client_, SuspendedForReconfiguration()).Times(0);
+  EXPECT_CALL(*mock_le_audio_source_hal_client_, CancelStreamingRequest()).Times(0);
+  EXPECT_CALL(*mock_le_audio_source_hal_client_, ReconfigurationComplete()).Times(0);
   EXPECT_CALL(mock_state_machine_, ConfigureStream(_, _, _, _)).Times(0);
-  EXPECT_CALL(mock_state_machine_, StopStream(_)).Times(1);
+  EXPECT_CALL(mock_state_machine_, StopStream(_)).Times(0);
 
   LeAudioClient::Get()->SetInCall(false);
   SyncOnMainLoop();
@@ -8454,27 +8439,19 @@ TEST_F(UnicastTest, UpdateMultipleBidirContextTypes_SpeedUpReconfigFlagEnabled) 
 
   log::info("Start the game on local source - expect no previous sink (LIVE) metadata");
 
-  EXPECT_CALL(mock_state_machine_, StopStream(_)).Times(0);
-  UpdateLocalSourceMetadata(AUDIO_USAGE_GAME, AUDIO_CONTENT_TYPE_UNKNOWN, false);
-  SyncOnMainLoop();
-
-  /* If the above triggers reconfiguration, Audio Hal action is needed to
-   * restart the stream.
-   */
+  /* Stream shall keep streaming */
   contexts = {.sink = types::AudioContexts(types::LeAudioContextType::GAME),
               .source = types::AudioContexts(types::LeAudioContextType::GAME)};
-  EXPECT_CALL(mock_state_machine_, StartStream(_, types::LeAudioContextType::GAME, contexts, _))
-          .Times(1);
+  EXPECT_CALL(mock_state_machine_, StartStream(_, _, contexts, _)).Times(1);
 
+  UpdateLocalSourceMetadata(AUDIO_USAGE_GAME, AUDIO_CONTENT_TYPE_UNKNOWN, false);
   LocalAudioSourceResume();
   SyncOnMainLoop();
-  Mock::VerifyAndClearExpectations(&mock_state_machine_);
 
-  EXPECT_CALL(mock_state_machine_, StartStream(_, types::LeAudioContextType::GAME, contexts, _))
-          .Times(1);
-
-  LocalAudioSinkResume();
-  SyncOnMainLoop();
+  // Verify Data transfer on one audio source cis
+  cis_count_out = 1;
+  cis_count_in = 1;
+  TestAudioDataTransfer(group_id, cis_count_out, cis_count_in, 1920, 40);
   Mock::VerifyAndClearExpectations(&mock_state_machine_);
 
   log::info(" Step 4 Stop streaming");
