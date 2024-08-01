@@ -40,6 +40,7 @@ public class VolumeControlStackEvent {
     public BluetoothDevice device;
     public int valueInt1;
     public int valueInt2;
+    public int valueInt3;
     public boolean valueBool1;
     public boolean valueBool2;
     public String valueString1;
@@ -58,6 +59,7 @@ public class VolumeControlStackEvent {
         result.append(", device:").append(device);
         result.append(", valueInt1:").append(eventTypeValue1ToString(type, valueInt1));
         result.append(", valueInt2:").append(eventTypeValue2ToString(type, valueInt2));
+        result.append(", valueInt3:").append(eventTypeValue3ToString(type, valueInt3));
         result.append(", valueBool1:").append(eventTypeValueBool1ToString(type, valueBool1));
         result.append(", valueBool2:").append(eventTypeValueBool2ToString(type, valueBool2));
         result.append(", valueString1:").append(eventTypeString1ToString(type, valueString1));
@@ -132,6 +134,16 @@ public class VolumeControlStackEvent {
                 }
             case EVENT_TYPE_VOLUME_STATE_CHANGED:
                 return "{volume:" + value + "}";
+            default:
+                break;
+        }
+        return Integer.toString(value);
+    }
+
+    private static String eventTypeValue3ToString(int type, int value) {
+        switch (type) {
+            case EVENT_TYPE_VOLUME_STATE_CHANGED:
+                return "{flags:" + value + "}";
             default:
                 break;
         }
