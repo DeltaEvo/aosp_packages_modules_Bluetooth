@@ -229,6 +229,7 @@ typedef struct {
   uint8_t op_code;
   uint8_t status;
   uint8_t cback_cnt[GATT_MAX_APPS];
+  std::unordered_map<tGATT_IF, uint8_t> cback_cnt_map;
   uint16_t cid;
 } tGATT_SR_CMD;
 
@@ -316,6 +317,7 @@ typedef struct {
   alarm_t* conf_timer; /* peer confirm to indication timer */
 
   uint8_t prep_cnt[GATT_MAX_APPS];
+  std::unordered_map<tGATT_IF, uint8_t> prep_cnt_map;
   uint8_t ind_count;
 
   std::deque<tGATT_CMD_Q> cl_cmd_q;
