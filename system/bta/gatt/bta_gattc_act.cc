@@ -224,11 +224,26 @@ void bta_gattc_deregister(tBTA_GATTC_RCB* p_clreg) {
       continue;
     }
 
-    if (bta_gattc_cb.bg_track[i].cif_mask & ((tBTA_GATTC_CIF_MASK)1 << (p_clreg->client_if - 1))) {
-      bta_gattc_mark_bg_conn(p_clreg->client_if, bta_gattc_cb.bg_track[i].remote_bda, false);
-      if (!GATT_CancelConnect(p_clreg->client_if, bta_gattc_cb.bg_track[i].remote_bda, false)) {
-        log::warn("Unable to cancel GATT connection client_if:{} peer:{} is_direct:{}",
+    if (com::android::bluetooth::flags::gatt_client_dynamic_allocation()) {
+      if (bta_gattc_cb.bg_track[i].cif_set.contains(p_clreg->client_if)) {
+        bta_gattc_mark_bg_conn(p_clreg->client_if, bta_gattc_cb.bg_track[i].remote_bda, false);
+        if (!GATT_CancelConnect(p_clreg->client_if, bta_gattc_cb.bg_track[i].remote_bda, false)) {
+          log::warn(
+                  "Unable to cancel GATT connection client_if:{} peer:{} "
+                  "is_direct:{}",
                   p_clreg->client_if, bta_gattc_cb.bg_track[i].remote_bda, false);
+        }
+      }
+    } else {
+      if (bta_gattc_cb.bg_track[i].cif_mask &
+          ((tBTA_GATTC_CIF_MASK)1 << (p_clreg->client_if - 1))) {
+        bta_gattc_mark_bg_conn(p_clreg->client_if, bta_gattc_cb.bg_track[i].remote_bda, false);
+        if (!GATT_CancelConnect(p_clreg->client_if, bta_gattc_cb.bg_track[i].remote_bda, false)) {
+          log::warn(
+                  "Unable to cancel GATT connection client_if:{} peer:{} "
+                  "is_direct:{}",
+                  p_clreg->client_if, bta_gattc_cb.bg_track[i].remote_bda, false);
+        }
       }
     }
   }

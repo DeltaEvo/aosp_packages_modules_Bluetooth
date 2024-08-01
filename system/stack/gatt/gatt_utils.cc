@@ -1034,13 +1034,21 @@ tGATT_REG* gatt_get_regcb(tGATT_IF gatt_if) {
   uint8_t ii = (uint8_t)gatt_if;
   tGATT_REG* p_reg = NULL;
 
-  if (ii < 1 || ii > GATT_MAX_APPS) {
-    log::warn("gatt_if out of range = {}", ii);
-    return NULL;
+  if (com::android::bluetooth::flags::gatt_client_dynamic_allocation()) {
+    auto it = gatt_cb.cl_rcb_map.find(gatt_if);
+    if (it == gatt_cb.cl_rcb_map.end()) {
+      log::warn("unknown gatt_if = {}", ii);
+      return NULL;
+    }
+    p_reg = it->second.get();
+  } else {
+    // Index for cl_rcb is always 1 less than gatt_if.
+    if (ii < 1 || ii > GATT_MAX_APPS) {
+      log::warn("gatt_if out of range = {}", ii);
+      return NULL;
+    }
+    p_reg = &gatt_cb.cl_rcb[ii - 1];
   }
-
-  // Index for cl_rcb is always 1 less than gatt_if.
-  p_reg = &gatt_cb.cl_rcb[ii - 1];
 
   if (!p_reg->in_use) {
     log::warn("gatt_if found but not in use.");
@@ -1768,20 +1776,39 @@ static void gatt_le_disconnect_complete_notify_user(const RawAddress& bda,
                                                     tBT_TRANSPORT transport) {
   tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(bda, transport);
 
-  for (uint8_t i = 0; i < GATT_MAX_APPS; i++) {
-    tGATT_REG* p_reg = &gatt_cb.cl_rcb[i];
-    if (p_reg->in_use && p_reg->app_cb.p_conn_cb) {
-      uint16_t conn_id =
-              p_tcb ? GATT_CREATE_CONN_ID(p_tcb->tcb_idx, p_reg->gatt_if) : GATT_INVALID_CONN_ID;
-      (*p_reg->app_cb.p_conn_cb)(p_reg->gatt_if, bda, conn_id, kGattDisconnected, reason,
-                                 transport);
-    }
+  if (com::android::bluetooth::flags::gatt_client_dynamic_allocation()) {
+    for (auto& [i, p_reg] : gatt_cb.cl_rcb_map) {
+      if (p_reg->in_use && p_reg->app_cb.p_conn_cb) {
+        uint16_t conn_id =
+                p_tcb ? GATT_CREATE_CONN_ID(p_tcb->tcb_idx, p_reg->gatt_if) : GATT_INVALID_CONN_ID;
+        (*p_reg->app_cb.p_conn_cb)(p_reg->gatt_if, bda, conn_id, kGattDisconnected, reason,
+                                   transport);
+      }
 
-    if (com::android::bluetooth::flags::gatt_reconnect_on_bt_on_fix()) {
-      if (p_reg->direct_connect_request.count(bda) > 0) {
-        log::info("Removing device {} from the direct connect list of gatt_if {}", bda,
-                  p_reg->gatt_if);
-        p_reg->direct_connect_request.erase(bda);
+      if (com::android::bluetooth::flags::gatt_reconnect_on_bt_on_fix()) {
+        if (p_reg->direct_connect_request.count(bda) > 0) {
+          log::info("Removing device {} from the direct connect list of gatt_if {}", bda,
+                    p_reg->gatt_if);
+          p_reg->direct_connect_request.erase(bda);
+        }
+      }
+    }
+  } else {
+    for (uint8_t i = 0; i < GATT_MAX_APPS; i++) {
+      tGATT_REG* p_reg = &gatt_cb.cl_rcb[i];
+      if (p_reg->in_use && p_reg->app_cb.p_conn_cb) {
+        uint16_t conn_id =
+                p_tcb ? GATT_CREATE_CONN_ID(p_tcb->tcb_idx, p_reg->gatt_if) : GATT_INVALID_CONN_ID;
+        (*p_reg->app_cb.p_conn_cb)(p_reg->gatt_if, bda, conn_id, kGattDisconnected, reason,
+                                   transport);
+      }
+
+      if (com::android::bluetooth::flags::gatt_reconnect_on_bt_on_fix()) {
+        if (p_reg->direct_connect_request.count(bda) > 0) {
+          log::info("Removing device {} from the direct connect list of gatt_if {}", bda,
+                    p_reg->gatt_if);
+          p_reg->direct_connect_request.erase(bda);
+        }
       }
     }
   }

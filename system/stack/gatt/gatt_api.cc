@@ -72,6 +72,9 @@ tGATT_HDL_LIST_ELEM& gatt_add_an_item_to_list(uint16_t s_handle) {
   return *rit;
 }
 
+static tGATT_IF GATT_Register_Dynamic(const Uuid& app_uuid128, const std::string& name,
+                                      tGATT_CBACK* p_cb_info, bool eatt_support);
+
 /*****************************************************************************
  *
  *                  GATT SERVER API
@@ -1216,6 +1219,9 @@ void GATT_SetIdleTimeout(const RawAddress& bd_addr, uint16_t idle_tout, tBT_TRAN
  ******************************************************************************/
 tGATT_IF GATT_Register(const Uuid& app_uuid128, const std::string& name, tGATT_CBACK* p_cb_info,
                        bool eatt_support) {
+  if (com::android::bluetooth::flags::gatt_client_dynamic_allocation()) {
+    return GATT_Register_Dynamic(app_uuid128, name, p_cb_info, eatt_support);
+  }
   tGATT_REG* p_reg;
   uint8_t i_gatt_if = 0;
   tGATT_IF gatt_if = 0;
@@ -1249,6 +1255,54 @@ tGATT_IF GATT_Register(const Uuid& app_uuid128, const std::string& name, tGATT_C
   }
 
   log::error("Unable to register GATT client, MAX client reached: {}", GATT_MAX_APPS);
+  return 0;
+}
+
+static tGATT_IF GATT_Register_Dynamic(const Uuid& app_uuid128, const std::string& name,
+                                      tGATT_CBACK* p_cb_info, bool eatt_support) {
+  for (auto& [gatt_if, p_reg] : gatt_cb.cl_rcb_map) {
+    if (p_reg->app_uuid128 == app_uuid128) {
+      log::error("Application already registered, uuid={}", app_uuid128.ToString());
+      return 0;
+    }
+  }
+
+  if (stack_config_get_interface()->get_pts_use_eatt_for_all_services()) {
+    log::info("PTS: Force to use EATT for servers");
+    eatt_support = true;
+  }
+
+  if (gatt_cb.cl_rcb_map.size() >= GATT_CL_RCB_MAX) {
+    log::error("Unable to register GATT client, MAX client reached: {}", gatt_cb.cl_rcb_map.size());
+    return 0;
+  }
+
+  uint8_t i_gatt_if = gatt_cb.next_gatt_if;
+  for (int i = 0; i < GATT_CL_RCB_MAX; i++) {
+    if (gatt_cb.cl_rcb_map.find(static_cast<tGATT_IF>(i_gatt_if)) == gatt_cb.cl_rcb_map.end()) {
+      gatt_cb.cl_rcb_map.emplace(i_gatt_if, std::make_unique<tGATT_REG>());
+      tGATT_REG* p_reg = gatt_cb.cl_rcb_map[i_gatt_if].get();
+      p_reg->app_uuid128 = app_uuid128;
+      p_reg->gatt_if = (tGATT_IF)i_gatt_if;
+      p_reg->app_cb = *p_cb_info;
+      p_reg->in_use = true;
+      p_reg->eatt_support = eatt_support;
+      p_reg->name = name;
+      log::info("Allocated name:{} uuid:{} gatt_if:{} eatt_support:{}", name,
+                app_uuid128.ToString(), p_reg->gatt_if, eatt_support);
+
+      gatt_cb.next_gatt_if = (tGATT_IF)(i_gatt_if + 1);
+      if (gatt_cb.next_gatt_if == 0) {
+        gatt_cb.next_gatt_if = 1;
+      }
+    }
+    i_gatt_if++;
+    if (i_gatt_if == 0) {
+      i_gatt_if = 1;
+    }
+  }
+
+  log::error("Unable to register GATT client, MAX client reached: {}", gatt_cb.cl_rcb_map.size());
   return 0;
 }
 
@@ -1319,7 +1373,11 @@ void GATT_Deregister(tGATT_IF gatt_if) {
     connection_manager::on_app_deregistered(gatt_if);
   }
 
-  *p_reg = {};
+  if (com::android::bluetooth::flags::gatt_client_dynamic_allocation()) {
+    gatt_cb.cl_rcb_map.erase(gatt_if);
+  } else {
+    *p_reg = {};
+  }
 }
 
 /*******************************************************************************
