@@ -295,6 +295,10 @@ class HostBuild():
         if not env:
             env = self.env
 
+        for k, v in env.items():
+            if env[k] is None:
+                env[k] = ""
+
         log_file = os.path.join(self.output_dir, '{}.log'.format(target))
         with open(log_file, 'wb') as lf:
             rc = 0
