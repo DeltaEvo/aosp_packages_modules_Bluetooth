@@ -57,7 +57,7 @@ import org.mockito.junit.MockitoRule;
 @RunWith(AndroidJUnit4.class)
 public class VolumeControlStateMachineTest {
     private BluetoothAdapter mAdapter;
-    private HandlerThread mHandlerThread;
+    private HandlerThread mHandlerThread = null;
     private VolumeControlStateMachine mVolumeControlStateMachine;
     private BluetoothDevice mTestDevice;
     private static final int TIMEOUT_MS = 1000;
@@ -68,6 +68,8 @@ public class VolumeControlStateMachineTest {
     @Mock private VolumeControlService mVolumeControlService;
     @Mock private VolumeControlNativeInterface mVolumeControlNativeInterface;
 
+    boolean mIsAdapterServiceSet;
+
     @Before
     public void setUp() throws Exception {
         InstrumentationRegistry.getInstrumentation()
@@ -76,6 +78,7 @@ public class VolumeControlStateMachineTest {
         TestUtils.setAdapterService(mAdapterService);
 
         mAdapter = BluetoothAdapter.getDefaultAdapter();
+        mIsAdapterServiceSet = true;
 
         // Get a device for testing
         mTestDevice = mAdapter.getRemoteDevice("00:01:02:03:04:05");
@@ -96,8 +99,12 @@ public class VolumeControlStateMachineTest {
 
     @After
     public void tearDown() throws Exception {
-        mHandlerThread.quit();
-        TestUtils.clearAdapterService(mAdapterService);
+        if (mHandlerThread != null) {
+            mHandlerThread.quit();
+        }
+        if (mIsAdapterServiceSet) {
+            TestUtils.clearAdapterService(mAdapterService);
+        }
     }
 
     /** Test that default state is disconnected */
