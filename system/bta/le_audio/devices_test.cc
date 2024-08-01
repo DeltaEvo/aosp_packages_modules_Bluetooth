@@ -610,7 +610,7 @@ protected:
           auto num_of_allocations_per_ase =
                   std::min(target_max_channel_counts_per_ase, (uint8_t)split_allocations.size());
           // Note: This is very important to set for the unit test
-          // Configuration verifier
+          // Configuration provider
           endpoint_cfg.codec.channel_count_per_iso_stream = num_of_allocations_per_ase;
 
           // Consume the `num_of_allocations_per_ase` amount of allocations for
@@ -683,7 +683,7 @@ protected:
             .WillByDefault(Invoke(
                     [&](const bluetooth::le_audio::CodecManager::UnicastConfigurationRequirements&
                                 requirements,
-                        bluetooth::le_audio::CodecManager::UnicastConfigurationVerifier verifier) {
+                        bluetooth::le_audio::CodecManager::UnicastConfigurationProvider provider) {
                       if (codec_coding_format_ == kLeAudioCodingFormatLC3) {
                         auto filtered =
                                 *bluetooth::le_audio::AudioSetConfigurationProvider::Get()
@@ -702,7 +702,7 @@ protected:
                                                  }),
                                   filtered.end());
                         }
-                        auto cfg = verifier(requirements, &filtered);
+                        auto cfg = provider(requirements, &filtered);
                         if (cfg == nullptr) {
                           return std::unique_ptr<AudioSetConfiguration>(nullptr);
                         }
@@ -1244,7 +1244,7 @@ protected:
             .WillByDefault(Invoke([&configs](const bluetooth::le_audio::CodecManager::
                                                      UnicastConfigurationRequirements& requirements,
                                              bluetooth::le_audio::CodecManager::
-                                                     UnicastConfigurationVerifier verifier) {
+                                                     UnicastConfigurationProvider provider) {
               auto filtered = configs;
               // Filter out the dual bidir SWB configurations
               if (!bluetooth::le_audio::CodecManager::GetInstance()->IsDualBiDirSwbSupported()) {
@@ -1258,7 +1258,7 @@ protected:
                                               }),
                                filtered.end());
               }
-              auto cfg = verifier(requirements, &filtered);
+              auto cfg = provider(requirements, &filtered);
               if (cfg == nullptr) {
                 return std::unique_ptr<AudioSetConfiguration>(nullptr);
               }
@@ -1897,7 +1897,7 @@ TEST_P(LeAudioAseConfigurationTest, test_lc3_config_media_codec_extensibility_fb
           .WillByDefault(Invoke(
                   [&](const bluetooth::le_audio::CodecManager::UnicastConfigurationRequirements&
                               requirements,
-                      bluetooth::le_audio::CodecManager::UnicastConfigurationVerifier verifier) {
+                      bluetooth::le_audio::CodecManager::UnicastConfigurationProvider provider) {
                     auto filtered = *bluetooth::le_audio::AudioSetConfigurationProvider::Get()
                                              ->GetConfigurations(requirements.audio_context_type);
                     // Filter out the dual bidir SWB configurations
@@ -1914,7 +1914,7 @@ TEST_P(LeAudioAseConfigurationTest, test_lc3_config_media_codec_extensibility_fb
                                              }),
                               filtered.end());
                     }
-                    auto cfg = verifier(requirements, &filtered);
+                    auto cfg = provider(requirements, &filtered);
                     if (cfg == nullptr) {
                       return std::unique_ptr<AudioSetConfiguration>(nullptr);
                     }

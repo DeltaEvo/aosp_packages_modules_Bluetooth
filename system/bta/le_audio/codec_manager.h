@@ -77,16 +77,16 @@ public:
     std::optional<std::vector<DeviceDirectionRequirements>> source_requirements;
   };
 
-  /* The verifier function checks each possible configuration (from the set of
+  /* The provider function checks each possible configuration (from the set of
    * all possible, supported configuration acquired from
    * AudioSetConfigurationProvider for the given scenario), to select a single
    * configuration, matching the current streaming audio group requirements.
    * Note: Used only with the legacy AudioSetConfigurationProvider.
    */
-  typedef std::function<const set_configurations::AudioSetConfiguration*(
+  typedef std::function<std::unique_ptr<set_configurations::AudioSetConfiguration>(
           const UnicastConfigurationRequirements& requirements,
           const set_configurations::AudioSetConfigurations* confs)>
-          UnicastConfigurationVerifier;
+          UnicastConfigurationProvider;
 
   struct BroadcastConfigurationRequirements {
     std::vector<std::pair<bluetooth::le_audio::types::LeAudioContextType, uint8_t>>
@@ -119,7 +119,7 @@ public:
           std::function<void(const offload_config& config, uint8_t direction)> update_receiver);
   virtual std::unique_ptr<::bluetooth::le_audio::set_configurations::AudioSetConfiguration>
   GetCodecConfig(const UnicastConfigurationRequirements& requirements,
-                 UnicastConfigurationVerifier verifier);
+                 UnicastConfigurationProvider provider);
   virtual bool CheckCodecConfigIsBiDirSwb(
           const ::bluetooth::le_audio::set_configurations::AudioSetConfiguration& config) const;
   virtual bool CheckCodecConfigIsDualBiDirSwb(

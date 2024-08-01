@@ -828,6 +828,23 @@ LeAudioDeviceGroup::GetAudioSetConfigurationRequirements(types::LeAudioContextTy
         continue;
       }
 
+      if ((com::android::bluetooth::flags::le_audio_support_unidirectional_voice_assistant() &&
+           ctx_type == types::LeAudioContextType::VOICEASSISTANTS) ||
+          (com::android::bluetooth::flags::leaudio_multicodec_aidl_support() &&
+           ctx_type == types::LeAudioContextType::GAME)) {
+        // For GAME and VOICE ASSISTANT, ignore direction if it is not supported only on a single
+        // direction.
+        auto group_contexts = GetSupportedContexts(types::kLeAudioDirectionBoth);
+        if (group_contexts.test(ctx_type)) {
+          auto direction_contexs = device->GetSupportedContexts(direction);
+          if (!direction_contexs.test(ctx_type)) {
+            log::warn("Device {} has no {} context support", device->address_,
+                      common::ToString(ctx_type));
+            continue;
+          }
+        }
+      }
+
       auto& dev_locations = (direction == types::kLeAudioDirectionSink)
                                     ? device->snk_audio_locations_
                                     : device->src_audio_locations_;
@@ -1399,6 +1416,22 @@ bool LeAudioDeviceGroup::IsAudioSetConfigurationSupported(
       continue;
     }
 
+    if (com::android::bluetooth::flags::le_audio_support_unidirectional_voice_assistant() ||
+        com::android::bluetooth::flags::leaudio_multicodec_aidl_support()) {
+      // Verify the direction requirements.
+      if (direction == types::kLeAudioDirectionSink &&
+          requirements.sink_requirements->size() == 0) {
+        log::debug("There is no requirement for Sink direction.");
+        return false;
+      }
+
+      if (direction == types::kLeAudioDirectionSource &&
+          requirements.source_requirements->size() == 0) {
+        log::debug("There is no requirement for source direction.");
+        return false;
+      }
+    }
+
     // In some tests we expect the configuration to be there even when the
     // contexts are not supported. Then we might want to configure the device
     // but use UNSPECIFIED which is always supported (but can be unavailable)
@@ -1873,7 +1906,7 @@ bool LeAudioDeviceGroup::IsConfiguredForContext(LeAudioContextType context_type)
   return stream_conf.conf.get() == GetActiveConfiguration().get();
 }
 
-const set_configurations::AudioSetConfiguration*
+std::unique_ptr<set_configurations::AudioSetConfiguration>
 LeAudioDeviceGroup::FindFirstSupportedConfiguration(
         const CodecManager::UnicastConfigurationRequirements& requirements,
         const set_configurations::AudioSetConfigurations* confs) const {
@@ -1887,7 +1920,7 @@ LeAudioDeviceGroup::FindFirstSupportedConfiguration(
     log::assert_that(conf != nullptr, "confs should not be null");
     if (IsAudioSetConfigurationSupported(requirements, conf)) {
       log::debug("found: {}", conf->name);
-      return conf;
+      return std::make_unique<set_configurations::AudioSetConfiguration>(*conf);
     }
   }
 
