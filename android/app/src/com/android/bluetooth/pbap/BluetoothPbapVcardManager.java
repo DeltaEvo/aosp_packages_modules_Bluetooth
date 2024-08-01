@@ -1215,12 +1215,7 @@ public class BluetoothPbapVcardManager {
                                 .replace(" ", "");
                 if (vTagAndTel[1].length() < telLenBefore) {
                     Log.v(TAG, "Fixing vCard TEL to " + vTagAndTel[1]);
-                    attr[i] =
-                            new StringBuilder()
-                                    .append(vTagAndTel[0])
-                                    .append(":")
-                                    .append(vTagAndTel[1])
-                                    .toString();
+                    attr[i] = vTagAndTel[0] + ":" + vTagAndTel[1];
                 }
             }
         }

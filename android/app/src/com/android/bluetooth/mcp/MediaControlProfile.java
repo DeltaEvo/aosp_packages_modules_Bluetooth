@@ -686,6 +686,9 @@ public class MediaControlProfile implements MediaControlServiceCallbacks {
                                             + opcodes);
                         }
                         break;
+                    case TRACK_TITLE:
+                        // Not implemented
+                        break;
                 }
             }
         }
