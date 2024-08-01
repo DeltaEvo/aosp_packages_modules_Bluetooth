@@ -501,14 +501,14 @@ class BluetoothManagerService {
                     if (BluetoothAdapter.ACTION_LOCAL_NAME_CHANGED.equals(action)) {
                         String newName = intent.getStringExtra(BluetoothAdapter.EXTRA_LOCAL_NAME);
                         if (newName != null) {
-                            Log.d(TAG, "Bluetooth Adapter name changed to " + newName);
+                            Log.d(TAG, "Local name changed to: " + newName);
                             storeNameAndAddress(newName, null);
                         }
                     } else if (BluetoothAdapter.ACTION_BLUETOOTH_ADDRESS_CHANGED.equals(action)) {
                         String newAddress =
                                 intent.getStringExtra(BluetoothAdapter.EXTRA_BLUETOOTH_ADDRESS);
                         if (newAddress != null) {
-                            Log.d(TAG, "Local address changed to …" + logAddress(newAddress));
+                            Log.d(TAG, "Local address changed to: " + logAddress(newAddress));
                             storeNameAndAddress(null, newAddress);
                         } else {
                             Log.e(TAG, "No Bluetooth Adapter address parameter found");
