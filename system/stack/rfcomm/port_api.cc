@@ -31,7 +31,6 @@
 
 #include <cstdint>
 
-#include "internal_include/bt_target.h"
 #include "internal_include/bt_trace.h"
 #include "os/logging/log_adapter.h"
 #include "osi/include/allocator.h"
@@ -40,6 +39,7 @@
 #include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/btm_log_history.h"
+#include "stack/include/rfcdefs.h"
 #include "stack/rfcomm/rfc_int.h"
 #include "types/raw_address.h"
 
@@ -925,9 +925,7 @@ int PORT_WriteDataCO(uint16_t handle, int* p_len) {
     // if(recv(fd, (uint8_t *)(p_buf + 1) + p_buf->offset + p_buf->len,
     // available, 0) != available)
     if (!p_port->p_data_co_callback(handle, (uint8_t*)(p_buf + 1) + p_buf->offset + p_buf->len,
-                                    available, DATA_CO_CALLBACK_TYPE_OUTGOING))
-
-    {
+                                    available, DATA_CO_CALLBACK_TYPE_OUTGOING)) {
       log::error("p_data_co_callback DATA_CO_CALLBACK_TYPE_OUTGOING failed, available:{}",
                  available);
       mutex_global_unlock();

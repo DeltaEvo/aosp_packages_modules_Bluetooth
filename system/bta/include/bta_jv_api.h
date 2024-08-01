@@ -21,19 +21,19 @@
  *  This is the public interface file the BTA Java I/F
  *
  ******************************************************************************/
-#ifndef BTA_JV_API_H
-#define BTA_JV_API_H
+#pragma once
 
 #include <cstdint>
 #include <memory>
 #include <string>
 
 #include "bta/include/bta_api.h"
-#include "bta_sec_api.h"
+#include "bta/include/bta_sec_api.h"
 #include "include/macros.h"
 #include "internal_include/bt_target.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/l2c_api.h"
+#include "stack/include/rfcdefs.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
@@ -78,9 +78,8 @@ typedef uint8_t tBTA_JV_L2CAP_REASON;
 #define BTA_JV_MAX_UUIDS SDP_MAX_UUID_FILTERS
 #define BTA_JV_MAX_ATTRS SDP_MAX_ATTR_FILTERS
 #define BTA_JV_MAX_SDP_REC SDP_MAX_RECORDS
-#define BTA_JV_MAX_L2C_CONN                                                    \
-  GAP_MAX_CONNECTIONS /* GAP handle is used as index, hence do not change this \
-                         value */
+/* GAP handle is used as index, hence do not change this value */
+#define BTA_JV_MAX_L2C_CONN GAP_MAX_CONNECTIONS
 #define BTA_JV_MAX_RFC_CONN MAX_RFC_PORTS
 
 #ifndef BTA_JV_DEF_RFC_MTU
@@ -271,7 +270,6 @@ typedef struct {
   int32_t tx_mtu;        /* The transmit MTU */
   void** p_p_cback;      /* set them for new socket */
   void** p_user_data;    /* set them for new socket */
-
 } tBTA_JV_L2CAP_LE_OPEN;
 
 /* data associated with BTA_JV_L2CAP_CLOSE_EVT */
@@ -310,8 +308,7 @@ typedef struct {
   tBTA_JV_STATUS status; /* Whether the operation succeeded or failed. */
   uint32_t handle;       /* The connection handle */
   uint32_t req_id;       /* The req_id in the associated BTA_JvL2capRead() */
-  uint8_t* p_data;       /* This points the same location as the p_data
-                          * parameter in BTA_JvL2capRead () */
+  uint8_t* p_data;       /* Points to the same location as p_data parameter in BTA_JvL2capRead() */
   uint16_t len;          /* The length of the data read. */
 } tBTA_JV_L2CAP_READ;
 
@@ -423,8 +420,7 @@ typedef union {
   tBTA_JV_RFCOMM_CL_INIT rfc_cl_init;   /* BTA_JV_RFCOMM_CL_INIT_EVT */
   tBTA_JV_RFCOMM_CONG rfc_cong;         /* BTA_JV_RFCOMM_CONG_EVT */
   tBTA_JV_RFCOMM_WRITE rfc_write;       /* BTA_JV_RFCOMM_WRITE_EVT */
-  tBTA_JV_DATA_IND data_ind;            /* BTA_JV_L2CAP_DATA_IND_EVT
-                                           BTA_JV_RFCOMM_DATA_IND_EVT */
+  tBTA_JV_DATA_IND data_ind;            /* BTA_JV_L2CAP_DATA_IND_EVT, BTA_JV_RFCOMM_DATA_IND_EVT */
   tBTA_JV_LE_DATA_IND le_data_ind;      /* BTA_JV_L2CAP_LE_DATA_IND_EVT */
   tBTA_JV_L2CAP_LE_OPEN l2c_le_open;    /* BTA_JV_L2CAP_OPEN_EVT */
 } tBTA_JV;
@@ -760,5 +756,3 @@ tBTA_JV_STATUS BTA_JvSetPmProfile(uint32_t handle, tBTA_JV_PM_ID app_id,
  *
  ******************************************************************************/
 uint16_t BTA_JvRfcommGetPortHdl(uint32_t handle);
-
-#endif /* BTA_JV_API_H */
