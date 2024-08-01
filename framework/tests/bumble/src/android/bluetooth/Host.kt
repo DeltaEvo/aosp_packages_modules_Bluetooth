@@ -72,13 +72,17 @@ public class Host(context: Context) : Closeable {
         runBlocking(scope.coroutineContext) {
             withTimeout(TIMEOUT) {
                 Truth.assertThat(remoteDevice.createBond()).isTrue()
-                flow
-                    .filter { it.getAction() == BluetoothDevice.ACTION_PAIRING_REQUEST }
-                    .filter { it.getBluetoothDeviceExtra() == remoteDevice }
-                    .first()
+                val pairingRequestJob = launch {
+                    Log.d(TAG, "Waiting for ACTION_PAIRING_REQUEST")
+                    flow
+                        .filter { it.action == BluetoothDevice.ACTION_PAIRING_REQUEST }
+                        .filter { it.getBluetoothDeviceExtra() == remoteDevice }
+                        .first()
 
-                remoteDevice.setPairingConfirmation(true)
+                    remoteDevice.setPairingConfirmation(true)
+                }
 
+                Log.d(TAG, "Waiting for ACTION_BOND_STATE_CHANGED")
                 flow
                     .filter { it.action == BluetoothDevice.ACTION_BOND_STATE_CHANGED }
                     .filter { it.getBluetoothDeviceExtra() == remoteDevice }
@@ -87,6 +91,11 @@ public class Host(context: Context) : Closeable {
                             BluetoothDevice.BOND_BONDED
                     }
                     .first()
+
+                if (pairingRequestJob.isActive) {
+                    pairingRequestJob.cancel()
+                }
+
                 Log.d(TAG, "createBondAndVerify: bonded")
             }
         }
@@ -118,6 +127,7 @@ public class Host(context: Context) : Closeable {
             val broadcastReceiver: BroadcastReceiver =
                 object : BroadcastReceiver() {
                     override fun onReceive(context: Context, intent: Intent) {
+                        Log.d(TAG, "intentFlow: onReceive: ${intent.action}")
                         scope.launch { trySendBlocking(intent) }
                     }
                 }
