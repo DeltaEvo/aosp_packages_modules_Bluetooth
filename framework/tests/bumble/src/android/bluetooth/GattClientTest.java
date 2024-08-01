@@ -368,11 +368,16 @@ public class GattClientTest {
         BluetoothGatt gatt = device.connectGatt(mContext, false, gattCallback);
         BluetoothGatt gatt2 = device.connectGatt(mContext, false, gattCallback2);
 
-        gatt.disconnect();
-        gatt.close();
+        try {
+            gatt.disconnect();
+            gatt.close();
 
-        verify(gattCallback2, timeout(1000))
-                .onConnectionStateChange(eq(gatt2), eq(GATT_SUCCESS), eq(STATE_CONNECTED));
+            verify(gattCallback2, timeout(1000))
+                    .onConnectionStateChange(eq(gatt2), eq(GATT_SUCCESS), eq(STATE_CONNECTED));
+        } finally {
+            gatt2.disconnect();
+            gatt2.close();
+        }
     }
 
     private void registerWritableGattService() {
