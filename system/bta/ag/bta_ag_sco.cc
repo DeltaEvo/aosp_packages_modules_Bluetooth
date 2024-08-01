@@ -640,6 +640,7 @@ void bta_ag_codec_negotiate(tBTA_AG_SCB* p_scb) {
   bta_ag_cb.sco.p_curr_scb = p_scb;
   uint8_t* p_rem_feat = get_btm_client_interface().peer.BTM_ReadRemoteFeatures(p_scb->peer_addr);
   bool sdp_wbs_support = p_scb->peer_sdp_features & BTA_AG_FEAT_WBS_SUPPORT;
+  bool sdp_swb_support = p_scb->peer_sdp_features & BTA_AG_FEAT_SWB_SUPPORT;
 
   if (p_rem_feat == nullptr) {
     log::warn("Skip codec negotiation, failed to read remote features");
@@ -648,7 +649,7 @@ void bta_ag_codec_negotiate(tBTA_AG_SCB* p_scb) {
   }
 
   // Workaround for misbehaving HFs, which indicate which one is not support on
-  // Transparent Synchronous Data in Remote Supported Features, WBS in SDP and
+  // Transparent Synchronous Data in Remote Supported Features, WBS and SWB in SDP
   // and Codec Negotiation in BRSF. Fluoride will assume CVSD codec by default.
   // In Sony XAV AX100 car kit and Sony MW600 Headset case, which indicate
   // Transparent Synchronous Data and WBS support, but no codec negotiation
@@ -656,7 +657,10 @@ void bta_ag_codec_negotiate(tBTA_AG_SCB* p_scb) {
   // In Skullcandy JIB case, which indicate WBS and codec negotiation support,
   // but no Transparent Synchronous Data support, using mSBC codec can result
   // SCO setup fail by Firmware reject.
-  if (!HCI_LMP_TRANSPNT_SUPPORTED(p_rem_feat) || !sdp_wbs_support ||
+  if (!HCI_LMP_TRANSPNT_SUPPORTED(p_rem_feat) ||
+      !(sdp_wbs_support ||
+        (com::android::bluetooth::flags::choose_wrong_hfp_codec_in_specific_config() &&
+         sdp_swb_support)) ||
       !(p_scb->peer_features & BTA_AG_PEER_FEAT_CODEC)) {
     log::info("Assume CVSD by default due to mask mismatch");
     p_scb->sco_codec = BTM_SCO_CODEC_CVSD;
