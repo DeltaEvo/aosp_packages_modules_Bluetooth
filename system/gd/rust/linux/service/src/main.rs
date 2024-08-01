@@ -262,15 +262,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 signal::SigSet::empty(),
             );
 
-            let sig_action_int = signal::SigAction::new(
-                signal::SigHandler::Handler(handle_sigint),
-                signal::SaFlags::empty(),
-                signal::SigSet::empty(),
-            );
-
             unsafe {
                 signal::sigaction(signal::SIGTERM, &sig_action_term).unwrap();
-                signal::sigaction(signal::SIGINT, &sig_action_int).unwrap();
             }
         }
 
@@ -316,12 +309,5 @@ extern "C" fn handle_sigterm(_signum: i32) {
     }
 
     log::debug!("Sigterm completed");
-    std::process::exit(0);
-}
-
-extern "C" fn handle_sigint(_signum: i32) {
-    // Assumed this is from HAL Host, which is likely caused by chipset error.
-    // In this case, don't crash the daemon and don't try to power off the adapter.
-    log::debug!("Sigint completed");
     std::process::exit(0);
 }

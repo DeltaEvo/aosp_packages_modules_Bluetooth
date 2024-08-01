@@ -192,6 +192,12 @@ class A2dpTest(base_test.BaseTestClass):  # type: ignore[misc]
                 device.config.setdefault('classic_smp_enabled', False)
                 device.server_config.io_capability = PairingDelegate.NO_OUTPUT_NO_INPUT
 
+    def teardown_class(self) -> None:
+        if self.devices:
+            self.devices.stop_all()
+
+    @avatar.asynchronous
+    async def setup_test(self) -> None:
         await asyncio.gather(self.dut.reset(), self.ref1.reset(), self.ref2.reset())
 
         self.dut.a2dp = A2DP(channel=self.dut.aio.channel)
@@ -213,14 +219,6 @@ class A2dpTest(base_test.BaseTestClass):  # type: ignore[misc]
 
         self.ref1.a2dp.on('connection', on_ref1_avdtp_connection)
         self.ref2.a2dp.on('connection', on_ref2_avdtp_connection)
-
-    def teardown_class(self) -> None:
-        if self.devices:
-            self.devices.stop_all()
-
-    @avatar.asynchronous
-    async def setup_test(self) -> None:
-        pass
 
     @avatar.asynchronous
     async def test_connect_and_stream(self) -> None:

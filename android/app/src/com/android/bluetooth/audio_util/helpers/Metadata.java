@@ -101,6 +101,8 @@ public class Metadata implements Cloneable {
                 + artist
                 + "\" album=\""
                 + album
+                + "\" genre=\""
+                + genre
                 + "\" duration="
                 + duration
                 + " trackPosition="

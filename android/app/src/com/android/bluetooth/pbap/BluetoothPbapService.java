@@ -838,7 +838,7 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
             mService = null;
         }
 
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+        @RequiresPermission(BLUETOOTH_CONNECT)
         private BluetoothPbapService getService(AttributionSource source) {
             // Cache mService because it can change while getService is called
             BluetoothPbapService service = mService;

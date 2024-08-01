@@ -408,9 +408,11 @@ LeAudioClientInterface::Sink::GetBroadcastConfig(
 
   auto aidl_pacs = GetAidlLeAudioDeviceCapabilitiesFromStackFormat(pacs);
   auto reqs = GetAidlLeAudioBroadcastConfigurationRequirementFromStackFormat(subgroup_quality);
-  auto aidl_broadcast_config =
-          aidl::le_audio::LeAudioSourceTransport::interface->getLeAudioBroadcastConfiguration(
-                  aidl_pacs, reqs);
+
+  log::assert_that(aidl::le_audio::LeAudioSinkTransport::interface_broadcast_ != nullptr,
+                   "LeAudioSourceTransport::interface should not be null");
+  auto aidl_broadcast_config = aidl::le_audio::LeAudioSinkTransport::interface_broadcast_
+                                       ->getLeAudioBroadcastConfiguration(aidl_pacs, reqs);
 
   return GetStackBroadcastConfigurationFromAidlFormat(aidl_broadcast_config);
 }
@@ -464,6 +466,9 @@ void LeAudioClientInterface::Sink::UpdateBroadcastAudioConfigToHal(
   }
 
   get_aidl_transport_instance(is_broadcaster_)->LeAudioSetBroadcastConfig(offload_config);
+  get_aidl_client_interface(is_broadcaster_)
+          ->UpdateAudioConfig(aidl::le_audio::broadcast_config_to_hal_audio_config(
+                  get_aidl_transport_instance(is_broadcaster_)->LeAudioGetBroadcastConfig()));
 }
 
 void LeAudioClientInterface::Sink::SuspendedForReconfiguration() {

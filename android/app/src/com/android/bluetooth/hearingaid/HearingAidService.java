@@ -610,8 +610,7 @@ public class HearingAidService extends ProfileService {
     }
 
     void messageFromNative(HearingAidStackEvent stackEvent) {
-        Objects.requireNonNull(
-                stackEvent.device, "Device should never be null, event: " + stackEvent);
+        Objects.requireNonNull(stackEvent.device);
 
         if (stackEvent.type == HearingAidStackEvent.EVENT_TYPE_DEVICE_AVAILABLE) {
             BluetoothDevice device = stackEvent.device;
@@ -911,7 +910,7 @@ public class HearingAidService extends ProfileService {
             mService = null;
         }
 
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+        @RequiresPermission(BLUETOOTH_CONNECT)
         private HearingAidService getService(AttributionSource source) {
             // Cache mService because it can change while getService is called
             HearingAidService service = mService;

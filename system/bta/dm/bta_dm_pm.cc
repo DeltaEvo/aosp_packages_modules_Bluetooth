@@ -137,7 +137,9 @@ void bta_dm_disable_pm(void) {
   /* Need to stop all active timers. */
   for (int i = 0; i < BTA_DM_NUM_PM_TIMER; i++) {
     for (int j = 0; j < BTA_DM_PM_MODE_TIMER_MAX; j++) {
-      bta_dm_pm_stop_timer_by_index(&bta_dm_cb.pm_timer[i], j);
+      if (bta_dm_cb.pm_timer[i].in_use) {
+        bta_dm_pm_stop_timer_by_index(&bta_dm_cb.pm_timer[i], j);
+      }
       bta_dm_cb.pm_timer[i].pm_action[j] = BTA_DM_PM_NO_ACTION;
     }
   }

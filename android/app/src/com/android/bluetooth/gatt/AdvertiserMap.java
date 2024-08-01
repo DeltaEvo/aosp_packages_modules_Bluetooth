@@ -190,7 +190,7 @@ class AdvertiserMap {
     /** Logs advertiser debug information. */
     synchronized void dump(StringBuilder sb) {
         if (!mLastAdvertises.isEmpty()) {
-            sb.append("\n  last " + mLastAdvertises.size() + " advertising:");
+            sb.append("\n  last ").append(mLastAdvertises.size()).append(" advertising:");
             for (AppAdvertiseStats stats : mLastAdvertises) {
                 AppAdvertiseStats.dumpToString(sb, stats);
             }
@@ -198,9 +198,8 @@ class AdvertiserMap {
         }
 
         if (!mAppAdvertiseStats.isEmpty()) {
-            sb.append(
-                    "  Total number of ongoing advertising                   : "
-                            + mAppAdvertiseStats.size());
+            sb.append("  Total number of ongoing advertising                   : ")
+                    .append(mAppAdvertiseStats.size());
             sb.append("\n  Ongoing advertising:");
             for (Integer key : mAppAdvertiseStats.keySet()) {
                 AppAdvertiseStats stats = mAppAdvertiseStats.get(key);

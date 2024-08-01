@@ -254,9 +254,10 @@ public class Config {
         for (ProfileConfig config : PROFILE_SERVICES_AND_FLAGS) {
             Log.i(
                     TAG,
-                    String.format(
-                            "init: profile=%s, enabled=%s",
-                            BluetoothProfile.getProfileName(config.mProfileId), config.mSupported));
+                    "init: profile= "
+                            + BluetoothProfile.getProfileName(config.mProfileId)
+                            + ", enabled="
+                            + config.mSupported);
         }
     }
 

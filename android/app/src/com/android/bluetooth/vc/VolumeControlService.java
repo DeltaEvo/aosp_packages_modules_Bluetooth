@@ -17,6 +17,7 @@
 
 package com.android.bluetooth.vc;
 
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 
 import android.annotation.RequiresPermission;
@@ -1123,8 +1124,7 @@ public class VolumeControlService extends ProfileService {
             return;
         }
 
-        Objects.requireNonNull(
-                stackEvent.device, "Device should never be null, event: " + stackEvent);
+        Objects.requireNonNull(stackEvent.device);
 
         BluetoothDevice device = stackEvent.device;
         if (stackEvent.type == VolumeControlStackEvent.EVENT_TYPE_DEVICE_AVAILABLE) {
@@ -1382,7 +1382,7 @@ public class VolumeControlService extends ProfileService {
             mService = null;
         }
 
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+        @RequiresPermission(BLUETOOTH_CONNECT)
         private VolumeControlService getService(AttributionSource source) {
             // Cache mService because it can change while getService is called
             VolumeControlService service = mService;

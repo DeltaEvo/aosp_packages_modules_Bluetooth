@@ -101,6 +101,9 @@ public:
   // Get the MSFT opcode (as specified in Microsoft-defined Bluetooth HCI
   // extensions)
   virtual uint16_t getMsftOpcode() { return 0; }
+
+  // Mark the controller as broken to prevent further read / write operation.
+  virtual void markControllerBroken() { return; }
 };
 // LINT.ThenChange(fuzz/fuzz_hci_hal.h)
 

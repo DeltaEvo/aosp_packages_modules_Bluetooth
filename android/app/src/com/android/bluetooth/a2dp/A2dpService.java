@@ -885,7 +885,7 @@ public class A2dpService extends ProfileService {
      *     BluetoothA2dp#DYNAMIC_BUFFER_SUPPORT_A2DP_OFFLOAD}, {@link
      *     BluetoothA2dp#DYNAMIC_BUFFER_SUPPORT_A2DP_SOFTWARE_ENCODING}.
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(BLUETOOTH_PRIVILEGED)
     public int getDynamicBufferSupport() {
         enforceCallingOrSelfPermission(
                 BLUETOOTH_PRIVILEGED, "Need BLUETOOTH_PRIVILEGED permission");
@@ -897,7 +897,7 @@ public class A2dpService extends ProfileService {
      *
      * @return BufferConstraints
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(BLUETOOTH_PRIVILEGED)
     public BufferConstraints getBufferConstraints() {
         enforceCallingOrSelfPermission(
                 BLUETOOTH_PRIVILEGED, "Need BLUETOOTH_PRIVILEGED permission");
@@ -911,7 +911,7 @@ public class A2dpService extends ProfileService {
      * @param value buffer millis
      * @return true if the settings is successful, false otherwise
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(BLUETOOTH_PRIVILEGED)
     public boolean setBufferLengthMillis(int codec, int value) {
         enforceCallingOrSelfPermission(
                 BLUETOOTH_PRIVILEGED, "Need BLUETOOTH_PRIVILEGED permission");
@@ -920,7 +920,7 @@ public class A2dpService extends ProfileService {
 
     // Handle messages from native (JNI) to Java
     void messageFromNative(A2dpStackEvent stackEvent) {
-        requireNonNull(stackEvent.device, "Device should never be null, event: " + stackEvent);
+        requireNonNull(stackEvent.device);
         synchronized (mStateMachines) {
             BluetoothDevice device = stackEvent.device;
             A2dpStateMachine sm = mStateMachines.get(device);

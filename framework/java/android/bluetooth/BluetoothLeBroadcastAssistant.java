@@ -16,6 +16,10 @@
 
 package android.bluetooth;
 
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
+import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
+import static android.Manifest.permission.BLUETOOTH_SCAN;
+
 import android.annotation.CallbackExecutor;
 import android.annotation.FlaggedApi;
 import android.annotation.IntDef;
@@ -468,8 +472,8 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_CONNECTION_STATE_CHANGED =
@@ -557,8 +561,8 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     @Override
     @BluetoothProfile.BtProfileState
@@ -589,8 +593,8 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     @Override
     @NonNull
@@ -621,8 +625,8 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     @Override
     public @NonNull List<BluetoothDevice> getConnectedDevices() {
@@ -659,8 +663,8 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public boolean setConnectionPolicy(
             @NonNull BluetoothDevice device, @ConnectionPolicy int connectionPolicy) {
@@ -699,8 +703,8 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public @ConnectionPolicy int getConnectionPolicy(@NonNull BluetoothDevice device) {
         log("getConnectionPolicy()");
@@ -738,8 +742,8 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public void registerCallback(
             @NonNull @CallbackExecutor Executor executor, @NonNull Callback callback) {
@@ -792,8 +796,8 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public void unregisterCallback(@NonNull Callback callback) {
         Objects.requireNonNull(callback, "callback cannot be null");
@@ -853,8 +857,8 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
     @RequiresBluetoothLocationPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_SCAN,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_SCAN,
+                BLUETOOTH_PRIVILEGED,
             })
     public void startSearchingForSources(@NonNull List<ScanFilter> filters) {
         log("searchForBroadcastSources");
@@ -896,8 +900,8 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
     @RequiresBluetoothScanPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_SCAN,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_SCAN,
+                BLUETOOTH_PRIVILEGED,
             })
     public void stopSearchingForSources() {
         log("stopSearchingForSources:");
@@ -934,8 +938,8 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
     @RequiresBluetoothScanPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_SCAN,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_SCAN,
+                BLUETOOTH_PRIVILEGED,
             })
     public boolean isSearchInProgress() {
         log("stopSearchingForSources:");
@@ -1015,8 +1019,8 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public void addSource(
             @NonNull BluetoothDevice sink,
@@ -1095,8 +1099,8 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public void modifySource(
             @NonNull BluetoothDevice sink,
@@ -1154,8 +1158,8 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public void removeSource(@NonNull BluetoothDevice sink, int sourceId) {
         log("removeBroadcastSource: " + sourceId + " from " + sink);
@@ -1196,8 +1200,8 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     @NonNull
     public List<BluetoothLeBroadcastReceiveState> getAllSources(@NonNull BluetoothDevice sink) {
@@ -1231,8 +1235,8 @@ public final class BluetoothLeBroadcastAssistant implements BluetoothProfile, Au
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
             allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                BLUETOOTH_CONNECT,
+                BLUETOOTH_PRIVILEGED,
             })
     public int getMaximumSourceCapacity(@NonNull BluetoothDevice sink) {
         Objects.requireNonNull(sink, "sink cannot be null");

@@ -629,7 +629,8 @@ public class MediaPlayerList {
                 int id = mMediaPlayerIds.get(browser.getPackageName());
 
                 Log.d(TAG, "getFolderItemsMediaPlayerList: Adding player " + displayName);
-                Folder playerFolder = new Folder(String.format("%02d", id), false, displayName);
+                Folder playerFolder =
+                        new Folder(Utils.formatSimple("%02d", id), false, displayName);
                 playerList.add(new ListItem(playerFolder));
             }
         } else {
@@ -639,7 +640,8 @@ public class MediaPlayerList {
                 int id = mMediaPlayerIds.get(player.getPackageName());
 
                 Log.d(TAG, "getFolderItemsMediaPlayerList: Adding player " + displayName);
-                Folder playerFolder = new Folder(String.format("%02d", id), false, displayName);
+                Folder playerFolder =
+                        new Folder(Utils.formatSimple("%02d", id), false, displayName);
                 playerList.add(new ListItem(playerFolder));
             }
         }
@@ -722,7 +724,7 @@ public class MediaPlayerList {
                                 return;
                             }
 
-                            String playerPrefix = String.format("%02d", playerIndex);
+                            String playerPrefix = Utils.formatSimple("%02d", playerIndex);
                             for (ListItem item : results) {
                                 if (item.isFolder) {
                                     item.folder.mediaId = playerPrefix.concat(item.folder.mediaId);
@@ -1338,25 +1340,29 @@ public class MediaPlayerList {
 
     /** Dumps all players and browsable players currently listed in this class. */
     public void dump(StringBuilder sb) {
-        sb.append("List of MediaControllers: size=" + mMediaPlayers.size() + "\n");
+        sb.append("List of MediaControllers: size=").append(mMediaPlayers.size()).append("\n");
         for (int id : mMediaPlayers.keySet()) {
             if (id == mActivePlayerId) {
                 sb.append("<Active> ");
             }
             MediaPlayerWrapper player = mMediaPlayers.get(id);
-            sb.append("  Media Player " + id + ": " + player.getPackageName() + "\n");
+            sb.append("  Media Player ")
+                    .append(id)
+                    .append(": ")
+                    .append(player.getPackageName())
+                    .append("\n");
             sb.append(player.toString().replaceAll("(?m)^", "  "));
             sb.append("\n");
         }
 
         if (Flags.browsingRefactor()) {
-            sb.append("List of Browsers: size=" + mMediaBrowserWrappers.size() + "\n");
+            sb.append("List of Browsers: size=").append(mMediaBrowserWrappers.size()).append("\n");
             for (MediaBrowserWrapper player : mMediaBrowserWrappers.values()) {
                 sb.append(player.toString().replaceAll("(?m)^", "  "));
                 sb.append("\n");
             }
         } else {
-            sb.append("List of Browsers: size=" + mBrowsablePlayers.size() + "\n");
+            sb.append("List of Browsers: size=").append(mBrowsablePlayers.size()).append("\n");
             for (BrowsedPlayerWrapper player : mBrowsablePlayers.values()) {
                 sb.append(player.toString().replaceAll("(?m)^", "  "));
                 sb.append("\n");

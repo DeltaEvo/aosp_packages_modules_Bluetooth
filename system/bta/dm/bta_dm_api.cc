@@ -250,15 +250,13 @@ void BTA_DmBleRequestMaxTxDataLength(const RawAddress& remote_device) {
  * Parameters       start: start or stop the scan procedure,
  *                  duration_sec: Duration of the scan. Continuous scan if 0 is
  *                                passed,
- *                  low_latency_scan: whether this is an low latency scan,
- *                                    default is false.
  *
  * Returns          void
  *
  ******************************************************************************/
-void BTA_DmBleScan(bool start, uint8_t duration_sec, bool low_latency_scan) {
+void BTA_DmBleScan(bool start, uint8_t duration_sec) {
   log::verbose("start = {}", start);
-  do_in_main_thread(base::BindOnce(bta_dm_ble_scan, start, duration_sec, low_latency_scan));
+  do_in_main_thread(base::BindOnce(bta_dm_ble_scan, start, duration_sec));
 }
 
 /*******************************************************************************
