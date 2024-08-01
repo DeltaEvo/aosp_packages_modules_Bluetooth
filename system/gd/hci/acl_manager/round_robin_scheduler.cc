@@ -18,6 +18,9 @@
 
 #include <bluetooth/log.h>
 
+#include <memory>
+#include <utility>
+
 #include "hci/acl_manager/acl_fragmenter.h"
 namespace bluetooth {
 namespace hci {
@@ -49,7 +52,10 @@ void RoundRobinScheduler::Register(ConnectionType connection_type, uint16_t hand
   acl_queue_handler acl_queue_handler = {connection_type, std::move(queue), false, 0};
   acl_queue_handlers_.insert(
           std::pair<uint16_t, RoundRobinScheduler::acl_queue_handler>(handle, acl_queue_handler));
+  log::info("registering acl_queue handle={}, acl_credits={}, le_credits={}", handle,
+            acl_packet_credits_, le_acl_packet_credits_);
   if (fragments_to_send_.size() == 0) {
+    log::info("start round robin");
     start_round_robin();
   }
 }
@@ -58,6 +64,8 @@ void RoundRobinScheduler::Unregister(uint16_t handle) {
   log::assert_that(acl_queue_handlers_.count(handle) == 1,
                    "assert failed: acl_queue_handlers_.count(handle) == 1");
   auto acl_queue_handler = acl_queue_handlers_.find(handle)->second;
+  log::info("unregistering acl_queue handle={}, sent_packets={}", handle,
+            acl_queue_handler.number_of_sent_packets_);
   // Reclaim outstanding packets
   if (acl_queue_handler.connection_type_ == ConnectionType::CLASSIC) {
     acl_packet_credits_ += acl_queue_handler.number_of_sent_packets_;
@@ -89,6 +97,7 @@ uint16_t RoundRobinScheduler::GetLeCredits() { return le_acl_packet_credits_; }
 
 void RoundRobinScheduler::start_round_robin() {
   if (acl_packet_credits_ == 0 && le_acl_packet_credits_ == 0) {
+    log::warn("Both buffers are full");
     return;
   }
   if (!fragments_to_send_.empty()) {
