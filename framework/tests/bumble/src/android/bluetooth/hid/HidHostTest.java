@@ -236,21 +236,27 @@ public class HidHostTest {
         mFutureConnectionIntent = SettableFuture.create();
 
         mDevice = mBumble.getRemoteDevice();
+        mFutureBondIntent = SettableFuture.create();
         assertThat(mDevice.createBond()).isTrue();
+        assertThat(mFutureBondIntent.get()).isEqualTo(BluetoothDevice.BOND_BONDED);
 
-        assertThat(mFutureConnectionIntent.get()).isEqualTo(BluetoothProfile.STATE_CONNECTED);
-        if (mA2dpService != null) {
+        if (mA2dpService != null
+                && mA2dpService.getConnectionPolicy(mDevice)
+                        == BluetoothProfile.CONNECTION_POLICY_ALLOWED) {
             assertThat(
                             mA2dpService.setConnectionPolicy(
                                     mDevice, BluetoothProfile.CONNECTION_POLICY_FORBIDDEN))
                     .isTrue();
         }
-        if (mHfpService != null) {
+        if (mHfpService != null
+                && mHfpService.getConnectionPolicy(mDevice)
+                        == BluetoothProfile.CONNECTION_POLICY_ALLOWED) {
             assertThat(
                             mHfpService.setConnectionPolicy(
                                     mDevice, BluetoothProfile.CONNECTION_POLICY_FORBIDDEN))
                     .isTrue();
         }
+        assertThat(mFutureConnectionIntent.get()).isEqualTo(BluetoothProfile.STATE_CONNECTED);
     }
 
     @After
