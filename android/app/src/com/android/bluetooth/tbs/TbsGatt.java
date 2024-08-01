@@ -28,6 +28,7 @@ import android.bluetooth.BluetoothGattServerCallback;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothProfile;
 import android.content.Context;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelUuid;
@@ -910,7 +911,12 @@ public class TbsGatt {
     }
 
     public boolean setIncomingCall(int callIndex, String uri) {
-        Log.d(TAG, "setIncomingCall: callIndex=" + callIndex + " uri=" + uri);
+        Log.d(
+                TAG,
+                "setIncomingCall: callIndex="
+                        + callIndex
+                        + " uri="
+                        + Uri.parse(uri).toSafeString());
         int uri_len = 0;
         if (uri != null) {
             uri_len = uri.length();
