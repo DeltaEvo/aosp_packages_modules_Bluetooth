@@ -22,6 +22,7 @@ import static android.Manifest.permission.BLUETOOTH_ADVERTISE;
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 import static android.Manifest.permission.BLUETOOTH_SCAN;
+import static android.Manifest.permission.LOCAL_MAC_ADDRESS;
 import static android.Manifest.permission.MODIFY_PHONE_STATE;
 
 import static java.util.Objects.requireNonNull;
@@ -1687,12 +1688,18 @@ public final class BluetoothAdapter {
     @RequiresLegacyBluetoothAdminPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(BLUETOOTH_CONNECT)
+    @SuppressLint("AndroidFrameworkRequiresPermission") // See disable(boolean) for reason
     public boolean disable() {
         return disable(true);
     }
 
     /**
      * Turn off the local Bluetooth adapter and don't persist the setting.
+     *
+     * <p>Requires the {@link android.Manifest.permission#BLUETOOTH_PRIVILEGED} permission only when
+     * {@code persist} is {@code false}.
+     *
+     * <p>The {@link android.Manifest.permission#BLUETOOTH_CONNECT} permission is always enforced.
      *
      * @param persist Indicate whether the off state should be persisted following the next reboot
      * @return true to indicate adapter shutdown has begun, or false on immediate error
@@ -1702,10 +1709,8 @@ public final class BluetoothAdapter {
     @RequiresLegacyBluetoothAdminPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(
-            allOf = {
-                BLUETOOTH_CONNECT,
-                BLUETOOTH_PRIVILEGED,
-            })
+            allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED},
+            conditional = true)
     public boolean disable(boolean persist) {
         try {
             return mManagerService.disable(mAttributionSource, persist);
@@ -1721,11 +1726,10 @@ public final class BluetoothAdapter {
      * <p>For example, "00:11:22:AA:BB:CC".
      *
      * @return Bluetooth hardware address as string
-     *     <p>Requires {@code android.Manifest.permission#LOCAL_MAC_ADDRESS} and {@link
-     *     android.Manifest.permission#BLUETOOTH_CONNECT}.
      */
     @RequiresLegacyBluetoothPermission
     @RequiresBluetoothConnectPermission
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, LOCAL_MAC_ADDRESS})
     public String getAddress() {
         try {
             return mManagerService.getAddress(mAttributionSource);
