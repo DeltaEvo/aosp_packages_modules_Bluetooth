@@ -16,6 +16,7 @@
 
 package com.android.bluetooth.avrcpcontroller;
 
+import android.annotation.SuppressLint;
 import android.util.Log;
 import android.util.Xml;
 
@@ -298,6 +299,7 @@ public class BipImageProperties {
     }
 
     @Override
+    @SuppressLint("ToStringReturnsNull") // Since this is used for encoding to xml
     public String toString() {
         StringWriter writer = new StringWriter();
         XmlSerializer xmlMsgElement = Xml.newSerializer();

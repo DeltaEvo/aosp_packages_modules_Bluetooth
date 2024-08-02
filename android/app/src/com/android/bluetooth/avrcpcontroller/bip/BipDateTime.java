@@ -16,6 +16,8 @@
 
 package com.android.bluetooth.avrcpcontroller;
 
+import android.annotation.SuppressLint;
+
 import com.android.bluetooth.Utils;
 
 import java.util.Calendar;
@@ -121,6 +123,7 @@ public class BipDateTime {
     }
 
     @Override
+    @SuppressLint("ToStringReturnsNull")
     public String toString() {
         Date d = getTime();
         if (d == null) {

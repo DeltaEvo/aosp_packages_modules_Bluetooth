@@ -438,7 +438,7 @@ public class GattNativeInterface {
     /**
      * Connect to the remote Gatt server
      *
-     * @see {@link BluetoothDevice#connectGatt} for parameters.
+     * @see BluetoothDevice#connectGatt for parameters.
      */
     public void gattClientConnect(
             int clientIf,

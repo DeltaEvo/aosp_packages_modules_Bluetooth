@@ -197,9 +197,11 @@ public class BipPixel {
     private static int determinePixelType(String pixel) {
         if (pixel == null || pixel.length() > 23) return TYPE_UNKNOWN;
         int delimCount = 0;
-        for (char c : pixel.toCharArray()) {
+        for (int i = 0; i < pixel.length(); i++) {
+            char c = pixel.charAt(i);
             if (c == '*') delimCount++;
         }
+
         return delimCount > 0 && delimCount <= 3 ? delimCount : TYPE_UNKNOWN;
     }
 
