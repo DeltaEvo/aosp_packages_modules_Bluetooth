@@ -199,22 +199,30 @@ void bta_hh_disc_cmpl(void) {
  * Returns          void
  *
  ******************************************************************************/
-static void bta_hh_sdp_cback(tSDP_STATUS result, uint16_t attr_mask, tHID_DEV_SDP_INFO* sdp_rec) {
-  tBTA_HH_DEV_CB* p_cb = bta_hh_cb.p_cur;
-  uint8_t hdl = 0;
+static void bta_hh_sdp_cback(const RawAddress& bd_addr, tSDP_STATUS result, uint16_t attr_mask,
+                             tHID_DEV_SDP_INFO* sdp_rec) {
   tBTA_HH_STATUS status = BTA_HH_ERR_SDP;
+  tAclLinkSpec link_spec = {
+          .addrt = {.type = BLE_ADDR_PUBLIC, .bda = bd_addr},
+          .transport = BT_TRANSPORT_BR_EDR,
+  };
+  tBTA_HH_DEV_CB* p_cb = bta_hh_find_cb(link_spec);
+  if (p_cb == nullptr) {
+    log::error("Unknown device {}", bd_addr);
+    return;
+  }
 
-  /* make sure sdp succeeded and hh has not been disabled */
-  if ((result == SDP_SUCCESS) && (p_cb != NULL)) {
+  if (result == SDP_SUCCESS) {
     /* security is required for the connection, add attr_mask bit*/
     attr_mask |= HID_SEC_REQUIRED;
 
-    log::verbose("p_cb:{} result:0x{:02x}, attr_mask:0x{:02x}, handle:0x{:x}", fmt::ptr(p_cb),
-                 result, attr_mask, p_cb->hid_handle);
+    log::verbose("Device:{} result:0x{:02x}, attr_mask:0x{:02x}, handle:0x{:x}", bd_addr, result,
+                 attr_mask, p_cb->hid_handle);
 
     /* check to see type of device is supported , and should not been added
      * before */
     if (bta_hh_tod_spt(p_cb, sdp_rec->sub_class)) {
+      uint8_t hdl = 0;
       /* if not added before */
       if (p_cb->hid_handle == BTA_HH_INVALID_HANDLE) {
         /*  add device/update attr_mask information */
@@ -247,14 +255,12 @@ static void bta_hh_sdp_cback(tSDP_STATUS result, uint16_t attr_mask, tHID_DEV_SD
   }
 
   /* free disc_db when SDP is completed */
-  osi_free_and_reset((void**)&bta_hh_cb.p_disc_db);
+  osi_free_and_reset((void**)&p_cb->p_disc_db);
 
   /* send SDP_CMPL_EVT into state machine */
   tBTA_HH_DATA bta_hh_data;
   bta_hh_data.status = status;
   bta_hh_sm_execute(p_cb, BTA_HH_SDP_CMPL_EVT, &bta_hh_data);
-
-  return;
 }
 /*******************************************************************************
  *
@@ -265,12 +271,19 @@ static void bta_hh_sdp_cback(tSDP_STATUS result, uint16_t attr_mask, tHID_DEV_SD
  * Returns          void
  *
  ******************************************************************************/
-static void bta_hh_di_sdp_cback(const RawAddress& /* bd_addr */, tSDP_RESULT result) {
-  tBTA_HH_DEV_CB* p_cb = bta_hh_cb.p_cur;
+static void bta_hh_di_sdp_cback(const RawAddress& bd_addr, tSDP_RESULT result) {
   tBTA_HH_STATUS status = BTA_HH_ERR_SDP;
-  tSDP_DI_GET_RECORD di_rec;
-  tHID_STATUS ret;
-  log::verbose("p_cb:{} result:0x{:02x}", fmt::ptr(p_cb), result);
+  tAclLinkSpec link_spec = {
+          .addrt = {.type = BLE_ADDR_PUBLIC, .bda = bd_addr},
+          .transport = BT_TRANSPORT_BR_EDR,
+  };
+  tBTA_HH_DEV_CB* p_cb = bta_hh_find_cb(link_spec);
+  if (p_cb == nullptr) {
+    log::error("Unknown device {}", bd_addr);
+    return;
+  }
+
+  log::verbose("device:{} result:0x{:02x}", bd_addr, result);
 
   /* if DI record does not exist on remote device, vendor_id in
    * tBTA_HH_DEV_DSCP_INFO will be set to 0xffff and we will allow the
@@ -278,38 +291,38 @@ static void bta_hh_di_sdp_cback(const RawAddress& /* bd_addr */, tSDP_RESULT res
    * HID devices do not set this. So for IOP purposes, we allow the connection
    * to go through and update the DI record to invalid DI entry.
    */
-  if (((result == SDP_SUCCESS) || (result == SDP_NO_RECS_MATCH)) && (p_cb != NULL)) {
+  if (result == SDP_SUCCESS || result == SDP_NO_RECS_MATCH) {
     if (result == SDP_SUCCESS &&
-        get_legacy_stack_sdp_api()->device_id.SDP_GetNumDiRecords(bta_hh_cb.p_disc_db) != 0) {
+        get_legacy_stack_sdp_api()->device_id.SDP_GetNumDiRecords(p_cb->p_disc_db) != 0) {
+      tSDP_DI_GET_RECORD di_rec;
+
       /* always update information with primary DI record */
-      if (get_legacy_stack_sdp_api()->device_id.SDP_GetDiRecord(1, &di_rec, bta_hh_cb.p_disc_db) ==
+      if (get_legacy_stack_sdp_api()->device_id.SDP_GetDiRecord(1, &di_rec, p_cb->p_disc_db) ==
           SDP_SUCCESS) {
         bta_hh_update_di_info(p_cb, di_rec.rec.vendor, di_rec.rec.product, di_rec.rec.version, 0,
                               0);
       }
 
-    } else /* no DI record available */
-    {
+    } else /* no DI record available */ {
       bta_hh_update_di_info(p_cb, BTA_HH_VENDOR_ID_INVALID, 0, 0, 0, 0);
     }
 
-    ret = HID_HostGetSDPRecord(p_cb->link_spec.addrt.bda, bta_hh_cb.p_disc_db,
-                               p_bta_hh_cfg->sdp_db_size, bta_hh_sdp_cback);
+    tHID_STATUS ret = HID_HostGetSDPRecord(p_cb->link_spec.addrt.bda, p_cb->p_disc_db,
+                                           p_bta_hh_cfg->sdp_db_size, bta_hh_sdp_cback);
     if (ret == HID_SUCCESS) {
       status = BTA_HH_OK;
     } else {
-      log::verbose("failure Status 0x{:2x}", ret);
+      log::warn("failure Status 0x{:2x}", ret);
     }
   }
 
   if (status != BTA_HH_OK) {
-    osi_free_and_reset((void**)&bta_hh_cb.p_disc_db);
+    osi_free_and_reset((void**)&p_cb->p_disc_db);
     /* send SDP_CMPL_EVT into state machine */
     tBTA_HH_DATA bta_hh_data;
     bta_hh_data.status = status;
     bta_hh_sm_execute(p_cb, BTA_HH_SDP_CMPL_EVT, &bta_hh_data);
   }
-  return;
 }
 
 /*******************************************************************************
@@ -324,27 +337,8 @@ static void bta_hh_di_sdp_cback(const RawAddress& /* bd_addr */, tSDP_RESULT res
  * Returns          void
  *
  ******************************************************************************/
-static void bta_hh_start_sdp(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
-  if (!bta_hh_cb.p_disc_db) {
-    bta_hh_cb.p_disc_db = (tSDP_DISCOVERY_DB*)osi_malloc(p_bta_hh_cfg->sdp_db_size);
-
-    /* Do DI discovery first */
-    if (get_legacy_stack_sdp_api()->device_id.SDP_DiDiscover(
-                p_data->api_conn.link_spec.addrt.bda, bta_hh_cb.p_disc_db,
-                p_bta_hh_cfg->sdp_db_size, bta_hh_di_sdp_cback) == SDP_SUCCESS) {
-      /* SDP search started successfully
-       * Connection will be triggered at the end of successful SDP search
-       */
-    } else {
-      log::error("SDP_DiDiscover failed");
-
-      osi_free_and_reset((void**)&bta_hh_cb.p_disc_db);
-
-      tBTA_HH_DATA bta_hh_data;
-      bta_hh_data.status = BTA_HH_ERR_SDP;
-      bta_hh_sm_execute(p_cb, BTA_HH_SDP_CMPL_EVT, &bta_hh_data);
-    }
-  } else if (bta_hh_cb.p_disc_db) {
+static void bta_hh_start_sdp(tBTA_HH_DEV_CB* p_cb) {
+  if (p_cb->p_disc_db != nullptr) {
     /* Incoming/outgoing collision case. DUT initiated HID connection at the
      * same time as the remote connected HID control channel.
      * When flow reaches here due to remote initiated connection, DUT may be
@@ -352,6 +346,25 @@ static void bta_hh_start_sdp(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
      * or failure will handle this case.
      */
     log::warn("Ignoring as SDP already in progress");
+    return;
+  }
+
+  p_cb->p_disc_db = (tSDP_DISCOVERY_DB*)osi_malloc(p_bta_hh_cfg->sdp_db_size);
+
+  /* Do DI discovery first */
+  if (get_legacy_stack_sdp_api()->device_id.SDP_DiDiscover(
+              p_cb->link_spec.addrt.bda, p_cb->p_disc_db, p_bta_hh_cfg->sdp_db_size,
+              bta_hh_di_sdp_cback) == SDP_SUCCESS) {
+    // SDP search started successfully. Connection will be triggered at the end of successful SDP
+    // search
+  } else {
+    log::error("SDP_DiDiscover failed");
+
+    osi_free_and_reset((void**)&p_cb->p_disc_db);
+
+    tBTA_HH_DATA bta_hh_data;
+    bta_hh_data.status = BTA_HH_ERR_SDP;
+    bta_hh_sm_execute(p_cb, BTA_HH_SDP_CMPL_EVT, &bta_hh_data);
   }
 }
 
@@ -447,12 +460,10 @@ void bta_hh_sdp_cmpl(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-static void bta_hh_bredr_conn(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
-  bta_hh_cb.p_cur = p_cb;
-
+static void bta_hh_bredr_conn(tBTA_HH_DEV_CB* p_cb) {
   /* If previously virtually cabled device */
   if (p_cb->app_id) {
-    tBTA_HH_DATA bta_hh_data;
+    tBTA_HH_DATA bta_hh_data = {};
     bta_hh_data.status = BTA_HH_OK;
 
     log::verbose("skip SDP for known devices");
@@ -461,7 +472,7 @@ static void bta_hh_bredr_conn(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) 
       uint8_t hdl;
       if (HID_HostAddDev(p_cb->link_spec.addrt.bda, p_cb->attr_mask, &hdl) == HID_SUCCESS) {
         /* update device CB with newly register device handle */
-        bta_hh_add_device_to_list(p_cb, hdl, p_cb->attr_mask, NULL, p_cb->sub_class,
+        bta_hh_add_device_to_list(p_cb, hdl, p_cb->attr_mask, nullptr, p_cb->sub_class,
                                   p_cb->dscp_info.ssr_max_latency, p_cb->dscp_info.ssr_min_tout,
                                   p_cb->app_id);
         /* update cb_index[] map */
@@ -473,7 +484,7 @@ static void bta_hh_bredr_conn(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) 
 
     bta_hh_sm_execute(p_cb, BTA_HH_SDP_CMPL_EVT, &bta_hh_data);
   } else { /* First time connection, start SDP */
-    bta_hh_start_sdp(p_cb, p_data);
+    bta_hh_start_sdp(p_cb);
   }
 }
 
@@ -487,15 +498,13 @@ static void bta_hh_bredr_conn(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) 
  *
  ******************************************************************************/
 void bta_hh_connect(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
-  p_cb->link_spec = p_data->api_conn.link_spec;
   p_cb->mode = p_data->api_conn.mode;
-  bta_hh_cb.p_cur = p_cb;
 
   // Initiate HID host connection
   if (p_cb->link_spec.transport == BT_TRANSPORT_LE) {
-    bta_hh_le_open_conn(p_cb, p_data->api_conn.link_spec);
+    bta_hh_le_open_conn(p_cb);
   } else {
-    bta_hh_bredr_conn(p_cb, p_data);
+    bta_hh_bredr_conn(p_cb);
   }
 }
 
@@ -601,8 +610,6 @@ void bta_hh_open_cmpl_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
  *
  ******************************************************************************/
 void bta_hh_open_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
-  tBTA_HH_API_CONN conn_data;
-
   uint8_t dev_handle = p_data ? (uint8_t)p_data->hid_cback.hdr.layer_specific : p_cb->hid_handle;
 
   log::verbose("Device[{}] connected", dev_handle);
@@ -619,13 +626,8 @@ void bta_hh_open_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
     /* store the handle here in case sdp fails - need to disconnect */
     p_cb->incoming_hid_handle = dev_handle;
 
-    memset(&conn_data, 0, sizeof(tBTA_HH_API_CONN));
-    conn_data.link_spec = p_cb->link_spec;
-    bta_hh_cb.p_cur = p_cb;
-    bta_hh_bredr_conn(p_cb, (tBTA_HH_DATA*)&conn_data);
+    bta_hh_bredr_conn(p_cb);
   }
-
-  return;
 }
 
 /*******************************************************************************

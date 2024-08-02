@@ -348,3 +348,14 @@ void BTA_HhRemoveDev(uint8_t dev_handle) {
 
   bta_sys_sendmsg(p_buf);
 }
+
+/*******************************************************************************
+ *
+ * Function         BTA_HhDump
+ *
+ * Description      Dump BTA HH control block
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_HhDump(int fd) { bta_hh_dump(fd); }
