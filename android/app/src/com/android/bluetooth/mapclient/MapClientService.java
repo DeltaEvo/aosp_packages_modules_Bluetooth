@@ -429,23 +429,27 @@ public class MapClientService extends ProfileService {
             mService = service;
         }
 
-        @RequiresPermission(BLUETOOTH_CONNECT)
-        private MapClientService getService(AttributionSource source) {
-            if (Utils.isInstrumentationTestMode()) {
-                return mService;
-            }
-            if (!Utils.checkServiceAvailable(mService, TAG)
-                    || !(getCallingUserHandle().isSystem()
-                            || Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG))
-                    || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
-                return null;
-            }
-            return mService;
-        }
-
         @Override
         public void cleanup() {
             mService = null;
+        }
+
+        @RequiresPermission(BLUETOOTH_CONNECT)
+        private MapClientService getService(AttributionSource source) {
+            // Cache mService because it can change while getService is called
+            MapClientService service = mService;
+
+            if (Utils.isInstrumentationTestMode()) {
+                return service;
+            }
+
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !(getCallingUserHandle().isSystem()
+                            || Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG))
+                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
+                return null;
+            }
+            return service;
         }
 
         @Override

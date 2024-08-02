@@ -16,11 +16,16 @@
 
 package android.bluetooth;
 
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
+import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
+
 import static java.util.Objects.requireNonNull;
 
 import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
+import android.annotation.SuppressLint;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -78,6 +83,8 @@ public class CallbackWrapper<T, S> {
     }
 
     /** Register the callback and save the wrapper to the service if needed */
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
+    @SuppressLint("AndroidFrameworkRequiresPermission") // Consumer wrongly report permission
     public void registerCallback(
             @Nullable S service,
             @NonNull T callback,
@@ -99,6 +106,8 @@ public class CallbackWrapper<T, S> {
     }
 
     /** Register the callback and remove the wrapper to the service if needed */
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
+    @SuppressLint("AndroidFrameworkRequiresPermission") // Consumer wrongly report permission
     public void unregisterCallback(@Nullable S service, @NonNull T callback) {
         requireNonNull(callback);
         synchronized (mCallbackExecutorMap) {
