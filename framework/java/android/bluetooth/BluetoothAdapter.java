@@ -2771,7 +2771,7 @@ public final class BluetoothAdapter {
      * @hide
      */
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(BLUETOOTH_CONNECT)
+    @RequiresPermission(BLUETOOTH_SCAN)
     public boolean isHardwareTrackingFiltersAvailable() {
         if (!getLeAccess()) {
             return false;
