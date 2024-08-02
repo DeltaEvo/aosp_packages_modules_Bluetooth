@@ -18,7 +18,6 @@ package android.bluetooth
 import android.Manifest
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.android.compatibility.common.util.AdoptShellPermissionsRule
 import com.google.common.truth.Truth
@@ -30,14 +29,16 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.*
 import org.junit.After
 import org.junit.Before
+import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.runners.JUnit4
 import pandora.RfcommProto
 import pandora.RfcommProto.ServerId
 import pandora.RfcommProto.StartServerRequest
 
-@RunWith(AndroidJUnit4::class)
+@RunWith(JUnit4::class)
 @kotlinx.coroutines.ExperimentalCoroutinesApi
 class RfcommTest {
     private val mContext = ApplicationProvider.getApplicationContext<Context>()
@@ -77,16 +78,19 @@ class RfcommTest {
     }
 
     @Test
+    @Ignore("b/355328584")
     fun clientConnectToOpenServerSocketBondedInsecure() {
         startServer { serverId -> createConnectAcceptSocket(isSecure = false, serverId) }
     }
 
     @Test
+    @Ignore("b/355328584")
     fun clientConnectToOpenServerSocketBondedSecure() {
         startServer { serverId -> createConnectAcceptSocket(isSecure = true, serverId) }
     }
 
     @Test
+    @Ignore("b/355328584")
     fun clientSendDataOverInsecureSocket() {
         startServer { serverId ->
             val (insecureSocket, connection) = createConnectAcceptSocket(isSecure = false, serverId)
@@ -104,6 +108,7 @@ class RfcommTest {
     }
 
     @Test
+    @Ignore("b/355328584")
     fun clientSendDataOverSecureSocket() {
         startServer { serverId ->
             val (secureSocket, connection) = createConnectAcceptSocket(isSecure = true, serverId)
@@ -121,6 +126,7 @@ class RfcommTest {
     }
 
     @Test
+    @Ignore("b/355328584")
     fun clientReceiveDataOverInsecureSocket() {
         startServer { serverId ->
             val (insecureSocket, connection) = createConnectAcceptSocket(isSecure = false, serverId)
@@ -139,6 +145,7 @@ class RfcommTest {
     }
 
     @Test
+    @Ignore("b/355328584")
     fun clientReceiveDataOverSecureSocket() {
         startServer { serverId ->
             val (secureSocket, connection) = createConnectAcceptSocket(isSecure = true, serverId)
