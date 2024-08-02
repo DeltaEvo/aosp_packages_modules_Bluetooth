@@ -620,7 +620,7 @@ void BluetoothAudioClientInterface::SetCodecPriority(CodecId codec_id, int32_t p
   log::assert_that(provider_ != nullptr, "assert failed: provider_ != nullptr");
   auto aidl_retval = provider_->setCodecPriority(codec_id, priority);
   if (!aidl_retval.isOk()) {
-    log::fatal("BluetoothAudioHal::setCodecPriority failure: {}", aidl_retval.getDescription());
+    log::error("BluetoothAudioHal::setCodecPriority failure: {}", aidl_retval.getDescription());
   }
 }
 
@@ -641,14 +641,15 @@ BluetoothAudioClientInterface::GetLeAudioAseConfiguration(
                                                            requirements, &configurations);
 
   if (!aidl_retval.isOk()) {
-    log::fatal("BluetoothAudioHal::getLeAudioAseConfiguration failure: {}",
+    log::error("BluetoothAudioHal::getLeAudioAseConfiguration failure: {}",
                aidl_retval.getDescription());
+  } else {
+    log::info(
+            "BluetoothAudioHal::getLeAudioAseConfiguration returned {} "
+            "configurations.",
+            configurations.size());
   }
 
-  log::info(
-          "BluetoothAudioHal::getLeAudioAseConfiguration returned {} "
-          "configurations.",
-          configurations.size());
   return configurations;
 }
 
@@ -661,7 +662,7 @@ BluetoothAudioClientInterface::getLeAudioAseQosConfiguration(
   auto aidl_retval = provider_->getLeAudioAseQosConfiguration(qosRequirement, &qos_configuration);
 
   if (!aidl_retval.isOk()) {
-    log::fatal("BluetoothAudioHal::getLeAudioAseQosConfiguration failure: {}",
+    log::error("BluetoothAudioHal::getLeAudioAseQosConfiguration failure: {}",
                aidl_retval.getDescription());
   }
   return qos_configuration;
@@ -675,7 +676,7 @@ void BluetoothAudioClientInterface::onSinkAseMetadataChanged(
   auto aidl_retval = provider_->onSinkAseMetadataChanged(state, cigId, cisId, metadata);
 
   if (!aidl_retval.isOk()) {
-    log::fatal("BluetoothAudioHal::onSinkAseMetadataChanged failure: {}",
+    log::error("BluetoothAudioHal::onSinkAseMetadataChanged failure: {}",
                aidl_retval.getDescription());
   }
 }
@@ -688,7 +689,7 @@ void BluetoothAudioClientInterface::onSourceAseMetadataChanged(
   auto aidl_retval = provider_->onSourceAseMetadataChanged(state, cigId, cisId, metadata);
 
   if (!aidl_retval.isOk()) {
-    log::fatal("BluetoothAudioHal::onSinkAseMetadataChanged failure: {}",
+    log::error("BluetoothAudioHal::onSourceAseMetadataChanged failure: {}",
                aidl_retval.getDescription());
   }
 }
@@ -706,7 +707,7 @@ BluetoothAudioClientInterface::getLeAudioBroadcastConfiguration(
                                                                  requirement, &setting);
 
   if (!aidl_retval.isOk()) {
-    log::fatal("BluetoothAudioHal::onSinkAseMetadataChanged failure: {}",
+    log::error("BluetoothAudioHal::getLeAudioBroadcastConfiguration failure: {}",
                aidl_retval.getDescription());
   }
 
