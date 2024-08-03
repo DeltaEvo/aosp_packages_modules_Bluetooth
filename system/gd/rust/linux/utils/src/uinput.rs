@@ -105,13 +105,8 @@ impl Default for UInputDevInfo {
 }
 
 impl UInputDevInfo {
-    pub fn serialize(&mut self) -> &[u8] {
-        unsafe {
-            slice::from_raw_parts(
-                (self as *const UInputDevInfo) as *const u8,
-                mem::size_of::<UInputDevInfo>(),
-            )
-        }
+    pub fn serialize(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts((self as *const Self) as *const u8, mem::size_of::<Self>()) }
     }
 }
 
@@ -124,13 +119,8 @@ struct UInputEvent {
 }
 
 impl UInputEvent {
-    pub fn serialize(&mut self) -> &[u8] {
-        unsafe {
-            slice::from_raw_parts(
-                (self as *const UInputEvent) as *const u8,
-                mem::size_of::<UInputEvent>(),
-            )
-        }
+    pub fn serialize(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts((self as *const Self) as *const u8, mem::size_of::<Self>()) }
     }
 }
 
@@ -184,10 +174,11 @@ impl UInputDev {
                 ));
             }
 
+            let device_serialized = self.device.serialize();
             if libc::write(
                 fd,
-                self.device.serialize().as_ptr() as *const libc::c_void,
-                mem::size_of::<UInputDevInfo>(),
+                device_serialized.as_ptr() as *const libc::c_void,
+                device_serialized.len(),
             ) < 0
             {
                 libc::close(fd);
@@ -236,14 +227,15 @@ impl UInputDev {
         code: libc::c_ushort,
         value: libc::c_int,
     ) -> i32 {
-        let mut event =
+        let event =
             UInputEvent { time: libc::timeval { tv_sec: 0, tv_usec: 0 }, event_type, code, value };
 
         unsafe {
+            let event_serialized = event.serialize();
             libc::write(
                 self.fd,
-                event.serialize().as_ptr() as *const libc::c_void,
-                mem::size_of::<UInputDevInfo>(),
+                event_serialized.as_ptr() as *const libc::c_void,
+                event_serialized.len(),
             )
             .try_into()
             .unwrap()
