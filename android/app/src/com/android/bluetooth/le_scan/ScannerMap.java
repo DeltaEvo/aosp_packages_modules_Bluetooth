@@ -178,7 +178,7 @@ public class ScannerMap {
 
     /** Logs debug information. */
     public void dump(StringBuilder sb) {
-        sb.append("  Entries: " + mAppScanStatsMap.size() + "\n\n");
+        sb.append("  Entries: ").append(mAppScanStatsMap.size()).append("\n\n");
         for (AppScanStats appScanStats : mAppScanStatsMap.values()) {
             appScanStats.dumpToString(sb);
         }

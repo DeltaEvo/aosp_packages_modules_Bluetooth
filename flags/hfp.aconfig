@@ -145,3 +145,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "choose_wrong_hfp_codec_in_specific_config"
+    namespace: "bluetooth"
+    description: "Flag to fix codec selection in nego when the peer device only support NB and SWB."
+    bug: "354070098"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}

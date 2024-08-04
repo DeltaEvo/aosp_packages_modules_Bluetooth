@@ -553,7 +553,7 @@ public class MetricsLogger {
         StringBuilder hexString = new StringBuilder();
         byte[] hashBytes = getSha256(name);
         for (byte b : hashBytes) {
-            hexString.append(String.format("%02x", b));
+            hexString.append(Utils.formatSimple("%02x", b));
         }
         return hexString.toString();
     }

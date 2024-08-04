@@ -109,7 +109,7 @@ public:
     log::debug("[PSync]: handle = {}", handle);
     auto periodic_sync = GetEstablishedSyncFromHandle(handle);
     if (periodic_sync == periodic_syncs_.end()) {
-      log::error("[PSync]: invalid index for handle {}", handle);
+      log::error("[PSync]: index not found for handle {}", handle);
       le_scanning_interface_->EnqueueCommand(
               hci::LePeriodicAdvertisingTerminateSyncBuilder::Create(handle),
               handler_->BindOnce(check_complete<LePeriodicAdvertisingTerminateSyncCompleteView>));
@@ -125,7 +125,7 @@ public:
     log::debug("[PSync]");
     auto periodic_sync = GetSyncFromAddressAndSid(address, adv_sid);
     if (periodic_sync == periodic_syncs_.end()) {
-      log::error("[PSync]:Invalid index for sid={}", adv_sid);
+      log::error("[PSync]: index not found for address={} and SID={:04X}", address, adv_sid);
       return;
     }
 
@@ -211,15 +211,24 @@ public:
     log::assert_that(status_view.IsValid(), "assert failed: status_view.IsValid()");
     auto status = status_view.GetStatus();
     if (status != ErrorCode::SUCCESS) {
+      if (pending_sync_requests_.empty()) {
+        log::error("pending_sync_requests_ empty");
+        return;
+      }
       auto& request = pending_sync_requests_.front();
       request.sync_timeout_alarm.Cancel();
       log::warn("Got a Command status {}, status {}, SID={:04X}, bd_addr={}",
                 OpCodeText(view.GetCommandOpCode()), ErrorCodeText(status), request.advertiser_sid,
                 request.address_with_type);
 
-      uint8_t adv_sid = request.advertiser_sid;
-      AddressWithType address_with_type = request.address_with_type;
-      auto sync = GetSyncFromAddressWithTypeAndSid(address_with_type, adv_sid);
+      auto sync =
+              GetSyncFromAddressWithTypeAndSid(request.address_with_type, request.advertiser_sid);
+      if (sync == periodic_syncs_.end()) {
+        log::error("[PSync]: index not found for address={} and SID={:04X}",
+                   request.address_with_type, request.advertiser_sid);
+        AdvanceRequest();
+        return;
+      }
       callbacks_->OnPeriodicSyncStarted(sync->request_id, (uint8_t)status, 0, sync->advertiser_sid,
                                         request.address_with_type, 0, 0);
       periodic_syncs_.erase(sync);
@@ -237,6 +246,10 @@ public:
     log::assert_that(status_view.IsValid(), "assert failed: status_view.IsValid()");
     auto status = status_view.GetStatus();
     if (status != ErrorCode::SUCCESS) {
+      if (pending_sync_requests_.empty()) {
+        log::error("pending_sync_requests_ empty");
+        return;
+      }
       auto& request = pending_sync_requests_.front();
       request.sync_timeout_alarm.Cancel();
       log::warn("Got a Command complete {}, status {}, SID={:04X}, bd_addr={}",
@@ -308,11 +321,13 @@ public:
         break;
     }
 
-    auto periodic_sync = GetSyncFromAddressWithTypeAndSid(
-            AddressWithType(event_view.GetAdvertiserAddress(), temp_address_type),
-            event_view.GetAdvertisingSid());
+    auto address_with_temp_type =
+            AddressWithType(event_view.GetAdvertiserAddress(), temp_address_type);
+    auto periodic_sync = GetSyncFromAddressWithTypeAndSid(address_with_temp_type,
+                                                          event_view.GetAdvertisingSid());
     if (periodic_sync == periodic_syncs_.end()) {
-      log::warn("[PSync]: Invalid address and sid for sync established");
+      log::warn("[PSync]: index not found for address={} and SID={:04X}", address_with_temp_type,
+                event_view.GetAdvertisingSid());
       if (event_view.GetStatus() == ErrorCode::SUCCESS) {
         log::warn("Terminate sync");
         le_scanning_interface_->EnqueueCommand(
@@ -322,17 +337,21 @@ public:
       AdvanceRequest();
       return;
     }
-    periodic_sync->sync_handle = event_view.GetSyncHandle();
-    periodic_sync->sync_state = PERIODIC_SYNC_STATE_ESTABLISHED;
-    callbacks_->OnPeriodicSyncStarted(periodic_sync->request_id, (uint8_t)event_view.GetStatus(),
-                                      event_view.GetSyncHandle(), event_view.GetAdvertisingSid(),
-                                      address_with_type, (uint16_t)event_view.GetAdvertiserPhy(),
-                                      event_view.GetPeriodicAdvertisingInterval());
+    if (periodic_sync->sync_state == PERIODIC_SYNC_STATE_PENDING) {
+      periodic_sync->sync_handle = event_view.GetSyncHandle();
+      periodic_sync->sync_state = PERIODIC_SYNC_STATE_ESTABLISHED;
+      callbacks_->OnPeriodicSyncStarted(periodic_sync->request_id, (uint8_t)event_view.GetStatus(),
+                                        event_view.GetSyncHandle(), event_view.GetAdvertisingSid(),
+                                        address_with_type, (uint16_t)event_view.GetAdvertiserPhy(),
+                                        event_view.GetPeriodicAdvertisingInterval());
 
-    if (com::android::bluetooth::flags::leaudio_broadcast_feature_support()) {
-      if (event_view.GetStatus() != ErrorCode::SUCCESS) {
-        periodic_syncs_.erase(periodic_sync);
+      if (com::android::bluetooth::flags::leaudio_broadcast_feature_support()) {
+        if (event_view.GetStatus() != ErrorCode::SUCCESS) {
+          periodic_syncs_.erase(periodic_sync);
+        }
       }
+    } else {
+      log::debug("[PSync]: Wrong sync state={}", (uint8_t)(periodic_sync->sync_state));
     }
 
     AdvanceRequest();
@@ -410,17 +429,24 @@ public:
   }
 
   void OnStartSyncTimeout() {
+    if (pending_sync_requests_.empty()) {
+      log::error("pending_sync_requests_ empty");
+      return;
+    }
     auto& request = pending_sync_requests_.front();
     log::warn("sync timeout SID={:04X}, bd_addr={}", request.advertiser_sid,
               request.address_with_type);
-    uint8_t adv_sid = request.advertiser_sid;
-    AddressWithType address_with_type = request.address_with_type;
-    auto sync = GetSyncFromAddressWithTypeAndSid(address_with_type, adv_sid);
     le_scanning_interface_->EnqueueCommand(
             hci::LePeriodicAdvertisingCreateSyncCancelBuilder::Create(),
             handler_->BindOnceOn(
                     this, &PeriodicSyncManager::HandlePeriodicAdvertisingCreateSyncCancelStatus<
                                   LePeriodicAdvertisingCreateSyncCancelCompleteView>));
+    auto sync = GetSyncFromAddressWithTypeAndSid(request.address_with_type, request.advertiser_sid);
+    if (sync == periodic_syncs_.end()) {
+      log::error("[PSync]: index not found for address={} and SID={:04X}",
+                 request.address_with_type, request.advertiser_sid);
+      return;
+    }
     int status = static_cast<int>(ErrorCode::ADVERTISING_TIMEOUT);
     callbacks_->OnPeriodicSyncStarted(sync->request_id, status, 0, sync->advertiser_sid,
                                       request.address_with_type, 0, 0);
@@ -513,8 +539,6 @@ private:
                     PeriodicSyncCteType::AVOID_AOD_CONSTANT_TONE_EXTENSION_WITH_ONE_US_SLOTS) |
             static_cast<uint8_t>(
                     PeriodicSyncCteType::AVOID_AOD_CONSTANT_TONE_EXTENSION_WITH_TWO_US_SLOTS);
-    auto sync = GetSyncFromAddressWithTypeAndSid(address_with_type, sid);
-    sync->sync_state = PERIODIC_SYNC_STATE_PENDING;
     AdvertisingAddressType advertisingAddressType =
             static_cast<AdvertisingAddressType>(address_with_type.GetAddressType());
     le_scanning_interface_->EnqueueCommand(
@@ -540,6 +564,15 @@ private:
     }
     request.busy = true;
     request.sync_timeout_alarm.Cancel();
+
+    auto sync = GetSyncFromAddressWithTypeAndSid(request.address_with_type, request.advertiser_sid);
+    if (sync == periodic_syncs_.end()) {
+      log::warn("[PSync]: index not found for address={} and SID={:04X}", request.address_with_type,
+                request.advertiser_sid);
+      AdvanceRequest();
+      return;
+    }
+    sync->sync_state = PERIODIC_SYNC_STATE_PENDING;
     HandleStartSyncRequest(request.advertiser_sid, request.address_with_type, request.skip,
                            request.sync_timeout);
     request.sync_timeout_alarm.Schedule(

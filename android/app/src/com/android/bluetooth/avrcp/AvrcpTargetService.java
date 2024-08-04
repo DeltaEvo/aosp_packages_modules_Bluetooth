@@ -604,7 +604,7 @@ public class AvrcpTargetService extends ProfileService {
         }
 
         StringBuilder tempBuilder = new StringBuilder();
-        tempBuilder.append("AVRCP version: " + mAvrcpVersion + "\n");
+        tempBuilder.append("AVRCP version: ").append(mAvrcpVersion).append("\n");
 
         if (mMediaPlayerList != null) {
             mMediaPlayerList.dump(tempBuilder);

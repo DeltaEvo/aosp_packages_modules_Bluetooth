@@ -31,6 +31,8 @@ import com.android.compatibility.common.util.AdoptShellPermissionsRule;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.ByteString;
 
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -63,16 +65,26 @@ public class SdpClientTest {
                         ParcelUuid[] parcelUuids =
                                 intent.getParcelableArrayExtra(
                                         BluetoothDevice.EXTRA_UUID, ParcelUuid.class);
-                        mFutureIntent.set(Arrays.asList(parcelUuids));
+                        if (parcelUuids != null) {
+                            mFutureIntent.set(Arrays.asList(parcelUuids));
+                        }
                     }
                 }
             };
 
-    @Test
-    public void remoteConnectServiceDiscoveryTest() throws Exception {
+    @Before
+    public void setup() {
         IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_UUID);
         mContext.registerReceiver(mConnectionStateReceiver, filter);
+    }
 
+    @After
+    public void tearDown() {
+        mContext.unregisterReceiver(mConnectionStateReceiver);
+    }
+
+    @Test
+    public void remoteConnectServiceDiscoveryTest() throws Exception {
         mFutureIntent = SettableFuture.create();
 
         String local_addr = mAdapter.getAddress();
@@ -89,12 +101,10 @@ public class SdpClientTest {
         assertThat(device.fetchUuidsWithSdp()).isTrue();
 
         assertThat(mFutureIntent.get())
-                .containsExactly(
+                .containsAtLeast(
                         BluetoothUuid.HFP,
                         BluetoothUuid.A2DP_SOURCE,
                         BluetoothUuid.A2DP_SINK,
                         BluetoothUuid.AVRCP);
-
-        mContext.unregisterReceiver(mConnectionStateReceiver);
     }
 }

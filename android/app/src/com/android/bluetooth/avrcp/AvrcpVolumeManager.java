@@ -421,8 +421,10 @@ class AvrcpVolumeManager extends AudioDeviceCallback {
 
     public void dump(StringBuilder sb) {
         sb.append("AvrcpVolumeManager:\n");
-        sb.append("  mCurrentDevice: " + mCurrentDevice + "\n");
-        sb.append("  Current System Volume: " + mAudioManager.getStreamVolume(STREAM_MUSIC) + "\n");
+        sb.append("  mCurrentDevice: ").append(mCurrentDevice).append("\n");
+        sb.append("  Current System Volume: ")
+                .append(mAudioManager.getStreamVolume(STREAM_MUSIC))
+                .append("\n");
         sb.append("  Device Volume Memory Map:\n");
         sb.append(
                 String.format(

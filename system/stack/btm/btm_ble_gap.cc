@@ -509,35 +509,22 @@ std::pair<uint16_t /* interval */, uint16_t /* window */> get_low_latency_scan_p
  *                  duration: how long the scan should last, in seconds. 0 means
  *                  scan without timeout. Starting the scan second time without
  *                  timeout will disable the timer.
- *                  low_latency_scan: whether this is a low latency scan,
- *                                    default is false.
  *
  * Returns          void
  *
  ******************************************************************************/
 tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration, tBTM_INQ_RESULTS_CB* p_results_cb,
-                           tBTM_CMPL_CB* p_cmpl_cb, bool low_latency_scan) {
+                           tBTM_CMPL_CB* p_cmpl_cb) {
   tBTM_STATUS status = BTM_WRONG_MODE;
-
-  uint16_t scan_interval = !btm_cb.ble_ctr_cb.inq_var.scan_interval
-                                   ? BTM_BLE_GAP_DISC_SCAN_INT
-                                   : btm_cb.ble_ctr_cb.inq_var.scan_interval;
-  uint16_t scan_window = !btm_cb.ble_ctr_cb.inq_var.scan_window
-                                 ? BTM_BLE_GAP_DISC_SCAN_WIN
-                                 : btm_cb.ble_ctr_cb.inq_var.scan_window;
-
   uint8_t scan_phy = !btm_cb.ble_ctr_cb.inq_var.scan_phy ? BTM_BLE_DEFAULT_PHYS
                                                          : btm_cb.ble_ctr_cb.inq_var.scan_phy;
 
-  // use low latency scanning if the scanning is active
+  // use low latency scanning
   uint16_t ll_scan_interval, ll_scan_window;
   std::tie(ll_scan_interval, ll_scan_window) = get_low_latency_scan_params();
-  if (low_latency_scan) {
-    std::tie(scan_interval, scan_window) = std::tie(ll_scan_interval, ll_scan_window);
-  }
 
-  log::verbose("scan_type:{}, {}, {}", btm_cb.ble_ctr_cb.inq_var.scan_type, scan_interval,
-               scan_window);
+  log::verbose("scan_type:{}, {}, {}", btm_cb.ble_ctr_cb.inq_var.scan_type, ll_scan_interval,
+               ll_scan_window);
 
   if (!bluetooth::shim::GetController()->SupportsBle()) {
     return BTM_ILLEGAL_VALUE;
@@ -554,19 +541,14 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration, tBTM_INQ_RESULTS_CB* p_
         } else {
           log::error("Scan with no duration started twice!");
         }
-      } else {
-        if (!low_latency_scan && alarm_is_scheduled(btm_cb.ble_ctr_cb.observer_timer)) {
-          log::error("Scan with duration started twice!");
-        }
       }
       /*
        * we stop current observation request for below scenarios
-       * 1. if the scan we wish to start is not low latency
-       * 2. current ongoing scanning is low latency
+       * 1. current ongoing scanning is low latency
        */
       bool is_ongoing_low_latency = btm_cb.ble_ctr_cb.inq_var.scan_interval == ll_scan_interval &&
                                     btm_cb.ble_ctr_cb.inq_var.scan_window == ll_scan_window;
-      if (!low_latency_scan || is_ongoing_low_latency) {
+      if (is_ongoing_low_latency) {
         log::warn("Observer was already active, is_low_latency: {}", is_ongoing_low_latency);
         return BTM_CMD_STARTED;
       }
@@ -586,8 +568,8 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration, tBTM_INQ_RESULTS_CB* p_
               (btm_cb.ble_ctr_cb.inq_var.scan_type == BTM_BLE_SCAN_MODE_NONE)
                       ? BTM_BLE_SCAN_MODE_ACTI
                       : btm_cb.ble_ctr_cb.inq_var.scan_type;
-      btm_send_hci_set_scan_params(btm_cb.ble_ctr_cb.inq_var.scan_type, (uint16_t)scan_interval,
-                                   (uint8_t)scan_phy, (uint16_t)scan_window,
+      btm_send_hci_set_scan_params(btm_cb.ble_ctr_cb.inq_var.scan_type, (uint16_t)ll_scan_interval,
+                                   (uint8_t)scan_phy, (uint16_t)ll_scan_window,
                                    btm_cb.ble_ctr_cb.addr_mgnt_cb.own_addr_type,
                                    BTM_BLE_DEFAULT_SFP);
 
@@ -600,7 +582,7 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration, tBTM_INQ_RESULTS_CB* p_
     };
 
     BTM_LogHistory(kBtmLogTag, RawAddress::kEmpty, "Le observe started",
-                   base::StringPrintf("low latency scanning enabled: %d", low_latency_scan));
+                   "low latency scanning enabled");
 
     if (status == BTM_CMD_STARTED) {
       btm_cb.ble_ctr_cb.set_ble_observe_active();

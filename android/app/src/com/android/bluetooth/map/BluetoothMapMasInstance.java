@@ -329,9 +329,9 @@ public class BluetoothMapMasInstance implements IObexConnectionHandler {
         if (mBaseUri != null) {
             if (mEnableSmsMms) {
                 if (mAccount.getType() == TYPE.EMAIL) {
-                    masName += "/" + TYPE_EMAIL_STR;
+                    masName = masName + "/" + TYPE_EMAIL_STR;
                 } else if (mAccount.getType() == TYPE.IM) {
-                    masName += "/" + TYPE_IM_STR;
+                    masName = masName + "/" + TYPE_IM_STR;
                 }
             } else {
                 masName = mAccount.getName();

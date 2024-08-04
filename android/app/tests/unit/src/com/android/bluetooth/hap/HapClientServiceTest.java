@@ -50,13 +50,11 @@ import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothStatusCodes;
 import android.bluetooth.BluetoothUuid;
 import android.bluetooth.IBluetoothHapClientCallback;
-import android.content.AttributionSource;
 import android.os.Binder;
 import android.os.ParcelUuid;
 import android.os.RemoteException;
 
 import androidx.test.filters.MediumTest;
-import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.TestUtils;
@@ -89,17 +87,13 @@ import java.util.concurrent.TimeoutException;
 
 @MediumTest
 @RunWith(AndroidJUnit4.class)
-public class HapClientTest {
-    private final String mFlagDexmarker = System.getProperty("dexmaker.share_classloader", "false");
-
+public class HapClientServiceTest {
     private static final int TIMEOUT_MS = 1000;
-    private BluetoothAdapter mAdapter;
+    private final BluetoothAdapter mAdapter = BluetoothAdapter.getDefaultAdapter();
     private BluetoothDevice mDevice;
     private BluetoothDevice mDevice2;
     private BluetoothDevice mDevice3;
     private HapClientService mService;
-    private HapClientService.BluetoothHapClientBinder mServiceBinder;
-    private AttributionSource mAttributionSource;
 
     @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
 
@@ -113,21 +107,13 @@ public class HapClientTest {
 
     @Before
     public void setUp() throws Exception {
-        if (!mFlagDexmarker.equals("true")) {
-            System.setProperty("dexmaker.share_classloader", "true");
-        }
-
         HapClientStateMachine.sConnectTimeoutMs = TIMEOUT_MS;
 
         doReturn(mDatabaseManager).when(mAdapterService).getDatabase();
 
-        mAdapter = BluetoothAdapter.getDefaultAdapter();
-        mAttributionSource = mAdapter.getAttributionSource();
-
         startService();
         mService.mFactory = mServiceFactory;
         doReturn(mCsipService).when(mServiceFactory).getCsipSetCoordinatorService();
-        mServiceBinder = (HapClientService.BluetoothHapClientBinder) mService.initBinder();
 
         when(mCallback.asBinder()).thenReturn(mBinder);
         mService.mCallbacks.register(mCallback);
@@ -193,10 +179,6 @@ public class HapClientTest {
 
     @After
     public void tearDown() throws Exception {
-        if (!mFlagDexmarker.equals("true")) {
-            System.setProperty("dexmaker.share_classloader", mFlagDexmarker);
-        }
-
         if (mService == null) {
             return;
         }
@@ -204,8 +186,6 @@ public class HapClientTest {
         mService.mCallbacks.unregister(mCallback);
 
         stopService();
-
-        mAdapter = null;
     }
 
     private void startService() throws TimeoutException {
@@ -224,15 +204,6 @@ public class HapClientTest {
     @Test
     public void testGetHapService() {
         Assert.assertEquals(mService, HapClientService.getHapClientService());
-    }
-
-    /** Test stop HA Service Client */
-    @Test
-    public void testStopHapService() {
-        Assert.assertEquals(mService, HapClientService.getHapClientService());
-
-        InstrumentationRegistry.getInstrumentation().runOnMainSync(mService::stop);
-        InstrumentationRegistry.getInstrumentation().runOnMainSync(mService::start);
     }
 
     /** Test get/set policy for BluetoothDevice */
@@ -254,8 +225,7 @@ public class HapClientTest {
 
         when(mDatabaseManager.getProfileConnectionPolicy(mDevice, BluetoothProfile.HAP_CLIENT))
                 .thenReturn(BluetoothProfile.CONNECTION_POLICY_ALLOWED);
-        // call getConnectionPolicy via binder
-        int policy = mServiceBinder.getConnectionPolicy(mDevice, mAttributionSource);
+        int policy = mService.getConnectionPolicy(mDevice);
         Assert.assertEquals(
                 "Setting device policy to POLICY_ALLOWED",
                 BluetoothProfile.CONNECTION_POLICY_ALLOWED,
@@ -425,7 +395,7 @@ public class HapClientTest {
                                         hasExtra(EXTRA_PREVIOUS_STATE, STATE_CONNECTING))),
                         any());
 
-        int state = mServiceBinder.getConnectionState(mDevice, mAttributionSource);
+        int state = mService.getConnectionState(mDevice);
         Assert.assertEquals(BluetoothProfile.STATE_DISCONNECTED, state);
     }
 
@@ -444,8 +414,7 @@ public class HapClientTest {
         BluetoothDevice Device2 = TestUtils.getTestDevice(mAdapter, 1);
         testConnectingDevice(order, Device2);
 
-        // indirect call of mService.getConnectedDevices to test BluetoothHearingAidBinder
-        List<BluetoothDevice> devices = mServiceBinder.getConnectedDevices(mAttributionSource);
+        List<BluetoothDevice> devices = mService.getConnectedDevices();
         Assert.assertTrue(devices.contains(mDevice));
         Assert.assertTrue(devices.contains(Device2));
         Assert.assertNotEquals(mDevice, Device2);
@@ -486,7 +455,7 @@ public class HapClientTest {
         Assert.assertEquals(3, mService.getHapGroup(mDevice3));
 
         /* Third one has no coordinated operations support but is part of the group */
-        int hapGroup = mServiceBinder.getHapGroup(mDevice2, mAttributionSource);
+        int hapGroup = mService.getHapGroup(mDevice2);
         Assert.assertEquals(2, hapGroup);
     }
 
@@ -510,7 +479,7 @@ public class HapClientTest {
             throw e.rethrowFromSystemServer();
         }
 
-        mServiceBinder.selectPreset(mDevice, 0x01, mAttributionSource);
+        mService.selectPreset(mDevice, 0x01);
         verify(mNativeInterface, times(1)).selectActivePreset(eq(mDevice), eq(0x01));
     }
 
@@ -536,7 +505,7 @@ public class HapClientTest {
             throw e.rethrowFromSystemServer();
         }
 
-        mServiceBinder.selectPresetForGroup(0x03, 0x01, mAttributionSource);
+        mService.selectPresetForGroup(0x03, 0x01);
         verify(mNativeInterface, times(1)).groupSelectActivePreset(eq(0x03), eq(0x01));
     }
 
@@ -550,7 +519,7 @@ public class HapClientTest {
         testConnectingDevice(order, mDevice);
 
         // Verify Native Interface call
-        mServiceBinder.switchToNextPreset(mDevice, mAttributionSource);
+        mService.switchToNextPreset(mDevice);
         verify(mNativeInterface, times(1)).nextActivePreset(eq(mDevice));
     }
 
@@ -566,7 +535,7 @@ public class HapClientTest {
         mNativeInterface.onFeaturesUpdate(getByteAddress(mDevice3), flags);
 
         // Verify Native Interface call
-        mServiceBinder.switchToNextPresetForGroup(0x03, mAttributionSource);
+        mService.switchToNextPresetForGroup(0x03);
         verify(mNativeInterface, times(1)).groupNextActivePreset(eq(0x03));
     }
 
@@ -580,7 +549,7 @@ public class HapClientTest {
         testConnectingDevice(order, mDevice);
 
         // Verify Native Interface call
-        mServiceBinder.switchToPreviousPreset(mDevice, mAttributionSource);
+        mService.switchToPreviousPreset(mDevice);
         verify(mNativeInterface, times(1)).previousActivePreset(eq(mDevice));
     }
 
@@ -598,7 +567,7 @@ public class HapClientTest {
         mNativeInterface.onFeaturesUpdate(getByteAddress(mDevice), flags);
 
         // Verify Native Interface call
-        mServiceBinder.switchToPreviousPresetForGroup(0x02, mAttributionSource);
+        mService.switchToPreviousPresetForGroup(0x02);
         verify(mNativeInterface, times(1)).groupPreviousActivePreset(eq(0x02));
     }
 
@@ -613,7 +582,7 @@ public class HapClientTest {
         testOnPresetSelected(mDevice, 0x01);
 
         // Verify cached value via binder
-        int presetIndex = mServiceBinder.getActivePresetIndex(mDevice, mAttributionSource);
+        int presetIndex = mService.getActivePresetIndex(mDevice);
         Assert.assertEquals(0x01, presetIndex);
     }
 
@@ -627,11 +596,9 @@ public class HapClientTest {
         testConnectingDevice(order, mDevice2);
 
         // Check when active preset is not known yet
-        List<BluetoothHapPresetInfo> presetList =
-                mServiceBinder.getAllPresetInfo(mDevice2, mAttributionSource);
+        List<BluetoothHapPresetInfo> presetList = mService.getAllPresetInfo(mDevice2);
 
-        BluetoothHapPresetInfo presetInfo =
-                mServiceBinder.getPresetInfo(mDevice2, 0x01, mAttributionSource);
+        BluetoothHapPresetInfo presetInfo = mService.getPresetInfo(mDevice2, 0x01);
         Assert.assertTrue(presetList.contains(presetInfo));
         Assert.assertEquals(0x01, presetInfo.getIndex());
 
@@ -645,8 +612,7 @@ public class HapClientTest {
 
         // Check when active preset is known
         Assert.assertEquals(0x01, mService.getActivePresetIndex(mDevice2));
-        BluetoothHapPresetInfo info =
-                mServiceBinder.getActivePresetInfo(mDevice2, mAttributionSource);
+        BluetoothHapPresetInfo info = mService.getActivePresetInfo(mDevice2);
         Assert.assertNotNull(info);
         Assert.assertEquals("One", info.getName());
     }
@@ -660,7 +626,7 @@ public class HapClientTest {
                 .getRemoteUuids(any(BluetoothDevice.class));
         testConnectingDevice(order, mDevice);
 
-        mServiceBinder.setPresetName(mDevice, 0x00, "ExamplePresetName", mAttributionSource);
+        mService.setPresetName(mDevice, 0x00, "ExamplePresetName");
         verify(mNativeInterface, times(0))
                 .setPresetName(eq(mDevice), eq(0x00), eq("ExamplePresetName"));
         try {
@@ -694,8 +660,7 @@ public class HapClientTest {
         int flags = 0x21;
         mNativeInterface.onFeaturesUpdate(getByteAddress(mDevice), flags);
 
-        mServiceBinder.setPresetNameForGroup(
-                test_group, 0x00, "ExamplePresetName", mAttributionSource);
+        mService.setPresetNameForGroup(test_group, 0x00, "ExamplePresetName");
         try {
             verify(mCallback, after(TIMEOUT_MS).times(1))
                     .onSetPresetNameForGroupFailed(
@@ -970,16 +935,14 @@ public class HapClientTest {
 
     @Test
     public void testServiceBinderGetDevicesMatchingConnectionStates() throws Exception {
-        List<BluetoothDevice> devices =
-                mServiceBinder.getDevicesMatchingConnectionStates(null, mAttributionSource);
+        List<BluetoothDevice> devices = mService.getDevicesMatchingConnectionStates(null);
         Assert.assertEquals(0, devices.size());
     }
 
     @Test
     public void testServiceBinderSetConnectionPolicy() throws Exception {
         Assert.assertTrue(
-                mServiceBinder.setConnectionPolicy(
-                        mDevice, BluetoothProfile.CONNECTION_POLICY_UNKNOWN, mAttributionSource));
+                mService.setConnectionPolicy(mDevice, BluetoothProfile.CONNECTION_POLICY_UNKNOWN));
         verify(mDatabaseManager)
                 .setProfileConnectionPolicy(
                         mDevice,
@@ -989,7 +952,7 @@ public class HapClientTest {
 
     @Test
     public void testServiceBinderGetFeatures() throws Exception {
-        int features = mServiceBinder.getFeatures(mDevice, mAttributionSource);
+        int features = mService.getFeatures(mDevice);
         Assert.assertEquals(0x00, features);
     }
 
@@ -1000,10 +963,10 @@ public class HapClientTest {
         when(callback.asBinder()).thenReturn(binder);
 
         int size = mService.mCallbacks.getRegisteredCallbackCount();
-        mServiceBinder.registerCallback(callback, mAttributionSource);
+        mService.registerCallback(callback);
         Assert.assertEquals(size + 1, mService.mCallbacks.getRegisteredCallbackCount());
 
-        mServiceBinder.unregisterCallback(callback, mAttributionSource);
+        mService.unregisterCallback(callback);
         Assert.assertEquals(size, mService.mCallbacks.getRegisteredCallbackCount());
     }
 

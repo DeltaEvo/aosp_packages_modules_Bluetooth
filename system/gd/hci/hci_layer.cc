@@ -465,10 +465,12 @@ struct HciLayer::impl {
     log::assert_that(event_view.IsValid(), "assert failed: event_view.IsValid()");
 #ifdef TARGET_FLOSS
     log::warn("Hardware Error Event with code 0x{:02x}", event_view.GetHardwareCode());
-    // Sending SIGINT to process the exception from BT controller.
+    // Sending SIGTERM to process the exception from BT controller.
     // The Floss daemon will be restarted. HCI reset during restart will clear the
     // error state of the BT controller.
-    kill(getpid(), SIGINT);
+    auto hal = module_.GetDependency<hal::HciHal>();
+    hal->markControllerBroken();
+    kill(getpid(), SIGTERM);
 #else
     log::fatal("Hardware Error Event with code 0x{:02x}", event_view.GetHardwareCode());
 #endif

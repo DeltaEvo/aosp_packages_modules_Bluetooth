@@ -1325,7 +1325,7 @@ public class BluetoothPbapVcardManager {
 
                 // Build filtered vCard
                 if (filteredIn) {
-                    filteredVCard.append(line + SEPARATOR);
+                    filteredVCard.append(line).append(SEPARATOR);
                 }
             }
 

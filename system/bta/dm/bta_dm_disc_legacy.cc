@@ -1608,9 +1608,9 @@ static void bta_dm_observe_cmpl_cb(void* p_result) {
   }
 }
 
-static void bta_dm_start_scan(uint8_t duration_sec, bool low_latency_scan = false) {
+static void bta_dm_start_scan(uint8_t duration_sec) {
   tBTM_STATUS status = get_btm_client_interface().ble.BTM_BleObserve(
-          true, duration_sec, bta_dm_observe_results_cb, bta_dm_observe_cmpl_cb, low_latency_scan);
+          true, duration_sec, bta_dm_observe_results_cb, bta_dm_observe_cmpl_cb);
 
   if (status != BTM_CMD_STARTED) {
     log::warn("BTM_BleObserve  failed. status {}", status);
@@ -1621,16 +1621,15 @@ static void bta_dm_start_scan(uint8_t duration_sec, bool low_latency_scan = fals
   }
 }
 
-void bta_dm_ble_scan(bool start, uint8_t duration_sec, bool low_latency_scan = false) {
+void bta_dm_ble_scan(bool start, uint8_t duration_sec) {
   if (!start) {
-    if (get_btm_client_interface().ble.BTM_BleObserve(false, 0, NULL, NULL, false) !=
-        BTM_CMD_STARTED) {
+    if (get_btm_client_interface().ble.BTM_BleObserve(false, 0, NULL, NULL) != BTM_CMD_STARTED) {
       log::warn("Unable to stop ble observe");
     }
     return;
   }
 
-  bta_dm_start_scan(duration_sec, low_latency_scan);
+  bta_dm_start_scan(duration_sec);
 }
 
 void bta_dm_ble_csis_observe(bool observe, tBTA_DM_SEARCH_CBACK* p_cback) {
@@ -2233,8 +2232,8 @@ void bta_dm_service_search_remname_cback(const RawAddress& bd_addr, DEV_CLASS dc
   ::bta_dm_disc_legacy::bta_dm_service_search_remname_cback(bd_addr, dc, bd_name);
 }
 
-void bta_dm_start_scan(uint8_t duration_sec, bool low_latency_scan = false) {
-  ::bta_dm_disc_legacy::bta_dm_start_scan(duration_sec, low_latency_scan);
+void bta_dm_start_scan(uint8_t duration_sec) {
+  ::bta_dm_disc_legacy::bta_dm_start_scan(duration_sec);
 }
 
 void store_avrcp_profile_feature(tSDP_DISC_REC* sdp_rec) {

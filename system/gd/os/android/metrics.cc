@@ -48,6 +48,10 @@ struct formatter<android::bluetooth::DeviceInfoSrcEnum>
 template <>
 struct formatter<android::bluetooth::AddressTypeEnum>
     : enum_formatter<android::bluetooth::AddressTypeEnum> {};
+template <>
+struct formatter<android::bluetooth::EventType> : enum_formatter<android::bluetooth::EventType> {};
+template <>
+struct formatter<android::bluetooth::State> : enum_formatter<android::bluetooth::State> {};
 }  // namespace fmt
 
 namespace bluetooth {
@@ -444,6 +448,20 @@ void LogMetricBluetoothLEConnection(os::LEConnectionSessionOptions session_optio
             session_options.remote_address,
             common::ToHexString(session_options.acl_connection_state),
             common::ToHexString(session_options.origin_type));
+  }
+}
+
+void LogMetricBluetoothEvent(const Address& address, android::bluetooth::EventType event_type,
+                             android::bluetooth::State state) {
+  if (address.IsEmpty()) {
+    log::warn("Failed BluetoothEvent Upload - Address is Empty");
+    return;
+  }
+  int metric_id = MetricIdManager::GetInstance().AllocateId(address);
+  int ret = stats_write(BLUETOOTH_CROSS_LAYER_EVENT_REPORTED, event_type, state, 0, metric_id, 0);
+  if (ret < 0) {
+    log::warn("Failed BluetoothEvent Upload - Address {}, Event_type {}, State {}", address,
+              event_type, state);
   }
 }
 
