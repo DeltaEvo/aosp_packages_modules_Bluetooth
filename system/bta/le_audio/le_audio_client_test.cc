@@ -6221,6 +6221,93 @@ TEST_F(UnicastTest, TwoEarbudsStreaming) {
                       .size());
 }
 
+TEST_F(UnicastTest, TestSetValidSingleOutputPreferredCodecConfig) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  btle_audio_codec_config_t preferred_output_codec_config = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_24000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 60};
+  // We did not set input preferred codec config
+  btle_audio_codec_config_t empty_input_codec_config;
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+  StartStreaming(AUDIO_USAGE_MEDIA, AUDIO_CONTENT_TYPE_MUSIC, group_id);
+  Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
+  Mock::VerifyAndClearExpectations(mock_le_audio_source_hal_client_);
+
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            false);
+  do_in_main_thread(base::BindOnce(&LeAudioClient::SetCodecConfigPreference,
+                                   base::Unretained(LeAudioClient::Get()), group_id,
+                                   empty_input_codec_config, preferred_output_codec_config));
+  SyncOnMainLoop();
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            true);
+  // We only set output preferred codec config so bidirectional context would
+  // use default config
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::CONVERSATIONAL)),
+            false);
+}
+
+TEST_F(UnicastTest, TestSetPreferredCodecConfigToNonActiveGroup) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+  StartStreaming(AUDIO_USAGE_MEDIA, AUDIO_CONTENT_TYPE_MUSIC, group_id);
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            false);
+
+  // Inactivate group 2
+  LeAudioClient::Get()->GroupSetActive(bluetooth::groups::kGroupUnknown);
+
+  btle_audio_codec_config_t preferred_codec_config = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+
+  // Re-initialize mock for destroyed hal client
+  RegisterSourceHalClientMock();
+  RegisterSinkHalClientMock();
+
+  // Reconfiguration not needed as set preferred config to non active group
+  EXPECT_CALL(mock_state_machine_, StopStream(_)).Times(0);
+  EXPECT_CALL(*mock_le_audio_source_hal_client_, ReconfigurationComplete()).Times(0);
+
+  do_in_main_thread(base::BindOnce(&LeAudioClient::SetCodecConfigPreference,
+                                   base::Unretained(LeAudioClient::Get()), group_id,
+                                   preferred_codec_config, preferred_codec_config));
+  SyncOnMainLoop();
+
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            true);
+  Mock::VerifyAndClearExpectations(&mock_state_machine_);
+  Mock::VerifyAndClearExpectations(mock_le_audio_source_hal_client_);
+
+  // Activate group 2 again
+  do_in_main_thread(base::BindOnce(&LeAudioClient::GroupSetActive,
+                                   base::Unretained(LeAudioClient::Get()), group_id));
+  SyncOnMainLoop();
+
+  StartStreaming(AUDIO_USAGE_MEDIA, AUDIO_CONTENT_TYPE_MUSIC, group_id);
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            true);
+}
+
 TEST_F(UnicastTest, TwoEarbudsClearPreferenceBeforeMedia) {
   com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
 
