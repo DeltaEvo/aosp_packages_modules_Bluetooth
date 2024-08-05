@@ -294,7 +294,6 @@ bool gatt_disconnect(tGATT_TCB* p_tcb) {
   tGATT_CH_STATE ch_state = gatt_get_ch_state(p_tcb);
   if (ch_state == GATT_CH_CLOSING) {
     log::debug("Device already in closing state peer:{}", p_tcb->peer_bda);
-    log::verbose("already in closing state");
     return true;
   }
 
