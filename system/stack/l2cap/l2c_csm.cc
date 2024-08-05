@@ -1137,8 +1137,7 @@ static void l2c_csm_config(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
           if (l2cb.fixed_reg[p_ccb->local_cid - L2CAP_FIRST_FIXED_CHNL].pL2CA_FixedData_Cb !=
               nullptr) {
             p_ccb->metrics.rx(static_cast<BT_HDR*>(p_data)->len);
-            (*l2cb.fixed_reg[p_ccb->local_cid - L2CAP_FIRST_FIXED_CHNL].pL2CA_FixedData_Cb)(
-                    p_ccb->local_cid, p_ccb->p_lcb->remote_bd_addr, (BT_HDR*)p_data);
+            l2cu_fixed_channel_data_cb(p_lcb, p_ccb->local_cid, reinterpret_cast<BT_HDR*>(p_data));
           } else {
             if (p_data != nullptr) {
               osi_free_and_reset(&p_data);

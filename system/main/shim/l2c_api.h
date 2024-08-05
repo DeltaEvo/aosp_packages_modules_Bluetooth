@@ -364,9 +364,8 @@ uint16_t L2CA_SendFixedChnlData(uint16_t fixed_cid, const RawAddress& rem_bda, B
  *
  *  Parameters:     Fixed CID
  *                  BD Address of remote
- *                  Idle timeout to use (or 0xFFFF if don't care)
  *
- *  Return value:   true if channel removed
+ *  Return value:   true if channel removed or marked for removal
  *
  ******************************************************************************/
 bool L2CA_RemoveFixedChnl(uint16_t fixed_cid, const RawAddress& rem_bda);
