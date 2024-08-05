@@ -30,6 +30,16 @@ flag {
 }
 
 flag {
+    name: "broadcast_adapter_state_with_callback"
+    namespace: "bluetooth"
+    description: "Instead of caching the value with an IPC cache, we directly broadcast the state to each app so they can store it locally"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+    bug: "357645528"
+}
+
+flag {
     name: "fast_bind_to_app"
     namespace: "bluetooth"
     description: "Remove complexity and non necessary initialization when simply binding"
