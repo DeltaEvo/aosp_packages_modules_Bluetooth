@@ -162,17 +162,18 @@ struct AclScheduler::impl {
   void Stop() { stopped_ = true; }
 
 private:
-  bool is_ready_to_send_next_operation() const {
-    return incoming_connecting_address_set_.empty() && !outgoing_entry_.has_value() &&
-           !pending_outgoing_operations_.empty();
+  bool ready_to_send_next_operation() const {
+    if (stopped_) {
+      return false;
+    }
+    if (pending_outgoing_operations_.empty()) {
+      return false;
+    }
+    return incoming_connecting_address_set_.empty() && !outgoing_entry_.has_value();
   }
 
   void try_dequeue_next_operation() {
-    if (stopped_) {
-      return;
-    }
-
-    if (is_ready_to_send_next_operation()) {
+    if (ready_to_send_next_operation()) {
       log::info("Pending connections is not empty; so sending next connection");
       auto entry = std::move(pending_outgoing_operations_.front());
       pending_outgoing_operations_.pop_front();
