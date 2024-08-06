@@ -1504,7 +1504,9 @@ static void btm_ble_scan_filt_param_cfg_evt(uint8_t /* avbl_space */,
  *                  If the duration is zero, the periodic inquiry mode is
  *                  cancelled.
  *
- * Parameters:      duration - Duration of inquiry in seconds
+ * Parameters:      duration - Duration of inquiry in seconds. With flag
+ *                             le_inquiry_duration duration is a multiplier for
+ *                             1.28 seconds.
  *
  * Returns          BTM_CMD_STARTED if successfully started
  *                  BTM_BUSY - if an inquiry is already active
@@ -1550,8 +1552,10 @@ tBTM_STATUS btm_ble_start_inquiry(uint8_t duration) {
   } else if ((btm_cb.ble_ctr_cb.inq_var.scan_interval != scan_interval) ||
              (btm_cb.ble_ctr_cb.inq_var.scan_window != scan_window)) {
     log::verbose("restart LE scan with low latency scan params");
-    btm_cb.ble_ctr_cb.inq_var.scan_interval = scan_interval;
-    btm_cb.ble_ctr_cb.inq_var.scan_window = scan_window;
+    if (!com::android::bluetooth::flags::le_inquiry_duration()) {
+      btm_cb.ble_ctr_cb.inq_var.scan_interval = scan_interval;
+      btm_cb.ble_ctr_cb.inq_var.scan_window = scan_window;
+    }
     btm_send_hci_scan_enable(BTM_BLE_SCAN_DISABLE, BTM_BLE_DUPLICATE_ENABLE);
     btm_send_hci_set_scan_params(BTM_BLE_SCAN_MODE_ACTI, scan_interval, scan_window, scan_phy,
                                  btm_cb.ble_ctr_cb.addr_mgnt_cb.own_addr_type, SP_ADV_ALL);
@@ -1565,7 +1569,8 @@ tBTM_STATUS btm_ble_start_inquiry(uint8_t duration) {
 
   if (duration != 0) {
     /* start inquiry timer */
-    uint64_t duration_ms = duration * 1000;
+    uint64_t duration_ms =
+            duration * (com::android::bluetooth::flags::le_inquiry_duration() ? 1280 : 1000);
     alarm_set_on_mloop(btm_cb.ble_ctr_cb.inq_var.inquiry_timer, duration_ms,
                        btm_ble_inquiry_timer_timeout, NULL);
   }
