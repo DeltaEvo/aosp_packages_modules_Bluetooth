@@ -393,17 +393,6 @@ struct BTM_ReadConnectionAddr {
   }
 };
 extern struct BTM_ReadConnectionAddr BTM_ReadConnectionAddr;
-// Name: BTM_RequestPeerSCA
-// Params: const RawAddress& remote_bda, tBT_TRANSPORT transport
-// Returns: void
-struct BTM_RequestPeerSCA {
-  std::function<void(const RawAddress& remote_bda, tBT_TRANSPORT transport)> body{
-          [](const RawAddress& /* remote_bda */, tBT_TRANSPORT /* transport */) { ; }};
-  void operator()(const RawAddress& remote_bda, tBT_TRANSPORT transport) {
-    body(remote_bda, transport);
-  }
-};
-extern struct BTM_RequestPeerSCA BTM_RequestPeerSCA;
 // Name: BTM_acl_after_controller_started
 // Returns: void
 struct BTM_acl_after_controller_started {

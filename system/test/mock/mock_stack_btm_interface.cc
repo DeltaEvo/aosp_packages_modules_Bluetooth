@@ -205,6 +205,7 @@ struct btm_client_interface_t default_btm_client_interface = {
                   return BTM_SUCCESS;
                 },
                 .BTM_RemoveSco = [](uint16_t /* sco_inx */) -> tBTM_STATUS { return BTM_SUCCESS; },
+                .BTM_RemoveScoByBdaddr = [](const RawAddress& /* bd_addr */) {},
                 .BTM_WriteVoiceSettings = [](uint16_t /* settings */) {},
                 .BTM_EScoConnRsp = [](uint16_t /* sco_inx */, tHCI_STATUS /* hci_status */,
                                       enh_esco_params_t* /* p_parms */) {},

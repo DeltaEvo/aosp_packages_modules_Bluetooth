@@ -335,7 +335,7 @@ static void socket_read_ready_cb(socket_t* /* socket */, void* context) {
   // routine that the socket is no longer desired and should be torn
   // down.
   if (sco_socket->connect_completed || sco_socket == listen_sco_socket) {
-    if (BTM_RemoveSco(sco_socket->sco_handle) == BTM_SUCCESS) {
+    if (get_btm_client_interface().sco.BTM_RemoveSco(sco_socket->sco_handle) == BTM_SUCCESS) {
       list_remove(sco_sockets, sco_socket);
     }
     if (sco_socket == listen_sco_socket) {

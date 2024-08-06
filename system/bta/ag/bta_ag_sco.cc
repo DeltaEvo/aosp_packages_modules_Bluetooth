@@ -318,7 +318,7 @@ static void bta_ag_sco_disc_cback(uint16_t sco_idx) {
 static bool bta_ag_remove_sco(tBTA_AG_SCB* p_scb, bool only_active) {
   if (p_scb->sco_idx != BTM_INVALID_SCO_INDEX) {
     if (!only_active || p_scb->sco_idx == bta_ag_cb.sco.cur_idx) {
-      tBTM_STATUS status = BTM_RemoveSco(p_scb->sco_idx);
+      tBTM_STATUS status = get_btm_client_interface().sco.BTM_RemoveSco(p_scb->sco_idx);
       log::debug("Removed SCO index:0x{:04x} status:{}", p_scb->sco_idx, btm_status_text(status));
       if (status == BTM_CMD_STARTED) {
         /* SCO is connected; set current control block */

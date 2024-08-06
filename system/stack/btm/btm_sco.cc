@@ -1177,7 +1177,7 @@ tBTM_STATUS BTM_RemoveSco(uint16_t sco_inx) {
   return BTM_CMD_STARTED;
 }
 
-void BTM_RemoveSco(const RawAddress& bda) {
+void BTM_RemoveScoByBdaddr(const RawAddress& bda) {
   tSCO_CONN* p = &btm_cb.sco_cb.sco_db[0];
   uint16_t xx;
 

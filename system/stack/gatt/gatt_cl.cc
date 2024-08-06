@@ -31,13 +31,11 @@
 #include "gatt_int.h"
 #include "hardware/bt_gatt_types.h"
 #include "internal_include/bt_target.h"
-#include "internal_include/bt_trace.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/osi.h"
 #include "stack/arbiter/acl_arbiter.h"
 #include "stack/eatt/eatt.h"
 #include "stack/include/bt_types.h"
+#include "stack/include/btm_client_interface.h"
 #include "types/bluetooth/uuid.h"
 
 #define GATT_WRITE_LONG_HDR_SIZE 5 /* 1 opcode + 2 handle + 2 offset */
@@ -1127,7 +1125,11 @@ void gatt_process_mtu_rsp(tGATT_TCB& tcb, tGATT_CLCB* p_clcb, uint16_t len, uint
 
     log::info("MTU Exchange resulted in: {}", tcb.payload_size);
 
-    BTM_SetBleDataLength(tcb.peer_bda, tcb.max_user_mtu + L2CAP_PKT_OVERHEAD);
+    if (get_btm_client_interface().ble.BTM_SetBleDataLength(
+                tcb.peer_bda, tcb.max_user_mtu + L2CAP_PKT_OVERHEAD) != BTM_SUCCESS) {
+      log::warn("Unable to set BLE data length peer:{} mtu:{}", tcb.peer_bda,
+                tcb.max_user_mtu + L2CAP_PKT_OVERHEAD);
+    }
   }
 
   gatt_end_operation(p_clcb, status, NULL);
