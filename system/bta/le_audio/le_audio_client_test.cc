@@ -39,6 +39,7 @@
 #include "gatt/database_builder.h"
 #include "gmock/gmock.h"
 #include "hardware/bt_gatt_types.h"
+#include "hardware/bt_le_audio.h"
 #include "hci/controller_interface_mock.h"
 #include "internal_include/stack_config.h"
 #include "le_audio/codec_manager.h"
@@ -231,6 +232,12 @@ std::unique_ptr<LeAudioSinkAudioHalClient> LeAudioSinkAudioHalClient::AcquireUni
 }
 
 void LeAudioSinkAudioHalClient::DebugDump(int fd) {}
+
+RawAddress GetTestAddress(uint8_t index) {
+  EXPECT_LT(index, UINT8_MAX);
+  RawAddress result = {{0xC0, 0xDE, 0xC0, 0xDE, 0x00, index}};
+  return result;
+}
 
 class MockAudioHalClientCallbacks : public bluetooth::le_audio::LeAudioClientCallbacks {
 public:
@@ -675,49 +682,47 @@ protected:
 
     // default Characteristic read handler dispatches requests to service mocks
     ON_CALL(mock_gatt_queue_, ReadCharacteristic(_, _, _, _))
-            .WillByDefault(Invoke(
-                    [&](uint16_t conn_id, uint16_t handle, GATT_READ_OP_CB cb, void* cb_data) {
-                      do_in_main_thread(base::BindOnce(
-                              [](std::map<uint16_t, std::unique_ptr<NiceMock<MockDeviceWrapper>>>*
-                                         peer_devices,
-                                 uint16_t conn_id, uint16_t handle, GATT_READ_OP_CB cb,
-                                 void* cb_data) -> void {
-                                if (peer_devices->count(conn_id)) {
-                                  auto& device = peer_devices->at(conn_id);
-                                  auto svc = std::find_if(device->services.begin(),
-                                                          device->services.end(),
-                                                          [handle](const gatt::Service& svc) {
-                                                            return (handle >= svc.handle) &&
-                                                                   (handle <= svc.end_handle);
-                                                          });
-                                  if (svc == device->services.end()) {
-                                    return;
-                                  }
+            .WillByDefault(Invoke([&](uint16_t conn_id, uint16_t handle, GATT_READ_OP_CB cb,
+                                      void* cb_data) {
+              do_in_main_thread(base::BindOnce(
+                      [](std::map<uint16_t, std::unique_ptr<NiceMock<MockDeviceWrapper>>>*
+                                 peer_devices,
+                         uint16_t conn_id, uint16_t handle, GATT_READ_OP_CB cb,
+                         void* cb_data) -> void {
+                        if (peer_devices->count(conn_id)) {
+                          auto& device = peer_devices->at(conn_id);
+                          auto svc = std::find_if(device->services.begin(), device->services.end(),
+                                                  [handle](const gatt::Service& svc) {
+                                                    return (handle >= svc.handle) &&
+                                                           (handle <= svc.end_handle);
+                                                  });
+                          if (svc == device->services.end()) {
+                            return;
+                          }
 
-                                  GattStatus status;
-                                  std::vector<uint8_t> value;
-                                  // Dispatch to mockable handler functions
-                                  if (svc->handle == device->csis->start) {
-                                    std::tie(status, value) =
-                                            device->csis->OnGetCharacteristicValue(handle);
-                                  } else if (svc->handle == device->cas->start) {
-                                    std::tie(status, value) =
-                                            device->cas->OnGetCharacteristicValue(handle);
-                                  } else if (svc->handle == device->ascs->start) {
-                                    std::tie(status, value) =
-                                            device->ascs->OnGetCharacteristicValue(handle);
-                                  } else if (svc->handle == device->pacs->start) {
-                                    std::tie(status, value) =
-                                            device->pacs->OnGetCharacteristicValue(handle);
-                                  } else {
-                                    return;
-                                  }
+                          GattStatus status;
+                          std::vector<uint8_t> value;
+                          // Dispatch to mockable handler functions
+                          if (svc->handle == device->csis->start) {
+                            std::tie(status, value) =
+                                    device->csis->OnGetCharacteristicValue(handle);
+                          } else if (svc->handle == device->cas->start) {
+                            std::tie(status, value) = device->cas->OnGetCharacteristicValue(handle);
+                          } else if (svc->handle == device->ascs->start) {
+                            std::tie(status, value) =
+                                    device->ascs->OnGetCharacteristicValue(handle);
+                          } else if (svc->handle == device->pacs->start) {
+                            std::tie(status, value) =
+                                    device->pacs->OnGetCharacteristicValue(handle);
+                          } else {
+                            return;
+                          }
 
-                                  cb(conn_id, status, handle, value.size(), value.data(), cb_data);
-                                }
-                              },
-                              &peer_devices, conn_id, handle, cb, cb_data));
-                    }));
+                          cb(conn_id, status, handle, value.size(), value.data(), cb_data);
+                        }
+                      },
+                      &peer_devices, conn_id, handle, cb, cb_data));
+            }));
 
     // default multiple Characteristic read handler dispatches requests to service mocks
     ON_CALL(mock_gatt_queue_, ReadMultiCharacteristic(_, _, _, _))
@@ -1744,7 +1749,7 @@ protected:
                          uint8_t rank, bool connect_through_csis = false, bool new_device = true) {
     SetSampleDatabaseEarbudsValid(conn_id, addr, sink_audio_allocation, source_audio_allocation,
                                   default_channel_cnt, default_channel_cnt,
-                                  0x0004, /* source sample freq 16khz */
+                                  0x0034, /* source sample freq 16/24k/32hz */
                                   true,   /*add_csis*/
                                   true,   /*add_cas*/
                                   true,   /*add_pacs*/
@@ -2735,6 +2740,127 @@ protected:
     groups.clear();
     UnicastTestNoInit::TearDown();
   }
+
+  void TestSetupRemoteDevices(int group_id) {
+    uint8_t group_size = 2;
+
+    // Report working CSIS
+    ON_CALL(mock_csis_client_module_, IsCsisClientRunning()).WillByDefault(Return(true));
+
+    // First earbud
+    const RawAddress test_address0 = GetTestAddress(0);
+    EXPECT_CALL(mock_btif_storage_, AddLeaudioAutoconnect(test_address0, true)).Times(1);
+    ConnectCsisDevice(test_address0, 1 /*conn_id*/, codec_spec_conf::kLeAudioLocationFrontLeft,
+                      codec_spec_conf::kLeAudioLocationFrontLeft, group_size, group_id,
+                      1 /* rank*/);
+
+    // Second earbud
+    const RawAddress test_address1 = GetTestAddress(1);
+    EXPECT_CALL(mock_btif_storage_, AddLeaudioAutoconnect(test_address1, true)).Times(1);
+    ConnectCsisDevice(test_address1, 2 /*conn_id*/, codec_spec_conf::kLeAudioLocationFrontRight,
+                      codec_spec_conf::kLeAudioLocationFrontRight, group_size, group_id,
+                      2 /* rank*/, true /*connect_through_csis*/);
+
+    constexpr int gmcs_ccid = 1;
+    constexpr int gtbs_ccid = 2;
+    EXPECT_CALL(*mock_le_audio_source_hal_client_, Start(_, _, _)).Times(1);
+    EXPECT_CALL(*mock_le_audio_sink_hal_client_, Start(_, _, _)).Times(1);
+    LeAudioClient::Get()->SetCcidInformation(gmcs_ccid,
+                                             static_cast<int>(LeAudioContextType::MEDIA));
+    LeAudioClient::Get()->SetCcidInformation(gtbs_ccid,
+                                             static_cast<int>(LeAudioContextType::CONVERSATIONAL));
+    LeAudioClient::Get()->GroupSetActive(group_id);
+  }
+
+  void TestSetCodecPreference(
+          const btle_audio_codec_config_t* preferred_codec_config_before_streaming,
+          const btle_audio_codec_config_t* preferred_codec_config_during_streaming,
+          LeAudioContextType context_type, int group_id, bool set_before_streaming,
+          bool set_while_streaming, bool is_using_set_before_streaming_codec_during_streaming,
+          bool is_using_set_while_streaming_codec_during_streaming, bool is_reconfig) {
+    auto config_before_streaming_str = preferred_codec_config_before_streaming
+                                               ? preferred_codec_config_before_streaming->ToString()
+                                               : "null";
+    auto config_during_streaming_str = preferred_codec_config_during_streaming
+                                               ? preferred_codec_config_during_streaming->ToString()
+                                               : "null";
+    log::debug(
+            "preferred_codec_config_before_streaming: {}, "
+            "preferred_codec_config_during_streaming: {}, context_type: {}, "
+            "group_id: {}, set_before_streaming: {}, "
+            "set_while_streaming: {}, "
+            "is_using_set_before_streaming_codec_during_streaming: "
+            "{},is_using_set_while_streaming_codec_during_streaming:{}, "
+            "is_reconfig: {}",
+            config_before_streaming_str, config_during_streaming_str,
+            bluetooth::common::ToString(context_type), group_id, set_before_streaming,
+            set_while_streaming, is_using_set_before_streaming_codec_during_streaming,
+            is_using_set_while_streaming_codec_during_streaming, is_reconfig);
+
+    if (context_type != LeAudioContextType::MEDIA &&
+        context_type != LeAudioContextType::CONVERSATIONAL) {
+      return;
+    }
+
+    if (set_before_streaming) {
+      do_in_main_thread(base::BindOnce(&LeAudioClient::SetCodecConfigPreference,
+                                       base::Unretained(LeAudioClient::Get()), group_id,
+                                       *preferred_codec_config_before_streaming,
+                                       *preferred_codec_config_before_streaming));
+      SyncOnMainLoop();
+    }
+
+    types::BidirectionalPair<std::vector<uint8_t>> ccids;
+    constexpr int gmcs_ccid = 1;
+    constexpr int gtbs_ccid = 2;
+    if (context_type == LeAudioContextType::MEDIA) {
+      ccids = types::BidirectionalPair<std::vector<uint8_t>>{{gmcs_ccid}, {}};
+      EXPECT_CALL(mock_state_machine_, StartStream(_, _, _, ccids)).Times(1);
+      StartStreaming(AUDIO_USAGE_MEDIA, AUDIO_CONTENT_TYPE_MUSIC, group_id);
+    } else {
+      ccids = types::BidirectionalPair<std::vector<uint8_t>>{{gtbs_ccid}, {gtbs_ccid}};
+      EXPECT_CALL(mock_state_machine_, StartStream(_, _, _, ccids)).Times(1);
+      StartStreaming(AUDIO_USAGE_VOICE_COMMUNICATION, AUDIO_CONTENT_TYPE_SPEECH, group_id);
+    }
+    Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
+    Mock::VerifyAndClearExpectations(mock_le_audio_source_hal_client_);
+
+    ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(group_id,
+                                                                static_cast<int>(context_type)),
+              is_using_set_before_streaming_codec_during_streaming);
+
+    uint8_t cis_count_out = 2;
+    uint8_t cis_count_in = context_type == LeAudioContextType::MEDIA ? 0 : 2;
+    TestAudioDataTransfer(group_id, cis_count_out, cis_count_in, 1920);
+
+    if (set_while_streaming) {
+      EXPECT_CALL(mock_state_machine_, StopStream(_)).Times(is_reconfig);
+      EXPECT_CALL(*mock_le_audio_source_hal_client_, ReconfigurationComplete()).Times(is_reconfig);
+
+      do_in_main_thread(base::BindOnce(&LeAudioClient::SetCodecConfigPreference,
+                                       base::Unretained(LeAudioClient::Get()), group_id,
+                                       *preferred_codec_config_during_streaming,
+                                       *preferred_codec_config_during_streaming));
+      SyncOnMainLoop();
+      ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(group_id,
+                                                                  static_cast<int>(context_type)),
+                is_using_set_while_streaming_codec_during_streaming);
+
+      if (context_type == LeAudioContextType::MEDIA) {
+        ccids = types::BidirectionalPair<std::vector<uint8_t>>{{gmcs_ccid}, {}};
+        EXPECT_CALL(mock_state_machine_, StartStream(_, _, _, ccids)).Times(1);
+        StartStreaming(AUDIO_USAGE_MEDIA, AUDIO_CONTENT_TYPE_MUSIC, group_id);
+      } else {
+        ccids = types::BidirectionalPair<std::vector<uint8_t>>{{gtbs_ccid}, {gtbs_ccid}};
+        EXPECT_CALL(mock_state_machine_, StartStream(_, _, _, ccids)).Times(1);
+        StartStreaming(AUDIO_USAGE_VOICE_COMMUNICATION, AUDIO_CONTENT_TYPE_SPEECH, group_id);
+      }
+    }
+
+    StopStreaming(group_id, context_type == LeAudioContextType::CONVERSATIONAL);
+    Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
+    Mock::VerifyAndClearExpectations(&mock_state_machine_);
+  }
 };
 
 class UnicastTestHealthStatus : public UnicastTest {
@@ -2769,12 +2895,6 @@ protected:
   const int group_id_ = 0;
   LeAudioDeviceGroup* group_ = nullptr;
 };
-
-RawAddress GetTestAddress(uint8_t index) {
-  EXPECT_LT(index, UINT8_MAX);
-  RawAddress result = {{0xC0, 0xDE, 0xC0, 0xDE, 0x00, index}};
-  return result;
-}
 
 TEST_F(UnicastTest, Initialize) {
   ASSERT_NE(LeAudioClient::Get(), nullptr);
@@ -6034,11 +6154,11 @@ TEST_F(UnicastTest, TwoEarbudsStreaming) {
 
   /* Make sure configurations are non empty */
   btle_audio_codec_config_t call_config = {.codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
-                                           .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+                                           .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_32000HZ,
                                            .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
                                            .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
                                            .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
-                                           .octets_per_frame = 40};
+                                           .octets_per_frame = 80};
 
   EXPECT_CALL(mock_audio_hal_client_callbacks_,
               OnAudioGroupCurrentCodecConf(group_id, call_config, call_config))
@@ -6099,6 +6219,1313 @@ TEST_F(UnicastTest, TwoEarbudsStreaming) {
   ASSERT_TRUE(group->GetCachedConfiguration(types::LeAudioContextType::CONVERSATIONAL)
                       ->confs.get(le_audio::types::kLeAudioDirectionSource)
                       .size());
+}
+
+TEST_F(UnicastTest, TestSetValidSingleOutputPreferredCodecConfig) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  btle_audio_codec_config_t preferred_output_codec_config = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_24000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 60};
+  // We did not set input preferred codec config
+  btle_audio_codec_config_t empty_input_codec_config;
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+  StartStreaming(AUDIO_USAGE_MEDIA, AUDIO_CONTENT_TYPE_MUSIC, group_id);
+  Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
+  Mock::VerifyAndClearExpectations(mock_le_audio_source_hal_client_);
+
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            false);
+  do_in_main_thread(base::BindOnce(&LeAudioClient::SetCodecConfigPreference,
+                                   base::Unretained(LeAudioClient::Get()), group_id,
+                                   empty_input_codec_config, preferred_output_codec_config));
+  SyncOnMainLoop();
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            true);
+  // We only set output preferred codec config so bidirectional context would
+  // use default config
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::CONVERSATIONAL)),
+            false);
+}
+
+TEST_F(UnicastTest, TestSetPreferredCodecConfigToNonActiveGroup) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+  StartStreaming(AUDIO_USAGE_MEDIA, AUDIO_CONTENT_TYPE_MUSIC, group_id);
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            false);
+
+  // Inactivate group 2
+  LeAudioClient::Get()->GroupSetActive(bluetooth::groups::kGroupUnknown);
+
+  btle_audio_codec_config_t preferred_codec_config = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+
+  // Re-initialize mock for destroyed hal client
+  RegisterSourceHalClientMock();
+  RegisterSinkHalClientMock();
+
+  // Reconfiguration not needed as set preferred config to non active group
+  EXPECT_CALL(mock_state_machine_, StopStream(_)).Times(0);
+  EXPECT_CALL(*mock_le_audio_source_hal_client_, ReconfigurationComplete()).Times(0);
+
+  do_in_main_thread(base::BindOnce(&LeAudioClient::SetCodecConfigPreference,
+                                   base::Unretained(LeAudioClient::Get()), group_id,
+                                   preferred_codec_config, preferred_codec_config));
+  SyncOnMainLoop();
+
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            true);
+  Mock::VerifyAndClearExpectations(&mock_state_machine_);
+  Mock::VerifyAndClearExpectations(mock_le_audio_source_hal_client_);
+
+  // Activate group 2 again
+  do_in_main_thread(base::BindOnce(&LeAudioClient::GroupSetActive,
+                                   base::Unretained(LeAudioClient::Get()), group_id));
+  SyncOnMainLoop();
+
+  StartStreaming(AUDIO_USAGE_MEDIA, AUDIO_CONTENT_TYPE_MUSIC, group_id);
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            true);
+}
+
+TEST_F(UnicastTest, TwoEarbudsClearPreferenceBeforeMedia) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  btle_audio_codec_config_t preferred_codec_config_before_media = {.codec_priority = -1};
+
+  bool set_before_media = true;
+  bool set_while_media = false;
+  bool is_using_set_before_media_codec_during_media = false;
+  bool is_using_set_while_media_codec_during_media = false;
+  // Use legacy codec and should not reconfig while streaming
+  bool is_reconfig = false;
+  TestSetCodecPreference(&preferred_codec_config_before_media, nullptr, LeAudioContextType::MEDIA,
+                         group_id, set_before_media, set_while_media,
+                         is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceSuccessBeforeMedia) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can be used by media
+  btle_audio_codec_config_t preferred_codec_config_before_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+
+  bool set_before_media = true;
+  bool set_while_media = false;
+  bool is_using_set_before_media_codec_during_media = true;
+  bool is_using_set_while_media_codec_during_media = false;
+  // Use preferred codec and should not reconfig while streaming
+  bool is_reconfig = false;
+  TestSetCodecPreference(&preferred_codec_config_before_media, nullptr, LeAudioContextType::MEDIA,
+                         group_id, set_before_media, set_while_media,
+                         is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceFailBeforeMedia) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can not be used by media
+  btle_audio_codec_config_t preferred_codec_config_before_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 70};
+
+  bool set_before_media = true;
+  bool set_while_media = false;
+  bool is_using_set_before_media_codec_during_media = false;
+  bool is_using_set_while_media_codec_during_media = false;
+  // Use legacy codec and should not reconfig while streaming
+  bool is_reconfig = false;
+  TestSetCodecPreference(&preferred_codec_config_before_media, nullptr, LeAudioContextType::MEDIA,
+                         group_id, set_before_media, set_while_media,
+                         is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceSuccessDuringMediaWithReconfig) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can be used by media
+  btle_audio_codec_config_t preferred_codec_config_during_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_24000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 60};
+
+  bool set_before_media = false;
+  bool set_while_media = true;
+  bool is_using_set_before_media_codec_during_media = false;
+  bool is_using_set_while_media_codec_during_media = true;
+  // Should reconfig and use preferred codec while streaming
+  bool is_reconfig = true;
+  TestSetCodecPreference(nullptr, &preferred_codec_config_during_media, LeAudioContextType::MEDIA,
+                         group_id, set_before_media, set_while_media,
+                         is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceSuccessDuringMediaWithoutReconfig) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can be used by media
+  btle_audio_codec_config_t preferred_codec_config_during_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_48000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 120};
+
+  bool set_before_media = false;
+  bool set_while_media = true;
+  bool is_using_set_before_media_codec_during_media = false;
+  bool is_using_set_while_media_codec_during_media = true;
+  // Use preferred codec but not reconfig while streaming since same codec with
+  // original
+  bool is_reconfig = false;
+  TestSetCodecPreference(nullptr, &preferred_codec_config_during_media, LeAudioContextType::MEDIA,
+                         group_id, set_before_media, set_while_media,
+                         is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceFailDuringMediaWithoutReconfig) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can not be used by media
+  btle_audio_codec_config_t preferred_codec_config_during_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 70};
+
+  bool set_before_media = false;
+  bool set_while_media = true;
+  bool is_using_set_before_media_codec_during_media = false;
+  bool is_using_set_while_media_codec_during_media = false;
+  // Use original codec and should not reconfig while streaming
+  bool is_reconfig = false;
+  TestSetCodecPreference(nullptr, &preferred_codec_config_during_media, LeAudioContextType::MEDIA,
+                         group_id, set_before_media, set_while_media,
+                         is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+}
+
+TEST_F(UnicastTest,
+       TwoEarbudsSetPreferenceSucessBeforeMediaClearPreferenceDuringMediaWithReconfig) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can be used by media
+  btle_audio_codec_config_t preferred_codec_config_before_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+  btle_audio_codec_config_t preferred_codec_config_during_media = {.codec_priority = -1};
+
+  bool set_before_media = true;
+  bool set_while_media = true;
+  bool is_using_set_before_media_codec_during_media = true;
+  bool is_using_set_while_media_codec_during_media = false;
+  // Should reconfig to legacy codec while streaming as we clear preferred codec
+  bool is_reconfig = true;
+  TestSetCodecPreference(&preferred_codec_config_before_media, &preferred_codec_config_during_media,
+                         LeAudioContextType::MEDIA, group_id, set_before_media, set_while_media,
+                         is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+}
+
+TEST_F(UnicastTest,
+       TwoEarbudsSetPreferenceSucessBeforeMediaSetPreferenceSuccessDuringMediaWithReconfig) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can be used by media
+  btle_audio_codec_config_t preferred_codec_config_before_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+  // This codec can be used by media
+  btle_audio_codec_config_t preferred_codec_config_during_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_24000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 60};
+
+  bool set_before_media = true;
+  bool set_while_media = true;
+  bool is_using_set_before_media_codec_during_media = true;
+  bool is_using_set_while_media_codec_during_media = true;
+  // Should reconfig to new preferred codec from old preferred codec while streaming
+  bool is_reconfig = true;
+  TestSetCodecPreference(&preferred_codec_config_before_media, &preferred_codec_config_during_media,
+                         LeAudioContextType::MEDIA, group_id, set_before_media, set_while_media,
+                         is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+}
+
+TEST_F(UnicastTest,
+       TwoEarbudsSetPreferenceSucessBeforeMediaSetPreferenceSuccessDuringMediaWithoutReconfig) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can be used by media
+  btle_audio_codec_config_t preferred_codec_config_before_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+  // This codec can be used by media
+  btle_audio_codec_config_t preferred_codec_config_during_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+
+  bool set_before_media = true;
+  bool set_while_media = true;
+  bool is_using_set_before_media_codec_during_media = true;
+  bool is_using_set_while_media_codec_during_media = true;
+  // Should not reconfig while streaming because same as previous preferred codec
+  bool is_reconfig = false;
+  TestSetCodecPreference(&preferred_codec_config_before_media, &preferred_codec_config_during_media,
+                         LeAudioContextType::MEDIA, group_id, set_before_media, set_while_media,
+                         is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+}
+
+TEST_F(UnicastTest,
+       TwoEarbudsSetPreferenceSucessBeforeMediaSetPreferenceFailDuringMediaWithReconfig) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can be used by media
+  btle_audio_codec_config_t preferred_codec_config_before_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+  // This codec can not be used by media
+  btle_audio_codec_config_t preferred_codec_config_during_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 70};
+
+  bool set_before_media = true;
+  bool set_while_media = true;
+  bool is_using_set_before_media_codec_during_media = true;
+  bool is_using_set_while_media_codec_during_media = false;
+  // Should reconfig to legacy codec while streaming because invalid preferred codec
+  bool is_reconfig = true;
+  TestSetCodecPreference(&preferred_codec_config_before_media, &preferred_codec_config_during_media,
+                         LeAudioContextType::MEDIA, group_id, set_before_media, set_while_media,
+                         is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+}
+
+TEST_F(UnicastTest, TwoEarbudsClearPreferenceBeforeConv) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  btle_audio_codec_config_t preferred_codec_config_before_conv = {.codec_priority = -1};
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = true;
+  bool set_while_conv = false;
+  bool is_using_set_before_conv_codec_during_conv = false;
+  bool is_using_set_while_conv_codec_during_conv = false;
+  // Use legacy codec and should not reconfig while streaming
+  bool is_reconfig = false;
+  TestSetCodecPreference(&preferred_codec_config_before_conv, nullptr,
+                         LeAudioContextType::CONVERSATIONAL, group_id, set_before_conv,
+                         set_while_conv, is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceSuccessBeforeConv) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can be used by conv
+  btle_audio_codec_config_t preferred_codec_config_before_conv = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = true;
+  bool set_while_conv = false;
+  bool is_using_set_before_conv_codec_during_conv = true;
+  bool is_using_set_while_conv_codec_during_conv = false;
+  // Use preferred codec and should not reconfig while streaming
+  bool is_reconfig = false;
+  TestSetCodecPreference(&preferred_codec_config_before_conv, nullptr,
+                         LeAudioContextType::CONVERSATIONAL, group_id, set_before_conv,
+                         set_while_conv, is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceFailBeforeConv) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can not be used by conv
+  btle_audio_codec_config_t preferred_codec_config_before_conv = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 70};
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = true;
+  bool set_while_conv = false;
+  bool is_using_set_before_conv_codec_during_conv = false;
+  bool is_using_set_while_conv_codec_during_conv = false;
+  // Use legacy codec and should not reconfig while streaming
+  bool is_reconfig = false;
+  TestSetCodecPreference(&preferred_codec_config_before_conv, nullptr,
+                         LeAudioContextType::CONVERSATIONAL, group_id, set_before_conv,
+                         set_while_conv, is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceSuccessDuringConvWithReconfig) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can be used by conv
+  btle_audio_codec_config_t preferred_codec_config_during_conv = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = false;
+  bool set_while_conv = true;
+  bool is_using_set_before_conv_codec_during_conv = false;
+  bool is_using_set_while_conv_codec_during_conv = true;
+  // Should reconfig and use preferred codec while streaming
+  bool is_reconfig = true;
+  TestSetCodecPreference(nullptr, &preferred_codec_config_during_conv,
+                         LeAudioContextType::CONVERSATIONAL, group_id, set_before_conv,
+                         set_while_conv, is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceSuccessDuringConvWithoutReconfig) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can be used by conv
+  btle_audio_codec_config_t preferred_codec_config_during_conv = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_32000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 80};
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = false;
+  bool set_while_conv = true;
+  bool is_using_set_before_conv_codec_during_conv = false;
+  bool is_using_set_while_conv_codec_during_conv = true;
+  // Use preferred codec but not reconfig while streaming since same codec with
+  // original
+  bool is_reconfig = false;
+  TestSetCodecPreference(nullptr, &preferred_codec_config_during_conv,
+                         LeAudioContextType::CONVERSATIONAL, group_id, set_before_conv,
+                         set_while_conv, is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceFailDuringConvWithoutReconfig) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can not be used by conv
+  btle_audio_codec_config_t preferred_codec_config_during_conv = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 70};
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = false;
+  bool set_while_conv = true;
+  bool is_using_set_before_conv_codec_during_conv = false;
+  bool is_using_set_while_conv_codec_during_conv = false;
+  // Use original codec and should not reconfig while streaming
+  bool is_reconfig = false;
+  TestSetCodecPreference(nullptr, &preferred_codec_config_during_conv,
+                         LeAudioContextType::CONVERSATIONAL, group_id, set_before_conv,
+                         set_while_conv, is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceSucessBeforeConvClearPreferenceDuringConvWithReconfig) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can be used by conv
+  btle_audio_codec_config_t preferred_codec_config_before_conv = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+  btle_audio_codec_config_t preferred_codec_config_during_conv = {.codec_priority = -1};
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = true;
+  bool set_while_conv = true;
+  bool is_using_set_before_conv_codec_during_conv = true;
+  bool is_using_set_while_conv_codec_during_conv = false;
+  // Should reconfig to legacy codec while streaming as we clear preferred codec
+  bool is_reconfig = true;
+  TestSetCodecPreference(&preferred_codec_config_before_conv, &preferred_codec_config_during_conv,
+                         LeAudioContextType::CONVERSATIONAL, group_id, set_before_conv,
+                         set_while_conv, is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+}
+
+TEST_F(UnicastTest,
+       TwoEarbudsSetPreferenceSucessBeforeConvSetPreferenceSuccessDuringConvWithReconfig) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can be used by conv
+  btle_audio_codec_config_t preferred_codec_config_before_conv = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+  // This codec can be used by conv
+  btle_audio_codec_config_t preferred_codec_config_during_conv = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_32000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 80};
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = true;
+  bool set_while_conv = true;
+  bool is_using_set_before_conv_codec_during_conv = true;
+  bool is_using_set_while_conv_codec_during_conv = true;
+  // Should reconfig to new preferred codec from old preferred codec while
+  // streaming
+  bool is_reconfig = true;
+  TestSetCodecPreference(&preferred_codec_config_before_conv, &preferred_codec_config_during_conv,
+                         LeAudioContextType::CONVERSATIONAL, group_id, set_before_conv,
+                         set_while_conv, is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+}
+
+TEST_F(UnicastTest,
+       TwoEarbudsSetPreferenceSucessBeforeConvSetPreferenceSuccessDuringConvWithoutReconfig) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can be used by conv
+  btle_audio_codec_config_t preferred_codec_config_before_conv = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+  // This codec can be used by conv
+  btle_audio_codec_config_t preferred_codec_config_during_conv = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = true;
+  bool set_while_conv = true;
+  bool is_using_set_before_conv_codec_during_conv = true;
+  bool is_using_set_while_conv_codec_during_conv = true;
+  // Should not reconfig while streaming because same as previous preferred
+  // codec
+  bool is_reconfig = false;
+  TestSetCodecPreference(&preferred_codec_config_before_conv, &preferred_codec_config_during_conv,
+                         LeAudioContextType::CONVERSATIONAL, group_id, set_before_conv,
+                         set_while_conv, is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+}
+
+TEST_F(UnicastTest,
+       TwoEarbudsSetPreferenceSucessBeforeConvSetPreferenceFailDuringConvWithReconfig) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can be used by conv
+  btle_audio_codec_config_t preferred_codec_config_before_conv = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+  // This codec can not be used by conv
+  btle_audio_codec_config_t preferred_codec_config_during_conv = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 70};
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = true;
+  bool set_while_conv = true;
+  bool is_using_set_before_conv_codec_during_conv = true;
+  bool is_using_set_while_conv_codec_during_conv = false;
+  // Should reconfig to legacy codec while streaming because invalid preferred
+  // codec
+  bool is_reconfig = true;
+  TestSetCodecPreference(&preferred_codec_config_before_conv, &preferred_codec_config_during_conv,
+                         LeAudioContextType::CONVERSATIONAL, group_id, set_before_conv,
+                         set_while_conv, is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceWhenIdleForBothMediaAndConv) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can be used by media and conv
+  btle_audio_codec_config_t preferred_codec_config_before_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+
+  bool set_before_media = true;
+  bool set_while_media = false;
+  bool is_using_set_before_media_codec_during_media = true;
+  bool is_using_set_while_media_codec_during_media = false;
+  bool is_reconfig = false;
+  TestSetCodecPreference(&preferred_codec_config_before_media, nullptr, LeAudioContextType::MEDIA,
+                         group_id, set_before_media, set_while_media,
+                         is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+
+  // simulate suspend timeout passed, alarm executing
+  fake_osi_alarm_set_on_mloop_.cb(fake_osi_alarm_set_on_mloop_.data);
+  SyncOnMainLoop();
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = false;
+  bool set_while_conv = false;
+  bool is_using_set_before_conv_codec_during_conv = true;
+  bool is_using_set_while_conv_codec_during_conv = false;
+  is_reconfig = false;
+  TestSetCodecPreference(nullptr, nullptr, LeAudioContextType::CONVERSATIONAL, group_id,
+                         set_before_conv, set_while_conv,
+                         is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+
+  // should use preferred codec when switching back to media
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            true);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceWhenIdleForMediaNotForConv) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can be used by media but not by conv
+  btle_audio_codec_config_t preferred_codec_config_before_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_24000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 60};
+
+  bool set_before_media = true;
+  bool set_while_media = false;
+  bool is_using_set_before_media_codec_during_media = true;
+  bool is_using_set_while_media_codec_during_media = false;
+  bool is_reconfig = false;
+  TestSetCodecPreference(&preferred_codec_config_before_media, nullptr, LeAudioContextType::MEDIA,
+                         group_id, set_before_media, set_while_media,
+                         is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+
+  // simulate suspend timeout passed, alarm executing
+  fake_osi_alarm_set_on_mloop_.cb(fake_osi_alarm_set_on_mloop_.data);
+  SyncOnMainLoop();
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = false;
+  bool set_while_conv = false;
+  bool is_using_set_before_conv_codec_during_conv = false;
+  bool is_using_set_while_conv_codec_during_conv = false;
+  is_reconfig = false;
+  TestSetCodecPreference(nullptr, nullptr, LeAudioContextType::CONVERSATIONAL, group_id,
+                         set_before_conv, set_while_conv,
+                         is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+
+  // should use preferred codec when switching back to media
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            true);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceWhenIdleNotForMediaForConv) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can not be used by media but by conv
+  btle_audio_codec_config_t preferred_codec_config_before_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_32000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 80};
+
+  bool set_before_media = true;
+  bool set_while_media = false;
+  bool is_using_set_before_media_codec_during_media = false;
+  bool is_using_set_while_media_codec_during_media = false;
+  bool is_reconfig = false;
+  TestSetCodecPreference(&preferred_codec_config_before_media, nullptr, LeAudioContextType::MEDIA,
+                         group_id, set_before_media, set_while_media,
+                         is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+
+  // simulate suspend timeout passed, alarm executing
+  fake_osi_alarm_set_on_mloop_.cb(fake_osi_alarm_set_on_mloop_.data);
+  SyncOnMainLoop();
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = false;
+  bool set_while_conv = false;
+  bool is_using_set_before_conv_codec_during_conv = true;
+  bool is_using_set_while_conv_codec_during_conv = false;
+  is_reconfig = false;
+  TestSetCodecPreference(nullptr, nullptr, LeAudioContextType::CONVERSATIONAL, group_id,
+                         set_before_conv, set_while_conv,
+                         is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+
+  // should use legacy codec when switching back to media
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            false);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceWhenIdleNotForBothMediaAndConv) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can not be used by media and conv
+  btle_audio_codec_config_t preferred_codec_config_before_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_24000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 10};
+
+  bool set_before_media = true;
+  bool set_while_media = false;
+  bool is_using_set_before_media_codec_during_media = false;
+  bool is_using_set_while_media_codec_during_media = false;
+  bool is_reconfig = false;
+  TestSetCodecPreference(&preferred_codec_config_before_media, nullptr, LeAudioContextType::MEDIA,
+                         group_id, set_before_media, set_while_media,
+                         is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+
+  // simulate suspend timeout passed, alarm executing
+  fake_osi_alarm_set_on_mloop_.cb(fake_osi_alarm_set_on_mloop_.data);
+  SyncOnMainLoop();
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = false;
+  bool set_while_conv = false;
+  bool is_using_set_before_conv_codec_during_conv = false;
+  bool is_using_set_while_conv_codec_during_conv = false;
+  is_reconfig = false;
+  TestSetCodecPreference(nullptr, nullptr, LeAudioContextType::CONVERSATIONAL, group_id,
+                         set_before_conv, set_while_conv,
+                         is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+
+  // should use legacy codec when switching back to media
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            false);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceWhenMediaForBothMediaAndConv) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can be used by media and conv
+  btle_audio_codec_config_t preferred_codec_config_during_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+
+  bool set_before_media = false;
+  bool set_while_media = true;
+  bool is_using_set_before_media_codec_during_media = false;
+  bool is_using_set_while_media_codec_during_media = true;
+  // should use preferred codec and reconfig
+  bool is_reconfig = true;
+  TestSetCodecPreference(nullptr, &preferred_codec_config_during_media, LeAudioContextType::MEDIA,
+                         group_id, set_before_media, set_while_media,
+                         is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+
+  // simulate suspend timeout passed, alarm executing
+  fake_osi_alarm_set_on_mloop_.cb(fake_osi_alarm_set_on_mloop_.data);
+  SyncOnMainLoop();
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = false;
+  bool set_while_conv = false;
+  bool is_using_set_before_conv_codec_during_conv = true;
+  bool is_using_set_while_conv_codec_during_conv = false;
+  is_reconfig = false;
+  TestSetCodecPreference(nullptr, nullptr, LeAudioContextType::CONVERSATIONAL, group_id,
+                         set_before_conv, set_while_conv,
+                         is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+
+  // should use preferred codec when switching back to media
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            true);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceWhenMediaForMediaNotForConv) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can be used by media but not by conv
+  btle_audio_codec_config_t preferred_codec_config_during_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_24000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 60};
+
+  bool set_before_media = false;
+  bool set_while_media = true;
+  bool is_using_set_before_media_codec_during_media = false;
+  bool is_using_set_while_media_codec_during_media = true;
+  // should use preferred codec and reconfig
+  bool is_reconfig = true;
+  TestSetCodecPreference(nullptr, &preferred_codec_config_during_media, LeAudioContextType::MEDIA,
+                         group_id, set_before_media, set_while_media,
+                         is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+
+  // simulate suspend timeout passed, alarm executing
+  fake_osi_alarm_set_on_mloop_.cb(fake_osi_alarm_set_on_mloop_.data);
+  SyncOnMainLoop();
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = false;
+  bool set_while_conv = false;
+  bool is_using_set_before_conv_codec_during_conv = false;
+  bool is_using_set_while_conv_codec_during_conv = false;
+  is_reconfig = false;
+  TestSetCodecPreference(nullptr, nullptr, LeAudioContextType::CONVERSATIONAL, group_id,
+                         set_before_conv, set_while_conv,
+                         is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+
+  // should use preferred codec when switching back to media
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            true);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceWhenMediaNotForMediaForConv) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can not be used by media and but by conv
+  btle_audio_codec_config_t preferred_codec_config_during_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_32000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 80};
+
+  bool set_before_media = false;
+  bool set_while_media = true;
+  bool is_using_set_before_media_codec_during_media = false;
+  bool is_using_set_while_media_codec_during_media = false;
+  // should use legacy codec
+  bool is_reconfig = false;
+  TestSetCodecPreference(nullptr, &preferred_codec_config_during_media, LeAudioContextType::MEDIA,
+                         group_id, set_before_media, set_while_media,
+                         is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+
+  // simulate suspend timeout passed, alarm executing
+  fake_osi_alarm_set_on_mloop_.cb(fake_osi_alarm_set_on_mloop_.data);
+  SyncOnMainLoop();
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = false;
+  bool set_while_conv = false;
+  bool is_using_set_before_conv_codec_during_conv = true;
+  bool is_using_set_while_conv_codec_during_conv = false;
+  is_reconfig = false;
+  TestSetCodecPreference(nullptr, nullptr, LeAudioContextType::CONVERSATIONAL, group_id,
+                         set_before_conv, set_while_conv,
+                         is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+
+  // should use legacy codec when switching back to media
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            false);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceWhenMediaNotForBothMediaAndConv) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  // This codec can not be used by media and conv
+  btle_audio_codec_config_t preferred_codec_config_during_media = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_24000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 70};
+
+  bool set_before_media = false;
+  bool set_while_media = true;
+  bool is_using_set_before_media_codec_during_media = false;
+  bool is_using_set_while_media_codec_during_media = false;
+  // should use legacy codec
+  bool is_reconfig = false;
+  TestSetCodecPreference(nullptr, &preferred_codec_config_during_media, LeAudioContextType::MEDIA,
+                         group_id, set_before_media, set_while_media,
+                         is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+
+  // simulate suspend timeout passed, alarm executing
+  fake_osi_alarm_set_on_mloop_.cb(fake_osi_alarm_set_on_mloop_.data);
+  SyncOnMainLoop();
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = false;
+  bool set_while_conv = false;
+  bool is_using_set_before_conv_codec_during_conv = false;
+  bool is_using_set_while_conv_codec_during_conv = false;
+  is_reconfig = false;
+  TestSetCodecPreference(nullptr, nullptr, LeAudioContextType::CONVERSATIONAL, group_id,
+                         set_before_conv, set_while_conv,
+                         is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+
+  // should use legacy codec when switching back to media
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            false);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceWhenConvForBothMediaAndConv) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  bool set_before_media = false;
+  bool set_while_media = false;
+  bool is_using_set_before_media_codec_during_media = false;
+  bool is_using_set_while_media_codec_during_media = false;
+  bool is_reconfig = false;
+  TestSetCodecPreference(nullptr, nullptr, LeAudioContextType::MEDIA, group_id, set_before_media,
+                         set_while_media, is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+
+  // simulate suspend timeout passed, alarm executing
+  fake_osi_alarm_set_on_mloop_.cb(fake_osi_alarm_set_on_mloop_.data);
+  SyncOnMainLoop();
+
+  // This codec can be used by media and conv
+  btle_audio_codec_config_t preferred_codec_config_during_conv = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = false;
+  bool set_while_conv = true;
+  bool is_using_set_before_conv_codec_during_conv = false;
+  bool is_using_set_while_conv_codec_during_conv = true;
+  // should use preferred codec and reconfig
+  is_reconfig = true;
+  TestSetCodecPreference(nullptr, &preferred_codec_config_during_conv,
+                         LeAudioContextType::CONVERSATIONAL, group_id, set_before_conv,
+                         set_while_conv, is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+
+  // should use preferred codec when switching back to media
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            true);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceWhenConvForMediaNotForConv) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  bool set_before_media = false;
+  bool set_while_media = false;
+  bool is_using_set_before_media_codec_during_media = false;
+  bool is_using_set_while_media_codec_during_media = false;
+  bool is_reconfig = false;
+  TestSetCodecPreference(nullptr, nullptr, LeAudioContextType::MEDIA, group_id, set_before_media,
+                         set_while_media, is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+
+  // simulate suspend timeout passed, alarm executing
+  fake_osi_alarm_set_on_mloop_.cb(fake_osi_alarm_set_on_mloop_.data);
+  SyncOnMainLoop();
+
+  // This codec can be used by media but not by conv
+  btle_audio_codec_config_t preferred_codec_config_during_conv = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_24000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 60};
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = false;
+  bool set_while_conv = true;
+  bool is_using_set_before_conv_codec_during_conv = false;
+  bool is_using_set_while_conv_codec_during_conv = false;
+  // should use legacy codec
+  is_reconfig = false;
+  TestSetCodecPreference(nullptr, &preferred_codec_config_during_conv,
+                         LeAudioContextType::CONVERSATIONAL, group_id, set_before_conv,
+                         set_while_conv, is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+
+  // should use preferred codec when switching back to media
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            true);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceWhenConvNotForMediaForConv) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  bool set_before_media = false;
+  bool set_while_media = false;
+  bool is_using_set_before_media_codec_during_media = false;
+  bool is_using_set_while_media_codec_during_media = false;
+  bool is_reconfig = false;
+  TestSetCodecPreference(nullptr, nullptr, LeAudioContextType::MEDIA, group_id, set_before_media,
+                         set_while_media, is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+
+  // simulate suspend timeout passed, alarm executing
+  fake_osi_alarm_set_on_mloop_.cb(fake_osi_alarm_set_on_mloop_.data);
+  SyncOnMainLoop();
+
+  // This codec can not be used by media but by conv
+  btle_audio_codec_config_t preferred_codec_config_during_conv = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_32000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 80};
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = false;
+  bool set_while_conv = true;
+  bool is_using_set_before_conv_codec_during_conv = false;
+  bool is_using_set_while_conv_codec_during_conv = true;
+  // should use preferred codec but not reconfig
+  is_reconfig = false;
+  TestSetCodecPreference(nullptr, &preferred_codec_config_during_conv,
+                         LeAudioContextType::CONVERSATIONAL, group_id, set_before_conv,
+                         set_while_conv, is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+
+  // should use legacy codec when switching back to media
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            false);
+}
+
+TEST_F(UnicastTest, TwoEarbudsSetPreferenceWhenConvNotForBothMediaAndConv) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  int group_id = 2;
+  TestSetupRemoteDevices(group_id);
+
+  bool set_before_media = false;
+  bool set_while_media = false;
+  bool is_using_set_before_media_codec_during_media = false;
+  bool is_using_set_while_media_codec_during_media = false;
+  bool is_reconfig = false;
+  TestSetCodecPreference(nullptr, nullptr, LeAudioContextType::MEDIA, group_id, set_before_media,
+                         set_while_media, is_using_set_before_media_codec_during_media,
+                         is_using_set_while_media_codec_during_media, is_reconfig);
+
+  // simulate suspend timeout passed, alarm executing
+  fake_osi_alarm_set_on_mloop_.cb(fake_osi_alarm_set_on_mloop_.data);
+  SyncOnMainLoop();
+
+  // This codec can not be used by media and conv
+  btle_audio_codec_config_t preferred_codec_config_during_conv = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_24000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 70};
+
+  // SetInCall is used by GTBS - and only then we can expect CCID to be set.
+  LeAudioClient::Get()->SetInCall(true);
+
+  bool set_before_conv = false;
+  bool set_while_conv = true;
+  bool is_using_set_before_conv_codec_during_conv = false;
+  bool is_using_set_while_conv_codec_during_conv = false;
+  // should use legacy codec
+  is_reconfig = false;
+  TestSetCodecPreference(nullptr, &preferred_codec_config_during_conv,
+                         LeAudioContextType::CONVERSATIONAL, group_id, set_before_conv,
+                         set_while_conv, is_using_set_before_conv_codec_during_conv,
+                         is_using_set_while_conv_codec_during_conv, is_reconfig);
+  LeAudioClient::Get()->SetInCall(false);
+
+  // should use legacy codec when switching back to media
+  ASSERT_EQ(LeAudioClient::Get()->IsUsingPreferredCodecConfig(
+                    group_id, static_cast<int>(types::LeAudioContextType::MEDIA)),
+            false);
 }
 
 TEST_F(UnicastTest, StreamingVxAospSampleSound) {
@@ -6450,7 +7877,7 @@ TEST_F(UnicastTest, TwoEarbudsStopConversational_StartStreamSonification) {
 }
 
 TEST_F(UnicastTest, TwoEarbudsStreamingContextSwitchReconfigure) {
-  //TODO(b/352686917). Remove the test when flag will be removing
+  // TODO(b/352686917). Remove the test when flag will be removing
   com::android::bluetooth::flags::provider_->leaudio_speed_up_reconfiguration_between_call(false);
 
   uint8_t group_size = 2;
@@ -8038,7 +9465,7 @@ TEST_F(UnicastTest, MicrophoneAttachToCurrentMediaScenario) {
  * use case).
  */
 TEST_F(UnicastTest, UpdateNotSupportedContextTypeUnspecifiedAvailable) {
-  //TODO(b/352686917). Remove the test when flag will be removing
+  // TODO(b/352686917). Remove the test when flag will be removing
   com::android::bluetooth::flags::provider_->leaudio_speed_up_reconfiguration_between_call(false);
 
   const RawAddress test_address0 = GetTestAddress(0);
@@ -8181,7 +9608,7 @@ TEST_F(UnicastTest, UpdateNotSupportedContextTypeUnspecifiedAvailable_SpeedUpRec
  * is not confused about our intentions.
  */
 TEST_F(UnicastTest, UpdateMultipleBidirContextTypes) {
-  //TODO(b/352686917). Remove the test when flag will be removing
+  // TODO(b/352686917). Remove the test when flag will be removing
   com::android::bluetooth::flags::provider_->leaudio_speed_up_reconfiguration_between_call(false);
 
   const RawAddress test_address0 = GetTestAddress(0);
@@ -8544,7 +9971,7 @@ TEST_F(UnicastTest, UpdateDisableLocalAudioSinkOnGame) {
 
 /* Start music when in a call, end the call, continue with music only */
 TEST_F(UnicastTest, MusicDuringCallContextTypes) {
-  //TODO(b/352686917). Remove the test when flag will be removing
+  // TODO(b/352686917). Remove the test when flag will be removing
   com::android::bluetooth::flags::provider_->leaudio_speed_up_reconfiguration_between_call(false);
 
   const RawAddress test_address0 = GetTestAddress(0);
