@@ -355,7 +355,7 @@ public class HapClientServiceTest {
                 BluetoothProfile.STATE_CONNECTING, mService.getConnectionState(mDevice));
 
         // Verify the connection state broadcast, and that we are in Disconnected state via binder
-        order.verify(mAdapterService, timeout(HapClientStateMachine.sConnectTimeoutMs * 2))
+        order.verify(mAdapterService, timeout(HapClientStateMachine.sConnectTimeoutMs * 2L))
                 .sendBroadcastMultiplePermissions(
                         argThat(
                                 allOf(
