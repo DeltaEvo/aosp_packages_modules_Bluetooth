@@ -525,7 +525,7 @@ public class ActiveDeviceManagerTest {
     }
 
     @Test
-    @EnableFlags(Flags.FLAG_ALWAYS_FALLBACK_TO_AVAILABLE_DEVICE)
+    @EnableFlags(Flags.FLAG_ADM_ALWAYS_FALLBACK_TO_AVAILABLE_DEVICE)
     public void a2dpHeadsetActivated_checkFallbackMeachanismOneA2dpOneHeadset() {
         // Active call
         when(mAudioManager.getMode()).thenReturn(AudioManager.MODE_IN_CALL);
