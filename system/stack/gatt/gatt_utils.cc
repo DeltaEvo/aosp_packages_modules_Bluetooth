@@ -758,10 +758,10 @@ void gatt_rsp_timeout(void* data) {
   auto eatt_channel =
           EattExtension::GetInstance()->FindEattChannelByCid(p_clcb->p_tcb->peer_bda, p_clcb->cid);
   if (eatt_channel) {
-    log::warn("disconnecting EATT cid: {}", p_clcb->cid);
+    log::warn("conn_id: 0x{:04x} disconnecting EATT cid: {}", p_clcb->conn_id, p_clcb->cid);
     EattExtension::GetInstance()->Disconnect(p_clcb->p_tcb->peer_bda, p_clcb->cid);
   } else {
-    log::warn("disconnecting GATT...");
+    log::warn("conn_id: 0x{:04x} disconnecting GATT...", p_clcb->conn_id);
     gatt_disconnect(p_clcb->p_tcb);
   }
 }
@@ -801,7 +801,7 @@ void gatt_indication_confirmation_timeout(void* data) {
     return;
   }
 
-  log::warn("disconnecting...");
+  log::warn("disconnecting... bda:{} transport:{}", p_tcb->peer_bda, p_tcb->transport);
   gatt_disconnect(p_tcb);
 }
 
