@@ -1324,7 +1324,7 @@ public class ActiveDeviceManagerTest {
 
     /** A wired audio device is disconnected. Check if falls back to connected A2DP. */
     @Test
-    @EnableFlags(Flags.FLAG_FALLBACK_WHEN_WIRED_AUDIO_DISCONNECTED)
+    @EnableFlags(Flags.FLAG_ADM_FALLBACK_WHEN_WIRED_AUDIO_DISCONNECTED)
     public void wiredAudioDeviceDisconnected_setFallbackDevice() throws Exception {
         AudioDeviceInfo[] testDevices = createAudioDeviceInfoTestDevices();
 
