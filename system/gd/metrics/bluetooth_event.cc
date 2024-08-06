@@ -92,6 +92,11 @@ State MapHCIStatusToState(tHCI_STATUS status) {
   }
 }
 
+void LogIncomingAclStartEvent(const hci::Address& address) {
+  bluetooth::os::LogMetricBluetoothEvent(address, EventType::ACL_CONNECTION_RESPONDER,
+                                         State::START);
+}
+
 void LogAclCompletionEvent(const hci::Address& address, ErrorCode reason,
                            bool is_locally_initiated) {
   bluetooth::os::LogMetricBluetoothEvent(address,

@@ -25,6 +25,8 @@
 namespace bluetooth {
 namespace metrics {
 
+void LogIncomingAclStartEvent(const hci::Address& address);
+
 void LogAclCompletionEvent(const hci::Address& address, hci::ErrorCode reason,
                            bool is_locally_initiated);
 
