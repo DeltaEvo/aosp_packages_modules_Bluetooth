@@ -16,6 +16,8 @@
 
 package com.android.bluetooth.mapclient;
 
+import android.annotation.SuppressLint;
+
 import com.android.bluetooth.Utils;
 
 import java.time.Instant;
@@ -82,7 +84,7 @@ public final class ObexTime {
                 int ohh = Integer.parseInt(m.group(9));
                 int omm = Integer.parseInt(m.group(10));
 
-                /* time zone offset is specified in miliseconds */
+                /* time zone offset is specified in milliseconds */
                 int offset = (ohh * 60 + omm) * 60 * 1000;
 
                 if (m.group(8).equals("-")) {
@@ -123,6 +125,7 @@ public final class ObexTime {
     }
 
     @Override
+    @SuppressLint("ToStringReturnsNull")
     public String toString() {
         if (mInstant == null) {
             return null;

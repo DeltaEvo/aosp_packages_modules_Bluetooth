@@ -56,7 +56,6 @@ struct BTM_GetRemoteDeviceName BTM_GetRemoteDeviceName;
 struct BTM_SecAddBleDevice BTM_SecAddBleDevice;
 struct BTM_SecAddBleKey BTM_SecAddBleKey;
 struct BTM_SecurityGrant BTM_SecurityGrant;
-struct BTM_SetBleDataLength BTM_SetBleDataLength;
 struct BTM_UseLeLink BTM_UseLeLink;
 struct btm_ble_connected btm_ble_connected;
 struct btm_ble_get_acl_remote_addr btm_ble_get_acl_remote_addr;
@@ -100,7 +99,6 @@ const Octet16 BTM_GetDeviceEncRoot::return_value{0xd5, 0xcb, 0x84, 0x54, 0xd1, 0
                                                  0xff, 0xff, 0xb2, 0xec, 0x71, 0x2b, 0xae, 0xab};
 const Octet16 BTM_GetDeviceIDRoot::return_value{0xd5, 0xcb, 0x84, 0x54, 0xd1, 0x77, 0x73, 0x3e,
                                                 0xff, 0xff, 0xb2, 0xec, 0x71, 0x2b, 0xae, 0xab};
-tBTM_STATUS BTM_SetBleDataLength::return_value = BTM_SUCCESS;
 bool BTM_UseLeLink::return_value = false;
 bool btm_ble_get_acl_remote_addr::return_value = false;
 bool btm_ble_get_enc_key_type::return_value = false;
@@ -194,10 +192,6 @@ void BTM_SecAddBleKey(const RawAddress& bd_addr, tBTM_LE_KEY_VALUE* p_le_key,
 void BTM_SecurityGrant(const RawAddress& bd_addr, uint8_t res) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_ble::BTM_SecurityGrant(bd_addr, res);
-}
-tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr, uint16_t tx_pdu_length) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_btm_ble::BTM_SetBleDataLength(bd_addr, tx_pdu_length);
 }
 bool BTM_UseLeLink(const RawAddress& bd_addr) {
   inc_func_call_count(__func__);

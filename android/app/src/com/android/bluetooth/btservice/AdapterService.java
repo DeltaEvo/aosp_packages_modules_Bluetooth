@@ -794,28 +794,14 @@ public class AdapterService extends Service {
     }
 
     @Override
-    @RequiresPermission(BLUETOOTH_CONNECT)
     public boolean onUnbind(Intent intent) {
-        if (Flags.explicitKillFromSystemServer()) {
-            Log.d(TAG, "onUnbind()");
-            return super.onUnbind(intent);
-        }
-        Log.d(TAG, "onUnbind() - calling cleanup");
-        cleanup();
+        Log.d(TAG, "onUnbind()");
         return super.onUnbind(intent);
     }
 
     @Override
     public void onDestroy() {
         Log.d(TAG, "onDestroy()");
-        if (Flags.explicitKillFromSystemServer()) {
-            return;
-        }
-        if (!isMock()) {
-            // TODO(b/27859763)
-            Log.i(TAG, "Force exit to cleanup internal state in Bluetooth stack");
-            System.exit(0);
-        }
     }
 
     public ActiveDeviceManager getActiveDeviceManager() {
@@ -1166,7 +1152,9 @@ public class AdapterService extends Service {
     }
 
     private void invalidateBluetoothGetStateCache() {
-        BluetoothAdapter.invalidateBluetoothGetStateCache();
+        if (!Flags.broadcastAdapterStateWithCallback()) {
+            BluetoothAdapter.invalidateBluetoothGetStateCache();
+        }
     }
 
     void updateLeAudioProfileServiceState() {
@@ -1197,7 +1185,9 @@ public class AdapterService extends Service {
 
     void updateAdapterState(int prevState, int newState) {
         mAdapterProperties.setState(newState);
-        invalidateBluetoothGetStateCache();
+        if (!Flags.broadcastAdapterStateWithCallback()) {
+            invalidateBluetoothGetStateCache();
+        }
 
         // Only BluetoothManagerService should be registered
         int n = mRemoteCallbacks.beginBroadcast();
@@ -1484,14 +1474,6 @@ public class AdapterService extends Service {
             mBluetoothSocketManagerBinder = null;
         }
 
-        if (!Flags.explicitKillFromSystemServer()) {
-            // Bluetooth will be killed, no need to cleanup binder
-            if (mBinder != null) {
-                mBinder.cleanup();
-                mBinder = null; // Do not remove. Otherwise Binder leak!
-            }
-        }
-
         mPreferredAudioProfilesCallbacks.kill();
 
         mBluetoothQualityReportReadyCallbacks.kill();
@@ -1503,7 +1485,9 @@ public class AdapterService extends Service {
         BluetoothAdapter.invalidateGetProfileConnectionStateCache();
         BluetoothAdapter.invalidateIsOffloadedFilteringSupportedCache();
         BluetoothDevice.invalidateBluetoothGetBondStateCache();
-        BluetoothAdapter.invalidateBluetoothGetStateCache();
+        if (!Flags.broadcastAdapterStateWithCallback()) {
+            BluetoothAdapter.invalidateBluetoothGetStateCache();
+        }
         BluetoothAdapter.invalidateGetAdapterConnectionStateCache();
         BluetoothMap.invalidateBluetoothGetConnectionStateCache();
         BluetoothSap.invalidateBluetoothGetConnectionStateCache();
@@ -2252,41 +2236,29 @@ public class AdapterService extends Service {
     }
 
     /**
-     * The Binder implementation must be declared to be a static class, with the AdapterService
-     * instance passed in the constructor. Furthermore, when the AdapterService shuts down, the
-     * reference to the AdapterService must be explicitly removed.
-     *
-     * <p>Otherwise, a memory leak can occur from repeated starting/stopping the service...Please
-     * refer to android.os.Binder for further details on why an inner instance class should be
-     * avoided.
-     *
-     * <p>TODO: b/339548431 -- Delete this comment as it does not apply when we get killed
+     * There is no leak of this binder since it is never re-used and the process is systematically
+     * killed
      */
     @VisibleForTesting
     public static class AdapterServiceBinder extends IBluetooth.Stub {
-        // TODO: b/339548431 move variable to final
-        private AdapterService mService;
+        private final AdapterService mService;
 
         AdapterServiceBinder(AdapterService svc) {
             mService = svc;
-            mService.invalidateBluetoothGetStateCache();
+            if (!Flags.broadcastAdapterStateWithCallback()) {
+                mService.invalidateBluetoothGetStateCache();
+            }
             BluetoothAdapter.getDefaultAdapter().disableBluetoothGetStateCache();
         }
 
-        public void cleanup() {
-            mService = null;
-        }
-
         public AdapterService getService() {
-            // Cache mService because it can change while getService is called
-            AdapterService service = mService;
-
-            if (service == null || !service.isAvailable()) {
+            if (!mService.isAvailable()) {
                 return null;
             }
-            return service;
+            return mService;
         }
 
+        // TODO: b/357645528 - delete getState method
         @Override
         public int getState() {
             AdapterService service = getService();
@@ -4020,6 +3992,24 @@ public class AdapterService extends Service {
         }
 
         @Override
+        public int isDualModeAudioEnabled(AttributionSource source) {
+            AdapterService service = getService();
+            if (service == null) {
+                return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
+            }
+            if (!Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
+                return BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION;
+            }
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
+
+            if (!Utils.isDualModeAudioEnabled()) {
+                return BluetoothStatusCodes.FEATURE_NOT_SUPPORTED;
+            }
+
+            return BluetoothStatusCodes.SUCCESS;
+        }
+
+        @Override
         public int registerPreferredAudioProfilesChangedCallback(
                 IBluetoothPreferredAudioProfilesCallback callback, AttributionSource source) {
             AdapterService service = getService();
@@ -4037,7 +4027,7 @@ public class AdapterService extends Service {
             service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             // If LE only mode is enabled, the dual mode audio feature is disabled
-            if (!isDualModeAudioEnabled()) {
+            if (!Utils.isDualModeAudioEnabled()) {
                 return BluetoothStatusCodes.FEATURE_NOT_SUPPORTED;
             }
 
@@ -6887,16 +6877,5 @@ public class AdapterService extends Service {
         if (mPhonePolicy != null) {
             mPhonePolicy.onUuidsDiscovered(device, uuids);
         }
-    }
-
-    // TODO: b/339548431 delete isMock
-    // Returns if this is a mock object. This is currently used in testing so that we may not call
-    // System.exit() while finalizing the object. Otherwise GC of mock objects unfortunately ends up
-    // calling finalize() which in turn calls System.exit() and the process crashes.
-    //
-    // Mock this in your testing framework to return true to avoid the mentioned behavior. In
-    // production this has no effect.
-    public boolean isMock() {
-        return false;
     }
 }

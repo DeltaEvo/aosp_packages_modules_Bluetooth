@@ -417,13 +417,28 @@ impl BluetoothDeviceContext {
             match &prop {
                 BluetoothProperty::BdAddr(bdaddr) => {
                     self.info.address = *bdaddr;
-                    self.properties.insert(prop.get_type(), prop.clone());
+                    self.properties.insert(BtPropertyType::BdAddr, prop.clone());
                 }
                 BluetoothProperty::BdName(bdname) => {
                     if !bdname.is_empty() {
                         self.info.name = bdname.clone();
-                        self.properties.insert(prop.get_type(), prop.clone());
+                        self.properties.insert(BtPropertyType::BdName, prop.clone());
                     }
+                }
+                BluetoothProperty::Uuids(new_uuids) => {
+                    // Merge the new and the old (if exist) UUIDs.
+                    self.properties
+                        .entry(BtPropertyType::Uuids)
+                        .and_modify(|old_prop| {
+                            if let BluetoothProperty::Uuids(old_uuids) = old_prop {
+                                for uuid in new_uuids {
+                                    if !old_uuids.contains(uuid) {
+                                        old_uuids.push(*uuid);
+                                    }
+                                }
+                            }
+                        })
+                        .or_insert(prop.clone());
                 }
                 _ => {
                     self.properties.insert(prop.get_type(), prop.clone());
@@ -1691,7 +1706,7 @@ impl BtifBluetoothCallbacks for Bluetooth {
                 BtAclState::Disconnected,
                 device_info,
                 Instant::now(),
-                properties,
+                properties.clone(),
             ))
             .info
             .clone();
@@ -1699,6 +1714,17 @@ impl BtifBluetoothCallbacks for Bluetooth {
         self.callbacks.for_all_callbacks(|callback| {
             callback.on_device_found(device_info.clone());
         });
+
+        // In btif_dm, Floss intentionally reports the UUIDs in EIR on DeviceFound,
+        // thus we forward the properties changed event to the clients here.
+        if !properties.is_empty() {
+            self.callbacks.for_all_callbacks(|callback| {
+                callback.on_device_properties_changed(
+                    device_info.clone(),
+                    properties.clone().into_iter().map(|x| x.get_type()).collect(),
+                );
+            });
+        }
 
         self.bluetooth_admin.lock().unwrap().on_device_found(&device_info);
     }

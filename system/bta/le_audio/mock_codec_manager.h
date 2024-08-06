@@ -60,7 +60,7 @@ public:
           (std::unique_ptr<bluetooth::le_audio::set_configurations::AudioSetConfiguration>),
           GetCodecConfig,
           (const bluetooth::le_audio::CodecManager::UnicastConfigurationRequirements& requirements,
-           bluetooth::le_audio::CodecManager::UnicastConfigurationVerifier),
+           bluetooth::le_audio::CodecManager::UnicastConfigurationProvider),
           (const));
   MOCK_METHOD((bool), CheckCodecConfigIsBiDirSwb,
               (const bluetooth::le_audio::set_configurations::AudioSetConfiguration& config),

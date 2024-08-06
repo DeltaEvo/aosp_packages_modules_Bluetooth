@@ -58,7 +58,7 @@ static bool bta_hf_client_sco_remove(tBTA_HF_CLIENT_CB* client_cb) {
   log::verbose("");
 
   if (client_cb->sco_idx != BTM_INVALID_SCO_INDEX) {
-    status = BTM_RemoveSco(client_cb->sco_idx);
+    status = get_btm_client_interface().sco.BTM_RemoveSco(client_cb->sco_idx);
 
     log::verbose("idx 0x{:04x}, status:0x{:x}", client_cb->sco_idx, status);
 

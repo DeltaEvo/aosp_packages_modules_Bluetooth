@@ -73,25 +73,14 @@ struct bta_hh_cleanup_disable {
 };
 extern struct bta_hh_cleanup_disable bta_hh_cleanup_disable;
 
-// Name: bta_hh_dev_handle_to_cb_idx
-// Params: uint8_t dev_handle
-// Return: uint8_t
-struct bta_hh_dev_handle_to_cb_idx {
-  uint8_t return_value{0};
-  std::function<uint8_t(uint8_t dev_handle)> body{
-          [this](uint8_t /* dev_handle */) { return return_value; }};
-  uint8_t operator()(uint8_t dev_handle) { return body(dev_handle); }
-};
-extern struct bta_hh_dev_handle_to_cb_idx bta_hh_dev_handle_to_cb_idx;
-
 // Name: bta_hh_find_cb
 // Params: const tAclLinkSpec& link_spec
 // Return: uint8_t
 struct bta_hh_find_cb {
-  uint8_t return_value{0};
-  std::function<uint8_t(const tAclLinkSpec& link_spec)> body{
+  tBTA_HH_DEV_CB* return_value{nullptr};
+  std::function<tBTA_HH_DEV_CB*(const tAclLinkSpec& link_spec)> body{
           [this](const tAclLinkSpec& /* link_spec */) { return return_value; }};
-  uint8_t operator()(const tAclLinkSpec& link_spec) { return body(link_spec); }
+  tBTA_HH_DEV_CB* operator()(const tAclLinkSpec& link_spec) { return body(link_spec); }
 };
 extern struct bta_hh_find_cb bta_hh_find_cb;
 

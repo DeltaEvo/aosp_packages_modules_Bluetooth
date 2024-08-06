@@ -79,7 +79,7 @@ object BlockingBluetoothAdapter {
                 if (adapter.isBleScanAlwaysAvailable()) {
                     break
                 }
-                Log.d(TAG, "Ble scan not yet available… Sleeping 20 ms $i/5")
+                Log.d(TAG, "Ble scan not yet available... Sleeping 20 ms $i/5")
                 Thread.sleep(20)
             }
             if (!adapter.isBleScanAlwaysAvailable()) {

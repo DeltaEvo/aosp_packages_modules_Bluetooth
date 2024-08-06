@@ -47,8 +47,8 @@
  *  Type Definitions
  ****************************************************************************/
 
-typedef void(tHID_HOST_SDP_CALLBACK)(tSDP_STATUS result, uint16_t attr_mask,
-                                     tHID_DEV_SDP_INFO* sdp_rec);
+typedef void(tHID_HOST_SDP_CALLBACK)(const RawAddress& bd_add, tSDP_STATUS result,
+                                     uint16_t attr_mask, tHID_DEV_SDP_INFO* sdp_rec);
 
 /* HID-HOST returns the events in the following table to the application via
  * tHID_HOST_DEV_CALLBACK

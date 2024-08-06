@@ -57,10 +57,25 @@ static std::unique_ptr<AclBuilder> NextAclPacket(uint16_t handle) {
   return AclBuilder::Create(handle, packet_boundary_flag, broadcast_flag, NextPayload(handle));
 }
 
+static void DebugPrintCommandOpcode(std::string prefix,
+                                    const std::unique_ptr<CommandBuilder>& command) {
+  std::shared_ptr<std::vector<uint8_t>> packet_bytes = std::make_shared<std::vector<uint8_t>>();
+  BitInserter it(*packet_bytes);
+  command->Serialize(it);
+  PacketView<kLittleEndian> packet_bytes_view(packet_bytes);
+  auto temp_cmd_view = CommandView::Create(packet_bytes_view);
+  temp_cmd_view.IsValid();
+  auto op_code = temp_cmd_view.GetOpCode();
+
+  log::info("{} op_code: {}", prefix, OpCodeText(op_code));
+}
+
 void HciLayerFake::EnqueueCommand(
         std::unique_ptr<CommandBuilder> command,
         common::ContextualOnceCallback<void(CommandStatusView)> on_status) {
   std::lock_guard<std::mutex> lock(mutex_);
+
+  DebugPrintCommandOpcode(std::string("Sending with command status, "), command);
 
   command_queue_.push(std::move(command));
   command_status_callbacks.push_back(std::move(on_status));
@@ -75,6 +90,8 @@ void HciLayerFake::EnqueueCommand(
         std::unique_ptr<CommandBuilder> command,
         common::ContextualOnceCallback<void(CommandCompleteView)> on_complete) {
   std::lock_guard<std::mutex> lock(mutex_);
+
+  DebugPrintCommandOpcode(std::string("Sending with command complete, "), command);
 
   command_queue_.push(std::move(command));
   command_complete_callbacks.push_back(std::move(on_complete));

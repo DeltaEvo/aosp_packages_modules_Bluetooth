@@ -34,7 +34,6 @@ import com.android.bluetooth.content_profiles.ContentProfileErrorReportUtils;
 import com.android.bluetooth.map.BluetoothMapContentObserver.Msg;
 import com.android.bluetooth.map.BluetoothMapUtils.TYPE;
 import com.android.bluetooth.sdp.SdpManagerNativeInterface;
-import com.android.internal.annotations.VisibleForTesting;
 import com.android.obex.ServerSession;
 
 import java.io.IOException;
@@ -47,7 +46,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class BluetoothMapMasInstance implements IObexConnectionHandler {
     private static final String TAG = "BluetoothMapMasInstance";
 
-    @VisibleForTesting static volatile int sInstanceCounter = 0;
+    private static int sInstanceCounter = 0;
 
     private final int mObjectInstanceId;
 

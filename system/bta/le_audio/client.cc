@@ -47,6 +47,7 @@
 #include "gatt_api.h"
 #include "hci/controller_interface.h"
 #include "internal_include/stack_config.h"
+#include "le_audio/device_groups.h"
 #include "le_audio_health_status.h"
 #include "le_audio_set_configuration_provider.h"
 #include "le_audio_types.h"
@@ -237,6 +238,7 @@ public:
         callbacks_(callbacks_),
         active_group_id_(bluetooth::groups::kGroupUnknown),
         configuration_context_type_(LeAudioContextType::UNINITIALIZED),
+        in_call_metadata_context_types_({.sink = AudioContexts(), .source = AudioContexts()}),
         local_metadata_context_types_({.sink = AudioContexts(), .source = AudioContexts()}),
         stream_setup_start_timestamp_(0),
         stream_setup_end_timestamp_(0),
@@ -317,8 +319,8 @@ public:
     }
 
     /* Choose the right configuration context */
-    auto new_configuration_context = AdjustForVoiceAssistant(
-            group, ChooseConfigurationContextType(local_metadata_context_types_.source));
+    auto new_configuration_context =
+            ChooseConfigurationContextType(local_metadata_context_types_.source);
 
     log::debug("new_configuration_context= {}", ToString(new_configuration_context));
     ReconfigureOrUpdateMetadata(group, new_configuration_context,
@@ -986,7 +988,45 @@ public:
   void SetCodecConfigPreference(
           int group_id, bluetooth::le_audio::btle_audio_codec_config_t input_codec_config,
           bluetooth::le_audio::btle_audio_codec_config_t output_codec_config) override {
-    // TODO Implement
+    if (!com::android::bluetooth::flags::leaudio_set_codec_config_preference()) {
+      log::debug("leaudio_set_codec_config_preference flag is not enabled");
+      return;
+    }
+
+    LeAudioDeviceGroup* group = aseGroups_.FindById(group_id);
+
+    if (!group) {
+      log::error("Unknown group id: %d", group_id);
+    }
+
+    if (group->SetPreferredAudioSetConfiguration(input_codec_config, output_codec_config)) {
+      log::info("group id: {}, setting preferred codec is successful.", group_id);
+    } else {
+      log::warn("group id: {}, setting preferred codec is failed.", group_id);
+      return;
+    }
+
+    if (group_id != active_group_id_) {
+      log::warn("Selected group is not active.");
+      return;
+    }
+
+    if (SetConfigurationAndStopStreamWhenNeeded(group, group->GetConfigurationContextType())) {
+      log::debug("Group id {} do the reconfiguration based on preferred codec config", group_id);
+    } else {
+      log::debug("Group id {} preferred codec config is not changed", group_id);
+    }
+  }
+
+  bool IsUsingPreferredCodecConfig(int group_id, int context_type) {
+    LeAudioDeviceGroup* group = aseGroups_.FindById(group_id);
+    if (!group) {
+      log::error("Unknown group id: %d", group_id);
+      return false;
+    }
+
+    return group->IsUsingPreferredAudioSetConfiguration(
+            static_cast<LeAudioContextType>(context_type));
   }
 
   void SetCcidInformation(int ccid, int context_type) override {
@@ -1006,6 +1046,11 @@ public:
 
   void SetInCall(bool in_call) override {
     log::debug("in_call: {}", in_call);
+    if (in_call == in_call_) {
+      log::verbose("no state change {}", in_call);
+      return;
+    }
+
     in_call_ = in_call;
 
     if (!com::android::bluetooth::flags::leaudio_speed_up_reconfiguration_between_call()) {
@@ -1014,17 +1059,25 @@ public:
     }
 
     if (active_group_id_ == bluetooth::groups::kGroupUnknown) {
+      log::debug("There is no active group");
       return;
     }
 
     LeAudioDeviceGroup* group = aseGroups_.FindById(active_group_id_);
     if (!group || !group->IsStreaming()) {
+      log::debug("{} is not streaming", active_group_id_);
       return;
     }
 
     bool reconfigure = false;
 
     if (in_call_) {
+      in_call_metadata_context_types_ = local_metadata_context_types_;
+
+      log::debug("in_call_metadata_context_types_ sink: {}  source: {}",
+                 in_call_metadata_context_types_.sink.to_string(),
+                 in_call_metadata_context_types_.source.to_string());
+
       auto audio_set_conf = group->GetConfiguration(LeAudioContextType::CONVERSATIONAL);
       if (audio_set_conf && group->IsGroupConfiguredTo(*audio_set_conf)) {
         log::info("Call is coming, but CIG already set for a call");
@@ -1035,14 +1088,18 @@ public:
     } else {
       if (configuration_context_type_ == LeAudioContextType::CONVERSATIONAL) {
         log::info("Call is ended, speed up reconfiguration for media");
-        local_metadata_context_types_.sink.unset(LeAudioContextType::CONVERSATIONAL);
-        local_metadata_context_types_.source.unset(LeAudioContextType::CONVERSATIONAL);
+        local_metadata_context_types_ = in_call_metadata_context_types_;
+        log::debug("restored local_metadata_context_types_ sink: {}  source: {}",
+                   local_metadata_context_types_.sink.to_string(),
+                   local_metadata_context_types_.source.to_string());
+        in_call_metadata_context_types_.sink.clear();
+        in_call_metadata_context_types_.source.clear();
         reconfigure = true;
       }
     }
 
     if (reconfigure) {
-      initReconfiguration(group, configuration_context_type_);
+      ReconfigureOrUpdateRemote(group, bluetooth::le_audio::types::kLeAudioDirectionSink);
     }
   }
 
@@ -4152,7 +4209,10 @@ public:
 
   inline bool IsDirectionAvailableForCurrentConfiguration(const LeAudioDeviceGroup* group,
                                                           uint8_t direction) const {
-    auto current_config = group->GetCachedConfiguration(configuration_context_type_);
+    auto current_config =
+            group->IsUsingPreferredAudioSetConfiguration(configuration_context_type_)
+                    ? group->GetCachedPreferredConfiguration(configuration_context_type_)
+                    : group->GetCachedConfiguration(configuration_context_type_);
     if (current_config) {
       return current_config->confs.get(direction).size() != 0;
     }
@@ -4374,9 +4434,6 @@ public:
       LeAudioContextType context_priority_list[] = {
               /* Highest priority first */
               LeAudioContextType::CONVERSATIONAL,
-              /* Handling RINGTONE will cause the ringtone volume slider to trigger
-               * reconfiguration. This will be fixed in b/283349711.
-               */
               LeAudioContextType::RINGTONE,
               LeAudioContextType::LIVE,
               LeAudioContextType::VOICEASSISTANTS,
@@ -4755,46 +4812,6 @@ public:
     return remote_metadata;
   }
 
-  LeAudioContextType AdjustForVoiceAssistant(LeAudioDeviceGroup* group,
-                                             LeAudioContextType new_configuration_context) {
-    if (!com::android::bluetooth::flags::le_audio_support_unidirectional_voice_assistant()) {
-      log::debug("Flag le_audio_support_unidirectional_voice_assistant NOT enabled");
-      return new_configuration_context;
-    }
-
-    /* Some remote devices expect VOICE ASSISTANT to be unidirectional Phone is
-     * Source and Earbuds are Sink */
-    if (new_configuration_context != LeAudioContextType::VOICEASSISTANTS) {
-      return new_configuration_context;
-    }
-
-    auto sink_supported_contexts =
-            group->GetSupportedContexts(bluetooth::le_audio::types::kLeAudioDirectionSink);
-    auto source_supported_contexts =
-            group->GetSupportedContexts(bluetooth::le_audio::types::kLeAudioDirectionSource);
-
-    log::debug("group_id: {}, sink_supported: {}, source_supported {}", group->group_id_,
-               ToString(sink_supported_contexts), ToString(source_supported_contexts));
-    if (sink_supported_contexts.test(LeAudioContextType::VOICEASSISTANTS) &&
-        source_supported_contexts.test(LeAudioContextType::VOICEASSISTANTS)) {
-      return new_configuration_context;
-    }
-
-    if (sink_supported_contexts.test(LeAudioContextType::VOICEASSISTANTS)) {
-      log::info(
-              "group_id {} supports only Sink direction for Voice Assistant. "
-              "Selecting configurarion context type {}",
-              group->group_id_, ToString(LeAudioContextType::INSTRUCTIONAL));
-
-      return LeAudioContextType::INSTRUCTIONAL;
-    }
-
-    log::warn("group_id: {},  unexpected configuration, sink_supported: {}, source_supported {}",
-              group->group_id_, ToString(sink_supported_contexts),
-              ToString(source_supported_contexts));
-    return new_configuration_context;
-  }
-
   /* Return true if stream is started */
   bool ReconfigureOrUpdateRemote(LeAudioDeviceGroup* group, int remote_direction) {
     if (stack_config_get_interface()->get_pts_force_le_audio_multiple_contexts_metadata()) {
@@ -4811,8 +4828,7 @@ public:
                 local_metadata_context_types_.source.to_string(), override_contexts.to_string());
 
       /* Choose the right configuration context */
-      auto new_configuration_context =
-              AdjustForVoiceAssistant(group, ChooseConfigurationContextType(override_contexts));
+      auto new_configuration_context = ChooseConfigurationContextType(override_contexts);
 
       log::debug("new_configuration_context= {}.", ToString(new_configuration_context));
       BidirectionalPair<AudioContexts> remote_contexts = {.sink = override_contexts,
@@ -4829,8 +4845,7 @@ public:
 
     /* Choose the right configuration context */
     auto config_context_candids = get_bidirectional(remote_metadata);
-    auto new_config_context =
-            AdjustForVoiceAssistant(group, ChooseConfigurationContextType(config_context_candids));
+    auto new_config_context = ChooseConfigurationContextType(config_context_candids);
     log::debug("config_context_candids= {}, new_config_context= {}",
                ToString(config_context_candids), ToString(new_config_context));
 
@@ -4848,7 +4863,7 @@ public:
             LeAudioContextType::NOTIFICATIONS | LeAudioContextType::SOUNDEFFECTS |
             LeAudioContextType::INSTRUCTIONAL | LeAudioContextType::ALERTS |
             LeAudioContextType::EMERGENCYALARM | LeAudioContextType::UNSPECIFIED;
-    if (group->IsStreaming() && config_context_candids.any() &&
+    if (group->IsStreaming() && !group->IsReleasingOrIdle() && config_context_candids.any() &&
         (config_context_candids & ~no_reconfigure_contexts).none() &&
         (configuration_context_type_ != LeAudioContextType::UNINITIALIZED) &&
         (configuration_context_type_ != LeAudioContextType::UNSPECIFIED) &&
@@ -5552,6 +5567,7 @@ private:
   LeAudioContextType configuration_context_type_;
   static constexpr char kAllowMultipleContextsInMetadata[] =
           "persist.bluetooth.leaudio.allow.multiple.contexts";
+  BidirectionalPair<AudioContexts> in_call_metadata_context_types_;
   BidirectionalPair<AudioContexts> local_metadata_context_types_;
   uint64_t stream_setup_start_timestamp_;
   uint64_t stream_setup_end_timestamp_;

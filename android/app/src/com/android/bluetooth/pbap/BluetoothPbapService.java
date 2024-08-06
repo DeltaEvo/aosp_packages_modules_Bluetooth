@@ -155,7 +155,7 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
     @VisibleForTesting
     final HashMap<BluetoothDevice, PbapStateMachine> mPbapStateMachineMap = new HashMap<>();
 
-    private volatile int mNextNotificationId = PBAP_NOTIFICATION_ID_START;
+    private int mNextNotificationId = PBAP_NOTIFICATION_ID_START;
 
     // package and class name to which we send intent to check phone book access permission
     private static final String ACCESS_AUTHORITY_PACKAGE = "com.android.settings";

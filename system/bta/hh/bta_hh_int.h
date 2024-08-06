@@ -223,6 +223,8 @@ typedef struct {
 #define BTA_HH_LE_SCPS_NOTIFY_ENB 0x02
   uint8_t scps_notify; /* scan refresh supported/notification enabled */
   bool security_pending;
+
+  tSDP_DISCOVERY_DB* p_disc_db;
 } tBTA_HH_DEV_CB;
 
 /******************************************************************************
@@ -230,15 +232,12 @@ typedef struct {
  ******************************************************************************/
 typedef struct {
   tBTA_HH_DEV_CB kdev[BTA_HH_MAX_DEVICE];   /* device control block */
-  tBTA_HH_DEV_CB* p_cur;                    /* current device control
-                                                   block idx, used in sdp */
   uint8_t cb_index[BTA_HH_MAX_KNOWN];       /* maintain a CB index
                                           map to dev handle */
   uint8_t le_cb_index[BTA_HH_LE_MAX_KNOWN]; /* maintain a CB index map to LE dev
                                              handle */
   tGATT_IF gatt_if;
   tBTA_HH_CBACK* p_cback; /* Application callbacks */
-  tSDP_DISCOVERY_DB* p_disc_db;
   uint8_t cnt_num; /* connected device number */
   bool w4_disable; /* w4 disable flag */
 } tBTA_HH_CB;
@@ -252,7 +251,7 @@ extern tBTA_HH_CFG* p_bta_hh_cfg;
  *  Function prototypes
  ****************************************************************************/
 bool bta_hh_hdl_event(const BT_HDR_RIGID* p_msg);
-void bta_hh_sm_execute(tBTA_HH_DEV_CB* p_cb, uint16_t event, const tBTA_HH_DATA* p_data);
+void bta_hh_sm_execute(tBTA_HH_DEV_CB* p_cb, tBTA_HH_INT_EVT event, const tBTA_HH_DATA* p_data);
 
 /* action functions */
 void bta_hh_api_disc_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data);
@@ -270,8 +269,9 @@ void bta_hh_open_cmpl_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data);
 void bta_hh_open_failure(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data);
 
 /* utility functions */
-uint8_t bta_hh_find_cb(const tAclLinkSpec& link_spec);
+tBTA_HH_DEV_CB* bta_hh_find_cb(const tAclLinkSpec& link_spec);
 tBTA_HH_DEV_CB* bta_hh_get_cb(const tAclLinkSpec& link_spec);
+tBTA_HH_DEV_CB* bta_hh_find_cb_by_handle(uint8_t hid_handle);
 bool bta_hh_tod_spt(tBTA_HH_DEV_CB* p_cb, uint8_t sub_class);
 void bta_hh_clean_up_kdev(tBTA_HH_DEV_CB* p_cb);
 
@@ -281,8 +281,6 @@ void bta_hh_add_device_to_list(tBTA_HH_DEV_CB* p_cb, uint8_t handle, uint16_t at
 void bta_hh_update_di_info(tBTA_HH_DEV_CB* p_cb, uint16_t vendor_id, uint16_t product_id,
                            uint16_t version, uint8_t flag, uint8_t ctry_code);
 void bta_hh_cleanup_disable(tBTA_HH_STATUS status);
-
-uint8_t bta_hh_dev_handle_to_cb_idx(uint8_t dev_handle);
 
 /* action functions used outside state machine */
 void bta_hh_api_enable(tBTA_HH_CBACK* p_cback, bool enable_hid, bool enable_hogp);
@@ -295,7 +293,7 @@ tBTA_HH_STATUS bta_hh_read_ssr_param(const tAclLinkSpec& link_spec, uint16_t* p_
 /* functions for LE HID */
 void bta_hh_le_enable(void);
 void bta_hh_le_deregister(void);
-void bta_hh_le_open_conn(tBTA_HH_DEV_CB* p_cb, const tAclLinkSpec& link_spec);
+void bta_hh_le_open_conn(tBTA_HH_DEV_CB* p_cb);
 void bta_hh_le_api_disc_act(tBTA_HH_DEV_CB* p_cb);
 void bta_hh_le_get_dscp_act(tBTA_HH_DEV_CB* p_cb);
 void bta_hh_le_write_dev_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data);
@@ -321,6 +319,8 @@ void bta_hh_le_service_parsed(tBTA_HH_DEV_CB* p_dev_cb, tGATT_STATUS status);
 void bta_hh_headtracker_parse_service(tBTA_HH_DEV_CB* p_dev_cb, const gatt::Service* service);
 bool bta_hh_headtracker_supported(tBTA_HH_DEV_CB* p_dev_cb);
 uint16_t bta_hh_get_uuid16(tBTA_HH_DEV_CB* p_dev_cb, bluetooth::Uuid uuid);
+
+void bta_hh_dump(int fd);
 
 #if (BTA_HH_DEBUG == TRUE)
 void bta_hh_trace_dev_db(void);

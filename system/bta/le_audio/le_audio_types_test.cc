@@ -717,5 +717,110 @@ TEST(CodecConfigSettingTest, test_vendor_codec_type) {
   ASSERT_EQ(vendor_16_2, vendor_codec);
 }
 
+TEST(CodecSpecTest, test_sampling_frequency_transition) {
+  ASSERT_EQ(codec_spec_conf::SingleSamplingFreqCapability2Config(
+                    codec_spec_caps::SamplingFreqConfig2Capability(
+                            codec_spec_conf::kLeAudioSamplingFreq8000Hz)),
+            codec_spec_conf::kLeAudioSamplingFreq8000Hz);
+  ASSERT_EQ(codec_spec_conf::SingleSamplingFreqCapability2Config(
+                    codec_spec_caps::SamplingFreqConfig2Capability(
+                            codec_spec_conf::kLeAudioSamplingFreq11025Hz)),
+            codec_spec_conf::kLeAudioSamplingFreq11025Hz);
+  ASSERT_EQ(codec_spec_conf::SingleSamplingFreqCapability2Config(
+                    codec_spec_caps::SamplingFreqConfig2Capability(
+                            codec_spec_conf::kLeAudioSamplingFreq16000Hz)),
+            codec_spec_conf::kLeAudioSamplingFreq16000Hz);
+  ASSERT_EQ(codec_spec_conf::SingleSamplingFreqCapability2Config(
+                    codec_spec_caps::SamplingFreqConfig2Capability(
+                            codec_spec_conf::kLeAudioSamplingFreq22050Hz)),
+            codec_spec_conf::kLeAudioSamplingFreq22050Hz);
+  ASSERT_EQ(codec_spec_conf::SingleSamplingFreqCapability2Config(
+                    codec_spec_caps::SamplingFreqConfig2Capability(
+                            codec_spec_conf::kLeAudioSamplingFreq24000Hz)),
+            codec_spec_conf::kLeAudioSamplingFreq24000Hz);
+  ASSERT_EQ(codec_spec_conf::SingleSamplingFreqCapability2Config(
+                    codec_spec_caps::SamplingFreqConfig2Capability(
+                            codec_spec_conf::kLeAudioSamplingFreq32000Hz)),
+            codec_spec_conf::kLeAudioSamplingFreq32000Hz);
+  ASSERT_EQ(codec_spec_conf::SingleSamplingFreqCapability2Config(
+                    codec_spec_caps::SamplingFreqConfig2Capability(
+                            codec_spec_conf::kLeAudioSamplingFreq44100Hz)),
+            codec_spec_conf::kLeAudioSamplingFreq44100Hz);
+  ASSERT_EQ(codec_spec_conf::SingleSamplingFreqCapability2Config(
+                    codec_spec_caps::SamplingFreqConfig2Capability(
+                            codec_spec_conf::kLeAudioSamplingFreq48000Hz)),
+            codec_spec_conf::kLeAudioSamplingFreq48000Hz);
+  ASSERT_EQ(codec_spec_conf::SingleSamplingFreqCapability2Config(
+                    codec_spec_caps::SamplingFreqConfig2Capability(
+                            codec_spec_conf::kLeAudioSamplingFreq88200Hz)),
+            codec_spec_conf::kLeAudioSamplingFreq88200Hz);
+  ASSERT_EQ(codec_spec_conf::SingleSamplingFreqCapability2Config(
+                    codec_spec_caps::SamplingFreqConfig2Capability(
+                            codec_spec_conf::kLeAudioSamplingFreq96000Hz)),
+            codec_spec_conf::kLeAudioSamplingFreq96000Hz);
+  ASSERT_EQ(codec_spec_conf::SingleSamplingFreqCapability2Config(
+                    codec_spec_caps::SamplingFreqConfig2Capability(
+                            codec_spec_conf::kLeAudioSamplingFreq176400Hz)),
+            codec_spec_conf::kLeAudioSamplingFreq176400Hz);
+  ASSERT_EQ(codec_spec_conf::SingleSamplingFreqCapability2Config(
+                    codec_spec_caps::SamplingFreqConfig2Capability(
+                            codec_spec_conf::kLeAudioSamplingFreq192000Hz)),
+            codec_spec_conf::kLeAudioSamplingFreq192000Hz);
+  ASSERT_EQ(codec_spec_conf::SingleSamplingFreqCapability2Config(
+                    codec_spec_caps::SamplingFreqConfig2Capability(
+                            codec_spec_conf::kLeAudioSamplingFreq384000Hz)),
+            codec_spec_conf::kLeAudioSamplingFreq384000Hz);
+}
+
+TEST(CodecSpecTest, test_frame_duration_transition) {
+  ASSERT_EQ(codec_spec_conf::SingleFrameDurationCapability2Config(
+                    codec_spec_caps::FrameDurationConfig2Capability(
+                            codec_spec_conf::kLeAudioCodecFrameDur7500us)),
+            codec_spec_conf::kLeAudioCodecFrameDur7500us);
+  ASSERT_EQ(codec_spec_conf::SingleFrameDurationCapability2Config(
+                    codec_spec_caps::FrameDurationConfig2Capability(
+                            codec_spec_conf::kLeAudioCodecFrameDur10000us)),
+            codec_spec_conf::kLeAudioCodecFrameDur10000us);
+}
+
+TEST(CodecSpecTest, test_channel_count_transition) {
+  ASSERT_EQ(codec_spec_caps::ChannelCountConfig2Capability(
+                    codec_spec_conf::SingleChannelCountCapability2Config(
+                            codec_spec_caps::kLeAudioCodecChannelCountNone)),
+            codec_spec_caps::kLeAudioCodecChannelCountNone);
+  ASSERT_EQ(codec_spec_caps::ChannelCountConfig2Capability(
+                    codec_spec_conf::SingleChannelCountCapability2Config(
+                            codec_spec_caps::kLeAudioCodecChannelCountSingleChannel)),
+            codec_spec_caps::kLeAudioCodecChannelCountSingleChannel);
+  ASSERT_EQ(codec_spec_caps::ChannelCountConfig2Capability(
+                    codec_spec_conf::SingleChannelCountCapability2Config(
+                            codec_spec_caps::kLeAudioCodecChannelCountTwoChannel)),
+            codec_spec_caps::kLeAudioCodecChannelCountTwoChannel);
+  ASSERT_EQ(codec_spec_caps::ChannelCountConfig2Capability(
+                    codec_spec_conf::SingleChannelCountCapability2Config(
+                            codec_spec_caps::kLeAudioCodecChannelCountThreeChannel)),
+            codec_spec_caps::kLeAudioCodecChannelCountThreeChannel);
+  ASSERT_EQ(codec_spec_caps::ChannelCountConfig2Capability(
+                    codec_spec_conf::SingleChannelCountCapability2Config(
+                            codec_spec_caps::kLeAudioCodecChannelCountFourChannel)),
+            codec_spec_caps::kLeAudioCodecChannelCountFourChannel);
+  ASSERT_EQ(codec_spec_caps::ChannelCountConfig2Capability(
+                    codec_spec_conf::SingleChannelCountCapability2Config(
+                            codec_spec_caps::kLeAudioCodecChannelCountFiveChannel)),
+            codec_spec_caps::kLeAudioCodecChannelCountFiveChannel);
+  ASSERT_EQ(codec_spec_caps::ChannelCountConfig2Capability(
+                    codec_spec_conf::SingleChannelCountCapability2Config(
+                            codec_spec_caps::kLeAudioCodecChannelCountSixChannel)),
+            codec_spec_caps::kLeAudioCodecChannelCountSixChannel);
+  ASSERT_EQ(codec_spec_caps::ChannelCountConfig2Capability(
+                    codec_spec_conf::SingleChannelCountCapability2Config(
+                            codec_spec_caps::kLeAudioCodecChannelCountSevenChannel)),
+            codec_spec_caps::kLeAudioCodecChannelCountSevenChannel);
+  ASSERT_EQ(codec_spec_caps::ChannelCountConfig2Capability(
+                    codec_spec_conf::SingleChannelCountCapability2Config(
+                            codec_spec_caps::kLeAudioCodecChannelCountEightChannel)),
+            codec_spec_caps::kLeAudioCodecChannelCountEightChannel);
+}
+
 }  // namespace types
 }  // namespace bluetooth::le_audio

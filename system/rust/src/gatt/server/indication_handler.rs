@@ -6,10 +6,7 @@ use tokio::{
     time::timeout,
 };
 
-use crate::{
-    gatt::ids::AttHandle,
-    packets::{AttChild, AttHandleValueIndicationBuilder},
-};
+use crate::{gatt::ids::AttHandle, packets::att};
 
 use super::{
     att_database::{AttDatabase, StableAttDatabase},
@@ -53,7 +50,7 @@ impl<T: AttDatabase> IndicationHandler<T> {
         handle: AttHandle,
         data: &[u8],
         mtu: usize,
-        send_packet: impl FnOnce(AttChild) -> Result<(), SendError>,
+        send_packet: impl FnOnce(att::Att) -> Result<(), SendError>,
     ) -> Result<(), IndicationError> {
         let data_size = data.len();
         // As per Core Spec 5.3 Vol 3F 3.4.7.2, the indicated value must be at most
@@ -78,7 +75,9 @@ impl<T: AttDatabase> IndicationHandler<T> {
         let _ = self.pending_confirmation.try_recv();
 
         send_packet(
-            AttHandleValueIndicationBuilder { handle: handle.into(), value: data.into() }.into(),
+            att::AttHandleValueIndication { handle: handle.into(), value: data.to_vec() }
+                .try_into()
+                .unwrap(),
         )
         .map_err(IndicationError::SendError)?;
 
@@ -116,6 +115,7 @@ impl ConfirmationWatcher {
 
 #[cfg(test)]
 mod test {
+    use crate::packets::att;
     use tokio::{sync::oneshot, task::spawn_local, time::Instant};
 
     use crate::{
@@ -175,12 +175,11 @@ mod test {
             });
 
             // assert: that an AttHandleValueIndication was sent on the channel
-            let AttChild::AttHandleValueIndication(indication) = rx.await.unwrap() else {
-                unreachable!()
-            };
+            let indication = rx.await.unwrap();
             assert_eq!(
-                indication,
-                AttHandleValueIndicationBuilder { handle: HANDLE.into(), value: DATA.into() }
+                Ok(indication),
+                att::AttHandleValueIndication { handle: HANDLE.into(), value: DATA.to_vec() }
+                    .try_into()
             );
         });
     }
@@ -354,7 +353,7 @@ mod test {
                 IndicationHandler::new(get_att_database());
 
             // act: send an indication with an ATT_MTU of 4 and data length of 3
-            let res = indication_handler.send(HANDLE, &[1, 2, 3], 4, move |_| unreachable!()).await;
+            let res = indication_handler.send(HANDLE, &DATA, 4, move |_| unreachable!()).await;
 
             // assert: that we got the expected error, indicating the max data size (not the
             // ATT_MTU, but ATT_MTU-3)

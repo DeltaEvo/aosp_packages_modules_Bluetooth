@@ -50,6 +50,7 @@
 #include "stack/include/gap_api.h"
 #include "stack/include/l2cdefs.h"
 #include "stack/include/port_api.h"
+#include "stack/include/rfcdefs.h"
 #include "stack/include/sdp_api.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
@@ -1737,6 +1738,7 @@ static tBTA_JV_PCB* bta_jv_add_rfc_port(tBTA_JV_RFC_CB* p_cb, tBTA_JV_PCB* p_pcb
         port_state.fc_type = (PORT_FC_CTS_ON_INPUT | PORT_FC_CTS_ON_OUTPUT);
 
         if (PORT_SetState(p_pcb->port_handle, &port_state) != PORT_SUCCESS) {
+          log::warn("Unable to set RFCOMM server state handle:{}", p_pcb->port_handle);
         }
         p_pcb->handle = BTA_JV_RFC_H_S_TO_HDL(p_cb->handle, si);
         log::verbose("p_pcb->handle=0x{:x}, curr_sess={}", p_pcb->handle, p_cb->curr_sess);
@@ -1804,7 +1806,7 @@ void bta_jv_rfcomm_start_server(tBTA_SEC sec_mask, uint8_t local_scn, uint8_t ma
 
     if (PORT_SetState(handle, &port_state) != PORT_SUCCESS) {
       log::warn("Unable to set RFCOMM port state handle:{}", handle);
-    };
+    }
   } while (0);
 
   tBTA_JV bta_jv;
@@ -1890,8 +1892,7 @@ void bta_jv_set_pm_profile(uint32_t handle, tBTA_JV_PM_ID app_id, tBTA_JV_CONN_S
     if (status != tBTA_JV_STATUS::SUCCESS) {
       log::warn("free pm cb failed: reason={}", bta_jv_status_text(status));
     }
-  } else /* set PM control block */
-  {
+  } else { /* set PM control block */
     p_cb = bta_jv_alloc_set_pm_profile_cb(handle, app_id);
 
     if (NULL != p_cb) {

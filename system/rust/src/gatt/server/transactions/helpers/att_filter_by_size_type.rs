@@ -4,7 +4,7 @@
 use crate::{
     core::uuid::Uuid,
     gatt::server::att_database::{AttAttribute, StableAttDatabase},
-    packets::AttErrorCode,
+    packets::att::AttErrorCode,
 };
 
 /// An attribute and the value
@@ -108,7 +108,7 @@ mod test {
             response.collect::<Vec<_>>(),
             vec![AttributeWithValue {
                 attr: db.find_attribute(AttHandle(3)).unwrap(),
-                value: vec![4, 5]
+                value: vec![4, 5],
             }]
         )
     }
@@ -287,7 +287,7 @@ mod test {
         ));
 
         // assert: got READ_NOT_PERMITTED
-        assert!(matches!(response, Err(AttErrorCode::READ_NOT_PERMITTED)));
+        assert!(matches!(response, Err(AttErrorCode::ReadNotPermitted)));
     }
 
     #[test]

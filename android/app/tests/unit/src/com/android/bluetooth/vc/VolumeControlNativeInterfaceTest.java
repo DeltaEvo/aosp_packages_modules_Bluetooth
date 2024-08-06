@@ -71,10 +71,11 @@ public class VolumeControlNativeInterfaceTest {
     public void onVolumeStateChanged() {
         int volume = 3;
         boolean mute = false;
+        int flags = 1;
         byte[] address = new byte[] {0x00, 0x01, 0x02, 0x03, 0x04, 0x05};
         boolean isAutonomous = false;
 
-        mNativeInterface.onVolumeStateChanged(volume, mute, address, isAutonomous);
+        mNativeInterface.onVolumeStateChanged(volume, mute, flags, address, isAutonomous);
 
         ArgumentCaptor<VolumeControlStackEvent> event =
                 ArgumentCaptor.forClass(VolumeControlStackEvent.class);

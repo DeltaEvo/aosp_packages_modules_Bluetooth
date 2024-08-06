@@ -366,14 +366,16 @@ public:
     auto csis_api = CsisClient::Get();
     if (!csis_api) {
       log::warn("Csis module is not available");
-      callbacks_->OnVolumeStateChanged(device->address, device->volume, device->mute, true);
+      callbacks_->OnVolumeStateChanged(device->address, device->volume, device->mute, device->flags,
+                                       true);
       return;
     }
 
     auto group_id = csis_api->GetGroupId(device->address, le_audio::uuid::kCapServiceUuid);
     if (group_id == bluetooth::groups::kGroupUnknown) {
       log::warn("No group for device {}", device->address);
-      callbacks_->OnVolumeStateChanged(device->address, device->volume, device->mute, true);
+      callbacks_->OnVolumeStateChanged(device->address, device->volume, device->mute, device->flags,
+                                       true);
       return;
     }
 
@@ -438,7 +440,8 @@ public:
 
     /* This is just a read, send single notification */
     if (!is_notification) {
-      callbacks_->OnVolumeStateChanged(device->address, device->volume, device->mute, false);
+      callbacks_->OnVolumeStateChanged(device->address, device->volume, device->mute, device->flags,
+                                       false);
       return;
     }
 
@@ -468,7 +471,8 @@ public:
     } else {
       /* op->is_autonomous_ will always be false,
          since we only make it true for group operations */
-      callbacks_->OnVolumeStateChanged(device->address, device->volume, device->mute, false);
+      callbacks_->OnVolumeStateChanged(device->address, device->volume, device->mute, device->flags,
+                                       false);
     }
 
     ongoing_operations_.erase(op);
@@ -1067,7 +1071,8 @@ private:
       callbacks_->OnConnectionState(ConnectionState::CONNECTED, device->address);
 
       // once profile connected we can notify current states
-      callbacks_->OnVolumeStateChanged(device->address, device->volume, device->mute, false);
+      callbacks_->OnVolumeStateChanged(device->address, device->volume, device->mute, device->flags,
+                                       true);
 
       for (auto const& offset : device->audio_offsets.volume_offsets) {
         callbacks_->OnExtAudioOutVolumeOffsetChanged(device->address, offset.id, offset.offset);

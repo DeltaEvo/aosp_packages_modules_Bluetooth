@@ -33,6 +33,7 @@ import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -191,7 +192,9 @@ public class PeriodicScanManager {
         }
 
         synchronized (mSyncs) {
-            for (Map.Entry<IBinder, SyncInfo> e : mSyncs.entrySet()) {
+            Iterator<Map.Entry<IBinder, SyncInfo>> it = mSyncs.entrySet().iterator();
+            while (it.hasNext()) {
+                Map.Entry<IBinder, SyncInfo> e = it.next();
                 if (e.getValue().id != regId) {
                     continue;
                 }
@@ -224,7 +227,7 @@ public class PeriodicScanManager {
                             status);
                     IBinder binder = e.getKey();
                     binder.unlinkToDeath(e.getValue().deathRecipient, 0);
-                    mSyncs.remove(binder);
+                    it.remove();
                 }
             }
         }

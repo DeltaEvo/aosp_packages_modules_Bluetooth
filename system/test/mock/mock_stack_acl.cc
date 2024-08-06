@@ -77,7 +77,6 @@ struct acl_get_supported_packet_types acl_get_supported_packet_types;
 struct acl_link_role_from_handle acl_link_role_from_handle;
 struct btm_handle_to_acl_index btm_handle_to_acl_index;
 struct BTM_ReadConnectionAddr BTM_ReadConnectionAddr;
-struct BTM_RequestPeerSCA BTM_RequestPeerSCA;
 struct BTM_acl_after_controller_started BTM_acl_after_controller_started;
 struct btm_connection_request btm_connection_request;
 struct BTM_unblock_role_switch_for BTM_unblock_role_switch_for;
@@ -284,10 +283,6 @@ void BTM_ReadConnectionAddr(const RawAddress& remote_bda, RawAddress& local_conn
   inc_func_call_count(__func__);
   test::mock::stack_acl::BTM_ReadConnectionAddr(remote_bda, local_conn_addr, p_addr_type,
                                                 ota_address);
-}
-void BTM_RequestPeerSCA(const RawAddress& remote_bda, tBT_TRANSPORT transport) {
-  inc_func_call_count(__func__);
-  test::mock::stack_acl::BTM_RequestPeerSCA(remote_bda, transport);
 }
 void BTM_acl_after_controller_started() {
   inc_func_call_count(__func__);

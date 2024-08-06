@@ -38,6 +38,9 @@ bool gatt_connect(const RawAddress& /* rem_bda */, tGATT_TCB* /* p_tcb */,
   inc_func_call_count(__func__);
   return false;
 }
+void gatt_cancel_connect(const RawAddress& /* bd_addr */, tBT_TRANSPORT /* transport*/) {
+  inc_func_call_count(__func__);
+}
 bool gatt_disconnect(tGATT_TCB* /* p_tcb */) {
   inc_func_call_count(__func__);
   return false;

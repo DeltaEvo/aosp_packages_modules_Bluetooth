@@ -19,6 +19,7 @@
 #include <bluetooth/log.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <log/log.h>
 
 #include <chrono>
 #include <future>
@@ -237,6 +238,7 @@ public:
 class LeImplTest : public ::testing::Test {
 protected:
   void SetUp() override {
+    __android_log_set_minimum_priority(ANDROID_LOG_VERBOSE);
     thread_ = new Thread("thread", Thread::Priority::NORMAL);
     handler_ = new Handler(thread_);
     controller_ = new TestController();
@@ -1422,7 +1424,8 @@ TEST_F(LeImplTest, direct_connection_after_background_connection) {
   hci::AddressWithType address({0x21, 0x22, 0x23, 0x24, 0x25, 0x26},
                                AddressType::PUBLIC_DEVICE_ADDRESS);
 
-  // arrange: Create background connection
+  // arrange: Create background connection. Remember that acl_manager adds device background list
+  le_impl_->add_device_to_background_connection_list(address);
   le_impl_->create_le_connection(address, true, /* is_direct */ false);
   hci_layer_->GetCommand(OpCode::LE_ADD_DEVICE_TO_FILTER_ACCEPT_LIST);
   hci_layer_->IncomingEvent(
@@ -1455,6 +1458,112 @@ TEST_F(LeImplTest, direct_connection_after_background_connection) {
   EXPECT_TRUE(direct_create_connection.IsValid());
   log::info("Scan Interval {}", direct_create_connection.GetLeScanInterval());
   ASSERT_NE(direct_create_connection.GetLeScanInterval(), bg_create_connection.GetLeScanInterval());
+
+  hci_layer_->IncomingEvent(LeCreateConnectionStatusBuilder::Create(ErrorCode::SUCCESS, 0x01));
+  sync_handler();
+
+  // Check state is ARMED
+  ASSERT_EQ(ConnectabilityState::ARMED, le_impl_->connectability_state_);
+
+  // Simulate timeout on direct connect. Verify background connect is still in place
+  EXPECT_CALL(mock_le_connection_callbacks_,
+              OnLeConnectFail(_, ErrorCode::CONNECTION_ACCEPT_TIMEOUT))
+          .Times(1);
+  le_impl_->on_create_connection_timeout(address);
+  sync_handler();
+  cancel_connection = hci_layer_->GetCommand(OpCode::LE_CREATE_CONNECTION_CANCEL);
+  hci_layer_->IncomingEvent(
+          LeCreateConnectionCancelCompleteBuilder::Create(0x01, ErrorCode::SUCCESS));
+  hci_layer_->IncomingLeMetaEvent(LeConnectionCompleteBuilder::Create(
+          ErrorCode::UNKNOWN_CONNECTION, kHciHandle, Role::CENTRAL,
+          AddressType::PUBLIC_DEVICE_ADDRESS, Address::kEmpty, 0x0000, 0x0000, 0x0000,
+          ClockAccuracy::PPM_30));
+  EXPECT_TRUE(cancel_connection.IsValid());
+  raw_bg_create_connection = hci_layer_->GetCommand(OpCode::LE_CREATE_CONNECTION);
+  bg_create_connection = LeCreateConnectionView::Create(LeConnectionManagementCommandView::Create(
+          AclCommandView::Create(raw_bg_create_connection)));
+  EXPECT_TRUE(bg_create_connection.IsValid());
+  sync_handler();
+  ASSERT_TRUE(le_impl_->create_connection_timeout_alarms_.empty());
+
+  hci_layer_->IncomingEvent(LeCreateConnectionStatusBuilder::Create(ErrorCode::SUCCESS, 0x01));
+  sync_handler();
+
+  // Check state is ARMED
+  ASSERT_EQ(ConnectabilityState::ARMED, le_impl_->connectability_state_);
+}
+
+TEST_F(LeImplTest, direct_connection_after_direct_connection) {
+  set_random_device_address_policy();
+
+  hci::AddressWithType address({0x21, 0x22, 0x23, 0x24, 0x25, 0x26},
+                               AddressType::PUBLIC_DEVICE_ADDRESS);
+
+  // Create first direct connection
+  le_impl_->create_le_connection(address, true, /* is_direct */ true);
+  hci_layer_->GetCommand(OpCode::LE_ADD_DEVICE_TO_FILTER_ACCEPT_LIST);
+  hci_layer_->IncomingEvent(
+          LeAddDeviceToFilterAcceptListCompleteBuilder::Create(0x01, ErrorCode::SUCCESS));
+  auto raw_direct_1_create_connection = hci_layer_->GetCommand(OpCode::LE_CREATE_CONNECTION);
+  hci_layer_->IncomingEvent(LeCreateConnectionStatusBuilder::Create(ErrorCode::SUCCESS, 0x01));
+  sync_handler();
+
+  // Check state is ARMED
+  ASSERT_EQ(ConnectabilityState::ARMED, le_impl_->connectability_state_);
+
+  log::info("Second direct connect to the same device");
+
+  // Create second direct connection
+  le_impl_->create_le_connection(address, true, /* is_direct */ true);
+  sync_handler();
+
+  auto cancel_connection = hci_layer_->GetCommand(OpCode::LE_CREATE_CONNECTION_CANCEL);
+  if (cancel_connection.IsValid()) {
+    hci_layer_->IncomingEvent(
+            LeCreateConnectionCancelCompleteBuilder::Create(0x01, ErrorCode::SUCCESS));
+    hci_layer_->IncomingLeMetaEvent(LeConnectionCompleteBuilder::Create(
+            ErrorCode::UNKNOWN_CONNECTION, kHciHandle, Role::CENTRAL,
+            AddressType::PUBLIC_DEVICE_ADDRESS, Address::kEmpty, 0x0000, 0x0000, 0x0000,
+            ClockAccuracy::PPM_30));
+  }
+
+  auto raw_direct_2_create_connection = hci_layer_->GetCommand(OpCode::LE_CREATE_CONNECTION);
+
+  // assert
+  auto direct_1_create_connection =
+          LeCreateConnectionView::Create(LeConnectionManagementCommandView::Create(
+                  AclCommandView::Create(raw_direct_1_create_connection)));
+  EXPECT_TRUE(direct_1_create_connection.IsValid());
+  auto direct_2_create_connection =
+          LeCreateConnectionView::Create(LeConnectionManagementCommandView::Create(
+                  AclCommandView::Create(raw_direct_2_create_connection)));
+  EXPECT_TRUE(direct_2_create_connection.IsValid());
+  hci_layer_->IncomingEvent(LeCreateConnectionStatusBuilder::Create(ErrorCode::SUCCESS, 0x01));
+  sync_handler();
+
+  log::info("Simulate timeout");
+
+  EXPECT_CALL(mock_le_connection_callbacks_,
+              OnLeConnectFail(_, ErrorCode::CONNECTION_ACCEPT_TIMEOUT))
+          .Times(1);
+  le_impl_->on_create_connection_timeout(address);
+  sync_handler();
+  cancel_connection = hci_layer_->GetCommand(OpCode::LE_CREATE_CONNECTION_CANCEL);
+  EXPECT_TRUE(cancel_connection.IsValid());
+  hci_layer_->IncomingEvent(
+          LeCreateConnectionCancelCompleteBuilder::Create(0x01, ErrorCode::SUCCESS));
+  hci_layer_->IncomingLeMetaEvent(LeConnectionCompleteBuilder::Create(
+          ErrorCode::UNKNOWN_CONNECTION, kHciHandle, Role::CENTRAL,
+          AddressType::PUBLIC_DEVICE_ADDRESS, Address::kEmpty, 0x0000, 0x0000, 0x0000,
+          ClockAccuracy::PPM_30));
+  sync_handler();
+  ASSERT_TRUE(le_impl_->create_connection_timeout_alarms_.empty());
+
+  hci_layer_->GetCommand(OpCode::LE_REMOVE_DEVICE_FROM_FILTER_ACCEPT_LIST);
+  hci_layer_->IncomingEvent(
+          LeRemoveDeviceFromFilterAcceptListCompleteBuilder::Create(0x01, ErrorCode::SUCCESS));
+  hci_layer_->AssertNoQueuedCommand();
+  ASSERT_EQ(ConnectabilityState::DISARMED, le_impl_->connectability_state_);
 }
 
 }  // namespace acl_manager

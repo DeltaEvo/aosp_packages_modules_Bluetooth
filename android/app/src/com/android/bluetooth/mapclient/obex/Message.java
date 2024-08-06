@@ -262,7 +262,7 @@ public class Message {
     }
 
     /**
-     * @return {@link .ReceptionStatus} object corresponding to <code>reception_status</code>
+     * @return {@link ReceptionStatus} object corresponding to <code>reception_status</code>
      *     parameter in MAP specification
      */
     public ReceptionStatus getReceptionStatus() {

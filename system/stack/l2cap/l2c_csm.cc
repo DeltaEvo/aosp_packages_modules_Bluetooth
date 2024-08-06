@@ -33,7 +33,6 @@
 #include "internal_include/bt_target.h"
 #include "main/shim/entry.h"
 #include "main/shim/metrics_api.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/stack_power_telemetry.h"
 #include "stack/btm/btm_sec.h"
@@ -58,7 +57,7 @@ static void l2c_csm_open(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data);
 static void l2c_csm_w4_l2cap_disconnect_rsp(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data);
 static void l2c_csm_w4_l2ca_disconnect_rsp(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data);
 
-static const char* l2c_csm_get_event_name(tL2CEVT event);
+static std::string l2c_csm_get_event_name(const tL2CEVT& event);
 
 // Send a connect response with result OK and adjust the state machine
 static void l2c_csm_send_connect_rsp(tL2C_CCB* p_ccb) {
@@ -1494,116 +1493,51 @@ static void l2c_csm_w4_l2ca_disconnect_rsp(tL2C_CCB* p_ccb, tL2CEVT event, void*
                p_ccb->chnl_state, l2c_csm_get_event_name(event), event);
 }
 
-/*******************************************************************************
- *
- * Function         l2c_csm_get_event_name
- *
- * Description      This function returns the event name.
- *
- * NOTE             conditionally compiled to save memory.
- *
- * Returns          pointer to the name
- *
- ******************************************************************************/
-static const char* l2c_csm_get_event_name(tL2CEVT event) {
+static std::string l2c_csm_get_event_name(const tL2CEVT& event) {
   switch (event) {
-    case L2CEVT_LP_CONNECT_CFM: /* Lower layer connect confirm          */
-      return "LOWER_LAYER_CONNECT_CFM";
-    case L2CEVT_LP_CONNECT_CFM_NEG: /* Lower layer connect confirm (failed) */
-      return "LOWER_LAYER_CONNECT_CFM_NEG";
-    case L2CEVT_LP_CONNECT_IND: /* Lower layer connect indication       */
-      return "LOWER_LAYER_CONNECT_IND";
-    case L2CEVT_LP_DISCONNECT_IND: /* Lower layer disconnect indication    */
-      return "LOWER_LAYER_DISCONNECT_IND";
+    CASE_RETURN_STRING(L2CEVT_LP_CONNECT_CFM);
+    CASE_RETURN_STRING(L2CEVT_LP_CONNECT_CFM_NEG);
+    CASE_RETURN_STRING(L2CEVT_LP_CONNECT_IND);
+    CASE_RETURN_STRING(L2CEVT_LP_DISCONNECT_IND);
+    CASE_RETURN_STRING(L2CEVT_SEC_COMP);
+    CASE_RETURN_STRING(L2CEVT_SEC_COMP_NEG);
+    CASE_RETURN_STRING(L2CEVT_L2CAP_CONNECT_REQ);
+    CASE_RETURN_STRING(L2CEVT_L2CAP_CONNECT_RSP);
+    CASE_RETURN_STRING(L2CEVT_L2CAP_CONNECT_RSP_PND);
+    CASE_RETURN_STRING(L2CEVT_L2CAP_CONNECT_RSP_NEG);
+    CASE_RETURN_STRING(L2CEVT_L2CAP_CONFIG_REQ);
+    CASE_RETURN_STRING(L2CEVT_L2CAP_CONFIG_RSP);
+    CASE_RETURN_STRING(L2CEVT_L2CAP_CONFIG_RSP_NEG);
+    CASE_RETURN_STRING(L2CEVT_L2CAP_DISCONNECT_REQ);
+    CASE_RETURN_STRING(L2CEVT_L2CAP_DISCONNECT_RSP);
+    CASE_RETURN_STRING(L2CEVT_L2CAP_DATA);
 
-    case L2CEVT_SEC_COMP: /* Security cleared successfully        */
-      return "SECURITY_COMPLETE";
-    case L2CEVT_SEC_COMP_NEG: /* Security procedure failed            */
-      return "SECURITY_COMPLETE_NEG";
-
-    case L2CEVT_L2CAP_CONNECT_REQ: /* Peer connection request              */
-      return "PEER_CONNECT_REQ";
-    case L2CEVT_L2CAP_CONNECT_RSP: /* Peer connection response             */
-      return "PEER_CONNECT_RSP";
-    case L2CEVT_L2CAP_CONNECT_RSP_PND: /* Peer connection response pending */
-      return "PEER_CONNECT_RSP_PND";
-    case L2CEVT_L2CAP_CONNECT_RSP_NEG: /* Peer connection response (failed) */
-      return "PEER_CONNECT_RSP_NEG";
-    case L2CEVT_L2CAP_CONFIG_REQ: /* Peer configuration request           */
-      return "PEER_CONFIG_REQ";
-    case L2CEVT_L2CAP_CONFIG_RSP: /* Peer configuration response          */
-      return "PEER_CONFIG_RSP";
-    case L2CEVT_L2CAP_CONFIG_RSP_NEG: /* Peer configuration response (failed) */
-      return "PEER_CONFIG_RSP_NEG";
-    case L2CEVT_L2CAP_DISCONNECT_REQ: /* Peer disconnect request              */
-      return "PEER_DISCONNECT_REQ";
-    case L2CEVT_L2CAP_DISCONNECT_RSP: /* Peer disconnect response             */
-      return "PEER_DISCONNECT_RSP";
-    case L2CEVT_L2CAP_DATA: /* Peer data                            */
-      return "PEER_DATA";
-
-    case L2CEVT_L2CA_CONNECT_REQ: /* Upper layer connect request          */
-      return "UPPER_LAYER_CONNECT_REQ";
-    case L2CEVT_L2CA_CONNECT_RSP: /* Upper layer connect response         */
-      return "UPPER_LAYER_CONNECT_RSP";
-    case L2CEVT_L2CA_CONNECT_RSP_NEG: /* Upper layer connect response (failed)*/
-      return "UPPER_LAYER_CONNECT_RSP_NEG";
-    case L2CEVT_L2CA_CONFIG_REQ: /* Upper layer config request           */
-      return "UPPER_LAYER_CONFIG_REQ";
-    case L2CEVT_L2CA_CONFIG_RSP: /* Upper layer config response          */
-      return "UPPER_LAYER_CONFIG_RSP";
-    case L2CEVT_L2CA_DISCONNECT_REQ: /* Upper layer disconnect request       */
-      return "UPPER_LAYER_DISCONNECT_REQ";
-    case L2CEVT_L2CA_DISCONNECT_RSP: /* Upper layer disconnect response      */
-      return "UPPER_LAYER_DISCONNECT_RSP";
-    case L2CEVT_L2CA_DATA_READ: /* Upper layer data read                */
-      return "UPPER_LAYER_DATA_READ";
-    case L2CEVT_L2CA_DATA_WRITE: /* Upper layer data write               */
-      return "UPPER_LAYER_DATA_WRITE";
-    case L2CEVT_TIMEOUT: /* Timeout                              */
-      return "TIMEOUT";
-    case L2CEVT_SEC_RE_SEND_CMD:
-      return "SEC_RE_SEND_CMD";
-    case L2CEVT_L2CAP_INFO_RSP: /* Peer information response            */
-      return "L2CEVT_L2CAP_INFO_RSP";
-    case L2CEVT_ACK_TIMEOUT:
-      return "L2CEVT_ACK_TIMEOUT";
-    case L2CEVT_L2CA_SEND_FLOW_CONTROL_CREDIT: /* Upper layer send credit packet
-                                                */
-      return "SEND_FLOW_CONTROL_CREDIT";
-    case L2CEVT_L2CA_CREDIT_BASED_CONNECT_REQ: /* Upper layer credit based
-                                                  connect request */
-      return "SEND_CREDIT_BASED_CONNECT_REQ";
-    case L2CEVT_L2CA_CREDIT_BASED_CONNECT_RSP: /* Upper layer credit based
-                                                  connect response */
-      return "SEND_CREDIT_BASED_CONNECT_RSP";
-    case L2CEVT_L2CA_CREDIT_BASED_CONNECT_RSP_NEG: /* Upper layer credit based
-                                                      connect response
-                                                      (failed)*/
-      return "SEND_CREDIT_BASED_CONNECT_RSP_NEG";
-    case L2CEVT_L2CA_CREDIT_BASED_RECONFIG_REQ: /* Upper layer credit based
-                                                   reconfig request */
-      return "SEND_CREDIT_BASED_RECONFIG_REQ";
-    case L2CEVT_L2CAP_RECV_FLOW_CONTROL_CREDIT: /* Peer send credit packet */
-      return "RECV_FLOW_CONTROL_CREDIT";
-    case L2CEVT_L2CAP_CREDIT_BASED_CONNECT_REQ: /* Peer send credit based
-                                                   connect request */
-      return "RECV_CREDIT_BASED_CONNECT_REQ";
-    case L2CEVT_L2CAP_CREDIT_BASED_CONNECT_RSP: /* Peer send credit based
-                                                   connect response */
-      return "RECV_CREDIT_BASED_CONNECT_RSP";
-    case L2CEVT_L2CAP_CREDIT_BASED_CONNECT_RSP_NEG: /* Peer send reject credit
-                                                       based connect response */
-      return "RECV_CREDIT_BASED_CONNECT_RSP_NEG";
-    case L2CEVT_L2CAP_CREDIT_BASED_RECONFIG_REQ: /* Peer send credit based
-                                                    reconfig request */
-      return "RECV_CREDIT_BASED_RECONFIG_REQ";
-    case L2CEVT_L2CAP_CREDIT_BASED_RECONFIG_RSP: /* Peer send credit based
-                                                    reconfig response */
-      return "RECV_CREDIT_BASED_RECONFIG_RSP";
-    default:
-      return "???? UNKNOWN EVENT";
+    CASE_RETURN_STRING(L2CEVT_L2CA_CONNECT_REQ);
+    CASE_RETURN_STRING(L2CEVT_L2CA_CONNECT_RSP);
+    CASE_RETURN_STRING(L2CEVT_L2CA_CONNECT_RSP_NEG);
+    CASE_RETURN_STRING(L2CEVT_L2CA_CONFIG_REQ);
+    CASE_RETURN_STRING(L2CEVT_L2CA_CONFIG_RSP);
+    CASE_RETURN_STRING(L2CEVT_L2CA_DISCONNECT_REQ);
+    CASE_RETURN_STRING(L2CEVT_L2CA_DISCONNECT_RSP);
+    CASE_RETURN_STRING(L2CEVT_L2CA_DATA_READ);
+    CASE_RETURN_STRING(L2CEVT_L2CA_DATA_WRITE);
+    CASE_RETURN_STRING(L2CEVT_TIMEOUT);
+    CASE_RETURN_STRING(L2CEVT_SEC_RE_SEND_CMD);
+    CASE_RETURN_STRING(L2CEVT_L2CAP_INFO_RSP);
+    CASE_RETURN_STRING(L2CEVT_ACK_TIMEOUT);
+    CASE_RETURN_STRING(L2CEVT_L2CA_SEND_FLOW_CONTROL_CREDIT);
+    CASE_RETURN_STRING(L2CEVT_L2CA_CREDIT_BASED_CONNECT_REQ);
+    CASE_RETURN_STRING(L2CEVT_L2CA_CREDIT_BASED_CONNECT_RSP);
+    CASE_RETURN_STRING(L2CEVT_L2CA_CREDIT_BASED_CONNECT_RSP_NEG);
+    CASE_RETURN_STRING(L2CEVT_L2CA_CREDIT_BASED_RECONFIG_REQ);
+    CASE_RETURN_STRING(L2CEVT_L2CAP_RECV_FLOW_CONTROL_CREDIT);
+    CASE_RETURN_STRING(L2CEVT_L2CAP_CREDIT_BASED_CONNECT_REQ);
+    CASE_RETURN_STRING(L2CEVT_L2CAP_CREDIT_BASED_CONNECT_RSP);
+    CASE_RETURN_STRING(L2CEVT_L2CAP_CREDIT_BASED_CONNECT_RSP_NEG);
+    CASE_RETURN_STRING(L2CEVT_L2CAP_CREDIT_BASED_RECONFIG_REQ);
+    CASE_RETURN_STRING(L2CEVT_L2CAP_CREDIT_BASED_RECONFIG_RSP);
   }
+  RETURN_UNKNOWN_TYPE_STRING(tL2CEVT, event);
 }
 
 /*******************************************************************************

@@ -72,3 +72,4 @@ void BTA_HhSetReport(uint8_t /* dev_handle */, tBTA_HH_RPT_TYPE /* r_type */,
                      BT_HDR* /* p_data */) {
   inc_func_call_count(__func__);
 }
+void BTA_HhDump(int /* fd */) { inc_func_call_count(__func__); }

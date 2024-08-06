@@ -28,6 +28,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <unordered_set>
 
 #include "bta/gatt/database.h"
 #include "bta/gatt/database_builder.h"
@@ -322,7 +323,7 @@ typedef struct {
   bool in_use;
   RawAddress remote_bda;
   tBTA_GATTC_CIF_MASK cif_mask;
-
+  std::unordered_set<tGATT_IF> cif_set;
 } tBTA_GATTC_BG_TCK;
 
 typedef struct {
@@ -343,8 +344,10 @@ typedef struct {
   tBTA_GATTC_CONN conn_track[GATT_MAX_PHY_CHANNEL];
   tBTA_GATTC_BG_TCK bg_track[BTA_GATTC_KNOWN_SR_MAX];
   tBTA_GATTC_RCB cl_rcb[BTA_GATTC_CL_MAX];
+  std::unordered_map<tGATT_IF, std::unique_ptr<tBTA_GATTC_RCB>> cl_rcb_map;
 
   tBTA_GATTC_CLCB clcb[BTA_GATTC_CLCB_MAX];
+  std::unordered_set<std::unique_ptr<tBTA_GATTC_CLCB>> clcb_set;
   tBTA_GATTC_SERV known_server[BTA_GATTC_KNOWN_SR_MAX];
 } tBTA_GATTC_CB;
 

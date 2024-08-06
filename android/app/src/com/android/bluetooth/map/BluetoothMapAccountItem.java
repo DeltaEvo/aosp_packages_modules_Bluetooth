@@ -104,7 +104,7 @@ public class BluetoothMapAccountItem implements Comparable<BluetoothMapAccountIt
         if (mUciPrefix == null) {
             return null;
         }
-        return new StringBuilder(mUciPrefix).append(":").append(mUci).toString();
+        return mUciPrefix + ":" + mUci;
     }
 
     @Override

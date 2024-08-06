@@ -525,7 +525,9 @@ public:
 
     // Set data length
     // TODO(jpawlowski: for 16khz only 87 is required, optimize
-    BTM_SetBleDataLength(address, 167);
+    if (get_btm_client_interface().ble.BTM_SetBleDataLength(address, 167) != BTM_SUCCESS) {
+      log::warn("Unable to set BLE data length peer:{} size:{}", address, 167);
+    }
 
     if (BTM_SecIsSecurityPending(address)) {
       /* if security collision happened, wait for encryption done
@@ -1409,9 +1411,6 @@ public:
     }
 
     uint16_t l2cap_flush_threshold = 0;
-    if (com::android::bluetooth::flags::higher_l2cap_flush_threshold()) {
-      l2cap_flush_threshold = 1;
-    }
 
     // Skipping packets completely messes up the resampler context.
     // The condition for skipping packets seems to be easily triggered,
@@ -1973,7 +1972,7 @@ private:
         device->num_intervals_since_last_rssi_read = 0;
         log::debug("bd_addr={}", device->address);
         if (get_btm_client_interface().link_controller.BTM_ReadRSSI(
-                    device->address, read_rssi_callback) != BTM_SUCCESS) {
+                    device->address, read_rssi_callback) != BTM_CMD_STARTED) {
           log::warn("Unable to read RSSI peer:{}", device->address);
         }
       }

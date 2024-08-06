@@ -104,3 +104,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "transmit_smp_packets_before_release"
+    namespace: "bluetooth"
+    description: "Ensure that SMP packets are transmitted before SMP channel is released"
+    bug: "357106628"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}

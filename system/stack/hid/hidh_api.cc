@@ -110,7 +110,7 @@ void hidh_get_str_attr(tSDP_DISC_REC* p_rec, uint16_t attr_id, uint16_t max_len,
   }
 }
 
-static void hidh_search_callback(const RawAddress& /* bd_addr */, tSDP_RESULT sdp_result) {
+static void hidh_search_callback(const RawAddress& bd_addr, tSDP_RESULT sdp_result) {
   tSDP_DISCOVERY_DB* p_db = hh_cb.p_sdp_db;
   tSDP_DISC_REC* p_rec;
   tSDP_DISC_ATTR *p_attr, *p_subattr1, *p_subattr2, *p_repdesc;
@@ -120,14 +120,14 @@ static void hidh_search_callback(const RawAddress& /* bd_addr */, tSDP_RESULT sd
   hh_cb.sdp_busy = false;
 
   if (sdp_result != SDP_SUCCESS) {
-    hh_cb.sdp_cback(sdp_result, 0, NULL);
+    hh_cb.sdp_cback(bd_addr, sdp_result, 0, NULL);
     return;
   }
 
   Uuid hid_uuid = Uuid::From16Bit(UUID_SERVCLASS_HUMAN_INTERFACE);
   p_rec = get_legacy_stack_sdp_api()->db.SDP_FindServiceUUIDInDb(p_db, hid_uuid, NULL);
   if (p_rec == NULL) {
-    hh_cb.sdp_cback(HID_SDP_NO_SERV_UUID, 0, NULL);
+    hh_cb.sdp_cback(bd_addr, HID_SDP_NO_SERV_UUID, 0, NULL);
     return;
   }
 
@@ -142,7 +142,7 @@ static void hidh_search_callback(const RawAddress& /* bd_addr */, tSDP_RESULT sd
       ((p_subattr2 = p_subattr1->attr_value.v.p_sub_attr) == NULL) ||
       ((p_repdesc = p_subattr2->p_next_attr) == NULL) ||
       (SDP_DISC_ATTR_TYPE(p_repdesc->attr_len_type) != TEXT_STR_DESC_TYPE)) {
-    hh_cb.sdp_cback(HID_SDP_MANDATORY_MISSING, 0, NULL);
+    hh_cb.sdp_cback(bd_addr, HID_SDP_MANDATORY_MISSING, 0, NULL);
     return;
   }
 
@@ -255,7 +255,7 @@ static void hidh_search_callback(const RawAddress& /* bd_addr */, tSDP_RESULT sd
   }
 
   hh_cb.sdp_rec.p_sdp_layer_rec = p_rec;
-  hh_cb.sdp_cback(SDP_SUCCESS, attr_mask, &hh_cb.sdp_rec);
+  hh_cb.sdp_cback(bd_addr, SDP_SUCCESS, attr_mask, &hh_cb.sdp_rec);
 }
 
 /*******************************************************************************

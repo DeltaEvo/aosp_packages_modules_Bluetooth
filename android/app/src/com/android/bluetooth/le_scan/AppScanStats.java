@@ -47,7 +47,8 @@ import java.util.Objects;
 public class AppScanStats {
     private static final String TAG = AppScanStats.class.getSimpleName();
 
-    static final DateFormat DATE_FORMAT = new SimpleDateFormat("MM-dd HH:mm:ss");
+    private static final ThreadLocal<DateFormat> DATE_FORMAT =
+            ThreadLocal.withInitial(() -> new SimpleDateFormat("MM-dd HH:mm:ss"));
 
     // Weight is the duty cycle of the scan mode
     static final int OPPORTUNISTIC_WEIGHT = 0;
@@ -1031,7 +1032,7 @@ public class AppScanStats {
             for (int i = 0; i < mLastScans.size(); i++) {
                 LastScan scan = mLastScans.get(i);
                 Date timestamp = new Date(currentTime - currTime + scan.timestamp);
-                sb.append("\n    ").append(DATE_FORMAT.format(timestamp)).append(" - ");
+                sb.append("\n    ").append(DATE_FORMAT.get().format(timestamp)).append(" - ");
                 sb.append(scan.duration).append("ms ");
                 if (scan.isOpportunisticScan) {
                     sb.append("Opp ");
@@ -1084,7 +1085,7 @@ public class AppScanStats {
             for (Integer key : mOngoingScans.keySet()) {
                 LastScan scan = mOngoingScans.get(key);
                 Date timestamp = new Date(currentTime - currTime + scan.timestamp);
-                sb.append("\n    ").append(DATE_FORMAT.format(timestamp)).append(" - ");
+                sb.append("\n    ").append(DATE_FORMAT.get().format(timestamp)).append(" - ");
                 sb.append((currTime - scan.timestamp)).append("ms ");
                 if (scan.isOpportunisticScan) {
                     sb.append("Opp ");
