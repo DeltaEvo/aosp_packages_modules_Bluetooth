@@ -1409,9 +1409,6 @@ public:
     }
 
     uint16_t l2cap_flush_threshold = 0;
-    if (com::android::bluetooth::flags::higher_l2cap_flush_threshold()) {
-      l2cap_flush_threshold = 1;
-    }
 
     // Skipping packets completely messes up the resampler context.
     // The condition for skipping packets seems to be easily triggered,
