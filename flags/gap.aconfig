@@ -259,3 +259,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "le_inquiry_duration"
+    namespace: "bluetooth"
+    description: "Use the same duration for LE inquiry scan that classic discovery uses"
+    bug: "357894405"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
