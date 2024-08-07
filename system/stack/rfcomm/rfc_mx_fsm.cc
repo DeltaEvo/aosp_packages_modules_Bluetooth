@@ -68,7 +68,7 @@ void rfc_mx_sm_execute(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_data) {
   log::assert_that(p_mcb != nullptr, "NULL mcb for event {}", event);
 
   log::info("RFCOMM peer:{} event:{} state:{}", p_mcb->bd_addr, event,
-            rfcomm_mx_state_text(static_cast<tRFC_MX_STATE>(p_mcb->state)));
+            rfcomm_mx_state_text(p_mcb->state));
 
   switch (p_mcb->state) {
     case RFC_MX_STATE_IDLE:
@@ -100,7 +100,8 @@ void rfc_mx_sm_execute(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_data) {
       break;
 
     default:
-      log::error("Received unexpected event:{} in state:{}", event, p_mcb->state);
+      log::error("Received unexpected event:{} in state:{}", event,
+                 rfcomm_mx_state_text(p_mcb->state));
   }
 }
 
@@ -160,10 +161,10 @@ void rfc_mx_sm_state_idle(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* /* p_data 
       return;
 
     default:
-      log::error("Mx error state {} event {}", p_mcb->state, event);
+      log::error("Mx error state {} event {}", rfcomm_mx_state_text(p_mcb->state), event);
       return;
   }
-  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, p_mcb->state);
+  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, rfcomm_mx_state_text(p_mcb->state));
 }
 
 /*******************************************************************************
@@ -177,10 +178,9 @@ void rfc_mx_sm_state_idle(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* /* p_data 
  *
  ******************************************************************************/
 void rfc_mx_sm_state_wait_conn_cnf(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_data) {
-  log::verbose("evt {}", event);
   switch (event) {
     case RFC_MX_EVENT_START_REQ:
-      log::error("Mx error state {} event {}", p_mcb->state, event);
+      log::error("Mx error state:{} event:{}", rfcomm_mx_state_text(p_mcb->state), event);
       return;
 
     /* There is some new timing so that Config Ind comes before security is
@@ -218,7 +218,7 @@ void rfc_mx_sm_state_wait_conn_cnf(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p
         uint8_t handle;
 
         log::verbose("RFCOMM MX retry as acceptor in collision case - evt:{} in state:{}", event,
-                     p_mcb->state);
+                     rfcomm_mx_state_text(p_mcb->state));
 
         rfc_save_lcid_mcb(NULL, p_mcb->lcid);
         p_mcb->lcid = p_mcb->pending_lcid;
@@ -243,9 +243,10 @@ void rfc_mx_sm_state_wait_conn_cnf(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p
       }
       return;
     default:
-      log::error("Received unexpected event:{} in state:{}", event, p_mcb->state);
+      log::error("Received unexpected event:{} in state:{}", event,
+                 rfcomm_mx_state_text(p_mcb->state));
   }
-  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, p_mcb->state);
+  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, rfcomm_mx_state_text(p_mcb->state));
 }
 
 /*******************************************************************************
@@ -291,9 +292,10 @@ void rfc_mx_sm_state_configure(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_dat
       PORT_StartCnf(p_mcb, RFCOMM_ERROR);
       return;
     default:
-      log::error("Received unexpected event:{} in state:{}", event, p_mcb->state);
+      log::error("Received unexpected event:{} in state:{}", event,
+                 rfcomm_mx_state_text(p_mcb->state));
   }
-  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, p_mcb->state);
+  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, rfcomm_mx_state_text(p_mcb->state));
 }
 
 /*******************************************************************************
@@ -355,9 +357,10 @@ void rfc_mx_sm_sabme_wait_ua(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* /* p_da
       PORT_StartCnf(p_mcb, RFCOMM_ERROR);
       return;
     default:
-      log::error("Received unexpected event:{} in state:{}", event, p_mcb->state);
+      log::error("Received unexpected event:{} in state:{}", event,
+                 rfcomm_mx_state_text(p_mcb->state));
   }
-  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, p_mcb->state);
+  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, rfcomm_mx_state_text(p_mcb->state));
 }
 
 /*******************************************************************************
@@ -423,9 +426,10 @@ void rfc_mx_sm_state_wait_sabme(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_da
       return;
 
     default:
-      log::warn("RFCOMM MX ignored - evt:{} in state:{}", event, p_mcb->state);
+      log::warn("RFCOMM MX ignored - evt:{} in state:{}", event,
+                rfcomm_mx_state_text(p_mcb->state));
   }
-  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, p_mcb->state);
+  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, rfcomm_mx_state_text(p_mcb->state));
 }
 
 /*******************************************************************************
@@ -468,9 +472,10 @@ void rfc_mx_sm_state_connected(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* /* p_
       PORT_CloseInd(p_mcb);
       return;
     default:
-      log::error("Received unexpected event:{} in state:{}", event, p_mcb->state);
+      log::error("Received unexpected event:{} in state:{}", event,
+                 rfcomm_mx_state_text(p_mcb->state));
   }
-  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, p_mcb->state);
+  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, rfcomm_mx_state_text(p_mcb->state));
 }
 
 /*******************************************************************************
@@ -549,9 +554,10 @@ void rfc_mx_sm_state_disc_wait_ua(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_
     case RFC_MX_EVENT_QOS_VIOLATION_IND:
       break;
     default:
-      log::error("Received unexpected event:{} in state:{}", event, p_mcb->state);
+      log::error("Received unexpected event:{} in state:{}", event,
+                 rfcomm_mx_state_text(p_mcb->state));
   }
-  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, p_mcb->state);
+  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, rfcomm_mx_state_text(p_mcb->state));
 }
 
 void rfc_on_l2cap_error(uint16_t lcid, uint16_t result) {
