@@ -42,7 +42,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import pandora.HIDGrpc;
 import pandora.HostProto.AdvertiseRequest;
 import pandora.HostProto.OwnAddressType;
 
@@ -64,7 +63,6 @@ public class HidHostDualModeTest {
     private final Context mContext = ApplicationProvider.getApplicationContext();
     private final BluetoothManager mManager = mContext.getSystemService(BluetoothManager.class);
     private final BluetoothAdapter mAdapter = mManager.getAdapter();
-    private HIDGrpc.HIDBlockingStub mHidBlockingStub;
     private byte mReportId;
     private static final int KEYBD_RPT_ID = 1;
     private static final int KEYBD_RPT_SIZE = 9;
@@ -216,7 +214,6 @@ public class HidHostDualModeTest {
         mAdapter.getProfileProxy(mContext, mBluetoothProfileServiceListener, BluetoothProfile.A2DP);
         mAdapter.getProfileProxy(
                 mContext, mBluetoothProfileServiceListener, BluetoothProfile.HEADSET);
-        mHidBlockingStub = mBumble.hidBlocking();
         AdvertiseRequest request =
                 AdvertiseRequest.newBuilder()
                         .setLegacy(true)
@@ -228,20 +225,26 @@ public class HidHostDualModeTest {
         mFutureConnectionIntent = SettableFuture.create();
 
         mDevice = mBumble.getRemoteDevice();
+        mFutureBondIntent = SettableFuture.create();
         assertThat(mDevice.createBond()).isTrue();
-        assertThat(mFutureConnectionIntent.get()).isEqualTo(BluetoothProfile.STATE_CONNECTED);
-        if (mA2dpService != null) {
+        assertThat(mFutureBondIntent.get()).isEqualTo(BluetoothDevice.BOND_BONDED);
+        if (mA2dpService != null
+                && mA2dpService.getConnectionPolicy(mDevice)
+                        == BluetoothProfile.CONNECTION_POLICY_ALLOWED) {
             assertThat(
                             mA2dpService.setConnectionPolicy(
                                     mDevice, BluetoothProfile.CONNECTION_POLICY_FORBIDDEN))
                     .isTrue();
         }
-        if (mHfpService != null) {
+        if (mHfpService != null
+                && mHfpService.getConnectionPolicy(mDevice)
+                        == BluetoothProfile.CONNECTION_POLICY_ALLOWED) {
             assertThat(
                             mHfpService.setConnectionPolicy(
                                     mDevice, BluetoothProfile.CONNECTION_POLICY_FORBIDDEN))
                     .isTrue();
         }
+        assertThat(mFutureConnectionIntent.get()).isEqualTo(BluetoothProfile.STATE_CONNECTED);
         mFutureHogpServiceIntent = SettableFuture.create();
         assertThat(mFutureHogpServiceIntent.get()).isTrue();
         assertThat(mHidService.getPreferredTransport(mDevice))
