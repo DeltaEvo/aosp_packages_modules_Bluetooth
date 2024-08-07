@@ -873,7 +873,8 @@ void bta_av_restore_switch(void) {
     mask = BTA_AV_HNDL_TO_MSK(i);
     if (p_cb->conn_audio == mask) {
       if (p_cb->p_scb[i]) {
-        BTM_unblock_role_switch_for(p_cb->p_scb[i]->PeerAddress());
+        get_btm_client_interface().link_policy.BTM_unblock_role_switch_for(
+                p_cb->p_scb[i]->PeerAddress());
       }
       break;
     }
@@ -922,7 +923,7 @@ static void bta_av_sys_rs_cback(tBTA_SYS_CONN_STATUS /* status */, tHCI_ROLE new
   if ((HCI_SUCCESS != hci_status) &&
       (get_btm_client_interface().link_policy.BTM_GetRole(peer_addr, &cur_role) == BTM_SUCCESS) &&
       (cur_role == HCI_ROLE_PERIPHERAL)) {
-    BTM_unblock_role_switch_for(peer_addr);
+    get_btm_client_interface().link_policy.BTM_unblock_role_switch_for(peer_addr);
   }
 
   /* if BTA_AvOpen() was called for other device, which caused the role switch
@@ -1089,7 +1090,8 @@ bool bta_av_link_role_ok(tBTA_AV_SCB* p_scb, uint8_t bits) {
             "conn_audio:0x{:x} bits:{} features:0x{:x}",
             p_scb->PeerAddress(), p_scb->hndl, RoleText(role), bta_av_cb.conn_audio, bits,
             bta_av_cb.features);
-    const tBTM_STATUS status = BTM_SwitchRoleToCentral(p_scb->PeerAddress());
+    const tBTM_STATUS status =
+            get_btm_client_interface().link_policy.BTM_SwitchRoleToCentral(p_scb->PeerAddress());
     switch (status) {
       case BTM_CMD_STARTED:
         break;

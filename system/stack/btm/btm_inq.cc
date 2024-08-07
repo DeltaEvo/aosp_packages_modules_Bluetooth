@@ -848,7 +848,7 @@ tBTM_STATUS BTM_CancelRemoteDeviceName(void) {
   if (com::android::bluetooth::flags::rnr_store_device_type()) {
     is_le = (btm_cb.rnr.remname_dev_type == BT_DEVICE_TYPE_BLE);
   } else {
-    is_le = BTM_UseLeLink(btm_cb.rnr.remname_bda);
+    is_le = get_btm_client_interface().ble.BTM_UseLeLink(btm_cb.rnr.remname_bda);
   }
 
   if (is_le) {
@@ -1922,7 +1922,7 @@ void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn, uint16_t 
   if (com::android::bluetooth::flags::rnr_store_device_type()) {
     on_le_link = (btm_cb.rnr.remname_dev_type == BT_DEVICE_TYPE_BLE);
   } else {
-    on_le_link = BTM_UseLeLink(btm_cb.rnr.remname_bda);
+    on_le_link = get_btm_client_interface().ble.BTM_UseLeLink(btm_cb.rnr.remname_bda);
   }
 
   /* If the inquire BDA and remote DBA are the same, then stop the timer and set

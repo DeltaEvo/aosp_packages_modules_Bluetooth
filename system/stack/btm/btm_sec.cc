@@ -808,7 +808,8 @@ tBTM_STATUS BTM_SecBond(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
                         tBT_TRANSPORT transport, tBT_DEVICE_TYPE /* device_type */) {
   if (transport == BT_TRANSPORT_AUTO) {
     if (addr_type == BLE_ADDR_PUBLIC) {
-      transport = BTM_UseLeLink(bd_addr) ? BT_TRANSPORT_LE : BT_TRANSPORT_BR_EDR;
+      transport = get_btm_client_interface().ble.BTM_UseLeLink(bd_addr) ? BT_TRANSPORT_LE
+                                                                        : BT_TRANSPORT_BR_EDR;
     } else {
       log::info("Forcing transport LE (was auto) because of the address type");
       transport = BT_TRANSPORT_LE;
@@ -3115,7 +3116,10 @@ void btm_sec_auth_complete(uint16_t handle, tHCI_STATUS status) {
         log::info(
                 "auth completed in role=peripheral, try to switch role and "
                 "encrypt");
-        BTM_SwitchRoleToCentral(p_dev_rec->RemoteAddress());
+        if (get_btm_client_interface().link_policy.BTM_SwitchRoleToCentral(
+                    p_dev_rec->RemoteAddress()) != BTM_CMD_STARTED) {
+          log::warn("Unable to switch role to central peer:{}", p_dev_rec->RemoteAddress());
+        }
       }
 
       l2cu_start_post_bond_timer(p_dev_rec->hci_handle);
