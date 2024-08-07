@@ -132,7 +132,7 @@ public:
         acl_asymmetric_(false),
         acl_phy_update_done_(false),
         link_quality_timer(nullptr),
-        dsa_({{DsaMode::DISABLED}, types::DataPathState::IDLE, GATT_INVALID_CONN_ID}) {}
+        dsa_({{DsaMode::DISABLED}, types::DataPathState::IDLE, GATT_INVALID_CONN_ID, false}) {}
   ~LeAudioDevice(void);
 
   void SetConnectionState(DeviceConnectState state);
@@ -227,6 +227,7 @@ public:
   void GetDeviceModelName(void);
   void UpdateDeviceAllowlistFlag(void);
   DsaModes GetDsaModes(void);
+  bool DsaReducedSduSizeSupported();
   types::DataPathState GetDsaDataPathState(void);
   void SetDsaDataPathState(types::DataPathState state);
   uint16_t GetDsaCisHandle(void);
@@ -239,6 +240,7 @@ private:
     DsaModes modes;
     types::DataPathState state;
     uint16_t cis_handle;
+    bool reduced_sdu;  // TODO: Remove when earbud implementations move to approved DSA 2.0 standard
   } dsa_;
 
   static constexpr char kLeAudioDeviceAllowListProp[] = "persist.bluetooth.leaudio.allow_list";
