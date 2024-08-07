@@ -387,6 +387,16 @@ public:
     return dsa_modes_list;
   }
 
+  bool DsaReducedSduSizeSupported() {
+    bool reduced_sdu = false;
+    for (auto leAudioDevice : leAudioDevices_) {
+      if (!leAudioDevice.expired()) {
+        reduced_sdu |= leAudioDevice.lock()->DsaReducedSduSizeSupported();
+      }
+    }
+    return reduced_sdu;
+  }
+
   types::BidirectionalPair<types::AudioContexts> GetLatestAvailableContexts(void) const;
 
   bool IsInTransition(void) const;
