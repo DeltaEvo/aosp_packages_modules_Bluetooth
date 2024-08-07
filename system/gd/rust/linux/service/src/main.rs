@@ -121,9 +121,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    // Always treat discovery as classic only
-    init_flags.push(String::from("INIT_classic_discovery_only=true"));
-
     let (tx, rx) = Stack::create_channel();
     let (api_tx, api_rx) = interface_manager::InterfaceManager::create_channel();
     let sig_notifier = Arc::new(SigData {
