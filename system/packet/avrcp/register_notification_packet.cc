@@ -44,8 +44,11 @@ bool RegisterNotificationResponse::IsValid() const {
   if (size() < kMinSize()) {
     return false;
   }
-  if (GetCType() != CType::INTERIM && GetCType() != CType::CHANGED &&
-      GetCType() != CType::REJECTED) {
+  // Rejected type packets is not followed by event, but by error code instead.
+  if (GetCType() == CType::REJECTED) {
+    return true;
+  }
+  if (GetCType() != CType::INTERIM && GetCType() != CType::CHANGED) {
     return false;
   }
 

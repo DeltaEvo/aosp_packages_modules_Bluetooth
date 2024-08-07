@@ -135,12 +135,15 @@ void Device::VendorPacketHandler(uint8_t label, std::shared_ptr<VendorPacket> pk
           return;
         }
 
-        if (register_notification->GetEvent() != Event::VOLUME_CHANGED) {
+        // The rejected packet doesn't have an event field, so we just have to assume it is indeed
+        // for the volume changed event since that's the only one we possibly register.
+        if (pkt->GetCType() == CType::REJECTED ||
+            register_notification->GetEvent() == Event::VOLUME_CHANGED) {
+          HandleVolumeChanged(label, register_notification);
+        } else {
           log::warn("{}: Unhandled register notification received: {}", address_,
                     register_notification->GetEvent());
-          return;
         }
-        HandleVolumeChanged(label, register_notification);
         break;
       }
       case CommandPdu::SET_ABSOLUTE_VOLUME:
