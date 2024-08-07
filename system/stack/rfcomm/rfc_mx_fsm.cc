@@ -260,7 +260,6 @@ void rfc_mx_sm_state_wait_conn_cnf(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p
  *
  ******************************************************************************/
 void rfc_mx_sm_state_configure(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_data) {
-  log::verbose("event {}", event);
   switch (event) {
     case RFC_MX_EVENT_START_REQ:
     case RFC_MX_EVENT_CONN_CNF:
@@ -309,7 +308,6 @@ void rfc_mx_sm_state_configure(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_dat
  *
  ******************************************************************************/
 void rfc_mx_sm_sabme_wait_ua(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* /* p_data */) {
-  log::verbose("event {}", event);
   switch (event) {
     case RFC_MX_EVENT_START_REQ:
     case RFC_MX_EVENT_CONN_CNF:
@@ -374,7 +372,6 @@ void rfc_mx_sm_sabme_wait_ua(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* /* p_da
  *
  ******************************************************************************/
 void rfc_mx_sm_state_wait_sabme(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_data) {
-  log::verbose("event {}", event);
   switch (event) {
     case RFC_MX_EVENT_DISC_IND:
       p_mcb->state = RFC_MX_STATE_IDLE;
@@ -426,7 +423,7 @@ void rfc_mx_sm_state_wait_sabme(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_da
       return;
 
     default:
-      log::warn("RFCOMM MX ignored - evt:{} in state:{}", event,
+      log::warn("Received unexpected event:{} in state:{}", event,
                 rfcomm_mx_state_text(p_mcb->state));
   }
   log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, rfcomm_mx_state_text(p_mcb->state));
@@ -443,8 +440,6 @@ void rfc_mx_sm_state_wait_sabme(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_da
  *
  ******************************************************************************/
 void rfc_mx_sm_state_connected(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* /* p_data */) {
-  log::verbose("event {}", event);
-
   switch (event) {
     case RFC_MX_EVENT_TIMEOUT:
     case RFC_MX_EVENT_CLOSE_REQ:
@@ -490,8 +485,6 @@ void rfc_mx_sm_state_connected(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* /* p_
  ******************************************************************************/
 void rfc_mx_sm_state_disc_wait_ua(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_data) {
   BT_HDR* p_buf;
-
-  log::verbose("event {}", event);
   switch (event) {
     case RFC_MX_EVENT_UA:
     case RFC_MX_EVENT_DM:
