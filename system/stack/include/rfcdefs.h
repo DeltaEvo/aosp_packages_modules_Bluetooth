@@ -259,7 +259,7 @@
 #define BTA_RFC_MTU_SIZE (L2CAP_MTU_SIZE - L2CAP_MIN_OFFSET - RFCOMM_DATA_OVERHEAD)
 
 // The port receive queue low watermark level, in number of buffers.
-#define PORT_RX_BUF_LOW_WM 4
+#define PORT_RX_BUF_LOW_WM 8
 
 // The port receive queue high watermark level, in number of buffers.
 #define PORT_RX_BUF_HIGH_WM 10
