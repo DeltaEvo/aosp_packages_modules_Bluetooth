@@ -22,6 +22,7 @@
 #include <android_bluetooth_sysprop.h>
 #include <base/strings/stringprintf.h>
 #include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -65,6 +66,7 @@ using namespace bluetooth;
 extern tBTM_CB btm_cb;
 
 bool btm_ble_init_pseudo_addr(tBTM_SEC_DEV_REC* p_dev_rec, const RawAddress& new_pseudo_addr);
+tBTM_STATUS btm_ble_read_remote_name(const RawAddress& remote_bda, tBTM_NAME_CMPL_CB* p_cb);
 
 namespace {
 constexpr char kBtmLogTag[] = "SEC";
@@ -1481,8 +1483,7 @@ static tBTM_STATUS btm_ble_br_keys_req(tBTM_SEC_DEV_REC* p_dev_rec, tBTM_LE_IO_R
  *
  * Function         btm_ble_connected
  *
- * Description      This function is when a LE connection to the peer device is
- *                  establsihed
+ * Description      This function is called on LE connection
  *
  * Returns          void
  *
@@ -1515,6 +1516,27 @@ void btm_ble_connected(const RawAddress& bda, uint16_t handle, uint8_t /* enc_mo
     }
   }
   btm_cb.ble_ctr_cb.inq_var.directed_conn = BTM_BLE_ADV_IND_EVT;
+}
+
+/*******************************************************************************
+ *
+ * Function         btm_ble_connection_established
+ *
+ * Description      This function when LE connection is established
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void btm_ble_connection_established(const RawAddress& bda) {
+  if (!com::android::bluetooth::flags::name_discovery_for_le_pairing()) {
+    return;
+  }
+
+  // Read device name if it is not known already, we may need it for pairing
+  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bda);
+  if (p_dev_rec != nullptr && !p_dev_rec->sec_rec.is_name_known()) {
+    btm_ble_read_remote_name(bda, nullptr);
+  }
 }
 
 /*****************************************************************************

@@ -58,6 +58,7 @@
 #include "rust/src/core/ffi/types.h"
 #include "stack/acl/acl.h"
 #include "stack/acl/peer_packet_types.h"
+#include "stack/btm/btm_ble_int.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/btm/btm_sco.h"
@@ -1003,6 +1004,8 @@ void StackAclBtmAcl::btm_establish_continue(tACL_CONN* p_acl) {
                  default_packet_type_mask, p_acl->RemoteAddress());
     }
     btm_set_link_policy(p_acl, btm_cb.acl_cb_.DefaultLinkPolicy());
+  } else if (p_acl->is_transport_ble()) {
+    btm_ble_connection_established(p_acl->remote_addr);
   }
   NotifyAclLinkUp(*p_acl);
 }

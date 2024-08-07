@@ -278,7 +278,8 @@ extern struct BTM_SecurityGrant BTM_SecurityGrant;
 
 // Name: btm_ble_connected
 // Params: const RawAddress& bda, uint16_t handle, uint8_t enc_mode, uint8_t
-// role, tBLE_ADDR_TYPE addr_type, bool addr_matched Return: void
+// role, tBLE_ADDR_TYPE addr_type, bool addr_matched, bool can_read_discoverable_characteristics
+// Return: void
 struct btm_ble_connected {
   std::function<void(const RawAddress& bda, uint16_t handle, uint8_t enc_mode, uint8_t role,
                      tBLE_ADDR_TYPE addr_type, bool addr_matched,
@@ -294,6 +295,14 @@ struct btm_ble_connected {
   }
 };
 extern struct btm_ble_connected btm_ble_connected;
+
+// Name: btm_ble_connection_established
+// Params: const RawAddress& bda Return: void
+struct btm_ble_connection_established {
+  std::function<void(const RawAddress& bda)> body{[](const RawAddress& /* bda */) {}};
+  void operator()(const RawAddress& bda) { body(bda); }
+};
+extern struct btm_ble_connection_established btm_ble_connection_established;
 
 // Name: btm_ble_get_acl_remote_addr
 // Params: uint16_t hci_handle, RawAddress& conn_addr, tBLE_ADDR_TYPE*
