@@ -352,7 +352,7 @@ tBTM_STATUS BTM_SetDiscoverability(uint16_t inq_mode) {
     }
 
     FIELDS_TO_COD(cod, minor, major, service_class);
-    (void)BTM_SetDeviceClass(cod);
+    (void)get_btm_client_interface().local.BTM_SetDeviceClass(cod);
   }
 
   return BTM_SUCCESS;

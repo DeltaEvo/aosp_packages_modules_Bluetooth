@@ -44,10 +44,6 @@ tBTM_STATUS BTM_CreateSco(const RawAddress* /* remote_bda */, bool /* is_orig */
   inc_func_call_count(__func__);
   return BTM_SUCCESS;
 }
-tBTM_STATUS BTM_SetEScoMode(enh_esco_params_t* /* p_parms */) {
-  inc_func_call_count(__func__);
-  return BTM_SUCCESS;
-}
 uint8_t BTM_GetNumScoLinks(void) {
   inc_func_call_count(__func__);
   return 0;

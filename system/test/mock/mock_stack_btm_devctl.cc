@@ -45,14 +45,6 @@ tBTM_STATUS BTM_EnableTestMode(void) {
   inc_func_call_count(__func__);
   return BTM_SUCCESS;
 }
-tBTM_STATUS BTM_SetDeviceClass(DEV_CLASS /* dev_class */) {
-  inc_func_call_count(__func__);
-  return BTM_SUCCESS;
-}
-tBTM_STATUS BTM_SetLocalDeviceName(const char* /* p_name */) {
-  inc_func_call_count(__func__);
-  return BTM_SUCCESS;
-}
 DEV_CLASS BTM_ReadDeviceClass(void) {
   inc_func_call_count(__func__);
   return kDevClassEmpty;
