@@ -49,6 +49,8 @@ const ADMIN_SETTINGS_FILE_PATH: &str = "/var/lib/bluetooth/admin_policy.json";
 const STACK_TURN_OFF_TIMEOUT_MS: Duration = Duration::from_millis(4000);
 // Time bt_stack_manager waits for cleanup
 const STACK_CLEANUP_TIMEOUT_MS: Duration = Duration::from_millis(1000);
+// Time bt_stack_manager waits for cleanup profiles
+const STACK_CLEANUP_PROFILES_TIMEOUT_MS: Duration = Duration::from_millis(100);
 
 const INIT_LOGGING_MAX_RETRY: u8 = 3;
 
@@ -297,7 +299,12 @@ extern "C" fn handle_sigterm(_signum: i32) {
         log::debug!("SIGTERM cleaning up the stack.");
         let txl = tx.clone();
         tokio::spawn(async move {
-            // Send the cleanup message here.
+            // Clean up the profiles first as some of them might require main thread to clean up.
+            let _ = txl.send(Message::CleanupProfiles).await;
+            // Currently there is no good way to know when the profile is cleaned.
+            // Simply add a small delay here.
+            tokio::time::sleep(STACK_CLEANUP_PROFILES_TIMEOUT_MS).await;
+            // Send the cleanup message to clean up the main thread.
             let _ = txl.send(Message::Cleanup).await;
         });
 
