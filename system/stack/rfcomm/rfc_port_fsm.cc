@@ -472,11 +472,9 @@ void rfc_port_sm_opened(tPORT* p_port, tRFC_PORT_EVENT event, void* p_data) {
       return;
 
     case RFC_PORT_EVENT_DATA:
-      /* Send credits in the frame.  Pass them in the layer specific member of
-       * the hdr. */
-      /* There might be an initial case when we reduced rx_max and credit_rx is
-       * still */
-      /* bigger.  Make sure that we do not send 255 */
+      // Send credits in the frame.  Pass them in the layer specific member of the hdr.
+      // There might be an initial case when we reduced rx_max and credit_rx is still bigger.
+      // Make sure that we do not send 255
       log::verbose("RFC_PORT_EVENT_DATA bd_addr:{} handle:{} dlci:{} scn:{}", p_port->bd_addr,
                    p_port->handle, p_port->dlci, p_port->scn);
       if ((p_port->rfc.p_mcb->flow == PORT_FC_CREDIT) &&
@@ -704,15 +702,14 @@ void rfc_process_rpn(tRFC_MCB* p_mcb, bool is_command, bool is_request, MX_FRAME
     return;
   }
 
-  /* If we are not awaiting response just ignore it */
+  // If we are not awaiting response just ignore it
   p_port = port_find_mcb_dlci_port(p_mcb, p_frame->dlci);
   if ((p_port == nullptr) || !(p_port->rfc.expected_rsp & (RFC_RSP_RPN | RFC_RSP_RPN_REPLY))) {
     log::warn("ignore DLC parameter negotiation as we are not waiting for any");
     return;
   }
 
-  /* If we sent a request for port parameters to the peer it is replying with */
-  /* mask 0. */
+  // If we sent a request for port parameters to the peer it is replying with mask 0.
   rfc_port_timer_stop(p_port);
 
   if (p_port->rfc.expected_rsp & RFC_RSP_RPN_REPLY) {
