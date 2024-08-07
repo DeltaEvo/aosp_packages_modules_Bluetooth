@@ -279,7 +279,7 @@ static const std::vector<std::function<void(FuzzedDataProvider*)>> sdp_operation
         [](FuzzedDataProvider* fdp) -> void {
           uint32_t handle;  // Output var
           tSDP_DI_RECORD device_info = generateArbitrarySdpDiRecord(fdp);
-          [[maybe_unused]] bool rc =
+          [[maybe_unused]] tSDP_STATUS rc =
                   get_legacy_stack_sdp_api()->device_id.SDP_SetLocalDiRecord(&device_info, &handle);
         },
 
@@ -292,7 +292,7 @@ static const std::vector<std::function<void(FuzzedDataProvider*)>> sdp_operation
           std::shared_ptr<tSDP_DISCOVERY_DB> p_db(
                   reinterpret_cast<tSDP_DISCOVERY_DB*>(malloc(db_size)), free);
           if (p_db) {
-            [[maybe_unused]] bool rc = get_legacy_stack_sdp_api()->device_id.SDP_DiDiscover(
+            [[maybe_unused]] tSDP_STATUS rc = get_legacy_stack_sdp_api()->device_id.SDP_DiDiscover(
                     remote_device, p_db.get(), db_size, &sdp_disc_cmpl_cb);
           }
         },
