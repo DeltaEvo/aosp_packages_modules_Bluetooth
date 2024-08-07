@@ -211,10 +211,13 @@ public class BipPixel {
 
     @Override
     public boolean equals(Object o) {
-        if (o == this) return true;
-        if (!(o instanceof BipPixel)) return false;
+        if (o == this) {
+            return true;
+        }
+        if (!(o instanceof BipPixel p)) {
+            return false;
+        }
 
-        BipPixel p = (BipPixel) o;
         return p.getType() == getType()
                 && p.getMinWidth() == getMinWidth()
                 && p.getMaxWidth() == getMaxWidth()

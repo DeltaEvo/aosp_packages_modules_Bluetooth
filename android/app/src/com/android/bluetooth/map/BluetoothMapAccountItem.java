@@ -159,13 +159,9 @@ public class BluetoothMapAccountItem implements Comparable<BluetoothMapAccountIt
         if (this == obj) {
             return true;
         }
-        if (obj == null) {
+        if (!(obj instanceof BluetoothMapAccountItem other)) {
             return false;
         }
-        if (getClass() != obj.getClass()) {
-            return false;
-        }
-        BluetoothMapAccountItem other = (BluetoothMapAccountItem) obj;
         if (mId == null) {
             if (other.mId != null) {
                 return false;

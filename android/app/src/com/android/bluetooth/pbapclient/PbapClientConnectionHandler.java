@@ -410,7 +410,7 @@ class PbapClientConnectionHandler extends Handler {
                                 startOffset);
                 request.execute(mObexSession);
                 List<VCardEntry> vcards = request.getList();
-                if (path == FAV_PATH) {
+                if (FAV_PATH.equals(path)) {
                     // mark each vcard as a favorite
                     for (VCardEntry v : vcards) {
                         v.setStarred(true);
