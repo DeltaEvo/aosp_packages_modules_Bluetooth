@@ -143,17 +143,6 @@ struct BTM_StartInquiry {
 };
 extern struct BTM_StartInquiry BTM_StartInquiry;
 
-// Name: BTM_WriteEIR
-// Params: BT_HDR* p_buff
-// Return: tBTM_STATUS
-struct BTM_WriteEIR {
-  static tBTM_STATUS return_value;
-  std::function<tBTM_STATUS(BT_HDR* p_buff)> body{
-          [](BT_HDR* /* p_buff */) { return return_value; }};
-  tBTM_STATUS operator()(BT_HDR* p_buff) { return body(p_buff); }
-};
-extern struct BTM_WriteEIR BTM_WriteEIR;
-
 // Name: btm_clear_all_pending_le_entry
 // Params: void
 // Return: void
