@@ -3128,10 +3128,15 @@
     "SUM ICS": {},
     "VCP": {}
   },
-  "flags": {
-    "avdtp_error_codes": [
-      "A2DP/SNK/AVP",
-      "A2DP/SRC/AVP"
-    ]
-  }
+  "flags":[
+      {
+         "flags":[
+            "avdtp_error_codes"
+         ],
+         "tests":[
+            "A2DP/SNK/AVP",
+            "A2DP/SRC/AVP"
+         ]
+      }
+   ]
 }
