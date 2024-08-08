@@ -262,7 +262,7 @@ static uint16_t a2dp_get_peer_mtu(btav_a2dp_codec_index_t codec_index, uint8_t c
   tA2DP_ENCODER_INIT_PEER_PARAMS peer_params;
   bta_av_co_get_peer_params(peer_addr, &peer_params);
   uint16_t peer_mtu = peer_params.peer_mtu;
-  uint16_t effective_mtu = bta_av_co_get_encoder_effective_frame_size();
+  uint16_t effective_mtu = bta_av_co_get_encoder_effective_frame_size(peer_addr);
 
   if (effective_mtu > 0 && effective_mtu < peer_mtu) {
     peer_mtu = effective_mtu;
@@ -343,7 +343,7 @@ bool a2dp_get_selected_hal_codec_config(CodecConfiguration* codec_config) {
   RawAddress peer_addr = btif_av_source_active_peer();
   tA2DP_ENCODER_INIT_PEER_PARAMS peer_param;
   bta_av_co_get_peer_params(peer_addr, &peer_param);
-  int effectiveMtu = bta_av_co_get_encoder_effective_frame_size();
+  int effectiveMtu = bta_av_co_get_encoder_effective_frame_size(peer_addr);
   if (effectiveMtu > 0 && effectiveMtu < peer_param.peer_mtu) {
     codec_config->peerMtu = effectiveMtu;
   } else {

@@ -3394,7 +3394,7 @@ static void bta_av_event_callback(tBTA_AV_EVT event, tBTA_AV* p_data) {
 // TODO: All processing should be done on the JNI thread
 static void bta_av_sink_media_callback(const RawAddress& peer_address, tBTA_AV_EVT event,
                                        tBTA_AV_MEDIA* p_data) {
-  log::verbose("event={}", event);
+  log::verbose("event={} peer {}", event, peer_address);
 
   switch (event) {
     case BTA_AV_SINK_MEDIA_DATA_EVT: {
@@ -3415,7 +3415,8 @@ static void bta_av_sink_media_callback(const RawAddress& peer_address, tBTA_AV_E
       log::verbose("address={}", p_data->avk_config.bd_addr);
 
       // Update the codec info of the A2DP Sink decoder
-      btif_a2dp_sink_update_decoder(reinterpret_cast<uint8_t*>(p_data->avk_config.codec_info));
+      btif_a2dp_sink_update_decoder(p_data->avk_config.bd_addr,
+                                    reinterpret_cast<uint8_t*>(p_data->avk_config.codec_info));
 
       config_req.sample_rate = A2DP_GetTrackSampleRate(p_data->avk_config.codec_info);
       if (config_req.sample_rate == -1) {
