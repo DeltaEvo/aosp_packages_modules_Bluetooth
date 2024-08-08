@@ -592,6 +592,12 @@ void bta_dm_remove_device(const RawAddress& target) {
     bredr_connected = get_btm_client_interface().peer.BTM_ReadConnectedTransportAddress(
             &identity_addr, BT_TRANSPORT_BR_EDR);
   }
+  if (pseudo_addr.IsEmpty()) {
+    pseudo_addr = target;
+  }
+  if (identity_addr.IsEmpty()) {
+    identity_addr = target;
+  }
 
   // Remove from LE allowlist
   if (!GATT_CancelConnect(0, pseudo_addr, false)) {
@@ -628,7 +634,7 @@ void bta_dm_remove_device(const RawAddress& target) {
 
   if (le_connected || bredr_connected) {
     // Wait for all transports to be disconnected
-    tBTA_DM_REMOVE_PENDNIG node = {pseudo_addr, target, le_connected, bredr_connected};
+    tBTA_DM_REMOVE_PENDNIG node = {pseudo_addr, identity_addr, le_connected, bredr_connected};
     bta_dm_cb.pending_removals.push_back(node);
     log::info(
             "Waiting for disconnection over LE:{}, BR/EDR:{} for pseudo address: {}, identity "
