@@ -205,7 +205,7 @@ TEST_F(AvrcpConnectionHandlerTest, remoteDeviceConnectionTest) {
   // device connects.
   EXPECT_CALL(mock_avrcp_, OpenBrowse(1, AVCT_ACP)).Times(1);
 
-  if (com::android::bluetooth::flags::avrcp_connect_a2dp_delayed()) {
+  if (com::android::bluetooth::flags::avrcp_connect_a2dp_with_delay()) {
     // Set an expectation that SDP for audio will be performed
     EXPECT_CALL(mock_a2dp_, find_audio_sink_service(_, _)).Times(1);
   }
@@ -245,7 +245,7 @@ TEST_F(AvrcpConnectionHandlerTest, noAbsoluteVolumeTest) {
   tAVRC_FIND_CBACK sdp_cb;
   SetUpSdp(&sdp_cb, false, false);
 
-  if (com::android::bluetooth::flags::avrcp_connect_a2dp_delayed()) {
+  if (com::android::bluetooth::flags::avrcp_connect_a2dp_with_delay()) {
     // Set an expectation that SDP for audio will be performed
     EXPECT_CALL(mock_a2dp_, find_audio_sink_service(_, _)).Times(1);
   }
@@ -289,7 +289,7 @@ TEST_F(AvrcpConnectionHandlerTest, absoluteVolumeTest) {
   tAVRC_FIND_CBACK sdp_cb;
   SetUpSdp(&sdp_cb, false, true);
 
-  if (com::android::bluetooth::flags::avrcp_connect_a2dp_delayed()) {
+  if (com::android::bluetooth::flags::avrcp_connect_a2dp_with_delay()) {
     // Set an expectation that SDP for audio will be performed
     EXPECT_CALL(mock_a2dp_, find_audio_sink_service(_, _)).Times(1);
   }
@@ -321,7 +321,7 @@ TEST_F(AvrcpConnectionHandlerTest, disconnectTest) {
                                             &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
 
-  if (com::android::bluetooth::flags::avrcp_connect_a2dp_delayed()) {
+  if (com::android::bluetooth::flags::avrcp_connect_a2dp_with_delay()) {
     // Set an expectation that SDP for audio will be performed
     EXPECT_CALL(mock_a2dp_, find_audio_sink_service(_, _)).Times(1);
   }
