@@ -157,8 +157,8 @@ struct btm_client_interface_t default_btm_client_interface = {
                 .BTM_SecConfirmReqReply = [](tBTM_STATUS /* res */, tBT_TRANSPORT /* transport */,
                                              const RawAddress /* bd_addr */) {},
                 .BTM_BleSirkConfirmDeviceReply = [](const RawAddress& /* bd_addr */,
-                                                    uint8_t /* res */) {},
-                .BTM_BlePasskeyReply = [](const RawAddress& /* bd_addr */, uint8_t /* res */,
+                                                    tBTM_STATUS /* res */) {},
+                .BTM_BlePasskeyReply = [](const RawAddress& /* bd_addr */, tBTM_STATUS /* res */,
                                           uint32_t /* passkey */) {},
                 .BTM_GetSecurityMode = []() -> uint8_t { return 0; },
                 .BTM_SecReadDevName = [](const RawAddress& /* bd_addr */) -> const char* {

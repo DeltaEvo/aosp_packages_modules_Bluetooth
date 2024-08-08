@@ -112,7 +112,7 @@ tBTM_STATUS btm_proc_smp_cback::return_value = BTM_SUCCESS;
 }  // namespace test
 
 // Mocked functions, if any
-void BTM_BleConfirmReply(const RawAddress& bd_addr, uint8_t res) {
+void BTM_BleConfirmReply(const RawAddress& bd_addr, tBTM_STATUS res) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_ble::BTM_BleConfirmReply(bd_addr, res);
 }
@@ -125,11 +125,11 @@ void BTM_BleLoadLocalKeys(uint8_t key_type, tBTM_BLE_LOCAL_KEYS* p_key) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_ble::BTM_BleLoadLocalKeys(key_type, p_key);
 }
-void BTM_BleOobDataReply(const RawAddress& bd_addr, uint8_t res, uint8_t len, uint8_t* p_data) {
+void BTM_BleOobDataReply(const RawAddress& bd_addr, tBTM_STATUS res, uint8_t len, uint8_t* p_data) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_ble::BTM_BleOobDataReply(bd_addr, res, len, p_data);
 }
-void BTM_BlePasskeyReply(const RawAddress& bd_addr, uint8_t res, uint32_t passkey) {
+void BTM_BlePasskeyReply(const RawAddress& bd_addr, tBTM_STATUS res, uint32_t passkey) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_ble::BTM_BlePasskeyReply(bd_addr, res, passkey);
 }
@@ -187,7 +187,7 @@ void BTM_SecAddBleKey(const RawAddress& bd_addr, tBTM_LE_KEY_VALUE* p_le_key,
   inc_func_call_count(__func__);
   test::mock::stack_btm_ble::BTM_SecAddBleKey(bd_addr, p_le_key, key_type);
 }
-void BTM_SecurityGrant(const RawAddress& bd_addr, uint8_t res) {
+void BTM_SecurityGrant(const RawAddress& bd_addr, tBTM_STATUS res) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_ble::BTM_SecurityGrant(bd_addr, res);
 }
