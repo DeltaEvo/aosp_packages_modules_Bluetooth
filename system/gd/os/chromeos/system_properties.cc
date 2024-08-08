@@ -16,7 +16,7 @@
 
 #include "os/system_properties.h"
 
-#include <mutex>
+#include <mutex>  // NOLINT
 #include <string>
 #include <unordered_map>
 
