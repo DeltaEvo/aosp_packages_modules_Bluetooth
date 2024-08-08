@@ -200,6 +200,9 @@ int mgmt_get_codec_capabilities(int fd, uint16_t hci) {
         if (ret < 0) {
           log::debug("Failed to read mgmt socket: {}", -errno);
           return -errno;
+        } else if (ret == 0) { // unlikely to happen, just a safeguard.
+          log::debug("Failed to read mgmt socket: EOF");
+          return -1;
         }
 
         if (ev.opcode == MGMT_EV_COMMAND_COMPLETE) {

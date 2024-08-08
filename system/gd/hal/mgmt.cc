@@ -141,6 +141,10 @@ uint16_t Mgmt::get_vs_opcode(uint16_t vendor_specification) {
           log::error("Failed to read mgmt socket: {}", -errno);
           close(fd);
           return ret_opcode;
+        } else if (ret == 0) { // unlikely to happen, just a safeguard.
+          log::error("Failed to read mgmt socket: EOF");
+          close(fd);
+          return ret_opcode;
         }
 
         if (cc_ev.opcode == MGMT_EV_COMMAND_COMPLETE) {

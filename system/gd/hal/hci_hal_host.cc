@@ -145,6 +145,9 @@ int waitHciDev(int hci_interface) {
       if (n < 0) {
         bluetooth::log::error("Error reading control channel: {}", strerror(errno));
         break;
+      } else if (n == 0) { // unlikely to happen, just a safeguard.
+        bluetooth::log::error("Error reading control channel: EOF");
+        break;
       }
 
       if (ev.opcode == MGMT_EV_COMMAND_COMP) {
