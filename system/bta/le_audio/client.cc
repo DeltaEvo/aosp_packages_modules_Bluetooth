@@ -4814,28 +4814,33 @@ public:
     return remote_metadata;
   }
 
+  bool ReconfigureOrUpdateRemoteForPTS(LeAudioDeviceGroup* group, int remote_direction) {
+    log::info("{}", group->group_id_);
+    // Use common audio stream contexts exposed by the PTS
+    auto override_contexts = AudioContexts(0xFFFF);
+    for (auto device = group->GetFirstDevice(); device != nullptr;
+         device = group->GetNextDevice(device)) {
+      override_contexts &= device->GetAvailableContexts();
+    }
+    if (override_contexts.value() == 0xFFFF) {
+      override_contexts = AudioContexts(LeAudioContextType::UNSPECIFIED);
+    }
+    log::warn("Overriding local_metadata_context_types_: {} with: {}",
+              local_metadata_context_types_.source.to_string(), override_contexts.to_string());
+
+    /* Choose the right configuration context */
+    auto new_configuration_context = ChooseConfigurationContextType(override_contexts);
+
+    log::debug("new_configuration_context= {}.", ToString(new_configuration_context));
+    BidirectionalPair<AudioContexts> remote_contexts = {.sink = override_contexts,
+                                                        .source = override_contexts};
+    return GroupStream(active_group_id_, new_configuration_context, remote_contexts);
+  }
+
   /* Return true if stream is started */
   bool ReconfigureOrUpdateRemote(LeAudioDeviceGroup* group, int remote_direction) {
     if (stack_config_get_interface()->get_pts_force_le_audio_multiple_contexts_metadata()) {
-      // Use common audio stream contexts exposed by the PTS
-      auto override_contexts = AudioContexts(0xFFFF);
-      for (auto device = group->GetFirstDevice(); device != nullptr;
-           device = group->GetNextDevice(device)) {
-        override_contexts &= device->GetAvailableContexts();
-      }
-      if (override_contexts.value() == 0xFFFF) {
-        override_contexts = AudioContexts(LeAudioContextType::UNSPECIFIED);
-      }
-      log::warn("Overriding local_metadata_context_types_: {} with: {}",
-                local_metadata_context_types_.source.to_string(), override_contexts.to_string());
-
-      /* Choose the right configuration context */
-      auto new_configuration_context = ChooseConfigurationContextType(override_contexts);
-
-      log::debug("new_configuration_context= {}.", ToString(new_configuration_context));
-      BidirectionalPair<AudioContexts> remote_contexts = {.sink = override_contexts,
-                                                          .source = override_contexts};
-      return GroupStream(active_group_id_, new_configuration_context, remote_contexts);
+      return ReconfigureOrUpdateRemoteForPTS(group, remote_direction);
     }
 
     /* When the local sink and source update their metadata, we need to come up
