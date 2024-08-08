@@ -115,11 +115,14 @@ public class BipDateTime {
 
     @Override
     public boolean equals(Object o) {
-        if (o == this) return true;
-        if (!(o instanceof BipDateTime)) return false;
+        if (o == this) {
+            return true;
+        }
+        if (!(o instanceof BipDateTime d)) {
+            return false;
+        }
 
-        BipDateTime d = (BipDateTime) o;
-        return d.isUtc() == isUtc() && d.getTime() == getTime();
+        return d.isUtc() == isUtc() && Objects.equals(d.getTime(), getTime());
     }
 
     @Override

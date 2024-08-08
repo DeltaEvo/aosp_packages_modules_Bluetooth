@@ -144,11 +144,16 @@ public class BipTransformation {
 
     @Override
     public boolean equals(Object o) {
-        if (o == this) return true;
-        if (o == null && !supportsAny()) return true;
-        if (!(o instanceof BipTransformation)) return false;
+        if (o == this) {
+            return true;
+        }
+        if (o == null && !supportsAny()) {
+            return true;
+        }
+        if (!(o instanceof BipTransformation t)) {
+            return false;
+        }
 
-        BipTransformation t = (BipTransformation) o;
         return mSupportedTransformations.equals(t.mSupportedTransformations);
     }
 

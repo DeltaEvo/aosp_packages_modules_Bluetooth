@@ -120,7 +120,7 @@ public:
       callbacks_->OnConnected(address, att_handle, tracker->vendor_specific_characteristics_);
       return;
     }
-    BTA_GATTC_Open(gatt_if_, ble_bd_addr.bda, BTM_BLE_DIRECT_CONNECTION, false);
+    BTA_GATTC_Open(gatt_if_, ble_bd_addr.bda, BTM_BLE_DIRECT_CONNECTION, true);
   }
 
   void SendVendorSpecificReply(
@@ -142,7 +142,7 @@ public:
       log::debug("write to remote, uuid {}, len {}",
                  vendor_specific_characteristic.characteristicUuid_,
                  vendor_specific_characteristic.value_.size());
-      BTA_GATTC_WriteCharValue(tracker->conn_id_, characteristic->value_handle, GATT_WRITE,
+      BTA_GATTC_WriteCharValue(tracker->conn_id_, characteristic->value_handle, GATT_WRITE_NO_RSP,
                                vendor_specific_characteristic.value_, GATT_AUTH_REQ_NO_MITM,
                                GattWriteCallback, &gatt_write_callback_data_);
     }
@@ -206,7 +206,7 @@ public:
       BTA_GATTC_Close(evt.conn_id);
       return;
     }
-    tracker->is_connected_ = false;
+    trackers_.remove(tracker);
   }
 
   void OnGattServiceSearchComplete(const tBTA_GATTC_SEARCH_CMPL& evt) {
@@ -364,8 +364,8 @@ public:
     value[0] = (uint8_t)Opcode::GET_RANGING_DATA;
     value[1] = (uint8_t)(ranging_counter & 0xFF);
     value[2] = (uint8_t)((ranging_counter >> 8) & 0xFF);
-    BTA_GATTC_WriteCharValue(tracker->conn_id_, characteristic->value_handle, GATT_WRITE, value,
-                             GATT_AUTH_REQ_NO_MITM, GattWriteCallback, nullptr);
+    BTA_GATTC_WriteCharValue(tracker->conn_id_, characteristic->value_handle, GATT_WRITE_NO_RSP,
+                             value, GATT_AUTH_REQ_NO_MITM, GattWriteCallback, nullptr);
   }
 
   void AckRangingData(uint16_t ranging_counter, std::shared_ptr<RasTracker> tracker) {
@@ -380,8 +380,8 @@ public:
     value[0] = (uint8_t)Opcode::ACK_RANGING_DATA;
     value[1] = (uint8_t)(ranging_counter & 0xFF);
     value[2] = (uint8_t)((ranging_counter >> 8) & 0xFF);
-    BTA_GATTC_WriteCharValue(tracker->conn_id_, characteristic->value_handle, GATT_WRITE, value,
-                             GATT_AUTH_REQ_NO_MITM, GattWriteCallback, nullptr);
+    BTA_GATTC_WriteCharValue(tracker->conn_id_, characteristic->value_handle, GATT_WRITE_NO_RSP,
+                             value, GATT_AUTH_REQ_NO_MITM, GattWriteCallback, nullptr);
     if (ranging_counter != tracker->latest_ranging_counter_) {
       GetRangingData(tracker->latest_ranging_counter_, tracker);
     }
@@ -611,9 +611,6 @@ public:
       }
       if ((value & kFilterRangingData) != 0) {
         ss << "|Filter Ranging Data";
-      }
-      if ((value & kPctPhaseFormat) != 0) {
-        ss << "|PCT Phase Format";
       }
     }
     return ss.str();

@@ -54,16 +54,6 @@ uint32_t BTM_PM_ReadBleScanDutyCycle(void) {
   inc_func_call_count(__func__);
   return 0;
 }
-tBTM_STATUS BTM_SetPowerMode(uint8_t /* pm_id */, const RawAddress& /* remote_bda */,
-                             const tBTM_PM_PWR_MD* /* p_mode */) {
-  inc_func_call_count(__func__);
-  return BTM_SUCCESS;
-}
-tBTM_STATUS BTM_SetSsrParams(const RawAddress& /* remote_bda */, uint16_t /* max_lat */,
-                             uint16_t /* min_rmt_to */, uint16_t /* min_loc_to */) {
-  inc_func_call_count(__func__);
-  return BTM_SUCCESS;
-}
 void BTM_PM_OnConnected(uint16_t /* handle */, const RawAddress& /* remote_bda */) {
   inc_func_call_count(__func__);
 }

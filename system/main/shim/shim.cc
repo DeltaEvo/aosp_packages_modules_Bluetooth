@@ -66,7 +66,3 @@ bool bluetooth::shim::is_gd_stack_started_up() {
 bool bluetooth::shim::is_gd_dumpsys_module_started() {
   return bluetooth::shim::Stack::GetInstance()->IsDumpsysModuleStarted();
 }
-
-bool bluetooth::shim::is_classic_discovery_only_enabled() {
-  return bluetooth::common::init_flags::classic_discovery_only_is_enabled();
-}

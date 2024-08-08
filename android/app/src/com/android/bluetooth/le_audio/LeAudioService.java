@@ -2273,7 +2273,7 @@ public class LeAudioService extends ProfileService {
             /* Make sure active group is already exposed to audio framework.
              * If not, lets wait for it and don't sent additional intent.
              */
-            if (groupDescriptor.mCurrentLeadDevice == mExposedActiveDevice) {
+            if (Objects.equals(groupDescriptor.mCurrentLeadDevice, mExposedActiveDevice)) {
                 Log.w(
                         TAG,
                         "group is already active: device="
@@ -4303,8 +4303,8 @@ public class LeAudioService extends ProfileService {
      */
     public void setCcidInformation(ParcelUuid userUuid, int ccid, int contextType) {
         /* for the moment we care only for GMCS and GTBS */
-        if (userUuid != BluetoothUuid.GENERIC_MEDIA_CONTROL
-                && userUuid.getUuid() != TbsGatt.UUID_GTBS) {
+        if (!BluetoothUuid.GENERIC_MEDIA_CONTROL.equals(userUuid)
+                && !TbsGatt.UUID_GTBS.equals(userUuid.getUuid())) {
             return;
         }
         if (!mLeAudioNativeIsInitialized) {

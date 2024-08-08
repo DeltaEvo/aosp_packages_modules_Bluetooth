@@ -694,9 +694,8 @@ public class TbsGeneric {
                 mCurrentCallsList.put(callIndex, TbsCall.create(call));
                 cclc |= true;
             } else {
-                TbsCall tbsCall = mCurrentCallsList.get(callIndex);
                 TbsCall tbsCallNew = TbsCall.create(call);
-                if (tbsCall != tbsCallNew) {
+                if (!tbsCallNew.equals(mCurrentCallsList.get(callIndex))) {
                     mCurrentCallsList.replace(callIndex, tbsCallNew);
                     cclc |= true;
                 }

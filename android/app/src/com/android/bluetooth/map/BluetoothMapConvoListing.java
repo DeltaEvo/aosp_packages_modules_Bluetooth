@@ -214,13 +214,9 @@ public class BluetoothMapConvoListing {
         if (this == obj) {
             return true;
         }
-        if (obj == null) {
+        if (!(obj instanceof BluetoothMapConvoListing other)) {
             return false;
         }
-        if (getClass() != obj.getClass()) {
-            return false;
-        }
-        BluetoothMapConvoListing other = (BluetoothMapConvoListing) obj;
         if (mHasUnread != other.mHasUnread) {
             return false;
         }

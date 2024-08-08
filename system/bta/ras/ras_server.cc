@@ -69,6 +69,8 @@ public:
     bool handling_control_point_command_ = false;
     uint8_t vendor_specific_reply_counter_ = 0;
     PendingWriteResponse pending_write_response_;
+    uint16_t last_ready_procedure_ = 0;
+    uint16_t last_overwritten_procedure_ = 0;
   };
 
   void Initialize() {
@@ -138,6 +140,7 @@ public:
     std::lock_guard<std::mutex> lock(on_demand_ranging_mutex_);
     DataBuffer& data_buffer = InitDataBuffer(ble_bd_addr.bda, procedure_counter);
     data_buffer.segments_.push_back(data);
+    tracker.last_ready_procedure_ = procedure_counter;
 
     // Send data ready
     if (is_last) {
@@ -158,6 +161,7 @@ public:
     // Send data overwritten
     if (tracker.buffers_.size() > kBufferSize) {
       auto begin = tracker.buffers_.begin();
+      tracker.last_overwritten_procedure_ = begin->ranging_counter_;
       if (ccc_data_over_written == GATT_CLT_CONFIG_NONE || ccc_real_time != GATT_CLT_CONFIG_NONE) {
         log::debug("Skip Ranging Data Over Written");
         tracker.buffers_.erase(begin);
@@ -180,6 +184,9 @@ public:
     switch (event) {
       case BTA_GATTS_CONNECT_EVT: {
         OnGattConnect(p_data);
+      } break;
+      case BTA_GATTS_DISCONNECT_EVT: {
+        OnGattDisconnect(p_data);
       } break;
       case BTA_GATTS_REG_EVT: {
         OnGattServerRegister(p_data);
@@ -213,6 +220,14 @@ public:
       log::warn("Create new tracker");
     }
     trackers_[address].conn_id_ = p_data->conn.conn_id;
+  }
+
+  void OnGattDisconnect(tBTA_GATTS* p_data) {
+    auto address = p_data->conn.remote_bda;
+    log::info("Address: {}, conn_id:{}", address, p_data->conn.conn_id);
+    if (trackers_.find(address) != trackers_.end()) {
+      trackers_.erase(address);
+    }
   }
 
   void OnGattServerRegister(tBTA_GATTS* p_data) {
@@ -279,7 +294,7 @@ public:
     ranging_data_ready_characteristic.uuid = kRasRangingDataReadyCharacteristic;
     ranging_data_ready_characteristic.type = BTGATT_DB_CHARACTERISTIC;
     ranging_data_ready_characteristic.properties =
-            GATT_CHAR_PROP_BIT_NOTIFY | GATT_CHAR_PROP_BIT_INDICATE;
+            GATT_CHAR_PROP_BIT_READ | GATT_CHAR_PROP_BIT_NOTIFY | GATT_CHAR_PROP_BIT_INDICATE;
     ranging_data_ready_characteristic.permissions = GATT_PERM_READ_ENCRYPTED | key_mask;
     service.push_back(ranging_data_ready_characteristic);
     service.push_back(ccc_descriptor);
@@ -289,7 +304,7 @@ public:
     ranging_data_overwritten_characteristic.uuid = kRasRangingDataOverWrittenCharacteristic;
     ranging_data_overwritten_characteristic.type = BTGATT_DB_CHARACTERISTIC;
     ranging_data_overwritten_characteristic.properties =
-            GATT_CHAR_PROP_BIT_NOTIFY | GATT_CHAR_PROP_BIT_INDICATE;
+            GATT_CHAR_PROP_BIT_READ | GATT_CHAR_PROP_BIT_NOTIFY | GATT_CHAR_PROP_BIT_INDICATE;
     ranging_data_overwritten_characteristic.permissions = GATT_PERM_READ_ENCRYPTED | key_mask;
     service.push_back(ranging_data_overwritten_characteristic);
     service.push_back(ccc_descriptor);
@@ -337,12 +352,33 @@ public:
       return;
     }
     log::info("Read uuid, {}", getUuidName(uuid));
+    ClientTracker* tracker = &trackers_[p_data->req_data.remote_bda];
+    if (trackers_.find(p_data->req_data.remote_bda) == trackers_.end()) {
+      log::warn("Can't find tracker for {}", p_data->req_data.remote_bda);
+      BTA_GATTS_SendRsp(p_data->req_data.conn_id, p_data->req_data.trans_id, GATT_ILLEGAL_PARAMETER,
+                        &p_msg);
+      return;
+    }
 
     // Check Characteristic UUID
     switch (uuid.As16Bit()) {
       case kRasFeaturesCharacteristic16bit: {
         p_msg.attr_value.len = kFeatureSize;
         memcpy(p_msg.attr_value.value, &kSupportedFeatures, sizeof(uint32_t));
+      } break;
+      case kRasRangingDataReadyCharacteristic16bit: {
+        p_msg.attr_value.len = kRingingCounterSize;
+        std::vector<uint8_t> value(kRingingCounterSize);
+        if (tracker->buffers_.size() > 0) {
+          p_msg.attr_value.value[0] = (tracker->last_ready_procedure_ & 0xFF);
+          p_msg.attr_value.value[1] = (tracker->last_ready_procedure_ >> 8) & 0xFF;
+        }
+      } break;
+      case kRasRangingDataOverWrittenCharacteristic16bit: {
+        p_msg.attr_value.len = kRingingCounterSize;
+        std::vector<uint8_t> value(kRingingCounterSize);
+        p_msg.attr_value.value[0] = (tracker->last_overwritten_procedure_ & 0xFF);
+        p_msg.attr_value.value[1] = (tracker->last_overwritten_procedure_ >> 8) & 0xFF;
       } break;
       default:
         log::warn("Unhandled uuid {}", uuid.ToString());
@@ -418,8 +454,8 @@ public:
         }
         ClientTracker* tracker = &trackers_[p_data->req_data.remote_bda];
         if (tracker->handling_control_point_command_) {
-          log::warn("Procedure Already In Progress");
-          BTA_GATTS_SendRsp(conn_id, p_data->req_data.trans_id, GATT_PRC_IN_PROGRESS, &p_msg);
+          log::warn("Server busy");
+          SendResponseCode(ResponseCodeValue::SERVER_BUSY, tracker);
           return;
         }
         if (need_rsp) {
@@ -532,20 +568,19 @@ public:
     tracker->handling_control_point_command_ = true;
 
     switch (command.opcode_) {
-      case Opcode::GET_RANGING_DATA: {
+      case Opcode::GET_RANGING_DATA:
         OnGetRangingData(&command, tracker);
-      } break;
-      case Opcode::ACK_RANGING_DATA: {
+        break;
+      case Opcode::ACK_RANGING_DATA:
         OnAckRangingData(&command, tracker);
-      } break;
+        break;
       case Opcode::RETRIEVE_LOST_RANGING_DATA_SEGMENTS:
       case Opcode::ABORT_OPERATION:
       case Opcode::FILTER:
-      case Opcode::PCT_FORMAT: {
         log::warn("Unsupported opcode:0x{:02x}, {}", (uint16_t)command.opcode_,
                   GetOpcodeText(command.opcode_));
         SendResponseCode(ResponseCodeValue::OP_CODE_NOT_SUPPORTED, tracker);
-      } break;
+        break;
       default:
         log::warn("Unknown opcode:0x{:02x}", (uint16_t)command.opcode_);
         SendResponseCode(ResponseCodeValue::OP_CODE_NOT_SUPPORTED, tracker);

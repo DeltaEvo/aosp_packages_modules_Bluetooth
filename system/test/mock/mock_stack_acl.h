@@ -309,15 +309,6 @@ struct BTM_SetLinkSuperTout {
   }
 };
 extern struct BTM_SetLinkSuperTout BTM_SetLinkSuperTout;
-// Name: BTM_SwitchRoleToCentral
-// Params: const RawAddress& remote_bd_addr
-// Returns: tBTM_STATUS
-struct BTM_SwitchRoleToCentral {
-  std::function<tBTM_STATUS(const RawAddress& remote_bd_addr)> body{
-          [](const RawAddress& /* remote_bd_addr */) { return BTM_SUCCESS; }};
-  tBTM_STATUS operator()(const RawAddress& remote_bd_addr) { return body(remote_bd_addr); }
-};
-extern struct BTM_SwitchRoleToCentral BTM_SwitchRoleToCentral;
 // Name: btm_remove_acl
 // Params: const RawAddress& bd_addr, tBT_TRANSPORT transport
 // Returns: tBTM_STATUS
@@ -400,24 +391,6 @@ struct BTM_acl_after_controller_started {
   void operator()() { body(); }
 };
 extern struct BTM_acl_after_controller_started BTM_acl_after_controller_started;
-// Name: BTM_unblock_role_switch_for
-// Params: const RawAddress& peer_addr
-// Returns: void
-struct BTM_unblock_role_switch_for {
-  std::function<void(const RawAddress& peer_addr)> body{
-          [](const RawAddress& /* peer_addr */) { ; }};
-  void operator()(const RawAddress& peer_addr) { body(peer_addr); }
-};
-extern struct BTM_unblock_role_switch_for BTM_unblock_role_switch_for;
-// Name: BTM_unblock_sniff_mode_for
-// Params: const RawAddress& peer_addr
-// Returns: void
-struct BTM_unblock_sniff_mode_for {
-  std::function<void(const RawAddress& peer_addr)> body{
-          [](const RawAddress& /* peer_addr */) { ; }};
-  void operator()(const RawAddress& peer_addr) { body(peer_addr); }
-};
-extern struct BTM_unblock_sniff_mode_for BTM_unblock_sniff_mode_for;
 // Name: acl_disconnect_after_role_switch
 // Params: uint16_t conn_handle, tHCI_STATUS reason
 // Returns: void

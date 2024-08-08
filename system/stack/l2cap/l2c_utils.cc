@@ -2119,7 +2119,8 @@ void l2cu_create_conn_br_edr(tL2C_LCB* p_lcb) {
       p_lcb->link_state = LST_CONNECTING_WAIT_SWITCH;
       p_lcb->SetLinkRoleAsCentral();
 
-      if (BTM_SwitchRoleToCentral(p_lcb_cur->remote_bd_addr) == BTM_CMD_STARTED) {
+      if (get_btm_client_interface().link_policy.BTM_SwitchRoleToCentral(
+                  p_lcb_cur->remote_bd_addr) == BTM_CMD_STARTED) {
         alarm_set_on_mloop(p_lcb->l2c_lcb_timer, L2CAP_LINK_ROLE_SWITCH_TIMEOUT_MS,
                            l2c_lcb_timer_timeout, p_lcb);
         return;

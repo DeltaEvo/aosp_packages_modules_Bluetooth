@@ -45,23 +45,10 @@ tBTM_STATUS BTM_EnableTestMode(void) {
   inc_func_call_count(__func__);
   return BTM_SUCCESS;
 }
-tBTM_STATUS BTM_SetDeviceClass(DEV_CLASS /* dev_class */) {
-  inc_func_call_count(__func__);
-  return BTM_SUCCESS;
-}
-tBTM_STATUS BTM_SetLocalDeviceName(const char* /* p_name */) {
-  inc_func_call_count(__func__);
-  return BTM_SUCCESS;
-}
 DEV_CLASS BTM_ReadDeviceClass(void) {
   inc_func_call_count(__func__);
   return kDevClassEmpty;
 }
-void BTM_VendorSpecificCommand(uint16_t /* opcode */, uint8_t /* param_len */,
-                               uint8_t* /* p_param_buf */, tBTM_VSC_CMPL_CB* /* p_cb */) {
-  inc_func_call_count(__func__);
-}
-void BTM_WritePageTimeout(uint16_t /* timeout */) { inc_func_call_count(__func__); }
 void BTM_db_reset(void) { inc_func_call_count(__func__); }
 void btm_delete_stored_link_key_complete(uint8_t* /* p */, uint16_t /* evt_len */) {
   inc_func_call_count(__func__);
