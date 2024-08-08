@@ -107,7 +107,7 @@ TEST_F(StackSdpInitTest, sdp_service_search_request) {
 
   ASSERT_EQ(p_ccb->con_state, tSDP_STATE::CONNECTED);
 
-  sdp_disconnect(p_ccb, SDP_SUCCESS);
+  sdp_disconnect(p_ccb, tSDP_STATUS::SDP_SUCCESS);
   sdp_cb.reg_info.pL2CA_DisconnectCfm_Cb(p_ccb->connection_id, 0);
 
   ASSERT_EQ(p_ccb->con_state, tSDP_STATE::IDLE);
@@ -145,13 +145,13 @@ TEST_F(StackSdpInitTest, sdp_service_search_request_queuing) {
   ASSERT_EQ(p_ccb1->con_state, tSDP_STATE::CONNECTED);
   ASSERT_EQ(p_ccb2->con_state, tSDP_STATE::CONN_PEND);
 
-  p_ccb1->disconnect_reason = SDP_SUCCESS;
-  sdp_disconnect(p_ccb1, SDP_SUCCESS);
+  p_ccb1->disconnect_reason = tSDP_STATUS::SDP_SUCCESS;
+  sdp_disconnect(p_ccb1, tSDP_STATUS::SDP_SUCCESS);
 
   ASSERT_EQ(p_ccb1->con_state, tSDP_STATE::IDLE);
   ASSERT_EQ(p_ccb2->con_state, tSDP_STATE::CONNECTED);
 
-  sdp_disconnect(p_ccb2, SDP_SUCCESS);
+  sdp_disconnect(p_ccb2, tSDP_STATUS::SDP_SUCCESS);
   sdp_cb.reg_info.pL2CA_DisconnectCfm_Cb(p_ccb2->connection_id, 0);
 
   ASSERT_EQ(p_ccb1->con_state, tSDP_STATE::IDLE);
@@ -159,7 +159,7 @@ TEST_F(StackSdpInitTest, sdp_service_search_request_queuing) {
 }
 
 void sdp_callback(const RawAddress& /* bd_addr */, tSDP_RESULT result) {
-  if (result == SDP_SUCCESS) {
+  if (result == tSDP_STATUS::SDP_SUCCESS) {
     ASSERT_TRUE(SDP_ServiceSearchRequest(addr, sdp_db, nullptr));
   }
 }
@@ -177,7 +177,7 @@ TEST_F(StackSdpInitTest, sdp_service_search_request_queuing_race_condition) {
 
   ASSERT_EQ(p_ccb1->con_state, tSDP_STATE::CONNECTED);
 
-  sdp_disconnect(p_ccb1, SDP_SUCCESS);
+  sdp_disconnect(p_ccb1, tSDP_STATUS::SDP_SUCCESS);
   sdp_cb.reg_info.pL2CA_DisconnectCfm_Cb(p_ccb1->connection_id, 0);
 
   const int cid2 = L2CA_ConnectReqWithSecurity_cid;
@@ -187,7 +187,7 @@ TEST_F(StackSdpInitTest, sdp_service_search_request_queuing_race_condition) {
   // If race condition, this will be stuck in PEND
   ASSERT_EQ(p_ccb2->con_state, tSDP_STATE::CONN_SETUP);
 
-  sdp_disconnect(p_ccb2, SDP_SUCCESS);
+  sdp_disconnect(p_ccb2, tSDP_STATUS::SDP_SUCCESS);
 }
 
 TEST_F(StackSdpInitTest, sdp_disc_wait_text) {
@@ -243,26 +243,32 @@ TEST_F(StackSdpInitTest, sdp_flags_text) {
 
 TEST_F(StackSdpInitTest, sdp_status_text) {
   std::vector<std::pair<tSDP_STATUS, std::string>> status = {
-          std::make_pair(SDP_SUCCESS, "SDP_SUCCESS"),
-          std::make_pair(SDP_INVALID_VERSION, "SDP_INVALID_VERSION"),
-          std::make_pair(SDP_INVALID_SERV_REC_HDL, "SDP_INVALID_SERV_REC_HDL"),
-          std::make_pair(SDP_INVALID_REQ_SYNTAX, "SDP_INVALID_REQ_SYNTAX"),
-          std::make_pair(SDP_INVALID_PDU_SIZE, "SDP_INVALID_PDU_SIZE"),
-          std::make_pair(SDP_INVALID_CONT_STATE, "SDP_INVALID_CONT_STATE"),
-          std::make_pair(SDP_NO_RESOURCES, "SDP_NO_RESOURCES"),
-          std::make_pair(SDP_DI_REG_FAILED, "SDP_DI_REG_FAILED"),
-          std::make_pair(SDP_DI_DISC_FAILED, "SDP_DI_DISC_FAILED"),
-          std::make_pair(SDP_NO_DI_RECORD_FOUND, "SDP_NO_DI_RECORD_FOUND"),
-          std::make_pair(SDP_ERR_ATTR_NOT_PRESENT, "SDP_ERR_ATTR_NOT_PRESENT"),
-          std::make_pair(SDP_ILLEGAL_PARAMETER, "SDP_ILLEGAL_PARAMETER"),
-          std::make_pair(HID_SDP_NO_SERV_UUID, "HID_SDP_NO_SERV_UUID"),
-          std::make_pair(HID_SDP_MANDATORY_MISSING, "HID_SDP_MANDATORY_MISSING"),
-          std::make_pair(SDP_NO_RECS_MATCH, "SDP_NO_RECS_MATCH"),
-          std::make_pair(SDP_CONN_FAILED, "SDP_CONN_FAILED"),
-          std::make_pair(SDP_CFG_FAILED, "SDP_CFG_FAILED"),
-          std::make_pair(SDP_GENERIC_ERROR, "SDP_GENERIC_ERROR"),
-          std::make_pair(SDP_DB_FULL, "SDP_DB_FULL"),
-          std::make_pair(SDP_CANCEL, "SDP_CANCEL"),
+          std::make_pair(tSDP_STATUS::SDP_SUCCESS, "tSDP_STATUS::SDP_SUCCESS"),
+          std::make_pair(tSDP_STATUS::SDP_INVALID_VERSION, "tSDP_STATUS::SDP_INVALID_VERSION"),
+          std::make_pair(tSDP_STATUS::SDP_INVALID_SERV_REC_HDL,
+                         "tSDP_STATUS::SDP_INVALID_SERV_REC_HDL"),
+          std::make_pair(tSDP_STATUS::SDP_INVALID_REQ_SYNTAX,
+                         "tSDP_STATUS::SDP_INVALID_REQ_SYNTAX"),
+          std::make_pair(tSDP_STATUS::SDP_INVALID_PDU_SIZE, "tSDP_STATUS::SDP_INVALID_PDU_SIZE"),
+          std::make_pair(tSDP_STATUS::SDP_INVALID_CONT_STATE,
+                         "tSDP_STATUS::SDP_INVALID_CONT_STATE"),
+          std::make_pair(tSDP_STATUS::SDP_NO_RESOURCES, "tSDP_STATUS::SDP_NO_RESOURCES"),
+          std::make_pair(tSDP_STATUS::SDP_DI_REG_FAILED, "tSDP_STATUS::SDP_DI_REG_FAILED"),
+          std::make_pair(tSDP_STATUS::SDP_DI_DISC_FAILED, "tSDP_STATUS::SDP_DI_DISC_FAILED"),
+          std::make_pair(tSDP_STATUS::SDP_NO_DI_RECORD_FOUND,
+                         "tSDP_STATUS::SDP_NO_DI_RECORD_FOUND"),
+          std::make_pair(tSDP_STATUS::SDP_ERR_ATTR_NOT_PRESENT,
+                         "tSDP_STATUS::SDP_ERR_ATTR_NOT_PRESENT"),
+          std::make_pair(tSDP_STATUS::SDP_ILLEGAL_PARAMETER, "tSDP_STATUS::SDP_ILLEGAL_PARAMETER"),
+          std::make_pair(tSDP_STATUS::HID_SDP_NO_SERV_UUID, "tSDP_STATUS::HID_SDP_NO_SERV_UUID"),
+          std::make_pair(tSDP_STATUS::HID_SDP_MANDATORY_MISSING,
+                         "tSDP_STATUS::HID_SDP_MANDATORY_MISSING"),
+          std::make_pair(tSDP_STATUS::SDP_NO_RECS_MATCH, "tSDP_STATUS::SDP_NO_RECS_MATCH"),
+          std::make_pair(tSDP_STATUS::SDP_CONN_FAILED, "tSDP_STATUS::SDP_CONN_FAILED"),
+          std::make_pair(tSDP_STATUS::SDP_CFG_FAILED, "tSDP_STATUS::SDP_CFG_FAILED"),
+          std::make_pair(tSDP_STATUS::SDP_GENERIC_ERROR, "tSDP_STATUS::SDP_GENERIC_ERROR"),
+          std::make_pair(tSDP_STATUS::SDP_DB_FULL, "tSDP_STATUS::SDP_DB_FULL"),
+          std::make_pair(tSDP_STATUS::SDP_CANCEL, "tSDP_STATUS::SDP_CANCEL"),
   };
   for (const auto& stat : status) {
     ASSERT_STREQ(stat.second.c_str(), sdp_status_text(stat.first).c_str());

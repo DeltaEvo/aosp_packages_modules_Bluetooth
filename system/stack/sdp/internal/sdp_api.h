@@ -382,7 +382,7 @@ bool SDP_AddServiceClassIdList(uint32_t handle, uint16_t num_services, uint16_t*
  *
  * Description      This function adds a DI record to the local SDP database.
  *
- * Returns          Returns SDP_SUCCESS if record added successfully, else error
+ * Returns          Returns tSDP_STATUS::SDP_SUCCESS if record added successfully, else error
  *
  ******************************************************************************/
 tSDP_STATUS SDP_SetLocalDiRecord(const tSDP_DI_RECORD* device_info, uint32_t* p_handle);
@@ -393,7 +393,7 @@ tSDP_STATUS SDP_SetLocalDiRecord(const tSDP_DI_RECORD* device_info, uint32_t* p_
  *
  * Description      This function queries a remote device for DI information.
  *
- * Returns          SDP_SUCCESS if query started successfully, else error
+ * Returns          tSDP_STATUS::SDP_SUCCESS if query started successfully, else error
  *
  ******************************************************************************/
 tSDP_STATUS SDP_DiDiscover(const RawAddress& remote_device, tSDP_DISCOVERY_DB* p_db, uint32_t len,

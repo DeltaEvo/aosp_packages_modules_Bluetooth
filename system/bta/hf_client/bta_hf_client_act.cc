@@ -330,7 +330,8 @@ void bta_hf_client_disc_int_res(tBTA_HF_CLIENT_DATA* p_data) {
   }
 
   /* if found service */
-  if (p_data->disc_result.status == SDP_SUCCESS || p_data->disc_result.status == SDP_DB_FULL) {
+  if (p_data->disc_result.status == tSDP_STATUS::SDP_SUCCESS ||
+      p_data->disc_result.status == tSDP_STATUS::SDP_DB_FULL) {
     /* get attributes */
     if (bta_hf_client_sdp_find_attr(client_cb)) {
       event = BTA_HF_CLIENT_DISC_OK_EVT;
@@ -362,7 +363,8 @@ void bta_hf_client_disc_acp_res(tBTA_HF_CLIENT_DATA* p_data) {
   }
 
   /* if found service */
-  if (p_data->disc_result.status == SDP_SUCCESS || p_data->disc_result.status == SDP_DB_FULL) {
+  if (p_data->disc_result.status == tSDP_STATUS::SDP_SUCCESS ||
+      p_data->disc_result.status == tSDP_STATUS::SDP_DB_FULL) {
     /* get attributes */
     bta_hf_client_sdp_find_attr(client_cb);
   }

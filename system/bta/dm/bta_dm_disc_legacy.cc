@@ -584,8 +584,9 @@ static void bta_dm_sdp_result(tBTA_DM_SDP_RESULT& sdp_event) {
 
   const tSDP_RESULT sdp_result = sdp_event.sdp_result;
 
-  if ((sdp_event.sdp_result == SDP_SUCCESS) || (sdp_event.sdp_result == SDP_NO_RECS_MATCH) ||
-      (sdp_event.sdp_result == SDP_DB_FULL)) {
+  if ((sdp_event.sdp_result == tSDP_STATUS::SDP_SUCCESS) ||
+      (sdp_event.sdp_result == tSDP_STATUS::SDP_NO_RECS_MATCH) ||
+      (sdp_event.sdp_result == tSDP_STATUS::SDP_DB_FULL)) {
     log::verbose("sdp_result::0x{:x}", sdp_event.sdp_result);
     do {
       p_sdp_rec = NULL;
@@ -676,7 +677,7 @@ static void bta_dm_sdp_result(tBTA_DM_SDP_RESULT& sdp_event) {
 #if TARGET_FLOSS
     tSDP_DI_GET_RECORD di_record;
     if (get_legacy_stack_sdp_api()->device_id.SDP_GetDiRecord(
-                1, &di_record, bta_dm_search_cb.p_sdp_db) == SDP_SUCCESS) {
+                1, &di_record, bta_dm_search_cb.p_sdp_db) == tSDP_STATUS::SDP_SUCCESS) {
       bta_dm_search_cb.service_search_cbacks.on_did_received(
               bta_dm_search_cb.peer_bdaddr, di_record.rec.vendor_id_source, di_record.rec.vendor,
               di_record.rec.product, di_record.rec.version);
@@ -739,7 +740,7 @@ static void bta_dm_sdp_result(tBTA_DM_SDP_RESULT& sdp_event) {
     BTM_LogHistory(kBtmLogTag, bta_dm_search_cb.peer_bdaddr, "Discovery failed",
                    base::StringPrintf("Result:%s", sdp_result_text(sdp_result).c_str()));
     log::error("SDP connection failed {}", sdp_status_text(sdp_result));
-    if (sdp_event.sdp_result == SDP_CONN_FAILED) {
+    if (sdp_event.sdp_result == tSDP_STATUS::SDP_CONN_FAILED) {
       bta_dm_search_cb.wait_disc = false;
     }
 
