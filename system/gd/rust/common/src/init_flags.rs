@@ -207,7 +207,6 @@ pub fn set_all_for_testing() {
 init_flags!(
     name: InitFlags
     flags: {
-        classic_discovery_only,
         hci_adapter: i32,
         use_unified_connection_manager,
     }

@@ -50,6 +50,7 @@ void gatt_update_app_use_link_flag(tGATT_IF gatt_if, tGATT_TCB* p_tcb, bool is_a
                                    bool check_acl_link) {}
 void gatts_proc_srv_chg_ind_ack(tGATT_TCB) {}
 bool gatt_disconnect(tGATT_TCB* p_tcb) { return false; }
+void gatt_cancel_connect(const RawAddress& bd_addr, tBT_TRANSPORT transport) {}
 tGATT_CH_STATE gatt_get_ch_state(tGATT_TCB* p_tcb) { return GATT_CH_CLOSE; }
 void gatt_set_ch_state(tGATT_TCB* p_tcb, tGATT_CH_STATE ch_state) {}
 

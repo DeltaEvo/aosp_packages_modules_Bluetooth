@@ -37,7 +37,6 @@ aconfig("bluetooth_flags_c_lib") {
     "rnr.aconfig",
     "sdp.aconfig",
     "security.aconfig",
-    "sniff.aconfig",
     "sockets.aconfig",
     "system_service.aconfig",
     "vcp.aconfig",

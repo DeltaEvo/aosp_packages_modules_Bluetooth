@@ -321,12 +321,18 @@ public:
     }
   }
 
+  void set_connectability_state(ConnectabilityState state) {
+    log::debug("{} --> {}", connectability_state_machine_text(connectability_state_),
+               connectability_state_machine_text(state));
+    connectability_state_ = state;
+  }
+
   // connection canceled by LeAddressManager.OnPause(), will auto reconnect by
   // LeAddressManager.OnResume()
   void on_le_connection_canceled_on_pause() {
     log::assert_that(pause_connection, "Connection must be paused to ack the le address manager");
     arm_on_resume_ = true;
-    connectability_state_ = ConnectabilityState::DISARMED;
+    set_connectability_state(ConnectabilityState::DISARMED);
     le_address_manager_->AckPause(this);
   }
 
@@ -394,7 +400,7 @@ public:
     const bool in_filter_accept_list = is_device_in_accept_list(remote_address);
 
     if (role == hci::Role::CENTRAL) {
-      connectability_state_ = ConnectabilityState::DISARMED;
+      set_connectability_state(ConnectabilityState::DISARMED);
       if (status == ErrorCode::UNKNOWN_CONNECTION && pause_connection) {
         on_le_connection_canceled_on_pause();
         return;
@@ -652,9 +658,11 @@ public:
   }
 
   void direct_connect_add(AddressWithType address_with_type) {
+    log::debug("{}", address_with_type);
     direct_connections_.insert(address_with_type);
     if (create_connection_timeout_alarms_.find(address_with_type) !=
         create_connection_timeout_alarms_.end()) {
+      log::verbose("Timer already added for {}", address_with_type);
       return;
     }
 
@@ -672,6 +680,7 @@ public:
   }
 
   void direct_connect_remove(AddressWithType address_with_type) {
+    log::debug("{}", address_with_type);
     auto it = create_connection_timeout_alarms_.find(address_with_type);
     if (it != create_connection_timeout_alarms_.end()) {
       it->second.Cancel();
@@ -691,6 +700,7 @@ public:
       return;
     }
 
+    log::debug("Adding device to accept list {}", address_with_type);
     accept_list.insert(address_with_type);
     register_with_address_manager();
     le_address_manager_->AddDeviceToFilterAcceptList(
@@ -752,8 +762,8 @@ public:
         if (status != ErrorCode::SUCCESS) {
           log::error("Le connection state machine armed failed status:{}", ErrorCodeText(status));
         }
-        connectability_state_ = (status == ErrorCode::SUCCESS) ? ConnectabilityState::ARMED
-                                                               : ConnectabilityState::DISARMED;
+        set_connectability_state((status == ErrorCode::SUCCESS) ? ConnectabilityState::ARMED
+                                                                : ConnectabilityState::DISARMED);
         log::info("Le connection state machine armed state:{} status:{}",
                   connectability_state_machine_text(connectability_state_), ErrorCodeText(status));
         if (disarmed_while_arming_) {
@@ -791,7 +801,7 @@ public:
       return;
     }
     AddressWithType empty(Address::kEmpty, AddressType::RANDOM_DEVICE_ADDRESS);
-    connectability_state_ = ConnectabilityState::ARMING;
+    set_connectability_state(ConnectabilityState::ARMING);
     connecting_le_ = accept_list;
 
     uint16_t le_scan_interval =
@@ -905,7 +915,7 @@ public:
     switch (connectability_state_) {
       case ConnectabilityState::ARMED:
         log::info("Disarming LE connection state machine with create connection cancel");
-        connectability_state_ = ConnectabilityState::DISARMING;
+        set_connectability_state(ConnectabilityState::DISARMING);
         le_acl_connection_interface_->EnqueueCommand(
                 LeCreateConnectionCancelBuilder::Create(),
                 handler_->BindOnce(&le_impl::on_create_connection_cancel_complete,
@@ -963,6 +973,10 @@ public:
       arm_on_resume_ = true;
       return;
     }
+
+    log::verbose("{}, already_in_accept_list: {}, pause_connection {}, state: {}",
+                 address_with_type, already_in_accept_list, pause_connection,
+                 connectability_state_machine_text(connectability_state_));
 
     switch (connectability_state_) {
       case ConnectabilityState::ARMED:

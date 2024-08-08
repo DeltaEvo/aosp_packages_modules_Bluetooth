@@ -501,14 +501,14 @@ class BluetoothManagerService {
                     if (BluetoothAdapter.ACTION_LOCAL_NAME_CHANGED.equals(action)) {
                         String newName = intent.getStringExtra(BluetoothAdapter.EXTRA_LOCAL_NAME);
                         if (newName != null) {
-                            Log.d(TAG, "Bluetooth Adapter name changed to " + newName);
+                            Log.d(TAG, "Local name changed to: " + newName);
                             storeNameAndAddress(newName, null);
                         }
                     } else if (BluetoothAdapter.ACTION_BLUETOOTH_ADDRESS_CHANGED.equals(action)) {
                         String newAddress =
                                 intent.getStringExtra(BluetoothAdapter.EXTRA_BLUETOOTH_ADDRESS);
                         if (newAddress != null) {
-                            Log.d(TAG, "Local address changed to …" + logAddress(newAddress));
+                            Log.d(TAG, "Local address changed to: " + logAddress(newAddress));
                             storeNameAndAddress(null, newAddress);
                         } else {
                             Log.e(TAG, "No Bluetooth Adapter address parameter found");
@@ -782,6 +782,16 @@ class BluetoothManagerService {
     IBluetooth registerAdapter(IBluetoothManagerCallback callback) {
         synchronized (mCallbacks) {
             mCallbacks.register(callback);
+            if (Flags.broadcastAdapterStateWithCallback()) {
+                try {
+                    callback.onBluetoothAdapterStateChange(getState());
+                } catch (RemoteException e) {
+                    Log.e(
+                            TAG,
+                            "registerAdapter: Unable to call onBluetoothAdapterStateChange()",
+                            e);
+                }
+            }
         }
         return mAdapter != null ? mAdapter.getAdapterBinder() : null;
     }
@@ -1207,13 +1217,6 @@ class BluetoothManagerService {
                 Log.e(TAG, "Unable to unregister BluetoothCallback", e);
             }
 
-            if (!Flags.explicitKillFromSystemServer()) {
-                mAdapter = null;
-                mContext.unbindService(mConnection);
-                mHandler.removeMessages(MESSAGE_TIMEOUT_BIND);
-                return;
-            }
-
             CompletableFuture<Void> binderDead = new CompletableFuture<>();
             try {
                 mAdapter.getAdapterBinder()
@@ -1386,6 +1389,27 @@ class BluetoothManagerService {
                         mCallbacks.getBroadcastItem(i).onBluetoothServiceDown();
                     } catch (RemoteException e) {
                         Log.e(TAG, "Unable to call onBluetoothServiceDown() on callback #" + i, e);
+                    }
+                }
+            } finally {
+                mCallbacks.finishBroadcast();
+            }
+        }
+    }
+
+    private void sendBluetoothAdapterStateChangeCallback(int newState) {
+        if (!Flags.broadcastAdapterStateWithCallback()) {
+            return;
+        }
+        synchronized (mCallbacks) {
+            try {
+                int n = mCallbacks.beginBroadcast();
+                Log.d(TAG, "sendBluetoothAdapterStateChangeCallback(): to " + n + " receivers");
+                for (int i = 0; i < n; i++) {
+                    try {
+                        mCallbacks.getBroadcastItem(i).onBluetoothAdapterStateChange(newState);
+                    } catch (RemoteException e) {
+                        Log.e(TAG, "onBluetoothAdapterStateChange: failed for callback #" + i, e);
                     }
                 }
             } finally {
@@ -2048,6 +2072,7 @@ class BluetoothManagerService {
             return;
         }
         mState.set(newState);
+        sendBluetoothAdapterStateChangeCallback(newState);
 
         if (prevState == STATE_ON) {
             autoOnSetupTimer();

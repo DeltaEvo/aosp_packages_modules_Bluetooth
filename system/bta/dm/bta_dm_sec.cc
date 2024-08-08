@@ -39,13 +39,13 @@
 using namespace bluetooth;
 
 static tBTM_STATUS bta_dm_sp_cback(tBTM_SP_EVT event, tBTM_SP_EVT_DATA* p_data);
-static uint8_t bta_dm_ble_smp_cback(tBTM_LE_EVT event, const RawAddress& bda,
-                                    tBTM_LE_EVT_DATA* p_data);
-static uint8_t bta_dm_new_link_key_cback(const RawAddress& bd_addr, DEV_CLASS dev_class,
-                                         BD_NAME bd_name, const LinkKey& key, uint8_t key_type,
-                                         bool is_ctkd);
-static uint8_t bta_dm_pin_cback(const RawAddress& bd_addr, DEV_CLASS dev_class,
-                                const BD_NAME bd_name, bool min_16_digit);
+static tBTM_STATUS bta_dm_ble_smp_cback(tBTM_LE_EVT event, const RawAddress& bda,
+                                        tBTM_LE_EVT_DATA* p_data);
+static tBTM_STATUS bta_dm_new_link_key_cback(const RawAddress& bd_addr, DEV_CLASS dev_class,
+                                             BD_NAME bd_name, const LinkKey& key, uint8_t key_type,
+                                             bool is_ctkd);
+static tBTM_STATUS bta_dm_pin_cback(const RawAddress& bd_addr, DEV_CLASS dev_class,
+                                    const BD_NAME bd_name, bool min_16_digit);
 static tBTM_STATUS bta_dm_sirk_verifiction_cback(const RawAddress& bd_addr);
 static void bta_dm_authentication_complete_cback(const RawAddress& bd_addr, DEV_CLASS dev_class,
                                                  BD_NAME bd_name, tHCI_REASON result);
@@ -249,8 +249,8 @@ static void bta_dm_pinname_cback(const tBTM_REMOTE_DEV_NAME* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-static uint8_t bta_dm_pin_cback(const RawAddress& bd_addr, DEV_CLASS dev_class,
-                                const BD_NAME bd_name, bool min_16_digit) {
+static tBTM_STATUS bta_dm_pin_cback(const RawAddress& bd_addr, DEV_CLASS dev_class,
+                                    const BD_NAME bd_name, bool min_16_digit) {
   if (!bta_dm_sec_cb.p_sec_cback) {
     return BTM_NOT_AUTHORIZED;
   }
@@ -290,9 +290,9 @@ static uint8_t bta_dm_pin_cback(const RawAddress& bd_addr, DEV_CLASS dev_class,
  * Returns          void
  *
  ******************************************************************************/
-static uint8_t bta_dm_new_link_key_cback(const RawAddress& bd_addr, DEV_CLASS /* dev_class */,
-                                         BD_NAME bd_name, const LinkKey& key, uint8_t key_type,
-                                         bool is_ctkd) {
+static tBTM_STATUS bta_dm_new_link_key_cback(const RawAddress& bd_addr, DEV_CLASS /* dev_class */,
+                                             BD_NAME bd_name, const LinkKey& key, uint8_t key_type,
+                                             bool is_ctkd) {
   tBTA_DM_SEC sec_event;
   tBTA_DM_AUTH_CMPL* p_auth_cmpl;
   tBTA_DM_SEC_EVT event = BTA_DM_AUTH_CMPL_EVT;
@@ -648,8 +648,8 @@ static void ble_io_req(const RawAddress& bd_addr, tBTM_IO_CAP* p_io_cap, tBTM_OO
  * Returns          void
  *
  ******************************************************************************/
-static uint8_t bta_dm_ble_smp_cback(tBTM_LE_EVT event, const RawAddress& bda,
-                                    tBTM_LE_EVT_DATA* p_data) {
+static tBTM_STATUS bta_dm_ble_smp_cback(tBTM_LE_EVT event, const RawAddress& bda,
+                                        tBTM_LE_EVT_DATA* p_data) {
   tBTM_STATUS status = BTM_SUCCESS;
   tBTA_DM_SEC sec_event;
 

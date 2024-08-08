@@ -610,7 +610,7 @@ protected:
           auto num_of_allocations_per_ase =
                   std::min(target_max_channel_counts_per_ase, (uint8_t)split_allocations.size());
           // Note: This is very important to set for the unit test
-          // Configuration verifier
+          // Configuration provider
           endpoint_cfg.codec.channel_count_per_iso_stream = num_of_allocations_per_ase;
 
           // Consume the `num_of_allocations_per_ase` amount of allocations for
@@ -683,7 +683,7 @@ protected:
             .WillByDefault(Invoke(
                     [&](const bluetooth::le_audio::CodecManager::UnicastConfigurationRequirements&
                                 requirements,
-                        bluetooth::le_audio::CodecManager::UnicastConfigurationVerifier verifier) {
+                        bluetooth::le_audio::CodecManager::UnicastConfigurationProvider provider) {
                       if (codec_coding_format_ == kLeAudioCodingFormatLC3) {
                         auto filtered =
                                 *bluetooth::le_audio::AudioSetConfigurationProvider::Get()
@@ -702,7 +702,7 @@ protected:
                                                  }),
                                   filtered.end());
                         }
-                        auto cfg = verifier(requirements, &filtered);
+                        auto cfg = provider(requirements, &filtered);
                         if (cfg == nullptr) {
                           return std::unique_ptr<AudioSetConfiguration>(nullptr);
                         }
@@ -847,6 +847,26 @@ protected:
     }
   }
 
+  const CodecConfigSetting PreparePreferredCodecConfig(
+          const CodecConfigSetting& audio_set_codec_conf,
+          const btle_audio_codec_config_t& preferred_config) {
+    constexpr uint8_t supported_codec_frames_per_sdu = 1;
+    return {.id = LeAudioCodecIdLc3,
+            .params = LeAudioLtvMap({
+                    {codec_spec_conf::kLeAudioLtvTypeSamplingFreq,
+                     UINT8_TO_VEC_UINT8(codec_spec_conf::SingleSamplingFreqCapability2Config(
+                             preferred_config.sample_rate))},
+                    {codec_spec_conf::kLeAudioLtvTypeFrameDuration,
+                     UINT8_TO_VEC_UINT8(codec_spec_conf::SingleFrameDurationCapability2Config(
+                             preferred_config.frame_duration))},
+                    {codec_spec_conf::kLeAudioLtvTypeOctetsPerCodecFrame,
+                     UINT16_TO_VEC_UINT8(preferred_config.octets_per_frame)},
+                    {codec_spec_conf::kLeAudioLtvTypeCodecFrameBlocksPerSdu,
+                     UINT8_TO_VEC_UINT8(supported_codec_frames_per_sdu)},
+            }),
+            .channel_count_per_iso_stream = audio_set_codec_conf.GetChannelCountPerIsoStream()};
+  }
+
   void TestSingleAseConfiguration(LeAudioContextType context_type,
                                   TestGroupAseConfigurationData* data, uint8_t data_size,
                                   const AudioSetConfiguration* audio_set_conf,
@@ -939,7 +959,9 @@ protected:
   void TestGroupAseConfiguration(LeAudioContextType context_type,
                                  TestGroupAseConfigurationData* data, uint8_t data_size,
                                  uint8_t directions_to_verify = kLeAudioDirectionSink |
-                                                                kLeAudioDirectionSource) {
+                                                                kLeAudioDirectionSource,
+                                 btle_audio_codec_config_t* preferred_codec_config = nullptr,
+                                 bool should_use_preferred_codec = false) {
     if (codec_coding_format_ != kLeAudioCodingFormatLC3) {
       return TestGroupAseVendorConfiguration(context_type, data, data_size, directions_to_verify);
     }
@@ -996,6 +1018,11 @@ protected:
           for (const auto& entry : ase_confs) {
             num_of_ase.get(direction)++;
             pac_builder.Add(entry.codec, data_channel_counts);
+            if (preferred_codec_config && should_use_preferred_codec) {
+              const auto customized_codec_config =
+                      PreparePreferredCodecConfig(entry.codec, *preferred_codec_config);
+              pac_builder.Add(customized_codec_config, data_channel_counts);
+            }
             dest_pacs = pac_builder.Get();
           }
           num_of_ase.get(direction) /= data_size;
@@ -1014,6 +1041,11 @@ protected:
       BidirectionalPair<AudioContexts> group_audio_locations = {
               .sink = AudioContexts(context_type), .source = AudioContexts(context_type)};
 
+      /* Set preferred codec*/
+      if (preferred_codec_config) {
+        group_->SetPreferredAudioSetConfiguration(*preferred_codec_config, *preferred_codec_config);
+      }
+
       /* Stimulate update of available context map */
       group_->UpdateAudioContextAvailability();
       group_->UpdateAudioSetConfigurationCache(context_type);
@@ -1024,7 +1056,10 @@ protected:
        * activated verify, ASEs are actually active */
       if (interesting_configuration && (directions_to_verify == configuration_directions)) {
         ASSERT_TRUE(configuration_result);
-
+        ASSERT_EQ(group_->GetPreferredConfiguration(context_type) != nullptr,
+                  should_use_preferred_codec);
+        ASSERT_EQ(group_->IsUsingPreferredAudioSetConfiguration(context_type),
+                  should_use_preferred_codec);
         bool matching_conf = true;
         /* Check if each of the devices has activated ASEs as expected */
         for (int i = 0; i < data_size; i++) {
@@ -1244,7 +1279,7 @@ protected:
             .WillByDefault(Invoke([&configs](const bluetooth::le_audio::CodecManager::
                                                      UnicastConfigurationRequirements& requirements,
                                              bluetooth::le_audio::CodecManager::
-                                                     UnicastConfigurationVerifier verifier) {
+                                                     UnicastConfigurationProvider provider) {
               auto filtered = configs;
               // Filter out the dual bidir SWB configurations
               if (!bluetooth::le_audio::CodecManager::GetInstance()->IsDualBiDirSwbSupported()) {
@@ -1258,7 +1293,7 @@ protected:
                                               }),
                                filtered.end());
               }
-              auto cfg = verifier(requirements, &filtered);
+              auto cfg = provider(requirements, &filtered);
               if (cfg == nullptr) {
                 return std::unique_ptr<AudioSetConfiguration>(nullptr);
               }
@@ -1881,6 +1916,138 @@ TEST_P(LeAudioAseConfigurationTest, test_lc3_config_media) {
   TestLc3CodecConfig(LeAudioContextType::MEDIA);
 }
 
+TEST_P(LeAudioAseConfigurationTest, test_use_codec_preference_earbuds_media) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  LeAudioDevice* left = AddTestDevice(1, 1);
+  LeAudioDevice* right = AddTestDevice(1, 1);
+  TestGroupAseConfigurationData data[] = {{left, kLeAudioCodecChannelCountSingleChannel,
+                                           kLeAudioCodecChannelCountSingleChannel, 1, 0},
+                                          {right, kLeAudioCodecChannelCountSingleChannel,
+                                           kLeAudioCodecChannelCountSingleChannel, 1, 0}};
+
+  /* Change location as by default it is stereo */
+  left->snk_audio_locations_ = ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft;
+  left->src_audio_locations_ = ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft;
+  right->snk_audio_locations_ = ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontRight;
+  right->src_audio_locations_ = ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontRight;
+  group_->ReloadAudioLocations();
+
+  // this would be also built into pac record
+  btle_audio_codec_config_t preferred_codec_config = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 40};
+
+  uint8_t directions_to_verify = kLeAudioDirectionSink;
+  bool should_use_preferred_codec = true;
+
+  TestGroupAseConfiguration(LeAudioContextType::MEDIA, data, 2, directions_to_verify,
+                            &preferred_codec_config, should_use_preferred_codec);
+}
+
+TEST_P(LeAudioAseConfigurationTest, test_not_use_codec_preference_earbuds_media) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  LeAudioDevice* left = AddTestDevice(1, 1);
+  LeAudioDevice* right = AddTestDevice(1, 1);
+  TestGroupAseConfigurationData data[] = {{left, kLeAudioCodecChannelCountSingleChannel,
+                                           kLeAudioCodecChannelCountSingleChannel, 1, 0},
+                                          {right, kLeAudioCodecChannelCountSingleChannel,
+                                           kLeAudioCodecChannelCountSingleChannel, 1, 0}};
+
+  /* Change location as by default it is stereo */
+  left->snk_audio_locations_ = ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft;
+  left->src_audio_locations_ = ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft;
+  right->snk_audio_locations_ = ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontRight;
+  right->src_audio_locations_ = ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontRight;
+  group_->ReloadAudioLocations();
+
+  // this would be also built into pac record
+  btle_audio_codec_config_t preferred_codec_config = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 70};
+
+  uint8_t directions_to_verify = kLeAudioDirectionSink;
+  bool should_use_preferred_codec = false;
+
+  TestGroupAseConfiguration(LeAudioContextType::MEDIA, data, 2, directions_to_verify,
+                            &preferred_codec_config, should_use_preferred_codec);
+}
+
+TEST_P(LeAudioAseConfigurationTest, test_use_codec_preference_earbuds_conv) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  LeAudioDevice* left = AddTestDevice(1, 1);
+  LeAudioDevice* right = AddTestDevice(1, 1);
+  TestGroupAseConfigurationData data[] = {{left, kLeAudioCodecChannelCountSingleChannel,
+                                           kLeAudioCodecChannelCountSingleChannel, 1, 1},
+                                          {right, kLeAudioCodecChannelCountSingleChannel,
+                                           kLeAudioCodecChannelCountSingleChannel, 1, 1}};
+
+  /* Change location as by default it is stereo */
+  left->snk_audio_locations_ = ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft;
+  left->src_audio_locations_ = ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft;
+  right->snk_audio_locations_ = ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontRight;
+  right->src_audio_locations_ = ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontRight;
+  group_->ReloadAudioLocations();
+
+  // this would be also built into pac record
+  btle_audio_codec_config_t preferred_codec_config = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_32000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 80};
+
+  uint8_t directions_to_verify = kLeAudioDirectionBoth;
+  bool should_use_preferred_codec = true;
+
+  TestGroupAseConfiguration(LeAudioContextType::CONVERSATIONAL, data, 2, directions_to_verify,
+                            &preferred_codec_config, should_use_preferred_codec);
+}
+
+TEST_P(LeAudioAseConfigurationTest, test_not_use_codec_preference_earbuds_conv) {
+  com::android::bluetooth::flags::provider_->leaudio_set_codec_config_preference(true);
+
+  LeAudioDevice* left = AddTestDevice(1, 1);
+  LeAudioDevice* right = AddTestDevice(1, 1);
+  TestGroupAseConfigurationData data[] = {{left, kLeAudioCodecChannelCountSingleChannel,
+                                           kLeAudioCodecChannelCountSingleChannel, 1, 1},
+                                          {right, kLeAudioCodecChannelCountSingleChannel,
+                                           kLeAudioCodecChannelCountSingleChannel, 1, 1}};
+
+  /* Change location as by default it is stereo */
+  left->snk_audio_locations_ = ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft;
+  left->src_audio_locations_ = ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft;
+  right->snk_audio_locations_ = ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontRight;
+  right->src_audio_locations_ = ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontRight;
+  group_->ReloadAudioLocations();
+
+  // this would be also built into pac record
+  btle_audio_codec_config_t preferred_codec_config = {
+          .codec_type = LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
+          .sample_rate = LE_AUDIO_SAMPLE_RATE_INDEX_16000HZ,
+          .bits_per_sample = LE_AUDIO_BITS_PER_SAMPLE_INDEX_16,
+          .channel_count = LE_AUDIO_CHANNEL_COUNT_INDEX_1,
+          .frame_duration = LE_AUDIO_FRAME_DURATION_INDEX_10000US,
+          .octets_per_frame = 10};
+
+  uint8_t directions_to_verify = kLeAudioDirectionBoth;
+  bool should_use_preferred_codec = false;
+
+  TestGroupAseConfiguration(LeAudioContextType::CONVERSATIONAL, data, 2, directions_to_verify,
+                            &preferred_codec_config, should_use_preferred_codec);
+}
+
 TEST_P(LeAudioAseConfigurationTest, test_lc3_config_media_codec_extensibility_fb2) {
   if (codec_coding_format_ != kLeAudioCodingFormatLC3) {
     GTEST_SKIP();
@@ -1897,7 +2064,7 @@ TEST_P(LeAudioAseConfigurationTest, test_lc3_config_media_codec_extensibility_fb
           .WillByDefault(Invoke(
                   [&](const bluetooth::le_audio::CodecManager::UnicastConfigurationRequirements&
                               requirements,
-                      bluetooth::le_audio::CodecManager::UnicastConfigurationVerifier verifier) {
+                      bluetooth::le_audio::CodecManager::UnicastConfigurationProvider provider) {
                     auto filtered = *bluetooth::le_audio::AudioSetConfigurationProvider::Get()
                                              ->GetConfigurations(requirements.audio_context_type);
                     // Filter out the dual bidir SWB configurations
@@ -1914,7 +2081,7 @@ TEST_P(LeAudioAseConfigurationTest, test_lc3_config_media_codec_extensibility_fb
                                              }),
                               filtered.end());
                     }
-                    auto cfg = verifier(requirements, &filtered);
+                    auto cfg = provider(requirements, &filtered);
                     if (cfg == nullptr) {
                       return std::unique_ptr<AudioSetConfiguration>(nullptr);
                     }

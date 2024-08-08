@@ -95,9 +95,6 @@ std::vector<tBTM_SEC_DEV_REC*> btm_get_sec_dev_rec() {
   inc_func_call_count(__func__);
   return {};
 }
-
-void BTM_SetConsolidationCallback(BTM_CONSOLIDATION_CB* /* cb */) { inc_func_call_count(__func__); }
-
 bool BTM_Sec_AddressKnown(const RawAddress& address) {
   inc_func_call_count(__func__);
   return test::mock::stack_btm_dev::BTM_Sec_AddressKnown(address);

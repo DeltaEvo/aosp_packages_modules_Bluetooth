@@ -82,7 +82,8 @@ public:
   MOCK_METHOD((void), OnDeviceAvailable, (const RawAddress& address, uint8_t num_offset),
               (override));
   MOCK_METHOD((void), OnVolumeStateChanged,
-              (const RawAddress& address, uint8_t volume, bool mute, bool isAutonomous),
+              (const RawAddress& address, uint8_t volume, bool mute, uint8_t flags,
+               bool isAutonomous),
               (override));
   MOCK_METHOD((void), OnGroupVolumeStateChanged,
               (int group_id, uint8_t volume, bool mute, bool isAutonomous), (override));
@@ -885,7 +886,7 @@ TEST_F(VolumeControlTest, test_subscribe_vocs_output_description) {
 
 TEST_F(VolumeControlTest, test_read_vcs_volume_state) {
   const RawAddress test_address = GetTestAddress(0);
-  EXPECT_CALL(*callbacks, OnVolumeStateChanged(test_address, _, _, false));
+  EXPECT_CALL(*callbacks, OnVolumeStateChanged(test_address, _, _, _, true)).Times(1);
   std::vector<uint16_t> handles({0x0021});
   TestReadCharacteristic(test_address, 1, handles);
 }
@@ -960,7 +961,7 @@ TEST_F(VolumeControlTest, test_discovery_vocs_broken) {
 
 TEST_F(VolumeControlTest, test_read_vcs_database_out_of_sync) {
   const RawAddress test_address = GetTestAddress(0);
-  EXPECT_CALL(*callbacks, OnVolumeStateChanged(test_address, _, _, false));
+  EXPECT_CALL(*callbacks, OnVolumeStateChanged(test_address, _, _, _, true));
   std::vector<uint16_t> handles({0x0021});
   uint16_t conn_id = 1;
 
@@ -1033,12 +1034,12 @@ protected:
 
 TEST_F(VolumeControlCallbackTest, test_volume_state_changed_stress) {
   std::vector<uint8_t> value({0x03, 0x01, 0x02});
-  EXPECT_CALL(*callbacks, OnVolumeStateChanged(test_address, 0x03, true, true));
+  EXPECT_CALL(*callbacks, OnVolumeStateChanged(test_address, 0x03, true, _, true));
   GetNotificationEvent(0x0021, value);
 }
 
 TEST_F(VolumeControlCallbackTest, test_volume_state_changed_malformed) {
-  EXPECT_CALL(*callbacks, OnVolumeStateChanged(test_address, _, _, _)).Times(0);
+  EXPECT_CALL(*callbacks, OnVolumeStateChanged(test_address, _, _, _, _)).Times(0);
   std::vector<uint8_t> too_short({0x03, 0x01});
   GetNotificationEvent(0x0021, too_short);
   std::vector<uint8_t> too_long({0x03, 0x01, 0x02, 0x03});
@@ -1527,6 +1528,8 @@ TEST_F(VolumeControlCsis, test_set_volume) {
   VolumeControl::Get()->SetVolume(test_address_1, 20);
   VolumeControl::Get()->SetVolume(test_address_2, 20);
 
+  EXPECT_CALL(*callbacks, OnVolumeStateChanged(test_address_1, 20, false, _, false));
+  EXPECT_CALL(*callbacks, OnVolumeStateChanged(test_address_2, 20, false, _, false));
   std::vector<uint8_t> value2({20, 0x00, 0x03});
   GetNotificationEvent(conn_id_1, test_address_1, 0x0021, value2);
   GetNotificationEvent(conn_id_2, test_address_2, 0x0021, value2);

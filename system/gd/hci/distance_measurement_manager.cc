@@ -496,7 +496,7 @@ struct DistanceMeasurementManager::impl : bluetooth::hal::RangingHalCallback {
                     connection_handle, kConfigId, kMaxProcedureLen, kMinProcedureInterval,
                     kMaxProcedureInterval, kMaxProcedureCount, kMinSubeventLen, kMaxSubeventLen,
                     kToneAntennaConfigSelection, CsPhy::LE_1M_PHY, kTxPwrDelta,
-                    preferred_peer_antenna),
+                    preferred_peer_antenna, CsSnrControl::NOT_APPLIED, CsSnrControl::NOT_APPLIED),
             handler_->BindOnceOn(this, &impl::on_cs_set_procedure_parameters));
   }
 

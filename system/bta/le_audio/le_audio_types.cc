@@ -858,6 +858,8 @@ template struct BidirectionalPair<bool>;
 template struct BidirectionalPair<int>;
 template struct BidirectionalPair<std::vector<set_configurations::AseConfiguration>>;
 template struct BidirectionalPair<set_configurations::QosConfigSetting>;
+template struct BidirectionalPair<
+        std::unique_ptr<const bluetooth::le_audio::btle_audio_codec_config_t>>;
 
 }  // namespace types
 }  // namespace bluetooth::le_audio

@@ -16,16 +16,21 @@
 
 #define LOG_TAG "BTAudioClientAIDL"
 
-#include "client_interface_aidl.h"
+#include "aidl/client_interface_aidl.h"
 
 #include <android/binder_manager.h>
 #include <bluetooth/log.h>
 #include <com_android_bluetooth_flags.h>
 
+#include <memory>
+#include <set>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "bta/ag/bta_ag_int.h"
+
+const uint8_t kFetchAudioProviderRetryNumber = 3;
 
 namespace bluetooth {
 namespace audio {
@@ -174,42 +179,50 @@ void BluetoothAudioClientInterface::FetchAudioProvider() {
   if (provider_ != nullptr) {
     log::warn("refetch");
   }
-  auto provider_factory = IBluetoothAudioProviderFactory::fromBinder(::ndk::SpAIBinder(
-          AServiceManager_waitForService(kDefaultAudioProviderFactoryInterface.c_str())));
+  // Retry if audioserver restarts in the middle of fetching.
+  // When audioserver restarts, IBluetoothAudioProviderFactory service is also
+  // re-registered, so we need to re-fetch the service.
+  for (int retry_no = 0; retry_no < kFetchAudioProviderRetryNumber; ++retry_no) {
+    auto provider_factory = IBluetoothAudioProviderFactory::fromBinder(::ndk::SpAIBinder(
+            AServiceManager_waitForService(kDefaultAudioProviderFactoryInterface.c_str())));
 
-  if (provider_factory == nullptr) {
-    log::error("can't get capability from unknown factory");
-    return;
-  }
+    if (provider_factory == nullptr) {
+      log::error("can't get capability from unknown factory");
+      return;
+    }
 
-  capabilities_.clear();
-  auto aidl_retval =
-          provider_factory->getProviderCapabilities(transport_->GetSessionType(), &capabilities_);
-  if (!aidl_retval.isOk()) {
-    log::fatal("BluetoothAudioHal::getProviderCapabilities failure: {}",
-               aidl_retval.getDescription());
-    return;
-  }
-  if (capabilities_.empty()) {
-    log::warn("SessionType={} Not supported by BluetoothAudioHal",
-              toString(transport_->GetSessionType()));
-    return;
-  }
-  log::info("BluetoothAudioHal SessionType={} has {} AudioCapabilities",
-            toString(transport_->GetSessionType()), capabilities_.size());
+    capabilities_.clear();
+    auto aidl_retval =
+            provider_factory->getProviderCapabilities(transport_->GetSessionType(), &capabilities_);
+    if (!aidl_retval.isOk()) {
+      log::fatal("BluetoothAudioHal::getProviderCapabilities failure: {}",
+                 aidl_retval.getDescription());
+      return;
+    }
+    if (capabilities_.empty()) {
+      log::warn("SessionType={} Not supported by BluetoothAudioHal",
+                toString(transport_->GetSessionType()));
+      return;
+    }
+    log::info("BluetoothAudioHal SessionType={} has {} AudioCapabilities",
+              toString(transport_->GetSessionType()), capabilities_.size());
 
-  aidl_retval = provider_factory->openProvider(transport_->GetSessionType(), &provider_);
-  if (!aidl_retval.isOk()) {
-    log::fatal("BluetoothAudioHal::openProvider failure: {}", aidl_retval.getDescription());
+    aidl_retval = provider_factory->openProvider(transport_->GetSessionType(), &provider_);
+    if (!aidl_retval.isOk()) {
+      log::error("BluetoothAudioHal::openProvider failure: {}, retry number {}",
+                 aidl_retval.getDescription(), retry_no + 1);
+    } else {
+      provider_factory_ = std::move(provider_factory);
+      break;
+    }
   }
   log::assert_that(provider_ != nullptr, "assert failed: provider_ != nullptr");
 
   binder_status_t binder_status =
-          AIBinder_linkToDeath(provider_factory->asBinder().get(), death_recipient_.get(), this);
+          AIBinder_linkToDeath(provider_factory_->asBinder().get(), death_recipient_.get(), this);
   if (binder_status != STATUS_OK) {
     log::error("Failed to linkToDeath {}", static_cast<int>(binder_status));
   }
-  provider_factory_ = std::move(provider_factory);
 
   log::info("IBluetoothAudioProvidersFactory::openProvider() returned {}{}",
             fmt::ptr(provider_.get()), (provider_->isRemote() ? " (remote)" : " (local)"));
@@ -524,7 +537,7 @@ size_t BluetoothAudioSinkClientInterface::ReadAudioData(uint8_t* p_buf, uint32_t
       if (avail_to_read > len - total_read) {
         avail_to_read = len - total_read;
       }
-      if (data_mq_->read((MqDataType*)p_buf + total_read, avail_to_read) == 0) {
+      if (data_mq_->read(reinterpret_cast<MqDataType*>(p_buf) + total_read, avail_to_read) == 0) {
         log::warn("len={} total_read={} failed", len, total_read);
         break;
       }
@@ -620,7 +633,7 @@ void BluetoothAudioClientInterface::SetCodecPriority(CodecId codec_id, int32_t p
   log::assert_that(provider_ != nullptr, "assert failed: provider_ != nullptr");
   auto aidl_retval = provider_->setCodecPriority(codec_id, priority);
   if (!aidl_retval.isOk()) {
-    log::fatal("BluetoothAudioHal::setCodecPriority failure: {}", aidl_retval.getDescription());
+    log::error("BluetoothAudioHal::setCodecPriority failure: {}", aidl_retval.getDescription());
   }
 }
 
@@ -641,14 +654,15 @@ BluetoothAudioClientInterface::GetLeAudioAseConfiguration(
                                                            requirements, &configurations);
 
   if (!aidl_retval.isOk()) {
-    log::fatal("BluetoothAudioHal::getLeAudioAseConfiguration failure: {}",
+    log::error("BluetoothAudioHal::getLeAudioAseConfiguration failure: {}",
                aidl_retval.getDescription());
+  } else {
+    log::info(
+            "BluetoothAudioHal::getLeAudioAseConfiguration returned {} "
+            "configurations.",
+            configurations.size());
   }
 
-  log::info(
-          "BluetoothAudioHal::getLeAudioAseConfiguration returned {} "
-          "configurations.",
-          configurations.size());
   return configurations;
 }
 
@@ -661,7 +675,7 @@ BluetoothAudioClientInterface::getLeAudioAseQosConfiguration(
   auto aidl_retval = provider_->getLeAudioAseQosConfiguration(qosRequirement, &qos_configuration);
 
   if (!aidl_retval.isOk()) {
-    log::fatal("BluetoothAudioHal::getLeAudioAseQosConfiguration failure: {}",
+    log::error("BluetoothAudioHal::getLeAudioAseQosConfiguration failure: {}",
                aidl_retval.getDescription());
   }
   return qos_configuration;
@@ -675,7 +689,7 @@ void BluetoothAudioClientInterface::onSinkAseMetadataChanged(
   auto aidl_retval = provider_->onSinkAseMetadataChanged(state, cigId, cisId, metadata);
 
   if (!aidl_retval.isOk()) {
-    log::fatal("BluetoothAudioHal::onSinkAseMetadataChanged failure: {}",
+    log::error("BluetoothAudioHal::onSinkAseMetadataChanged failure: {}",
                aidl_retval.getDescription());
   }
 }
@@ -688,7 +702,7 @@ void BluetoothAudioClientInterface::onSourceAseMetadataChanged(
   auto aidl_retval = provider_->onSourceAseMetadataChanged(state, cigId, cisId, metadata);
 
   if (!aidl_retval.isOk()) {
-    log::fatal("BluetoothAudioHal::onSinkAseMetadataChanged failure: {}",
+    log::error("BluetoothAudioHal::onSourceAseMetadataChanged failure: {}",
                aidl_retval.getDescription());
   }
 }
@@ -706,7 +720,7 @@ BluetoothAudioClientInterface::getLeAudioBroadcastConfiguration(
                                                                  requirement, &setting);
 
   if (!aidl_retval.isOk()) {
-    log::fatal("BluetoothAudioHal::onSinkAseMetadataChanged failure: {}",
+    log::error("BluetoothAudioHal::getLeAudioBroadcastConfiguration failure: {}",
                aidl_retval.getDescription());
   }
 

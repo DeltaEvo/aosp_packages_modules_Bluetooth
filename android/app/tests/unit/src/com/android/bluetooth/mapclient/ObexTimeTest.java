@@ -16,6 +16,8 @@
 
 package com.android.bluetooth.mapclient;
 
+import android.annotation.SuppressLint;
+
 import androidx.test.runner.AndroidJUnit4;
 
 import org.junit.Assert;
@@ -27,6 +29,7 @@ import java.util.Date;
 import java.util.TimeZone;
 
 @RunWith(AndroidJUnit4.class)
+@SuppressLint("UndefinedEquals")
 public class ObexTimeTest {
     private static final String TAG = ObexTimeTest.class.getSimpleName();
 

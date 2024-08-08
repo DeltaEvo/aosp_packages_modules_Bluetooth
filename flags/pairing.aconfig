@@ -2,10 +2,13 @@ package: "com.android.bluetooth.flags"
 container: "com.android.btservices"
 
 flag {
-    name: "clear_collision_state_on_pairing_complete"
+    name: "clear_auth_collision_state_on_pairing_complete"
     namespace: "bluetooth"
     description: "Clear authentication collision state on pairing conclusion"
-    bug: "327208896"
+    bug: "358116527"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
 }
 
 flag {
@@ -100,6 +103,16 @@ flag {
     namespace: "bluetooth"
     description: "Perform LE name discovery for pairing if device name is not known"
     bug: "355095011"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "transmit_smp_packets_before_release"
+    namespace: "bluetooth"
+    description: "Ensure that SMP packets are transmitted before SMP channel is released"
+    bug: "357106628"
     metadata {
         purpose: PURPOSE_BUGFIX
     }

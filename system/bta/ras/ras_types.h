@@ -58,7 +58,6 @@ static const uint32_t kRealTimeRangingData = 0x01;
 static const uint32_t kRetrieveLostRangingDataSegments = 0x02;
 static const uint32_t kAbortOperation = 0x04;
 static const uint32_t kFilterRangingData = 0x08;
-static const uint32_t kPctPhaseFormat = 0xA0;
 }  // namespace feature
 
 enum class Opcode : uint8_t {
@@ -67,7 +66,6 @@ enum class Opcode : uint8_t {
   RETRIEVE_LOST_RANGING_DATA_SEGMENTS = 0x02,
   ABORT_OPERATION = 0x03,
   FILTER = 0x04,
-  PCT_FORMAT = 0x05,
 };
 
 static const uint8_t OPERATOR_NULL = 0x00;
@@ -88,7 +86,7 @@ enum class ResponseCodeValue : uint8_t {
   PERSISTED = 0x04,
   ABORT_UNSUCCESSFUL = 0x05,
   PROCEDURE_NOT_COMPLETED = 0x06,
-  OPERAND_NOT_SUPPORTED = 0x07,
+  SERVER_BUSY = 0x07,
   NO_RECORDS_FOUND = 0x08,
 };
 

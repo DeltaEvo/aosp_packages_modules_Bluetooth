@@ -1843,7 +1843,7 @@ private:
         break;
 
       case BTA_GATTC_ENC_CMPL_CB_EVT: {
-        uint8_t encryption_status;
+        tBTM_STATUS encryption_status;
         if (BTM_IsEncrypted(p_data->enc_cmpl.remote_bda, BT_TRANSPORT_LE)) {
           encryption_status = BTM_SUCCESS;
         } else {
@@ -1910,7 +1910,7 @@ private:
       return;
     }
 
-    int result =
+    tBTM_STATUS result =
             BTM_SetEncryption(device->addr, BT_TRANSPORT_LE, nullptr, nullptr, BTM_BLE_SEC_ENCRYPT);
 
     log::info("Encryption required for {}. Request result: 0x{:02x}", device->addr, result);
@@ -2048,7 +2048,7 @@ private:
     OnCsisNotification(evt.conn_id, evt.handle, evt.len, evt.value);
   }
 
-  void OnLeEncryptionComplete(const RawAddress& address, uint8_t status) {
+  void OnLeEncryptionComplete(const RawAddress& address, tBTM_STATUS status) {
     log::info("{}", address);
     auto device = FindDeviceByAddress(address);
     if (device == nullptr) {

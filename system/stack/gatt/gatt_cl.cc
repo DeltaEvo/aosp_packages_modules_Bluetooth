@@ -25,18 +25,17 @@
 #define LOG_TAG "bluetooth"
 
 #include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 #include <string.h>
 
 #include "gatt_int.h"
 #include "hardware/bt_gatt_types.h"
 #include "internal_include/bt_target.h"
-#include "internal_include/bt_trace.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/osi.h"
 #include "stack/arbiter/acl_arbiter.h"
 #include "stack/eatt/eatt.h"
 #include "stack/include/bt_types.h"
+#include "stack/include/btm_client_interface.h"
 #include "types/bluetooth/uuid.h"
 
 #define GATT_WRITE_LONG_HDR_SIZE 5 /* 1 opcode + 2 handle + 2 offset */
@@ -696,9 +695,17 @@ void gatt_process_notification(tGATT_TCB& tcb, uint16_t cid, uint8_t op_code, ui
     // notification/indication
     // Note: need to do the indication count and start timer first then do
     // callback
-    for (i = 0, p_reg = gatt_cb.cl_rcb; i < GATT_MAX_APPS; i++, p_reg++) {
-      if (p_reg->in_use && p_reg->app_cb.p_cmpl_cb) {
-        tcb.ind_count++;
+    if (com::android::bluetooth::flags::gatt_client_dynamic_allocation()) {
+      for (auto& [i, p_reg] : gatt_cb.cl_rcb_map) {
+        if (p_reg->in_use && p_reg->app_cb.p_cmpl_cb) {
+          tcb.ind_count++;
+        }
+      }
+    } else {
+      for (i = 0, p_reg = gatt_cb.cl_rcb; i < GATT_MAX_APPS; i++, p_reg++) {
+        if (p_reg->in_use && p_reg->app_cb.p_cmpl_cb) {
+          tcb.ind_count++;
+        }
       }
     }
 
@@ -718,10 +725,19 @@ void gatt_process_notification(tGATT_TCB& tcb, uint16_t cid, uint8_t op_code, ui
   gatt_cl_complete.att_value = value;
   gatt_cl_complete.cid = cid;
 
-  for (i = 0, p_reg = gatt_cb.cl_rcb; i < GATT_MAX_APPS; i++, p_reg++) {
-    if (p_reg->in_use && p_reg->app_cb.p_cmpl_cb) {
-      conn_id = GATT_CREATE_CONN_ID(tcb.tcb_idx, p_reg->gatt_if);
-      (*p_reg->app_cb.p_cmpl_cb)(conn_id, event, encrypt_status, &gatt_cl_complete);
+  if (com::android::bluetooth::flags::gatt_client_dynamic_allocation()) {
+    for (auto& [i, p_reg] : gatt_cb.cl_rcb_map) {
+      if (p_reg->in_use && p_reg->app_cb.p_cmpl_cb) {
+        conn_id = GATT_CREATE_CONN_ID(tcb.tcb_idx, p_reg->gatt_if);
+        (*p_reg->app_cb.p_cmpl_cb)(conn_id, event, encrypt_status, &gatt_cl_complete);
+      }
+    }
+  } else {
+    for (i = 0, p_reg = gatt_cb.cl_rcb; i < GATT_MAX_APPS; i++, p_reg++) {
+      if (p_reg->in_use && p_reg->app_cb.p_cmpl_cb) {
+        conn_id = GATT_CREATE_CONN_ID(tcb.tcb_idx, p_reg->gatt_if);
+        (*p_reg->app_cb.p_cmpl_cb)(conn_id, event, encrypt_status, &gatt_cl_complete);
+      }
     }
   }
 
@@ -759,10 +775,19 @@ void gatt_process_notification(tGATT_TCB& tcb, uint16_t cid, uint8_t op_code, ui
     gatt_cl_complete.att_value = value;
     gatt_cl_complete.cid = cid;
 
-    for (i = 0, p_reg = gatt_cb.cl_rcb; i < GATT_MAX_APPS; i++, p_reg++) {
-      if (p_reg->in_use && p_reg->app_cb.p_cmpl_cb) {
-        conn_id = GATT_CREATE_CONN_ID(tcb.tcb_idx, p_reg->gatt_if);
-        (*p_reg->app_cb.p_cmpl_cb)(conn_id, event, encrypt_status, &gatt_cl_complete);
+    if (com::android::bluetooth::flags::gatt_client_dynamic_allocation()) {
+      for (auto& [i, p_reg] : gatt_cb.cl_rcb_map) {
+        if (p_reg->in_use && p_reg->app_cb.p_cmpl_cb) {
+          conn_id = GATT_CREATE_CONN_ID(tcb.tcb_idx, p_reg->gatt_if);
+          (*p_reg->app_cb.p_cmpl_cb)(conn_id, event, encrypt_status, &gatt_cl_complete);
+        }
+      }
+    } else {
+      for (i = 0, p_reg = gatt_cb.cl_rcb; i < GATT_MAX_APPS; i++, p_reg++) {
+        if (p_reg->in_use && p_reg->app_cb.p_cmpl_cb) {
+          conn_id = GATT_CREATE_CONN_ID(tcb.tcb_idx, p_reg->gatt_if);
+          (*p_reg->app_cb.p_cmpl_cb)(conn_id, event, encrypt_status, &gatt_cl_complete);
+        }
       }
     }
   }
@@ -1100,7 +1125,11 @@ void gatt_process_mtu_rsp(tGATT_TCB& tcb, tGATT_CLCB* p_clcb, uint16_t len, uint
 
     log::info("MTU Exchange resulted in: {}", tcb.payload_size);
 
-    BTM_SetBleDataLength(tcb.peer_bda, tcb.max_user_mtu + L2CAP_PKT_OVERHEAD);
+    if (get_btm_client_interface().ble.BTM_SetBleDataLength(
+                tcb.peer_bda, tcb.max_user_mtu + L2CAP_PKT_OVERHEAD) != BTM_SUCCESS) {
+      log::warn("Unable to set BLE data length peer:{} mtu:{}", tcb.peer_bda,
+                tcb.max_user_mtu + L2CAP_PKT_OVERHEAD);
+    }
   }
 
   gatt_end_operation(p_clcb, status, NULL);

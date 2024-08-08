@@ -277,11 +277,11 @@ public class HfpClientConnection extends Connection {
 
     @Override
     public boolean equals(Object o) {
-        if (!(o instanceof HfpClientConnection)) {
+        if (!(o instanceof HfpClientConnection h)) {
             return false;
         }
-        Uri otherAddr = ((HfpClientConnection) o).getAddress();
-        return getAddress() == otherAddr || otherAddr != null && otherAddr.equals(getAddress());
+
+        return Objects.equals(h.getAddress(), getAddress());
     }
 
     @Override

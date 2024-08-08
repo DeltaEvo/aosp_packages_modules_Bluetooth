@@ -67,7 +67,7 @@ public:
                                  addr.get());
   }
 
-  void OnVolumeStateChanged(const RawAddress& bd_addr, uint8_t volume, bool mute,
+  void OnVolumeStateChanged(const RawAddress& bd_addr, uint8_t volume, bool mute, uint8_t flags,
                             bool isAutonomous) override {
     log::info("");
 
@@ -86,7 +86,7 @@ public:
 
     sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress), (jbyte*)&bd_addr);
     sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onVolumeStateChanged, (jint)volume,
-                                 (jboolean)mute, addr.get(), (jboolean)isAutonomous);
+                                 (jboolean)mute, (jint)flags, addr.get(), (jboolean)isAutonomous);
   }
 
   void OnGroupVolumeStateChanged(int group_id, uint8_t volume, bool mute,
@@ -533,7 +533,7 @@ int register_com_android_bluetooth_vc(JNIEnv* env) {
 
   const JNIJavaMethod javaMethods[] = {
           {"onConnectionStateChanged", "(I[B)V", &method_onConnectionStateChanged},
-          {"onVolumeStateChanged", "(IZ[BZ)V", &method_onVolumeStateChanged},
+          {"onVolumeStateChanged", "(IZI[BZ)V", &method_onVolumeStateChanged},
           {"onGroupVolumeStateChanged", "(IZIZ)V", &method_onGroupVolumeStateChanged},
           {"onDeviceAvailable", "(I[B)V", &method_onDeviceAvailable},
           {"onExtAudioOutVolumeOffsetChanged", "(II[B)V", &method_onExtAudioOutVolumeOffsetChanged},

@@ -792,6 +792,11 @@ void l2c_pin_code_request(const RawAddress& bd_addr) {
  *
  ******************************************************************************/
 static bool l2c_link_check_power_mode(tL2C_LCB* p_lcb) {
+  if (com::android::bluetooth::flags::transmit_smp_packets_before_release()) {
+    // TODO: Remove this function when flag transmit_smp_packets_before_release is released
+    return false;
+  }
+
   bool need_to_active = false;
 
   // Return false as LM modes are applicable for BREDR transport

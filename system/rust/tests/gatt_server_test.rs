@@ -1,3 +1,4 @@
+use pdl_runtime::Packet;
 use std::{
     rc::Rc,
     sync::{Arc, Mutex},
@@ -29,17 +30,7 @@ use bluetooth_core::{
             GattModule, IndicationError,
         },
     },
-    packets::{
-        AttBuilder, AttChild, AttErrorCode, AttErrorResponseBuilder,
-        AttFindByTypeValueRequestBuilder, AttFindInformationRequestBuilder,
-        AttFindInformationResponseChild, AttHandleValueConfirmationBuilder,
-        AttHandleValueIndicationBuilder, AttOpcode, AttReadByTypeRequestBuilder,
-        AttReadRequestBuilder, AttReadResponseBuilder, AttWriteRequestBuilder,
-        AttWriteResponseBuilder, GattCharacteristicDeclarationValueView,
-        GattClientCharacteristicConfigurationBuilder, GattServiceChangedBuilder,
-        GattServiceDeclarationValueBuilder, Packet, Serializable, UuidAsAttDataBuilder,
-    },
-    utils::packet::build_att_view_or_crash,
+    packets::att::{self, AttErrorCode},
 };
 
 use tokio::{
@@ -69,7 +60,7 @@ const DESCRIPTOR_TYPE: Uuid = Uuid::new(0x0104);
 const DATA: [u8; 4] = [1, 2, 3, 4];
 const ANOTHER_DATA: [u8; 4] = [5, 6, 7, 8];
 
-fn start_gatt_module() -> (gatt::server::GattModule, UnboundedReceiver<(TransportIndex, AttBuilder)>)
+fn start_gatt_module() -> (gatt::server::GattModule, UnboundedReceiver<(TransportIndex, att::Att)>)
 {
     let (transport, transport_rx) = MockAttTransport::new();
     let arbiter = IsolationManager::new();
@@ -119,28 +110,20 @@ fn test_service_read() {
 
         // act
         gatt.get_bearer(TCB_IDX).unwrap().handle_packet(
-            build_att_view_or_crash(AttReadRequestBuilder {
-                attribute_handle: SERVICE_HANDLE.into(),
-            })
-            .view(),
+            att::AttReadRequest { attribute_handle: SERVICE_HANDLE.into() }.try_into().unwrap(),
         );
         let (tcb_idx, resp) = transport_rx.recv().await.unwrap();
 
         // assert
         assert_eq!(tcb_idx, TCB_IDX);
         assert_eq!(
-            resp.to_vec(),
-            AttBuilder {
-                opcode: AttOpcode::READ_RESPONSE,
-                _child_: AttReadResponseBuilder {
-                    value: GattServiceDeclarationValueBuilder { uuid: SERVICE_TYPE.into() }
-                        .to_vec()
-                        .unwrap()
-                        .into(),
-                }
-                .into()
+            Ok(resp),
+            att::AttReadResponse {
+                value: att::GattServiceDeclarationValue { uuid: SERVICE_TYPE.into() }
+                    .encode_to_vec()
+                    .unwrap(),
             }
-            .to_vec()
+            .try_into()
         );
     })
 }
@@ -157,23 +140,19 @@ fn test_server_closed_while_connected() {
 
         // act: read from the closed server
         gatt.get_bearer(TCB_IDX).unwrap().handle_packet(
-            build_att_view_or_crash(AttReadRequestBuilder {
-                attribute_handle: SERVICE_HANDLE.into(),
-            })
-            .view(),
+            att::AttReadRequest { attribute_handle: SERVICE_HANDLE.into() }.try_into().unwrap(),
         );
         let (_, resp) = transport_rx.recv().await.unwrap();
 
         // assert that the read failed, but that a response was provided
-        assert_eq!(resp.opcode, AttOpcode::ERROR_RESPONSE);
         assert_eq!(
-            resp._child_,
-            AttErrorResponseBuilder {
-                opcode_in_error: AttOpcode::READ_REQUEST,
+            Ok(resp),
+            att::AttErrorResponse {
+                opcode_in_error: att::AttOpcode::ReadRequest,
                 handle_in_error: SERVICE_HANDLE.into(),
-                error_code: AttErrorCode::INVALID_HANDLE
+                error_code: AttErrorCode::InvalidHandle
             }
-            .into()
+            .try_into()
         )
     });
 }
@@ -187,10 +166,9 @@ fn test_characteristic_read() {
 
         // act
         gatt.get_bearer(TCB_IDX).unwrap().handle_packet(
-            build_att_view_or_crash(AttReadRequestBuilder {
-                attribute_handle: CHARACTERISTIC_HANDLE.into(),
-            })
-            .view(),
+            att::AttReadRequest { attribute_handle: CHARACTERISTIC_HANDLE.into() }
+                .try_into()
+                .unwrap(),
         );
         let tx = if let MockDatastoreEvents::Read(
             TCB_IDX,
@@ -208,13 +186,7 @@ fn test_characteristic_read() {
 
         // assert
         assert_eq!(tcb_idx, TCB_IDX);
-        assert_eq!(
-            resp,
-            AttBuilder {
-                opcode: AttOpcode::READ_RESPONSE,
-                _child_: AttReadResponseBuilder { value: DATA.into() }.into()
-            }
-        );
+        assert_eq!(Ok(resp), att::AttReadResponse { value: DATA.into() }.try_into());
     })
 }
 
@@ -227,11 +199,9 @@ fn test_characteristic_write() {
 
         // act
         gatt.get_bearer(TCB_IDX).unwrap().handle_packet(
-            build_att_view_or_crash(AttWriteRequestBuilder {
-                handle: CHARACTERISTIC_HANDLE.into(),
-                value: DATA.into(),
-            })
-            .view(),
+            att::AttWriteRequest { handle: CHARACTERISTIC_HANDLE.into(), value: DATA.into() }
+                .try_into()
+                .unwrap(),
         );
         let (tx, written_data) = if let MockDatastoreEvents::Write(
             TCB_IDX,
@@ -250,13 +220,7 @@ fn test_characteristic_write() {
 
         // assert
         assert_eq!(tcb_idx, TCB_IDX);
-        assert_eq!(
-            resp,
-            AttBuilder {
-                opcode: AttOpcode::WRITE_RESPONSE,
-                _child_: AttWriteResponseBuilder {}.into()
-            }
-        );
+        assert_eq!(Ok(resp), att::AttWriteResponse {}.try_into());
         assert_eq!(&DATA, written_data.as_slice());
     })
 }
@@ -277,21 +241,18 @@ fn test_send_indication() {
 
         gatt.get_bearer(TCB_IDX)
             .unwrap()
-            .handle_packet(build_att_view_or_crash(AttHandleValueConfirmationBuilder {}).view());
+            .handle_packet(att::AttHandleValueConfirmation {}.try_into().unwrap());
 
         // assert
         assert!(matches!(pending_indication.await.unwrap(), Ok(())));
         assert_eq!(tcb_idx, TCB_IDX);
         assert_eq!(
-            resp,
-            AttBuilder {
-                opcode: AttOpcode::HANDLE_VALUE_INDICATION,
-                _child_: AttHandleValueIndicationBuilder {
-                    handle: CHARACTERISTIC_HANDLE.into(),
-                    value: DATA.into(),
-                }
-                .into()
+            Ok(resp),
+            att::AttHandleValueIndication {
+                handle: CHARACTERISTIC_HANDLE.into(),
+                value: DATA.into(),
             }
+            .try_into()
         );
     })
 }
@@ -330,11 +291,9 @@ fn test_write_to_descriptor() {
 
         // act
         gatt.get_bearer(TCB_IDX).unwrap().handle_packet(
-            build_att_view_or_crash(AttWriteRequestBuilder {
-                handle: DESCRIPTOR_HANDLE.into(),
-                value: DATA.into(),
-            })
-            .view(),
+            att::AttWriteRequest { handle: DESCRIPTOR_HANDLE.into(), value: DATA.into() }
+                .try_into()
+                .unwrap(),
         );
         let (tx, written_data) = if let MockDatastoreEvents::Write(
             TCB_IDX,
@@ -353,13 +312,7 @@ fn test_write_to_descriptor() {
 
         // assert
         assert_eq!(tcb_idx, TCB_IDX);
-        assert_eq!(
-            resp,
-            AttBuilder {
-                opcode: AttOpcode::WRITE_RESPONSE,
-                _child_: AttWriteResponseBuilder {}.into()
-            }
-        );
+        assert_eq!(Ok(resp), att::AttWriteResponse {}.try_into());
         assert_eq!(&DATA, written_data.as_slice());
     })
 }
@@ -395,16 +348,14 @@ fn test_multiple_servers() {
 
         // act: read from both connections
         gatt.get_bearer(TCB_IDX).unwrap().handle_packet(
-            build_att_view_or_crash(AttReadRequestBuilder {
-                attribute_handle: CHARACTERISTIC_HANDLE.into(),
-            })
-            .view(),
+            att::AttReadRequest { attribute_handle: CHARACTERISTIC_HANDLE.into() }
+                .try_into()
+                .unwrap(),
         );
         gatt.get_bearer(ANOTHER_TCB_IDX).unwrap().handle_packet(
-            build_att_view_or_crash(AttReadRequestBuilder {
-                attribute_handle: CHARACTERISTIC_HANDLE.into(),
-            })
-            .view(),
+            att::AttReadRequest { attribute_handle: CHARACTERISTIC_HANDLE.into() }
+                .try_into()
+                .unwrap(),
         );
         // service the first read with `data`
         let MockDatastoreEvents::Read(TCB_IDX, _, _, tx) = data_rx_1.recv().await.unwrap() else {
@@ -424,9 +375,9 @@ fn test_multiple_servers() {
 
         // assert: the responses were routed to the correct connections
         assert_eq!(tcb_idx_1, TCB_IDX);
-        assert_eq!(resp_1._child_.to_vec().unwrap(), DATA);
+        assert_eq!(Ok(resp_1), att::AttReadResponse { value: DATA.to_vec() }.try_into());
         assert_eq!(tcb_idx_2, ANOTHER_TCB_IDX);
-        assert_eq!(resp_2._child_.to_vec().unwrap(), ANOTHER_DATA);
+        assert_eq!(Ok(resp_2), att::AttReadResponse { value: ANOTHER_DATA.to_vec() }.try_into());
     })
 }
 
@@ -439,21 +390,27 @@ fn test_read_device_name() {
 
         // act: try to read the device name
         gatt.get_bearer(TCB_IDX).unwrap().handle_packet(
-            build_att_view_or_crash(AttReadByTypeRequestBuilder {
+            att::AttReadByTypeRequest {
                 starting_handle: AttHandle(1).into(),
                 ending_handle: AttHandle(0xFFFF).into(),
                 attribute_type: DEVICE_NAME_UUID.into(),
-            })
-            .view(),
+            }
+            .try_into()
+            .unwrap(),
         );
         let (tcb_idx, resp) = transport_rx.recv().await.unwrap();
 
         // assert: the name should not be readable
         assert_eq!(tcb_idx, TCB_IDX);
-        let AttChild::AttErrorResponse(resp) = resp._child_ else {
-            unreachable!("{resp:?}");
-        };
-        assert_eq!(resp.error_code, AttErrorCode::INSUFFICIENT_AUTHENTICATION);
+        assert_eq!(
+            Ok(resp),
+            att::AttErrorResponse {
+                opcode_in_error: att::AttOpcode::ReadByTypeRequest,
+                handle_in_error: AttHandle(1).into(),
+                error_code: AttErrorCode::InsufficientAuthentication,
+            }
+            .try_into()
+        );
     });
 }
 
@@ -491,19 +448,19 @@ fn test_service_change_indication() {
 
         // act: discover the GATT server
         gatt.get_bearer(TCB_IDX).unwrap().handle_packet(
-            build_att_view_or_crash(AttFindByTypeValueRequestBuilder {
+            att::AttFindByTypeValueRequest {
                 starting_handle: AttHandle::MIN.into(),
                 ending_handle: AttHandle::MAX.into(),
                 attribute_type: PRIMARY_SERVICE_DECLARATION_UUID.try_into().unwrap(),
-                attribute_value: UuidAsAttDataBuilder { uuid: GATT_SERVICE_UUID.into() }
-                    .to_vec()
-                    .unwrap()
-                    .into(),
-            })
-            .view(),
+                attribute_value: att::UuidAsAttData { uuid: GATT_SERVICE_UUID.into() }
+                    .encode_to_vec()
+                    .unwrap(),
+            }
+            .try_into()
+            .unwrap(),
         );
-        let AttChild::AttFindByTypeValueResponse(resp) =
-            transport_rx.recv().await.unwrap().1._child_
+        let Ok(resp): Result<att::AttFindByTypeValueResponse, _> =
+            transport_rx.recv().await.unwrap().1.try_into()
         else {
             unreachable!()
         };
@@ -513,29 +470,30 @@ fn test_service_change_indication() {
         );
         // act: discover the service changed characteristic
         gatt.get_bearer(TCB_IDX).unwrap().handle_packet(
-            build_att_view_or_crash(AttReadByTypeRequestBuilder {
+            att::AttReadByTypeRequest {
                 starting_handle,
                 ending_handle,
                 attribute_type: CHARACTERISTIC_UUID.into(),
-            })
-            .view(),
+            }
+            .try_into()
+            .unwrap(),
         );
-        let AttChild::AttReadByTypeResponse(resp) = transport_rx.recv().await.unwrap().1._child_
+
+        let Ok(resp): Result<att::AttReadByTypeResponse, _> =
+            transport_rx.recv().await.unwrap().1.try_into()
         else {
             unreachable!()
         };
         let service_change_char_handle: AttHandle = resp
             .data
-            .into_vec()
             .into_iter()
             .find_map(|characteristic| {
                 let value = characteristic.value.to_vec();
                 let decl =
-                    GattCharacteristicDeclarationValueView::try_parse_from_buffer(value.as_slice())
-                        .unwrap();
+                    att::GattCharacteristicDeclarationValue::decode_full(value.as_slice()).unwrap();
 
-                if SERVICE_CHANGE_UUID == decl.get_uuid().try_into().unwrap() {
-                    Some(decl.get_handle().into())
+                if SERVICE_CHANGE_UUID == decl.uuid.try_into().unwrap() {
+                    Some(decl.handle.into())
                 } else {
                     None
                 }
@@ -543,24 +501,23 @@ fn test_service_change_indication() {
             .unwrap();
         // act: find the CCC descriptor for the service changed characteristic
         gatt.get_bearer(TCB_IDX).unwrap().handle_packet(
-            build_att_view_or_crash(AttFindInformationRequestBuilder {
+            att::AttFindInformationRequest {
                 starting_handle: service_change_char_handle.into(),
                 ending_handle: AttHandle::MAX.into(),
-            })
-            .view(),
+            }
+            .try_into()
+            .unwrap(),
         );
-        let AttChild::AttFindInformationResponse(resp) =
-            transport_rx.recv().await.unwrap().1._child_
+        let Ok(resp): Result<att::AttFindInformationResponse, _> =
+            transport_rx.recv().await.unwrap().1.try_into()
         else {
             unreachable!()
         };
-        let AttFindInformationResponseChild::AttFindInformationShortResponse(resp) = resp._child_
-        else {
+        let Ok(resp): Result<att::AttFindInformationShortResponse, _> = resp.try_into() else {
             unreachable!()
         };
         let service_change_descriptor_handle = resp
             .data
-            .into_vec()
             .into_iter()
             .find_map(|attr| {
                 if attr.uuid == CLIENT_CHARACTERISTIC_CONFIGURATION_UUID.try_into().unwrap() {
@@ -572,19 +529,21 @@ fn test_service_change_indication() {
             .unwrap();
         // act: register for indications on this handle
         gatt.get_bearer(TCB_IDX).unwrap().handle_packet(
-            build_att_view_or_crash(AttWriteRequestBuilder {
+            att::AttWriteRequest {
                 handle: service_change_descriptor_handle,
-                value: GattClientCharacteristicConfigurationBuilder {
+                value: att::GattClientCharacteristicConfiguration {
                     notification: 0,
                     indication: 1,
                 }
-                .to_vec()
-                .unwrap()
-                .into(),
-            })
-            .view(),
+                .encode_to_vec()
+                .unwrap(),
+            }
+            .try_into()
+            .unwrap(),
         );
-        let AttChild::AttWriteResponse(_) = transport_rx.recv().await.unwrap().1._child_ else {
+        let Ok(_): Result<att::AttWriteResponse, _> =
+            transport_rx.recv().await.unwrap().1.try_into()
+        else {
             unreachable!()
         };
         // act: add a new service
@@ -601,19 +560,19 @@ fn test_service_change_indication() {
         .unwrap();
 
         // assert: we got an indication
-        let AttChild::AttHandleValueIndication(indication) =
-            transport_rx.recv().await.unwrap().1._child_
+        let Ok(indication): Result<att::AttHandleValueIndication, _> =
+            transport_rx.recv().await.unwrap().1.try_into()
         else {
             unreachable!()
         };
         assert_eq!(indication.handle, service_change_char_handle.into());
         assert_eq!(
             Ok(indication.value.into()),
-            GattServiceChangedBuilder {
+            att::GattServiceChanged {
                 start_handle: AttHandle(30).into(),
                 end_handle: AttHandle(30).into(),
             }
-            .to_vec()
+            .encode_to_vec()
         );
     });
 }

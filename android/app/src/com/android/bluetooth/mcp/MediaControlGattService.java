@@ -1300,7 +1300,7 @@ public class MediaControlGattService implements MediaControlGattServiceInterface
     }
 
     private void handlePlaybackSpeedRequest(int speed) {
-        float floatingSpeed = (float) Math.pow(2, speed / 64);
+        float floatingSpeed = (float) Math.pow(2, speed / 64.0);
         mEventLogger.add("handlePlaybackSpeedRequest: floatingSpeed= " + floatingSpeed);
         mCallbacks.onPlaybackSpeedSetRequest(floatingSpeed);
     }

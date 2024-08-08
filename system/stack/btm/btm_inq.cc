@@ -352,7 +352,7 @@ tBTM_STATUS BTM_SetDiscoverability(uint16_t inq_mode) {
     }
 
     FIELDS_TO_COD(cod, minor, major, service_class);
-    (void)BTM_SetDeviceClass(cod);
+    (void)get_btm_client_interface().local.BTM_SetDeviceClass(cod);
   }
 
   return BTM_SUCCESS;
@@ -529,17 +529,16 @@ uint16_t BTM_IsInquiryActive(void) {
  *
  ******************************************************************************/
 static void BTM_CancelLeScan() {
-  if (!bluetooth::shim::is_classic_discovery_only_enabled()) {
-    log::assert_that(get_btm_client_interface().local.BTM_IsDeviceUp(),
-                     "assert failed: BTM_IsDeviceUp()");
-    if ((btm_cb.btm_inq_vars.inqparms.mode & BTM_BLE_GENERAL_INQUIRY) != 0) {
-      btm_ble_stop_inquiry();
-    }
-  } else {
-    log::info(
-            "Unable to cancel le scan as `is_classic_discovery_only_enabled` is "
-            "true");
+#if TARGET_FLOSS
+  log::info("Skipping because FLOSS doesn't use this API for LE scans");
+  return;
+#else
+  log::assert_that(get_btm_client_interface().local.BTM_IsDeviceUp(),
+                   "assert failed: BTM_IsDeviceUp()");
+  if ((btm_cb.btm_inq_vars.inqparms.mode & BTM_BLE_GENERAL_INQUIRY) != 0) {
+    btm_ble_stop_inquiry();
   }
+#endif
 }
 
 /*******************************************************************************
@@ -601,6 +600,7 @@ void BTM_CancelInquiry(void) {
   }
 }
 
+#if TARGET_FLOSS
 static void btm_classic_inquiry_timeout(void* /* data */) {
   // When the Inquiry Complete event is received, the classic inquiry
   // will be marked as completed. Therefore, we only need to mark
@@ -608,6 +608,7 @@ static void btm_classic_inquiry_timeout(void* /* data */) {
   // as inquiry results.
   btm_process_inq_complete(HCI_SUCCESS, BTM_BLE_GENERAL_INQUIRY);
 }
+#endif
 
 /*******************************************************************************
  *
@@ -618,23 +619,22 @@ static void btm_classic_inquiry_timeout(void* /* data */) {
  *
  * Returns          tBTM_STATUS
  *                  BTM_CMD_STARTED if le scan successfully initiated
- *                  BTM_WRONG_MODE if controller does not support ble or the
- *                                 is_classic_discovery_only_enabled flag is set
+ *                  BTM_WRONG_MODE if controller does not support ble
  *
  ******************************************************************************/
 static tBTM_STATUS BTM_StartLeScan() {
-  if (!bluetooth::shim::is_classic_discovery_only_enabled()) {
-    if (shim::GetController()->SupportsBle()) {
-      btm_ble_start_inquiry(btm_cb.btm_inq_vars.inqparms.duration);
-      return BTM_CMD_STARTED;
-    } else {
-      log::warn("Trying to do LE scan on a non-LE adapter");
-      btm_cb.btm_inq_vars.inqparms.mode &= ~BTM_BLE_GENERAL_INQUIRY;
-    }
-  } else {
-    log::info("init_flag: Skip le scan as classic inquiry only flag is set enabled");
-  }
+#if TARGET_FLOSS
+  log::info("Skipping because FLOSS doesn't use this API for LE scans");
   return BTM_WRONG_MODE;
+#else
+  if (shim::GetController()->SupportsBle()) {
+    btm_ble_start_inquiry(btm_cb.btm_inq_vars.inqparms.duration);
+    return BTM_CMD_STARTED;
+  }
+  log::warn("Trying to do LE scan on a non-LE adapter");
+  btm_cb.btm_inq_vars.inqparms.mode &= ~BTM_BLE_GENERAL_INQUIRY;
+  return BTM_WRONG_MODE;
+#endif
 }
 
 /*******************************************************************************
@@ -647,7 +647,7 @@ static tBTM_STATUS BTM_StartLeScan() {
  *
  * Parameters:      p_inqparms - pointer to the inquiry information
  *                      mode - GENERAL or LIMITED inquiry, BR/LE bit mask
- *                             seperately
+ *                             separately
  *                      duration - length in 1.28 sec intervals (If '0', the
  *                                 inquiry is CANCELLED)
  *                      filter_cond_type - BTM_CLR_INQUIRY_FILTER,
@@ -769,15 +769,16 @@ tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb, tBTM_CMPL_CB* p_
             }
           }));
 
+#if TARGET_FLOSS
   // If we are only doing classic discovery, we should also set a timeout for
   // the inquiry if a duration is set.
-  if (bluetooth::shim::is_classic_discovery_only_enabled() &&
-      btm_cb.btm_inq_vars.inqparms.duration != 0) {
+  if (btm_cb.btm_inq_vars.inqparms.duration != 0) {
     /* start inquiry timer */
     uint64_t duration_ms = btm_cb.btm_inq_vars.inqparms.duration * 1280;
     alarm_set_on_mloop(btm_cb.btm_inq_vars.classic_inquiry_timer, duration_ms,
                        btm_classic_inquiry_timeout, NULL);
   }
+#endif
 
   return BTM_CMD_STARTED;
 }
@@ -848,7 +849,7 @@ tBTM_STATUS BTM_CancelRemoteDeviceName(void) {
   if (com::android::bluetooth::flags::rnr_store_device_type()) {
     is_le = (btm_cb.rnr.remname_dev_type == BT_DEVICE_TYPE_BLE);
   } else {
-    is_le = BTM_UseLeLink(btm_cb.rnr.remname_bda);
+    is_le = get_btm_client_interface().ble.BTM_UseLeLink(btm_cb.rnr.remname_bda);
   }
 
   if (is_le) {
@@ -1922,7 +1923,7 @@ void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn, uint16_t 
   if (com::android::bluetooth::flags::rnr_store_device_type()) {
     on_le_link = (btm_cb.rnr.remname_dev_type == BT_DEVICE_TYPE_BLE);
   } else {
-    on_le_link = BTM_UseLeLink(btm_cb.rnr.remname_bda);
+    on_le_link = get_btm_client_interface().ble.BTM_UseLeLink(btm_cb.rnr.remname_bda);
   }
 
   /* If the inquire BDA and remote DBA are the same, then stop the timer and set

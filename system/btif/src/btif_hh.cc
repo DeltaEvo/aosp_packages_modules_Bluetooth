@@ -2186,6 +2186,7 @@ void DumpsysHid(int fd) {
                   p_dev->reconnect_allowed ? "T" : "F");
     }
   }
+  BTA_HhDump(fd);
 }
 
 namespace bluetooth {

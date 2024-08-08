@@ -251,13 +251,15 @@ public class VolumeControlNativeInterface {
     }
 
     @VisibleForTesting
-    void onVolumeStateChanged(int volume, boolean mute, byte[] address, boolean isAutonomous) {
+    void onVolumeStateChanged(
+            int volume, boolean mute, int flags, byte[] address, boolean isAutonomous) {
         VolumeControlStackEvent event =
                 new VolumeControlStackEvent(
                         VolumeControlStackEvent.EVENT_TYPE_VOLUME_STATE_CHANGED);
         event.device = getDevice(address);
         event.valueInt1 = -1;
         event.valueInt2 = volume;
+        event.valueInt3 = flags;
         event.valueBool1 = mute;
         event.valueBool2 = isAutonomous;
 

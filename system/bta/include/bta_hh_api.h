@@ -551,6 +551,17 @@ void BTA_HhAddDev(const tAclLinkSpec& link_spec, tBTA_HH_ATTR_MASK attr_mask, ui
  ******************************************************************************/
 void BTA_HhRemoveDev(uint8_t dev_handle);
 
+/*******************************************************************************
+ *
+ * Function         BTA_HhDump
+ *
+ * Description      Dump BTA HH control block
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_HhDump(int fd);
+
 namespace fmt {
 template <>
 struct formatter<tBTA_HH_STATUS> : enum_formatter<tBTA_HH_STATUS> {};

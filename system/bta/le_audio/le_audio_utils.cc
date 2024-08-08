@@ -604,5 +604,67 @@ const struct types::acs_ac_record* GetConfigurationSupportedPac(
   }
   return nullptr;
 }
+
+bool IsAseConfigMatchedWithPreferredRequirements(
+        const std::vector<struct set_configurations::AseConfiguration>& ase_confs,
+        const std::vector<
+                CodecManager::UnicastConfigurationRequirements::DeviceDirectionRequirements>& reqs,
+        uint8_t channel_cnt_per_ase) {
+  if (ase_confs.empty() || reqs.empty() || ase_confs.size() != reqs.size()) {
+    return false;
+  }
+
+  for (auto i = 0; i < static_cast<int>(ase_confs.size()); ++i) {
+    const auto& ase_config = ase_confs.at(i).codec.params.GetAsCoreCodecConfig();
+    const auto& req_config = reqs.at(i).params.GetAsCoreCodecConfig();
+
+    /* Sampling frequency */
+    if (!ase_config.sampling_frequency || !req_config.sampling_frequency) {
+      log::debug("Missing sampling frequencies capability");
+      return false;
+    }
+    if (ase_config.sampling_frequency.value() != req_config.sampling_frequency.value()) {
+      log::debug("Ase cfg: SamplingFrequency= {:#x}", ase_config.sampling_frequency.value());
+      log::debug("Req cfg: SamplingFrequency= {:#x}", req_config.sampling_frequency.value());
+      log::debug("Sampling frequency not supported");
+      return false;
+    }
+
+    /* Channel counts */
+    if (ase_confs.at(i).codec.GetChannelCountPerIsoStream() != channel_cnt_per_ase) {
+      log::debug("Ase cfg: Allocated channel count= {:#x}",
+                 ase_confs.at(i).codec.GetChannelCountPerIsoStream());
+      log::debug("Req cfg: Allocated channel counts= {:#x}", channel_cnt_per_ase);
+      log::debug("Channel count not supported");
+      return false;
+    }
+
+    /* Frame duration */
+    if (!ase_config.frame_duration || !req_config.frame_duration) {
+      log::debug("Missing frame duration capability");
+      return false;
+    }
+    if (ase_config.frame_duration.value() != ase_config.frame_duration.value()) {
+      log::debug("Ase cfg: FrameDuration= {:#x}", ase_config.frame_duration.value());
+      log::debug("Req cfg: FrameDuration= {:#x}", req_config.frame_duration.value());
+      log::debug("Frame duration not supported");
+      return false;
+    }
+
+    /* Octets per frame */
+    if (!ase_config.octets_per_codec_frame || !req_config.octets_per_codec_frame) {
+      log::debug("Missing octets per codec frame");
+      return false;
+    }
+    if (ase_config.octets_per_codec_frame.value() != req_config.octets_per_codec_frame.value()) {
+      log::debug("Ase cfg: Octets per frame={}", ase_config.octets_per_codec_frame.value());
+      log::debug("Req cfg: Octets per frame={}", req_config.octets_per_codec_frame.value());
+      return false;
+    }
+  }
+
+  return true;
+}
+
 }  // namespace utils
 }  // namespace bluetooth::le_audio

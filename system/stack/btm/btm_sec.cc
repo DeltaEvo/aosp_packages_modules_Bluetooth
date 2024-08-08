@@ -808,7 +808,8 @@ tBTM_STATUS BTM_SecBond(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
                         tBT_TRANSPORT transport, tBT_DEVICE_TYPE /* device_type */) {
   if (transport == BT_TRANSPORT_AUTO) {
     if (addr_type == BLE_ADDR_PUBLIC) {
-      transport = BTM_UseLeLink(bd_addr) ? BT_TRANSPORT_LE : BT_TRANSPORT_BR_EDR;
+      transport = get_btm_client_interface().ble.BTM_UseLeLink(bd_addr) ? BT_TRANSPORT_LE
+                                                                        : BT_TRANSPORT_BR_EDR;
     } else {
       log::info("Forcing transport LE (was auto) because of the address type");
       transport = BT_TRANSPORT_LE;
@@ -3014,7 +3015,7 @@ void btm_sec_auth_complete(uint16_t handle, tHCI_STATUS status) {
     return;
   }
 
-  if (com::android::bluetooth::flags::clear_collision_state_on_pairing_complete()) {
+  if (com::android::bluetooth::flags::clear_auth_collision_state_on_pairing_complete()) {
     if (p_dev_rec && btm_sec_cb.p_collided_dev_rec &&
         p_dev_rec->bd_addr == btm_sec_cb.p_collided_dev_rec->bd_addr) {
       btm_sec_cb.collision_start_time = 0;
@@ -3115,7 +3116,10 @@ void btm_sec_auth_complete(uint16_t handle, tHCI_STATUS status) {
         log::info(
                 "auth completed in role=peripheral, try to switch role and "
                 "encrypt");
-        BTM_SwitchRoleToCentral(p_dev_rec->RemoteAddress());
+        if (get_btm_client_interface().link_policy.BTM_SwitchRoleToCentral(
+                    p_dev_rec->RemoteAddress()) != BTM_CMD_STARTED) {
+          log::warn("Unable to switch role to central peer:{}", p_dev_rec->RemoteAddress());
+        }
       }
 
       l2cu_start_post_bond_timer(p_dev_rec->hci_handle);
@@ -3761,7 +3765,7 @@ void btm_sec_disconnected(uint16_t handle, tHCI_REASON reason, std::string comme
   /* clear unused flags */
   p_dev_rec->sm4 &= BTM_SM4_TRUE;
 
-  if (com::android::bluetooth::flags::clear_collision_state_on_pairing_complete()) {
+  if (com::android::bluetooth::flags::clear_auth_collision_state_on_pairing_complete()) {
     if (btm_sec_cb.p_collided_dev_rec &&
         p_dev_rec->bd_addr == btm_sec_cb.p_collided_dev_rec->bd_addr) {
       log::debug("clear auth collision info after disconnection");

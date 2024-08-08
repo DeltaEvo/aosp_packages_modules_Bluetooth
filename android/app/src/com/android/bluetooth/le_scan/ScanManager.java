@@ -369,6 +369,7 @@ public class ScanManager {
                     break;
                 case MSG_BT_PROFILE_CONN_STATE_CHANGED:
                     handleProfileConnectionStateChanged(msg);
+                    break;
                 default:
                     // Shouldn't happen.
                     Log.e(TAG, "received an unknown message : " + msg.what);
@@ -940,10 +941,9 @@ public class ScanManager {
             if (this == obj) {
                 return true;
             }
-            if (obj == null || getClass() != obj.getClass()) {
+            if (!(obj instanceof BatchScanParams other)) {
                 return false;
             }
-            BatchScanParams other = (BatchScanParams) obj;
             return scanMode == other.scanMode
                     && fullScanscannerId == other.fullScanscannerId
                     && truncatedScanscannerId == other.truncatedScanscannerId;

@@ -133,32 +133,28 @@ struct GattCharacteristicProperties {
   extended_properties: 1,
 }
 
-struct AttAttributeData {
-  _payload_
-}
-
-struct GattCharacteristicDeclarationValue : AttAttributeData {
+struct GattCharacteristicDeclarationValue {
   properties: GattCharacteristicProperties,
   handle: AttHandle,
   uuid: Uuid,
 }
 
-struct GattServiceDeclarationValue : AttAttributeData {
+struct GattServiceDeclarationValue {
   uuid: Uuid,
 }
 
-struct GattClientCharacteristicConfiguration : AttAttributeData {
+struct GattClientCharacteristicConfiguration {
   notification: 1,
   indication: 1,
   _reserved_: 14,
 }
 
-struct GattServiceChanged : AttAttributeData {
+struct GattServiceChanged {
   start_handle: AttHandle,
   end_handle: AttHandle,
 }
 
-struct UuidAsAttData : AttAttributeData {
+struct UuidAsAttData {
   uuid: Uuid,
 }
 

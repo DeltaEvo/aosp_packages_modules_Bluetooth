@@ -2652,6 +2652,11 @@ impl IBluetoothMedia for BluetoothMediaDBus {
         dbus_generated!()
     }
 
+    #[dbus_method("IsInitialized")]
+    fn is_initialized(&self) -> bool {
+        dbus_generated!()
+    }
+
     #[dbus_method("Cleanup")]
     fn cleanup(&mut self) -> bool {
         dbus_generated!()

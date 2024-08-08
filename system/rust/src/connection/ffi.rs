@@ -56,8 +56,10 @@ mod inner {
         /// Register Rust callbacks for connection events
         ///
         /// # Safety
+        ///
         /// `callbacks` must be Send + Sync, since C++ moves it to a different thread and
         /// invokes it from several others (GD + legacy threads).
+        #[allow(clippy::missing_safety_doc)]
         #[cxx_name = "RegisterRustCallbacks"]
         unsafe fn unchecked_register_rust_callbacks(
             self: Pin<&mut Self>,

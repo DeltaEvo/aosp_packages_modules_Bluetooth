@@ -510,7 +510,7 @@ TEST_F(CodecManagerTestAdsp, test_capabilities_none) {
   bool has_null_config = false;
   auto match_first_config = [&](const CodecManager::UnicastConfigurationRequirements& requirements,
                                 const set_configurations::AudioSetConfigurations* confs)
-          -> const set_configurations::AudioSetConfiguration* {
+          -> std::unique_ptr<set_configurations::AudioSetConfiguration> {
     // Don't expect the matcher being called on nullptr
     if (confs == nullptr) {
       has_null_config = true;
@@ -518,7 +518,7 @@ TEST_F(CodecManagerTestAdsp, test_capabilities_none) {
     if (confs && confs->size()) {
       // For simplicity return the first element, the real matcher should
       // check the group capabilities.
-      return confs->at(0);
+      return std::make_unique<AudioSetConfiguration>(*(confs->at(0)));
     }
     return nullptr;
   };
@@ -558,12 +558,12 @@ TEST_F(CodecManagerTestAdsp, test_capabilities) {
             [&available_configs_size](
                     const CodecManager::UnicastConfigurationRequirements& requirements,
                     const set_configurations::AudioSetConfigurations* confs)
-            -> const set_configurations::AudioSetConfiguration* {
+            -> std::unique_ptr<set_configurations::AudioSetConfiguration> {
       if (confs && confs->size()) {
         available_configs_size = confs->size();
         // For simplicity return the first element, the real matcher should
         // check the group capabilities.
-        return confs->at(0);
+        return std::make_unique<AudioSetConfiguration>(*(confs->at(0)));
       }
       return nullptr;
     };
@@ -989,7 +989,7 @@ TEST_F(CodecManagerTestHost, test_dual_bidir_swb_supported) {
             {.audio_context_type = context},
             [&](const CodecManager::UnicastConfigurationRequirements& requirements,
                 const set_configurations::AudioSetConfigurations* confs)
-                    -> const set_configurations::AudioSetConfiguration* {
+                    -> std::unique_ptr<set_configurations::AudioSetConfiguration> {
               if (confs == nullptr) {
                 got_null_cfgs_container = true;
               } else {
@@ -1039,7 +1039,7 @@ TEST_F(CodecManagerTestAdsp, test_dual_bidir_swb_supported) {
             {.audio_context_type = context},
             [&](const CodecManager::UnicastConfigurationRequirements& requirements,
                 const set_configurations::AudioSetConfigurations* confs)
-                    -> const set_configurations::AudioSetConfiguration* {
+                    -> std::unique_ptr<set_configurations::AudioSetConfiguration> {
               if (confs == nullptr) {
                 got_null_cfgs_container = true;
               } else {
@@ -1071,7 +1071,7 @@ TEST_F(CodecManagerTestHostNoSwb, test_dual_bidir_swb_not_supported) {
             {.audio_context_type = context},
             [&](const CodecManager::UnicastConfigurationRequirements& requirements,
                 const set_configurations::AudioSetConfigurations* confs)
-                    -> const set_configurations::AudioSetConfiguration* {
+                    -> std::unique_ptr<set_configurations::AudioSetConfiguration> {
               if (confs == nullptr) {
                 got_null_cfgs_container = true;
               } else {
@@ -1120,7 +1120,7 @@ TEST_F(CodecManagerTestAdspNoSwb, test_dual_bidir_swb_not_supported) {
             {.audio_context_type = context},
             [&](const CodecManager::UnicastConfigurationRequirements& requirements,
                 const set_configurations::AudioSetConfigurations* confs)
-                    -> const set_configurations::AudioSetConfiguration* {
+                    -> std::unique_ptr<set_configurations::AudioSetConfiguration> {
               if (confs == nullptr) {
                 got_null_cfgs_container = true;
               } else {

@@ -87,5 +87,10 @@ GetAudioSessionCodecConfigFromAudioSetConfiguration(
 const struct types::acs_ac_record* GetConfigurationSupportedPac(
         const ::bluetooth::le_audio::types::PublishedAudioCapabilities& pacs,
         const ::bluetooth::le_audio::set_configurations::CodecConfigSetting& codec_config_setting);
+bool IsAseConfigMatchedWithPreferredRequirements(
+        const std::vector<struct set_configurations::AseConfiguration>& ase_confs,
+        const std::vector<
+                CodecManager::UnicastConfigurationRequirements::DeviceDirectionRequirements>& reqs,
+        uint8_t channel_cnt_per_ase);
 }  // namespace utils
 }  // namespace bluetooth::le_audio

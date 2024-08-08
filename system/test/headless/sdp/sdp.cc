@@ -71,7 +71,7 @@ int sdp_query_uuid([[maybe_unused]] unsigned int num_loops,
   const tSDP_STATUS result = future.get();
   if (result != SDP_SUCCESS) {
     fprintf(stdout, "Failed search discovery result:%s\n", sdp_status_text(result).c_str());
-    return result;
+    return static_cast<int>(result);
   }
 
   LOG_CONSOLE("Found records peer:%s uuid:%s", raw_address.ToString().c_str(),
