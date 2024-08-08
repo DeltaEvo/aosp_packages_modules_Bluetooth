@@ -18,6 +18,7 @@ package android.bluetooth;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
+import static android.Manifest.permission.LOCAL_MAC_ADDRESS;
 
 import android.annotation.FlaggedApi;
 import android.annotation.RequiresNoPermission;
@@ -193,6 +194,7 @@ public final class BluetoothSocket implements Closeable {
      * @param uuid SDP uuid
      * @throws IOException On error, for example Bluetooth not available, or insufficient privileges
      */
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, LOCAL_MAC_ADDRESS})
     /*package*/ BluetoothSocket(
             int type,
             boolean auth,
@@ -217,6 +219,7 @@ public final class BluetoothSocket implements Closeable {
      * @param min16DigitPin enforce a minimum length of 16 digits for a sec mode 2 connection
      * @throws IOException On error, for example Bluetooth not available, or insufficient privileges
      */
+    @RequiresPermission(allOf = {BLUETOOTH_CONNECT, LOCAL_MAC_ADDRESS})
     /*package*/ BluetoothSocket(
             int type,
             boolean auth,

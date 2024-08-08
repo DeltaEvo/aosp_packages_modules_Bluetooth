@@ -248,6 +248,7 @@ public class BluetoothMethodProxy {
     }
 
     /** Proxies {@link PeriodicAdvertisingManager#transferSync}. */
+    @SuppressLint("AndroidFrameworkRequiresPermission") // TODO: b/350563786
     public void periodicAdvertisingManagerTransferSync(
             PeriodicAdvertisingManager manager,
             BluetoothDevice bda,
@@ -257,6 +258,7 @@ public class BluetoothMethodProxy {
     }
 
     /** Proxies {@link PeriodicAdvertisingManager#transferSetInfo}. */
+    @SuppressLint("AndroidFrameworkRequiresPermission") // TODO: b/350563786
     public void periodicAdvertisingManagerTransferSetInfo(
             PeriodicAdvertisingManager manager,
             BluetoothDevice bda,

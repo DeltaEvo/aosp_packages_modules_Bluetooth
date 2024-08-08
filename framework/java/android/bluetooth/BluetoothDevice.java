@@ -2036,6 +2036,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresLegacyBluetoothPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(BLUETOOTH_CONNECT)
+    @SuppressLint("AndroidFrameworkRequiresPermission") // IpcDataCache prevent lint enforcement
     public int getBondState() {
         if (DBG) log("getBondState(" + this + ")");
         final IBluetooth service = getService();
