@@ -168,9 +168,12 @@ int waitHciDev(int hci_interface) {
             }
           }
 
-          // Chipset might be lost. Wait for index added event.
-          bluetooth::log::error("HCI interface({}) not found in the MGMT lndex list",
-                                hci_interface);
+          if (ret != 0) {
+            // Chipset might be lost. Wait for index added event.
+            bluetooth::log::error(
+                    "MGMT index list returns {} HCI interfaces, but HCI interface({}) is not found",
+                    cc->num_intf, hci_interface);
+          }
         } else {
           // Unlikely event (probably developer error or driver shut down).
           bluetooth::log::error("Failed to read index list: status({})", cc->status);
