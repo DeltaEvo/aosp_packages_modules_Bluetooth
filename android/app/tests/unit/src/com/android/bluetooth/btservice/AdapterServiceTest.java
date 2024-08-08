@@ -950,7 +950,7 @@ public class AdapterServiceTest {
         RemoteDevices remoteDevices = mAdapterService.getRemoteDevices();
         remoteDevices.addDeviceProperties(Utils.getBytesFromAddress((TEST_BT_ADDR_1)));
         String identityAddress = mAdapterService.getIdentityAddress(TEST_BT_ADDR_1);
-        if (!Flags.identityAddressNullIfUnknown()) {
+        if (!Flags.identityAddressNullIfNotKnown()) {
             assertThat(identityAddress).isEqualTo(TEST_BT_ADDR_1);
         }
 
@@ -965,7 +965,7 @@ public class AdapterServiceTest {
     }
 
     @Test
-    @EnableFlags(Flags.FLAG_IDENTITY_ADDRESS_NULL_IF_UNKNOWN)
+    @EnableFlags(Flags.FLAG_IDENTITY_ADDRESS_NULL_IF_NOT_KNOWN)
     public void testIdentityAddressNullIfUnknown() {
         BluetoothDevice device = TestUtils.getTestDevice(BluetoothAdapter.getDefaultAdapter(), 0);
 

@@ -194,7 +194,7 @@ public class BluetoothOppPreference {
 
     @SuppressLint("AndroidFrameworkRequiresPermission")
     private String getBrEdrAddress(BluetoothDevice device) {
-        if (Flags.identityAddressNullIfUnknown()) {
+        if (Flags.identityAddressNullIfNotKnown()) {
             return Utils.getBrEdrAddress(device);
         }
         return device.getIdentityAddress();

@@ -113,7 +113,7 @@ public class BluetoothObexTransport implements ObexTransport {
             return null;
         }
         String identityAddress =
-                Flags.identityAddressNullIfUnknown()
+                Flags.identityAddressNullIfNotKnown()
                         ? Utils.getBrEdrAddress(mSocket.getRemoteDevice())
                         : mSocket.getRemoteDevice().getIdentityAddress();
         return mSocket.getConnectionType() == BluetoothSocket.TYPE_RFCOMM

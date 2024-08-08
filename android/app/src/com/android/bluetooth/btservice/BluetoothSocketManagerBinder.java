@@ -58,7 +58,7 @@ class BluetoothSocketManagerBinder extends IBluetoothSocketManager.Stub {
         }
 
         String brEdrAddress =
-                Flags.identityAddressNullIfUnknown()
+                Flags.identityAddressNullIfNotKnown()
                         ? Utils.getBrEdrAddress(device)
                         : mService.getIdentityAddress(device.getAddress());
 
