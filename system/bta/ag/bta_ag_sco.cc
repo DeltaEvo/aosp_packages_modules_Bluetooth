@@ -1374,9 +1374,6 @@ void bta_ag_sco_conn_open(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& /* data */) {
   bta_sys_sco_open(BTA_ID_AG, p_scb->app_id, p_scb->peer_addr);
 
   if (bta_ag_is_sco_managed_by_audio()) {
-    // ConfirmStreamingRequest before sends callback to java layer
-    hfp_offload_interface->ConfirmStreamingRequest();
-
     bool is_controller_codec = false;
     if (sco_config_map.find(p_scb->inuse_codec) == sco_config_map.end()) {
       log::error("sco_config_map does not have inuse_codec={}",
@@ -1392,6 +1389,9 @@ void bta_ag_sco_conn_open(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& /* data */) {
             .is_nrec = p_scb->nrec_enabled,
     };
     hfp_offload_interface->UpdateAudioConfigToHal(config);
+
+    // ConfirmStreamingRequest before sends callback to java layer
+    hfp_offload_interface->ConfirmStreamingRequest();
   }
 
   /* call app callback */
