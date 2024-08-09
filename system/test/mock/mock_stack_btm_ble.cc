@@ -57,6 +57,7 @@ struct BTM_SecAddBleDevice BTM_SecAddBleDevice;
 struct BTM_SecAddBleKey BTM_SecAddBleKey;
 struct BTM_SecurityGrant BTM_SecurityGrant;
 struct btm_ble_connected btm_ble_connected;
+struct btm_ble_connection_established btm_ble_connection_established;
 struct btm_ble_get_acl_remote_addr btm_ble_get_acl_remote_addr;
 struct btm_ble_get_enc_key_type btm_ble_get_enc_key_type;
 struct btm_ble_link_encrypted btm_ble_link_encrypted;
@@ -197,6 +198,10 @@ void btm_ble_connected(const RawAddress& bda, uint16_t handle, uint8_t enc_mode,
   inc_func_call_count(__func__);
   test::mock::stack_btm_ble::btm_ble_connected(bda, handle, enc_mode, role, addr_type, addr_matched,
                                                can_read_discoverable_characteristics);
+}
+void btm_ble_connection_established(const RawAddress& bda) {
+  inc_func_call_count(__func__);
+  test::mock::stack_btm_ble::btm_ble_connection_established(bda);
 }
 bool btm_ble_get_acl_remote_addr(uint16_t hci_handle, RawAddress& conn_addr,
                                  tBLE_ADDR_TYPE* p_addr_type) {
