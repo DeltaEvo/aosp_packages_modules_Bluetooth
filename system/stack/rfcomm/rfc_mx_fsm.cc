@@ -379,8 +379,9 @@ void rfc_mx_sm_state_wait_sabme(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_da
       return;
 
     case RFC_MX_EVENT_SABME:
-      /* if we gave up outgoing connection request */
       if (p_mcb->pending_lcid) {
+        // Channel collision case - at this point we gave up as initiator
+        // and are trying again as acceptor
         p_mcb->pending_lcid = 0;
 
         rfc_send_ua(p_mcb, RFCOMM_MX_DLCI);
