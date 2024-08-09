@@ -104,7 +104,7 @@ static bool avct_l2c_is_passive(tAVCT_LCB* p_lcb) {
  *
  ******************************************************************************/
 void avct_l2c_connect_ind_cback(const RawAddress& bd_addr, uint16_t lcid, uint16_t /* psm */,
-                                uint8_t id) {
+                                uint8_t /* id */) {
   tAVCT_LCB* p_lcb;
   uint16_t result = L2CAP_CONN_OK;
 
@@ -252,7 +252,7 @@ void avct_l2c_connect_cfm_cback(uint16_t lcid, uint16_t result) {
  * Returns          void
  *
  ******************************************************************************/
-void avct_l2c_config_cfm_cback(uint16_t lcid, uint16_t initiator, tL2CAP_CFG_INFO* p_cfg) {
+void avct_l2c_config_cfm_cback(uint16_t lcid, uint16_t /* initiator */, tL2CAP_CFG_INFO* p_cfg) {
   avct_l2c_config_ind_cback(lcid, p_cfg);
 
   tAVCT_LCB* p_lcb;
@@ -306,7 +306,7 @@ void avct_l2c_config_ind_cback(uint16_t lcid, tL2CAP_CFG_INFO* p_cfg) {
  * Returns          void
  *
  ******************************************************************************/
-void avct_l2c_disconnect_ind_cback(uint16_t lcid, bool ack_needed) {
+void avct_l2c_disconnect_ind_cback(uint16_t lcid, bool /* ack_needed */) {
   tAVCT_LCB* p_lcb;
   uint16_t result = AVCT_RESULT_FAIL;
 

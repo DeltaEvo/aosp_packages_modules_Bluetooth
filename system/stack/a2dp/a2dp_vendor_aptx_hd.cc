@@ -370,7 +370,7 @@ bool A2DP_VendorAdjustCodecAptxHd(uint8_t* p_codec_info) {
   return true;
 }
 
-btav_a2dp_codec_index_t A2DP_VendorSourceCodecIndexAptxHd(const uint8_t* p_codec_info) {
+btav_a2dp_codec_index_t A2DP_VendorSourceCodecIndexAptxHd(const uint8_t* /* p_codec_info */) {
   return BTAV_A2DP_CODEC_INDEX_SOURCE_APTX_HD;
 }
 

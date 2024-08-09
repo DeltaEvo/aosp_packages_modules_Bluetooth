@@ -565,7 +565,7 @@ int A2DP_ComputeMaxBitRateAac(const uint8_t* p_codec_info, uint16_t mtu) {
   return (8 * mtu * sampling_freq) / pcm_channel_samples_per_frame;
 }
 
-bool A2DP_GetPacketTimestampAac(const uint8_t* p_codec_info, const uint8_t* p_data,
+bool A2DP_GetPacketTimestampAac(const uint8_t* /* p_codec_info */, const uint8_t* p_data,
                                 uint32_t* p_timestamp) {
   // TODO: Is this function really codec-specific?
   *p_timestamp = *(const uint32_t*)p_data;

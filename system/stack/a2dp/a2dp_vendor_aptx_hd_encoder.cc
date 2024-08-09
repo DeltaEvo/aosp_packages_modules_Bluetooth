@@ -269,7 +269,7 @@ int a2dp_vendor_aptx_hd_get_effective_frame_size() {
   return a2dp_aptx_hd_encoder_cb.peer_params.peer_mtu;
 }
 
-void a2dp_vendor_aptx_hd_send_frames(uint64_t timestamp_us) {
+void a2dp_vendor_aptx_hd_send_frames(uint64_t /* timestamp_us */) {
   tAPTX_HD_FRAMING_PARAMS* framing_params = &a2dp_aptx_hd_encoder_cb.framing_params;
 
   // Prepare the packet to send
