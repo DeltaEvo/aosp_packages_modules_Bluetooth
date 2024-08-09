@@ -617,7 +617,7 @@ class AdapterProperties {
     void cleanupPrevBondRecordsFor(BluetoothDevice device) {
         String address = device.getAddress();
         String identityAddress =
-                Flags.identityAddressNullIfUnknown()
+                Flags.identityAddressNullIfNotKnown()
                         ? Utils.getBrEdrAddress(device, mService)
                         : mService.getIdentityAddress(address);
         int deviceType = mRemoteDevices.getDeviceProperties(device).getDeviceType();
@@ -633,7 +633,7 @@ class AdapterProperties {
         for (BluetoothDevice existingDevice : mBondedDevices) {
             String existingAddress = existingDevice.getAddress();
             String existingIdentityAddress =
-                    Flags.identityAddressNullIfUnknown()
+                    Flags.identityAddressNullIfNotKnown()
                             ? Utils.getBrEdrAddress(existingDevice, mService)
                             : mService.getIdentityAddress(existingAddress);
             int existingDeviceType =
@@ -1185,7 +1185,7 @@ class AdapterProperties {
         for (BluetoothDevice device : mBondedDevices) {
             String address = device.getAddress();
             String brEdrAddress =
-                    Flags.identityAddressNullIfUnknown()
+                    Flags.identityAddressNullIfNotKnown()
                             ? Utils.getBrEdrAddress(device)
                             : mService.getIdentityAddress(address);
             if (brEdrAddress.equals(address)) {
