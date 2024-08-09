@@ -537,7 +537,7 @@ static void btif_a2dp_source_setup_codec_delayed(const RawAddress& peer_address)
       return;
     }
   }
-  btif_a2dp_source_cb.encoder_interface = bta_av_co_get_encoder_interface();
+  btif_a2dp_source_cb.encoder_interface = bta_av_co_get_encoder_interface(peer_address);
   if (btif_a2dp_source_cb.encoder_interface == nullptr) {
     log::error("Cannot stream audio: no source encoder interface");
     return;
