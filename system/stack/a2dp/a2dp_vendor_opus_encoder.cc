@@ -159,7 +159,7 @@ void a2dp_vendor_opus_encoder_init(const tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_
 }
 
 bool A2dpCodecConfigOpusSource::updateEncoderUserConfig(
-        const tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_params, bool* p_restart_input,
+        const tA2DP_ENCODER_INIT_PEER_PARAMS* /* p_peer_params */, bool* p_restart_input,
         bool* p_restart_output, bool* p_config_updated) {
   if (a2dp_opus_encoder_cb.peer_mtu == 0) {
     log::error("Cannot update the codec encoder for {}: invalid peer MTU", name());

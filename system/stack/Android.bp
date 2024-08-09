@@ -162,7 +162,6 @@ cc_library_static {
     ],
     host_supported: true,
     min_sdk_version: "Tiramisu",
-    cflags: ["-Wno-unused-parameter"],
 }
 
 filegroup {
