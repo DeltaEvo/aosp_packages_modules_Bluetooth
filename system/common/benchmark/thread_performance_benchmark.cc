@@ -48,15 +48,15 @@ void pthread_callback_batch(void* context) {
   }
 }
 
-void callback_sequential(void* context) { g_counter_promise->set_value(); }
+void callback_sequential(void* /* context */) { g_counter_promise->set_value(); }
 
-void callback_sequential_queue(fixed_queue_t* queue, void* context) {
+void callback_sequential_queue(fixed_queue_t* queue, void* /* context */) {
   bluetooth::log::assert_that(queue != nullptr, "assert failed: queue != nullptr");
   fixed_queue_dequeue(queue);
   g_counter_promise->set_value();
 }
 
-void callback_batch(fixed_queue_t* queue, void* data) {
+void callback_batch(fixed_queue_t* queue, void* /* data */) {
   bluetooth::log::assert_that(queue != nullptr, "assert failed: queue != nullptr");
   fixed_queue_dequeue(queue);
   g_counter++;
