@@ -797,7 +797,7 @@ package android.bluetooth {
     method @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT) public boolean isNoiseReductionSupported(@NonNull android.bluetooth.BluetoothDevice);
     method @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT) public boolean isVoiceRecognitionSupported(@NonNull android.bluetooth.BluetoothDevice);
     method @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT) public boolean sendVendorSpecificResultCode(android.bluetooth.BluetoothDevice, String, String);
-    method @RequiresPermission(allOf={android.Manifest.permission.BLUETOOTH_CONNECT, android.Manifest.permission.MODIFY_PHONE_STATE}) public boolean startVoiceRecognition(android.bluetooth.BluetoothDevice);
+    method @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT) public boolean startVoiceRecognition(android.bluetooth.BluetoothDevice);
     method @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT) public boolean stopVoiceRecognition(android.bluetooth.BluetoothDevice);
     field @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT) public static final String ACTION_AUDIO_STATE_CHANGED = "android.bluetooth.headset.profile.action.AUDIO_STATE_CHANGED";
     field @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT) public static final String ACTION_CONNECTION_STATE_CHANGED = "android.bluetooth.headset.profile.action.CONNECTION_STATE_CHANGED";
