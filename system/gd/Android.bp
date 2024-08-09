@@ -221,7 +221,6 @@ cc_library_static {
         "libbluetooth_gd_defaults",
     ],
     srcs: [
-        ":BluetoothDiscoverySources",
         ":BluetoothShimSources",
     ],
     include_dirs: [
@@ -545,7 +544,6 @@ cc_test {
     ],
     host_supported: true,
     srcs: [
-        ":BluetoothDiscoveryTestSources",
         ":BluetoothDumpsysTestSources",
         ":BluetoothShimTestSources",
         ":TestCommonMockFunctions",
@@ -568,7 +566,6 @@ cc_test {
         "libbluetooth-dumpsys-test",
         "libbluetooth-dumpsys-unittest",
         "libbluetooth-gdx",
-        "libbluetooth-types",
         "libbluetooth_gd",
         "libbluetooth_log",
         "libbt-btu-main-thread",
@@ -583,9 +580,6 @@ cc_test {
         "liblog",
         "libosi",
         "server_configurable_flags",
-    ],
-    shared_libs: [
-        "libcrypto",
     ],
     sanitize: {
         address: true,

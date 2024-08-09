@@ -56,11 +56,6 @@ group("gd_default_deps") {
 }
 
 static_library("libbluetooth-gdx") {
-  sources = [
-    "discovery/device/bt_property.cc",
-    "discovery/device/data_parser.cc",
-    "discovery/device/eir_data.cc",
-  ]
   include_dirs = [
     "packages/modules/Bluetooth/system",
   ]
