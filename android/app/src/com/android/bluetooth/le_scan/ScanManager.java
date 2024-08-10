@@ -64,6 +64,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** Class that handles Bluetooth LE scan related operations. */
 public class ScanManager {
@@ -120,8 +121,6 @@ public class ScanManager {
     private final Context mContext;
     private final TransitionalScanHelper mScanHelper;
     private final AdapterService mAdapterService;
-    private BroadcastReceiver mBatchAlarmReceiver;
-    private boolean mBatchAlarmReceiverRegistered;
     private ScanNative mScanNative;
     private volatile ClientHandler mHandler;
     private BluetoothAdapterProxy mBluetoothAdapterProxy;
@@ -993,9 +992,12 @@ public class ScanManager {
         private final Set<Integer> mAllPassRegularClients = new HashSet<>();
         private final Set<Integer> mAllPassBatchClients = new HashSet<>();
 
-        private AlarmManager mAlarmManager;
-        private PendingIntent mBatchScanIntervalIntent;
-        private ScanNativeInterface mNativeInterface;
+        private final AtomicReference<BroadcastReceiver> mBatchAlarmReceiver =
+                new AtomicReference<>();
+
+        private final AlarmManager mAlarmManager;
+        private final PendingIntent mBatchScanIntervalIntent;
+        private final ScanNativeInterface mNativeInterface;
 
         ScanNative(TransitionalScanHelper scanHelper) {
             mNativeInterface = ScanObjectsFactory.getInstance().getScanNativeInterface();
@@ -1011,7 +1013,7 @@ public class ScanManager {
             IntentFilter filter = new IntentFilter();
             filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
             filter.addAction(ACTION_REFRESH_BATCHED_SCAN);
-            mBatchAlarmReceiver =
+            mBatchAlarmReceiver.set(
                     new BroadcastReceiver() {
                         @Override
                         public void onReceive(Context context, Intent intent) {
@@ -1028,9 +1030,8 @@ public class ScanManager {
                                 }
                             }
                         }
-                    };
-            mContext.registerReceiver(mBatchAlarmReceiver, filter);
-            mBatchAlarmReceiverRegistered = true;
+                    });
+            mContext.registerReceiver(mBatchAlarmReceiver.get(), filter);
         }
 
         private void callbackDone(int scannerId, int status) {
@@ -1484,10 +1485,10 @@ public class ScanManager {
         void cleanup() {
             mAlarmManager.cancel(mBatchScanIntervalIntent);
             // Protect against multiple calls of cleanup.
-            if (mBatchAlarmReceiverRegistered) {
-                mContext.unregisterReceiver(mBatchAlarmReceiver);
+            BroadcastReceiver receiver = mBatchAlarmReceiver.getAndSet(null);
+            if (receiver != null) {
+                mContext.unregisterReceiver(receiver);
             }
-            mBatchAlarmReceiverRegistered = false;
             mNativeInterface.cleanup();
         }
 
