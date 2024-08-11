@@ -18,6 +18,7 @@ package com.android.bluetooth.avrcpcontroller;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 
@@ -162,6 +163,7 @@ public class BrowseNodeTest {
     }
 
     @Test
+    @SuppressLint("TruthIncompatibleType") // That the point of this test
     public void equals_withDifferentClass() {
         AvrcpItem avrcpItem = new AvrcpItem.Builder().setUuid(TEST_UUID).build();
 

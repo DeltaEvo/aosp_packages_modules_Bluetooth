@@ -21,12 +21,10 @@ import static org.mockito.Mockito.*;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
-import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.HandlerThread;
 
-import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
 import androidx.test.runner.AndroidJUnit4;
 
@@ -200,7 +198,7 @@ public class HearingAidStateMachineTest {
 
         // Verify that one connection state broadcast is executed
         ArgumentCaptor<Intent> intentArgument2 = ArgumentCaptor.forClass(Intent.class);
-        verify(mHearingAidService, timeout(HearingAidStateMachine.sConnectTimeoutMs * 2).times(2))
+        verify(mHearingAidService, timeout(HearingAidStateMachine.sConnectTimeoutMs * 2L).times(2))
                 .sendBroadcast(intentArgument2.capture(), anyString(), any(Bundle.class));
         Assert.assertEquals(
                 BluetoothProfile.STATE_DISCONNECTED,
@@ -247,7 +245,7 @@ public class HearingAidStateMachineTest {
 
         // Verify that one connection state broadcast is executed
         ArgumentCaptor<Intent> intentArgument2 = ArgumentCaptor.forClass(Intent.class);
-        verify(mHearingAidService, timeout(HearingAidStateMachine.sConnectTimeoutMs * 2).times(2))
+        verify(mHearingAidService, timeout(HearingAidStateMachine.sConnectTimeoutMs * 2L).times(2))
                 .sendBroadcast(intentArgument2.capture(), anyString(), any(Bundle.class));
         Assert.assertEquals(
                 BluetoothProfile.STATE_DISCONNECTED,

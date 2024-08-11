@@ -57,7 +57,7 @@ class LogTest {
 
     @Test
     fun log_errorThrowable() {
-        Log.e(TAG, "Logging error… ", RuntimeException("With a Throwable"))
+        Log.e(TAG, "Logging error... ", RuntimeException("With a Throwable"))
     }
 
     @Test

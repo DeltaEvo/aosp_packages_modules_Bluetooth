@@ -147,10 +147,11 @@ static void btapp_gatts_free_req_data(uint16_t event, tBTA_GATTS* p_data) {
 static void btapp_gatts_handle_cback(uint16_t event, char* p_param) {
   log::verbose("Event {}", event);
 
+  auto callbacks = bt_gatt_callbacks;
   tBTA_GATTS* p_data = (tBTA_GATTS*)p_param;
   switch (event) {
     case BTA_GATTS_REG_EVT: {
-      HAL_CBACK(bt_gatt_callbacks, server->register_server_cb, p_data->reg_oper.status,
+      HAL_CBACK(callbacks, server->register_server_cb, p_data->reg_oper.status,
                 p_data->reg_oper.server_if, p_data->reg_oper.uuid);
       break;
     }
@@ -161,29 +162,29 @@ static void btapp_gatts_handle_cback(uint16_t event, char* p_param) {
     case BTA_GATTS_CONNECT_EVT: {
       btif_gatt_check_encrypted_link(p_data->conn.remote_bda, p_data->conn.transport);
 
-      HAL_CBACK(bt_gatt_callbacks, server->connection_cb, p_data->conn.conn_id,
-                p_data->conn.server_if, true, p_data->conn.remote_bda);
+      HAL_CBACK(callbacks, server->connection_cb, p_data->conn.conn_id, p_data->conn.server_if,
+                true, p_data->conn.remote_bda);
       break;
     }
 
     case BTA_GATTS_DISCONNECT_EVT: {
-      HAL_CBACK(bt_gatt_callbacks, server->connection_cb, p_data->conn.conn_id,
-                p_data->conn.server_if, false, p_data->conn.remote_bda);
+      HAL_CBACK(callbacks, server->connection_cb, p_data->conn.conn_id, p_data->conn.server_if,
+                false, p_data->conn.remote_bda);
       break;
     }
 
     case BTA_GATTS_STOP_EVT:
-      HAL_CBACK(bt_gatt_callbacks, server->service_stopped_cb, p_data->srvc_oper.status,
+      HAL_CBACK(callbacks, server->service_stopped_cb, p_data->srvc_oper.status,
                 p_data->srvc_oper.server_if, p_data->srvc_oper.service_id);
       break;
 
     case BTA_GATTS_DELETE_EVT:
-      HAL_CBACK(bt_gatt_callbacks, server->service_deleted_cb, p_data->srvc_oper.status,
+      HAL_CBACK(callbacks, server->service_deleted_cb, p_data->srvc_oper.status,
                 p_data->srvc_oper.server_if, p_data->srvc_oper.service_id);
       break;
 
     case BTA_GATTS_READ_CHARACTERISTIC_EVT: {
-      HAL_CBACK(bt_gatt_callbacks, server->request_read_characteristic_cb, p_data->req_data.conn_id,
+      HAL_CBACK(callbacks, server->request_read_characteristic_cb, p_data->req_data.conn_id,
                 p_data->req_data.trans_id, p_data->req_data.remote_bda,
                 p_data->req_data.p_data->read_req.handle, p_data->req_data.p_data->read_req.offset,
                 p_data->req_data.p_data->read_req.is_long);
@@ -191,7 +192,7 @@ static void btapp_gatts_handle_cback(uint16_t event, char* p_param) {
     }
 
     case BTA_GATTS_READ_DESCRIPTOR_EVT: {
-      HAL_CBACK(bt_gatt_callbacks, server->request_read_descriptor_cb, p_data->req_data.conn_id,
+      HAL_CBACK(callbacks, server->request_read_descriptor_cb, p_data->req_data.conn_id,
                 p_data->req_data.trans_id, p_data->req_data.remote_bda,
                 p_data->req_data.p_data->read_req.handle, p_data->req_data.p_data->read_req.offset,
                 p_data->req_data.p_data->read_req.is_long);
@@ -200,39 +201,39 @@ static void btapp_gatts_handle_cback(uint16_t event, char* p_param) {
 
     case BTA_GATTS_WRITE_CHARACTERISTIC_EVT: {
       const auto& req = p_data->req_data.p_data->write_req;
-      HAL_CBACK(bt_gatt_callbacks, server->request_write_characteristic_cb,
-                p_data->req_data.conn_id, p_data->req_data.trans_id, p_data->req_data.remote_bda,
-                req.handle, req.offset, req.need_rsp, req.is_prep, req.value, req.len);
+      HAL_CBACK(callbacks, server->request_write_characteristic_cb, p_data->req_data.conn_id,
+                p_data->req_data.trans_id, p_data->req_data.remote_bda, req.handle, req.offset,
+                req.need_rsp, req.is_prep, req.value, req.len);
       break;
     }
 
     case BTA_GATTS_WRITE_DESCRIPTOR_EVT: {
       const auto& req = p_data->req_data.p_data->write_req;
-      HAL_CBACK(bt_gatt_callbacks, server->request_write_descriptor_cb, p_data->req_data.conn_id,
+      HAL_CBACK(callbacks, server->request_write_descriptor_cb, p_data->req_data.conn_id,
                 p_data->req_data.trans_id, p_data->req_data.remote_bda, req.handle, req.offset,
                 req.need_rsp, req.is_prep, req.value, req.len);
       break;
     }
 
     case BTA_GATTS_EXEC_WRITE_EVT: {
-      HAL_CBACK(bt_gatt_callbacks, server->request_exec_write_cb, p_data->req_data.conn_id,
+      HAL_CBACK(callbacks, server->request_exec_write_cb, p_data->req_data.conn_id,
                 p_data->req_data.trans_id, p_data->req_data.remote_bda,
                 p_data->req_data.p_data->exec_write);
       break;
     }
 
     case BTA_GATTS_CONF_EVT:
-      HAL_CBACK(bt_gatt_callbacks, server->indication_sent_cb, p_data->req_data.conn_id,
+      HAL_CBACK(callbacks, server->indication_sent_cb, p_data->req_data.conn_id,
                 p_data->req_data.status);
       break;
 
     case BTA_GATTS_CONGEST_EVT:
-      HAL_CBACK(bt_gatt_callbacks, server->congestion_cb, p_data->congest.conn_id,
+      HAL_CBACK(callbacks, server->congestion_cb, p_data->congest.conn_id,
                 p_data->congest.congested);
       break;
 
     case BTA_GATTS_MTU_EVT:
-      HAL_CBACK(bt_gatt_callbacks, server->mtu_changed_cb, p_data->req_data.conn_id,
+      HAL_CBACK(callbacks, server->mtu_changed_cb, p_data->req_data.conn_id,
                 p_data->req_data.p_data->mtu);
       break;
 
@@ -243,18 +244,18 @@ static void btapp_gatts_handle_cback(uint16_t event, char* p_param) {
       break;
 
     case BTA_GATTS_PHY_UPDATE_EVT:
-      HAL_CBACK(bt_gatt_callbacks, server->phy_updated_cb, p_data->phy_update.conn_id,
+      HAL_CBACK(callbacks, server->phy_updated_cb, p_data->phy_update.conn_id,
                 p_data->phy_update.tx_phy, p_data->phy_update.rx_phy, p_data->phy_update.status);
       break;
 
     case BTA_GATTS_CONN_UPDATE_EVT:
-      HAL_CBACK(bt_gatt_callbacks, server->conn_updated_cb, p_data->conn_update.conn_id,
+      HAL_CBACK(callbacks, server->conn_updated_cb, p_data->conn_update.conn_id,
                 p_data->conn_update.interval, p_data->conn_update.latency,
                 p_data->conn_update.timeout, p_data->conn_update.status);
       break;
 
     case BTA_GATTS_SUBRATE_CHG_EVT:
-      HAL_CBACK(bt_gatt_callbacks, server->subrate_chg_cb, p_data->subrate_chg.conn_id,
+      HAL_CBACK(callbacks, server->subrate_chg_cb, p_data->subrate_chg.conn_id,
                 p_data->subrate_chg.subrate_factor, p_data->subrate_chg.latency,
                 p_data->subrate_chg.cont_num, p_data->subrate_chg.timeout,
                 p_data->subrate_chg.status);
@@ -390,8 +391,8 @@ static bt_status_t btif_gatts_close(int server_if, const RawAddress& bd_addr, in
 
 static void on_service_added_cb(tGATT_STATUS status, int server_if,
                                 vector<btgatt_db_element_t> service) {
-  HAL_CBACK(bt_gatt_callbacks, server->service_added_cb, status, server_if, service.data(),
-            service.size());
+  auto callbacks = bt_gatt_callbacks;
+  HAL_CBACK(callbacks, server->service_added_cb, status, server_if, service.data(), service.size());
 }
 
 static void add_service_impl(int server_if, vector<btgatt_db_element_t> service) {
@@ -401,7 +402,8 @@ static void add_service_impl(int server_if, vector<btgatt_db_element_t> service)
   if (service[0].uuid == Uuid::From16Bit(UUID_SERVCLASS_GATT_SERVER) ||
       service[0].uuid == Uuid::From16Bit(UUID_SERVCLASS_GAP_SERVER)) {
     log::error("Attept to register restricted service");
-    HAL_CBACK(bt_gatt_callbacks, server->service_added_cb, BT_STATUS_AUTH_REJECTED, server_if,
+    auto callbacks = bt_gatt_callbacks;
+    HAL_CBACK(callbacks, server->service_added_cb, BT_STATUS_AUTH_REJECTED, server_if,
               service.data(), service.size());
     return;
   }
@@ -448,7 +450,8 @@ static void btif_gatts_send_response_impl(int conn_id, int trans_id, int status,
 
   BTA_GATTS_SendRsp(conn_id, trans_id, static_cast<tGATT_STATUS>(status), &rsp_struct);
 
-  HAL_CBACK(bt_gatt_callbacks, server->response_confirmation_cb, 0, rsp_struct.attr_value.handle);
+  auto callbacks = bt_gatt_callbacks;
+  HAL_CBACK(callbacks, server->response_confirmation_cb, 0, rsp_struct.attr_value.handle);
 }
 
 static bt_status_t btif_gatts_send_response(int conn_id, int trans_id, int status,

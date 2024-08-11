@@ -239,3 +239,33 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "android_os_identifier"
+    namespace: "bluetooth"
+    description: "Add a custom service to provide Android OS identifier"
+    bug: "351860033"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "gatt_callback_on_failure"
+    namespace: "bluetooth"
+    description: "Invoke callbacks on early failure from the native stack"
+    bug: "356550596"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "le_inquiry_duration"
+    namespace: "bluetooth"
+    description: "Use the same duration for LE inquiry scan that classic discovery uses"
+    bug: "357894405"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}

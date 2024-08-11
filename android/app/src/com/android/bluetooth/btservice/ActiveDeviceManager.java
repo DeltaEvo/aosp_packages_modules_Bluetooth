@@ -812,7 +812,7 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
         @Override
         public void onAudioDevicesRemoved(AudioDeviceInfo[] removedDevices) {
             Log.d(TAG, "onAudioDevicesRemoved");
-            if (!Flags.fallbackWhenWiredAudioDisconnected()) {
+            if (!Flags.admFallbackWhenWiredAudioDisconnected()) {
                 return;
             }
             if (!Arrays.stream(removedDevices)
@@ -1121,7 +1121,7 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
             if (Objects.equals(a2dpFallbackDevice, device)) {
                 Log.d(TAG, "Found an A2DP fallback device: " + device);
                 setA2dpActiveDevice(device);
-                if (Flags.alwaysFallbackToAvailableDevice()) {
+                if (Flags.admAlwaysFallbackToAvailableDevice()) {
                     setHfpActiveDevice(headsetFallbackDevice);
                 } else {
                     if (Objects.equals(headsetFallbackDevice, device)) {
@@ -1152,7 +1152,7 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
             if (Objects.equals(headsetFallbackDevice, device)) {
                 Log.d(TAG, "Found a HFP fallback device: " + device);
                 setHfpActiveDevice(device);
-                if (Flags.alwaysFallbackToAvailableDevice()) {
+                if (Flags.admAlwaysFallbackToAvailableDevice()) {
                     setA2dpActiveDevice(a2dpFallbackDevice);
                 } else {
                     if (Objects.equals(a2dpFallbackDevice, device)) {

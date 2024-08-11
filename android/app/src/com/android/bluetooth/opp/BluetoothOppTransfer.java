@@ -446,6 +446,7 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
                         mContext.getContentResolver(), contentUri, updateValues, null, null);
     }
 
+    @SuppressLint("WaitNotInLoop")
     private void markBatchFailed(int failReason) {
         synchronized (this) {
             try {

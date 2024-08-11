@@ -128,7 +128,8 @@ public class AvrcpCoverArtManager {
      */
     public static boolean isValidImageHandle(String handle) {
         if (handle == null || handle.length() != 7) return false;
-        for (char c : handle.toCharArray()) {
+        for (int i = 0; i < handle.length(); i++) {
+            char c = handle.charAt(i);
             if (!Character.isDigit(c)) {
                 return false;
             }

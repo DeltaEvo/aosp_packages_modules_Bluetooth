@@ -17,8 +17,7 @@
  *
  ******************************************************************************/
 
-#ifndef BT_TARGET_H
-#define BT_TARGET_H
+#pragma once
 
 #ifndef FALSE
 #define FALSE false
@@ -37,10 +36,6 @@
 
 #ifndef BTUI_OPS_FORMATS
 #define BTUI_OPS_FORMATS (BTA_OP_VCARD21_MASK | BTA_OP_ANY_MASK)
-#endif
-
-#ifndef BTA_RFC_MTU_SIZE
-#define BTA_RFC_MTU_SIZE (L2CAP_MTU_SIZE - L2CAP_MIN_OFFSET - RFCOMM_DATA_OVERHEAD)
 #endif
 
 #ifndef BTA_PAN_INCLUDED
@@ -115,16 +110,6 @@
 /* Sends SDP data packets. */
 #ifndef SDP_DATA_BUF_SIZE
 #define SDP_DATA_BUF_SIZE BT_DEFAULT_BUFFER_SIZE
-#endif
-
-/* Sends RFCOMM command packets. */
-#ifndef RFCOMM_CMD_BUF_SIZE
-#define RFCOMM_CMD_BUF_SIZE BT_SMALL_BUFFER_SIZE
-#endif
-
-/* Sends RFCOMM data packets. */
-#ifndef RFCOMM_DATA_BUF_SIZE
-#define RFCOMM_DATA_BUF_SIZE BT_DEFAULT_BUFFER_SIZE
 #endif
 
 /* Sends L2CAP packets to the peer and HCI messages to the controller. */
@@ -489,72 +474,6 @@
 
 /******************************************************************************
  *
- * RFCOMM
- *
- *****************************************************************************/
-
-/* The maximum number of ports supported. */
-#ifndef MAX_RFC_PORTS
-#define MAX_RFC_PORTS 30
-#endif
-
-/* The maximum simultaneous links to different devices. */
-#ifndef MAX_BD_CONNECTIONS
-#define MAX_BD_CONNECTIONS 16
-#endif
-
-/* The port receive queue low watermark level, in bytes. */
-#ifndef PORT_RX_LOW_WM
-#define PORT_RX_LOW_WM (BTA_RFC_MTU_SIZE * PORT_RX_BUF_LOW_WM)
-#endif
-
-/* The port receive queue high watermark level, in bytes. */
-#ifndef PORT_RX_HIGH_WM
-#define PORT_RX_HIGH_WM (BTA_RFC_MTU_SIZE * PORT_RX_BUF_HIGH_WM)
-#endif
-
-/* The port receive queue critical watermark level, in bytes. */
-#ifndef PORT_RX_CRITICAL_WM
-#define PORT_RX_CRITICAL_WM (BTA_RFC_MTU_SIZE * PORT_RX_BUF_CRITICAL_WM)
-#endif
-
-/* The port receive queue low watermark level, in number of buffers. */
-#ifndef PORT_RX_BUF_LOW_WM
-#define PORT_RX_BUF_LOW_WM 4
-#endif
-
-/* The port receive queue high watermark level, in number of buffers. */
-#ifndef PORT_RX_BUF_HIGH_WM
-#define PORT_RX_BUF_HIGH_WM 10
-#endif
-
-/* The port receive queue critical watermark level, in number of buffers. */
-#ifndef PORT_RX_BUF_CRITICAL_WM
-#define PORT_RX_BUF_CRITICAL_WM 15
-#endif
-
-/* The port transmit queue high watermark level, in bytes. */
-#ifndef PORT_TX_HIGH_WM
-#define PORT_TX_HIGH_WM (BTA_RFC_MTU_SIZE * PORT_TX_BUF_HIGH_WM)
-#endif
-
-/* The port transmit queue critical watermark level, in bytes. */
-#ifndef PORT_TX_CRITICAL_WM
-#define PORT_TX_CRITICAL_WM (BTA_RFC_MTU_SIZE * PORT_TX_BUF_CRITICAL_WM)
-#endif
-
-/* The port transmit queue high watermark level, in number of buffers. */
-#ifndef PORT_TX_BUF_HIGH_WM
-#define PORT_TX_BUF_HIGH_WM 10
-#endif
-
-/* The port transmit queue high watermark level, in number of buffers. */
-#ifndef PORT_TX_BUF_CRITICAL_WM
-#define PORT_TX_BUF_CRITICAL_WM 15
-#endif
-
-/******************************************************************************
- *
  * BNEP
  *
  *****************************************************************************/
@@ -766,11 +685,3 @@
 #ifndef BTA_EIR_SERVER_NUM_CUSTOM_UUID
 #define BTA_EIR_SERVER_NUM_CUSTOM_UUID 8
 #endif
-
-/******************************************************************************
- *
- * Tracing:  Include trace header file here.
- *
- *****************************************************************************/
-
-#endif /* BT_TARGET_H */

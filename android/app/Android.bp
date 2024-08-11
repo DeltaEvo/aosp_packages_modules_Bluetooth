@@ -323,24 +323,51 @@ android_app {
         enabled: true,
         javacflags: [
             "-Xep:AlmostJavadoc:ERROR",
+            "-Xep:AlreadyChecked:ERROR",
+            "-Xep:AndroidFrameworkBinderIdentity:ERROR",
             "-Xep:AndroidFrameworkEfficientStrings:ERROR",
             "-Xep:AndroidFrameworkRequiresPermission:ERROR",
             "-Xep:BadImport:ERROR",
             "-Xep:ClassCanBeStatic:ERROR",
+            "-Xep:DateFormatConstant:ERROR",
             "-Xep:EmptyBlockTag:ERROR",
+            "-Xep:EqualsGetClass:ERROR",
+            "-Xep:FallThrough:ERROR",
+            "-Xep:HidingField:ERROR",
             "-Xep:InlineMeInliner:ERROR",
             "-Xep:InvalidBlockTag:ERROR",
             "-Xep:InvalidParam:ERROR",
+            "-Xep:LoopOverCharArray:ERROR",
+            "-Xep:MissingCasesInEnumSwitch:ERROR",
             "-Xep:MockNotUsedInProduction:ERROR",
+            "-Xep:ModifyCollectionInEnhancedForLoop:ERROR",
+            "-Xep:NarrowCalculation:ERROR",
             "-Xep:NonApiType:ERROR",
+            "-Xep:NonAtomicVolatileUpdate:ERROR",
             "-Xep:NonCanonicalType:ERROR",
             "-Xep:NotJavadoc:ERROR",
+            "-Xep:ObjectEqualsForPrimitives:ERROR",
+            "-Xep:OperatorPrecedence:ERROR",
+            "-Xep:ReferenceEquality:ERROR",
             "-Xep:ReturnAtTheEndOfVoidFunction:ERROR",
             "-Xep:StringCaseLocaleUsage:ERROR",
             "-Xep:StringCharset:ERROR",
+            "-Xep:ToStringReturnsNull:ERROR",
+            "-Xep:UnnecessaryStringBuilder:ERROR",
+            "-Xep:UnrecognisedJavadocTag:ERROR",
             "-Xep:UnusedMethod:ERROR",
+            "-Xep:UnusedNestedClass:ERROR",
             "-Xep:UnusedVariable:ERROR",
-            "-XepExcludedPaths:.*/srcjars/.*", // Exclude generated files
+            "-Xep:WaitNotInLoop:ERROR",
+
+            // After fixing this errorprone, we decided to not merge the change.
+            // It is not very readable and the benefits are minimal when looking
+            // at the size of the maps used in the Bluetooth application.
+            // See https://r.android.com/3200511
+            "-Xep:AndroidFrameworkEfficientCollections:OFF",
+
+            // Exclude generated files
+            "-XepExcludedPaths:.*/srcjars/.*",
         ],
     },
     min_sdk_version: "Tiramisu",

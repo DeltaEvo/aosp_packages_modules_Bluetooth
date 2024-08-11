@@ -1,6 +1,8 @@
 //! FFI interfaces for the GATT module. Some structs are exported so that
 //! core::init can instantiate and pass them into the main loop.
 
+use pdl_runtime::EncodeError;
+use pdl_runtime::Packet;
 use std::iter::Peekable;
 
 use anyhow::{bail, Result};
@@ -11,7 +13,7 @@ use tokio::task::spawn_local;
 
 use crate::{
     do_in_rust_thread,
-    packets::{AttBuilder, AttErrorCode, Serializable, SerializeError},
+    packets::att::{self, AttErrorCode},
 };
 
 use super::{
@@ -266,12 +268,8 @@ impl GattCallbacks for GattCallbacksImpl {
 pub struct AttTransportImpl();
 
 impl AttTransport for AttTransportImpl {
-    fn send_packet(
-        &self,
-        tcb_idx: TransportIndex,
-        packet: AttBuilder,
-    ) -> Result<(), SerializeError> {
-        SendPacketToPeer(tcb_idx.0, packet.to_vec()?);
+    fn send_packet(&self, tcb_idx: TransportIndex, packet: att::Att) -> Result<(), EncodeError> {
+        SendPacketToPeer(tcb_idx.0, packet.encode_to_vec()?);
         Ok(())
     }
 }
@@ -418,7 +416,7 @@ fn send_response(_server_id: u8, conn_id: u16, trans_id: u32, status: u8, value:
     let value = if status == 0 {
         Ok(value.to_vec())
     } else {
-        Err(AttErrorCode::try_from(status).unwrap_or(AttErrorCode::UNLIKELY_ERROR))
+        Err(AttErrorCode::try_from(status).unwrap_or(AttErrorCode::UnlikelyError))
     };
 
     trace!("send_response {conn_id:?}, {trans_id:?}, {:?}", value.as_ref().err());
@@ -438,7 +436,7 @@ fn send_response(_server_id: u8, conn_id: u16, trans_id: u32, status: u8, value:
 fn send_indication(_server_id: u8, handle: u16, conn_id: u16, value: &[u8]) {
     let handle = AttHandle(handle);
     let conn_id = ConnectionId(conn_id);
-    let value = value.into();
+    let value = value.to_vec();
 
     trace!("send_indication {handle:?}, {conn_id:?}");
 

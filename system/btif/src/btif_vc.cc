@@ -60,10 +60,10 @@ class VolumeControlInterfaceImpl : public VolumeControlInterface, public VolumeC
                           address));
   }
 
-  void OnVolumeStateChanged(const RawAddress& address, uint8_t volume, bool mute,
+  void OnVolumeStateChanged(const RawAddress& address, uint8_t volume, bool mute, uint8_t flags,
                             bool isAutonomous) override {
     do_in_jni_thread(Bind(&VolumeControlCallbacks::OnVolumeStateChanged, Unretained(callbacks_),
-                          address, volume, mute, isAutonomous));
+                          address, volume, mute, flags, isAutonomous));
   }
 
   void OnGroupVolumeStateChanged(int group_id, uint8_t volume, bool mute,

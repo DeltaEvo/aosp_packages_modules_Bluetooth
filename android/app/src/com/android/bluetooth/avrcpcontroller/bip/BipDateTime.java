@@ -16,6 +16,8 @@
 
 package com.android.bluetooth.avrcpcontroller;
 
+import android.annotation.SuppressLint;
+
 import com.android.bluetooth.Utils;
 
 import java.util.Calendar;
@@ -113,14 +115,18 @@ public class BipDateTime {
 
     @Override
     public boolean equals(Object o) {
-        if (o == this) return true;
-        if (!(o instanceof BipDateTime)) return false;
+        if (o == this) {
+            return true;
+        }
+        if (!(o instanceof BipDateTime d)) {
+            return false;
+        }
 
-        BipDateTime d = (BipDateTime) o;
-        return d.isUtc() == isUtc() && d.getTime() == getTime();
+        return d.isUtc() == isUtc() && Objects.equals(d.getTime(), getTime());
     }
 
     @Override
+    @SuppressLint("ToStringReturnsNull")
     public String toString() {
         Date d = getTime();
         if (d == null) {

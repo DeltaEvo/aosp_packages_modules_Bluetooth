@@ -31,6 +31,8 @@
 #include <utility>  // for std::pair
 #include <vector>
 
+#include "hardware/bt_le_audio.h"
+
 #ifdef __ANDROID__
 #include <android/sysprop/BluetoothProperties.sysprop.h>
 #endif
@@ -124,6 +126,7 @@ public:
         group_user_allowed_context_mask_(
                 {.sink = types::AudioContexts(types::kLeAudioContextAllTypes),
                  .source = types::AudioContexts(types::kLeAudioContextAllTypes)}),
+        preferred_config_({.sink = nullptr, .source = nullptr}),
         target_state_(types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE),
         current_state_(types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE),
         in_transition_(false) {
@@ -204,9 +207,15 @@ public:
   bool GetPresentationDelay(uint32_t* delay, uint8_t direction) const;
   uint16_t GetRemoteDelay(uint8_t direction) const;
   bool UpdateAudioContextAvailability(void);
-  bool UpdateAudioSetConfigurationCache(types::LeAudioContextType ctx_type) const;
+  bool UpdateAudioSetConfigurationCache(types::LeAudioContextType ctx_type,
+                                        bool use_preferred = false) const;
   CodecManager::UnicastConfigurationRequirements GetAudioSetConfigurationRequirements(
           types::LeAudioContextType ctx_type) const;
+  bool SetPreferredAudioSetConfiguration(
+          const bluetooth::le_audio::btle_audio_codec_config_t& input_codec_config,
+          const bluetooth::le_audio::btle_audio_codec_config_t& output_codec_config) const;
+  bool IsUsingPreferredAudioSetConfiguration(const types::LeAudioContextType& context_type) const;
+  void ResetPreferredAudioSetConfiguration(void) const;
   bool ReloadAudioLocations(void);
   bool ReloadAudioDirections(void);
   std::shared_ptr<const set_configurations::AudioSetConfiguration> GetActiveConfiguration(
@@ -214,7 +223,11 @@ public:
   bool IsPendingConfiguration(void) const;
   std::shared_ptr<const set_configurations::AudioSetConfiguration> GetConfiguration(
           types::LeAudioContextType ctx_type) const;
+  std::shared_ptr<const set_configurations::AudioSetConfiguration> GetPreferredConfiguration(
+          types::LeAudioContextType ctx_type) const;
   std::shared_ptr<const set_configurations::AudioSetConfiguration> GetCachedConfiguration(
+          types::LeAudioContextType ctx_type) const;
+  std::shared_ptr<const set_configurations::AudioSetConfiguration> GetCachedPreferredConfiguration(
           types::LeAudioContextType ctx_type) const;
   void InvalidateCachedConfigurations(void);
   void SetPendingConfiguration(void);
@@ -374,6 +387,16 @@ public:
     return dsa_modes_list;
   }
 
+  bool DsaReducedSduSizeSupported() {
+    bool reduced_sdu = false;
+    for (auto leAudioDevice : leAudioDevices_) {
+      if (!leAudioDevice.expired()) {
+        reduced_sdu |= leAudioDevice.lock()->DsaReducedSduSizeSupported();
+      }
+    }
+    return reduced_sdu;
+  }
+
   types::BidirectionalPair<types::AudioContexts> GetLatestAvailableContexts(void) const;
 
   bool IsInTransition(void) const;
@@ -390,9 +413,9 @@ public:
    * configurations. This will not be used for finding best possible vendor
    * codec configuration.
    */
-  const set_configurations::AudioSetConfiguration* FindFirstSupportedConfiguration(
+  std::unique_ptr<set_configurations::AudioSetConfiguration> FindFirstSupportedConfiguration(
           const CodecManager::UnicastConfigurationRequirements& requirements,
-          const set_configurations::AudioSetConfigurations* confs) const;
+          const set_configurations::AudioSetConfigurations* confs, bool use_preferred) const;
 
 private:
   bool is_enabled_;
@@ -406,7 +429,8 @@ private:
                      const types::BidirectionalPair<std::vector<uint8_t>>& ccid_lists);
   bool IsAudioSetConfigurationSupported(
           const CodecManager::UnicastConfigurationRequirements& requirements,
-          const set_configurations::AudioSetConfiguration* audio_set_configuration) const;
+          const set_configurations::AudioSetConfiguration* audio_set_configuratio,
+          bool use_preferred = false) const;
   uint32_t GetTransportLatencyUs(uint8_t direction) const;
   bool IsCisPartOfCurrentStream(uint16_t cis_conn_hdl) const;
 
@@ -438,7 +462,20 @@ private:
   mutable std::map<
           types::LeAudioContextType,
           std::pair<bool, const std::shared_ptr<set_configurations::AudioSetConfiguration>>>
-          context_to_configuration_cache_map;
+          context_to_configuration_cache_map_;
+
+  /* Possible preferred configuration cache - refreshed on each group context
+   * availability change. Stored as a pair of (is_valid_cache, configuration*).
+   * `pair.first` being `false` means that the cached value should be refreshed.
+   */
+  mutable std::map<
+          types::LeAudioContextType,
+          std::pair<bool, const std::shared_ptr<set_configurations::AudioSetConfiguration>>>
+          context_to_preferred_configuration_cache_map_;
+
+  mutable types::BidirectionalPair<
+          std::unique_ptr<const bluetooth::le_audio::btle_audio_codec_config_t>>
+          preferred_config_;
 
   types::AseState target_state_;
   types::AseState current_state_;

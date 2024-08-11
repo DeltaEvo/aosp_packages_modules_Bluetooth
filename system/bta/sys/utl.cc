@@ -212,7 +212,7 @@ bool utl_set_device_class(tBTA_UTL_COD* p_cod, uint8_t cmd) {
   DEV_CLASS dev_class;
   FIELDS_TO_COD(dev_class, minor, major, service);
 
-  if (BTM_SetDeviceClass(dev_class) == BTM_SUCCESS) {
+  if (get_btm_client_interface().local.BTM_SetDeviceClass(dev_class) == BTM_SUCCESS) {
     return true;
   }
 

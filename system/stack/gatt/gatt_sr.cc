@@ -23,6 +23,7 @@
  ******************************************************************************/
 
 #include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 #include <string.h>
 
 #include <algorithm>
@@ -36,6 +37,7 @@
 #include "stack/eatt/eatt.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_types.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/l2cdefs.h"
 #include "types/bluetooth/uuid.h"
 
@@ -208,7 +210,7 @@ static void build_read_multi_rsp(tGATT_SR_CMD* p_cmd, uint16_t mtu) {
 
       len = std::min((size_t)p_rsp->attr_value.len, mtu - total_len);
 
-      if (len == 0) {
+      if (total_len == mtu && p_rsp->attr_value.len > 0) {
         log::verbose("Buffer space not enough for this data item, skipping");
         break;
       }
@@ -401,14 +403,26 @@ void gatt_process_exec_write_req(tGATT_TCB& tcb, uint16_t cid, uint8_t op_code, 
     trans_id = gatt_sr_enqueue_cmd(tcb, cid, op_code, 0);
     gatt_sr_copy_prep_cnt_to_cback_cnt(tcb);
 
-    for (i = 0; i < GATT_MAX_APPS; i++) {
-      if (tcb.prep_cnt[i]) {
-        gatt_if = (tGATT_IF)(i + 1);
+    if (com::android::bluetooth::flags::gatt_client_dynamic_allocation()) {
+      auto prep_cnt_it = tcb.prep_cnt_map.begin();
+      while (prep_cnt_it != tcb.prep_cnt_map.end()) {
+        gatt_if = i;
         conn_id = GATT_CREATE_CONN_ID(tcb.tcb_idx, gatt_if);
         tGATTS_DATA gatts_data;
         gatts_data.exec_write = flag;
         gatt_sr_send_req_callback(conn_id, trans_id, GATTS_REQ_TYPE_WRITE_EXEC, &gatts_data);
-        tcb.prep_cnt[i] = 0;
+        prep_cnt_it = tcb.prep_cnt_map.erase(prep_cnt_it);
+      }
+    } else {
+      for (i = 0; i < GATT_MAX_APPS; i++) {
+        if (tcb.prep_cnt[i]) {
+          gatt_if = (tGATT_IF)(i + 1);
+          conn_id = GATT_CREATE_CONN_ID(tcb.tcb_idx, gatt_if);
+          tGATTS_DATA gatts_data;
+          gatts_data.exec_write = flag;
+          gatt_sr_send_req_callback(conn_id, trans_id, GATTS_REQ_TYPE_WRITE_EXEC, &gatts_data);
+          tcb.prep_cnt[i] = 0;
+        }
       }
     }
   } else /* nothing needs to be executed , send response now */
@@ -856,7 +870,11 @@ static void gatts_process_mtu_req(tGATT_TCB& tcb, uint16_t cid, uint16_t len, ui
   log::info("MTU {} request from remote ({}), resulted MTU {}", mtu, tcb.peer_bda,
             tcb.payload_size);
 
-  BTM_SetBleDataLength(tcb.peer_bda, tcb.payload_size + L2CAP_PKT_OVERHEAD);
+  if (get_btm_client_interface().ble.BTM_SetBleDataLength(
+              tcb.peer_bda, tcb.payload_size + L2CAP_PKT_OVERHEAD) != BTM_SUCCESS) {
+    log::warn("Unable to set BLE data length peer:{} mtu:{}", tcb.peer_bda,
+              tcb.payload_size + L2CAP_PKT_OVERHEAD);
+  }
 
   BT_HDR* p_buf = attp_build_sr_msg(tcb, GATT_RSP_MTU, &gatt_sr_msg, GATT_DEF_BLE_MTU_SIZE);
   attp_send_sr_msg(tcb, cid, p_buf);
@@ -865,12 +883,21 @@ static void gatts_process_mtu_req(tGATT_TCB& tcb, uint16_t cid, uint16_t len, ui
 
   tGATTS_DATA gatts_data;
   gatts_data.mtu = tcb.payload_size;
-  /* Notify all registered application with new MTU size. Us a transaction ID */
-  /* of 0, as no response is allowed from application */
-  for (int i = 0; i < GATT_MAX_APPS; i++) {
-    if (gatt_cb.cl_rcb[i].in_use) {
-      uint16_t conn_id = GATT_CREATE_CONN_ID(tcb.tcb_idx, gatt_cb.cl_rcb[i].gatt_if);
-      gatt_sr_send_req_callback(conn_id, 0, GATTS_REQ_TYPE_MTU, &gatts_data);
+  /* Notify all registered application with new MTU size. Use a transaction ID */
+  /* of 0, as no response is allowed from applications */
+  if (com::android::bluetooth::flags::gatt_client_dynamic_allocation()) {
+    for (auto& [i, p_reg] : gatt_cb.cl_rcb_map) {
+      if (p_reg->in_use) {
+        uint16_t conn_id = GATT_CREATE_CONN_ID(tcb.tcb_idx, p_reg->gatt_if);
+        gatt_sr_send_req_callback(conn_id, 0, GATTS_REQ_TYPE_MTU, &gatts_data);
+      }
+    }
+  } else {
+    for (int i = 0; i < GATT_MAX_APPS; i++) {
+      if (gatt_cb.cl_rcb[i].in_use) {
+        uint16_t conn_id = GATT_CREATE_CONN_ID(tcb.tcb_idx, gatt_cb.cl_rcb[i].gatt_if);
+        gatt_sr_send_req_callback(conn_id, 0, GATTS_REQ_TYPE_MTU, &gatts_data);
+      }
     }
   }
 }

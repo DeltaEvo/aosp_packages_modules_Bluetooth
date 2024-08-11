@@ -99,9 +99,12 @@ public class TbsCall {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        TbsCall that = (TbsCall) o;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof TbsCall that)) {
+            return false;
+        }
         // check the state only
         return mState == that.mState;
     }

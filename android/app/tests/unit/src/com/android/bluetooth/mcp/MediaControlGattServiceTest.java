@@ -623,7 +623,7 @@ public class MediaControlGattServiceTest {
                 mCurrentDevice, 1, characteristic, false, true, 0, bb.array());
 
         verify(mMockMcsCallbacks)
-                .onPlaybackSpeedSetRequest(eq((float) Math.pow(2, playback_speed / 64)));
+                .onPlaybackSpeedSetRequest(eq((float) Math.pow(2, playback_speed / 64.0)));
 
         verify(mMockGattServer)
                 .sendResponse(
@@ -1095,7 +1095,7 @@ public class MediaControlGattServiceTest {
                 mCurrentDevice, 1, characteristic, false, true, 0, bb.array());
 
         verify(mMockMcsCallbacks)
-                .onPlaybackSpeedSetRequest(eq((float) Math.pow(2, playback_speed / 64)));
+                .onPlaybackSpeedSetRequest(eq((float) Math.pow(2, playback_speed / 64.0)));
 
         // Fake characteristic write - this is done by player status update
         characteristic.setValue(playback_speed, BluetoothGattCharacteristic.FORMAT_SINT8, 0);

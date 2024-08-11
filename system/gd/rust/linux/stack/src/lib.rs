@@ -73,6 +73,8 @@ pub enum Message {
     AdapterShutdown,
     /// Clean up the adapter by calling btif cleanup.
     Cleanup,
+    /// Clean up the media by calling profile cleanup.
+    CleanupProfiles,
 
     // Adapter is enabled and ready.
     AdapterReady,
@@ -248,6 +250,10 @@ impl Stack {
 
                 Message::Cleanup => {
                     bluetooth.lock().unwrap().cleanup();
+                }
+
+                Message::CleanupProfiles => {
+                    bluetooth_media.lock().unwrap().cleanup();
                 }
 
                 Message::AdapterReady => {

@@ -73,6 +73,7 @@ tGATT_STATUS attp_send_sr_msg(tGATT_TCB& tcb, uint16_t cid, BT_HDR* p_msg) { ret
 
 void gatt_act_discovery(tGATT_CLCB* p_clcb) {}
 bool gatt_disconnect(tGATT_TCB* p_tcb) { return false; }
+void gatt_cancel_connect(const RawAddress& bd_addr, tBT_TRANSPORT transport) {}
 tGATT_CH_STATE gatt_get_ch_state(tGATT_TCB* p_tcb) { return GATT_CH_CLOSE; }
 tGATT_STATUS gatts_db_read_attr_value_by_type(tGATT_TCB& tcb, uint16_t cid, tGATT_SVC_DB* p_db,
                                               uint8_t op_code, BT_HDR* p_rsp, uint16_t s_handle,

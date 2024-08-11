@@ -67,7 +67,11 @@ RUN /tmp/rustup.sh -y --default-toolchain 1.77.1
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Install cargo packages required on build image.
-RUN cargo install --locked cxxbridge-cmd@1.0.94 pdl-compiler@0.1.1 grpcio-compiler@0.13.0
+RUN cargo install --locked \
+    cxxbridge-cmd@1.0.94 \
+    pdl-compiler@0.1.1 \
+    grpcio-compiler@0.13.0 \
+    cargo-bloat@0.12.1
 RUN cargo install --git https://android.googlesource.com/platform/build#8f9ca807 aconfig
 
 # Rename llvm packages. By default, they are named 11vm-ar-13, etc. which won't

@@ -49,6 +49,9 @@ namespace os {
 bool GetSystemPropertyBool(const std::string& property, bool default_value) {
   return default_value;
 }
+uint32_t GetSystemPropertyUint32(const std::string& property, uint32_t default_value) {
+  return default_value;
+}
 }  // namespace os
 }  // namespace bluetooth
 

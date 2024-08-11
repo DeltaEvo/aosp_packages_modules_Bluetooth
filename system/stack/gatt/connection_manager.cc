@@ -366,7 +366,11 @@ bool background_connect_remove(uint8_t app_id, const RawAddress& address) {
 }
 
 bool is_background_connection(const RawAddress& address) {
-  return bgconn_dev.find(address) != bgconn_dev.end();
+  auto it = bgconn_dev.find(address);
+  if (it == bgconn_dev.end()) {
+    return false;
+  }
+  return it->second.is_in_accept_list;
 }
 
 /** deregister all related background connetion device. */

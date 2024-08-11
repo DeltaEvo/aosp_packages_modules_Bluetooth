@@ -43,7 +43,6 @@ aconfig_declarations {
         "rnr.aconfig",
         "sdp.aconfig",
         "security.aconfig",
-        "sniff.aconfig",
         "sockets.aconfig",
         "system_service.aconfig",
         "vcp.aconfig",

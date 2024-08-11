@@ -26,4 +26,5 @@ oneway interface IBluetoothManagerCallback {
     void onBluetoothServiceDown();
     void onBluetoothOn();
     void onBluetoothOff();
+    void onBluetoothAdapterStateChange(int newState);
 }

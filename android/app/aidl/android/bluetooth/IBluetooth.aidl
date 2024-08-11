@@ -46,6 +46,7 @@ import android.os.ResultReceiver;
  */
 interface IBluetooth
 {
+    // TODO: b/357645528 - delete aidl method
     @JavaPassthrough(annotation="@android.annotation.RequiresNoPermission")
     int getState();
 
@@ -279,6 +280,8 @@ interface IBluetooth
     int setPreferredAudioProfiles(in BluetoothDevice device, in Bundle modeToProfileBundle, in AttributionSource source);
     @JavaPassthrough(annotation="@android.annotation.RequiresPermission(allOf={android.Manifest.permission.BLUETOOTH_CONNECT,android.Manifest.permission.BLUETOOTH_PRIVILEGED})")
     Bundle getPreferredAudioProfiles(in BluetoothDevice device, in AttributionSource source);
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(allOf={android.Manifest.permission.BLUETOOTH_CONNECT,android.Manifest.permission.BLUETOOTH_PRIVILEGED})")
+    int isDualModeAudioEnabled(in AttributionSource attributionSource);
     @JavaPassthrough(annotation="@android.annotation.RequiresPermission(allOf={android.Manifest.permission.BLUETOOTH_CONNECT,android.Manifest.permission.BLUETOOTH_PRIVILEGED})")
     int registerPreferredAudioProfilesChangedCallback(in IBluetoothPreferredAudioProfilesCallback callback, in AttributionSource attributionSource);
     @JavaPassthrough(annotation="@android.annotation.RequiresPermission(allOf={android.Manifest.permission.BLUETOOTH_CONNECT,android.Manifest.permission.BLUETOOTH_PRIVILEGED})")

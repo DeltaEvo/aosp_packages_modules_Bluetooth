@@ -215,7 +215,7 @@ public class HapClientStateMachineTest {
 
         // Verify that one connection state broadcast is executed
         ArgumentCaptor<Intent> intentArgument2 = ArgumentCaptor.forClass(Intent.class);
-        verify(mHapClientService, timeout(HapClientStateMachine.sConnectTimeoutMs * 2).times(2))
+        verify(mHapClientService, timeout(HapClientStateMachine.sConnectTimeoutMs * 2L).times(2))
                 .sendBroadcastWithMultiplePermissions(
                         intentArgument2.capture(), any(String[].class));
         Assert.assertEquals(
@@ -263,7 +263,7 @@ public class HapClientStateMachineTest {
 
         // Verify that one connection state broadcast is executed
         ArgumentCaptor<Intent> intentArgument2 = ArgumentCaptor.forClass(Intent.class);
-        verify(mHapClientService, timeout(HapClientStateMachine.sConnectTimeoutMs * 2).times(2))
+        verify(mHapClientService, timeout(HapClientStateMachine.sConnectTimeoutMs * 2L).times(2))
                 .sendBroadcastWithMultiplePermissions(
                         intentArgument2.capture(), any(String[].class));
         Assert.assertEquals(

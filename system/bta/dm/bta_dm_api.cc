@@ -54,7 +54,7 @@ void BTA_dm_init() {
   /* if UUID list is not provided as static data */
   bta_sys_eir_register(bta_dm_eir_update_uuid);
   bta_sys_cust_eir_register(bta_dm_eir_update_cust_uuid);
-  BTM_SetConsolidationCallback(bta_dm_consolidate);
+  get_btm_client_interface().ble.BTM_SetConsolidationCallback(bta_dm_consolidate);
 }
 
 /** Enables bluetooth device under test mode */

@@ -277,32 +277,6 @@ struct BTM_SecurityGrant {
 };
 extern struct BTM_SecurityGrant BTM_SecurityGrant;
 
-// Name: BTM_SetBleDataLength
-// Params: const RawAddress& bd_addr, uint16_t tx_pdu_length
-// Return: tBTM_STATUS
-struct BTM_SetBleDataLength {
-  static tBTM_STATUS return_value;
-  std::function<tBTM_STATUS(const RawAddress& bd_addr, uint16_t tx_pdu_length)> body{
-          [](const RawAddress& /* bd_addr */, uint16_t /* tx_pdu_length */) {
-            return return_value;
-          }};
-  tBTM_STATUS operator()(const RawAddress& bd_addr, uint16_t tx_pdu_length) {
-    return body(bd_addr, tx_pdu_length);
-  }
-};
-extern struct BTM_SetBleDataLength BTM_SetBleDataLength;
-
-// Name: BTM_UseLeLink
-// Params: const RawAddress& bd_addr
-// Return: bool
-struct BTM_UseLeLink {
-  static bool return_value;
-  std::function<bool(const RawAddress& bd_addr)> body{
-          [](const RawAddress& /* bd_addr */) { return return_value; }};
-  bool operator()(const RawAddress& bd_addr) { return body(bd_addr); }
-};
-extern struct BTM_UseLeLink BTM_UseLeLink;
-
 // Name: btm_ble_connected
 // Params: const RawAddress& bda, uint16_t handle, uint8_t enc_mode, uint8_t
 // role, tBLE_ADDR_TYPE addr_type, bool addr_matched Return: void

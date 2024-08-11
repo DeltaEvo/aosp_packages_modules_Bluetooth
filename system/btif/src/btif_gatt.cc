@@ -28,12 +28,14 @@
 
 #include "btif_gatt.h"
 
+#include <com_android_bluetooth_flags.h>
 #include <hardware/bluetooth.h>
 #include <hardware/bt_gatt.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "bta_gatt_api.h"
+#include "bta/include/bta_gatt_api.h"
+#include "btif/include/btif_common.h"
 #include "main/shim/distance_measurement_manager.h"
 #include "main/shim/le_advertising_manager.h"
 
