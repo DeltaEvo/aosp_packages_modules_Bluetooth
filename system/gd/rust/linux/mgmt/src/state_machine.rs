@@ -286,6 +286,7 @@ fn pid_inotify_async_fd() -> AsyncFd<inotify::Inotify> {
 /// Given an pid path, returns the adapter index for that pid path.
 fn get_hci_index_from_pid_path(path: &str) -> Option<VirtualHciIndex> {
     path.rsplit_once('/')
+        .or_else(|| Some(("", path))) // Contains no '/', so |path| is the last component.
         .and_then(|tup| tup.1.strip_prefix("bluetooth"))
         .and_then(|s| s.strip_suffix(".pid"))
         .and_then(|p| p.parse::<i32>().ok())
