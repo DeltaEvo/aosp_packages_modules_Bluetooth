@@ -395,7 +395,7 @@ static bool bta_dm_read_remote_device_name(const RawAddress& bd_addr, tBT_TRANSP
     log::verbose("BTM_ReadRemoteDeviceName is started");
 
     return true;
-  } else if (btm_status == BTM_BUSY) {
+  } else if (btm_status == tBTM_STATUS::BTM_BUSY) {
     log::verbose("BTM_ReadRemoteDeviceName is busy");
 
     /* Remote name discovery is on going now so BTM cannot notify through
@@ -1388,7 +1388,7 @@ static void bta_dm_service_search_remname_cback(const RawAddress& bd_addr, DEV_C
     /* get name of device */
     btm_status = get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
             bta_dm_search_cb.peer_bdaddr, bta_dm_remname_cback, BT_TRANSPORT_BR_EDR);
-    if (btm_status == BTM_BUSY) {
+    if (btm_status == tBTM_STATUS::BTM_BUSY) {
       /* wait for next chance(notification of remote name discovery done) */
       log::verbose("BTM_ReadRemoteDeviceName is busy");
     } else if (btm_status != BTM_CMD_STARTED) {

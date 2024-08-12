@@ -1509,8 +1509,8 @@ static void btm_ble_scan_filt_param_cfg_evt(uint8_t /* avbl_space */,
  *                             le_inquiry_duration duration is a multiplier for
  *                             1.28 seconds.
  *
- * Returns          BTM_CMD_STARTED if successfully started
- *                  BTM_BUSY - if an inquiry is already active
+ * Returns          tBTM_STATUS::BTM_CMD_STARTED if successfully started
+ *                  tBTM_STATUS::BTM_BUSY - if an inquiry is already active
  *
  ******************************************************************************/
 tBTM_STATUS btm_ble_start_inquiry(uint8_t duration) {
@@ -1520,7 +1520,7 @@ tBTM_STATUS btm_ble_start_inquiry(uint8_t duration) {
    */
   if (btm_cb.ble_ctr_cb.is_ble_inquiry_active()) {
     log::error("LE Inquiry is active, can not start inquiry");
-    return BTM_BUSY;
+    return tBTM_STATUS::BTM_BUSY;
   }
 
   /* Cleanup anything remaining on index 0 */
@@ -1635,11 +1635,11 @@ tBTM_STATUS btm_ble_read_remote_name(const RawAddress& remote_bda, tBTM_NAME_CMP
   if (btm_cb.rnr.remname_active) {
     log::warn("Unable to start GATT RNR procedure for peer:{} busy with peer:{}", remote_bda,
               btm_cb.rnr.remname_bda);
-    return BTM_BUSY;
+    return tBTM_STATUS::BTM_BUSY;
   }
 
   if (!GAP_BleReadPeerDevName(remote_bda, btm_ble_read_remote_name_cmpl)) {
-    return BTM_BUSY;
+    return tBTM_STATUS::BTM_BUSY;
   }
 
   btm_cb.rnr.p_remname_cmpl_cb = p_cb;

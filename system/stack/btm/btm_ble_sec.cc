@@ -1215,7 +1215,7 @@ tBTM_STATUS btm_ble_start_encrypt(const RawAddress& bda, bool use_stk, Octet16* 
 
   if (p_rec->sec_rec.is_security_state_le_encrypting()) {
     log::warn("LE link encryption is active, Busy!");
-    return BTM_BUSY;
+    return tBTM_STATUS::BTM_BUSY;
   }
 
   // Some controllers may not like encrypting both transports at the same time
@@ -1223,7 +1223,7 @@ tBTM_STATUS btm_ble_start_encrypt(const RawAddress& bda, bool use_stk, Octet16* 
           android::sysprop::bluetooth::Ble::allow_enc_with_bredr().value_or(false);
   if (!allow_le_enc_with_bredr && p_rec->sec_rec.is_security_state_bredr_encrypting()) {
     log::warn("BR/EDR link encryption is active, Busy!");
-    return BTM_BUSY;
+    return tBTM_STATUS::BTM_BUSY;
   }
 
   p_cb->enc_handle = p_rec->ble_hci_handle;

@@ -565,7 +565,7 @@ tBTM_STATUS BTM_DeleteStoredLinkKey(const RawAddress* bd_addr, tBTM_CMPL_CB* p_c
 #if !defined(TARGET_FLOSS)
   /* Check if the previous command is completed */
   if (btm_sec_cb.devcb.p_stored_link_key_cmpl_cb) {
-    return BTM_BUSY;
+    return tBTM_STATUS::BTM_BUSY;
   }
 
   bool delete_all_flag = !bd_addr;

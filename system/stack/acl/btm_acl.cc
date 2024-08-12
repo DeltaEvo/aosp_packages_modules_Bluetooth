@@ -533,7 +533,7 @@ tBTM_STATUS BTM_GetRole(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role) {
  *                  BTM_UNKNOWN_ADDR if no active link with bd addr specified
  *                  BTM_MODE_UNSUPPORTED if local device does not support role
  *                                       switching
- *                  BTM_BUSY if the previous command is not completed
+ *                  tBTM_STATUS::BTM_BUSY if the previous command is not completed
  *
  ******************************************************************************/
 tBTM_STATUS BTM_SwitchRoleToCentral(const RawAddress& remote_bd_addr) {
@@ -565,7 +565,7 @@ tBTM_STATUS BTM_SwitchRoleToCentral(const RawAddress& remote_bd_addr) {
 
   if (!p_acl->is_switch_role_idle()) {
     log::info("Role switch is already progress");
-    return BTM_BUSY;
+    return tBTM_STATUS::BTM_BUSY;
   }
 
   if (interop_match_addr(INTEROP_DYNAMIC_ROLE_SWITCH, &remote_bd_addr)) {
@@ -1572,7 +1572,7 @@ tBTM_STATUS BTM_ReadRSSI(const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb) {
 
   /* If someone already waiting on the version, do not allow another */
   if (btm_cb.devcb.p_rssi_cmpl_cb) {
-    return BTM_BUSY;
+    return tBTM_STATUS::BTM_BUSY;
   }
 
   get_btm_client_interface().peer.BTM_ReadDevInfo(remote_bda, &dev_type, &addr_type);
@@ -1618,7 +1618,7 @@ tBTM_STATUS BTM_ReadFailedContactCounter(const RawAddress& remote_bda, tBTM_CMPL
 
   /* If someone already waiting on the result, do not allow another */
   if (btm_cb.devcb.p_failed_contact_counter_cmpl_cb) {
-    return BTM_BUSY;
+    return tBTM_STATUS::BTM_BUSY;
   }
 
   get_btm_client_interface().peer.BTM_ReadDevInfo(remote_bda, &dev_type, &addr_type);
@@ -1663,7 +1663,7 @@ tBTM_STATUS BTM_ReadTxPower(const RawAddress& remote_bda, tBT_TRANSPORT transpor
 
   /* If someone already waiting on the version, do not allow another */
   if (btm_cb.devcb.p_tx_power_cmpl_cb) {
-    return BTM_BUSY;
+    return tBTM_STATUS::BTM_BUSY;
   }
 
   p = internal_.btm_bda_to_acl(remote_bda, transport);

@@ -258,7 +258,7 @@ static bool is_inquery_by_rssi() { return osi_property_get_bool(PROPERTY_INQ_BY_
  *                  or interval, the default values are used.
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if successful
- *                  BTM_BUSY if a setting of the filter is already in progress
+ *                  tBTM_STATUS::BTM_BUSY if a setting of the filter is already in progress
  *                  BTM_NO_RESOURCES if couldn't get a memory pool buffer
  *                  BTM_ILLEGAL_VALUE if a bad parameter was detected
  *                  BTM_WRONG_MODE if the device is not up.
@@ -658,7 +658,7 @@ static tBTM_STATUS BTM_StartLeScan() {
  *                                completed.
  * Returns          tBTM_STATUS
  *                  BTM_CMD_STARTED if successfully initiated
- *                  BTM_BUSY if already in progress
+ *                  tBTM_STATUS::BTM_BUSY if already in progress
  *                  BTM_ILLEGAL_VALUE if parameter(s) are out of range
  *                  BTM_NO_RESOURCES if could not allocate resources to start
  *                                   the command
@@ -677,7 +677,7 @@ tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb, tBTM_CMPL_CB* p_
     btm_cb.neighbor.inquiry_history_->Push({
             .status = tBTM_INQUIRY_CMPL::NOT_STARTED,
     });
-    return BTM_BUSY;
+    return tBTM_STATUS::BTM_BUSY;
   }
 
   if (btm_cb.btm_inq_vars.registered_for_hci_events == false) {
@@ -862,14 +862,14 @@ tBTM_INQ_INFO* BTM_InqDbNext(tBTM_INQ_INFO* p_cur) {
  * Parameter        p_bda - (input) BD_ADDR ->  Address of device to clear
  *                                              (NULL clears all entries)
  *
- * Returns          BTM_BUSY if an inquiry, get remote name, or event filter
+ * Returns          tBTM_STATUS::BTM_BUSY if an inquiry, get remote name, or event filter
  *                          is active, otherwise tBTM_STATUS::BTM_SUCCESS
  *
  ******************************************************************************/
 tBTM_STATUS BTM_ClearInqDb(const RawAddress* p_bda) {
   /* If an inquiry or remote name is in progress return busy */
   if (btm_cb.btm_inq_vars.inq_active != BTM_INQUIRY_INACTIVE) {
-    return BTM_BUSY;
+    return tBTM_STATUS::BTM_BUSY;
   }
 
   btm_clr_inq_db(p_bda);

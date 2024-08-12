@@ -684,7 +684,7 @@ static tBTM_STATUS btm_send_connect_request(uint16_t acl_handle, enh_esco_params
  *                      parameter the default packet types is used.
  *
  * Returns          BTM_UNKNOWN_ADDR if the ACL connection is not up
- *                  BTM_BUSY         if another SCO being set up to
+ *                  tBTM_STATUS::BTM_BUSY         if another SCO being set up to
  *                                   the same BD address
  *                  BTM_NO_RESOURCES if the max SCO limit has been reached
  *                  BTM_CMD_STARTED  if the connection establishment is started.
@@ -727,7 +727,7 @@ tBTM_STATUS BTM_CreateSco(const RawAddress* remote_bda, bool is_orig, uint16_t p
           (p->esco.data.bd_addr == *remote_bda)) {
         log::error("a sco connection is already going on for {}, at state {}", *remote_bda,
                    unsigned(p->state));
-        return BTM_BUSY;
+        return tBTM_STATUS::BTM_BUSY;
       }
     }
   } else {
@@ -735,7 +735,7 @@ tBTM_STATUS BTM_CreateSco(const RawAddress* remote_bda, bool is_orig, uint16_t p
     for (xx = 0; xx < BTM_MAX_SCO_LINKS; xx++, p++) {
       if ((p->state == SCO_ST_LISTENING) && (!p->rem_bd_known)) {
         log::error("remote_bda is null and not known and we are still listening");
-        return BTM_BUSY;
+        return tBTM_STATUS::BTM_BUSY;
       }
     }
   }
@@ -1360,7 +1360,7 @@ const RawAddress* BTM_ReadScoBdAddr(uint16_t sco_inx) {
  *                      controller's feature mask.
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if the successful.
- *                  BTM_BUSY if there are one or more active (e)SCO links.
+ *                  tBTM_STATUS::BTM_BUSY if there are one or more active (e)SCO links.
  *
  ******************************************************************************/
 tBTM_STATUS BTM_SetEScoMode(enh_esco_params_t* p_parms) {

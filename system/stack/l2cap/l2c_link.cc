@@ -482,7 +482,7 @@ void l2c_link_timeout(tL2C_LCB* p_lcb) {
          * is done) */
         p_lcb->link_state = LST_DISCONNECTING;
         start_timeout = false;
-      } else if (rc == BTM_BUSY) {
+      } else if (rc == tBTM_STATUS::BTM_BUSY) {
         /* BTM is still executing security process. Let lcb stay as connected */
         start_timeout = false;
       } else if (p_lcb->IsBonding()) {

@@ -303,7 +303,7 @@ static bool bta_dm_read_remote_device_name(const RawAddress& bd_addr, tBT_TRANSP
     log::verbose("BTM_ReadRemoteDeviceName is started");
 
     return true;
-  } else if (btm_status == BTM_BUSY) {
+  } else if (btm_status == tBTM_STATUS::BTM_BUSY) {
     log::verbose("BTM_ReadRemoteDeviceName is busy");
 
     return true;
