@@ -19,6 +19,7 @@
 #include <sys/eventfd.h>
 #include <unistd.h>
 
+#include <cstdint>
 #include <map>
 
 namespace bluetooth {
@@ -117,7 +118,7 @@ static bool fire_next_event(uint64_t new_clock) {
   }
   to_fire->active = is_periodic;
   uint64_t value = 1;
-  write(to_fire->fd, &value, sizeof(uint64_t));
+  (void)write(to_fire->fd, &value, sizeof(uint64_t));
   return true;
 }
 
