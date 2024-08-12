@@ -213,7 +213,7 @@ void rfc_mx_sm_state_wait_conn_cnf(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p
       if (!L2CA_DisconnectReq(p_mcb->lcid)) {
         log::warn("Unable to send L2CAP disconnect request peer:{} cid:{}", p_mcb->bd_addr,
                   p_mcb->lcid);
-      };
+      }
 
       /* we gave up outgoing connection request then try peer's request */
       if (p_mcb->pending_lcid) {
@@ -290,7 +290,7 @@ void rfc_mx_sm_state_configure(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_dat
       if (!L2CA_DisconnectReq(p_mcb->lcid)) {
         log::warn("Unable to send L2CAP disconnect request peer:{} cid:{}", p_mcb->bd_addr,
                   p_mcb->lcid);
-      };
+      }
 
       PORT_StartCnf(p_mcb, RFCOMM_ERROR);
       return;
@@ -355,7 +355,7 @@ void rfc_mx_sm_sabme_wait_ua(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* /* p_da
       if (!L2CA_DisconnectReq(p_mcb->lcid)) {
         log::warn("Unable to send L2CAP disconnect request peer:{} cid:{}", p_mcb->bd_addr,
                   p_mcb->lcid);
-      };
+      }
 
       PORT_StartCnf(p_mcb, RFCOMM_ERROR);
       return;
@@ -423,7 +423,7 @@ void rfc_mx_sm_state_wait_sabme(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_da
       if (!L2CA_DisconnectReq(p_mcb->lcid)) {
         log::warn("Unable to send L2CAP disconnect request peer:{} cid:{}", p_mcb->bd_addr,
                   p_mcb->lcid);
-      };
+      }
 
       PORT_CloseInd(p_mcb);
       return;
@@ -468,7 +468,7 @@ void rfc_mx_sm_state_connected(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* /* p_
         if (!L2CA_DisconnectReq(p_mcb->lcid)) {
           log::warn("Unable to send L2CAP disconnect request peer:{} cid:{}", p_mcb->bd_addr,
                     p_mcb->lcid);
-        };
+        }
       }
       /* notify all ports that connection is gone */
       PORT_CloseInd(p_mcb);
@@ -500,7 +500,7 @@ void rfc_mx_sm_state_disc_wait_ua(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_
       if (!L2CA_DisconnectReq(p_mcb->lcid)) {
         log::warn("Unable to send L2CAP disconnect request peer:{} cid:{}", p_mcb->bd_addr,
                   p_mcb->lcid);
-      };
+      }
 
       if (p_mcb->restart_required) {
         /* Start Request was received while disconnecting.  Execute it again */
@@ -617,7 +617,7 @@ void rfc_on_l2cap_error(uint16_t lcid, uint16_t result) {
       if (!L2CA_DisconnectReq(p_mcb->lcid)) {
         log::warn("Unable to send L2CAP disconnect request peer:{} cid:{}", p_mcb->bd_addr,
                   p_mcb->lcid);
-      };
+      }
     }
     rfc_release_multiplexer_channel(p_mcb);
   }
@@ -641,9 +641,9 @@ static void rfc_mx_conf_cnf(tRFC_MCB* p_mcb, uint16_t /* result */) {
       rfc_timer_start(p_mcb, RFC_T1_TIMEOUT);
     } else {
       p_mcb->state = RFC_MX_STATE_WAIT_SABME;
-      rfc_timer_start(p_mcb, RFCOMM_CONN_TIMEOUT); /* - increased from T2=20 to CONN=120
-                                         to allow the user more than 10 sec to type in the
-                                         pin which can be e.g. 16 digits */
+      /* increased from T2=20 to CONN=120 to allow user more than 10 sec to type in
+       * the pin, which can be e.d. 16 digits */
+      rfc_timer_start(p_mcb, RFCOMM_CONN_TIMEOUT);
     }
   }
 }
