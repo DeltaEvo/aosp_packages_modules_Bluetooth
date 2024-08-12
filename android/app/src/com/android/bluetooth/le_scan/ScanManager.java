@@ -712,9 +712,9 @@ public class ScanManager {
             Log.d(
                     TAG,
                     "Scan mode update during screen off from "
-                            + client.scanModeApp
+                            + getScanModeString(client.scanModeApp)
                             + " to "
-                            + updatedScanMode);
+                            + getScanModeString(updatedScanMode));
             return client.updateScanMode(updatedScanMode);
         }
 
@@ -828,9 +828,9 @@ public class ScanManager {
             Log.d(
                     TAG,
                     "Scan mode update during screen on from "
-                            + client.scanModeApp
+                            + getScanModeString(client.scanModeApp)
                             + " to "
-                            + getMinScanMode(scanMode, maxScanMode));
+                            + getScanModeString(getMinScanMode(scanMode, maxScanMode)));
             return client.updateScanMode(getMinScanMode(scanMode, maxScanMode));
         }
 
@@ -2104,7 +2104,7 @@ public class ScanManager {
                             + " isForeground "
                             + isForeground
                             + " scanMode "
-                            + client.settings.getScanMode());
+                            + getScanModeString(client.settings.getScanMode()));
         }
 
         if (updatedScanParams) {
