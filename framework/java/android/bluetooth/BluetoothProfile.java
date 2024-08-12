@@ -126,10 +126,7 @@ public interface BluetoothProfile {
      */
     @SystemApi int MAP = 9;
 
-    /*
-     * SAP Profile
-     * @hide
-     */
+    /** SAP Profile */
     int SAP = 10;
 
     /**

@@ -176,7 +176,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
      */
     public static final int TERMINATION_REASON_NO_ANSWER = 0x08;
 
-    /*
+    /**
      * Flag indicating support for hold/unhold call feature.
      *
      * @hide

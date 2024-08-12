@@ -96,6 +96,7 @@ java_sdk_library {
             "-Xep:InlineMeSuggester:OFF", // The @InlineMe annotation is not available
 
             "-Xep:AndroidFrameworkRequiresPermission:ERROR",
+            "-Xep:AndroidHideInComments:ERROR",
             "-Xep:BadImport:ERROR",
             "-Xep:CatchFail:ERROR",
             "-Xep:ClassCanBeStatic:ERROR",
