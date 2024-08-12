@@ -1160,7 +1160,7 @@ std::vector<uint8_t> LeAudioDevice::GetMetadata(AudioContexts context_type,
   AppendMetadataLtvEntryForStreamingContext(metadata, context_type);
   AppendMetadataLtvEntryForCcidList(metadata, ccid_list);
 
-  return std::move(metadata);
+  return metadata;
 }
 
 bool LeAudioDevice::IsMetadataChanged(const BidirectionalPair<AudioContexts>& context_types,

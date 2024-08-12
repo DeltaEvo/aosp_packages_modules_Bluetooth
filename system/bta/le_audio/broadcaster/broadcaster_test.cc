@@ -179,7 +179,7 @@ std::unique_ptr<LeAudioSourceAudioHalClient> LeAudioSourceAudioHalClient::Acquir
     std::unique_ptr<LeAudioSourceAudioHalClient> ptr(
             (LeAudioSourceAudioHalClient*)mock_audio_source_);
     is_audio_hal_acquired = true;
-    return std::move(ptr);
+    return ptr;
   }
   return nullptr;
 }
