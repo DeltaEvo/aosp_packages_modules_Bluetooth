@@ -386,7 +386,7 @@ void power_telemetry::PowerTelemetry::LogTxPower(void* res) {
   tBTM_TX_POWER_RESULT* result = (tBTM_TX_POWER_RESULT*)res;
   LogDataContainer& ldc = pimpl_->GetCurrentLogDataContainer();
 
-  if (result->status != BTM_SUCCESS) {
+  if (result->status != tBTM_STATUS::BTM_SUCCESS) {
     return;
   }
 

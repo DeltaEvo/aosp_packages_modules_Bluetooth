@@ -42,7 +42,7 @@ tBTM_STATUS BTM_CreateSco(const RawAddress* /* remote_bda */, bool /* is_orig */
                           uint16_t /* pkt_types */, uint16_t* /* p_sco_inx */,
                           tBTM_SCO_CB* /* p_conn_cb */, tBTM_SCO_CB* /* p_disc_cb */) {
   inc_func_call_count(__func__);
-  return BTM_SUCCESS;
+  return tBTM_STATUS::BTM_SUCCESS;
 }
 uint8_t BTM_GetNumScoLinks(void) {
   inc_func_call_count(__func__);

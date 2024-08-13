@@ -24,6 +24,7 @@
 
 #include <cstdint>
 
+#include "stack/include/btm_status.h"
 #include "test/common/mock_functions.h"
 
 // Original usings
@@ -69,10 +70,10 @@ namespace stack_btm_inq {
 
 bool BTM_HasEirService::return_value = false;
 uint16_t BTM_IsInquiryActive::return_value = 0;
-tBTM_STATUS BTM_SetConnectability::return_value = BTM_SUCCESS;
-tBTM_STATUS BTM_SetDiscoverability::return_value = BTM_SUCCESS;
-tBTM_STATUS BTM_SetInquiryMode::return_value = BTM_SUCCESS;
-tBTM_STATUS BTM_StartInquiry::return_value = BTM_SUCCESS;
+tBTM_STATUS BTM_SetConnectability::return_value = tBTM_STATUS::BTM_SUCCESS;
+tBTM_STATUS BTM_SetDiscoverability::return_value = tBTM_STATUS::BTM_SUCCESS;
+tBTM_STATUS BTM_SetInquiryMode::return_value = tBTM_STATUS::BTM_SUCCESS;
+tBTM_STATUS BTM_StartInquiry::return_value = tBTM_STATUS::BTM_SUCCESS;
 tINQ_DB_ENT* btm_inq_db_find::return_value = nullptr;
 tINQ_DB_ENT* btm_inq_db_new::return_value = nullptr;
 bool btm_inq_find_bdaddr::return_value = false;

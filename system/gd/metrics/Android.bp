@@ -10,6 +10,7 @@ package {
 filegroup {
     name: "BluetoothMetricsSources",
     srcs: [
+        "bluetooth_event.cc",
         "counter_metrics.cc",
         "metrics_state.cc",
         "utils.cc",

@@ -26,6 +26,7 @@
 #include "stack/btm/btm_ble_int_types.h"
 #include "stack/include/bt_dev_class.h"
 #include "stack/include/btm_api_types.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/hci_error_code.h"
 #include "test/common/mock_functions.h"
 #include "types/ble_address_with_type.h"
@@ -76,19 +77,19 @@ void BTM_BleTargetAnnouncementObserve(bool /* enable */, tBTM_INQ_RESULTS_CB* /*
 }
 tBTM_STATUS btm_ble_read_remote_name(const RawAddress& /* remote_bda */, tBTM_CMPL_CB* /* p_cb */) {
   inc_func_call_count(__func__);
-  return BTM_SUCCESS;
+  return tBTM_STATUS::BTM_SUCCESS;
 }
 tBTM_STATUS btm_ble_set_connectability(uint16_t /* combined_mode */) {
   inc_func_call_count(__func__);
-  return BTM_SUCCESS;
+  return tBTM_STATUS::BTM_SUCCESS;
 }
 tBTM_STATUS btm_ble_set_discoverability(uint16_t /* combined_mode */) {
   inc_func_call_count(__func__);
-  return BTM_SUCCESS;
+  return tBTM_STATUS::BTM_SUCCESS;
 }
 tBTM_STATUS btm_ble_start_inquiry(uint8_t /* duration */) {
   inc_func_call_count(__func__);
-  return BTM_SUCCESS;
+  return tBTM_STATUS::BTM_SUCCESS;
 }
 void BTM_BleGetDynamicAudioBuffer(
         tBTM_BT_DYNAMIC_AUDIO_BUFFER_CB /* p_dynamic_audio_buffer_cb*/[]) {

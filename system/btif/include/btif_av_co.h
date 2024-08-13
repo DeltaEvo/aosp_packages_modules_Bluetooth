@@ -41,7 +41,7 @@ bool bta_av_co_set_active_sink_peer(const RawAddress& peer_address);
  */
 bool bta_av_co_set_active_source_peer(const RawAddress& peer_address);
 
-void bta_av_co_save_codec(const uint8_t* new_codec_config);
+void bta_av_co_save_codec(const RawAddress& peer_address, const uint8_t* new_codec_config);
 
 // Gets the A2DP peer parameters that are used to initialize the encoder.
 // The peer address is |peer_addr|.
@@ -54,7 +54,7 @@ void bta_av_co_get_peer_params(const RawAddress& peer_addr,
 // prepare A2DP packets for transmission - see |tA2DP_ENCODER_INTERFACE|.
 // Returns the A2DP encoder interface if the current codec is setup,
 // otherwise NULL.
-const tA2DP_ENCODER_INTERFACE* bta_av_co_get_encoder_interface(void);
+const tA2DP_ENCODER_INTERFACE* bta_av_co_get_encoder_interface(const RawAddress& peer_address);
 
 // Sets the user preferred codec configuration.
 // The peer address is |peer_addr|.
@@ -93,7 +93,7 @@ A2dpCodecConfig* bta_av_get_a2dp_peer_current_codec(const RawAddress& peer_addre
 
 // Gets the A2DP effective frame size from the current encoder.
 // Returns the effective frame size if the encoder is configured, otherwise 0.
-int bta_av_co_get_encoder_effective_frame_size();
+int bta_av_co_get_encoder_effective_frame_size(const RawAddress& peer_address);
 
 // Gets the preferred encoding interval from the current encoder.
 // Returns the preferred encoding interval if the encoder is configured,
@@ -104,5 +104,12 @@ int bta_av_co_get_encoder_preferred_interval_us();
 // |fd| is the file descriptor to use for writing the ASCII formatted
 // information.
 void btif_a2dp_codec_debug_dump(int fd);
+
+/**
+ * Retrieves the cached codec config for the input peer address.
+ * @param peer_address peer address of the remote device.
+ * @return the codec configuration for the corresponding peer address.
+ */
+uint8_t* bta_av_co_get_codec_config(const RawAddress& peer_address);
 
 #endif  // BTIF_AV_CO_H

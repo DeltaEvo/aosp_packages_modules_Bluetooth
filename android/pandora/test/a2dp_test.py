@@ -56,7 +56,7 @@ from pandora.security_pb2 import LEVEL2
 from threading import Thread
 from typing import Optional
 
-AVRCP_CONNECT_A2DP_DELAYED = 'persist.device_config.aconfig_flags.bluetooth.com.android.bluetooth.flags.avrcp_connect_a2dp_delayed'
+AVRCP_CONNECT_A2DP_WITH_DELAY = 'persist.device_config.aconfig_flags.bluetooth.com.android.bluetooth.flags.avrcp_connect_a2dp_with_delay'
 
 async def initiate_pairing(device, address) -> Connection:
     """Connect and pair a remote device."""
@@ -264,7 +264,7 @@ class A2dpTest(base_test.BaseTestClass):  # type: ignore[misc]
         # Enable AVRCP connect A2DP delayed feature
         for server in self.devices._servers:
             if isinstance(server, AndroidPandoraServer):
-                server.device.adb.shell(['setprop', AVRCP_CONNECT_A2DP_DELAYED, 'true'])  # type: ignore
+                server.device.adb.shell(['setprop', AVRCP_CONNECT_A2DP_WITH_DELAY, 'true'])  # type: ignore
                 break
 
         # Connect and pair RD1.

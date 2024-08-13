@@ -500,7 +500,7 @@ struct tSdpApi {
       Parameters:      info         - (input) device identification record
                        p_handle     - (output) handle of record if successful
 
-      Returns          Returns SDP_SUCCESS if record added successfully, else
+      Returns          Returns tSDP_STATUS::SDP_SUCCESS if record added successfully, else
                        error
 
      ******************************************************************************/
@@ -521,7 +521,7 @@ struct tSdpApi {
                        len          - (input ) data base length
                        p_cb         - (input) callback when complete
 
-      Returns          SDP_SUCCESS if query started successfully, else error
+      Returns          tSDP_STATUS::SDP_SUCCESS if query started successfully, else error
 
      ******************************************************************************/
     [[nodiscard]] tSDP_STATUS (*SDP_DiDiscover)(const RawAddress& remote_device,
@@ -556,7 +556,7 @@ struct tSdpApi {
                        device_info  - (input) dicovery database
                        p_cb         - (input) callback when complete
 
-      Returns          SDP_SUCCESS if record retrieved, else error
+      Returns          tSDP_STATUS::SDP_SUCCESS if record retrieved, else error
 
      ******************************************************************************/
     [[nodiscard]] tSDP_STATUS (*SDP_GetDiRecord)(uint8_t getRecordIndex,

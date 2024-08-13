@@ -135,6 +135,11 @@ public:
     }
     folder_cb.Run(list);
   }
+  using GetAddressedPlayerCallback = base::Callback<void(uint16_t)>;
+  void GetAddressedPlayer(GetAddressedPlayerCallback addressed_player) {
+    uint16_t currentPlayer = mFdp->ConsumeIntegral<uint16_t>();
+    addressed_player.Run(currentPlayer);
+  }
   using SetBrowsedPlayerCallback =
           base::Callback<void(bool success, std::string root_id, uint32_t num_items)>;
   void SetBrowsedPlayer(uint16_t player_id, SetBrowsedPlayerCallback browse_cb) {
@@ -142,6 +147,10 @@ public:
     uint32_t numItems = mFdp->ConsumeIntegral<uint32_t>();
     browse_cb.Run(player_id, rootId, numItems);
     return;
+  }
+  using SetAddressedPlayerCallback = base::Callback<void(uint16_t)>;
+  void SetAddressedPlayer(uint16_t player_id, SetAddressedPlayerCallback new_player) {
+    new_player.Run(player_id);
   }
   void PlayItem(uint16_t /* player_id */, bool /* now_playing */, std::string /* media_id */) {
     return;

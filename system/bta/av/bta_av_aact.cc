@@ -55,6 +55,7 @@
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_log_history.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/l2c_api.h"
 #include "storage/config_keys.h"
 #include "types/hci_role.h"
@@ -1867,7 +1868,7 @@ void bta_av_do_start(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
    * disable sniff mode unconditionally during streaming */
   tHCI_ROLE cur_role;
   if ((get_btm_client_interface().link_policy.BTM_GetRole(p_scb->PeerAddress(), &cur_role) ==
-       BTM_SUCCESS) &&
+       tBTM_STATUS::BTM_SUCCESS) &&
       (cur_role == HCI_ROLE_CENTRAL)) {
     BTM_block_role_switch_and_sniff_mode_for(p_scb->PeerAddress());
   } else {
@@ -2339,7 +2340,7 @@ void bta_av_start_ok(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
        * central.
        * disable sniff mode unconditionally during streaming */
       if ((get_btm_client_interface().link_policy.BTM_GetRole(p_scb->PeerAddress(), &cur_role) ==
-           BTM_SUCCESS) &&
+           tBTM_STATUS::BTM_SUCCESS) &&
           (cur_role == HCI_ROLE_CENTRAL)) {
         BTM_block_role_switch_and_sniff_mode_for(p_scb->PeerAddress());
       } else {

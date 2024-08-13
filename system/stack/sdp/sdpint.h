@@ -22,16 +22,16 @@
  *
  ******************************************************************************/
 
-#ifndef SDP_INT_H
-#define SDP_INT_H
+#pragma once
 
 #include <base/functional/callback.h>
 #include <base/strings/stringprintf.h>
 
 #include <cstdint>
+#include <string>
 
+#include "include/macros.h"
 #include "internal_include/bt_target.h"
-#include "macros.h"
 #include "osi/include/alarm.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/l2c_api.h"
@@ -116,15 +116,15 @@ struct tSDP_DB {
 
 /* Continuation information for the SDP server response */
 struct tSDP_CONT_INFO {
-  uint16_t next_attr_index;        /* attr index for next continuation response */
-  uint16_t next_attr_start_id;     /* attr id to start with for the attr index in
-                                      next cont. response */
-  const tSDP_RECORD* prev_sdp_rec; /* last sdp record that was completely sent
-                                in the response */
-  bool last_attr_seq_desc_sent;    /* whether attr seq length has been sent
-                                      previously */
-  uint16_t attr_offset;            /* offset within the attr to keep trak of partial
-                                      attributes in the responses */
+  uint16_t next_attr_index;         // attr index for next continuation response
+  uint16_t next_attr_start_id;      // attr id to start with for the attr index in
+                                    //   next cont. response
+  const tSDP_RECORD* prev_sdp_rec;  // last sdp record that was completely sent
+                                    // in the response
+  bool last_attr_seq_desc_sent;     // whether attr seq length has been sent
+                                    //    previously
+  uint16_t attr_offset;             // offset within the attr to keep trak of partial
+                                    //   attributes in the responses
 };
 
 enum class tSDP_STATE : uint8_t {
@@ -147,6 +147,7 @@ inline std::string sdp_state_text(const tSDP_STATE& state) {
 }
 
 enum : uint8_t {
+  SDP_FLAGS_NONE = 0x00,
   SDP_FLAGS_IS_ORIG = 0x01,
   SDP_FLAGS_HIS_CFG_DONE = 0x02,
   SDP_FLAGS_MY_CFG_DONE = 0x04,
@@ -175,16 +176,16 @@ typedef uint8_t tSDP_DISC_WAIT;
 
 /* Define the SDP Connection Control Block */
 struct tCONN_CB {
-  tSDP_STATE con_state;
-  uint8_t con_flags;
+  tSDP_STATE con_state{tSDP_STATE::IDLE};
+  tSDP_FLAGS con_flags{SDP_FLAGS_NONE};
 
   RawAddress device_address;
   alarm_t* sdp_conn_timer;
   uint16_t rem_mtu_size;
   uint16_t connection_id;
   uint16_t list_len;                   /* length of the response in the GKI buffer */
-  uint16_t pse_dynamic_attributes_len; /* length of the attributes need to be
-                             added in final sdp response len */
+  uint16_t pse_dynamic_attributes_len;  // length of the attributes need to be
+                                        // added in final sdp response len
   uint8_t* rsp_list;                   /* pointer to GKI buffer holding response */
 
   tSDP_DISCOVERY_DB* p_db; /* Database to save info into   */
@@ -199,12 +200,12 @@ struct tCONN_CB {
   uint16_t transaction_id;
   tSDP_REASON disconnect_reason; /* Disconnect reason            */
 
-  uint8_t disc_state;
-  bool is_attr_search;
+  tSDP_DISC_WAIT disc_state{SDP_DISC_WAIT_CONN};
+  bool is_attr_search{false};
 
   uint16_t cont_offset;     /* Continuation state data in the server response */
-  tSDP_CONT_INFO cont_info; /* structure to hold continuation information for
-                               the server response */
+  tSDP_CONT_INFO cont_info;  // structure to hold continuation information for
+                             //   the server response
   tCONN_CB() = default;
 
 private:
@@ -286,10 +287,10 @@ void sdpu_set_avrc_target_version(const tSDP_ATTRIBUTE* p_attr, const RawAddress
 void sdpu_set_avrc_target_features(const tSDP_ATTRIBUTE* p_attr, const RawAddress* bdaddr,
                                    uint16_t profile_version);
 uint16_t sdpu_get_active_ccb_cid(const RawAddress& bd_addr);
-bool sdpu_process_pend_ccb_same_cid(tCONN_CB& ccb);
-bool sdpu_process_pend_ccb_new_cid(tCONN_CB& ccb);
-void sdpu_clear_pend_ccb(tCONN_CB& ccb);
-void sdpu_callback(tCONN_CB& ccb, tSDP_REASON reason);
+bool sdpu_process_pend_ccb_same_cid(const tCONN_CB& ccb);
+bool sdpu_process_pend_ccb_new_cid(const tCONN_CB& ccb);
+void sdpu_clear_pend_ccb(const tCONN_CB& ccb);
+void sdpu_callback(const tCONN_CB& ccb, tSDP_REASON reason);
 
 /* Functions provided by sdp_db.cc
  */
@@ -315,5 +316,3 @@ void sdp_save_local_pse_record_attributes(int32_t rfcomm_channel_number, int32_t
 
 size_t sdp_get_num_records(const tSDP_DISCOVERY_DB& db);
 size_t sdp_get_num_attributes(const tSDP_DISC_REC& sdp_disc_rec);
-
-#endif

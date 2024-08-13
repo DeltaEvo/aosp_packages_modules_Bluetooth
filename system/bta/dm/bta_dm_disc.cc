@@ -32,7 +32,6 @@
 #include "bta/dm/bta_dm_disc_int.h"
 #include "bta/dm/bta_dm_disc_legacy.h"
 #include "bta/include/bta_gatt_api.h"
-#include "com_android_bluetooth_flags.h"
 #include "common/circular_buffer.h"
 #include "common/strings.h"
 #include "internal_include/bt_target.h"
@@ -172,6 +171,10 @@ void bta_dm_disc_gatt_cancel_open(const RawAddress& bd_addr) {
     return;
   }
   get_gatt_interface().BTA_GATTC_CancelOpen(0, bd_addr, false);
+  if (com::android::bluetooth::flags::cancel_open_discovery_client() &&
+      bta_dm_discovery_cb.client_if != BTA_GATTS_INVALID_IF) {
+    get_gatt_interface().BTA_GATTC_CancelOpen(bta_dm_discovery_cb.client_if, bd_addr, true);
+  }
 }
 
 void bta_dm_disc_gatt_refresh(const RawAddress& bd_addr) {
@@ -189,7 +192,7 @@ void bta_dm_disc_remove_device(const RawAddress& bd_addr) {
   }
   if (bta_dm_discovery_cb.service_discovery_state == BTA_DM_DISCOVER_ACTIVE &&
       bta_dm_discovery_cb.peer_bdaddr == bd_addr) {
-    log::info("Device removed while service discovery was pending, conclude the service disvovery");
+    log::info("Device removed while service discovery was pending, conclude the service discovery");
     bta_dm_gatt_disc_complete((uint16_t)GATT_INVALID_CONN_ID, (tGATT_STATUS)GATT_ERROR);
   }
 }
@@ -536,7 +539,7 @@ static void bta_dm_gatt_disc_complete(uint16_t conn_id, tGATT_STATUS status) {
   if (com::android::bluetooth::flags::bta_dm_discover_both() && sdp_pending && !le_pending) {
     /* LE Service discovery finished, and services were reported, but SDP is not
      * finished yet. gatt_close_timer closed the connection, and we received
-     * this callback because of disconnnection */
+     * this callback because of disconnection */
     return;
   }
 
@@ -575,9 +578,13 @@ static void bta_dm_gatt_disc_complete(uint16_t conn_id, tGATT_STATUS status) {
       bta_dm_disc_sm_execute(BTA_DM_DISC_CLOSE_TOUT_EVT, nullptr);
     }
   } else {
-    bta_dm_discovery_cb.conn_id = GATT_INVALID_CONN_ID;
-
     log::info("Discovery complete for invalid conn ID. Will pick up next job");
+
+    if (com::android::bluetooth::flags::cancel_open_discovery_client()) {
+      bta_dm_close_gatt_conn();
+    } else {
+      bta_dm_discovery_cb.conn_id = GATT_INVALID_CONN_ID;
+    }
     bta_dm_discovery_set_state(BTA_DM_DISCOVER_IDLE);
     bta_dm_execute_queued_discovery_request();
   }

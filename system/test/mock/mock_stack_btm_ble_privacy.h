@@ -26,6 +26,7 @@
 
 // Original included files, if any
 #include "stack/btm/security_device_record.h"
+#include "stack/include/btm_status.h"
 
 // Mocked compile conditionals, if any
 namespace test {
@@ -75,7 +76,7 @@ extern struct btm_ble_read_resolving_list_entry_complete btm_ble_read_resolving_
 // Returns: tBTM_STATUS
 struct btm_ble_remove_resolving_list_entry {
   std::function<tBTM_STATUS(tBTM_SEC_DEV_REC* p_dev_rec)> body{
-          [](tBTM_SEC_DEV_REC* /* p_dev_rec */) { return BTM_SUCCESS; }};
+          [](tBTM_SEC_DEV_REC* /* p_dev_rec */) { return tBTM_STATUS::BTM_SUCCESS; }};
   tBTM_STATUS operator()(tBTM_SEC_DEV_REC* p_dev_rec) { return body(p_dev_rec); }
 };
 extern struct btm_ble_remove_resolving_list_entry btm_ble_remove_resolving_list_entry;

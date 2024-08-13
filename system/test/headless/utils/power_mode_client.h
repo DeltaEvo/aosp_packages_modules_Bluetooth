@@ -181,7 +181,7 @@ public:
               });
             });
 
-    log::assert_that(BTM_SUCCESS == btm_status, "Failed to register power mode:{}",
+    log::assert_that(tBTM_STATUS::BTM_SUCCESS == btm_status, "Failed to register power mode:{}",
                      btm_status_text(btm_status));
   }
 
@@ -190,7 +190,7 @@ public:
             BTM_PM_DEREG, &pm_id_,
             []([[maybe_unused]] const RawAddress& bd_addr, [[maybe_unused]] tBTM_PM_STATUS status,
                [[maybe_unused]] uint16_t value, [[maybe_unused]] tHCI_STATUS hci_status) {});
-    log::assert_that(BTM_SUCCESS == status, "assert failed: BTM_SUCCESS == status");
+    log::assert_that(tBTM_STATUS::BTM_SUCCESS == status, "assert failed: BTM_SUCCESS == status");
   }
 
   Client GetClient(const RawAddress bd_addr) { return Client(pm_id_, bd_addr); }

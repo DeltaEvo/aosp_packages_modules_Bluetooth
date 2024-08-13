@@ -39,6 +39,7 @@
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_log_history.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/l2c_api.h"  // L2CA_
 #include "stack/include/main_thread.h"
 #include "stack/include/srvc_api.h"  // tDIS_VALUE
@@ -964,7 +965,7 @@ static void bta_hh_le_encrypt_cback(RawAddress bd_addr, tBT_TRANSPORT transport,
   }
 
   // TODO Collapse the duplicated status values
-  p_dev_cb->status = (result == BTM_SUCCESS) ? BTA_HH_OK : BTA_HH_ERR_SEC;
+  p_dev_cb->status = (result == tBTM_STATUS::BTM_SUCCESS) ? BTA_HH_OK : BTA_HH_ERR_SEC;
   p_dev_cb->btm_status = result;
 
   bta_hh_sm_execute(p_dev_cb, BTA_HH_ENC_CMPL_EVT, NULL);

@@ -46,6 +46,7 @@
 #include "stack/include/btm_ble_addr.h"
 #include "stack/include/btm_iso_api.h"
 #include "stack/include/btm_sec_api_types.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/dev_hci_link_interface.h"
 #include "stack/include/hci_error_code.h"
 #include "stack/include/hci_evt_length.h"
@@ -1220,7 +1221,7 @@ void btu_hcif_read_local_oob_complete(const uint8_t* p, uint16_t evt_len) {
   }
   STREAM_TO_UINT8(status, p);
   if (status == HCI_SUCCESS) {
-    evt_data.status = BTM_SUCCESS;
+    evt_data.status = tBTM_STATUS::BTM_SUCCESS;
   } else {
     evt_data.status = BTM_ERR_PROCESSING;
   }
@@ -1246,7 +1247,7 @@ void btu_hcif_read_local_oob_extended_complete(const uint8_t* p, uint16_t evt_le
   uint8_t status;
   STREAM_TO_UINT8(status, p);
   if (status == HCI_SUCCESS) {
-    evt_data.status = BTM_SUCCESS;
+    evt_data.status = tBTM_STATUS::BTM_SUCCESS;
   } else {
     evt_data.status = BTM_ERR_PROCESSING;
   }

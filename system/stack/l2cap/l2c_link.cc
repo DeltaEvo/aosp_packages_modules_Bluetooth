@@ -32,11 +32,13 @@
 
 #include "device/include/device_iot_config.h"
 #include "internal_include/bt_target.h"
+#include "l2c_api.h"
 #include "osi/include/allocator.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_types.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/hci_error_code.h"
 #include "stack/include/l2cap_acl_interface.h"
 #include "stack/include/l2cap_hci_link_interface.h"
@@ -191,8 +193,8 @@ void l2c_link_sec_comp(RawAddress p_bda, tBT_TRANSPORT transport, void* p_ref_da
   log::debug("btm_status={}, BD_ADDR={}, transport={}", btm_status_text(btm_status), p_bda,
              bt_transport_text(transport));
 
-  if (btm_status == BTM_SUCCESS_NO_SECURITY) {
-    btm_status = BTM_SUCCESS;
+  if (btm_status == tBTM_STATUS::BTM_SUCCESS_NO_SECURITY) {
+    btm_status = tBTM_STATUS::BTM_SUCCESS;
   }
 
   /* Save the parameters */
@@ -229,11 +231,11 @@ void l2c_link_sec_comp(RawAddress p_bda, tBT_TRANSPORT transport, void* p_ref_da
     }
 
     switch (btm_status) {
-      case BTM_SUCCESS:
+      case tBTM_STATUS::BTM_SUCCESS:
         l2c_csm_execute(p_ccb, L2CEVT_SEC_COMP, &ci);
         break;
 
-      case BTM_DELAY_CHECK:
+      case tBTM_STATUS::BTM_DELAY_CHECK:
         /* start a timer - encryption change not received before L2CAP connect
          * req */
         alarm_set_on_mloop(p_ccb->l2c_ccb_timer, L2CAP_DELAY_CHECK_SM4_TIMEOUT_MS,
@@ -251,11 +253,11 @@ void l2c_link_sec_comp(RawAddress p_bda, tBT_TRANSPORT transport, void* p_ref_da
 
       if (p_ccb == p_ref_data) {
         switch (btm_status) {
-          case BTM_SUCCESS:
+          case tBTM_STATUS::BTM_SUCCESS:
             l2c_csm_execute(p_ccb, L2CEVT_SEC_COMP, &ci);
             break;
 
-          case BTM_DELAY_CHECK:
+          case tBTM_STATUS::BTM_DELAY_CHECK:
             /* start a timer - encryption change not received before L2CAP
              * connect req */
             alarm_set_on_mloop(p_ccb->l2c_ccb_timer, L2CAP_DELAY_CHECK_SM4_TIMEOUT_MS,
@@ -474,13 +476,13 @@ void l2c_link_timeout(tL2C_LCB* p_lcb) {
       } else if (rc == BTM_CMD_STARTED) {
         p_lcb->link_state = LST_DISCONNECTING;
         timeout_ms = L2CAP_LINK_DISCONNECT_TIMEOUT_MS;
-      } else if (rc == BTM_SUCCESS) {
+      } else if (rc == tBTM_STATUS::BTM_SUCCESS) {
         l2cu_process_fixed_disc_cback(p_lcb);
         /* BTM SEC will make sure that link is release (probably after pairing
          * is done) */
         p_lcb->link_state = LST_DISCONNECTING;
         start_timeout = false;
-      } else if (rc == BTM_BUSY) {
+      } else if (rc == tBTM_STATUS::BTM_BUSY) {
         /* BTM is still executing security process. Let lcb stay as connected */
         start_timeout = false;
       } else if (p_lcb->IsBonding()) {
@@ -1057,6 +1059,45 @@ static void l2c_link_send_to_lower(tL2C_LCB* p_lcb, BT_HDR* p_buf,
   if (p_cbi) {
     l2cu_tx_complete(p_cbi);
   }
+
+  if (!com::android::bluetooth::flags::transmit_smp_packets_before_release() ||
+      p_lcb->suspended.empty()) {
+    return;
+  }
+
+  auto it = p_lcb->suspended.begin();
+  while (it != p_lcb->suspended.end()) {
+    bool erase = false;
+    uint16_t fixed_cid = *it;
+
+    if (fixed_cid < L2CAP_FIRST_FIXED_CHNL || fixed_cid > L2CAP_LAST_FIXED_CHNL) {
+      log::warn("Unknown channel was marked for removal, CID: 0x{:04x} BDA: {}", fixed_cid,
+                p_lcb->remote_bd_addr);
+      erase = true;
+    } else {
+      auto p_ccb = p_lcb->p_fixed_ccbs[fixed_cid - L2CAP_FIRST_FIXED_CHNL];
+      if (p_ccb == nullptr || !p_ccb->in_use) {
+        log::warn(
+                "Fixed channel control block not active but was marked for removal, CID: 0x{:04x} "
+                "BDA: {}",
+                fixed_cid, p_lcb->remote_bd_addr);
+        erase = true;
+      } else if (fixed_queue_is_empty(p_ccb->xmit_hold_q)) {
+        if (L2CA_RemoveFixedChnl(fixed_cid, p_lcb->remote_bd_addr)) {
+          log::info("Finally removed CID: 0x{:04x} BDA: {}", fixed_cid, p_lcb->remote_bd_addr);
+        } else {
+          log::error("Failed to remove CID: 0x{:04x} BDA: {}", fixed_cid, p_lcb->remote_bd_addr);
+        }
+        erase = true;
+      }
+    }
+
+    if (erase) {
+      it = p_lcb->suspended.erase(it);
+    } else {
+      it++;
+    }
+  }
 }
 
 void l2c_packets_completed(uint16_t handle, uint16_t num_sent) {
@@ -1157,7 +1198,7 @@ tBTM_STATUS l2cu_ConnectAclForSecurity(const RawAddress& bd_addr) {
   }
 
   l2cu_create_conn_br_edr(p_lcb);
-  return BTM_SUCCESS;
+  return tBTM_STATUS::BTM_SUCCESS;
 }
 
 void l2cble_update_sec_act(const RawAddress& bd_addr, uint16_t sec_act) {

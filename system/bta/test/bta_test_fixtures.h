@@ -24,6 +24,7 @@
 #include "bta/sys/bta_sys.h"
 #include "btm_client_interface.h"
 #include "osi/include/allocator.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/main_thread.h"
 #include "test/common/main_handler.h"
 #include "test/common/mock_functions.h"
@@ -70,7 +71,7 @@ protected:
                uint8_t* p_num_uuid16) -> uint8_t { return 0; };
     mock_btm_client_interface.eir.BTM_WriteEIR = [](BT_HDR* p_buf) -> tBTM_STATUS {
       osi_free(p_buf);
-      return BTM_SUCCESS;
+      return tBTM_STATUS::BTM_SUCCESS;
     };
     mock_btm_client_interface.local.BTM_ReadLocalDeviceNameFromController =
             [](tBTM_CMPL_CB* cb) -> tBTM_STATUS { return BTM_CMD_STARTED; };

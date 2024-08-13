@@ -106,7 +106,7 @@ static void hidd_check_config_done() {
  *
  ******************************************************************************/
 static void hidd_l2cif_connect_ind(const RawAddress& bd_addr, uint16_t cid, uint16_t psm,
-                                   uint8_t id) {
+                                   uint8_t /* id */) {
   tHID_DEV_DEV_CTB* p_dev;
   bool accept = TRUE;  // accept by default
 
@@ -180,7 +180,7 @@ static void hidd_l2cif_connect_ind(const RawAddress& bd_addr, uint16_t cid, uint
   p_hcon->intr_cid = cid;
 }
 
-static void hidd_on_l2cap_error(uint16_t lcid, uint16_t result) {
+static void hidd_on_l2cap_error(uint16_t /* lcid */, uint16_t result) {
   log::warn("connection of config failed, now disconnect");
 
   hidd_conn_disconnect();
@@ -267,7 +267,7 @@ static void hidd_l2cif_config_ind(uint16_t cid, tL2CAP_CFG_INFO* p_cfg) {
  * Returns          void
  *
  ******************************************************************************/
-static void hidd_l2cif_config_cfm(uint16_t cid, uint16_t initiator, tL2CAP_CFG_INFO* p_cfg) {
+static void hidd_l2cif_config_cfm(uint16_t cid, uint16_t /* initiator */, tL2CAP_CFG_INFO* p_cfg) {
   hidd_l2cif_config_ind(cid, p_cfg);
 
   log::verbose("cid={:04x}", cid);

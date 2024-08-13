@@ -69,7 +69,7 @@ int sdp_query_uuid([[maybe_unused]] unsigned int num_loops,
   LOG_CONSOLE("Started service search for uuid:%s", uuid.ToString().c_str());
 
   const tSDP_STATUS result = future.get();
-  if (result != SDP_SUCCESS) {
+  if (result != tSDP_STATUS::SDP_SUCCESS) {
     fprintf(stdout, "Failed search discovery result:%s\n", sdp_status_text(result).c_str());
     return static_cast<int>(result);
   }

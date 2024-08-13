@@ -29,8 +29,8 @@
 #include "hci/class_of_device.h"
 #include "stack/acl/acl.h"
 #include "stack/btm/security_device_record.h"
-#include "stack/include/acl_client_callbacks.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/btm_status.h"
 #include "types/raw_address.h"
 
 // Mocked compile conditionals, if any
@@ -278,7 +278,9 @@ extern struct acl_get_connection_from_handle acl_get_connection_from_handle;
 // Returns: tBTM_STATUS
 struct BTM_ReadFailedContactCounter {
   std::function<tBTM_STATUS(const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb)> body{
-          [](const RawAddress& /* remote_bda */, tBTM_CMPL_CB* /* p_cb */) { return BTM_SUCCESS; }};
+          [](const RawAddress& /* remote_bda */, tBTM_CMPL_CB* /* p_cb */) {
+            return tBTM_STATUS::BTM_SUCCESS;
+          }};
   tBTM_STATUS operator()(const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb) {
     return body(remote_bda, p_cb);
   }
@@ -291,7 +293,7 @@ struct BTM_ReadTxPower {
   std::function<tBTM_STATUS(const RawAddress& remote_bda, tBT_TRANSPORT transport,
                             tBTM_CMPL_CB* p_cb)>
           body{[](const RawAddress& /* remote_bda */, tBT_TRANSPORT /* transport */,
-                  tBTM_CMPL_CB* /* p_cb */) { return BTM_SUCCESS; }};
+                  tBTM_CMPL_CB* /* p_cb */) { return tBTM_STATUS::BTM_SUCCESS; }};
   tBTM_STATUS operator()(const RawAddress& remote_bda, tBT_TRANSPORT transport,
                          tBTM_CMPL_CB* p_cb) {
     return body(remote_bda, transport, p_cb);
@@ -303,7 +305,9 @@ extern struct BTM_ReadTxPower BTM_ReadTxPower;
 // Returns: tBTM_STATUS
 struct BTM_SetLinkSuperTout {
   std::function<tBTM_STATUS(const RawAddress& remote_bda, uint16_t timeout)> body{
-          [](const RawAddress& /* remote_bda */, uint16_t /* timeout */) { return BTM_SUCCESS; }};
+          [](const RawAddress& /* remote_bda */, uint16_t /* timeout */) {
+            return tBTM_STATUS::BTM_SUCCESS;
+          }};
   tBTM_STATUS operator()(const RawAddress& remote_bda, uint16_t timeout) {
     return body(remote_bda, timeout);
   }
@@ -315,7 +319,7 @@ extern struct BTM_SetLinkSuperTout BTM_SetLinkSuperTout;
 struct btm_remove_acl {
   std::function<tBTM_STATUS(const RawAddress& bd_addr, tBT_TRANSPORT transport)> body{
           [](const RawAddress& /* bd_addr */, tBT_TRANSPORT /* transport */) {
-            return BTM_SUCCESS;
+            return tBTM_STATUS::BTM_SUCCESS;
           }};
   tBTM_STATUS operator()(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
     return body(bd_addr, transport);

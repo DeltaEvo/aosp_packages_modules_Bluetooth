@@ -34,6 +34,7 @@
 #include "osi/include/thread.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_client_interface.h"
+#include "stack/include/btm_status.h"
 #include "types/raw_address.h"
 
 // This module provides a socket abstraction for SCO connections to a higher
@@ -89,7 +90,7 @@ bt_status_t btsock_sco_init(thread_t* thread_) {
 
   thread = thread_;
   enh_esco_params_t params = esco_parameters_for_codec(SCO_CODEC_CVSD_D1, true);
-  if (get_btm_client_interface().sco.BTM_SetEScoMode(&params) != BTM_SUCCESS) {
+  if (get_btm_client_interface().sco.BTM_SetEScoMode(&params) != tBTM_STATUS::BTM_SUCCESS) {
     log::warn("Unable to set ESCO parameters");
   }
 
@@ -112,8 +113,8 @@ bt_status_t btsock_sco_listen(int* sock_fd, int /* flags */) {
     return BT_STATUS_SOCKET_ERROR;
   }
 
-  if (get_btm_client_interface().sco.BTM_RegForEScoEvts(sco_socket->sco_handle,
-                                                        connection_request_cb) != BTM_SUCCESS) {
+  if (get_btm_client_interface().sco.BTM_RegForEScoEvts(
+              sco_socket->sco_handle, connection_request_cb) != tBTM_STATUS::BTM_SUCCESS) {
     log::warn("Unable to register for ESCO events");
   }
   listen_sco_socket = sco_socket;
@@ -199,7 +200,8 @@ static void sco_socket_free_locked(sco_socket_t* sco_socket) {
   }
 
   if (sco_socket->sco_handle != BTM_INVALID_SCO_INDEX) {
-    if (get_btm_client_interface().sco.BTM_RemoveSco(sco_socket->sco_handle) != BTM_SUCCESS) {
+    if (get_btm_client_interface().sco.BTM_RemoveSco(sco_socket->sco_handle) !=
+        tBTM_STATUS::BTM_SUCCESS) {
       log::warn("Unable to remove SCO handle:{}", sco_socket->sco_handle);
     }
   }
@@ -270,8 +272,8 @@ static void connection_request_cb(tBTM_ESCO_EVT event, tBTM_ESCO_EVT_DATA* data)
     goto error;
   }
 
-  if (get_btm_client_interface().sco.BTM_RegForEScoEvts(listen_sco_socket->sco_handle,
-                                                        connection_request_cb) != BTM_SUCCESS) {
+  if (get_btm_client_interface().sco.BTM_RegForEScoEvts(
+              listen_sco_socket->sco_handle, connection_request_cb) != tBTM_STATUS::BTM_SUCCESS) {
     log::warn("Unable to register for ESCO events handle:{}", listen_sco_socket->sco_handle);
   }
   get_btm_client_interface().sco.BTM_EScoConnRsp(conn_data->sco_inx, HCI_SUCCESS, NULL);
@@ -299,7 +301,8 @@ static void connect_completed_cb(uint16_t sco_handle) {
   // app-level
   // interest in the SCO socket.
   if (!sco_socket->socket) {
-    if (get_btm_client_interface().sco.BTM_RemoveSco(sco_socket->sco_handle) != BTM_SUCCESS) {
+    if (get_btm_client_interface().sco.BTM_RemoveSco(sco_socket->sco_handle) !=
+        tBTM_STATUS::BTM_SUCCESS) {
       log::warn("Unable to remove SCO handle:{}", sco_socket->sco_handle);
     }
     list_remove(sco_sockets, sco_socket);
@@ -335,7 +338,8 @@ static void socket_read_ready_cb(socket_t* /* socket */, void* context) {
   // routine that the socket is no longer desired and should be torn
   // down.
   if (sco_socket->connect_completed || sco_socket == listen_sco_socket) {
-    if (get_btm_client_interface().sco.BTM_RemoveSco(sco_socket->sco_handle) == BTM_SUCCESS) {
+    if (get_btm_client_interface().sco.BTM_RemoveSco(sco_socket->sco_handle) ==
+        tBTM_STATUS::BTM_SUCCESS) {
       list_remove(sco_sockets, sco_socket);
     }
     if (sco_socket == listen_sco_socket) {

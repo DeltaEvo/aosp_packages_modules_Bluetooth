@@ -56,6 +56,7 @@
 #include "stack/include/btm_api_types.h"
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_log_history.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/hci_error_code.h"
 #include "stack/include/hcimsgs.h"
 #include "stack/include/main_thread.h"
@@ -683,7 +684,7 @@ static tBTM_STATUS btm_send_connect_request(uint16_t acl_handle, enh_esco_params
  *                      parameter the default packet types is used.
  *
  * Returns          BTM_UNKNOWN_ADDR if the ACL connection is not up
- *                  BTM_BUSY         if another SCO being set up to
+ *                  tBTM_STATUS::BTM_BUSY         if another SCO being set up to
  *                                   the same BD address
  *                  BTM_NO_RESOURCES if the max SCO limit has been reached
  *                  BTM_CMD_STARTED  if the connection establishment is started.
@@ -726,7 +727,7 @@ tBTM_STATUS BTM_CreateSco(const RawAddress* remote_bda, bool is_orig, uint16_t p
           (p->esco.data.bd_addr == *remote_bda)) {
         log::error("a sco connection is already going on for {}, at state {}", *remote_bda,
                    unsigned(p->state));
-        return BTM_BUSY;
+        return tBTM_STATUS::BTM_BUSY;
       }
     }
   } else {
@@ -734,7 +735,7 @@ tBTM_STATUS BTM_CreateSco(const RawAddress* remote_bda, bool is_orig, uint16_t p
     for (xx = 0; xx < BTM_MAX_SCO_LINKS; xx++, p++) {
       if ((p->state == SCO_ST_LISTENING) && (!p->rem_bd_known)) {
         log::error("remote_bda is null and not known and we are still listening");
-        return BTM_BUSY;
+        return tBTM_STATUS::BTM_BUSY;
       }
     }
   }
@@ -912,7 +913,7 @@ void btm_sco_disc_chk_pend_for_modechange(uint16_t hci_handle) {
 
     {
       log::debug("Removing SCO Link handle 0x{:04x}", p->hci_handle);
-      if (get_btm_client_interface().sco.BTM_RemoveSco(xx) != BTM_SUCCESS) {
+      if (get_btm_client_interface().sco.BTM_RemoveSco(xx) != tBTM_STATUS::BTM_SUCCESS) {
         log::warn("Unable to remove SCO link:{}", xx);
       }
     }
@@ -1156,7 +1157,7 @@ tBTM_STATUS BTM_RemoveSco(uint16_t sco_inx) {
     p->hci_handle = HCI_INVALID_HANDLE;
     p->state = SCO_ST_UNUSED;
     p->esco.p_esco_cback = NULL; /* Deregister the eSCO event callback */
-    return BTM_SUCCESS;
+    return tBTM_STATUS::BTM_SUCCESS;
   }
 
   if (BTM_ReadPowerMode(p->esco.data.bd_addr, &state) && (state == BTM_PM_ST_PENDING)) {
@@ -1183,7 +1184,7 @@ void BTM_RemoveScoByBdaddr(const RawAddress& bda) {
 
   for (xx = 0; xx < BTM_MAX_SCO_LINKS; xx++, p++) {
     if (p->rem_bd_known && p->esco.data.bd_addr == bda) {
-      if (get_btm_client_interface().sco.BTM_RemoveSco(xx) != BTM_SUCCESS) {
+      if (get_btm_client_interface().sco.BTM_RemoveSco(xx) != tBTM_STATUS::BTM_SUCCESS) {
         log::warn("Unable to remove SCO link:{}", xx);
       }
     }
@@ -1358,8 +1359,8 @@ const RawAddress* BTM_ReadScoBdAddr(uint16_t sco_inx) {
  *                      desired the feature should be disabled in the
  *                      controller's feature mask.
  *
- * Returns          BTM_SUCCESS if the successful.
- *                  BTM_BUSY if there are one or more active (e)SCO links.
+ * Returns          tBTM_STATUS::BTM_SUCCESS if the successful.
+ *                  tBTM_STATUS::BTM_BUSY if there are one or more active (e)SCO links.
  *
  ******************************************************************************/
 tBTM_STATUS BTM_SetEScoMode(enh_esco_params_t* p_parms) {
@@ -1383,7 +1384,7 @@ tBTM_STATUS BTM_SetEScoMode(enh_esco_params_t* p_parms) {
             p_def->transmit_bandwidth, p_def->receive_bandwidth, p_def->max_latency_ms,
             p_def->packet_types, p_def->retransmission_effort);
   }
-  return BTM_SUCCESS;
+  return tBTM_STATUS::BTM_SUCCESS;
 }
 
 /*******************************************************************************
@@ -1395,7 +1396,7 @@ tBTM_STATUS BTM_SetEScoMode(enh_esco_params_t* p_parms) {
  *                  connection indication events and change of link parameter
  *                  events.
  *
- * Returns          BTM_SUCCESS if the successful.
+ * Returns          tBTM_STATUS::BTM_SUCCESS if the successful.
  *                  BTM_ILLEGAL_VALUE if there is an illegal sco_inx
  *                  BTM_MODE_UNSUPPORTED if controller version is not BT1.2 or
  *                          later or does not support eSCO.
@@ -1413,7 +1414,7 @@ tBTM_STATUS BTM_RegForEScoEvts(uint16_t sco_inx, tBTM_ESCO_CBACK* p_esco_cback) 
 
   if (sco_inx < BTM_MAX_SCO_LINKS && btm_cb.sco_cb.sco_db[sco_inx].state != SCO_ST_UNUSED) {
     btm_cb.sco_cb.sco_db[sco_inx].esco.p_esco_cback = p_esco_cback;
-    return BTM_SUCCESS;
+    return tBTM_STATUS::BTM_SUCCESS;
   }
   return BTM_ILLEGAL_VALUE;
 }

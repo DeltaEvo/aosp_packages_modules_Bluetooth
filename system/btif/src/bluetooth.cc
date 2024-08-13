@@ -101,6 +101,7 @@
 #include "stack/include/a2dp_api.h"
 #include "stack/include/avdt_api.h"
 #include "stack/include/btm_client_interface.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/hfp_lc3_decoder.h"
 #include "stack/include/hfp_lc3_encoder.h"
 #include "stack/include/hfp_msbc_decoder.h"
@@ -1396,7 +1397,8 @@ void invoke_oob_data_request_cb(tBT_TRANSPORT t, bool valid, Octet16 c, Octet16 
   log::info("");
   bt_oob_data_t oob_data = {};
   const char* local_name;
-  if (get_btm_client_interface().local.BTM_ReadLocalDeviceName(&local_name) != BTM_SUCCESS) {
+  if (get_btm_client_interface().local.BTM_ReadLocalDeviceName(&local_name) !=
+      tBTM_STATUS::BTM_SUCCESS) {
     log::warn("Unable to read local device name");
   }
   for (int i = 0; i < BD_NAME_LEN; i++) {

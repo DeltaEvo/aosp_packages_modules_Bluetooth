@@ -88,10 +88,14 @@ java_sdk_library {
         "com.android.bluetooth.flags",
         "com.android.bluetooth.jarjar",
     ],
+    plugins: [
+        "error_prone_android_framework",
+    ],
     errorprone: {
         javacflags: [
             "-Xep:InlineMeSuggester:OFF", // The @InlineMe annotation is not available
 
+            "-Xep:AndroidFrameworkRequiresPermission:ERROR",
             "-Xep:BadImport:ERROR",
             "-Xep:CatchFail:ERROR",
             "-Xep:ClassCanBeStatic:ERROR",

@@ -17,6 +17,7 @@
 #include "hci/acl_manager/acl_scheduler.h"
 
 #include <bluetooth/log.h>
+#include <com_android_bluetooth_flags.h>
 
 #include <deque>
 #include <optional>
@@ -168,6 +169,15 @@ private:
     }
     if (pending_outgoing_operations_.empty()) {
       return false;
+    }
+    if (com::android::bluetooth::flags::progress_acl_scheduler_upon_incoming_connection()) {
+      if (const RemoteNameRequestQueueEntry* peek =
+                  std::get_if<RemoteNameRequestQueueEntry>(&pending_outgoing_operations_.front())) {
+        if (incoming_connecting_address_set_.contains(peek->address)) {
+          log::info("Pending incoming connection and outgoing RNR to same peer:{}", peek->address);
+          return true;
+        }
+      }
     }
     return incoming_connecting_address_set_.empty() && !outgoing_entry_.has_value();
   }

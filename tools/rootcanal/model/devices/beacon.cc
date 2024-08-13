@@ -57,10 +57,10 @@ void Beacon::Tick() {
   std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
   if ((now - advertising_last_) >= advertising_interval_) {
     advertising_last_ = now;
-    SendLinkLayerPacket(std::move(LeLegacyAdvertisingPduBuilder::Create(
+    SendLinkLayerPacket(LeLegacyAdvertisingPduBuilder::Create(
                                 address_, Address::kEmpty, AddressType::PUBLIC, AddressType::PUBLIC,
                                 advertising_type_,
-                                std::vector(advertising_data_.begin(), advertising_data_.end()))),
+                                std::vector(advertising_data_.begin(), advertising_data_.end())),
                         Phy::Type::LOW_ENERGY);
   }
 }
@@ -71,9 +71,9 @@ void Beacon::ReceiveLinkLayerPacket(LinkLayerPacketView packet, Phy::Type /*type
       (advertising_type_ == LegacyAdvertisingType::ADV_IND ||
        advertising_type_ == LegacyAdvertisingType::ADV_SCAN_IND)) {
     SendLinkLayerPacket(
-            std::move(LeScanResponseBuilder::Create(
+            LeScanResponseBuilder::Create(
                     address_, packet.GetSourceAddress(), AddressType::PUBLIC,
-                    std::vector(scan_response_data_.begin(), scan_response_data_.end()))),
+                    std::vector(scan_response_data_.begin(), scan_response_data_.end())),
             Phy::Type::LOW_ENERGY);
   }
 }

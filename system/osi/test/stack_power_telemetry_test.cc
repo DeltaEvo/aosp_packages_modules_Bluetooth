@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include "osi/include/stack_power_telemetry.h"
+#include "stack/include/btm_status.h"
 #include "types/raw_address.h"
 
 class PowerTelemetryTest : public ::testing::Test {
@@ -97,7 +98,7 @@ TEST_F(PowerTelemetryTest, test_LogTxPower) {
   dummy_res.rem_bda = bdaddr;
 
   // Failed Case. Shouldn't crash if no init data
-  dummy_res.status = BTM_SUCCESS;
+  dummy_res.status = tBTM_STATUS::BTM_SUCCESS;
   void* p = &dummy_res;
   power_telemetry::GetInstance().LogTxPower(p);
 
@@ -269,7 +270,7 @@ TEST_F(PowerTelemetryTest, test_feature_flag) {
   LogDataContainer& ldc = power_telemetry::GetInstance().pimpl_->GetCurrentLogDataContainer();
   tBTM_TX_POWER_RESULT dummy_res;
   dummy_res.rem_bda = bdaddr;
-  dummy_res.status = BTM_SUCCESS;
+  dummy_res.status = tBTM_STATUS::BTM_SUCCESS;
   void* p = &dummy_res;
   power_telemetry::GetInstance().LogLinkDetails(handle, bdaddr, isConnected, true);
 

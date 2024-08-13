@@ -275,7 +275,7 @@ void sdpu_log_attribute_metrics(const RawAddress& bda, tSDP_DISCOVERY_DB* p_db) 
   // Log the first DI record if there is one
   if (has_di_record) {
     tSDP_DI_GET_RECORD di_record = {};
-    if (SDP_GetDiRecord(1, &di_record, p_db) == SDP_SUCCESS) {
+    if (SDP_GetDiRecord(1, &di_record, p_db) == tSDP_STATUS::SDP_SUCCESS) {
       auto version_array = to_little_endian_array(di_record.spec_id);
       log_sdp_attribute(bda, UUID_SERVCLASS_PNP_INFORMATION, ATTR_ID_SPECIFICATION_ID,
                         version_array.size(), version_array.data());
@@ -386,7 +386,7 @@ tCONN_CB* sdpu_allocate_ccb(void) {
  * Returns          void
  *
  ******************************************************************************/
-void sdpu_callback(tCONN_CB& ccb, tSDP_REASON reason) {
+void sdpu_callback(const tCONN_CB& ccb, tSDP_REASON reason) {
   if (ccb.p_cb) {
     (ccb.p_cb)(ccb.device_address, reason);
   } else if (ccb.complete_callback) {
@@ -415,7 +415,7 @@ void sdpu_release_ccb(tCONN_CB& ccb) {
   if (ccb.rsp_list) {
     log::verbose("releasing SDP rsp_list");
   }
-  osi_free_and_reset((void**)&ccb.rsp_list);
+  osi_free_and_reset(reinterpret_cast<void**>(&ccb.rsp_list));
 }
 
 /*******************************************************************************
@@ -480,7 +480,7 @@ uint16_t sdpu_get_active_ccb_cid(const RawAddress& bd_addr) {
  * Returns          returns true if any pending ccb, else false.
  *
  ******************************************************************************/
-bool sdpu_process_pend_ccb_same_cid(tCONN_CB& ccb) {
+bool sdpu_process_pend_ccb_same_cid(const tCONN_CB& ccb) {
   uint16_t xx;
   tCONN_CB* p_ccb{};
 
@@ -509,7 +509,7 @@ bool sdpu_process_pend_ccb_same_cid(tCONN_CB& ccb) {
  * Returns          returns true if any pending ccb, else false.
  *
  ******************************************************************************/
-bool sdpu_process_pend_ccb_new_cid(tCONN_CB& ccb) {
+bool sdpu_process_pend_ccb_new_cid(const tCONN_CB& ccb) {
   uint16_t xx;
   tCONN_CB* p_ccb{};
   uint16_t new_cid = 0;
@@ -530,7 +530,7 @@ bool sdpu_process_pend_ccb_new_cid(tCONN_CB& ccb) {
         // update alls cid to the new one for future reference
         p_ccb->connection_id = new_cid;
       } else {
-        sdpu_callback(*p_ccb, SDP_CONN_FAILED);
+        sdpu_callback(*p_ccb, tSDP_STATUS::SDP_CONN_FAILED);
         sdpu_release_ccb(*p_ccb);
       }
     }
@@ -549,7 +549,7 @@ bool sdpu_process_pend_ccb_new_cid(tCONN_CB& ccb) {
  * Returns          returns none.
  *
  ******************************************************************************/
-void sdpu_clear_pend_ccb(tCONN_CB& ccb) {
+void sdpu_clear_pend_ccb(const tCONN_CB& ccb) {
   uint16_t xx;
   tCONN_CB* p_ccb{};
 
@@ -557,7 +557,7 @@ void sdpu_clear_pend_ccb(tCONN_CB& ccb) {
   for (xx = 0, p_ccb = sdp_cb.ccb; xx < SDP_MAX_CONNECTIONS; xx++, p_ccb++) {
     if ((p_ccb->con_state == tSDP_STATE::CONN_PEND) &&
         (p_ccb->connection_id == ccb.connection_id) && (p_ccb->con_flags & SDP_FLAGS_IS_ORIG)) {
-      sdpu_callback(*p_ccb, SDP_CONN_FAILED);
+      sdpu_callback(*p_ccb, tSDP_STATUS::SDP_CONN_FAILED);
       sdpu_release_ccb(*p_ccb);
     }
   }
@@ -700,14 +700,14 @@ void sdpu_build_n_send_error(tCONN_CB* p_ccb, uint16_t trans_num, tSDP_STATUS er
                              char* p_error_text) {
   uint8_t *p_rsp, *p_rsp_start, *p_rsp_param_len;
   uint16_t rsp_param_len;
-  BT_HDR* p_buf = (BT_HDR*)osi_malloc(SDP_DATA_BUF_SIZE);
+  BT_HDR* p_buf = reinterpret_cast<BT_HDR*>(osi_malloc(SDP_DATA_BUF_SIZE));
 
   log::warn("SDP - sdpu_build_n_send_error  code: 0x{:x}  CID: 0x{:x}", error_code,
             p_ccb->connection_id);
 
   /* Send the packet to L2CAP */
   p_buf->offset = L2CAP_MIN_OFFSET;
-  p_rsp = p_rsp_start = (uint8_t*)(p_buf + 1) + L2CAP_MIN_OFFSET;
+  p_rsp = p_rsp_start = reinterpret_cast<uint8_t*>(p_buf + 1) + L2CAP_MIN_OFFSET;
 
   UINT8_TO_BE_STREAM(p_rsp, SDP_PDU_ERROR_RESPONSE);
   UINT16_TO_BE_STREAM(p_rsp, trans_num);
@@ -1128,7 +1128,7 @@ bool sdpu_compare_uuid_arrays(const uint8_t* p_uuid1, uint32_t len1, const uint8
       return (p_uuid1[0] == p_uuid2[0]) && (p_uuid1[1] == p_uuid2[1]) &&
              (p_uuid1[2] == p_uuid2[2]) && (p_uuid1[3] == p_uuid2[3]);
     } else {
-      return memcmp(p_uuid1, p_uuid2, (size_t)len1) == 0;
+      return memcmp(p_uuid1, p_uuid2, static_cast<size_t>(len1)) == 0;
     }
   } else if (len1 > len2) {
     /* If the len1 was 4-byte, (so len2 is 2-byte), compare on the fly */
@@ -1160,9 +1160,9 @@ bool sdpu_compare_uuid_arrays(const uint8_t* p_uuid1, uint32_t len1, const uint8
       memcpy(nu1, sdp_base_uuid, Uuid::kNumBytes128);
 
       if (len1 == 4) {
-        memcpy(nu1, p_uuid1, (size_t)len1);
+        memcpy(nu1, p_uuid1, static_cast<size_t>(len1));
       } else if (len1 == 2) {
-        memcpy(nu1 + 2, p_uuid1, (size_t)len1);
+        memcpy(nu1 + 2, p_uuid1, static_cast<size_t>(len1));
       }
 
       return memcmp(nu1, nu2, Uuid::kNumBytes128) == 0;
@@ -1210,8 +1210,8 @@ bool sdpu_compare_uuid_with_attr(const Uuid& uuid, tSDP_DISC_ATTR* p_attr) {
     return false;
   }
 
-  if (memcmp(uuid.To128BitBE().data(), (void*)p_attr->attr_value.v.array, Uuid::kNumBytes128) ==
-      0) {
+  if (memcmp(uuid.To128BitBE().data(), static_cast<void*>(p_attr->attr_value.v.array),
+             Uuid::kNumBytes128) == 0) {
     return true;
   }
 
@@ -1399,7 +1399,7 @@ uint16_t sdpu_get_attrib_entry_len(const tSDP_ATTRIBUTE* p_attr) {
  ******************************************************************************/
 uint8_t* sdpu_build_partial_attrib_entry(uint8_t* p_out, const tSDP_ATTRIBUTE* p_attr, uint16_t len,
                                          uint16_t* offset) {
-  uint8_t* p_attr_buff = (uint8_t*)osi_malloc(sizeof(uint8_t) * SDP_MAX_ATTR_LEN);
+  uint8_t* p_attr_buff = reinterpret_cast<uint8_t*>(osi_malloc(sizeof(uint8_t) * SDP_MAX_ATTR_LEN));
   sdpu_build_attrib_entry(p_attr_buff, p_attr);
 
   uint16_t attr_len = sdpu_get_attrib_entry_len(p_attr);
@@ -1561,7 +1561,7 @@ void sdpu_set_avrc_target_version(const tSDP_ATTRIBUTE* p_attr, const RawAddress
   }
 
   if (!btif_config_get_bin(bdaddr->ToString(), BTIF_STORAGE_KEY_AVRCP_CONTROLLER_VERSION,
-                           (uint8_t*)&cached_version, &version_value_size)) {
+                           reinterpret_cast<uint8_t*>(&cached_version), &version_value_size)) {
     log::info(
             "no cached AVRC Controller version for {}. Reply default AVRC Target "
             "version {:x}.DUT AVRC Target version {:x}.",
@@ -1630,7 +1630,7 @@ void sdpu_set_avrc_target_features(const tSDP_ATTRIBUTE* p_attr, const RawAddres
   }
 
   if (!btif_config_get_bin(bdaddr->ToString(), BTIF_STORAGE_KEY_AV_REM_CTRL_FEATURES,
-                           (uint8_t*)&avrcp_peer_features, &version_value_size)) {
+                           reinterpret_cast<uint8_t*>(&avrcp_peer_features), &version_value_size)) {
     log::error("Unable to fetch cached AVRC features");
     return;
   }

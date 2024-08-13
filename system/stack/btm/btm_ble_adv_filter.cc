@@ -22,11 +22,11 @@
 #include <bluetooth/log.h>
 
 #include "btm_ble_api.h"
-#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "stack/btm/btm_ble_int.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/include/bt_types.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/btu_hcif.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
@@ -140,7 +140,7 @@ static void btm_flt_update_cb(uint8_t expected_ocf, tBTM_BLE_PF_CFG_CBACK cb, ui
     return;
   }
 
-  tBTM_STATUS btm_status = (status == 0) ? BTM_SUCCESS : BTM_ERR_PROCESSING;
+  tBTM_STATUS btm_status = (status == 0) ? tBTM_STATUS::BTM_SUCCESS : BTM_ERR_PROCESSING;
 
   if (op_subcode == BTM_BLE_META_PF_FEAT_SEL) {
     cb.Run(num_avail, static_cast<tBTM_BLE_SCAN_COND_OP>(action), btm_status);

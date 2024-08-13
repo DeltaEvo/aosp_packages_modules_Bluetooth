@@ -493,17 +493,17 @@ void LogManufacturerInfo(const RawAddress& address,
 void LogBluetoothHalCrashReason(const RawAddress& address, uint32_t error_code,
                                 uint32_t vendor_error_code);
 
-void LogLeAudioConnectionSessionReported(int32_t group_size, int32_t group_metric_id,
-                                         int64_t connection_duration_nanos,
-                                         std::vector<int64_t>& device_connecting_offset_nanos,
-                                         std::vector<int64_t>& device_connected_offset_nanos,
-                                         std::vector<int64_t>& device_connection_duration_nanos,
-                                         std::vector<int32_t>& device_connection_status,
-                                         std::vector<int32_t>& device_disconnection_status,
-                                         std::vector<RawAddress>& device_address,
-                                         std::vector<int64_t>& streaming_offset_nanos,
-                                         std::vector<int64_t>& streaming_duration_nanos,
-                                         std::vector<int32_t>& streaming_context_type);
+void LogLeAudioConnectionSessionReported(
+        int32_t group_size, int32_t group_metric_id, int64_t connection_duration_nanos,
+        const std::vector<int64_t>& device_connecting_offset_nanos,
+        const std::vector<int64_t>& device_connected_offset_nanos,
+        const std::vector<int64_t>& device_connection_duration_nanos,
+        const std::vector<int32_t>& device_connection_status,
+        const std::vector<int32_t>& device_disconnection_status,
+        const std::vector<RawAddress>& device_address,
+        const std::vector<int64_t>& streaming_offset_nanos,
+        const std::vector<int64_t>& streaming_duration_nanos,
+        const std::vector<int32_t>& streaming_context_type);
 
 void LogLeAudioBroadcastSessionReported(int64_t duration_nanos);
 

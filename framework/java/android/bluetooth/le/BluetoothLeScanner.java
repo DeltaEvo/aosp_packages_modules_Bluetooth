@@ -16,7 +16,6 @@
 
 package android.bluetooth.le;
 
-import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_SCAN;
 import static android.Manifest.permission.UPDATE_DEVICE_STATS;
 
@@ -713,7 +712,7 @@ public final class BluetoothLeScanner {
         return true;
     }
 
-    @RequiresPermission(BLUETOOTH_CONNECT)
+    @RequiresPermission(BLUETOOTH_SCAN)
     private boolean isHardwareResourcesAvailableForScan(ScanSettings settings) {
         final int callbackType = settings.getCallbackType();
         if ((callbackType & ScanSettings.CALLBACK_TYPE_FIRST_MATCH) != 0

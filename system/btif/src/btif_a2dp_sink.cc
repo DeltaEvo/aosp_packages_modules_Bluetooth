@@ -75,6 +75,7 @@ enum {
 typedef struct {
   BT_HDR_RIGID hdr;
   uint8_t codec_info[AVDT_CODEC_SIZE];
+  RawAddress peer_address;
 } tBTIF_MEDIA_SINK_DECODER_UPDATE;
 
 typedef struct {
@@ -134,7 +135,8 @@ static std::atomic<int> btif_a2dp_sink_state{BTIF_A2DP_SINK_STATE_OFF};
 
 static void btif_a2dp_sink_init_delayed();
 static void btif_a2dp_sink_startup_delayed();
-static void btif_a2dp_sink_start_session_delayed(std::promise<void> peer_ready_promise);
+static void btif_a2dp_sink_start_session_delayed(const RawAddress& peer_address,
+                                                 std::promise<void> peer_ready_promise);
 static void btif_a2dp_sink_end_session_delayed();
 static void btif_a2dp_sink_shutdown_delayed();
 static void btif_a2dp_sink_cleanup_delayed();
@@ -147,6 +149,7 @@ static void btif_a2dp_sink_audio_rx_flush_req();
 /* Handle incoming media packets A2DP SINK streaming */
 static void btif_a2dp_sink_handle_inc_media(BT_HDR* p_msg);
 static void btif_a2dp_sink_decoder_update_event(tBTIF_MEDIA_SINK_DECODER_UPDATE* p_buf);
+static void btif_a2dp_sink_decoder_update_event_old(tBTIF_MEDIA_SINK_DECODER_UPDATE* p_buf);
 static void btif_a2dp_sink_clear_track_event();
 static void btif_a2dp_sink_set_focus_state_event(btif_a2dp_sink_focus_state_t state);
 static void btif_a2dp_sink_audio_rx_flush_event();
@@ -219,11 +222,82 @@ static void btif_a2dp_sink_startup_delayed() {
   // Nothing to do
 }
 
+static void btif_a2dp_sink_on_decode_complete(uint8_t* data, uint32_t len) {
+#ifdef __ANDROID__
+  BtifAvrcpAudioTrackWriteData(btif_a2dp_sink_cb.audio_track, reinterpret_cast<void*>(data), len);
+#endif
+}
+
+static bool btif_a2dp_sink_initialize_a2dp_control_block(const RawAddress& peer_address) {
+  log::info("Initializing the control block for peer {}", peer_address);
+  if (peer_address.IsEmpty()) {
+    log::error("Peer address is empty. Control block cannot be initialized");
+    return false;
+  }
+  uint8_t* codec_config = bta_av_co_get_codec_config(peer_address);
+  log::verbose("p_codec_info[{:x}:{:x}:{:x}:{:x}:{:x}:{:x}]", codec_config[1], codec_config[2],
+               codec_config[3], codec_config[4], codec_config[5], codec_config[6]);
+
+  btif_a2dp_sink_cb.decoder_interface = A2DP_GetDecoderInterface(codec_config);
+
+  if (btif_a2dp_sink_cb.decoder_interface == nullptr) {
+    log::error("cannot stream audio: no source decoder interface");
+    return false;
+  }
+
+  if (!btif_a2dp_sink_cb.decoder_interface->decoder_init(btif_a2dp_sink_on_decode_complete)) {
+    log::error("failed to initialize decoder");
+    return false;
+  }
+
+  if (btif_a2dp_sink_cb.decoder_interface->decoder_configure != nullptr) {
+    btif_a2dp_sink_cb.decoder_interface->decoder_configure(codec_config);
+  }
+
+  log::info("codec = {}", A2DP_CodecInfoString(codec_config));
+  int sample_rate = A2DP_GetTrackSampleRate(codec_config);
+  if (sample_rate == -1) {
+    log::error("cannot get the track frequency");
+    return false;
+  }
+  int bits_per_sample = A2DP_GetTrackBitsPerSample(codec_config);
+  if (bits_per_sample == -1) {
+    log::error("%cannot get the bits per sample");
+    return false;
+  }
+  int channel_count = A2DP_GetTrackChannelCount(codec_config);
+  if (channel_count == -1) {
+    log::error("cannot get the channel count");
+    return false;
+  }
+  int channel_type = A2DP_GetSinkTrackChannelType(codec_config);
+  if (channel_type == -1) {
+    log::error("cannot get the Sink channel type");
+    return false;
+  }
+  btif_a2dp_sink_cb.sample_rate = sample_rate;
+  btif_a2dp_sink_cb.bits_per_sample = bits_per_sample;
+  btif_a2dp_sink_cb.channel_count = channel_count;
+
+  btif_a2dp_sink_cb.audio_track =
+#ifdef __ANDROID__
+          BtifAvrcpAudioTrackCreate(sample_rate, bits_per_sample, channel_count);
+#else
+          NULL;
+#endif
+  if (btif_a2dp_sink_cb.audio_track == nullptr) {
+    log::error("track creation failed");
+    return false;
+  }
+  log::info("A2DP sink control block initialized");
+  return true;
+}
+
 bool btif_a2dp_sink_start_session(const RawAddress& peer_address,
                                   std::promise<void> peer_ready_promise) {
   log::info("peer_address={}", peer_address);
   if (btif_a2dp_sink_cb.worker_thread.DoInThread(
-              FROM_HERE, base::BindOnce(btif_a2dp_sink_start_session_delayed,
+              FROM_HERE, base::BindOnce(btif_a2dp_sink_start_session_delayed, peer_address,
                                         std::move(peer_ready_promise)))) {
     return true;
   } else {
@@ -233,9 +307,13 @@ bool btif_a2dp_sink_start_session(const RawAddress& peer_address,
   }
 }
 
-static void btif_a2dp_sink_start_session_delayed(std::promise<void> peer_ready_promise) {
+static void btif_a2dp_sink_start_session_delayed(const RawAddress& peer_address,
+                                                 std::promise<void> peer_ready_promise) {
   log::info("");
   LockGuard lock(g_mutex);
+  if (com::android::bluetooth::flags::bta_av_use_peer_codec()) {
+    btif_a2dp_sink_initialize_a2dp_control_block(peer_address);
+  }
   peer_ready_promise.set_value();
   // Nothing to do
 }
@@ -369,15 +447,15 @@ static void btif_a2dp_sink_command_ready(BT_HDR_RIGID* p_msg) {
   osi_free(p_msg);
 }
 
-void btif_a2dp_sink_update_decoder(const uint8_t* p_codec_info) {
-  log::info("");
+void btif_a2dp_sink_update_decoder(const RawAddress& peer_address, const uint8_t* p_codec_info) {
+  log::info("peer_address {}", peer_address);
   tBTIF_MEDIA_SINK_DECODER_UPDATE* p_buf = reinterpret_cast<tBTIF_MEDIA_SINK_DECODER_UPDATE*>(
           osi_malloc(sizeof(tBTIF_MEDIA_SINK_DECODER_UPDATE)));
 
   log::verbose("p_codec_info[{:x}:{:x}:{:x}:{:x}:{:x}:{:x}]", p_codec_info[1], p_codec_info[2],
                p_codec_info[3], p_codec_info[4], p_codec_info[5], p_codec_info[6]);
-
   memcpy(p_buf->codec_info, p_codec_info, AVDT_CODEC_SIZE);
+  p_buf->peer_address = peer_address;
   p_buf->hdr.event = BTIF_MEDIA_SINK_DECODER_UPDATE;
 
   btif_a2dp_sink_cb.worker_thread.DoInThread(
@@ -497,12 +575,6 @@ static void btif_a2dp_sink_audio_handle_start_decoding() {
             nullptr);
 }
 
-static void btif_a2dp_sink_on_decode_complete(uint8_t* data, uint32_t len) {
-#ifdef __ANDROID__
-  BtifAvrcpAudioTrackWriteData(btif_a2dp_sink_cb.audio_track, reinterpret_cast<void*>(data), len);
-#endif
-}
-
 // Must be called while locked.
 static void btif_a2dp_sink_handle_inc_media(BT_HDR* p_msg) {
   if ((btif_av_get_peer_sep(A2dpType::kSink) == AVDT_TSEP_SNK) || (btif_a2dp_sink_cb.rx_flush)) {
@@ -570,6 +642,24 @@ static void btif_a2dp_sink_audio_rx_flush_event() {
 
 static void btif_a2dp_sink_decoder_update_event(tBTIF_MEDIA_SINK_DECODER_UPDATE* p_buf) {
   log::info("");
+  if (!com::android::bluetooth::flags::bta_av_use_peer_codec()) {
+    btif_a2dp_sink_decoder_update_event_old(p_buf);
+    return;
+  }
+  LockGuard lock(g_mutex);
+  log::verbose("p_codec_info[{:x}:{:x}:{:x}:{:x}:{:x}:{:x}]", p_buf->codec_info[1],
+               p_buf->codec_info[2], p_buf->codec_info[3], p_buf->codec_info[4],
+               p_buf->codec_info[5], p_buf->codec_info[6]);
+
+  btif_a2dp_sink_cb.rx_flush = false;
+  log::verbose("reset to Sink role");
+
+  bta_av_co_save_codec(p_buf->peer_address, p_buf->codec_info);
+  log::info("codec = {}", A2DP_CodecInfoString(p_buf->codec_info));
+}
+
+static void btif_a2dp_sink_decoder_update_event_old(tBTIF_MEDIA_SINK_DECODER_UPDATE* p_buf) {
+  log::info("");
   LockGuard lock(g_mutex);
   log::verbose("p_codec_info[{:x}:{:x}:{:x}:{:x}:{:x}:{:x}]", p_buf->codec_info[1],
                p_buf->codec_info[2], p_buf->codec_info[3], p_buf->codec_info[4],
@@ -602,7 +692,8 @@ static void btif_a2dp_sink_decoder_update_event(tBTIF_MEDIA_SINK_DECODER_UPDATE*
   btif_a2dp_sink_cb.rx_flush = false;
   log::verbose("reset to Sink role");
 
-  bta_av_co_save_codec(p_buf->codec_info);
+  bta_av_co_save_codec(p_buf->peer_address, p_buf->codec_info);
+  log::info("codec = {}", A2DP_CodecInfoString(p_buf->codec_info));
 
   btif_a2dp_sink_cb.decoder_interface = A2DP_GetDecoderInterface(p_buf->codec_info);
 

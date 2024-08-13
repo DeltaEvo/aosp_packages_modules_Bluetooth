@@ -3,7 +3,7 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at:
  *
  *      http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -16,26 +16,21 @@
 
 #pragma once
 
-#include <vector>
-
+#include "hci/address.h"
 #include "hci/hci_packets.h"
+#include "stack/include/btm_status.h"
+#include "types/raw_address.h"
 
 namespace bluetooth {
-namespace discovery {
-namespace device {
+namespace metrics {
 
-class DataParser {
-public:
-  DataParser(const std::vector<uint8_t>& data);
+void LogAclCompletionEvent(const hci::Address& address, hci::ErrorCode reason,
+                           bool is_locally_initiated);
 
-  std::vector<hci::GapData> GetData() const;
-  std::vector<hci::GapDataType> GetDataTypes() const;
-  size_t GetNumGapData() const;
 
-protected:
-  std::vector<hci::GapData> gap_data_;
-};
+void LogAclAfterRemoteNameRequest(const RawAddress& raw_address, tBTM_STATUS status);
 
-}  // namespace device
-}  // namespace discovery
+void LogUserConfirmationRequestResponse(const hci::Address& address, bool positive);
+
+}  // namespace metrics
 }  // namespace bluetooth

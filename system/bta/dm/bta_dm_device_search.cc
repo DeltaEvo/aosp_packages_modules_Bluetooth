@@ -43,6 +43,7 @@
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_inq.h"
 #include "stack/include/btm_log_history.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/main_thread.h"
 #include "stack/rnr/remote_name_request.h"
 #include "types/raw_address.h"
@@ -107,7 +108,7 @@ void bta_dm_disc_disable_search() {
  *
  ******************************************************************************/
 static void bta_dm_search_start(tBTA_DM_API_SEARCH& search) {
-  if (get_btm_client_interface().db.BTM_ClearInqDb(nullptr) != BTM_SUCCESS) {
+  if (get_btm_client_interface().db.BTM_ClearInqDb(nullptr) != tBTM_STATUS::BTM_SUCCESS) {
     log::warn("Unable to clear inquiry database for device discovery");
   }
   /* save search params */
@@ -302,7 +303,7 @@ static bool bta_dm_read_remote_device_name(const RawAddress& bd_addr, tBT_TRANSP
     log::verbose("BTM_ReadRemoteDeviceName is started");
 
     return true;
-  } else if (btm_status == BTM_BUSY) {
+  } else if (btm_status == tBTM_STATUS::BTM_BUSY) {
     log::verbose("BTM_ReadRemoteDeviceName is busy");
 
     return true;

@@ -820,7 +820,7 @@ static void bta_jv_start_discovery_cback(uint32_t rfcomm_slot_id, const RawAddre
                             .scn = 0,
                     },
     };
-    if (result == SDP_SUCCESS || result == SDP_DB_FULL) {
+    if (result == tSDP_STATUS::SDP_SUCCESS || result == tSDP_STATUS::SDP_DB_FULL) {
       log::info("Received service discovery callback success bd_addr:{} result:{}", bd_addr,
                 sdp_result_text(result));
       tSDP_PROTOCOL_ELEM pe;

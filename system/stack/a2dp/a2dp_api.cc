@@ -79,7 +79,7 @@ static void a2dp_sdp_cback(const RawAddress& /* bd_addr */, tSDP_STATUS status) 
 
   log::info("status: {}", status);
 
-  if (status == SDP_SUCCESS) {
+  if (status == tSDP_STATUS::SDP_SUCCESS) {
     /* loop through all records we found */
     do {
       /* get next record; if none found, we're done */

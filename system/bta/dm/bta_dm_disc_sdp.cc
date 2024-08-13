@@ -163,8 +163,8 @@ void bta_dm_sdp_result(tSDP_STATUS sdp_result, tBTA_DM_SDP_STATE* sdp_state) {
   std::vector<Uuid> uuid_list;
   tSDP_DISCOVERY_DB* p_sdp_db = (tSDP_DISCOVERY_DB*)sdp_state->sdp_db_buffer;
 
-  if ((sdp_result == SDP_SUCCESS) || (sdp_result == SDP_NO_RECS_MATCH) ||
-      (sdp_result == SDP_DB_FULL)) {
+  if ((sdp_result == tSDP_STATUS::SDP_SUCCESS) || (sdp_result == tSDP_STATUS::SDP_NO_RECS_MATCH) ||
+      (sdp_result == tSDP_STATUS::SDP_DB_FULL)) {
     log::verbose("sdp_result::0x{:x}", sdp_result);
     std::vector<Uuid> gatt_uuids;
     do {
@@ -241,7 +241,7 @@ void bta_dm_sdp_result(tSDP_STATUS sdp_result, tBTA_DM_SDP_STATE* sdp_state) {
 #if TARGET_FLOSS
     tSDP_DI_GET_RECORD di_record;
     if (get_legacy_stack_sdp_api()->device_id.SDP_GetDiRecord(1, &di_record, p_sdp_db) ==
-        SDP_SUCCESS) {
+        tSDP_STATUS::SDP_SUCCESS) {
       bta_dm_sdp_received_di(sdp_state->bd_addr, di_record);
     }
 #endif

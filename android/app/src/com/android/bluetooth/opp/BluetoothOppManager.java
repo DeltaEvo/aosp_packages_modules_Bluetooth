@@ -482,7 +482,7 @@ public class BluetoothOppManager {
                 values.put(BluetoothShare.MIMETYPE, contentType);
                 values.put(
                         BluetoothShare.DESTINATION,
-                        Flags.identityAddressNullIfUnknown()
+                        Flags.identityAddressNullIfNotKnown()
                                 ? Utils.getBrEdrAddress(mRemoteDevice)
                                 : mRemoteDevice.getIdentityAddress());
                 values.put(BluetoothShare.TIMESTAMP, ts);
@@ -514,7 +514,7 @@ public class BluetoothOppManager {
             values.put(BluetoothShare.MIMETYPE, mTypeOfSingleFile);
             values.put(
                     BluetoothShare.DESTINATION,
-                    Flags.identityAddressNullIfUnknown()
+                    Flags.identityAddressNullIfNotKnown()
                             ? Utils.getBrEdrAddress(mRemoteDevice)
                             : mRemoteDevice.getIdentityAddress());
             if (mIsHandoverInitiated) {

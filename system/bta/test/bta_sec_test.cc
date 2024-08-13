@@ -21,7 +21,7 @@
 
 #include "bta/dm/bta_dm_sec_int.h"
 #include "bta/test/bta_test_fixtures.h"
-#include "btm_status.h"
+#include "stack/include/btm_status.h"
 #include "test/mock/mock_stack_btm_inq.h"
 #include "test/mock/mock_stack_btm_interface.h"
 #include "types/raw_address.h"
@@ -146,7 +146,7 @@ TEST_F(BtaSecTest, bta_dm_sp_cback__BTM_SP_CFM_REQ_EVT_WithoutName_RNRFail) {
   static bool callback_sent = false;
   mock_btm_client_interface.peer.BTM_ReadRemoteDeviceName =
           [](const RawAddress& remote_bda, tBTM_NAME_CMPL_CB* p_cb,
-             tBT_TRANSPORT transport) -> tBTM_STATUS { return BTM_SUCCESS; };
+             tBT_TRANSPORT transport) -> tBTM_STATUS { return tBTM_STATUS::BTM_SUCCESS; };
 
   static tBTA_DM_SP_CFM_REQ cfm_req{};
   bta_dm_sec_enable([](tBTA_DM_SEC_EVT event, tBTA_DM_SEC* p_data) {

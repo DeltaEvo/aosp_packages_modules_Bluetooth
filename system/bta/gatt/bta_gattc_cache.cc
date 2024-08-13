@@ -345,7 +345,7 @@ void bta_gattc_sdp_callback(tBTA_GATTC_CB_DATA* cb_data, const RawAddress& /* bd
     return;
   }
 
-  if ((sdp_status != SDP_SUCCESS) && (sdp_status != SDP_DB_FULL)) {
+  if ((sdp_status != tSDP_STATUS::SDP_SUCCESS) && (sdp_status != tSDP_STATUS::SDP_DB_FULL)) {
     bta_gattc_explore_srvc_finished(cb_data->sdp_conn_id, p_srvc_cb);
 
     /* allocated in bta_gattc_sdp_service_disc */

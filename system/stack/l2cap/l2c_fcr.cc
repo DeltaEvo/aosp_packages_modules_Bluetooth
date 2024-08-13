@@ -1219,8 +1219,7 @@ static bool do_sar_reassembly(tL2C_CCB* p_ccb, BT_HDR* p_buf, uint16_t ctrl_word
     if (p_ccb->local_cid < L2CAP_BASE_APPL_CID &&
         (p_ccb->local_cid >= L2CAP_FIRST_FIXED_CHNL && p_ccb->local_cid <= L2CAP_LAST_FIXED_CHNL)) {
       if (l2cb.fixed_reg[p_ccb->local_cid - L2CAP_FIRST_FIXED_CHNL].pL2CA_FixedData_Cb) {
-        (*l2cb.fixed_reg[p_ccb->local_cid - L2CAP_FIRST_FIXED_CHNL].pL2CA_FixedData_Cb)(
-                p_ccb->local_cid, p_ccb->p_lcb->remote_bd_addr, p_buf);
+        l2cu_fixed_channel_data_cb(p_ccb->p_lcb, p_ccb->local_cid, p_buf);
       }
     } else {
       l2c_csm_execute(p_ccb, L2CEVT_L2CAP_DATA, p_buf);

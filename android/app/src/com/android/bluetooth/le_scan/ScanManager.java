@@ -16,6 +16,8 @@
 
 package com.android.bluetooth.le_scan;
 
+import static android.bluetooth.le.ScanSettings.getScanModeString;
+
 import android.app.ActivityManager;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
@@ -649,7 +651,7 @@ public class ScanManager {
             Log.d(
                     TAG,
                     "Scan mode update during setAutoBatchScanClient() to "
-                            + ScanSettings.SCAN_MODE_SCREEN_OFF);
+                            + getScanModeString(ScanSettings.SCAN_MODE_SCREEN_OFF));
             if (client.stats != null) {
                 client.stats.setAutoBatchScan(client.scannerId, true);
             }
@@ -662,7 +664,8 @@ public class ScanManager {
             client.updateScanMode(client.scanModeApp);
             Log.d(
                     TAG,
-                    "Scan mode update during clearAutoBatchScanClient() to " + client.scanModeApp);
+                    "Scan mode update during clearAutoBatchScanClient() to "
+                            + getScanModeString(client.scanModeApp));
             if (client.stats != null) {
                 client.stats.setAutoBatchScan(client.scannerId, false);
             }
@@ -709,9 +712,9 @@ public class ScanManager {
             Log.d(
                     TAG,
                     "Scan mode update during screen off from "
-                            + client.scanModeApp
+                            + getScanModeString(client.scanModeApp)
                             + " to "
-                            + updatedScanMode);
+                            + getScanModeString(updatedScanMode));
             return client.updateScanMode(updatedScanMode);
         }
 
@@ -825,9 +828,9 @@ public class ScanManager {
             Log.d(
                     TAG,
                     "Scan mode update during screen on from "
-                            + client.scanModeApp
+                            + getScanModeString(client.scanModeApp)
                             + " to "
-                            + getMinScanMode(scanMode, maxScanMode));
+                            + getScanModeString(getMinScanMode(scanMode, maxScanMode)));
             return client.updateScanMode(getMinScanMode(scanMode, maxScanMode));
         }
 
@@ -2101,7 +2104,7 @@ public class ScanManager {
                             + " isForeground "
                             + isForeground
                             + " scanMode "
-                            + client.settings.getScanMode());
+                            + getScanModeString(client.settings.getScanMode()));
         }
 
         if (updatedScanParams) {
