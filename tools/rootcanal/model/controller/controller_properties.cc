@@ -1574,7 +1574,7 @@ bool ControllerProperties::CheckSupportedCommands() const {
 }
 
 ControllerProperties::ControllerProperties()
-    : supported_commands(std::move(SupportedCommands())),
+    : supported_commands(SupportedCommands()),
       lmp_features({Page0LmpFeatures(), 0, Page2LmpFeatures()}),
       le_features(LlFeatures()) {
   if (!CheckSupportedFeatures()) {
@@ -1670,7 +1670,7 @@ static void SetSupportedCommandBits(std::array<uint8_t, 64>& supported_commands,
 
 ControllerProperties::ControllerProperties(rootcanal::configuration::Controller const& config)
     : strict(!config.has_strict() || config.strict()),
-      supported_commands(std::move(SupportedCommands())),
+      supported_commands(SupportedCommands()),
       lmp_features({Page0LmpFeatures(), 0, Page2LmpFeatures()}),
       le_features(LlFeatures()) {
   using namespace rootcanal::configuration;

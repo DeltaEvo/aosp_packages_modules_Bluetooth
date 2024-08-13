@@ -987,7 +987,7 @@ private:
                          CsisGroupLockStatus status) {
     log::debug("group id: {}, target state {}", csis_group->GetGroupId(), lock ? "lock" : "unlock");
 
-    NotifyGroupStatus(csis_group->GetGroupId(), lock, status, std::move(csis_group->GetLockCb()));
+    NotifyGroupStatus(csis_group->GetGroupId(), lock, status, csis_group->GetLockCb());
     csis_group->SetTargetLockState(CsisLockState::CSIS_STATE_UNSET);
   }
 
@@ -1280,7 +1280,7 @@ private:
       devices.push_back(std::move(bda));
     }
 
-    return std::move(devices);
+    return devices;
   }
 
   int GetNumOfKnownExpectedDevicesWaitingForBonding(int group_id) {
