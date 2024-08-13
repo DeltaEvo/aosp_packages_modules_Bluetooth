@@ -481,33 +481,27 @@ public final class BluetoothQualityReport implements Parcelable {
         String str;
         str =
                 "BQR: {\n"
-                        + "  mAddr: "
-                        + mAddr
-                        + ", mLmpVer: "
-                        + String.format("0x%02X", mLmpVer)
-                        + ", mLmpSubVer: "
-                        + String.format("0x%04X", mLmpSubVer)
-                        + ", mManufacturerId: "
-                        + String.format("0x%04X", mManufacturerId)
-                        + ", mName: "
-                        + mName
-                        + ", mBluetoothClass: "
-                        + mBluetoothClass.toString()
+                        + ("  mAddr: " + mAddr)
+                        + (", mLmpVer: " + String.format("0x%02X", mLmpVer))
+                        + (", mLmpSubVer: " + String.format("0x%04X", mLmpSubVer))
+                        + (", mManufacturerId: " + String.format("0x%04X", mManufacturerId))
+                        + (", mName: " + mName)
+                        + (", mBluetoothClass: " + mBluetoothClass.toString())
                         + ",\n"
                         + mBqrCommon
                         + "\n";
 
         int id = mBqrCommon.getQualityReportId();
         if (id == QUALITY_REPORT_ID_APPROACH_LSTO) {
-            str += mBqrVsLsto + "\n}";
+            str = str + mBqrVsLsto + "\n}";
         } else if (id == QUALITY_REPORT_ID_A2DP_CHOPPY) {
-            str += mBqrVsA2dpChoppy + "\n}";
+            str = str + mBqrVsA2dpChoppy + "\n}";
         } else if (id == QUALITY_REPORT_ID_SCO_CHOPPY) {
-            str += mBqrVsScoChoppy + "\n}";
+            str = str + mBqrVsScoChoppy + "\n}";
         } else if (id == QUALITY_REPORT_ID_CONN_FAIL) {
-            str += mBqrConnectFail + "\n}";
+            str = str + mBqrConnectFail + "\n}";
         } else if (id == QUALITY_REPORT_ID_MONITOR) {
-            str += "}";
+            str = str + "}";
         }
 
         return str;

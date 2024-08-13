@@ -86,19 +86,19 @@ public class SdpMnsRecord implements Parcelable {
         String ret = "Bluetooth MNS SDP Record:\n";
 
         if (mRfcommChannelNumber != -1) {
-            ret += "RFCOMM Chan Number: " + mRfcommChannelNumber + "\n";
+            ret = ret + "RFCOMM Chan Number: " + mRfcommChannelNumber + "\n";
         }
         if (mL2capPsm != -1) {
-            ret += "L2CAP PSM: " + mL2capPsm + "\n";
+            ret = ret + "L2CAP PSM: " + mL2capPsm + "\n";
         }
         if (mServiceName != null) {
-            ret += "Service Name: " + mServiceName + "\n";
+            ret = ret + "Service Name: " + mServiceName + "\n";
         }
         if (mSupportedFeatures != -1) {
-            ret += "Supported features: " + mSupportedFeatures + "\n";
+            ret = ret + "Supported features: " + mSupportedFeatures + "\n";
         }
         if (mProfileVersion != -1) {
-            ret += "Profile_version: " + mProfileVersion + "\n";
+            ret = ret + "Profile_version: " + mProfileVersion + "\n";
         }
         return ret;
     }

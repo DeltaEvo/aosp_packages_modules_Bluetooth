@@ -3320,18 +3320,16 @@ public final class BluetoothAdapter {
                 }
             case BluetoothStatusCodes.RFCOMM_LISTENER_OPERATION_FAILED_DIFFERENT_APP:
                 throw new IllegalStateException(
-                        String.format(
-                                "RFCOMM listener for UUID %s was not registered by this app",
-                                uuid));
+                        "RFCOMM listener for UUID " + uuid + " was not registered by this app");
             case BluetoothStatusCodes.RFCOMM_LISTENER_NO_SOCKET_AVAILABLE:
                 return null;
             default:
                 Log.e(
                         TAG,
-                        String.format(
-                                "Unexpected result: (%d), from the adapter service while retrieving"
-                                        + " an rfcomm socket",
-                                socketInfo.status));
+                        "Unexpected result: ("
+                                + socketInfo.status
+                                + "), from the adapter service"
+                                + " while retrieving an rfcomm socket");
                 return null;
         }
     }

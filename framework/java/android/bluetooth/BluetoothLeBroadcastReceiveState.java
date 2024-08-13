@@ -536,8 +536,9 @@ public final class BluetoothLeBroadcastReceiveState implements Parcelable {
                         + "\n  Number Of Subgroups:"
                         + mNumSubgroups);
         for (int i = 0; i < mNumSubgroups; i++) {
-            receiveState +=
-                    ("\n    Subgroup index:"
+            receiveState =
+                    receiveState
+                            + ("\n    Subgroup index:"
                                     + i
                                     + "\n      BIS Sync State:"
                                     + bisSyncStateToString(mBisSyncState.get(i), i))
