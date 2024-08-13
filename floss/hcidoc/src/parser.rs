@@ -29,6 +29,7 @@ const SNOOP_HEADER_SIZE: usize = 16;
 #[derive(Debug, FromPrimitive, ToPrimitive)]
 #[repr(u32)]
 enum SnoopDatalinkType {
+    H4Uart = 1002,
     LinuxMonitor = 2001,
 }
 
@@ -200,6 +201,43 @@ impl GeneralSnoopPacket for LinuxSnoopPacket {
     }
 }
 
+pub struct H4SnoopPacket {
+    pub preamble: SnoopPacketPreamble,
+    pub data: Vec<u8>,
+    pub pkt_type: u8,
+}
+
+impl GeneralSnoopPacket for H4SnoopPacket {
+    fn adapter_index(&self) -> u16 {
+        0
+    }
+    fn opcode(&self) -> SnoopOpcodes {
+        match self.pkt_type {
+            0x01 => SnoopOpcodes::Command,
+            0x02 => match self.preamble.flags & 0x01 {
+                0x00 => SnoopOpcodes::AclTxPacket,
+                _ => SnoopOpcodes::AclRxPacket,
+            },
+            0x03 => match self.preamble.flags & 0x01 {
+                0x00 => SnoopOpcodes::ScoTxPacket,
+                _ => SnoopOpcodes::ScoRxPacket,
+            },
+            0x04 => SnoopOpcodes::Event,
+            0x05 => match self.preamble.flags & 0x01 {
+                0x00 => SnoopOpcodes::IsoTx,
+                _ => SnoopOpcodes::IsoRx,
+            },
+            _ => SnoopOpcodes::Invalid,
+        }
+    }
+    fn preamble(&self) -> &SnoopPacketPreamble {
+        &self.preamble
+    }
+    fn data(&self) -> &Vec<u8> {
+        &self.data
+    }
+}
+
 /// Maximum packet size for snoop is the max ACL size + 4 bytes.
 const SNOOP_MAX_PACKET_SIZE: usize = 1486 + 4;
 
@@ -244,6 +282,58 @@ impl<'a> Iterator for LinuxSnoopReader<'a> {
     }
 }
 
+/// Reader for H4/UART/Android snoop files.
+pub struct H4SnoopReader<'a> {
+    fd: Box<dyn BufRead + 'a>,
+}
+
+impl<'a> H4SnoopReader<'a> {
+    fn new(fd: Box<dyn BufRead + 'a>) -> Self {
+        H4SnoopReader { fd }
+    }
+}
+
+impl<'a> Iterator for H4SnoopReader<'a> {
+    type Item = Box<dyn GeneralSnoopPacket>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let preamble = match SnoopPacketPreamble::from_fd(&mut self.fd) {
+            Some(preamble) => preamble,
+            None => {
+                return None;
+            }
+        };
+
+        if preamble.included_length > 0 {
+            let size: usize = (preamble.included_length - 1).try_into().unwrap();
+            let mut type_buf = [0u8; 1];
+            match self.fd.read_exact(&mut type_buf) {
+                Ok(()) => {}
+                Err(e) => {
+                    eprintln!("Couldn't read any packet data: {}", e);
+                    return None;
+                }
+            };
+
+            let mut rem_data = [0u8; SNOOP_MAX_PACKET_SIZE];
+            match self.fd.read_exact(&mut rem_data[0..size]) {
+                Ok(()) => Some(Box::new(H4SnoopPacket {
+                    preamble,
+                    data: rem_data[0..size].to_vec(),
+                    pkt_type: type_buf[0],
+                })),
+                Err(e) => {
+                    eprintln!("Couldn't read any packet data: {}", e);
+                    None
+                }
+            }
+        } else {
+            eprintln!("Non-positive packet size: {}", preamble.included_length);
+            None
+        }
+    }
+}
+
 pub struct LogParser {
     fd: Box<dyn BufRead>,
     log_type: SnoopDatalinkType,
@@ -270,6 +360,7 @@ impl<'a> LogParser {
     pub fn get_snoop_iterator(self) -> Box<dyn Iterator<Item = Box<dyn GeneralSnoopPacket>>> {
         let reader = Box::new(BufReader::new(self.fd));
         match self.log_type {
+            SnoopDatalinkType::H4Uart => Box::new(H4SnoopReader::new(reader)),
             SnoopDatalinkType::LinuxMonitor => Box::new(LinuxSnoopReader::new(reader)),
         }
     }
