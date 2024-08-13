@@ -206,7 +206,7 @@ static void bta_dm_pinname_cback(const tBTM_REMOTE_DEV_NAME* p_data) {
     sec_event.cfm_req.dev_class = bta_dm_sec_cb.pin_dev_class;
     log::info("CoD: sec_event.cfm_req.dev_class = {}", dev_class_text(sec_event.cfm_req.dev_class));
 
-    if (p_result && p_result->status == tBTM_STATUS::BTM_SUCCESS) {
+    if (p_result && p_result->btm_status == tBTM_STATUS::BTM_SUCCESS) {
       bd_name_copy(sec_event.cfm_req.bd_name, p_result->remote_bd_name);
     } else { /* No name found */
       sec_event.cfm_req.bd_name[0] = 0;
@@ -227,7 +227,7 @@ static void bta_dm_pinname_cback(const tBTM_REMOTE_DEV_NAME* p_data) {
     sec_event.pin_req.bd_addr = bta_dm_sec_cb.pin_bd_addr;
     sec_event.pin_req.dev_class = bta_dm_sec_cb.pin_dev_class;
 
-    if (p_result && p_result->status == tBTM_STATUS::BTM_SUCCESS) {
+    if (p_result && p_result->btm_status == tBTM_STATUS::BTM_SUCCESS) {
       bd_name_copy(sec_event.pin_req.bd_name, p_result->remote_bd_name);
     } else { /* No name found */
       sec_event.pin_req.bd_name[0] = 0;

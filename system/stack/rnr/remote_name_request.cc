@@ -182,7 +182,7 @@ tBTM_STATUS btm_initiate_rem_name(const RawAddress& remote_bda, uint64_t timeout
 void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn, uint16_t /* evt_len */,
                              tHCI_STATUS hci_status) {
   tBTM_REMOTE_DEV_NAME rem_name = {
-          .status = BTM_BAD_VALUE_RET,
+          .btm_status = BTM_BAD_VALUE_RET,
           .bd_addr = bda ? *bda : RawAddress::kEmpty,
           .remote_bd_name = {},
           .hci_status = hci_status,
@@ -215,7 +215,7 @@ void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn, uint16_t 
         /* Copy the name from the data stream into the return structure */
         /* Note that even if it is not being returned, it is used as a  */
         /*      temporary buffer.                                       */
-        rem_name.status = BTM_SUCCESS;
+        rem_name.btm_status = BTM_SUCCESS;
         if (bdn) {
           bd_name_copy(rem_name.remote_bd_name, bdn);
         } else {
