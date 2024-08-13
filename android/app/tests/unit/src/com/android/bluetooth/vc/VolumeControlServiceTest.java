@@ -573,11 +573,7 @@ public class VolumeControlServiceTest {
                         idx -> {
                             // Given the reference volume index, set the LeAudio Volume
                             stackEvent.valueInt2 =
-                                    getLeAudioVolume(
-                                            idx,
-                                            mAudioManager.getStreamMinVolume(streamType),
-                                            mAudioManager.getStreamMaxVolume(streamType),
-                                            streamType);
+                                    getLeAudioVolume(idx, minIdx, maxIdx, streamType);
                             mService.messageFromNative(stackEvent);
 
                             // Verify that setting LeAudio Volume, sets the original volume index to

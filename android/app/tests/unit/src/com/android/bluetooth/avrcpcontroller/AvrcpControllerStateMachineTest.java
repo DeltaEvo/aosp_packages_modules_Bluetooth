@@ -378,7 +378,6 @@ public class AvrcpControllerStateMachineTest {
     @Test
     public void testDisconnectWithNullBrowseTree() {
         int numBroadcastsSent = setUpConnectedState(true, true);
-        mAvrcpControllerService.stop();
 
         testDisconnectInternal(numBroadcastsSent);
     }

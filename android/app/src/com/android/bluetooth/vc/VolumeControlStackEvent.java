@@ -173,7 +173,7 @@ public class VolumeControlStackEvent {
     private static String eventTypeString1ToString(int type, String value) {
         switch (type) {
             case EVENT_TYPE_EXT_AUDIO_OUT_DESCRIPTION_CHANGED:
-                return "{descrition:" + value + "}";
+                return "{description:" + value + "}";
             default:
                 break;
         }

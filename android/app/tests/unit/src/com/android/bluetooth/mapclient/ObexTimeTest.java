@@ -59,8 +59,13 @@ public class ObexTimeTest {
     @SuppressWarnings("JavaUtilDate")
     private static final Date VALID_DATE = new Date(VALID_TS);
 
+    @SuppressWarnings("JavaUtilDate")
     private static final Date VALID_DATE_LOCAL_TZ = new Date(VALID_TS_LOCAL_TZ);
+
+    @SuppressWarnings("JavaUtilDate")
     private static final Date VALID_DATE_WITH_OFFSET_POS = new Date(VALID_TS_OFFSET_POS);
+
+    @SuppressWarnings("JavaUtilDate")
     private static final Date VALID_DATE_WITH_OFFSET_NEG = new Date(VALID_TS_OFFSET_NEG);
 
     private static final Instant VALID_INSTANT = Instant.ofEpochMilli(VALID_TS);
