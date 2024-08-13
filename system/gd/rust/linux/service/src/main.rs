@@ -282,7 +282,7 @@ extern "C" fn handle_sigterm(_signum: i32) {
     if let Some((tx, notifier)) = guard.as_ref() {
         log::debug!("Handling SIGTERM by disabling the adapter!");
         let txl = tx.clone();
-        tokio::spawn(async move {
+        topstack::get_runtime().spawn(async move {
             // Send the shutdown message here.
             let _ = txl.send(Message::InterfaceShutdown).await;
         });
@@ -295,7 +295,7 @@ extern "C" fn handle_sigterm(_signum: i32) {
 
         log::debug!("SIGTERM cleaning up the stack.");
         let txl = tx.clone();
-        tokio::spawn(async move {
+        topstack::get_runtime().spawn(async move {
             // Clean up the profiles first as some of them might require main thread to clean up.
             let _ = txl.send(Message::CleanupProfiles).await;
             // Currently there is no good way to know when the profile is cleaned.
