@@ -17,6 +17,8 @@
 package android.bluetooth;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
+import android.os.Parcel;
 import android.os.UserHandle;
 import android.util.Log;
 
@@ -305,5 +307,18 @@ public final class BluetoothUtils {
             throw new IllegalArgumentException("Too many arguments");
         }
         return sb.toString();
+    }
+
+    /**
+     * Wrapper for Parcel.writeString that silence AndroidFrameworkEfficientParcelable
+     *
+     * <p>ErrorProne wants us to use writeString8 but it is not exposed outside of fwk/base. The
+     * alternative to deactivate entirely AndroidFrameworkEfficientParcelable is not good because
+     * there are other error reported by it
+     *
+     * @hide
+     */
+    public static void writeStringToParcel(@NonNull Parcel out, @Nullable String str) {
+        out.writeString(str);
     }
 }

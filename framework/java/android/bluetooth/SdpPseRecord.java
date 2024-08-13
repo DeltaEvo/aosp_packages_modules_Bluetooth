@@ -88,7 +88,7 @@ public class SdpPseRecord implements Parcelable {
         dest.writeInt(mProfileVersion);
         dest.writeInt(mSupportedFeatures);
         dest.writeInt(mSupportedRepositories);
-        dest.writeString(mServiceName);
+        BluetoothUtils.writeStringToParcel(dest, mServiceName);
     }
 
     @Override

@@ -109,7 +109,7 @@ public class SdpMasRecord implements Parcelable {
         dest.writeInt(mProfileVersion);
         dest.writeInt(mSupportedFeatures);
         dest.writeInt(mSupportedMessageTypes);
-        dest.writeString(mServiceName);
+        BluetoothUtils.writeStringToParcel(dest, mServiceName);
     }
 
     @Override

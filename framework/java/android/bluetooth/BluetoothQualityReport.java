@@ -455,11 +455,11 @@ public final class BluetoothQualityReport implements Parcelable {
     @SystemApi
     @Override
     public void writeToParcel(@NonNull Parcel out, int flags) {
-        out.writeString(mAddr);
+        BluetoothUtils.writeStringToParcel(out, mAddr);
         out.writeInt(mLmpVer);
         out.writeInt(mLmpSubVer);
         out.writeInt(mManufacturerId);
-        out.writeString(mName);
+        BluetoothUtils.writeStringToParcel(out, mName);
         out.writeInt(mBluetoothClass.getClassOfDevice());
         mBqrCommon.writeToParcel(out, flags);
         int id = mBqrCommon.getQualityReportId();
@@ -1075,7 +1075,7 @@ public final class BluetoothQualityReport implements Parcelable {
             dest.writeLong(mLastFlowOnTimestamp);
             dest.writeLong(mOverflowCount);
             dest.writeLong(mUnderflowCount);
-            dest.writeString(mAddr);
+            BluetoothUtils.writeStringToParcel(dest, mAddr);
             dest.writeInt(mCalFailedItemCount);
         }
 

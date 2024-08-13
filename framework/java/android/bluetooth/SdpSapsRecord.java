@@ -58,7 +58,7 @@ public class SdpSapsRecord implements Parcelable {
     public void writeToParcel(Parcel dest, int flags) {
         dest.writeInt(mRfcommChannelNumber);
         dest.writeInt(mProfileVersion);
-        dest.writeString(mServiceName);
+        BluetoothUtils.writeStringToParcel(dest, mServiceName);
     }
 
     @Override

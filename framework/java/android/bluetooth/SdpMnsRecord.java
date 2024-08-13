@@ -76,7 +76,7 @@ public class SdpMnsRecord implements Parcelable {
     public void writeToParcel(Parcel dest, int flags) {
         dest.writeInt(mRfcommChannelNumber);
         dest.writeInt(mL2capPsm);
-        dest.writeString(mServiceName);
+        BluetoothUtils.writeStringToParcel(dest, mServiceName);
         dest.writeInt(mSupportedFeatures);
         dest.writeInt(mProfileVersion);
     }
