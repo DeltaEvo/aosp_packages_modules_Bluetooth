@@ -145,16 +145,19 @@ public final class BluetoothManager {
     @RequiresLegacyBluetoothPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(BLUETOOTH_CONNECT)
+    @SuppressWarnings("AndroidFrameworkRethrowFromSystem") // iGatt is not system server
     public List<BluetoothDevice> getDevicesMatchingConnectionStates(int profile, int[] states) {
         if (profile != BluetoothProfile.GATT && profile != BluetoothProfile.GATT_SERVER) {
             throw new IllegalArgumentException("Profile not supported: " + profile);
         }
 
-        List<BluetoothDevice> devices = new ArrayList<BluetoothDevice>();
+        List<BluetoothDevice> devices = new ArrayList<>();
 
+        IBluetoothGatt iGatt = mAdapter.getBluetoothGatt();
+        if (iGatt == null) {
+            return devices;
+        }
         try {
-            IBluetoothGatt iGatt = mAdapter.getBluetoothGatt();
-            if (iGatt == null) return devices;
             devices =
                     Attributable.setAttributionSource(
                             iGatt.getDevicesMatchingConnectionStates(
