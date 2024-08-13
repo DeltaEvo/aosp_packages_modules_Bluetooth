@@ -45,6 +45,7 @@
 #include "main/shim/acl_api.h"
 #include "main/shim/entry.h"
 #include "main/shim/helpers.h"
+#include "metrics/bluetooth_event.h"
 #include "osi/include/allocator.h"
 #include "osi/include/properties.h"
 #include "stack/btm/btm_ble_int.h"
@@ -2318,6 +2319,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr, const uint8_
         /* Both we and the peer are 2.1 - continue to create connection */
         else {
           tBTM_STATUS req_status = btm_sec_dd_create_conn(p_dev_rec);
+          bluetooth::metrics::LogAclAfterRemoteNameRequest(bd_addr, req_status);
           if (req_status == tBTM_STATUS::BTM_SUCCESS) {
             await_connection = false;
           } else if (req_status != BTM_CMD_STARTED) {
