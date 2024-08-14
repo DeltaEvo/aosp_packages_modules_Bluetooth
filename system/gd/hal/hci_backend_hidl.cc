@@ -87,28 +87,34 @@ class HidlHci : public HciBackend {
 public:
   HidlHci(Handler* module_handler) {
     log::info("Trying to find a HIDL interface");
+    const int32_t timeout_ms = get_adjusted_timeout(500);
 
     auto get_service_alarm = new os::Alarm(module_handler);
-    get_service_alarm->Schedule(BindOnce([] {
-                                  const std::string kBoardProperty = "ro.product.board";
-                                  const std::string kCuttlefishBoard = "cutf";
-                                  auto board_name = os::GetSystemProperty(kBoardProperty);
-                                  bool emulator = board_name.has_value() &&
-                                                  board_name.value() == kCuttlefishBoard;
-                                  if (emulator) {
-                                    log::error("board_name: {}", board_name.value());
-                                    log::error(
-                                            "Unable to get a Bluetooth service after 500ms, start "
-                                            "the HAL before starting "
-                                            "Bluetooth");
-                                    return;
-                                  }
-                                  log::fatal(
-                                          "Unable to get a Bluetooth service after 500ms, start "
-                                          "the HAL before starting "
-                                          "Bluetooth");
-                                }),
-                                std::chrono::milliseconds(500));
+    get_service_alarm->Schedule(
+            BindOnce(
+                    [](uint32_t timeout_ms) {
+                      const std::string kBoardProperty = "ro.product.board";
+                      const std::string kCuttlefishBoard = "cutf";
+                      auto board_name = os::GetSystemProperty(kBoardProperty);
+                      bool emulator =
+                              board_name.has_value() && board_name.value() == kCuttlefishBoard;
+                      if (emulator) {
+                        log::error("board_name: {}", board_name.value());
+                        log::error(
+                                "Unable to get a Bluetooth service after {}ms, start "
+                                "the HAL before starting "
+                                "Bluetooth",
+                                timeout_ms);
+                        return;
+                      }
+                      log::fatal(
+                              "Unable to get a Bluetooth service after {}ms, start "
+                              "the HAL before starting "
+                              "Bluetooth",
+                              timeout_ms);
+                    },
+                    timeout_ms),
+            std::chrono::milliseconds(timeout_ms));
 
     hci_1_1_ = IBluetoothHci_1_1::getService();
     if (hci_1_1_) {
@@ -167,6 +173,20 @@ public:
   }
 
 private:
+  static int32_t get_adjusted_timeout(int32_t timeout) {
+    // Slower devices set this property.  While waiting longer for bluetooth
+    // is a poor user experience, it's not unexpected on these devices.
+    // At the same time, we don't get arbitrarily long to start up bluetooth.
+    // There are other, more concretely set timeouts which can get triggered,
+    // and having a timeout here helps narrow down the problematic area.
+    // As a pragmatic compromise, we cap this multiplier at 2.
+    const uint32_t multiplier = os::GetSystemPropertyUint32("ro.hw_timeout_multiplier", 1);
+    if (multiplier > 1) {
+      return timeout * 2;
+    }
+    return timeout;
+  }
+
   android::sp<DeathRecipient> death_recipient_;
   android::sp<HidlHciCallbacks> hci_callbacks_;
   android::sp<IBluetoothHci_1_0> hci_;
