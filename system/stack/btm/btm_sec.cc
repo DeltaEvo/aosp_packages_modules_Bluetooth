@@ -2998,6 +2998,7 @@ void btm_sec_auth_complete(uint16_t handle, tHCI_STATUS status) {
   bool was_authenticating = false;
 
   if (p_dev_rec) {
+    bluetooth::metrics::LogAuthenticationComplete(p_dev_rec->bd_addr, status);
     log::verbose(
             "Security Manager: in state: {}, handle: {}, status: {}, "
             "dev->sec_rec.classic_link:{}, bda: {}, RName: {}",
