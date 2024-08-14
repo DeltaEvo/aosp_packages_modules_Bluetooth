@@ -275,7 +275,7 @@ public class BluetoothManagerServiceTest {
         verify(mManagerCallback).onBluetoothServiceUp(any());
 
         IBluetoothCallback btCallback = captureBluetoothCallback(mAdapterBinder);
-        verify(mAdapterBinder).enable(anyBoolean(), any());
+        verify(mAdapterBinder).offToBleOn(anyBoolean(), any());
 
         // AdapterService is sending AdapterState.BLE_TURN_ON that will trigger this callback
         // and in parallel it call its `bringUpBle()`

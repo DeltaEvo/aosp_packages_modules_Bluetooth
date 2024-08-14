@@ -2304,16 +2304,16 @@ public class AdapterService extends Service {
         }
 
         @Override
-        public void enable(boolean quietMode, AttributionSource source) {
+        public void offToBleOn(boolean quietMode, AttributionSource source) {
             AdapterService service = getService();
             if (service == null
-                    || !callerIsSystemOrActiveOrManagedUser(service, TAG, "enable")
-                    || !Utils.checkConnectPermissionForDataDelivery(
-                            service, source, "AdapterService enable")) {
+                    || !callerIsSystemOrActiveOrManagedUser(service, TAG, "offToBleOn")) {
                 return;
             }
 
-            service.enable(quietMode);
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
+
+            service.offToBleOn(quietMode);
         }
 
         @Override
@@ -4611,11 +4611,11 @@ public class AdapterService extends Service {
         return BluetoothAdapter.STATE_OFF;
     }
 
-    public synchronized void enable(boolean quietMode) {
+    public synchronized void offToBleOn(boolean quietMode) {
         // Enforce the user restriction for disallowing Bluetooth if it was set.
         if (mUserManager.hasUserRestrictionForUser(
                 UserManager.DISALLOW_BLUETOOTH, UserHandle.SYSTEM)) {
-            Log.d(TAG, "enable() called when Bluetooth was disallowed");
+            Log.d(TAG, "offToBleOn() called when Bluetooth was disallowed");
             return;
         }
         if (Flags.fastBindToApp()) {
@@ -4623,7 +4623,7 @@ public class AdapterService extends Service {
             mHandler.post(() -> init());
         }
 
-        Log.i(TAG, "enable() - Enable called with quiet mode status =  " + quietMode);
+        Log.i(TAG, "offToBleOn() - Enable called with quiet mode status =  " + quietMode);
         mQuietmode = quietMode;
         mAdapterStateMachine.sendMessage(AdapterState.BLE_TURN_ON);
     }

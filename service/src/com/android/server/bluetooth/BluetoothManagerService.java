@@ -1660,11 +1660,7 @@ class BluetoothManagerService {
                         }
 
                         // Do enable request
-                        try {
-                            mAdapter.enable(mQuietEnable, mContext.getAttributionSource());
-                        } catch (RemoteException e) {
-                            Log.e(TAG, "Unable to call enable()", e);
-                        }
+                        offToBleOn();
                         if (Flags.fastBindToApp()) {
                             sendBluetoothServiceUpCallback();
                         }
@@ -2016,14 +2012,23 @@ class BluetoothManagerService {
                 bindToAdapter();
             } else if (!Flags.fastBindToApp() && mAdapter != null) {
                 // Enable bluetooth
-                try {
-                    mAdapter.enable(mQuietEnable, mContext.getAttributionSource());
-                } catch (RemoteException e) {
-                    Log.e(TAG, "Unable to call enable()", e);
-                }
+                offToBleOn();
             }
         } finally {
             mAdapterLock.writeLock().unlock();
+        }
+    }
+
+    private void offToBleOn() {
+        if (!mState.oneOf(STATE_OFF)) {
+            Log.d(TAG, "offToBleOn: Impossible transition from " + mState);
+            return;
+        }
+        Log.d(TAG, "offToBleOn: Sending request");
+        try {
+            mAdapter.offToBleOn(mQuietEnable, mContext.getAttributionSource());
+        } catch (RemoteException e) {
+            Log.e(TAG, "Unable to call offToBleOn()", e);
         }
     }
 
