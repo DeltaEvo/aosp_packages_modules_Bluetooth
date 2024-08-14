@@ -28,6 +28,7 @@ namespace metrics {
 void LogAclCompletionEvent(const hci::Address& address, hci::ErrorCode reason,
                            bool is_locally_initiated);
 
+void LogRemoteNameRequestCompletion(const RawAddress& raw_address, tHCI_STATUS hci_status);
 
 void LogAclAfterRemoteNameRequest(const RawAddress& raw_address, tBTM_STATUS status);
 
