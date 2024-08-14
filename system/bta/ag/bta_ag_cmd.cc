@@ -1668,6 +1668,8 @@ static void bta_ag_hfp_result(tBTA_AG_SCB* p_scb, const tBTA_AG_API_RESULT& resu
       break;
 
     case BTA_AG_CALL_CANCEL_RES:
+      alarm_cancel(p_scb->ring_timer);
+
       /* send indicators */
       bta_ag_send_call_inds(p_scb, result.result);
       break;
