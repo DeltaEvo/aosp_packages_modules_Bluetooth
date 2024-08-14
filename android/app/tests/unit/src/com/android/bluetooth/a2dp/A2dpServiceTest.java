@@ -104,7 +104,9 @@ public class A2dpServiceTest {
 
     @Parameters(name = "{0}")
     public static List<FlagsParameterization> getParams() {
-        return FlagsParameterization.allCombinationsOf(Flags.FLAG_A2DP_SERVICE_LOOPER);
+        return FlagsParameterization.allCombinationsOf(
+                Flags.FLAG_A2DP_SERVICE_LOOPER,
+                Flags.FLAG_A2DP_BROADCAST_CONNECTION_STATE_WHEN_TURNED_OFF);
     }
 
     public A2dpServiceTest(FlagsParameterization flags) {
@@ -197,6 +199,15 @@ public class A2dpServiceTest {
 
         mA2dpService.stop();
         dispatchAtLeastOneMessage();
+
+        if (Flags.a2dpBroadcastConnectionStateWhenTurnedOff()) {
+            // Verify that the intent CONNECTION_STATE_CHANGED is generated
+            // for the existing connections.
+            verifyConnectionStateIntent(
+                    sTestDevice,
+                    BluetoothProfile.STATE_DISCONNECTED,
+                    BluetoothProfile.STATE_CONNECTED);
+        }
 
         // Verify that setActiveDevice(null) was called during shutdown
         verify(mMockNativeInterface).setActiveDevice(null);
