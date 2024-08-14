@@ -1974,7 +1974,7 @@ private:
         device->num_intervals_since_last_rssi_read = 0;
         log::debug("bd_addr={}", device->address);
         if (get_btm_client_interface().link_controller.BTM_ReadRSSI(
-                    device->address, read_rssi_callback) != BTM_CMD_STARTED) {
+                    device->address, read_rssi_callback) != tBTM_STATUS::BTM_CMD_STARTED) {
           log::warn("Unable to read RSSI peer:{}", device->address);
         }
       }

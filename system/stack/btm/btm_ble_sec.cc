@@ -1158,7 +1158,7 @@ tBTM_STATUS btm_ble_set_encryption(const RawAddress& bd_addr, tBTM_BLE_SEC_ACT s
       }
 
       if (SMP_Pair(bd_addr) == SMP_STARTED) {
-        cmd = BTM_CMD_STARTED;
+        cmd = tBTM_STATUS::BTM_CMD_STARTED;
         p_rec->sec_rec.le_link = tSECURITY_STATE::AUTHENTICATING;
       }
       break;
@@ -1242,7 +1242,7 @@ tBTM_STATUS btm_ble_start_encrypt(const RawAddress& bda, bool use_stk, Octet16* 
     p_rec->sec_rec.le_link = tSECURITY_STATE::ENCRYPTING;
   }
 
-  return BTM_CMD_STARTED;
+  return tBTM_STATUS::BTM_CMD_STARTED;
 }
 
 /*******************************************************************************
@@ -1683,7 +1683,7 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
       case SMP_SIRK_VERIFICATION_REQ_EVT:
         res = (*btm_sec_cb.api.p_sirk_verification_callback)(bd_addr);
         log::debug("SMP SIRK verification result:{}", btm_status_text(res));
-        if (res != BTM_CMD_STARTED) {
+        if (res != tBTM_STATUS::BTM_CMD_STARTED) {
           return res;
         }
 

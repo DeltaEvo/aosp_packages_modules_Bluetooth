@@ -155,7 +155,7 @@ static sco_socket_t* sco_socket_establish_locked(bool is_listening, const RawAdd
   status = get_btm_client_interface().sco.BTM_CreateSco(
           bd_addr, !is_listening, params.packet_types, &sco_socket->sco_handle,
           connect_completed_cb, disconnect_completed_cb);
-  if (status != BTM_CMD_STARTED) {
+  if (status != tBTM_STATUS::BTM_CMD_STARTED) {
     log::error("unable to create SCO socket: {}", status);
     goto error;
   }

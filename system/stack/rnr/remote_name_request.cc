@@ -100,12 +100,12 @@ void btm_inq_remote_name_timer_timeout(void* /* data */) { btm_inq_rmt_name_fail
  * Input Params:    remote_bda: Remote address to execute RNR
  *                  timeout_ms: Internal timeout to await response
  * *                p_cb:       Callback function called when
- *                              BTM_CMD_STARTED is returned.
+ *                              tBTM_STATUS::BTM_CMD_STARTED is returned.
  *                              A pointer to tBTM_REMOTE_DEV_NAME is
  *                              passed to the callback.
  *
  * Returns
- *                  BTM_CMD_STARTED is returned if the request was sent to HCI.
+ *                  tBTM_STATUS::BTM_CMD_STARTED is returned if the request was sent to HCI.
  *                    and the callback will be called.
  *                  BTM_BUSY if already in progress
  *                  BTM_NO_RESOURCES if could not allocate resources to start
@@ -165,7 +165,7 @@ tBTM_STATUS btm_initiate_rem_name(const RawAddress& remote_bda, uint64_t timeout
   alarm_set_on_mloop(btm_cb.rnr.remote_name_timer, timeout_ms, btm_inq_remote_name_timer_timeout,
                      NULL);
 
-  return BTM_CMD_STARTED;
+  return tBTM_STATUS::BTM_CMD_STARTED;
 }
 
 /*******************************************************************************
@@ -258,12 +258,12 @@ void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn, uint16_t 
  *
  * Input Params:    remote_bda      - device address of name to retrieve
  *                  p_cb            - callback function called when
- *                                    BTM_CMD_STARTED is returned.
+ *                                    tBTM_STATUS::BTM_CMD_STARTED is returned.
  *                                    A pointer to tBTM_REMOTE_DEV_NAME is
  *                                    passed to the callback.
  *
  * Returns
- *                  BTM_CMD_STARTED is returned if the request was successfully
+ *                  tBTM_STATUS::BTM_CMD_STARTED is returned if the request was successfully
  *                                  sent to HCI.
  *                  BTM_BUSY if already in progress
  *                  BTM_UNKNOWN_ADDR if device address is bad
@@ -294,7 +294,7 @@ tBTM_STATUS BTM_ReadRemoteDeviceName(const RawAddress& remote_bda, tBTM_NAME_CMP
  * Input Params:    None
  *
  * Returns
- *                  BTM_CMD_STARTED is returned if the request was successfully
+ *                  tBTM_STATUS::BTM_CMD_STARTED is returned if the request was successfully
  *                                  sent to HCI.
  *                  BTM_NO_RESOURCES if could not allocate resources to start
  *                                   the command
@@ -327,5 +327,5 @@ tBTM_STATUS BTM_CancelRemoteDeviceName(void) {
       btm_process_remote_name(&btm_cb.rnr.remname_bda, nullptr, 0, HCI_ERR_UNSPECIFIED);
     }
   }
-  return BTM_CMD_STARTED;
+  return tBTM_STATUS::BTM_CMD_STARTED;
 }

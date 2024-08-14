@@ -551,7 +551,7 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration, tBTM_INQ_RESULTS_CB* p_
                                     btm_cb.ble_ctr_cb.inq_var.scan_window == ll_scan_window;
       if (is_ongoing_low_latency) {
         log::warn("Observer was already active, is_low_latency: {}", is_ongoing_low_latency);
-        return BTM_CMD_STARTED;
+        return tBTM_STATUS::BTM_CMD_STARTED;
       }
       // stop any scan without low latency config
       btm_ble_stop_observe();
@@ -559,7 +559,7 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration, tBTM_INQ_RESULTS_CB* p_
 
     btm_cb.ble_ctr_cb.p_obs_results_cb = p_results_cb;
     btm_cb.ble_ctr_cb.p_obs_cmpl_cb = p_cmpl_cb;
-    status = BTM_CMD_STARTED;
+    status = tBTM_STATUS::BTM_CMD_STARTED;
 
     /* scan is not started */
     if (!btm_cb.ble_ctr_cb.is_ble_scan_active()) {
@@ -585,7 +585,7 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration, tBTM_INQ_RESULTS_CB* p_
     BTM_LogHistory(kBtmLogTag, RawAddress::kEmpty, "Le observe started",
                    "low latency scanning enabled");
 
-    if (status == BTM_CMD_STARTED) {
+    if (status == tBTM_STATUS::BTM_CMD_STARTED) {
       btm_cb.ble_ctr_cb.set_ble_observe_active();
       if (duration != 0) {
         /* start observer timer */
@@ -601,7 +601,7 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration, tBTM_INQ_RESULTS_CB* p_
                    base::StringPrintf("duration_s:%6.3f results:%-3lu",
                                       (double)duration_timestamp / 1000.0,
                                       btm_cb.neighbor.le_observe.results));
-    status = BTM_CMD_STARTED;
+    status = tBTM_STATUS::BTM_CMD_STARTED;
     btm_ble_stop_observe();
   } else {
     log::error("Observe not active");
@@ -1582,7 +1582,7 @@ tBTM_STATUS btm_ble_start_inquiry(uint8_t duration) {
   };
   BTM_LogHistory(kBtmLogTag, RawAddress::kEmpty, "Le inquiry started");
 
-  return BTM_CMD_STARTED;
+  return tBTM_STATUS::BTM_CMD_STARTED;
 }
 
 /*******************************************************************************
@@ -1650,7 +1650,7 @@ tBTM_STATUS btm_ble_read_remote_name(const RawAddress& remote_bda, tBTM_NAME_CMP
   alarm_set_on_mloop(btm_cb.rnr.remote_name_timer, BTM_EXT_BLE_RMT_NAME_TIMEOUT_MS,
                      btm_inq_remote_name_timer_timeout, NULL);
 
-  return BTM_CMD_STARTED;
+  return tBTM_STATUS::BTM_CMD_STARTED;
 }
 
 /*******************************************************************************

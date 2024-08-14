@@ -321,7 +321,7 @@ static bool bta_ag_remove_sco(tBTA_AG_SCB* p_scb, bool only_active) {
     if (!only_active || p_scb->sco_idx == bta_ag_cb.sco.cur_idx) {
       tBTM_STATUS status = get_btm_client_interface().sco.BTM_RemoveSco(p_scb->sco_idx);
       log::debug("Removed SCO index:0x{:04x} status:{}", p_scb->sco_idx, btm_status_text(status));
-      if (status == BTM_CMD_STARTED) {
+      if (status == tBTM_STATUS::BTM_CMD_STARTED) {
         /* SCO is connected; set current control block */
         bta_ag_cb.sco.p_curr_scb = p_scb;
         return true;
@@ -553,9 +553,9 @@ void bta_ag_create_sco(tBTA_AG_SCB* p_scb, bool is_orig) {
       }
     }
 
-    if (get_btm_client_interface().sco.BTM_CreateSco(&p_scb->peer_addr, true, params.packet_types,
-                                                     &p_scb->sco_idx, bta_ag_sco_conn_cback,
-                                                     bta_ag_sco_disc_cback) == BTM_CMD_STARTED) {
+    if (get_btm_client_interface().sco.BTM_CreateSco(
+                &p_scb->peer_addr, true, params.packet_types, &p_scb->sco_idx,
+                bta_ag_sco_conn_cback, bta_ag_sco_disc_cback) == tBTM_STATUS::BTM_CMD_STARTED) {
       /* Initiating the connection, set the current sco handle */
       bta_ag_cb.sco.cur_idx = p_scb->sco_idx;
       /* Configure input/output data. */
@@ -570,7 +570,7 @@ void bta_ag_create_sco(tBTA_AG_SCB* p_scb, bool is_orig) {
     tBTM_STATUS btm_status = get_btm_client_interface().sco.BTM_CreateSco(
             &p_scb->peer_addr, false, params.packet_types, &p_scb->sco_idx, bta_ag_sco_conn_cback,
             bta_ag_sco_disc_cback);
-    if (btm_status == BTM_CMD_STARTED) {
+    if (btm_status == tBTM_STATUS::BTM_CMD_STARTED) {
       if (get_btm_client_interface().sco.BTM_RegForEScoEvts(
                   p_scb->sco_idx, bta_ag_esco_connreq_cback) != tBTM_STATUS::BTM_SUCCESS) {
         log::warn("Unable to register for ESCO events");
