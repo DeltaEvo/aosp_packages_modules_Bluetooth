@@ -2317,16 +2317,16 @@ public class AdapterService extends Service {
         }
 
         @Override
-        public void disable(AttributionSource source) {
+        public void onToBleOn(AttributionSource source) {
             AdapterService service = getService();
             if (service == null
-                    || !callerIsSystemOrActiveOrManagedUser(service, TAG, "disable")
-                    || !Utils.checkConnectPermissionForDataDelivery(
-                            service, source, "AdapterService disable")) {
+                    || !callerIsSystemOrActiveOrManagedUser(service, TAG, "onToBleOn")) {
                 return;
             }
 
-            service.disable();
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
+
+            service.onToBleOn();
         }
 
         @Override
@@ -4628,8 +4628,8 @@ public class AdapterService extends Service {
         mAdapterStateMachine.sendMessage(AdapterState.BLE_TURN_ON);
     }
 
-    void disable() {
-        Log.d(TAG, "disable() called with mRunningProfiles.size() = " + mRunningProfiles.size());
+    void onToBleOn() {
+        Log.d(TAG, "onToBleOn() called with mRunningProfiles.size() = " + mRunningProfiles.size());
         mAdapterStateMachine.sendMessage(AdapterState.USER_TURN_OFF);
     }
 

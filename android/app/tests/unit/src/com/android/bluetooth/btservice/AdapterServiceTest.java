@@ -435,7 +435,7 @@ public class AdapterServiceTest {
             IBluetoothCallback callback,
             boolean onlyGatt,
             List<ProfileService> services) {
-        adapter.disable();
+        adapter.onToBleOn();
         TestUtils.syncHandler(looper, AdapterState.USER_TURN_OFF);
         verifyStateChange(callback, STATE_ON, STATE_TURNING_OFF);
 
@@ -789,7 +789,7 @@ public class AdapterServiceTest {
 
         assertThat(mAdapterService.getState()).isEqualTo(STATE_ON);
 
-        mAdapterService.disable();
+        mAdapterService.onToBleOn();
         TestUtils.syncHandler(mLooper, AdapterState.USER_TURN_OFF);
         verifyStateChange(callback, STATE_ON, STATE_TURNING_OFF);
 
@@ -858,7 +858,7 @@ public class AdapterServiceTest {
     public void testProfileStopTimeout() {
         doEnable(false);
 
-        mAdapterService.disable();
+        mAdapterService.onToBleOn();
         syncHandler(AdapterState.USER_TURN_OFF);
         verifyStateChange(STATE_ON, STATE_TURNING_OFF);
         assertThat(mAdapterService.mSetProfileServiceStateCounter).isEqualTo(4);

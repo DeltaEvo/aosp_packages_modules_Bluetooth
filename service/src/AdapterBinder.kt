@@ -34,8 +34,8 @@ class AdapterBinder(rawBinder: IBinder) {
             "]"
 
     @Throws(RemoteException::class)
-    fun disable(source: AttributionSource) {
-        adapterBinder.disable(source)
+    fun onToBleOn(source: AttributionSource) {
+        adapterBinder.onToBleOn(source)
     }
 
     @Throws(RemoteException::class)
