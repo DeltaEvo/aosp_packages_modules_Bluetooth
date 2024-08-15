@@ -269,15 +269,13 @@ class BluetoothManagerService {
             }
             if (state == STATE_BLE_ON) {
                 ActiveLogs.add(ENABLE_DISABLE_REASON_FACTORY_RESET, false);
-                mAdapter.stopBle(mContext.getAttributionSource());
+                bleOnToOff();
                 return true;
             } else if (state == STATE_ON) {
                 ActiveLogs.add(ENABLE_DISABLE_REASON_FACTORY_RESET, false);
                 onToBleOn();
                 return true;
             }
-        } catch (RemoteException e) {
-            Log.e(TAG, "Unable to shutdown Bluetooth", e);
         } finally {
             mAdapterLock.readLock().unlock();
         }
@@ -417,14 +415,13 @@ class BluetoothManagerService {
             // If currentState is BLE_ON make sure we trigger stopBle
             mAdapterLock.readLock().lock();
             try {
-                if (mAdapter != null) {
-                    mEnable = false;
-                    mEnableExternal = false;
-                    ActiveLogs.add(reason, false);
-                    mAdapter.stopBle(mContext.getAttributionSource());
+                if (mAdapter == null) {
+                    return;
                 }
-            } catch (RemoteException e) {
-                Log.e(TAG, "Unable to call stopBle", e);
+                mEnable = false;
+                mEnableExternal = false;
+                ActiveLogs.add(reason, false);
+                bleOnToOff();
             } finally {
                 mAdapterLock.readLock().unlock();
             }
@@ -550,12 +547,10 @@ class BluetoothManagerService {
                                 return;
                             }
                             if (mState.oneOf(STATE_BLE_ON)) {
-                                mAdapter.stopBle(mContext.getAttributionSource());
+                                bleOnToOff();
                             } else if (mState.oneOf(STATE_ON)) {
                                 onToBleOn();
                             }
-                        } catch (RemoteException e) {
-                            Log.e(TAG, "Unable to shutdown Bluetooth", e);
                         } finally {
                             mAdapterLock.readLock().unlock();
                         }
@@ -667,11 +662,7 @@ class BluetoothManagerService {
         }
         if (mState.oneOf(STATE_BLE_ON)) {
             Log.i(TAG, "onBleScanDisabled: Shutting down BLE_ON mode");
-            try {
-                mAdapter.stopBle(mContext.getAttributionSource());
-            } catch (RemoteException e) {
-                Log.e(TAG, "onBleScanDisabled: stopBle failed", e);
-            }
+            bleOnToOff();
         } else {
             Log.i(TAG, "onBleScanDisabled: Bluetooth is not in BLE_ON, staying on");
         }
@@ -914,10 +905,8 @@ class BluetoothManagerService {
                         try {
                             if (mAdapter != null) {
                                 ActiveLogs.add(ENABLE_DISABLE_REASON_APPLICATION_REQUEST, false);
-                                mAdapter.stopBle(mContext.getAttributionSource());
+                                bleOnToOff();
                             }
-                        } catch (RemoteException e) {
-                            Log.e(TAG, "error when disabling bluetooth", e);
                         } finally {
                             mAdapterLock.readLock().unlock();
                         }
@@ -1074,7 +1063,7 @@ class BluetoothManagerService {
                 // enableBle & disableBle are executed on the handler
                 Log.i(TAG, "continueFromBleOnState: Disabled while enabling BLE, disable BLE now");
                 mEnable = false;
-                mAdapter.stopBle(mContext.getAttributionSource());
+                bleOnToOff();
                 return;
             }
             if (isBluetoothPersistedStateOnBluetooth() || !isBleAppPresent()) {
@@ -1113,7 +1102,7 @@ class BluetoothManagerService {
                 mAdapter.unregAllGattClient(mContext.getAttributionSource());
             } else {
                 Log.i(TAG, "sendBrEdrDownCallback: Stopping ble");
-                mAdapter.stopBle(mContext.getAttributionSource());
+                bleOnToOff();
             }
         } catch (RemoteException e) {
             Log.e(TAG, "sendBrEdrDownCallback: Call to mAdapter failed.", e);
@@ -2044,6 +2033,19 @@ class BluetoothManagerService {
             mAdapter.onToBleOn(mContext.getAttributionSource());
         } catch (RemoteException e) {
             Log.e(TAG, "Unable to call onToBleOn()", e);
+        }
+    }
+
+    private void bleOnToOff() {
+        if (!mState.oneOf(STATE_BLE_ON)) {
+            Log.d(TAG, "bleOnToOff: Impossible transition from " + mState);
+            return;
+        }
+        Log.d(TAG, "bleOnToOff: Sending request");
+        try {
+            mAdapter.bleOnToOff(mContext.getAttributionSource());
+        } catch (RemoteException e) {
+            Log.e(TAG, "Unable to call bleOnToOff()", e);
         }
     }
 
