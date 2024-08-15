@@ -73,7 +73,7 @@ static uid_set_node_t* uid_set_find_or_create_node(uid_set_t* set, int32_t app_u
 }
 
 void uid_set_add_tx(uid_set_t* set, int32_t app_uid, uint64_t bytes) {
-  if (app_uid == -1 || bytes == 0) {
+  if (set == nullptr || app_uid == -1 || bytes == 0) {
     return;
   }
 
@@ -83,7 +83,7 @@ void uid_set_add_tx(uid_set_t* set, int32_t app_uid, uint64_t bytes) {
 }
 
 void uid_set_add_rx(uid_set_t* set, int32_t app_uid, uint64_t bytes) {
-  if (app_uid == -1 || bytes == 0) {
+  if (set == nullptr || app_uid == -1 || bytes == 0) {
     return;
   }
 
