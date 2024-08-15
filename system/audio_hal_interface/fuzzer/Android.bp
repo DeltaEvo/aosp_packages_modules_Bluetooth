@@ -84,8 +84,6 @@ cc_defaults {
         "libbte",
         "libbtif",
         "libbtif-core",
-        "libcgrouprc",
-        "libcgrouprc_format",
         "libchrome",
         "libcutils",
         "libevent",
