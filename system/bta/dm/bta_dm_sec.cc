@@ -125,7 +125,7 @@ void bta_dm_bond(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type, tBT_TRANSP
   tBTM_STATUS status = get_btm_client_interface().security.BTM_SecBond(bd_addr, addr_type,
                                                                        transport, device_type);
 
-  if (bta_dm_sec_cb.p_sec_cback && (status != BTM_CMD_STARTED)) {
+  if (bta_dm_sec_cb.p_sec_cback && (status != tBTM_STATUS::BTM_CMD_STARTED)) {
     memset(&sec_event, 0, sizeof(tBTA_DM_SEC));
     sec_event.auth_cmpl.bd_addr = bd_addr;
     bd_name_from_char_pointer(sec_event.auth_cmpl.bd_name,
@@ -156,7 +156,7 @@ void bta_dm_bond_cancel(const RawAddress& bd_addr) {
   status = get_btm_client_interface().security.BTM_SecBondCancel(bd_addr);
 
   if (bta_dm_sec_cb.p_sec_cback &&
-      (status != BTM_CMD_STARTED && status != tBTM_STATUS::BTM_SUCCESS)) {
+      (status != tBTM_STATUS::BTM_CMD_STARTED && status != tBTM_STATUS::BTM_SUCCESS)) {
     sec_event.bond_cancel_cmpl.result = BTA_FAILURE;
 
     bta_dm_sec_cb.p_sec_cback(BTA_DM_BOND_CANCEL_CMPL_EVT, &sec_event);
@@ -206,7 +206,7 @@ static void bta_dm_pinname_cback(const tBTM_REMOTE_DEV_NAME* p_data) {
     sec_event.cfm_req.dev_class = bta_dm_sec_cb.pin_dev_class;
     log::info("CoD: sec_event.cfm_req.dev_class = {}", dev_class_text(sec_event.cfm_req.dev_class));
 
-    if (p_result && p_result->status == tBTM_STATUS::BTM_SUCCESS) {
+    if (p_result && p_result->btm_status == tBTM_STATUS::BTM_SUCCESS) {
       bd_name_copy(sec_event.cfm_req.bd_name, p_result->remote_bd_name);
     } else { /* No name found */
       sec_event.cfm_req.bd_name[0] = 0;
@@ -227,7 +227,7 @@ static void bta_dm_pinname_cback(const tBTM_REMOTE_DEV_NAME* p_data) {
     sec_event.pin_req.bd_addr = bta_dm_sec_cb.pin_bd_addr;
     sec_event.pin_req.dev_class = bta_dm_sec_cb.pin_dev_class;
 
-    if (p_result && p_result->status == tBTM_STATUS::BTM_SUCCESS) {
+    if (p_result && p_result->btm_status == tBTM_STATUS::BTM_SUCCESS) {
       bd_name_copy(sec_event.pin_req.bd_name, p_result->remote_bd_name);
     } else { /* No name found */
       sec_event.pin_req.bd_name[0] = 0;
@@ -263,9 +263,10 @@ static tBTM_STATUS bta_dm_pin_cback(const RawAddress& bd_addr, DEV_CLASS dev_cla
     bta_dm_sec_cb.pin_evt = BTA_DM_PIN_REQ_EVT;
     bta_dm_sec_cb.pin_bd_addr = bd_addr;
     bta_dm_sec_cb.pin_dev_class = dev_class;
-    if ((get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
-                bd_addr, bta_dm_pinname_cback, BT_TRANSPORT_BR_EDR)) == BTM_CMD_STARTED) {
-      return BTM_CMD_STARTED;
+    if ((get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(bd_addr, bta_dm_pinname_cback,
+                                                                  BT_TRANSPORT_BR_EDR)) ==
+        tBTM_STATUS::BTM_CMD_STARTED) {
+      return tBTM_STATUS::BTM_CMD_STARTED;
     }
 
     log::warn("Failed to start Remote Name Request, addr:{}", bd_addr);
@@ -280,7 +281,7 @@ static tBTM_STATUS bta_dm_pin_cback(const RawAddress& bd_addr, DEV_CLASS dev_cla
   bd_name_copy(sec_event.pin_req.bd_name, bd_name);
 
   bta_dm_sec_cb.p_sec_cback(BTA_DM_PIN_REQ_EVT, &sec_event);
-  return BTM_CMD_STARTED;
+  return tBTM_STATUS::BTM_CMD_STARTED;
 }
 
 /*******************************************************************************
@@ -329,7 +330,7 @@ static tBTM_STATUS bta_dm_new_link_key_cback(const RawAddress& bd_addr, DEV_CLAS
     bta_dm_reset_sec_dev_pending(p_auth_cmpl->bd_addr);
   }
 
-  return BTM_CMD_STARTED;
+  return tBTM_STATUS::BTM_CMD_STARTED;
 }
 
 /*******************************************************************************
@@ -388,7 +389,7 @@ static void bta_dm_authentication_complete_cback(const RawAddress& bd_addr,
  *
  ******************************************************************************/
 static tBTM_STATUS bta_dm_sp_cback(tBTM_SP_EVT event, tBTM_SP_EVT_DATA* p_data) {
-  tBTM_STATUS status = BTM_CMD_STARTED;
+  tBTM_STATUS status = tBTM_STATUS::BTM_CMD_STARTED;
   tBTA_DM_SEC sec_event = {};
   tBTA_DM_SEC_EVT pin_evt = BTA_DM_SP_KEY_NOTIF_EVT;
 
@@ -454,7 +455,7 @@ static tBTM_STATUS bta_dm_sp_cback(tBTM_SP_EVT event, tBTM_SP_EVT_DATA* p_data) 
             const tBTM_STATUS btm_status = get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
                     p_data->cfm_req.bd_addr, bta_dm_pinname_cback, BT_TRANSPORT_BR_EDR);
             switch (btm_status) {
-              case BTM_CMD_STARTED:
+              case tBTM_STATUS::BTM_CMD_STARTED:
                 return btm_status;
               default:
                 // NOTE: This will issue callback on this failure path
@@ -474,8 +475,8 @@ static tBTM_STATUS bta_dm_sp_cback(tBTM_SP_EVT event, tBTM_SP_EVT_DATA* p_data) 
           bta_dm_sec_cb.pin_dev_class = p_data->key_notif.dev_class;
           if ((get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
                       p_data->key_notif.bd_addr, bta_dm_pinname_cback, BT_TRANSPORT_BR_EDR)) ==
-              BTM_CMD_STARTED) {
-            return BTM_CMD_STARTED;
+              tBTM_STATUS::BTM_CMD_STARTED) {
+            return tBTM_STATUS::BTM_CMD_STARTED;
           }
           log::warn("Failed to start Remote Name Request, addr:{}", p_data->key_notif.bd_addr);
         } else {
@@ -846,8 +847,9 @@ void bta_dm_set_encryption(const RawAddress& bd_addr, tBT_TRANSPORT transport,
     return;
   }
 
-  if (get_btm_client_interface().security.BTM_SetEncryption(
-              bd_addr, transport, bta_dm_encrypt_cback, NULL, sec_act) == BTM_CMD_STARTED) {
+  if (get_btm_client_interface().security.BTM_SetEncryption(bd_addr, transport,
+                                                            bta_dm_encrypt_cback, NULL, sec_act) ==
+      tBTM_STATUS::BTM_CMD_STARTED) {
     device->p_encrypt_cback = p_callback;
     log::debug("Started encryption peer:{} transport:{}", bd_addr, bt_transport_text(transport));
   } else {
@@ -906,7 +908,7 @@ static tBTM_STATUS bta_dm_sirk_verifiction_cback(const RawAddress& bd_addr) {
   if (bta_dm_sec_cb.p_sec_sirk_cback) {
     log::debug("callback called");
     bta_dm_sec_cb.p_sec_sirk_cback(BTA_DM_SIRK_VERIFICATION_REQ_EVT, &sec_event);
-    return BTM_CMD_STARTED;
+    return tBTM_STATUS::BTM_CMD_STARTED;
   }
 
   log::debug("no callback registered");

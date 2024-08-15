@@ -763,7 +763,7 @@ static bool bta_dm_pm_park(const RawAddress& peer_addr) {
   if (mode != BTM_PM_MD_PARK) {
     tBTM_STATUS status = get_btm_client_interface().link_policy.BTM_SetPowerMode(
             bta_dm_cb.pm_id, peer_addr, &p_bta_dm_pm_md[BTA_DM_PM_PARK_IDX]);
-    if (status == BTM_CMD_STORED || status == BTM_CMD_STARTED) {
+    if (status == BTM_CMD_STORED || status == tBTM_STATUS::BTM_CMD_STARTED) {
       return true;
     }
     log::warn("Unable to set park power mode");
@@ -866,7 +866,7 @@ static void bta_dm_pm_sniff(tBTA_DM_PEER_DEVICE* p_peer_dev, uint8_t index) {
   }
   status = get_btm_client_interface().link_policy.BTM_SetPowerMode(
           bta_dm_cb.pm_id, p_peer_dev->peer_bdaddr, &pwr_md);
-  if (status == BTM_CMD_STORED || status == BTM_CMD_STARTED) {
+  if (status == BTM_CMD_STORED || status == tBTM_STATUS::BTM_CMD_STARTED) {
     p_peer_dev->reset_sniff_flags();
     p_peer_dev->set_sniff_command_sent();
   } else if (status == tBTM_STATUS::BTM_SUCCESS) {
@@ -983,7 +983,7 @@ void bta_dm_pm_active(const RawAddress& peer_addr) {
     case BTM_CMD_STORED:
       log::debug("Active power mode stored for execution later for remote:{}", peer_addr);
       break;
-    case BTM_CMD_STARTED:
+    case tBTM_STATUS::BTM_CMD_STARTED:
       log::debug("Active power mode started for remote:{}", peer_addr);
       break;
     case tBTM_STATUS::BTM_SUCCESS:

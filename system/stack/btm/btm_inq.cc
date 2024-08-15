@@ -620,7 +620,7 @@ static tBTM_STATUS BTM_StartLeScan() {
 #else
   if (shim::GetController()->SupportsBle()) {
     btm_ble_start_inquiry(btm_cb.btm_inq_vars.inqparms.duration);
-    return BTM_CMD_STARTED;
+    return tBTM_STATUS::BTM_CMD_STARTED;
   }
   log::warn("Trying to do LE scan on a non-LE adapter");
   btm_cb.btm_inq_vars.inqparms.mode &= ~BTM_BLE_GENERAL_INQUIRY;
@@ -657,7 +657,7 @@ static tBTM_STATUS BTM_StartLeScan() {
  *                                NULL, the application is not notified when
  *                                completed.
  * Returns          tBTM_STATUS
- *                  BTM_CMD_STARTED if successfully initiated
+ *                  tBTM_STATUS::BTM_CMD_STARTED if successfully initiated
  *                  tBTM_STATUS::BTM_BUSY if already in progress
  *                  BTM_ILLEGAL_VALUE if parameter(s) are out of range
  *                  BTM_NO_RESOURCES if could not allocate resources to start
@@ -771,7 +771,7 @@ tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb, tBTM_CMPL_CB* p_
   }
 #endif
 
-  return BTM_CMD_STARTED;
+  return tBTM_STATUS::BTM_CMD_STARTED;
 }
 
 /*******************************************************************************
@@ -951,7 +951,7 @@ void btm_inq_db_reset(void) {
     btm_cb.rnr.remname_dev_type = BT_DEVICE_TYPE_UNKNOWN;
 
     if (btm_cb.rnr.p_remname_cmpl_cb) {
-      rem_name.status = BTM_DEV_RESET;
+      rem_name.btm_status = BTM_DEV_RESET;
       rem_name.hci_status = HCI_SUCCESS;
 
       (*btm_cb.rnr.p_remname_cmpl_cb)(&rem_name);

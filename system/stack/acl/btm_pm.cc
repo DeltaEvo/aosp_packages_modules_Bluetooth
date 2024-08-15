@@ -600,7 +600,7 @@ static tBTM_STATUS btm_pm_snd_md_req(uint16_t handle, uint8_t pm_id, int link_in
     return BTM_NO_RESOURCES;
   }
 
-  return BTM_CMD_STARTED;
+  return tBTM_STATUS::BTM_CMD_STARTED;
 }
 
 static void btm_pm_continue_pending_mode_changes() {

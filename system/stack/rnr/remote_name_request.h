@@ -25,7 +25,7 @@
 
 /* Structure returned with remote name  request */
 struct tBTM_REMOTE_DEV_NAME {
-  tBTM_STATUS status;
+  tBTM_STATUS btm_status;
   RawAddress bd_addr;
   BD_NAME remote_bd_name;
   tHCI_STATUS hci_status;
@@ -112,7 +112,7 @@ bool BTM_IsRemoteNameKnown(const RawAddress& bd_addr, tBT_TRANSPORT transport);
  *                                    timed out.
  *                  transport       - transport used to query the remote name
  * Returns
- *                  BTM_CMD_STARTED is returned if the request was successfully
+ *                  tBTM_STATUS::BTM_CMD_STARTED is returned if the request was successfully
  *                                    sent to HCI.
  *                  BTM_BUSY if already in progress
  *                  BTM_UNKNOWN_ADDR if device address is bad
@@ -134,7 +134,7 @@ tBTM_STATUS BTM_ReadRemoteDeviceName(const RawAddress& remote_bda, tBTM_NAME_CMP
  * Input Params:    None
  *
  * Returns
- *                  BTM_CMD_STARTED is returned if the request was successfully
+ *                  tBTM_STATUS::BTM_CMD_STARTED is returned if the request was successfully
  *                                  sent to HCI.
  *                  BTM_NO_RESOURCES if could not allocate resources to start
  *                                   the command

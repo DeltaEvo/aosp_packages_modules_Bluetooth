@@ -283,7 +283,7 @@ TEST_F_WITH_FLAGS(BtaAgCmdTest, at_hfp_cback__qcs_ev_codec_q0_enabled,
              uint16_t* /* p_sco_inx */, tBTM_SCO_CB* /* p_conn_cb */,
              tBTM_SCO_CB* /* p_disc_cb */) -> tBTM_STATUS {
     inc_func_call_count("BTM_CreateSco");
-    return BTM_CMD_STARTED;
+    return tBTM_STATUS::BTM_CMD_STARTED;
   };
 
   tBTA_AG_SCB p_scb = {.peer_addr = addr,
@@ -323,7 +323,7 @@ TEST_F_WITH_FLAGS(BtaAgCmdTest, handle_swb_at_event__qcs_ev_codec_q1_fallback_to
              uint16_t* /* p_sco_inx */, tBTM_SCO_CB* /* p_conn_cb */,
              tBTM_SCO_CB* /* p_disc_cb */) -> tBTM_STATUS {
     inc_func_call_count("BTM_CreateSco");
-    return BTM_CMD_STARTED;
+    return tBTM_STATUS::BTM_CMD_STARTED;
   };
 
   tBTA_AG_SCB p_scb = {.peer_addr = addr,

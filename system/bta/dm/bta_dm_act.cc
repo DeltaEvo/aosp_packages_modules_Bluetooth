@@ -282,7 +282,7 @@ void BTA_dm_on_hw_on() {
      the DM_ENABLE_EVT to be sent only after all the init steps are complete
      */
   if (get_btm_client_interface().local.BTM_ReadLocalDeviceNameFromController(
-              bta_dm_local_name_cback) != BTM_CMD_STARTED) {
+              bta_dm_local_name_cback) != tBTM_STATUS::BTM_CMD_STARTED) {
     log::warn("Unable to read local device name from controller");
   }
 
@@ -413,7 +413,7 @@ static void bta_dm_wait_for_acl_to_drain_cback(void* data) {
 /** Sets local device name */
 void bta_dm_set_dev_name(const std::vector<uint8_t>& name) {
   if (get_btm_client_interface().local.BTM_SetLocalDeviceName((const char*)name.data()) !=
-      BTM_CMD_STARTED) {
+      tBTM_STATUS::BTM_CMD_STARTED) {
     log::warn("Unable to set local device name");
   }
   bta_dm_set_eir((char*)name.data());
@@ -725,7 +725,7 @@ static void handle_role_change(const RawAddress& bd_addr, tHCI_ROLE new_role,
         case tBTM_STATUS::BTM_SUCCESS:
           log::debug("Role policy already set to central peer:{}", bd_addr);
           break;
-        case BTM_CMD_STARTED:
+        case tBTM_STATUS::BTM_CMD_STARTED:
           log::debug("Role policy started to central peer:{}", bd_addr);
           break;
         default:
@@ -1026,7 +1026,7 @@ static void bta_dm_check_av() {
           case tBTM_STATUS::BTM_SUCCESS:
             log::debug("Role policy already set to central peer:{}", p_dev->peer_bdaddr);
             break;
-          case BTM_CMD_STARTED:
+          case tBTM_STATUS::BTM_CMD_STARTED:
             log::debug("Role policy started to central peer:{}", p_dev->peer_bdaddr);
             break;
           default:
@@ -1180,7 +1180,7 @@ static void bta_dm_adjust_roles(bool delay_role_switch) {
                 log::debug("Role policy already set to central peer:{}",
                            bta_dm_cb.device_list.peer_device[i].peer_bdaddr);
                 break;
-              case BTM_CMD_STARTED:
+              case tBTM_STATUS::BTM_CMD_STARTED:
                 log::debug("Role policy started to central peer:{}",
                            bta_dm_cb.device_list.peer_device[i].peer_bdaddr);
                 break;
@@ -1700,7 +1700,7 @@ void bta_dm_ble_get_energy_info(tBTA_BLE_ENERGY_INFO_CBACK* p_energy_info_cback)
   bta_dm_cb.p_energy_info_cback = p_energy_info_cback;
   tBTM_STATUS btm_status =
           get_btm_client_interface().ble.BTM_BleGetEnergyInfo(bta_ble_energy_info_cmpl);
-  if (btm_status != BTM_CMD_STARTED) {
+  if (btm_status != tBTM_STATUS::BTM_CMD_STARTED) {
     bta_ble_energy_info_cmpl(0, 0, 0, 0, HCI_ERR_UNSPECIFIED);
   }
 }

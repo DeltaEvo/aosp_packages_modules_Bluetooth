@@ -51,7 +51,7 @@ void BTM_acl_after_controller_started();
  *
  * Description      Create and send HCI "Write Link Supervision Timeout" command
  *
- * Returns          BTM_CMD_STARTED if successfully initiated, otherwise error
+ * Returns          tBTM_STATUS::BTM_CMD_STARTED if successfully initiated, otherwise error
  *
  ******************************************************************************/
 tBTM_STATUS BTM_SetLinkSuperTout(const RawAddress& remote_bda, uint16_t timeout);
@@ -102,7 +102,7 @@ tBTM_STATUS BTM_GetRole(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role);
  *                  peripheral.  If role is already set it will do nothing.
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if already in specified role.
- *                  BTM_CMD_STARTED if command issued to controller.
+ *                  tBTM_STATUS::BTM_CMD_STARTED if command issued to controller.
  *                  BTM_NO_RESOURCES if memory couldn't be allocated to issue
  *                                   the command
  *                  BTM_UNKNOWN_ADDR if no active link with bd addr specified
@@ -120,7 +120,7 @@ tBTM_STATUS BTM_SwitchRoleToCentral(const RawAddress& remote_bd_addr);
  *                  The address of link policy results are returned in the
  *                  callback. (tBTM_RSSI_RESULT)
  *
- * Returns          BTM_CMD_STARTED if command issued to controller.
+ * Returns          tBTM_STATUS::BTM_CMD_STARTED if command issued to controller.
  *                  BTM_NO_RESOURCES if memory couldn't be allocated to issue
  *                                   the command
  *                  BTM_UNKNOWN_ADDR if no active link with bd addr specified
@@ -138,7 +138,7 @@ tBTM_STATUS BTM_ReadRSSI(const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb);
  *                  The result is returned in the callback.
  *                  (tBTM_FAILED_CONTACT_COUNTER_RESULT)
  *
- * Returns          BTM_CMD_STARTED if command issued to controller.
+ * Returns          tBTM_STATUS::BTM_CMD_STARTED if command issued to controller.
  *                  BTM_NO_RESOURCES if memory couldn't be allocated to issue
  *                                   the command
  *                  BTM_UNKNOWN_ADDR if no active link with bd addr specified
@@ -157,7 +157,7 @@ tBTM_STATUS BTM_ReadFailedContactCounter(const RawAddress& remote_bda, tBTM_CMPL
  *                  are returned in the callback.
  *                  (tBTM_RSSI_RESULT)
  *
- * Returns          BTM_CMD_STARTED if command issued to controller.
+ * Returns          tBTM_STATUS::BTM_CMD_STARTED if command issued to controller.
  *                  BTM_NO_RESOURCES if memory couldn't be allocated to issue
  *                                   the command
  *                  BTM_UNKNOWN_ADDR if no active link with bd addr specified

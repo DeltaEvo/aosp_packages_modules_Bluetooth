@@ -527,7 +527,7 @@ tBTM_STATUS BTM_GetRole(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role) {
  *                  peripheral.  If role is already set it will do nothing.
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if already in specified role.
- *                  BTM_CMD_STARTED if command issued to controller.
+ *                  tBTM_STATUS::BTM_CMD_STARTED if command issued to controller.
  *                  BTM_NO_RESOURCES if couldn't allocate memory to issue
  *                                   command
  *                  BTM_UNKNOWN_ADDR if no active link with bd addr specified
@@ -599,7 +599,7 @@ tBTM_STATUS BTM_SwitchRoleToCentral(const RawAddress& remote_bd_addr) {
     }
   }
 
-  return BTM_CMD_STARTED;
+  return tBTM_STATUS::BTM_CMD_STARTED;
 }
 
 /*******************************************************************************
@@ -1069,7 +1069,7 @@ tBTM_STATUS BTM_SetLinkSuperTout(const RawAddress& remote_bda, uint16_t timeout)
     btsnd_hcic_write_link_super_tout(p_acl->hci_handle, timeout);
     log::debug("Set supervision timeout:{:.2f}ms bd_addr:{}",
                supervision_timeout_to_seconds(timeout), remote_bda);
-    return BTM_CMD_STARTED;
+    return tBTM_STATUS::BTM_CMD_STARTED;
   } else {
     log::warn(
             "Role is peripheral so unable to set supervision timeout:{:.2f}ms "
@@ -1562,7 +1562,7 @@ uint8_t* BTM_ReadRemoteFeatures(const RawAddress& addr) {
  *                  callback.
  *                  (tBTM_RSSI_RESULT)
  *
- * Returns          BTM_CMD_STARTED if successfully initiated or error code
+ * Returns          tBTM_STATUS::BTM_CMD_STARTED if successfully initiated or error code
  *
  ******************************************************************************/
 tBTM_STATUS BTM_ReadRSSI(const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb) {
@@ -1591,7 +1591,7 @@ tBTM_STATUS BTM_ReadRSSI(const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb) {
                        btm_read_rssi_timeout, NULL);
 
     btsnd_hcic_read_rssi(p->hci_handle);
-    return BTM_CMD_STARTED;
+    return tBTM_STATUS::BTM_CMD_STARTED;
   }
   log::warn("Unable to find active acl");
 
@@ -1607,7 +1607,7 @@ tBTM_STATUS BTM_ReadRSSI(const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb) {
  *                  The result is returned in the callback.
  *                  (tBTM_FAILED_CONTACT_COUNTER_RESULT)
  *
- * Returns          BTM_CMD_STARTED if successfully initiated or error code
+ * Returns          tBTM_STATUS::BTM_CMD_STARTED if successfully initiated or error code
  *
  ******************************************************************************/
 tBTM_STATUS BTM_ReadFailedContactCounter(const RawAddress& remote_bda, tBTM_CMPL_CB* p_cb) {
@@ -1633,7 +1633,7 @@ tBTM_STATUS BTM_ReadFailedContactCounter(const RawAddress& remote_bda, tBTM_CMPL
                        btm_read_failed_contact_counter_timeout, NULL);
 
     btsnd_hcic_read_failed_contact_counter(p->hci_handle);
-    return BTM_CMD_STARTED;
+    return tBTM_STATUS::BTM_CMD_STARTED;
   }
   log::warn("Unable to find active acl");
 
@@ -1650,7 +1650,7 @@ tBTM_STATUS BTM_ReadFailedContactCounter(const RawAddress& remote_bda, tBTM_CMPL
  *                  are returned in the callback.
  *                  (tBTM_RSSI_RESULT)
  *
- * Returns          BTM_CMD_STARTED if successfully initiated or error code
+ * Returns          tBTM_STATUS::BTM_CMD_STARTED if successfully initiated or error code
  *
  ******************************************************************************/
 tBTM_STATUS BTM_ReadTxPower(const RawAddress& remote_bda, tBT_TRANSPORT transport,
@@ -1679,7 +1679,7 @@ tBTM_STATUS BTM_ReadTxPower(const RawAddress& remote_bda, tBT_TRANSPORT transpor
       btsnd_hcic_read_tx_power(p->hci_handle, BTM_READ_RSSI_TYPE_CUR);
     }
 
-    return BTM_CMD_STARTED;
+    return tBTM_STATUS::BTM_CMD_STARTED;
   }
 
   log::warn("Unable to find active acl");

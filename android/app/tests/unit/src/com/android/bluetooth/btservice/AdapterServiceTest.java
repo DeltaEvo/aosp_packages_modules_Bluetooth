@@ -409,7 +409,7 @@ public class AdapterServiceTest {
             Context ctx,
             IBluetoothCallback callback,
             AdapterNativeInterface nativeInterface) {
-        adapter.enable(false);
+        adapter.offToBleOn(false);
         if (Flags.fastBindToApp()) {
             TestUtils.syncHandler(looper, 0); // when fastBindToApp is enable init need to be run
         }
@@ -435,7 +435,7 @@ public class AdapterServiceTest {
             IBluetoothCallback callback,
             boolean onlyGatt,
             List<ProfileService> services) {
-        adapter.disable();
+        adapter.onToBleOn();
         TestUtils.syncHandler(looper, AdapterState.USER_TURN_OFF);
         verifyStateChange(callback, STATE_ON, STATE_TURNING_OFF);
 
@@ -620,7 +620,7 @@ public class AdapterServiceTest {
     public void testGattStartTimeout() {
         assertThat(mAdapterService.getState()).isEqualTo(STATE_OFF);
 
-        mAdapterService.enable(false);
+        mAdapterService.offToBleOn(false);
         if (Flags.fastBindToApp()) {
             syncHandler(0); // when fastBindToApp is enable init need to be run
         }
@@ -789,7 +789,7 @@ public class AdapterServiceTest {
 
         assertThat(mAdapterService.getState()).isEqualTo(STATE_ON);
 
-        mAdapterService.disable();
+        mAdapterService.onToBleOn();
         TestUtils.syncHandler(mLooper, AdapterState.USER_TURN_OFF);
         verifyStateChange(callback, STATE_ON, STATE_TURNING_OFF);
 
@@ -858,7 +858,7 @@ public class AdapterServiceTest {
     public void testProfileStopTimeout() {
         doEnable(false);
 
-        mAdapterService.disable();
+        mAdapterService.onToBleOn();
         syncHandler(AdapterState.USER_TURN_OFF);
         verifyStateChange(STATE_ON, STATE_TURNING_OFF);
         assertThat(mAdapterService.mSetProfileServiceStateCounter).isEqualTo(4);

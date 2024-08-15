@@ -1095,7 +1095,7 @@ bool bta_av_link_role_ok(tBTA_AV_SCB* p_scb, uint8_t bits) {
     const tBTM_STATUS status =
             get_btm_client_interface().link_policy.BTM_SwitchRoleToCentral(p_scb->PeerAddress());
     switch (status) {
-      case BTM_CMD_STARTED:
+      case tBTM_STATUS::BTM_CMD_STARTED:
         break;
       case BTM_MODE_UNSUPPORTED:
       case BTM_DEV_RESTRICT_LISTED:

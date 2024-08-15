@@ -68,7 +68,7 @@ void BTM_reset_complete();
  *
  * Description      This function is called to set the local device name.
  *
- * Returns          BTM_CMD_STARTED if successful, otherwise an error
+ * Returns          tBTM_STATUS::BTM_CMD_STARTED if successful, otherwise an error
  *
  ******************************************************************************/
 [[nodiscard]] tBTM_STATUS BTM_SetLocalDeviceName(const char* p_name);
@@ -106,7 +106,7 @@ void BTM_reset_complete();
  * Description      Get local device name from controller. Do not use cached
  *                  name (used to get chip-id prior to btm reset complete).
  *
- * Returns          BTM_CMD_STARTED if successful, otherwise an error
+ * Returns          tBTM_STATUS::BTM_CMD_STARTED if successful, otherwise an error
  *
  ******************************************************************************/
 [[nodiscard]] tBTM_STATUS BTM_ReadLocalDeviceNameFromController(tBTM_CMPL_CB* p_rln_cmpl_cback);
@@ -178,12 +178,12 @@ void BTM_WriteVoiceSettings(uint16_t settings);
  *
  * Input Params:    remote_bda      - device address of name to retrieve
  *                  p_cb            - callback function called when
- *                                    BTM_CMD_STARTED is returned.
+ *                                    tBTM_STATUS::BTM_CMD_STARTED is returned.
  *                                    A pointer to tBTM_REMOTE_DEV_NAME is
  *                                    passed to the callback.
  *
  * Returns
- *                  BTM_CMD_STARTED is returned if the request was successfully
+ *                  tBTM_STATUS::BTM_CMD_STARTED is returned if the request was successfully
  *                                  sent to HCI.
  *                  tBTM_STATUS::BTM_BUSY if already in progress
  *                  BTM_UNKNOWN_ADDR if device address is bad
@@ -206,7 +206,7 @@ void BTM_WriteVoiceSettings(uint16_t settings);
  * Input Params:    None
  *
  * Returns
- *                  BTM_CMD_STARTED is returned if the request was successfully
+ *                  tBTM_STATUS::BTM_CMD_STARTED is returned if the request was successfully
  *                                  sent to HCI.
  *                  BTM_NO_RESOURCES if resources could not be allocated to
  *                                   start the command
@@ -323,7 +323,7 @@ void BTM_WriteVoiceSettings(uint16_t settings);
  *                  tBTM_STATUS::BTM_BUSY         if another SCO being set up to
  *                                   the same BD address
  *                  BTM_NO_RESOURCES if the max SCO limit has been reached
- *                  BTM_CMD_STARTED  if the connection establishment is started.
+ *                  tBTM_STATUS::BTM_CMD_STARTED  if the connection establishment is started.
  *                                   In this case, "*p_sco_inx" is filled in
  *                                   with the sco index used for the connection.
  *
@@ -338,7 +338,7 @@ void BTM_WriteVoiceSettings(uint16_t settings);
  *
  * Description      This function is called to remove a specific SCO connection.
  *
- * Returns          BTM_CMD_STARTED if successfully initiated, otherwise error
+ * Returns          tBTM_STATUS::BTM_CMD_STARTED if successfully initiated, otherwise error
  *
  ******************************************************************************/
 [[nodiscard]] tBTM_STATUS BTM_RemoveSco(uint16_t sco_inx);

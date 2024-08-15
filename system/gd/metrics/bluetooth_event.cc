@@ -41,6 +41,11 @@ State MapErrorCodeToState(ErrorCode reason) {
       return State::CONNECTION_ACCEPT_TIMEOUT;
     case ErrorCode::TRANSACTION_RESPONSE_TIMEOUT:
       return State::TRANSACTION_RESPONSE_TIMEOUT;
+    case ErrorCode::AUTHENTICATION_FAILURE:
+      return State::AUTH_FAILURE;
+    case ErrorCode::REMOTE_DEVICE_TERMINATED_CONNECTION_LOW_RESOURCES:
+    case ErrorCode::REMOTE_DEVICE_TERMINATED_CONNECTION_POWER_OFF:
+      return State::REMOTE_USER_TERMINATED_CONNECTION;
     case ErrorCode::CONNECTION_ALREADY_EXISTS:
       return State::ALREADY_CONNECTED;
     case ErrorCode::REPEATED_ATTEMPTS:
@@ -56,12 +61,50 @@ State MapErrorCodeToState(ErrorCode reason) {
   }
 }
 
+State MapHCIStatusToState(tHCI_STATUS status) {
+  // TODO - map the error codes to the state enum variants.
+  switch (status) {
+    case tHCI_STATUS::HCI_SUCCESS:
+      return State::SUCCESS;
+    // Timeout related errors
+    case tHCI_STATUS::HCI_ERR_PAGE_TIMEOUT:
+      return State::PAGE_TIMEOUT;
+    case tHCI_STATUS::HCI_ERR_CONNECTION_TOUT:
+      return State::CONNECTION_TIMEOUT;
+    case tHCI_STATUS::HCI_ERR_HOST_TIMEOUT:
+      return State::CONNECTION_ACCEPT_TIMEOUT;
+    case tHCI_STATUS::HCI_ERR_LMP_RESPONSE_TIMEOUT:
+      return State::TRANSACTION_RESPONSE_TIMEOUT;
+    case tHCI_STATUS::HCI_ERR_AUTH_FAILURE:
+      return State::AUTH_FAILURE;
+    case tHCI_STATUS::HCI_ERR_CONNECTION_EXISTS:
+      return State::ALREADY_CONNECTED;
+    case tHCI_STATUS::HCI_ERR_REPEATED_ATTEMPTS:
+      return State::REPEATED_ATTEMPTS;
+    case tHCI_STATUS::HCI_ERR_KEY_MISSING:
+      return State::KEY_MISSING;
+    case tHCI_STATUS::HCI_ERR_PAIRING_NOT_ALLOWED:
+      return State::PAIRING_NOT_ALLOWED;
+    case tHCI_STATUS::HCI_ERR_HOST_REJECT_RESOURCES:
+      return State::RESOURCES_EXCEEDED;
+    default:
+      return State::STATE_UNKNOWN;
+  }
+}
+
 void LogAclCompletionEvent(const hci::Address& address, ErrorCode reason,
                            bool is_locally_initiated) {
   bluetooth::os::LogMetricBluetoothEvent(address,
                                          is_locally_initiated ? EventType::ACL_CONNECTION_INITIATOR
                                                               : EventType::ACL_CONNECTION_RESPONDER,
                                          MapErrorCodeToState(reason));
+}
+
+void LogRemoteNameRequestCompletion(const RawAddress& raw_address, tHCI_STATUS hci_status) {
+  hci::Address address = bluetooth::ToGdAddress(raw_address);
+  bluetooth::os::LogMetricBluetoothEvent(
+          address, EventType::REMOTE_NAME_REQUEST,
+          MapHCIStatusToState(hci_status));
 }
 
 void LogAclAfterRemoteNameRequest(const RawAddress& raw_address, tBTM_STATUS status) {
@@ -85,6 +128,15 @@ void LogAclAfterRemoteNameRequest(const RawAddress& raw_address, tBTM_STATUS sta
 void LogUserConfirmationRequestResponse(const hci::Address& address, bool positive) {
   bluetooth::os::LogMetricBluetoothEvent(address, EventType::USER_CONF_REQUEST,
                                          positive ? State::SUCCESS : State::FAIL);
+}
+
+void LogAuthenticationComplete(const RawAddress& raw_address, tHCI_STATUS hci_status) {
+  hci::Address address = bluetooth::ToGdAddress(raw_address);
+  bluetooth::os::LogMetricBluetoothEvent(address,
+                                         hci_status == tHCI_STATUS::HCI_SUCCESS
+                                                 ? EventType::AUTHENTICATION_COMPLETE
+                                                 : EventType::AUTHENTICATION_COMPLETE_FAIL,
+                                         MapHCIStatusToState(hci_status));
 }
 
 }  // namespace metrics

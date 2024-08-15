@@ -918,7 +918,7 @@ static bool btif_a2dp_source_enqueue_callback(BT_HDR* p_buf, size_t frames_n,
     RawAddress peer_bda = btif_av_source_active_peer();
     tBTM_STATUS status =
             get_btm_client_interface().link_controller.BTM_ReadRSSI(peer_bda, btm_read_rssi_cb);
-    if (status != BTM_CMD_STARTED) {
+    if (status != tBTM_STATUS::BTM_CMD_STARTED) {
       log::warn("Cannot read RSSI: status {}", status);
     }
 
@@ -930,13 +930,13 @@ static bool btif_a2dp_source_enqueue_callback(BT_HDR* p_buf, size_t frames_n,
     // creating a framework to avoid ifdefs.
 #ifndef TARGET_FLOSS
     status = BTM_ReadFailedContactCounter(peer_bda, btm_read_failed_contact_counter_cb);
-    if (status != BTM_CMD_STARTED) {
+    if (status != tBTM_STATUS::BTM_CMD_STARTED) {
       log::warn("Cannot read Failed Contact Counter: status {}", status);
     }
 #endif
 
     status = BTM_ReadTxPower(peer_bda, BT_TRANSPORT_BR_EDR, btm_read_tx_power_cb);
-    if (status != BTM_CMD_STARTED) {
+    if (status != tBTM_STATUS::BTM_CMD_STARTED) {
       log::warn("Cannot read Tx Power: status {}", status);
     }
   }
