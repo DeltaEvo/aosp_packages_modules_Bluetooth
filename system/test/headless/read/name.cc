@@ -23,6 +23,7 @@
 #include "stack/btm/neighbor_inquiry.h"
 #include "stack/include/bt_name.h"
 #include "stack/include/btm_client_interface.h"
+#include "stack/include/btm_status.h"
 #include "test/headless/get_options.h"
 #include "test/headless/headless.h"
 #include "types/raw_address.h"
@@ -52,25 +53,26 @@ int bluetooth::test::headless::Name::Run() {
 
     tBTM_STATUS status = get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
             raw_address, &RemoteNameCallback, BT_TRANSPORT_BR_EDR);
-    if (status != BTM_CMD_STARTED) {
+    if (status != tBTM_STATUS::BTM_CMD_STARTED) {
       fprintf(stdout, "Failure to start read remote device\n");
       return -1;
     }
 
     tBTM_REMOTE_DEV_NAME name_packet = future.get();
-    switch (name_packet.status) {
-      case BTM_SUCCESS: {
+    switch (name_packet.btm_status) {
+      case tBTM_STATUS::BTM_SUCCESS: {
         char buf[BD_NAME_LEN];
         memcpy(buf, name_packet.remote_bd_name, BD_NAME_LEN);
         std::string name(buf);
         fprintf(stdout, "Name result mac:%s name:%s\n", raw_address.ToString().c_str(),
                 name.c_str());
       } break;
-      case BTM_BAD_VALUE_RET:
+      case tBTM_STATUS::BTM_BAD_VALUE_RET:
         fprintf(stdout, "Name Timeout or other failure");
         return -2;
       default:
-        fprintf(stdout, "Unexpected remote name request failure status:%hd", name_packet.status);
+        fprintf(stdout, "Unexpected remote name request failure status:%hd",
+                name_packet.btm_status);
         return -2;
     }
     return 0;

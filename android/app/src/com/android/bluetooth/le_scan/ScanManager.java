@@ -16,6 +16,8 @@
 
 package com.android.bluetooth.le_scan;
 
+import static android.bluetooth.le.ScanSettings.getScanModeString;
+
 import android.app.ActivityManager;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
@@ -62,6 +64,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** Class that handles Bluetooth LE scan related operations. */
 public class ScanManager {
@@ -118,8 +121,6 @@ public class ScanManager {
     private final Context mContext;
     private final TransitionalScanHelper mScanHelper;
     private final AdapterService mAdapterService;
-    private BroadcastReceiver mBatchAlarmReceiver;
-    private boolean mBatchAlarmReceiverRegistered;
     private ScanNative mScanNative;
     private volatile ClientHandler mHandler;
     private BluetoothAdapterProxy mBluetoothAdapterProxy;
@@ -649,7 +650,7 @@ public class ScanManager {
             Log.d(
                     TAG,
                     "Scan mode update during setAutoBatchScanClient() to "
-                            + ScanSettings.SCAN_MODE_SCREEN_OFF);
+                            + getScanModeString(ScanSettings.SCAN_MODE_SCREEN_OFF));
             if (client.stats != null) {
                 client.stats.setAutoBatchScan(client.scannerId, true);
             }
@@ -662,7 +663,8 @@ public class ScanManager {
             client.updateScanMode(client.scanModeApp);
             Log.d(
                     TAG,
-                    "Scan mode update during clearAutoBatchScanClient() to " + client.scanModeApp);
+                    "Scan mode update during clearAutoBatchScanClient() to "
+                            + getScanModeString(client.scanModeApp));
             if (client.stats != null) {
                 client.stats.setAutoBatchScan(client.scannerId, false);
             }
@@ -709,9 +711,9 @@ public class ScanManager {
             Log.d(
                     TAG,
                     "Scan mode update during screen off from "
-                            + client.scanModeApp
+                            + getScanModeString(client.scanModeApp)
                             + " to "
-                            + updatedScanMode);
+                            + getScanModeString(updatedScanMode));
             return client.updateScanMode(updatedScanMode);
         }
 
@@ -825,9 +827,9 @@ public class ScanManager {
             Log.d(
                     TAG,
                     "Scan mode update during screen on from "
-                            + client.scanModeApp
+                            + getScanModeString(client.scanModeApp)
                             + " to "
-                            + getMinScanMode(scanMode, maxScanMode));
+                            + getScanModeString(getMinScanMode(scanMode, maxScanMode)));
             return client.updateScanMode(getMinScanMode(scanMode, maxScanMode));
         }
 
@@ -990,9 +992,12 @@ public class ScanManager {
         private final Set<Integer> mAllPassRegularClients = new HashSet<>();
         private final Set<Integer> mAllPassBatchClients = new HashSet<>();
 
-        private AlarmManager mAlarmManager;
-        private PendingIntent mBatchScanIntervalIntent;
-        private ScanNativeInterface mNativeInterface;
+        private final AtomicReference<BroadcastReceiver> mBatchAlarmReceiver =
+                new AtomicReference<>();
+
+        private final AlarmManager mAlarmManager;
+        private final PendingIntent mBatchScanIntervalIntent;
+        private final ScanNativeInterface mNativeInterface;
 
         ScanNative(TransitionalScanHelper scanHelper) {
             mNativeInterface = ScanObjectsFactory.getInstance().getScanNativeInterface();
@@ -1008,7 +1013,7 @@ public class ScanManager {
             IntentFilter filter = new IntentFilter();
             filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
             filter.addAction(ACTION_REFRESH_BATCHED_SCAN);
-            mBatchAlarmReceiver =
+            mBatchAlarmReceiver.set(
                     new BroadcastReceiver() {
                         @Override
                         public void onReceive(Context context, Intent intent) {
@@ -1025,9 +1030,8 @@ public class ScanManager {
                                 }
                             }
                         }
-                    };
-            mContext.registerReceiver(mBatchAlarmReceiver, filter);
-            mBatchAlarmReceiverRegistered = true;
+                    });
+            mContext.registerReceiver(mBatchAlarmReceiver.get(), filter);
         }
 
         private void callbackDone(int scannerId, int status) {
@@ -1481,10 +1485,10 @@ public class ScanManager {
         void cleanup() {
             mAlarmManager.cancel(mBatchScanIntervalIntent);
             // Protect against multiple calls of cleanup.
-            if (mBatchAlarmReceiverRegistered) {
-                mContext.unregisterReceiver(mBatchAlarmReceiver);
+            BroadcastReceiver receiver = mBatchAlarmReceiver.getAndSet(null);
+            if (receiver != null) {
+                mContext.unregisterReceiver(receiver);
             }
-            mBatchAlarmReceiverRegistered = false;
             mNativeInterface.cleanup();
         }
 
@@ -2101,7 +2105,7 @@ public class ScanManager {
                             + " isForeground "
                             + isForeground
                             + " scanMode "
-                            + client.settings.getScanMode());
+                            + getScanModeString(client.settings.getScanMode()));
         }
 
         if (updatedScanParams) {

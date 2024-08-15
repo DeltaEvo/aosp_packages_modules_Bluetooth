@@ -21,16 +21,15 @@
 
 #include <vector>
 
-#include "btm_sco_hfp_hal.h"
 #include "common/init_flags.h"
 #include "hci/controller_interface.h"
 #include "main/shim/entry.h"
 #include "os/log.h"
 #include "osi/include/properties.h"
+#include "stack/btm/btm_sco_hfp_hal.h"
 #include "stack/include/hcimsgs.h"
 #include "stack/include/sdpdefs.h"
 
-using namespace bluetooth;
 using bluetooth::legacy::hci::GetInterface;
 
 namespace hfp_hal_interface {
@@ -116,15 +115,16 @@ void cache_codec_capabilities(struct mgmt_rp_get_codec_capabilities* rp) {
   }
 
   for (const auto& c : cached_codecs) {
-    log::info("Caching HFP codec {}, data path {}, data len {}, pkt_size {}",
-              (uint64_t)c.inner.codec, c.inner.data_path, c.inner.data.size(), c.pkt_size);
+    bluetooth::log::info("Caching HFP codec {}, data path {}, data len {}, pkt_size {}",
+                         (uint64_t)c.inner.codec, c.inner.data_path, c.inner.data.size(),
+                         c.pkt_size);
   }
 }
 
 struct sockaddr_hci {
   sa_family_t hci_family;
-  unsigned short hci_dev;
-  unsigned short hci_channel;
+  uint16_t hci_dev;
+  uint16_t hci_channel;
 };
 
 constexpr uint8_t BTPROTO_HCI = 1;
@@ -134,7 +134,7 @@ constexpr uint16_t HCI_DEV_NONE = 0xffff;
 int btsocket_open_mgmt(uint16_t hci) {
   int fd = socket(PF_BLUETOOTH, SOCK_RAW | SOCK_NONBLOCK, BTPROTO_HCI);
   if (fd < 0) {
-    log::debug("Failed to open BT socket, hci: %u", hci);
+    bluetooth::log::debug("Failed to open BT socket, hci: %u", hci);
     return -errno;
   }
 
@@ -146,7 +146,7 @@ int btsocket_open_mgmt(uint16_t hci) {
 
   int ret = bind(fd, (struct sockaddr*)&addr, sizeof(addr));
   if (ret < 0) {
-    log::debug("Failed to bind BT socket.");
+    bluetooth::log::debug("Failed to bind BT socket.");
     close(fd);
     return -errno;
   }
@@ -175,15 +175,15 @@ int mgmt_get_codec_capabilities(int fd, uint16_t hci) {
     if (ret > 0) {
       RETRY_ON_INTR(ret = write(fd, &ev, MGMT_PKT_HDR_SIZE + ev.len));
       if (ret < 0) {
-        log::debug("Failed to call MGMT_OP_GET_SCO_CODEC_CAPABILITIES: {}", -errno);
+        bluetooth::log::debug("Failed to call MGMT_OP_GET_SCO_CODEC_CAPABILITIES: {}", -errno);
         return -errno;
-      };
+      }
       break;
     }
   } while (ret > 0);
 
   if (ret <= 0) {
-    log::debug("Failed waiting for mgmt socket to be writable.");
+    bluetooth::log::debug("Failed waiting for mgmt socket to be writable.");
     return -1;
   }
 
@@ -198,8 +198,11 @@ int mgmt_get_codec_capabilities(int fd, uint16_t hci) {
       if (fds[0].revents & POLLIN) {
         RETRY_ON_INTR(ret = read(fd, &ev, sizeof(ev)));
         if (ret < 0) {
-          log::debug("Failed to read mgmt socket: {}", -errno);
+          bluetooth::log::debug("Failed to read mgmt socket: {}", -errno);
           return -errno;
+        } else if (ret == 0) { // unlikely to happen, just a safeguard.
+          bluetooth::log::debug("Failed to read mgmt socket: EOF");
+          return -1;
         }
 
         if (ev.opcode == MGMT_EV_COMMAND_COMPLETE) {
@@ -215,7 +218,7 @@ int mgmt_get_codec_capabilities(int fd, uint16_t hci) {
         }
       }
     } else if (ret == 0) {
-      log::debug("Timeout while waiting for codec capabilities response.");
+      bluetooth::log::debug("Timeout while waiting for codec capabilities response.");
       ret = -1;
     }
   } while (ret > 0);
@@ -259,15 +262,15 @@ int mgmt_notify_sco_connection_change(int fd, int hci, RawAddress device, bool i
     if (ret > 0) {
       RETRY_ON_INTR(ret = write(fd, &ev, MGMT_PKT_HDR_SIZE + ev.len));
       if (ret < 0) {
-        log::error("Failed to call MGMT_OP_NOTIFY_SCO_CONNECTION_CHANGE: {}", -errno);
+        bluetooth::log::error("Failed to call MGMT_OP_NOTIFY_SCO_CONNECTION_CHANGE: {}", -errno);
         return -errno;
-      };
+      }
       break;
     }
   } while (ret > 0);
 
   if (ret <= 0) {
-    log::debug("Failed waiting for mgmt socket to be writable.");
+    bluetooth::log::debug("Failed waiting for mgmt socket to be writable.");
     return -1;
   }
 
@@ -279,15 +282,15 @@ void init() {
   int hci = bluetooth::common::InitFlags::GetAdapterIndex();
   int fd = btsocket_open_mgmt(hci);
   if (fd < 0) {
-    log::error("Failed to open mgmt channel, error= {}.", fd);
+    bluetooth::log::error("Failed to open mgmt channel, error= {}.", fd);
     return;
   }
 
   int ret = mgmt_get_codec_capabilities(fd, hci);
   if (ret) {
-    log::error("Failed to get codec capabilities with error = {}.", ret);
+    bluetooth::log::error("Failed to get codec capabilities with error = {}.", ret);
   } else {
-    log::info("Successfully queried SCO codec capabilities.");
+    bluetooth::log::info("Successfully queried SCO codec capabilities.");
   }
 
   close(fd);
@@ -296,7 +299,7 @@ void init() {
 // Check if the specified coding format is supported by the adapter.
 bool is_coding_format_supported(esco_coding_format_t coding_format) {
   if (coding_format != ESCO_CODING_FORMAT_TRANSPNT && coding_format != ESCO_CODING_FORMAT_MSBC) {
-    log::warn("Unsupported coding format to query: {}", coding_format);
+    bluetooth::log::warn("Unsupported coding format to query: {}", coding_format);
     return false;
   }
 
@@ -346,7 +349,7 @@ bool get_offload_enabled() { return offload_supported && offload_enabled; }
 // Set offload enable/disable
 bool enable_offload(bool enable) {
   if (!offload_supported && enable) {
-    log::error("Cannot enable SCO-offload since it is not supported.");
+    bluetooth::log::error("Cannot enable SCO-offload since it is not supported.");
     return false;
   }
   offload_enabled = enable;
@@ -373,7 +376,7 @@ void set_codec_datapath(tBTA_AG_UUID_CODEC codec_uuid) {
   uint8_t codec_id;
 
   if (codec_uuid == tBTA_AG_UUID_CODEC::UUID_CODEC_LC3 && get_offload_enabled()) {
-    log::error("Offload path for LC3 is not implemented.");
+    bluetooth::log::error("Offload path for LC3 is not implemented.");
     return;
   }
 
@@ -388,20 +391,21 @@ void set_codec_datapath(tBTA_AG_UUID_CODEC codec_uuid) {
       codec_id = get_offload_enabled() ? codec::LC3 : codec::MSBC_TRANSPARENT;
       break;
     default:
-      log::warn("Unsupported codec ({}). Won't set datapath.", bta_ag_uuid_codec_text(codec_uuid));
+      bluetooth::log::warn("Unsupported codec ({}). Won't set datapath.",
+                           bta_ag_uuid_codec_text(codec_uuid));
       return;
   }
 
   found = get_single_codec(codec_id, &codec);
   if (!found) {
-    log::error("Failed to find codec config for codec ({}). Won't set datapath.",
-               bta_ag_uuid_codec_text(codec_uuid));
+    bluetooth::log::error("Failed to find codec config for codec ({}). Won't set datapath.",
+                          bta_ag_uuid_codec_text(codec_uuid));
     return;
   }
 
-  log::info("Configuring datapath for codec ({})", bta_ag_uuid_codec_text(codec_uuid));
+  bluetooth::log::info("Configuring datapath for codec ({})", bta_ag_uuid_codec_text(codec_uuid));
   if (codec->codec == codec::MSBC && !get_offload_enabled()) {
-    log::error(
+    bluetooth::log::error(
             "Tried to configure offload data path for format ({}) with offload "
             "disabled. Won't set datapath.",
             bta_ag_uuid_codec_text(codec_uuid));
@@ -442,12 +446,12 @@ void notify_sco_connection_change(RawAddress device, bool is_connected, int code
   int hci = bluetooth::common::InitFlags::GetAdapterIndex();
   int fd = btsocket_open_mgmt(hci);
   if (fd < 0) {
-    log::error("Failed to open mgmt channel, error= {}.", fd);
+    bluetooth::log::error("Failed to open mgmt channel, error= {}.", fd);
     return;
   }
 
   if (codec == codec::LC3) {
-    log::error("Offload path for LC3 is not implemented.");
+    bluetooth::log::error("Offload path for LC3 is not implemented.");
     return;
   }
 
@@ -466,12 +470,12 @@ void notify_sco_connection_change(RawAddress device, bool is_connected, int code
 
   int ret = mgmt_notify_sco_connection_change(fd, hci, device, is_connected, converted_codec);
   if (ret) {
-    log::error(
+    bluetooth::log::error(
             "Failed to notify HAL of connection change: hci {}, device {}, "
             "connected {}, codec {}",
             hci, device, is_connected, codec);
   } else {
-    log::info(
+    bluetooth::log::info(
             "Notified HAL of connection change: hci {}, device {}, connected {}, "
             "codec {}",
             hci, device, is_connected, codec);

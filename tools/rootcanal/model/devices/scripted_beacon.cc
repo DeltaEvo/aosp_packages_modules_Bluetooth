@@ -192,9 +192,9 @@ void ScriptedBeacon::ReceiveLinkLayerPacket(model::packets::LinkLayerPacketView 
     if (packet.GetDestinationAddress() == address_ && packet.GetType() == PacketType::LE_SCAN) {
       set_state(PlaybackEvent::SCANNED_ONCE);
       SendLinkLayerPacket(
-              std::move(model::packets::LeScanResponseBuilder::Create(
+              model::packets::LeScanResponseBuilder::Create(
                       address_, packet.GetSourceAddress(), AddressType::PUBLIC,
-                      std::vector(scan_response_data_.begin(), scan_response_data_.end()))),
+                      std::vector(scan_response_data_.begin(), scan_response_data_.end())),
               Phy::Type::LOW_ENERGY);
     }
   }

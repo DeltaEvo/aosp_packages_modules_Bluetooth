@@ -1125,7 +1125,8 @@ void bnepu_send_peer_multicast_filter_rsp(tBNEP_CONN* p_bcb, uint16_t response_c
  * Returns          void
  *
  ******************************************************************************/
-void bnep_sec_check_complete(const RawAddress* bd_addr, tBT_TRANSPORT transport, void* p_ref_data) {
+void bnep_sec_check_complete(const RawAddress* /* bd_addr */, tBT_TRANSPORT /* transport */,
+                             void* p_ref_data) {
   tBNEP_CONN* p_bcb = (tBNEP_CONN*)p_ref_data;
   uint16_t resp_code = BNEP_SETUP_CONN_OK;
   bool is_role_change;

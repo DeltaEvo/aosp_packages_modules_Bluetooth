@@ -31,6 +31,7 @@
 #include "stack/include/bt_octets.h"
 #include "stack/include/btm_ble_sec_api.h"
 #include "stack/include/btm_client_interface.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/main_thread.h"
 #include "types/raw_address.h"
 
@@ -214,7 +215,7 @@ void BTA_DmBleSecurityGrant(const RawAddress& bd_addr, tBTA_DM_BLE_SEC_GRANT res
   const tBTM_STATUS btm_status = [](const tBTA_DM_BLE_SEC_GRANT res) -> tBTM_STATUS {
     switch (res) {
       case tBTA_DM_BLE_SEC_GRANT::BTA_DM_SEC_GRANTED:
-        return BTM_SUCCESS;
+        return tBTM_STATUS::BTM_SUCCESS;
       case tBTA_DM_BLE_SEC_GRANT::BTA_DM_SEC_PAIR_NOT_SPT:
         return static_cast<tBTM_STATUS>(BTA_DM_AUTH_FAIL_BASE + SMP_PAIR_NOT_SUPPORT);
     }

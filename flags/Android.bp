@@ -41,6 +41,7 @@ aconfig_declarations {
         "ranging.aconfig",
         "rfcomm.aconfig",
         "rnr.aconfig",
+        "sco.aconfig",
         "sdp.aconfig",
         "security.aconfig",
         "sockets.aconfig",

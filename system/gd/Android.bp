@@ -34,7 +34,6 @@ cc_defaults {
         "-DEXPORT_SYMBOL=__attribute__((visibility(\"default\")))",
         "-DGOOGLE_PROTOBUF_NO_RTTI",
         "-DLOG_NDEBUG=0",
-        "-Wno-unused-result",
         "-fvisibility=hidden",
     ],
     header_libs: ["jni_headers"],
@@ -174,7 +173,6 @@ cc_defaults {
         "libbluetooth_smp_pdl",
     ],
     static_libs: [
-        "bluetooth_flags_c_lib",
         "libaconfig_storage_read_api_cc",
         "libbase",
         "libbluetooth-dumpsys",
@@ -210,7 +208,10 @@ cc_library {
         "com.android.btservices",
     ],
     min_sdk_version: "31",
-    static_libs: ["libchrome"],
+    static_libs: [
+        "bluetooth_flags_c_lib",
+        "libchrome",
+    ],
 }
 
 cc_library_static {
@@ -219,7 +220,6 @@ cc_library_static {
         "libbluetooth_gd_defaults",
     ],
     srcs: [
-        ":BluetoothDiscoverySources",
         ":BluetoothShimSources",
     ],
     include_dirs: [
@@ -229,7 +229,10 @@ cc_library_static {
         "com.android.btservices",
     ],
     min_sdk_version: "31",
-    static_libs: ["libchrome"],
+    static_libs: [
+        "bluetooth_flags_c_lib",
+        "libchrome",
+    ],
 }
 
 cc_library {
@@ -249,6 +252,7 @@ cc_library {
         "-Wno-unused-parameter",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libbluetooth-types",
         "libbt-common",
         "libchrome",
@@ -271,6 +275,7 @@ cc_library {
         "-DUSE_FAKE_TIMERS",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib_for_test",
         "libbluetooth-types",
         "libbt-common",
         "libchrome",
@@ -487,7 +492,7 @@ cc_test {
         "BluetoothGeneratedDumpsysTestData_h",
     ],
     static_libs: [
-        "bluetooth_flags_c_lib",
+        "bluetooth_flags_c_lib_for_test",
         "libbase",
         "libbluetooth-protos",
         "libbluetooth-types",
@@ -509,12 +514,12 @@ cc_test {
         "libflatbuffers-cpp",
         "libgmock",
         "libosi",
+        "server_configurable_flags",
     ],
     shared_libs: [
         "libPlatformProperties",
         "libaconfig_storage_read_api_cc",
         "libcrypto",
-        "server_configurable_flags",
     ],
     sanitize: {
         address: true,
@@ -538,7 +543,6 @@ cc_test {
     ],
     host_supported: true,
     srcs: [
-        ":BluetoothDiscoveryTestSources",
         ":BluetoothDumpsysTestSources",
         ":BluetoothShimTestSources",
         ":TestCommonMockFunctions",
@@ -561,7 +565,6 @@ cc_test {
         "libbluetooth-dumpsys-test",
         "libbluetooth-dumpsys-unittest",
         "libbluetooth-gdx",
-        "libbluetooth-types",
         "libbluetooth_gd",
         "libbluetooth_log",
         "libbt-btu-main-thread",
@@ -576,9 +579,6 @@ cc_test {
         "liblog",
         "libosi",
         "server_configurable_flags",
-    ],
-    shared_libs: [
-        "libcrypto",
     ],
     sanitize: {
         address: true,

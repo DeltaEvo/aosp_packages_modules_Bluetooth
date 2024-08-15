@@ -21,6 +21,7 @@
 #include "hci/controller_interface_mock.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/acl_hci_link_interface.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/hci_error_code.h"
 #include "test/common/mock_functions.h"
 #include "test/mock/mock_main_shim_entry.h"
@@ -52,20 +53,21 @@ protected:
     bluetooth::hci::testing::mock_controller_ = &controller_;
     power_mode_callback_queue.clear();
     reset_mock_function_count_map();
-    ASSERT_EQ(BTM_SUCCESS, BTM_PmRegister(BTM_PM_REG_SET, &pm_id_,
-                                          [](const RawAddress& p_bda, tBTM_PM_STATUS status,
-                                             uint16_t value, tHCI_STATUS hci_status) {
-                                            power_mode_callback_queue.push_back(power_mode_callback{
-                                                    .bd_addr = p_bda,
-                                                    .status = status,
-                                                    .value = value,
-                                                    .hci_status = hci_status,
-                                            });
-                                          }));
+    ASSERT_EQ(tBTM_STATUS::BTM_SUCCESS,
+              BTM_PmRegister(BTM_PM_REG_SET, &pm_id_,
+                             [](const RawAddress& p_bda, tBTM_PM_STATUS status, uint16_t value,
+                                tHCI_STATUS hci_status) {
+                               power_mode_callback_queue.push_back(power_mode_callback{
+                                       .bd_addr = p_bda,
+                                       .status = status,
+                                       .value = value,
+                                       .hci_status = hci_status,
+                               });
+                             }));
   }
 
   void TearDown() override {
-    ASSERT_EQ(BTM_SUCCESS,
+    ASSERT_EQ(tBTM_STATUS::BTM_SUCCESS,
               BTM_PmRegister(BTM_PM_DEREG, &pm_id_,
                              [](const RawAddress& /* p_bda */, tBTM_PM_STATUS /* status */,
                                 uint16_t /* value */, tHCI_STATUS /* hci_status */) {}));
@@ -96,7 +98,7 @@ TEST_F(StackBtmPowerMode, BTM_SetPowerMode__Undefined) {
 
 TEST_F(StackBtmPowerModeConnected, BTM_SetPowerMode__AlreadyActive) {
   tBTM_PM_PWR_MD mode = {};
-  ASSERT_EQ(BTM_SUCCESS, ::BTM_SetPowerMode(pm_id_, kRawAddress, &mode));
+  ASSERT_EQ(tBTM_STATUS::BTM_SUCCESS, ::BTM_SetPowerMode(pm_id_, kRawAddress, &mode));
 }
 
 TEST_F(StackBtmPowerModeConnected, BTM_SetPowerMode__ActiveToSniff) {

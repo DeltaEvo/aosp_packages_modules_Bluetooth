@@ -324,10 +324,10 @@ TEST_F(MessageLoopThreadTest, test_post_twice) {
   int counter = 0;
   message_loop_thread.StartUp();
   message_loop_thread.Post(base::BindOnce(
-          [](MessageLoopThread* thread, int* counter) { ASSERT_EQ((*counter)++, 0); },
+          [](MessageLoopThread* /* thread */, int* counter) { ASSERT_EQ((*counter)++, 0); },
           &message_loop_thread, &counter));
   message_loop_thread.Post(base::BindOnce(
-          [](MessageLoopThread* thread, int* counter) { ASSERT_EQ((*counter)++, 1); },
+          [](MessageLoopThread* /* thread */, int* counter) { ASSERT_EQ((*counter)++, 1); },
           &message_loop_thread, &counter));
   message_loop_thread.ShutDown();
   ASSERT_EQ(counter, 2);

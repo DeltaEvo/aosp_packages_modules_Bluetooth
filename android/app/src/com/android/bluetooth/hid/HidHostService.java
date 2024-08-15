@@ -188,7 +188,7 @@ public class HidHostService extends ProfileService {
     }
 
     private byte[] getIdentityAddress(BluetoothDevice device) {
-        if (Flags.identityAddressNullIfUnknown()) {
+        if (Flags.identityAddressNullIfNotKnown()) {
             return Utils.getByteBrEdrAddress(mAdapterService, device);
         } else {
             return mAdapterService.getByteIdentityAddress(device);

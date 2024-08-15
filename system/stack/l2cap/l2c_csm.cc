@@ -251,7 +251,7 @@ static void l2c_csm_closed(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
         /* If sec access does not result in started SEC_COM or COMP_NEG are
          * already processed */
         if (btm_sec_l2cap_access_req(p_ccb->p_lcb->remote_bd_addr, p_ccb->p_rcb->psm, true,
-                                     &l2c_link_sec_comp, p_ccb) == BTM_CMD_STARTED) {
+                                     &l2c_link_sec_comp, p_ccb) == tBTM_STATUS::BTM_CMD_STARTED) {
           p_ccb->chnl_state = CST_ORIG_W4_SEC_COMP;
         }
       }
@@ -320,7 +320,7 @@ static void l2c_csm_closed(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
         p_ccb->chnl_state = CST_TERM_W4_SEC_COMP;
         auto status = btm_sec_l2cap_access_req(p_ccb->p_lcb->remote_bd_addr, p_ccb->p_rcb->psm,
                                                false, &l2c_link_sec_comp, p_ccb);
-        if (status == BTM_CMD_STARTED) {
+        if (status == tBTM_STATUS::BTM_CMD_STARTED) {
           // started the security process, tell the peer to set a longer timer
           l2cu_send_peer_connect_rsp(p_ccb, L2CAP_CONN_PENDING, 0);
         } else {
@@ -1137,8 +1137,7 @@ static void l2c_csm_config(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
           if (l2cb.fixed_reg[p_ccb->local_cid - L2CAP_FIRST_FIXED_CHNL].pL2CA_FixedData_Cb !=
               nullptr) {
             p_ccb->metrics.rx(static_cast<BT_HDR*>(p_data)->len);
-            (*l2cb.fixed_reg[p_ccb->local_cid - L2CAP_FIRST_FIXED_CHNL].pL2CA_FixedData_Cb)(
-                    p_ccb->local_cid, p_ccb->p_lcb->remote_bd_addr, (BT_HDR*)p_data);
+            l2cu_fixed_channel_data_cb(p_lcb, p_ccb->local_cid, reinterpret_cast<BT_HDR*>(p_data));
           } else {
             if (p_data != nullptr) {
               osi_free_and_reset(&p_data);

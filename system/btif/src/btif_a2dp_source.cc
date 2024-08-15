@@ -50,6 +50,7 @@
 #include "stack/include/acl_api_types.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_client_interface.h"
+#include "stack/include/btm_status.h"
 #include "types/raw_address.h"
 
 using bluetooth::audio::a2dp::BluetoothAudioStatus;
@@ -537,7 +538,7 @@ static void btif_a2dp_source_setup_codec_delayed(const RawAddress& peer_address)
       return;
     }
   }
-  btif_a2dp_source_cb.encoder_interface = bta_av_co_get_encoder_interface();
+  btif_a2dp_source_cb.encoder_interface = bta_av_co_get_encoder_interface(peer_address);
   if (btif_a2dp_source_cb.encoder_interface == nullptr) {
     log::error("Cannot stream audio: no source encoder interface");
     return;
@@ -917,7 +918,7 @@ static bool btif_a2dp_source_enqueue_callback(BT_HDR* p_buf, size_t frames_n,
     RawAddress peer_bda = btif_av_source_active_peer();
     tBTM_STATUS status =
             get_btm_client_interface().link_controller.BTM_ReadRSSI(peer_bda, btm_read_rssi_cb);
-    if (status != BTM_CMD_STARTED) {
+    if (status != tBTM_STATUS::BTM_CMD_STARTED) {
       log::warn("Cannot read RSSI: status {}", status);
     }
 
@@ -929,13 +930,13 @@ static bool btif_a2dp_source_enqueue_callback(BT_HDR* p_buf, size_t frames_n,
     // creating a framework to avoid ifdefs.
 #ifndef TARGET_FLOSS
     status = BTM_ReadFailedContactCounter(peer_bda, btm_read_failed_contact_counter_cb);
-    if (status != BTM_CMD_STARTED) {
+    if (status != tBTM_STATUS::BTM_CMD_STARTED) {
       log::warn("Cannot read Failed Contact Counter: status {}", status);
     }
 #endif
 
     status = BTM_ReadTxPower(peer_bda, BT_TRANSPORT_BR_EDR, btm_read_tx_power_cb);
-    if (status != BTM_CMD_STARTED) {
+    if (status != tBTM_STATUS::BTM_CMD_STARTED) {
       log::warn("Cannot read Tx Power: status {}", status);
     }
   }
@@ -1240,7 +1241,7 @@ static void btm_read_rssi_cb(void* data) {
   }
 
   tBTM_RSSI_RESULT* result = (tBTM_RSSI_RESULT*)data;
-  if (result->status != BTM_SUCCESS) {
+  if (result->status != tBTM_STATUS::BTM_SUCCESS) {
     log::error("unable to read remote RSSI (status {})", result->status);
     return;
   }
@@ -1258,7 +1259,7 @@ static void btm_read_failed_contact_counter_cb(void* data) {
   }
 
   tBTM_FAILED_CONTACT_COUNTER_RESULT* result = (tBTM_FAILED_CONTACT_COUNTER_RESULT*)data;
-  if (result->status != BTM_SUCCESS) {
+  if (result->status != tBTM_STATUS::BTM_SUCCESS) {
     log::error("unable to read Failed Contact Counter (status {})", result->status);
     return;
   }
@@ -1277,7 +1278,7 @@ static void btm_read_tx_power_cb(void* data) {
   }
 
   tBTM_TX_POWER_RESULT* result = (tBTM_TX_POWER_RESULT*)data;
-  if (result->status != BTM_SUCCESS) {
+  if (result->status != tBTM_STATUS::BTM_SUCCESS) {
     log::error("unable to read Tx Power (status {})", result->status);
     return;
   }

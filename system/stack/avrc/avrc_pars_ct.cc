@@ -537,7 +537,7 @@ browse_length_error:
  *
  ******************************************************************************/
 static tAVRC_STS avrc_ctrl_pars_vendor_rsp(tAVRC_MSG_VENDOR* p_msg, tAVRC_RESPONSE* p_result,
-                                           uint8_t* p_buf, uint16_t* buf_len) {
+                                           uint8_t* /* p_buf */, uint16_t* /* buf_len */) {
   if (p_msg->vendor_len < 4) {
     log::warn("message length {} too short: must be at least 4", p_msg->vendor_len);
     return AVRC_STS_INTERNAL_ERR;

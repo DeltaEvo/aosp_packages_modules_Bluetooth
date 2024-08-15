@@ -1367,7 +1367,7 @@ impl Bluetooth {
     /// Disconnect the device if no HID or media profiles are enabled.
     pub fn disconnect_if_no_media_or_hid_profiles_connected(&mut self, device_address: RawAddress) {
         let context = match self.remote_devices.get(&device_address) {
-            Some(context) => context.clone(),
+            Some(context) => context,
             None => return,
         };
         let device = context.info.clone();

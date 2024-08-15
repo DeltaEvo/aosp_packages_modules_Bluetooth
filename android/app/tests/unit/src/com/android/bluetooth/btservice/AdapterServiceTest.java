@@ -409,7 +409,7 @@ public class AdapterServiceTest {
             Context ctx,
             IBluetoothCallback callback,
             AdapterNativeInterface nativeInterface) {
-        adapter.enable(false);
+        adapter.offToBleOn(false);
         if (Flags.fastBindToApp()) {
             TestUtils.syncHandler(looper, 0); // when fastBindToApp is enable init need to be run
         }
@@ -435,7 +435,7 @@ public class AdapterServiceTest {
             IBluetoothCallback callback,
             boolean onlyGatt,
             List<ProfileService> services) {
-        adapter.disable();
+        adapter.onToBleOn();
         TestUtils.syncHandler(looper, AdapterState.USER_TURN_OFF);
         verifyStateChange(callback, STATE_ON, STATE_TURNING_OFF);
 
@@ -540,7 +540,7 @@ public class AdapterServiceTest {
 
         onToBleOn(looper, adapter, ctx, callback, onlyGatt, services);
 
-        adapter.stopBle();
+        adapter.bleOnToOff();
         TestUtils.syncHandler(looper, AdapterState.BLE_TURN_OFF);
         verifyStateChange(callback, STATE_BLE_ON, STATE_BLE_TURNING_OFF);
 
@@ -620,7 +620,7 @@ public class AdapterServiceTest {
     public void testGattStartTimeout() {
         assertThat(mAdapterService.getState()).isEqualTo(STATE_OFF);
 
-        mAdapterService.enable(false);
+        mAdapterService.offToBleOn(false);
         if (Flags.fastBindToApp()) {
             syncHandler(0); // when fastBindToApp is enable init need to be run
         }
@@ -661,7 +661,7 @@ public class AdapterServiceTest {
                 false,
                 listOfMockServices());
 
-        mAdapterService.stopBle();
+        mAdapterService.bleOnToOff();
         syncHandler(AdapterState.BLE_TURN_OFF);
         verifyStateChange(STATE_BLE_ON, STATE_BLE_TURNING_OFF, CONTEXT_SWITCH_MS);
         assertThat(mAdapterService.getBluetoothGatt()).isNull();
@@ -723,7 +723,7 @@ public class AdapterServiceTest {
         assertThat(mAdapterService.getBluetoothScan()).isNotNull();
         assertThat(mAdapterService.getBluetoothGatt()).isNull();
 
-        mAdapterService.stopBle();
+        mAdapterService.bleOnToOff();
         syncHandler(AdapterState.BLE_TURN_OFF);
         verifyStateChange(callback, STATE_BLE_ON, STATE_BLE_TURNING_OFF);
 
@@ -789,7 +789,7 @@ public class AdapterServiceTest {
 
         assertThat(mAdapterService.getState()).isEqualTo(STATE_ON);
 
-        mAdapterService.disable();
+        mAdapterService.onToBleOn();
         TestUtils.syncHandler(mLooper, AdapterState.USER_TURN_OFF);
         verifyStateChange(callback, STATE_ON, STATE_TURNING_OFF);
 
@@ -858,7 +858,7 @@ public class AdapterServiceTest {
     public void testProfileStopTimeout() {
         doEnable(false);
 
-        mAdapterService.disable();
+        mAdapterService.onToBleOn();
         syncHandler(AdapterState.USER_TURN_OFF);
         verifyStateChange(STATE_ON, STATE_TURNING_OFF);
         assertThat(mAdapterService.mSetProfileServiceStateCounter).isEqualTo(4);
@@ -910,7 +910,7 @@ public class AdapterServiceTest {
                 false,
                 listOfMockServices());
 
-        // Do not call stopBle().  The Adapter should turn itself off.
+        // Do not call bleOnToOff().  The Adapter should turn itself off.
         syncHandler(AdapterState.BLE_TURN_OFF);
         verifyStateChange(STATE_BLE_ON, STATE_BLE_TURNING_OFF, CONTEXT_SWITCH_MS);
 
@@ -950,7 +950,7 @@ public class AdapterServiceTest {
         RemoteDevices remoteDevices = mAdapterService.getRemoteDevices();
         remoteDevices.addDeviceProperties(Utils.getBytesFromAddress((TEST_BT_ADDR_1)));
         String identityAddress = mAdapterService.getIdentityAddress(TEST_BT_ADDR_1);
-        if (!Flags.identityAddressNullIfUnknown()) {
+        if (!Flags.identityAddressNullIfNotKnown()) {
             assertThat(identityAddress).isEqualTo(TEST_BT_ADDR_1);
         }
 
@@ -965,7 +965,7 @@ public class AdapterServiceTest {
     }
 
     @Test
-    @EnableFlags(Flags.FLAG_IDENTITY_ADDRESS_NULL_IF_UNKNOWN)
+    @EnableFlags(Flags.FLAG_IDENTITY_ADDRESS_NULL_IF_NOT_KNOWN)
     public void testIdentityAddressNullIfUnknown() {
         BluetoothDevice device = TestUtils.getTestDevice(BluetoothAdapter.getDefaultAdapter(), 0);
 

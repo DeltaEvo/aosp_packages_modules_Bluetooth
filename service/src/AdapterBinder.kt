@@ -34,13 +34,13 @@ class AdapterBinder(rawBinder: IBinder) {
             "]"
 
     @Throws(RemoteException::class)
-    fun disable(source: AttributionSource) {
-        adapterBinder.disable(source)
+    fun onToBleOn(source: AttributionSource) {
+        adapterBinder.onToBleOn(source)
     }
 
     @Throws(RemoteException::class)
-    fun enable(quietMode: Boolean, source: AttributionSource) {
-        adapterBinder.enable(quietMode, source)
+    fun offToBleOn(quietMode: Boolean, source: AttributionSource) {
+        adapterBinder.offToBleOn(quietMode, source)
     }
 
     @Throws(RemoteException::class)
@@ -54,8 +54,8 @@ class AdapterBinder(rawBinder: IBinder) {
     }
 
     @Throws(RemoteException::class)
-    fun stopBle(source: AttributionSource) {
-        adapterBinder.stopBle(source)
+    fun bleOnToOff(source: AttributionSource) {
+        adapterBinder.bleOnToOff(source)
     }
 
     @Throws(RemoteException::class)

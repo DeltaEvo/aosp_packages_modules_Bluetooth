@@ -429,35 +429,58 @@ public class MapClientService extends ProfileService {
             mService = service;
         }
 
-        @RequiresPermission(BLUETOOTH_CONNECT)
-        private MapClientService getService(AttributionSource source) {
-            if (Utils.isInstrumentationTestMode()) {
-                return mService;
-            }
-            if (!Utils.checkServiceAvailable(mService, TAG)
-                    || !(getCallingUserHandle().isSystem()
-                            || Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG))
-                    || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
-                return null;
-            }
-            return mService;
-        }
-
         @Override
         public void cleanup() {
             mService = null;
+        }
+
+        @RequiresPermission(BLUETOOTH_CONNECT)
+        private MapClientService getService(AttributionSource source) {
+            // Cache mService because it can change while getService is called
+            MapClientService service = mService;
+
+            if (Utils.isInstrumentationTestMode()) {
+                return service;
+            }
+
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !(getCallingUserHandle().isSystem()
+                            || Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG))
+                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
+                return null;
+            }
+            return service;
+        }
+
+        @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
+        private MapClientService getServiceAndEnforcePrivileged(AttributionSource source) {
+            // Cache mService because it can change while getService is called
+            MapClientService service = mService;
+
+            if (Utils.isInstrumentationTestMode()) {
+                return service;
+            }
+
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !(getCallingUserHandle().isSystem()
+                            || Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG))
+                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
+                return null;
+            }
+
+            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
+
+            return service;
         }
 
         @Override
         public boolean connect(BluetoothDevice device, AttributionSource source) {
             Log.v(TAG, "connect()");
 
-            MapClientService service = getService(source);
+            MapClientService service = getServiceAndEnforcePrivileged(source);
             if (service == null) {
                 return false;
             }
-
-            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.connect(device);
         }
@@ -466,12 +489,10 @@ public class MapClientService extends ProfileService {
         public boolean disconnect(BluetoothDevice device, AttributionSource source) {
             Log.v(TAG, "disconnect()");
 
-            MapClientService service = getService(source);
+            MapClientService service = getServiceAndEnforcePrivileged(source);
             if (service == null) {
                 return false;
             }
-
-            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.disconnect(device);
         }
@@ -480,7 +501,7 @@ public class MapClientService extends ProfileService {
         public List<BluetoothDevice> getConnectedDevices(AttributionSource source) {
             Log.v(TAG, "getConnectedDevices()");
 
-            MapClientService service = getService(source);
+            MapClientService service = getServiceAndEnforcePrivileged(source);
             if (service == null) {
                 return Collections.emptyList();
             }
@@ -493,7 +514,7 @@ public class MapClientService extends ProfileService {
                 int[] states, AttributionSource source) {
             Log.v(TAG, "getDevicesMatchingConnectionStates()");
 
-            MapClientService service = getService(source);
+            MapClientService service = getServiceAndEnforcePrivileged(source);
             if (service == null) {
                 return Collections.emptyList();
             }
@@ -504,7 +525,7 @@ public class MapClientService extends ProfileService {
         public int getConnectionState(BluetoothDevice device, AttributionSource source) {
             Log.v(TAG, "getConnectionState()");
 
-            MapClientService service = getService(source);
+            MapClientService service = getServiceAndEnforcePrivileged(source);
             if (service == null) {
                 return BluetoothProfile.STATE_DISCONNECTED;
             }
@@ -517,12 +538,10 @@ public class MapClientService extends ProfileService {
                 BluetoothDevice device, int connectionPolicy, AttributionSource source) {
             Log.v(TAG, "setConnectionPolicy()");
 
-            MapClientService service = getService(source);
+            MapClientService service = getServiceAndEnforcePrivileged(source);
             if (service == null) {
                 return false;
             }
-
-            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.setConnectionPolicy(device, connectionPolicy);
         }
@@ -531,12 +550,10 @@ public class MapClientService extends ProfileService {
         public int getConnectionPolicy(BluetoothDevice device, AttributionSource source) {
             Log.v(TAG, "getConnectionPolicy()");
 
-            MapClientService service = getService(source);
+            MapClientService service = getServiceAndEnforcePrivileged(source);
             if (service == null) {
                 return BluetoothProfile.CONNECTION_POLICY_UNKNOWN;
             }
-
-            service.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, null);
 
             return service.getConnectionPolicy(device);
         }

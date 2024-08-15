@@ -333,7 +333,7 @@ bool A2dpCodecConfig::isCodecConfigEmpty(const btav_a2dp_codec_config_t& codec_c
 tA2DP_STATUS A2dpCodecConfig::setCodecUserConfig(
         const btav_a2dp_codec_config_t& codec_user_config,
         const btav_a2dp_codec_config_t& codec_audio_config,
-        const tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_params, const uint8_t* p_peer_codec_info,
+        const tA2DP_ENCODER_INIT_PEER_PARAMS* /* p_peer_params */, const uint8_t* p_peer_codec_info,
         bool is_capability, uint8_t* p_result_codec_config, bool* p_restart_input,
         bool* p_restart_output, bool* p_config_updated) {
   std::lock_guard<std::recursive_mutex> lock(codec_mutex_);

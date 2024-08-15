@@ -33,6 +33,7 @@
 #include "internal_include/bt_target.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
+#include "osi/include/properties.h"
 #include "stack/include/bt_hdr.h"
 
 //
@@ -211,7 +212,8 @@ static void a2dp_vendor_ldac_encoder_update(A2dpCodecConfig* a2dp_codec_config,
     log::info("setting quality mode to {}",
               quality_mode_index_to_name(p_encoder_params->quality_mode_index));
   } else {
-    p_encoder_params->quality_mode_index = A2DP_LDAC_QUALITY_ABR;
+    p_encoder_params->quality_mode_index = osi_property_get_int32(
+            "persist.bluetooth.a2dp_ldac.default_quality_mode", A2DP_LDAC_QUALITY_ABR);
     log::info("setting quality mode to default {}",
               quality_mode_index_to_name(p_encoder_params->quality_mode_index));
   }

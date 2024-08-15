@@ -50,6 +50,7 @@
 #include "stack/include/btm_ble_api.h"
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_log_history.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/l2c_api.h"
 #include "stack/include/l2cap_acl_interface.h"
 #include "stack/include/l2cdefs.h"
@@ -1076,7 +1077,7 @@ void l2cble_update_data_length(tL2C_LCB* p_lcb) {
   /* update TX data length if changed */
   if (p_lcb->tx_data_len != tx_mtu) {
     if (get_btm_client_interface().ble.BTM_SetBleDataLength(p_lcb->remote_bd_addr, tx_mtu) !=
-        BTM_SUCCESS) {
+        tBTM_STATUS::BTM_SUCCESS) {
       log::warn("Unable to set BLE data length peer:{} mtu:{}", p_lcb->remote_bd_addr, tx_mtu);
     }
   }
@@ -1259,7 +1260,7 @@ void l2cble_sec_comp(RawAddress bda, tBT_TRANSPORT transport, void* /* p_ref_dat
       return;
     }
 
-    if (btm_status != BTM_SUCCESS) {
+    if (btm_status != tBTM_STATUS::BTM_SUCCESS) {
       (*(p_buf->p_callback))(bda, BT_TRANSPORT_LE, p_buf->p_ref_data, btm_status);
       osi_free(p_buf);
     } else {
@@ -1285,7 +1286,7 @@ void l2cble_sec_comp(RawAddress bda, tBT_TRANSPORT transport, void* /* p_ref_dat
   while (!fixed_queue_is_empty(p_lcb->le_sec_pending_q)) {
     p_buf = (tL2CAP_SEC_DATA*)fixed_queue_dequeue(p_lcb->le_sec_pending_q);
 
-    if (btm_status != BTM_SUCCESS) {
+    if (btm_status != tBTM_STATUS::BTM_SUCCESS) {
       (*(p_buf->p_callback))(bda, BT_TRANSPORT_LE, p_buf->p_ref_data, btm_status);
       osi_free(p_buf);
     } else {
@@ -1342,7 +1343,7 @@ tL2CAP_LE_RESULT_CODE l2ble_sec_access_req(const RawAddress& bd_addr, uint16_t p
           btm_ble_start_sec_check(bd_addr, psm, is_originator, &l2cble_sec_comp, p_ref_data);
 
   switch (result) {
-    case BTM_SUCCESS:
+    case tBTM_STATUS::BTM_SUCCESS:
       return L2CAP_LE_RESULT_CONN_OK;
     case BTM_ILLEGAL_VALUE:
       return L2CAP_LE_RESULT_NO_PSM;

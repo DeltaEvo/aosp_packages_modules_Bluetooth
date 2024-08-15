@@ -37,6 +37,7 @@
 #include "osi/include/osi.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/bt_types.h"
+#include "stack/include/btm_status.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
@@ -178,7 +179,7 @@ public:
     BTA_GATTC_CancelOpen(gatt_if_, address, false);
 
     if (device->IsEncryptionEnabled()) {
-      OnEncryptionComplete(address, BTM_SUCCESS);
+      OnEncryptionComplete(address, tBTM_STATUS::BTM_SUCCESS);
       return;
     }
 
@@ -195,7 +196,7 @@ public:
       return;
     }
 
-    if (success != BTM_SUCCESS) {
+    if (success != tBTM_STATUS::BTM_SUCCESS) {
       log::error("encryption failed status: {}", btm_status_text(success));
       // If the encryption failed, do not remove the device.
       // Disconnect only, since the Android will try to re-enable encryption
@@ -1160,7 +1161,7 @@ private:
       case BTA_GATTC_ENC_CMPL_CB_EVT: {
         tBTM_STATUS encryption_status;
         if (BTM_IsEncrypted(p_data->enc_cmpl.remote_bda, BT_TRANSPORT_LE)) {
-          encryption_status = BTM_SUCCESS;
+          encryption_status = tBTM_STATUS::BTM_SUCCESS;
         } else {
           encryption_status = BTM_FAILED_ON_SECURITY;
         }

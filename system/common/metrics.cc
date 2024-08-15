@@ -16,7 +16,7 @@
  *
  ******************************************************************************/
 
-#include "metrics.h"
+#include "common/metrics.h"
 
 #include <base/base64.h>
 #include <bluetooth/log.h>
@@ -26,24 +26,21 @@
 #include <unistd.h>
 
 #include <algorithm>
-#include <array>
 #include <cerrno>
 #include <cstdint>
 #include <cstring>
 #include <memory>
-#include <mutex>
+#include <mutex>  // NOLINT
+#include <utility>
 
-#include "address_obfuscator.h"
 #include "bluetooth/metrics/bluetooth.pb.h"
+#include "common/address_obfuscator.h"
+#include "common/leaky_bonded_queue.h"
+#include "common/time_util.h"
 #include "hci/address.h"
-#include "internal_include/bt_trace.h"
-#include "leaky_bonded_queue.h"
 #include "main/shim/metric_id_api.h"
-#include "metric_id_allocator.h"
 #include "metrics/metrics_state.h"
-#include "os/metrics.h"
 #include "osi/include/osi.h"
-#include "time_util.h"
 #include "types/raw_address.h"
 
 namespace fmt {
@@ -391,7 +388,7 @@ void BluetoothMetricsLogger::LogBluetoothSessionDeviceInfo(uint32_t device_class
   }
   DeviceInfo* info = pimpl_->bluetooth_session_->mutable_device_connected_to();
   info->set_device_class(device_class);
-  info->set_device_type(DeviceInfo::DEVICE_TYPE_BREDR);
+  info->set_device_type(get_device_type(device_type));
 }
 
 void BluetoothMetricsLogger::LogA2dpSession(const A2dpSessionMetrics& a2dp_session_metrics) {
@@ -851,17 +848,17 @@ void LogBluetoothHalCrashReason(const RawAddress& address, uint32_t error_code,
   }
 }
 
-void LogLeAudioConnectionSessionReported(int32_t group_size, int32_t group_metric_id,
-                                         int64_t connection_duration_nanos,
-                                         std::vector<int64_t>& device_connecting_offset_nanos,
-                                         std::vector<int64_t>& device_connected_offset_nanos,
-                                         std::vector<int64_t>& device_connection_duration_nanos,
-                                         std::vector<int32_t>& device_connection_status,
-                                         std::vector<int32_t>& device_disconnection_status,
-                                         std::vector<RawAddress>& device_address,
-                                         std::vector<int64_t>& streaming_offset_nanos,
-                                         std::vector<int64_t>& streaming_duration_nanos,
-                                         std::vector<int32_t>& streaming_context_type) {
+void LogLeAudioConnectionSessionReported(
+        int32_t group_size, int32_t group_metric_id, int64_t connection_duration_nanos,
+        const std::vector<int64_t>& device_connecting_offset_nanos,
+        const std::vector<int64_t>& device_connected_offset_nanos,
+        const std::vector<int64_t>& device_connection_duration_nanos,
+        const std::vector<int32_t>& device_connection_status,
+        const std::vector<int32_t>& device_disconnection_status,
+        const std::vector<RawAddress>& device_address,
+        const std::vector<int64_t>& streaming_offset_nanos,
+        const std::vector<int64_t>& streaming_duration_nanos,
+        const std::vector<int32_t>& streaming_context_type) {
   std::vector<int32_t> device_metric_id(device_address.size());
   for (uint64_t i = 0; i < device_address.size(); i++) {
     if (!device_address[i].IsEmpty()) {

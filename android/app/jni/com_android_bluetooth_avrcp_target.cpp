@@ -62,6 +62,7 @@ static uint16_t getCurrentPlayerId();
 static std::vector<MediaPlayerInfo> getMediaPlayerList();
 using SetBrowsedPlayerCb = MediaInterface::SetBrowsedPlayerCallback;
 static void setBrowsedPlayer(uint16_t player_id, SetBrowsedPlayerCb);
+static uint16_t setAddressedPlayer(uint16_t player_id);
 using GetFolderItemsCb = MediaInterface::FolderItemsCallback;
 static void getFolderItems(uint16_t player_id, std::string media_id, GetFolderItemsCb cb);
 static void playItem(uint16_t player_id, bool now_playing, std::string media_id);
@@ -146,8 +147,17 @@ public:
     getFolderItems(player_id, media_id, folder_cb);
   }
 
+  void GetAddressedPlayer(GetAddressedPlayerCallback cb) override {
+    uint16_t current_player = getCurrentPlayerId();
+    cb.Run(current_player);
+  }
+
   void SetBrowsedPlayer(uint16_t player_id, SetBrowsedPlayerCallback browse_cb) override {
     setBrowsedPlayer(player_id, browse_cb);
+  }
+
+  void SetAddressedPlayer(uint16_t player_id, SetAddressedPlayerCallback addressed_cb) override {
+    addressed_cb.Run(setAddressedPlayer(player_id));
   }
 
   void RegisterUpdateCallback(MediaCallbacks* callback) override {
@@ -209,6 +219,7 @@ static jmethodID method_getCurrentMediaId;
 static jmethodID method_getNowPlayingList;
 
 static jmethodID method_setBrowsedPlayer;
+static jmethodID method_setAddressedPlayer;
 static jmethodID method_getCurrentPlayerId;
 static jmethodID method_getMediaPlayerList;
 static jmethodID method_getFolderItemsRequest;
@@ -695,6 +706,19 @@ static void setBrowsedPlayerResponseNative(JNIEnv* env, jobject /* object */, ji
   set_browsed_player_cb.Run(success == JNI_TRUE, root, num_items);
 }
 
+static uint16_t setAddressedPlayer(uint16_t player_id) {
+  log::debug("");
+  std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
+  CallbackEnv sCallbackEnv(__func__);
+  if (!sCallbackEnv.valid() || !mJavaInterface) {
+    return 0u;
+  }
+
+  jint new_player =
+          sCallbackEnv->CallIntMethod(mJavaInterface, method_setAddressedPlayer, player_id);
+  return static_cast<int>(new_player) & 0xFFFF;
+}
+
 static void getFolderItemsResponseNative(JNIEnv* env, jobject /* object */, jstring parent_id,
                                          jobject list) {
   log::debug("");
@@ -1065,6 +1089,7 @@ int register_com_android_bluetooth_avrcp_target(JNIEnv* env) {
           {"getCurrentPlayerId", "()I", &method_getCurrentPlayerId},
           {"getMediaPlayerList", "()Ljava/util/List;", &method_getMediaPlayerList},
           {"setBrowsedPlayer", "(I)V", &method_setBrowsedPlayer},
+          {"setAddressedPlayer", "(I)I", &method_setAddressedPlayer},
           {"getFolderItemsRequest", "(ILjava/lang/String;)V", &method_getFolderItemsRequest},
           {"playItem", "(IZLjava/lang/String;)V", &method_playItem},
           {"setActiveDevice", "(Ljava/lang/String;)V", &method_setActiveDevice},

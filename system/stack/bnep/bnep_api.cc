@@ -133,7 +133,7 @@ void BNEP_Deregister(void) {
  *
  ******************************************************************************/
 tBNEP_RESULT BNEP_Connect(const RawAddress& p_rem_bda, const Uuid& src_uuid, const Uuid& dst_uuid,
-                          uint16_t* p_handle, uint32_t mx_chan_id) {
+                          uint16_t* p_handle, uint32_t /* mx_chan_id */) {
   uint16_t cid;
   tBNEP_CONN* p_bcb = bnepu_find_bcb_by_bd_addr(p_rem_bda);
 

@@ -283,9 +283,10 @@ public:
   /**
    * Save the reconfig codec
    *
+   * @param peer_address the peer address.
    * @param new_codec_config the new codec config
    */
-  void SaveCodec(const uint8_t* new_codec_config);
+  void SaveCodec(const RawAddress& peer_address, const uint8_t* new_codec_config);
 
   /**
    * Get the encoder parameters for a peer.
@@ -299,9 +300,10 @@ public:
   /**
    * Get the Source encoder interface for the current codec.
    *
+   * @param peer_address the peer address.
    * @return the Source encoder interface for the current codec
    */
-  const tA2DP_ENCODER_INTERFACE* GetSourceEncoderInterface();
+  const tA2DP_ENCODER_INTERFACE* GetSourceEncoderInterface(const RawAddress& peer_address);
 
   /**
    * Set the codec user configuration.
@@ -328,9 +330,10 @@ public:
   /**
    * Get the Source encoder maximum frame size for the current codec.
    *
+   * @param peer_address the peer address.
    * @return the effective frame size for the current codec
    */
-  int GetSourceEncoderEffectiveFrameSize();
+  int GetSourceEncoderEffectiveFrameSize(const RawAddress& peer_address);
 
   /**
    * Get the Source encoder preferred encoding interval.

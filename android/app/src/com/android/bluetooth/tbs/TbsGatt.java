@@ -913,10 +913,8 @@ public class TbsGatt {
     public boolean setIncomingCall(int callIndex, String uri) {
         Log.d(
                 TAG,
-                "setIncomingCall: callIndex="
-                        + callIndex
-                        + " uri="
-                        + Uri.parse(uri).toSafeString());
+                ("setIncomingCall: callIndex=" + callIndex)
+                        + (" uri=" + (uri == null ? "null" : Uri.parse(uri).toSafeString())));
         int uri_len = 0;
         if (uri != null) {
             uri_len = uri.length();

@@ -83,6 +83,18 @@ public:
   bool ContentProtectActive() const { return content_protect_active_; }
   void SetContentProtectActive(bool cp_active) { content_protect_active_ = cp_active; }
 
+  /**
+   * Gets the codec config for the state.
+   * @return the active codec config.
+   */
+  uint8_t* getCodecConfig();
+
+  /**
+   * Updates the codec config
+   * @param new_codec_config codec config that needs to be updated.
+   */
+  void setCodecConfig(const uint8_t* new_codec_config);
+
   RawAddress addr;                                // Peer address
   BtaAvCoSep sinks[BTAV_A2DP_CODEC_INDEX_MAX];    // Supported sinks
   BtaAvCoSep sources[BTAV_A2DP_CODEC_INDEX_MAX];  // Supported sources

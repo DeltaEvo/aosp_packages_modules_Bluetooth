@@ -38,6 +38,7 @@
 #include "stack/include/bt_types.h"
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_log_history.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/smp_api_types.h"
 #include "types/raw_address.h"
 
@@ -157,7 +158,7 @@ void smp_send_app_cback(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
 
     callback_rc = (*p_cb->p_callback)(p_cb->cb_evt, p_cb->pairing_bda, &cb_data);
 
-    if (callback_rc == BTM_SUCCESS) {
+    if (callback_rc == tBTM_STATUS::BTM_SUCCESS) {
       switch (p_cb->cb_evt) {
         case SMP_IO_CAP_REQ_EVT:
           p_cb->loc_auth_req = cb_data.io_req.auth_req;
@@ -1166,7 +1167,7 @@ void smp_start_enc(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
     cmd = btm_ble_start_encrypt(p_cb->pairing_bda, false, NULL);
   }
 
-  if (cmd != BTM_CMD_STARTED && cmd != BTM_BUSY) {
+  if (cmd != tBTM_STATUS::BTM_CMD_STARTED && cmd != tBTM_STATUS::BTM_BUSY) {
     tSMP_INT_DATA smp_int_data;
     smp_int_data.status = SMP_ENC_FAIL;
     smp_sm_event(p_cb, SMP_AUTH_CMPL_EVT, &smp_int_data);
@@ -1226,7 +1227,7 @@ void smp_sirk_verify(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
     callback_rc = (*p_cb->p_callback)(p_cb->cb_evt, p_cb->pairing_bda, nullptr);
 
     /* There is no member validator callback - device is by default valid */
-    if (callback_rc == BTM_SUCCESS_NO_SECURITY) {
+    if (callback_rc == tBTM_STATUS::BTM_SUCCESS_NO_SECURITY) {
       BTM_LogHistory(kBtmLogTag, p_cb->pairing_bda, "SIRK verification",
                      base::StringPrintf("Device validated due to no security"));
 

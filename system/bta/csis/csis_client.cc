@@ -50,6 +50,7 @@
 #include "stack/include/bt_types.h"
 #include "stack/include/btm_ble_sec_api.h"
 #include "stack/include/btm_client_interface.h"
+#include "stack/include/btm_status.h"
 
 using base::Closure;
 using bluetooth::Uuid;
@@ -986,7 +987,7 @@ private:
                          CsisGroupLockStatus status) {
     log::debug("group id: {}, target state {}", csis_group->GetGroupId(), lock ? "lock" : "unlock");
 
-    NotifyGroupStatus(csis_group->GetGroupId(), lock, status, std::move(csis_group->GetLockCb()));
+    NotifyGroupStatus(csis_group->GetGroupId(), lock, status, csis_group->GetLockCb());
     csis_group->SetTargetLockState(CsisLockState::CSIS_STATE_UNSET);
   }
 
@@ -1279,7 +1280,7 @@ private:
       devices.push_back(std::move(bda));
     }
 
-    return std::move(devices);
+    return devices;
   }
 
   int GetNumOfKnownExpectedDevicesWaitingForBonding(int group_id) {
@@ -1845,7 +1846,7 @@ private:
       case BTA_GATTC_ENC_CMPL_CB_EVT: {
         tBTM_STATUS encryption_status;
         if (BTM_IsEncrypted(p_data->enc_cmpl.remote_bda, BT_TRANSPORT_LE)) {
-          encryption_status = BTM_SUCCESS;
+          encryption_status = tBTM_STATUS::BTM_SUCCESS;
         } else {
           encryption_status = BTM_FAILED_ON_SECURITY;
         }
@@ -2056,7 +2057,7 @@ private:
       return;
     }
 
-    if (status != BTM_SUCCESS) {
+    if (status != tBTM_STATUS::BTM_SUCCESS) {
       log::error("encryption failed. status: 0x{:02x}", status);
 
       BTA_GATTC_Close(device->conn_id);

@@ -88,7 +88,7 @@ int do_mode([[maybe_unused]] unsigned int num_loops, [[maybe_unused]] const RawA
     pwr_command_t pwr_command;
     pwr_result_t result = client.set_typical_sniff(std::move(pwr_command));
     LOG_CONSOLE("Sniff mode command sent");
-    if (result.btm_status == BTM_CMD_STARTED) {
+    if (result.btm_status == tBTM_STATUS::BTM_CMD_STARTED) {
       // This awaits the command status callback
       power_mode_callback_t cmd_status = result.cmd_status_future.get();
       LOG_CONSOLE("Sniff mode command complete:%s", cmd_status.ToString().c_str());
@@ -109,7 +109,7 @@ int do_mode([[maybe_unused]] unsigned int num_loops, [[maybe_unused]] const RawA
     pwr_command_t pwr_command;
     pwr_result_t result = client.set_active(std::move(pwr_command));
     LOG_CONSOLE("Active mode command sent");
-    if (result.btm_status == BTM_CMD_STARTED) {
+    if (result.btm_status == tBTM_STATUS::BTM_CMD_STARTED) {
       power_mode_callback_t cmd_status = result.cmd_status_future.get();
       LOG_CONSOLE("Active mode command complete:%s", cmd_status.ToString().c_str());
       if (cmd_status.status == BTM_PM_STS_PENDING) {

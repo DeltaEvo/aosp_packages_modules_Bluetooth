@@ -34,7 +34,7 @@
 /* Authorize device for service.  Parameters are
  *              Service Id (NULL - unknown service or unused)
  */
-typedef uint8_t(tBTM_AUTHORIZE_CALLBACK)(uint8_t service_id);
+typedef tBTM_STATUS(tBTM_AUTHORIZE_CALLBACK)(uint8_t service_id);
 
 /* Get PIN for the connection.  Parameters are
  *              BD Address of remote
@@ -131,9 +131,9 @@ typedef struct {
                            uint8_t* p_pin);
   void (*BTM_SecConfirmReqReply)(tBTM_STATUS res, tBT_TRANSPORT transport,
                                  const RawAddress bd_addr);
-  void (*BTM_BleSirkConfirmDeviceReply)(const RawAddress& bd_addr, uint8_t res);
+  void (*BTM_BleSirkConfirmDeviceReply)(const RawAddress& bd_addr, tBTM_STATUS res);
 
-  void (*BTM_BlePasskeyReply)(const RawAddress& bd_addr, uint8_t res, uint32_t passkey);
+  void (*BTM_BlePasskeyReply)(const RawAddress& bd_addr, tBTM_STATUS res, uint32_t passkey);
 
   // other misc APIs
   uint8_t (*BTM_GetSecurityMode)();

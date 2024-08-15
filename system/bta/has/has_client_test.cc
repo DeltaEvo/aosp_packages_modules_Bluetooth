@@ -38,6 +38,7 @@
 #include "has_types.h"
 #include "mock_csis_client.h"
 #include "stack/include/bt_uuid16.h"
+#include "stack/include/btm_status.h"
 #include "test/common/mock_functions.h"
 #include "types/bt_transport.h"
 
@@ -634,7 +635,7 @@ protected:
                                          tBTM_SEC_CALLBACK* p_callback, void* p_ref_data,
                                          tBTM_BLE_SEC_ACT sec_act) -> tBTM_STATUS {
               InjectEncryptionEvent(bd_addr);
-              return BTM_SUCCESS;
+              return tBTM_STATUS::BTM_SUCCESS;
             }));
 
     MockCsisClient::SetMockInstanceForTesting(&mock_csis_client_module_);
@@ -1249,7 +1250,8 @@ TEST_F(HasClientTest, test_service_discovery_complete_before_encryption) {
   EXPECT_CALL(*callbacks, OnConnectionState(ConnectionState::CONNECTED, test_address)).Times(0);
 
   SetEncryptionResult(test_address, false);
-  ON_CALL(btm_interface, SetEncryption(_, _, _, _, _)).WillByDefault(Return(BTM_SUCCESS));
+  ON_CALL(btm_interface, SetEncryption(_, _, _, _, _))
+          .WillByDefault(Return(tBTM_STATUS::BTM_SUCCESS));
 
   TestConnect(test_address);
   auto test_conn_id = GetTestConnId(test_address);
