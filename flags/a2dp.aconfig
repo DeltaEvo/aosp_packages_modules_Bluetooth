@@ -142,3 +142,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "a2dp_broadcast_connection_state_when_turned_off"
+    namespace: "bluetooth"
+    description: "Broadcast CONNECTION_STATE_CHANGED when A2dpService is turned off while a device is connected"
+    bug: "360034472"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
