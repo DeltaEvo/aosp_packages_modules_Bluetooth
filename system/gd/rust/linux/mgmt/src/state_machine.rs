@@ -2185,14 +2185,17 @@ mod tests {
             get_hci_index_from_pid_path("/var/run/bluetooth/bluetooth0.pid"),
             Some(VirtualHciIndex(0))
         );
+        assert_eq!(get_hci_index_from_pid_path("bluetooth0.pid"), Some(VirtualHciIndex(0)));
         assert_eq!(
             get_hci_index_from_pid_path("/var/run/bluetooth/bluetooth1.pid"),
             Some(VirtualHciIndex(1))
         );
+        assert_eq!(get_hci_index_from_pid_path("bluetooth1.pid"), Some(VirtualHciIndex(1)));
         assert_eq!(
             get_hci_index_from_pid_path("/var/run/bluetooth/bluetooth10.pid"),
             Some(VirtualHciIndex(10))
         );
+        assert_eq!(get_hci_index_from_pid_path("bluetooth10.pid"), Some(VirtualHciIndex(10)));
         assert_eq!(get_hci_index_from_pid_path("/var/run/bluetooth/garbage"), None);
         assert_eq!(get_hci_index_from_pid_path("garbage"), None);
     }

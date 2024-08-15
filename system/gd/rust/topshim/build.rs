@@ -63,7 +63,7 @@ fn main() {
         .opaque_type("std::.*")
         // Whitelist std::string though because we use it a lot
         .allowlist_type("std::string")
-        .rustfmt_bindings(true)
+        .formatter(bindgen::Formatter::Rustfmt)
         .derive_debug(true)
         .derive_partialeq(true)
         .derive_eq(true)
