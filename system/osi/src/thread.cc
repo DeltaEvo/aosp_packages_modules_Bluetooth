@@ -230,6 +230,8 @@ static void* run_thread(void* start_arg) {
 
   reactor_object_t* work_queue_object =
           reactor_register(thread->reactor, fd, context, work_queue_read_cb, NULL);
+  log::assert_that(work_queue_object != nullptr, "assert failed: work_queue_object != nullptr");
+
   reactor_start(thread->reactor);
   reactor_unregister(work_queue_object);
 
