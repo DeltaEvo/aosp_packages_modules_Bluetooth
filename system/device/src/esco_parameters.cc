@@ -367,7 +367,7 @@ enh_esco_params_t esco_parameters_for_codec(esco_codec_t codec, bool offload) {
   auto controller = bluetooth::shim::GetController();
   if (controller == nullptr) {
     log::warn("controller is null");
-  } else {
+  } else if (offload) {
     codecIds = controller->GetLocalSupportedBrEdrCodecIds();
     if (std::find(codecIds.begin(), codecIds.end(), ESCO_CODING_FORMAT_LC3) == codecIds.end()) {
       if (codec == ESCO_CODEC_LC3_T1 || codec == ESCO_CODEC_LC3_T2) {
