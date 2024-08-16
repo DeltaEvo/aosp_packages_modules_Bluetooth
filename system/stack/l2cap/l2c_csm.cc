@@ -312,6 +312,12 @@ static void l2c_csm_closed(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
           case L2CAP_LE_RESULT_INVALID_SOURCE_CID:
           case L2CAP_LE_RESULT_SOURCE_CID_ALREADY_ALLOCATED:
             break;
+          case L2CAP_LE_RESULT_CONN_PENDING:
+          case L2CAP_LE_RESULT_CONN_PENDING_AUTHENTICATION:
+          case L2CAP_LE_RESULT_CONN_PENDING_AUTHORIZATION:
+            log::warn("Received unexpected connection request return code:{}",
+                      l2cap_le_result_code_text(result));
+            break;
         }
       } else {
         if (!BTM_SetLinkPolicyActiveMode(p_ccb->p_lcb->remote_bd_addr)) {
