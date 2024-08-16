@@ -782,7 +782,12 @@ public class ScanManager {
             if (upgradeScanModeByOneLevel(client)) {
                 Message msg = obtainMessage(MSG_REVERT_SCAN_MODE_UPGRADE);
                 msg.obj = client;
-                Log.d(TAG, "scanMode is upgraded for " + client);
+                Log.d(
+                        TAG,
+                        "scanMode is upgraded to "
+                                + getScanModeString(client.settings.getScanMode())
+                                + " for "
+                                + client);
                 sendMessageDelayed(msg, mAdapterService.getScanUpgradeDurationMillis());
                 return true;
             }
@@ -809,7 +814,12 @@ public class ScanManager {
                 return;
             }
             if (client.updateScanMode(client.scanModeApp)) {
-                Log.d(TAG, "scanMode upgrade is reverted for " + client);
+                Log.d(
+                        TAG,
+                        "scanMode upgrade is reverted to "
+                                + getScanModeString(client.scanModeApp)
+                                + " for "
+                                + client);
                 mScanNative.configureRegularScanParams();
             }
         }
