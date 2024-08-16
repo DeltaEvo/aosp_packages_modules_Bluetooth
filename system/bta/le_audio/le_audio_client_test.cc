@@ -3365,7 +3365,7 @@ TEST_F(UnicastTest, DisconnectWhenLinkKeyIsGone) {
           .WillByDefault(DoAll(Return(false)));
 
   ON_CALL(mock_btm_interface_, SetEncryption(test_address0, _, _, _, _))
-          .WillByDefault(Return(BTM_ERR_KEY_MISSING));
+          .WillByDefault(Return(tBTM_STATUS::BTM_ERR_KEY_MISSING));
 
   EXPECT_CALL(mock_gatt_interface_, Close(conn_id)).Times(1);
   do_in_main_thread(base::BindOnce(&LeAudioClient::Connect, base::Unretained(LeAudioClient::Get()),

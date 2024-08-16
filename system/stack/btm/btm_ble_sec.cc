@@ -572,7 +572,7 @@ bool BTM_ReadConnectedTransportAddress(RawAddress* remote_bda, tBT_TRANSPORT tra
 tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr, uint16_t tx_pdu_length) {
   if (!bluetooth::shim::GetController()->SupportsBleDataPacketLengthExtension()) {
     log::info("Local controller does not support le packet extension");
-    return BTM_ILLEGAL_VALUE;
+    return tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
 
   log::info("bd_addr:{}, tx_pdu_length:{}", bd_addr, tx_pdu_length);
@@ -612,7 +612,7 @@ tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr, uint16_t tx_pdu_leng
 
   if (!acl_peer_supports_ble_packet_extension(hci_handle)) {
     log::info("Remote device unable to support le packet extension");
-    return BTM_ILLEGAL_VALUE;
+    return tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
 
   tx_pdu_length = std::min<uint16_t>(
@@ -731,7 +731,7 @@ tBTM_STATUS btm_ble_start_sec_check(const RawAddress& bd_addr, uint16_t psm, boo
   if (!p_serv_rec) {
     log::warn("PSM: {} no application registered", psm);
     (*p_callback)(bd_addr, BT_TRANSPORT_LE, p_ref_data, BTM_MODE_UNSUPPORTED);
-    return BTM_ILLEGAL_VALUE;
+    return tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
 
   bool is_encrypted = BTM_IsEncrypted(bd_addr, BT_TRANSPORT_LE);
@@ -1235,7 +1235,7 @@ tBTM_STATUS btm_ble_start_encrypt(const RawAddress& bda, bool use_stk, Octet16* 
                              p_rec->sec_rec.ble_keys.ediv, p_rec->sec_rec.ble_keys.pltk);
   } else {
     log::error("No key available to encrypt the link");
-    return BTM_ERR_KEY_MISSING;
+    return tBTM_STATUS::BTM_ERR_KEY_MISSING;
   }
 
   if (p_rec->sec_rec.le_link == tSECURITY_STATE::IDLE) {
@@ -1315,11 +1315,11 @@ void btm_ble_link_encrypted(const RawAddress& bd_addr, uint8_t encr_enable) {
     }
     /* LTK missing on peripheral */
     else if (p_dev_rec->role_central && (p_dev_rec->sec_rec.sec_status == HCI_ERR_KEY_MISSING)) {
-      btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_KEY_MISSING, true);
+      btm_sec_dev_rec_cback_event(p_dev_rec, tBTM_STATUS::BTM_ERR_KEY_MISSING, true);
     } else if (!(p_dev_rec->sec_rec.sec_flags & BTM_SEC_LE_LINK_KEY_KNOWN)) {
-      btm_sec_dev_rec_cback_event(p_dev_rec, BTM_FAILED_ON_SECURITY, true);
+      btm_sec_dev_rec_cback_event(p_dev_rec, tBTM_STATUS::BTM_FAILED_ON_SECURITY, true);
     } else if (p_dev_rec->role_central) {
-      btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_PROCESSING, true);
+      btm_sec_dev_rec_cback_event(p_dev_rec, tBTM_STATUS::BTM_ERR_PROCESSING, true);
     }
   }
 
@@ -1615,7 +1615,7 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
                        p_dev_rec->sec_rec.sec_flags);
 
           res = (p_data->cmplt.reason == SMP_SUCCESS) ? tBTM_STATUS::BTM_SUCCESS
-                                                      : BTM_ERR_PROCESSING;
+                                                      : tBTM_STATUS::BTM_ERR_PROCESSING;
 
           log::verbose("after update result={} sec_level=0x{:x} sec_flags=0x{:x}", res,
                        p_data->cmplt.sec_level, p_dev_rec->sec_rec.sec_flags);

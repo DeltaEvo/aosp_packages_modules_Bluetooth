@@ -484,7 +484,8 @@ protected:
                                             tBTM_BLE_SEC_ACT sec_act) -> tBTM_STATUS {
                       if (p_callback) {
                         p_callback(bd_addr, transport, p_ref_data,
-                                   success ? tBTM_STATUS::BTM_SUCCESS : BTM_FAILED_ON_SECURITY);
+                                   success ? tBTM_STATUS::BTM_SUCCESS
+                                           : tBTM_STATUS::BTM_FAILED_ON_SECURITY);
                       }
                       GetEncryptionCompleteEvt(bd_addr);
                       return tBTM_STATUS::BTM_SUCCESS;
@@ -772,7 +773,7 @@ TEST_F(VolumeControlTest, test_disconnect_when_link_key_gone) {
 
   ON_CALL(btm_interface, BTM_IsEncrypted(test_address, _)).WillByDefault(DoAll(Return(false)));
   ON_CALL(btm_interface, SetEncryption(test_address, _, _, _, BTM_BLE_SEC_ENCRYPT))
-          .WillByDefault(Return(BTM_ERR_KEY_MISSING));
+          .WillByDefault(Return(tBTM_STATUS::BTM_ERR_KEY_MISSING));
 
   // autoconnect - don't indicate disconnection
   EXPECT_CALL(*callbacks, OnConnectionState(ConnectionState::DISCONNECTED, test_address)).Times(0);

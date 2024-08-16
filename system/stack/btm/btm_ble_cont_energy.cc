@@ -92,7 +92,7 @@ tBTM_STATUS BTM_BleGetEnergyInfo(tBTM_BLE_ENERGY_INFO_CBACK* p_ener_cback) {
 
   if (0 == cmn_ble_vsc_cb.energy_support) {
     log::error("Controller does not support get energy info");
-    return BTM_ERR_PROCESSING;
+    return tBTM_STATUS::BTM_ERR_PROCESSING;
   }
 
   ble_energy_info_cb.p_ener_cback = p_ener_cback;

@@ -1875,7 +1875,7 @@ private:
 
     log::info("Encryption required for {}. Request result: 0x{:02x}", device->addr, result);
 
-    if (result == BTM_ERR_KEY_MISSING) {
+    if (result == tBTM_STATUS::BTM_ERR_KEY_MISSING) {
       log::error("Link key unknown for {}, disconnect profile", device->addr);
       BTA_GATTC_Close(device->conn_id);
     }

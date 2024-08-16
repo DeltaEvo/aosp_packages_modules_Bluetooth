@@ -1269,7 +1269,8 @@ void l2cble_sec_comp(RawAddress bda, tBT_TRANSPORT transport, void* /* p_ref_dat
           (*(p_buf->p_callback))(bda, BT_TRANSPORT_LE, p_buf->p_ref_data, btm_status);
         } else {
           log::verbose("MITM Protection Not present");
-          (*(p_buf->p_callback))(bda, BT_TRANSPORT_LE, p_buf->p_ref_data, BTM_FAILED_ON_SECURITY);
+          (*(p_buf->p_callback))(bda, BT_TRANSPORT_LE, p_buf->p_ref_data,
+                                 tBTM_STATUS::BTM_FAILED_ON_SECURITY);
         }
       } else {
         log::verbose("MITM Protection not required sec_act = {}", p_lcb->sec_act);
@@ -1345,7 +1346,7 @@ tL2CAP_LE_RESULT_CODE l2ble_sec_access_req(const RawAddress& bd_addr, uint16_t p
   switch (result) {
     case tBTM_STATUS::BTM_SUCCESS:
       return L2CAP_LE_RESULT_CONN_OK;
-    case BTM_ILLEGAL_VALUE:
+    case tBTM_STATUS::BTM_ILLEGAL_VALUE:
       return L2CAP_LE_RESULT_NO_PSM;
     case BTM_NOT_AUTHENTICATED:
       return L2CAP_LE_RESULT_INSUFFICIENT_AUTHENTICATION;
@@ -1353,7 +1354,7 @@ tL2CAP_LE_RESULT_CODE l2ble_sec_access_req(const RawAddress& bd_addr, uint16_t p
       return L2CAP_LE_RESULT_INSUFFICIENT_ENCRYP;
     case BTM_NOT_AUTHORIZED:
       return L2CAP_LE_RESULT_INSUFFICIENT_AUTHORIZATION;
-    case BTM_INSUFFICIENT_ENCRYPT_KEY_SIZE:
+    case tBTM_STATUS::BTM_INSUFFICIENT_ENCRYPT_KEY_SIZE:
       return L2CAP_LE_RESULT_INSUFFICIENT_ENCRYP_KEY_SIZE;
     default:
       log::error("unexpected return value: {}", btm_status_text(result));

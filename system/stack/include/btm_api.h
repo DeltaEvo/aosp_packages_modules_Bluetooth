@@ -393,7 +393,7 @@ void BTM_RemoveScoByBdaddr(const RawAddress& bda);
  *                  events.
  *
  * Returns          tBTM_STATUS::BTM_SUCCESS if the successful.
- *                  BTM_ILLEGAL_VALUE if there is an illegal sco_inx
+ *                  tBTM_STATUS::BTM_ILLEGAL_VALUE if there is an illegal sco_inx
  *
  ******************************************************************************/
 [[nodiscard]] tBTM_STATUS BTM_RegForEScoEvts(uint16_t sco_inx, tBTM_ESCO_CBACK* p_esco_cback);

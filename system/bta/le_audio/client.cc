@@ -2160,7 +2160,7 @@ public:
 
     log::info("Encryption required for {}. Request result: 0x{:02x}", address, result);
 
-    if (result == BTM_ERR_KEY_MISSING) {
+    if (result == tBTM_STATUS::BTM_ERR_KEY_MISSING) {
       log::error("Link key unknown for {}, disconnect profile", address);
       bluetooth::le_audio::MetricsCollector::Get()->OnConnectionStateChanged(
               leAudioDevice->group_id_, address, ConnectionState::CONNECTED,
@@ -5811,7 +5811,7 @@ void le_audio_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
       if (BTM_IsEncrypted(p_data->enc_cmpl.remote_bda, BT_TRANSPORT_LE)) {
         encryption_status = tBTM_STATUS::BTM_SUCCESS;
       } else {
-        encryption_status = BTM_FAILED_ON_SECURITY;
+        encryption_status = tBTM_STATUS::BTM_FAILED_ON_SECURITY;
       }
       instance->OnEncryptionComplete(p_data->enc_cmpl.remote_bda, encryption_status);
     } break;

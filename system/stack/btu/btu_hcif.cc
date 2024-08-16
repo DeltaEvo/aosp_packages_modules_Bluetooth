@@ -1223,7 +1223,7 @@ void btu_hcif_read_local_oob_complete(const uint8_t* p, uint16_t evt_len) {
   if (status == HCI_SUCCESS) {
     evt_data.status = tBTM_STATUS::BTM_SUCCESS;
   } else {
-    evt_data.status = BTM_ERR_PROCESSING;
+    evt_data.status = tBTM_STATUS::BTM_ERR_PROCESSING;
   }
   if (evt_len < 32 + 1) {
     goto err_out;
@@ -1249,7 +1249,7 @@ void btu_hcif_read_local_oob_extended_complete(const uint8_t* p, uint16_t evt_le
   if (status == HCI_SUCCESS) {
     evt_data.status = tBTM_STATUS::BTM_SUCCESS;
   } else {
-    evt_data.status = BTM_ERR_PROCESSING;
+    evt_data.status = tBTM_STATUS::BTM_ERR_PROCESSING;
   }
 
   STREAM_TO_ARRAY16(evt_data.c_192.data(), p);

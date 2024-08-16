@@ -528,7 +528,7 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration, tBTM_INQ_RESULTS_CB* p_
                ll_scan_window);
 
   if (!bluetooth::shim::GetController()->SupportsBle()) {
-    return BTM_ILLEGAL_VALUE;
+    return tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
 
   if (start) {
@@ -1321,7 +1321,7 @@ tBTM_STATUS btm_ble_set_discoverability(uint16_t combined_mode) {
 
   /*** Check mode parameter ***/
   if (mode > BTM_BLE_MAX_DISCOVERABLE) {
-    return BTM_ILLEGAL_VALUE;
+    return tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
 
   btm_cb.ble_ctr_cb.inq_var.discoverable_mode = mode;
@@ -1408,7 +1408,7 @@ tBTM_STATUS btm_ble_set_connectability(uint16_t combined_mode) {
 
   /*** Check mode parameter ***/
   if (mode > BTM_BLE_MAX_CONNECTABLE) {
-    return BTM_ILLEGAL_VALUE;
+    return tBTM_STATUS::BTM_ILLEGAL_VALUE;
   }
 
   btm_cb.ble_ctr_cb.inq_var.connectable_mode = mode;
@@ -1622,13 +1622,13 @@ void btm_ble_read_remote_name_cmpl(bool status, const RawAddress& bda, uint16_t 
  ******************************************************************************/
 tBTM_STATUS btm_ble_read_remote_name(const RawAddress& remote_bda, tBTM_NAME_CMPL_CB* p_cb) {
   if (!bluetooth::shim::GetController()->SupportsBle()) {
-    return BTM_ERR_PROCESSING;
+    return tBTM_STATUS::BTM_ERR_PROCESSING;
   }
 
   tINQ_DB_ENT* p_i = btm_inq_db_find(remote_bda);
   if (p_i && !ble_evt_type_is_connectable(p_i->inq_info.results.ble_evt_type)) {
     log::verbose("name request to non-connectable device failed.");
-    return BTM_ERR_PROCESSING;
+    return tBTM_STATUS::BTM_ERR_PROCESSING;
   }
 
   /* read remote device name using GATT procedure */
