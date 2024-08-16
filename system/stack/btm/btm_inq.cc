@@ -951,7 +951,7 @@ void btm_inq_db_reset(void) {
     btm_cb.rnr.remname_dev_type = BT_DEVICE_TYPE_UNKNOWN;
 
     if (btm_cb.rnr.p_remname_cmpl_cb) {
-      rem_name.btm_status = BTM_DEV_RESET;
+      rem_name.btm_status = tBTM_STATUS::BTM_DEV_RESET;
       rem_name.hci_status = HCI_SUCCESS;
 
       (*btm_cb.rnr.p_remname_cmpl_cb)(&rem_name);

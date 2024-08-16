@@ -1565,7 +1565,7 @@ tBTM_STATUS btm_sec_l2cap_access_req_by_requirement(const RawAddress& bd_addr,
      * as long as we have a link key, it's OK */
     if ((0 == (p_dev_rec->sec_rec.sec_flags & BTM_SEC_AUTHENTICATED)) ||
         (0 == (p_dev_rec->sec_rec.sec_flags & BTM_SEC_ENCRYPTED))) {
-      rc = BTM_DELAY_CHECK;
+      rc = tBTM_STATUS::BTM_DELAY_CHECK;
       /*
       2046 may report HCI_Encryption_Change and L2C Connection Request out of
       sequence
@@ -3642,7 +3642,7 @@ void btm_sec_connected(const RawAddress& bda, uint16_t handle, tHCI_STATUS statu
 
     if (status == HCI_ERR_CONNECTION_TOUT || status == HCI_ERR_LMP_RESPONSE_TIMEOUT ||
         status == HCI_ERR_UNSPECIFIED || status == HCI_ERR_PAGE_TIMEOUT) {
-      btm_sec_dev_rec_cback_event(p_dev_rec, BTM_DEVICE_TIMEOUT, false);
+      btm_sec_dev_rec_cback_event(p_dev_rec, tBTM_STATUS::BTM_DEVICE_TIMEOUT, false);
     } else {
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_PROCESSING, false);
     }

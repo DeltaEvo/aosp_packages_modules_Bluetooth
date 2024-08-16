@@ -1098,7 +1098,7 @@ bool bta_av_link_role_ok(tBTA_AV_SCB* p_scb, uint8_t bits) {
       case tBTM_STATUS::BTM_CMD_STARTED:
         break;
       case BTM_MODE_UNSUPPORTED:
-      case BTM_DEV_RESTRICT_LISTED:
+      case tBTM_STATUS::BTM_DEV_RESTRICT_LISTED:
         // Role switch can never happen, but indicate to caller
         // a result such that a timer will not start to repeatedly
         // try something not possible.
