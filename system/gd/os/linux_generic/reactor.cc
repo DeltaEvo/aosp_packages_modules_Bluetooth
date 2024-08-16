@@ -48,9 +48,10 @@ struct Reactor::Event::impl {
     log::assert_that(fd_ != -1, "Unable to create nonblocking event file descriptor semaphore");
   }
   ~impl() {
-    log::assert_that(fd_ != -1, "Unable to close a never-opened event file descriptor");
-    close(fd_);
-    fd_ = -1;
+    if (fd_ != -1) {
+      close(fd_);
+      fd_ = -1;
+    }
   }
   int fd_ = -1;
 };
@@ -72,6 +73,7 @@ void Reactor::Event::Close() {
   int close_status;
   RUN_NO_INTR(close_status = close(pimpl_->fd_));
   log::assert_that(close_status != -1, "assert failed: close_status != -1");
+  pimpl_->fd_ = -1;
 }
 void Reactor::Event::Notify() {
   uint64_t val = 1;
