@@ -45,8 +45,8 @@ A2dpCodecConfigExt::A2dpCodecConfigExt(btav_a2dp_codec_index_t codec_index, bool
 }
 
 tA2DP_STATUS A2dpCodecConfigExt::setCodecConfig(const uint8_t* p_peer_codec_info,
-                                                bool is_capability,
-                                                uint8_t* p_result_codec_config) {
+                                                bool /* is_capability */,
+                                                uint8_t* /* p_result_codec_config */) {
   // Call get_a2dp_config to recompute best capabilities.
   // This method need to update codec_capability_, codec_config_,
   // and ota_codec_config_ using the local codec_user_config_, and input
@@ -72,7 +72,7 @@ tA2DP_STATUS A2dpCodecConfigExt::setCodecConfig(const uint8_t* p_peer_codec_info
   return A2DP_SUCCESS;
 }
 
-bool A2dpCodecConfigExt::setPeerCodecCapabilities(const uint8_t* p_peer_codec_capabilities) {
+bool A2dpCodecConfigExt::setPeerCodecCapabilities(const uint8_t* /* p_peer_codec_capabilities */) {
   // setPeerCodecCapabilities updates the selectable
   // capabilities in the codec config. It can be safely
   // ignored as providing a superset of the selectable

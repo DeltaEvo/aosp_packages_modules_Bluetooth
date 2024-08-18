@@ -1253,27 +1253,30 @@ public class BluetoothMapService extends ProfileService {
     static class BluetoothMapBinder extends IBluetoothMap.Stub implements IProfileServiceBinder {
         private BluetoothMapService mService;
 
-        @RequiresPermission(BLUETOOTH_CONNECT)
-        private BluetoothMapService getService(AttributionSource source) {
-            if (Utils.isInstrumentationTestMode()) {
-                return mService;
-            }
-            if (!Utils.checkServiceAvailable(mService, TAG)
-                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
-                    || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
-                return null;
-            }
-            return mService;
-        }
-
         BluetoothMapBinder(BluetoothMapService service) {
-            Log.v(TAG, "BluetoothMapBinder()");
             mService = service;
         }
 
         @Override
         public synchronized void cleanup() {
             mService = null;
+        }
+
+        @RequiresPermission(BLUETOOTH_CONNECT)
+        private BluetoothMapService getService(AttributionSource source) {
+            // Cache mService because it can change while getService is called
+            BluetoothMapService service = mService;
+
+            if (Utils.isInstrumentationTestMode()) {
+                return service;
+            }
+
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG)
+                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
+                return null;
+            }
+            return service;
         }
 
         @Override

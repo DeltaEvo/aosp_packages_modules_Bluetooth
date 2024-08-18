@@ -237,7 +237,8 @@ void bta_ag_disc_int_res(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
   log::verbose("bta_ag_disc_int_res: Status: {}", data.disc_result.status);
 
   /* if found service */
-  if (data.disc_result.status == SDP_SUCCESS || data.disc_result.status == SDP_DB_FULL) {
+  if (data.disc_result.status == tSDP_STATUS::SDP_SUCCESS ||
+      data.disc_result.status == tSDP_STATUS::SDP_DB_FULL) {
     /* get attributes */
     if (bta_ag_sdp_find_attr(p_scb, p_scb->open_services)) {
       /* set connected service */
@@ -256,8 +257,9 @@ void bta_ag_disc_int_res(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
 
   /* if service not found check if we should search for other service */
   if ((event == BTA_AG_DISC_FAIL_EVT) &&
-      (data.disc_result.status == SDP_SUCCESS || data.disc_result.status == SDP_DB_FULL ||
-       data.disc_result.status == SDP_NO_RECS_MATCH)) {
+      (data.disc_result.status == tSDP_STATUS::SDP_SUCCESS ||
+       data.disc_result.status == tSDP_STATUS::SDP_DB_FULL ||
+       data.disc_result.status == tSDP_STATUS::SDP_NO_RECS_MATCH)) {
     if ((p_scb->open_services & BTA_HFP_SERVICE_MASK) &&
         (p_scb->open_services & BTA_HSP_SERVICE_MASK)) {
       /* search for HSP */
@@ -290,7 +292,8 @@ void bta_ag_disc_int_res(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
  ******************************************************************************/
 void bta_ag_disc_acp_res(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
   /* if found service */
-  if (data.disc_result.status == SDP_SUCCESS || data.disc_result.status == SDP_DB_FULL) {
+  if (data.disc_result.status == tSDP_STATUS::SDP_SUCCESS ||
+      data.disc_result.status == tSDP_STATUS::SDP_DB_FULL) {
     /* get attributes */
     bta_ag_sdp_find_attr(p_scb, bta_ag_svc_mask[p_scb->conn_service]);
     DEVICE_IOT_CONFIG_ADDR_SET_HEX_IF_GREATER(p_scb->peer_addr, IOT_CONF_KEY_HFP_VERSION,

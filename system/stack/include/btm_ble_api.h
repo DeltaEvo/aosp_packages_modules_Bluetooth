@@ -309,7 +309,7 @@ tBTM_STATUS BTM_BleGetEnergyInfo(tBTM_BLE_ENERGY_INFO_CBACK* p_ener_cback);
  *
  * Description      Set the maximum BLE transmission packet size
  *
- * Returns          BTM_SUCCESS if success; otherwise failed.
+ * Returns          tBTM_STATUS::BTM_SUCCESS if success; otherwise failed.
  *
  ******************************************************************************/
 tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr, uint16_t tx_pdu_length);
@@ -321,7 +321,7 @@ tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr, uint16_t tx_pdu_leng
  * Description      To read the current PHYs for specified LE connection
  *
  *
- * Returns          BTM_SUCCESS if success; otherwise failed.
+ * Returns          tBTM_STATUS::BTM_SUCCESS if success; otherwise failed.
  *
  ******************************************************************************/
 void BTM_BleReadPhy(const RawAddress& bd_addr,
@@ -334,7 +334,7 @@ void BTM_BleReadPhy(const RawAddress& bd_addr,
  * Description      To set PHY preferences for specified LE connection
  *
  *
- * Returns          BTM_SUCCESS if success; otherwise failed.
+ * Returns          tBTM_STATUS::BTM_SUCCESS if success; otherwise failed.
  *
  ******************************************************************************/
 void BTM_BleSetPhy(const RawAddress& bd_addr, uint8_t tx_phys, uint8_t rx_phys,

@@ -21,7 +21,7 @@
 
 #include "bta/dm/bta_dm_sec_int.h"
 #include "bta/test/bta_test_fixtures.h"
-#include "btm_status.h"
+#include "stack/include/btm_status.h"
 #include "test/mock/mock_stack_btm_inq.h"
 #include "test/mock/mock_stack_btm_interface.h"
 #include "types/raw_address.h"
@@ -60,7 +60,7 @@ TEST_F(BtaSecTest, bta_dm_sp_cback__BTM_SP_CFM_REQ_EVT_WithName) {
   static bool callback_sent = false;
   mock_btm_client_interface.peer.BTM_ReadRemoteDeviceName =
           [](const RawAddress& remote_bda, tBTM_NAME_CMPL_CB* p_cb,
-             tBT_TRANSPORT transport) -> tBTM_STATUS { return BTM_CMD_STARTED; };
+             tBT_TRANSPORT transport) -> tBTM_STATUS { return tBTM_STATUS::BTM_CMD_STARTED; };
 
   static tBTA_DM_SP_CFM_REQ cfm_req{};
   bta_dm_sec_enable([](tBTA_DM_SEC_EVT event, tBTA_DM_SEC* p_data) {
@@ -87,7 +87,7 @@ TEST_F(BtaSecTest, bta_dm_sp_cback__BTM_SP_CFM_REQ_EVT_WithName) {
   bd_name_from_char_pointer(data.cfm_req.bd_name, kRemoteName);
 
   ASSERT_EQ(
-          btm_status_text(BTM_CMD_STARTED),
+          btm_status_text(tBTM_STATUS::BTM_CMD_STARTED),
           btm_status_text(bluetooth::legacy::testing::bta_dm_sp_cback(BTM_SP_CFM_REQ_EVT, &data)));
   ASSERT_EQ(kNumVal, bta_dm_sec_cb.num_val);
   ASSERT_TRUE(callback_sent);
@@ -109,7 +109,7 @@ TEST_F(BtaSecTest, bta_dm_sp_cback__BTM_SP_CFM_REQ_EVT_WithoutName_RNRSuccess) {
   reset_mock_btm_client_interface();
   mock_btm_client_interface.peer.BTM_ReadRemoteDeviceName =
           [](const RawAddress& remote_bda, tBTM_NAME_CMPL_CB* p_cb,
-             tBT_TRANSPORT transport) -> tBTM_STATUS { return BTM_CMD_STARTED; };
+             tBT_TRANSPORT transport) -> tBTM_STATUS { return tBTM_STATUS::BTM_CMD_STARTED; };
 
   static tBTA_DM_SP_CFM_REQ cfm_req{};
   bta_dm_sec_enable([](tBTA_DM_SEC_EVT event, tBTA_DM_SEC* p_data) {
@@ -135,7 +135,7 @@ TEST_F(BtaSecTest, bta_dm_sp_cback__BTM_SP_CFM_REQ_EVT_WithoutName_RNRSuccess) {
   data.cfm_req.dev_class = kDeviceClass;
 
   ASSERT_EQ(
-          btm_status_text(BTM_CMD_STARTED),
+          btm_status_text(tBTM_STATUS::BTM_CMD_STARTED),
           btm_status_text(bluetooth::legacy::testing::bta_dm_sp_cback(BTM_SP_CFM_REQ_EVT, &data)));
   ASSERT_EQ(kNumVal, bta_dm_sec_cb.num_val);
   ASSERT_FALSE(callback_sent);
@@ -146,7 +146,7 @@ TEST_F(BtaSecTest, bta_dm_sp_cback__BTM_SP_CFM_REQ_EVT_WithoutName_RNRFail) {
   static bool callback_sent = false;
   mock_btm_client_interface.peer.BTM_ReadRemoteDeviceName =
           [](const RawAddress& remote_bda, tBTM_NAME_CMPL_CB* p_cb,
-             tBT_TRANSPORT transport) -> tBTM_STATUS { return BTM_SUCCESS; };
+             tBT_TRANSPORT transport) -> tBTM_STATUS { return tBTM_STATUS::BTM_SUCCESS; };
 
   static tBTA_DM_SP_CFM_REQ cfm_req{};
   bta_dm_sec_enable([](tBTA_DM_SEC_EVT event, tBTA_DM_SEC* p_data) {
@@ -172,7 +172,7 @@ TEST_F(BtaSecTest, bta_dm_sp_cback__BTM_SP_CFM_REQ_EVT_WithoutName_RNRFail) {
   data.cfm_req.dev_class = kDeviceClass;
 
   ASSERT_EQ(
-          btm_status_text(BTM_CMD_STARTED),
+          btm_status_text(tBTM_STATUS::BTM_CMD_STARTED),
           btm_status_text(bluetooth::legacy::testing::bta_dm_sp_cback(BTM_SP_CFM_REQ_EVT, &data)));
   ASSERT_EQ(kNumVal, bta_dm_sec_cb.num_val);
   ASSERT_TRUE(callback_sent);
@@ -192,7 +192,7 @@ TEST_F(BtaSecTest, bta_dm_sp_cback__BTM_SP_KEY_NOTIF_EVT) {
   static bool callback_sent = false;
   mock_btm_client_interface.peer.BTM_ReadRemoteDeviceName =
           [](const RawAddress& remote_bda, tBTM_NAME_CMPL_CB* p_cb,
-             tBT_TRANSPORT transport) -> tBTM_STATUS { return BTM_CMD_STARTED; };
+             tBT_TRANSPORT transport) -> tBTM_STATUS { return tBTM_STATUS::BTM_CMD_STARTED; };
 
   static tBTA_DM_SP_KEY_NOTIF key_notif{};
   bta_dm_sec_enable([](tBTA_DM_SEC_EVT event, tBTA_DM_SEC* p_data) {
@@ -213,7 +213,7 @@ TEST_F(BtaSecTest, bta_dm_sp_cback__BTM_SP_KEY_NOTIF_EVT) {
   data.key_notif.dev_class = kDeviceClass;
   bd_name_from_char_pointer(data.key_notif.bd_name, kRemoteName);
 
-  ASSERT_EQ(btm_status_text(BTM_CMD_STARTED),
+  ASSERT_EQ(btm_status_text(tBTM_STATUS::BTM_CMD_STARTED),
             btm_status_text(
                     bluetooth::legacy::testing::bta_dm_sp_cback(BTM_SP_KEY_NOTIF_EVT, &data)));
   ASSERT_EQ(kPassKey, bta_dm_sec_cb.num_val);

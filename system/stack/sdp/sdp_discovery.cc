@@ -150,6 +150,8 @@ static void sdp_snd_service_search_req(tCONN_CB* p_ccb, uint8_t cont_len, uint8_
 
   bytes_left -= base_bytes;
 
+  log::assert_that(p_ccb->p_db != nullptr, "SDP database has not been set");
+
   /* Build the UID sequence. */
   p = sdpu_build_uuid_seq(p, p_ccb->p_db->num_uuid_filters, p_ccb->p_db->uuid_filters, bytes_left);
 
@@ -590,7 +592,7 @@ static void process_service_search_attr_rsp(tCONN_CB* p_ccb, uint8_t* p_reply,
   /* If p_reply is NULL, we were called for the initial read */
   if (p_reply) {
     if (p_reply + 4 /* transaction ID and length */ + sizeof(lists_byte_count) > p_reply_end) {
-      sdp_disconnect(p_ccb, SDP_INVALID_PDU_SIZE);
+      sdp_disconnect(p_ccb, tSDP_STATUS::SDP_INVALID_PDU_SIZE);
       return;
     }
 
@@ -602,12 +604,12 @@ static void process_service_search_attr_rsp(tCONN_CB* p_ccb, uint8_t* p_reply,
     /* Copy the response to the scratchpad. First, a safety check on the length
      */
     if ((p_ccb->list_len + lists_byte_count) > SDP_MAX_LIST_BYTE_COUNT) {
-      sdp_disconnect(p_ccb, SDP_INVALID_PDU_SIZE);
+      sdp_disconnect(p_ccb, tSDP_STATUS::SDP_INVALID_PDU_SIZE);
       return;
     }
 
     if (p_reply + lists_byte_count + 1 /* continuation */ > p_reply_end) {
-      sdp_disconnect(p_ccb, SDP_INVALID_PDU_SIZE);
+      sdp_disconnect(p_ccb, tSDP_STATUS::SDP_INVALID_PDU_SIZE);
       return;
     }
 
@@ -619,7 +621,7 @@ static void process_service_search_attr_rsp(tCONN_CB* p_ccb, uint8_t* p_reply,
     p_reply += lists_byte_count;
     if (*p_reply) {
       if (*p_reply > SDP_MAX_CONTINUATION_LEN) {
-        sdp_disconnect(p_ccb, SDP_INVALID_CONT_STATE);
+        sdp_disconnect(p_ccb, tSDP_STATUS::SDP_INVALID_CONT_STATE);
         return;
       }
 
@@ -654,7 +656,7 @@ static void process_service_search_attr_rsp(tCONN_CB* p_ccb, uint8_t* p_reply,
              ((p_reply) ? (*p_reply) : 0));
 
     if (base_bytes > bytes_left) {
-      sdp_disconnect(p_ccb, SDP_INVALID_CONT_STATE);
+      sdp_disconnect(p_ccb, tSDP_STATUS::SDP_INVALID_CONT_STATE);
       return;
     }
 
@@ -707,8 +709,7 @@ static void process_service_search_attr_rsp(tCONN_CB* p_ccb, uint8_t* p_reply,
   /*******************************************************************/
 
   if (!sdp_copy_raw_data(p_ccb, true)) {
-    log::error("sdp_copy_raw_data failed");
-    sdp_disconnect(p_ccb, SDP_ILLEGAL_PARAMETER);
+    sdp_disconnect(p_ccb, tSDP_STATUS::SDP_ILLEGAL_PARAMETER);
     return;
   }
 
@@ -718,34 +719,32 @@ static void process_service_search_attr_rsp(tCONN_CB* p_ccb, uint8_t* p_reply,
   type = *p++;
 
   if ((type >> 3) != DATA_ELE_SEQ_DESC_TYPE) {
-    log::warn("Wrong element in attr_rsp type:0x{:02x}", type);
-    sdp_disconnect(p_ccb, SDP_ILLEGAL_PARAMETER);
+    sdp_disconnect(p_ccb, tSDP_STATUS::SDP_ILLEGAL_PARAMETER);
     return;
   }
   p = sdpu_get_len_from_type(p, p + p_ccb->list_len, type, &seq_len);
   if (p == NULL || (p + seq_len) > (p + p_ccb->list_len)) {
-    log::warn("Illegal search attribute length");
-    sdp_disconnect(p_ccb, SDP_ILLEGAL_PARAMETER);
+    sdp_disconnect(p_ccb, tSDP_STATUS::SDP_ILLEGAL_PARAMETER);
     return;
   }
   p_end = &p_ccb->rsp_list[p_ccb->list_len];
 
   if ((p + seq_len) != p_end) {
-    sdp_disconnect(p_ccb, SDP_INVALID_CONT_STATE);
+    sdp_disconnect(p_ccb, tSDP_STATUS::SDP_INVALID_CONT_STATE);
     return;
   }
 
   while (p < p_end) {
     p = save_attr_seq(p_ccb, p, &p_ccb->rsp_list[p_ccb->list_len]);
     if (!p) {
-      sdp_disconnect(p_ccb, SDP_DB_FULL);
+      sdp_disconnect(p_ccb, tSDP_STATUS::SDP_DB_FULL);
       return;
     }
   }
 
   /* Since we got everything we need, disconnect the call */
   sdpu_log_attribute_metrics(p_ccb->device_address, p_ccb->p_db);
-  sdp_disconnect(p_ccb, SDP_SUCCESS);
+  sdp_disconnect(p_ccb, tSDP_STATUS::SDP_SUCCESS);
 }
 
 /*******************************************************************************
@@ -766,7 +765,7 @@ static void process_service_attr_rsp(tCONN_CB* p_ccb, uint8_t* p_reply, uint8_t*
   /* If p_reply is NULL, we were called after the records handles were read */
   if (p_reply) {
     if (p_reply + 4 /* transaction ID and length */ + sizeof(list_byte_count) > p_reply_end) {
-      sdp_disconnect(p_ccb, SDP_INVALID_PDU_SIZE);
+      sdp_disconnect(p_ccb, tSDP_STATUS::SDP_INVALID_PDU_SIZE);
       return;
     }
 
@@ -778,12 +777,12 @@ static void process_service_attr_rsp(tCONN_CB* p_ccb, uint8_t* p_reply, uint8_t*
     /* Copy the response to the scratchpad. First, a safety check on the length
      */
     if ((p_ccb->list_len + list_byte_count) > SDP_MAX_LIST_BYTE_COUNT) {
-      sdp_disconnect(p_ccb, SDP_INVALID_PDU_SIZE);
+      sdp_disconnect(p_ccb, tSDP_STATUS::SDP_INVALID_PDU_SIZE);
       return;
     }
 
     if (p_reply + list_byte_count + 1 /* continuation */ > p_reply_end) {
-      sdp_disconnect(p_ccb, SDP_INVALID_PDU_SIZE);
+      sdp_disconnect(p_ccb, tSDP_STATUS::SDP_INVALID_PDU_SIZE);
       return;
     }
 
@@ -795,21 +794,20 @@ static void process_service_attr_rsp(tCONN_CB* p_ccb, uint8_t* p_reply, uint8_t*
     p_reply += list_byte_count;
     if (*p_reply) {
       if (*p_reply > SDP_MAX_CONTINUATION_LEN) {
-        sdp_disconnect(p_ccb, SDP_INVALID_CONT_STATE);
+        sdp_disconnect(p_ccb, tSDP_STATUS::SDP_INVALID_CONT_STATE);
         return;
       }
       cont_request_needed = true;
     } else {
       log::warn("process_service_attr_rsp");
       if (!sdp_copy_raw_data(p_ccb, false)) {
-        log::error("sdp_copy_raw_data failed");
-        sdp_disconnect(p_ccb, SDP_ILLEGAL_PARAMETER);
+        sdp_disconnect(p_ccb, tSDP_STATUS::SDP_ILLEGAL_PARAMETER);
         return;
       }
 
       /* Save the response in the database. Stop on any error */
       if (!save_attr_seq(p_ccb, &p_ccb->rsp_list[0], &p_ccb->rsp_list[p_ccb->list_len])) {
-        sdp_disconnect(p_ccb, SDP_DB_FULL);
+        sdp_disconnect(p_ccb, tSDP_STATUS::SDP_DB_FULL);
         return;
       }
       p_ccb->list_len = 0;
@@ -872,7 +870,7 @@ static void process_service_attr_rsp(tCONN_CB* p_ccb, uint8_t* p_reply, uint8_t*
     alarm_set_on_mloop(p_ccb->sdp_conn_timer, SDP_INACT_TIMEOUT_MS, sdp_conn_timer_timeout, p_ccb);
   } else {
     sdpu_log_attribute_metrics(p_ccb->device_address, p_ccb->p_db);
-    sdp_disconnect(p_ccb, SDP_SUCCESS);
+    sdp_disconnect(p_ccb, tSDP_STATUS::SDP_SUCCESS);
     return;
   }
 }
@@ -893,7 +891,7 @@ static void process_service_search_rsp(tCONN_CB* p_ccb, uint8_t* p_reply, uint8_
   uint8_t cont_len;
 
   if (p_reply + 8 > p_reply_end) {
-    sdp_disconnect(p_ccb, SDP_GENERIC_ERROR);
+    sdp_disconnect(p_ccb, tSDP_STATUS::SDP_GENERIC_ERROR);
     return;
   }
   /* Skip transaction, and param len */
@@ -905,7 +903,7 @@ static void process_service_search_rsp(tCONN_CB* p_ccb, uint8_t* p_reply, uint8_
   p_ccb->num_handles += cur_handles;
   if (p_ccb->num_handles == 0 || p_ccb->num_handles < orig) {
     log::warn("SDP - Rcvd ServiceSearchRsp, no matches");
-    sdp_disconnect(p_ccb, SDP_NO_RECS_MATCH);
+    sdp_disconnect(p_ccb, tSDP_STATUS::SDP_NO_RECS_MATCH);
     return;
   }
 
@@ -918,7 +916,7 @@ static void process_service_search_rsp(tCONN_CB* p_ccb, uint8_t* p_reply, uint8_
   }
 
   if (p_reply + ((p_ccb->num_handles - orig) * 4) + 1 > p_reply_end) {
-    sdp_disconnect(p_ccb, SDP_GENERIC_ERROR);
+    sdp_disconnect(p_ccb, tSDP_STATUS::SDP_GENERIC_ERROR);
     return;
   }
 
@@ -929,11 +927,11 @@ static void process_service_search_rsp(tCONN_CB* p_ccb, uint8_t* p_reply, uint8_
   BE_STREAM_TO_UINT8(cont_len, p_reply);
   if (cont_len != 0) {
     if (cont_len > SDP_MAX_CONTINUATION_LEN) {
-      sdp_disconnect(p_ccb, SDP_INVALID_CONT_STATE);
+      sdp_disconnect(p_ccb, tSDP_STATUS::SDP_INVALID_CONT_STATE);
       return;
     }
     if (p_reply + cont_len > p_reply_end) {
-      sdp_disconnect(p_ccb, SDP_INVALID_CONT_STATE);
+      sdp_disconnect(p_ccb, tSDP_STATUS::SDP_INVALID_CONT_STATE);
       return;
     }
     /* stay in the same state */
@@ -994,7 +992,7 @@ void sdp_disc_server_rsp(tCONN_CB* p_ccb, BT_HDR* p_msg) {
   uint8_t* p_end = p + p_msg->len;
 
   if (p_msg->len < 1) {
-    sdp_disconnect(p_ccb, SDP_GENERIC_ERROR);
+    sdp_disconnect(p_ccb, tSDP_STATUS::SDP_GENERIC_ERROR);
     return;
   }
 
@@ -1027,6 +1025,6 @@ void sdp_disc_server_rsp(tCONN_CB* p_ccb, BT_HDR* p_msg) {
 
   if (invalid_pdu) {
     log::warn("SDP - Unexp. PDU: {} in state: {}", rsp_pdu, p_ccb->disc_state);
-    sdp_disconnect(p_ccb, SDP_GENERIC_ERROR);
+    sdp_disconnect(p_ccb, tSDP_STATUS::SDP_GENERIC_ERROR);
   }
 }

@@ -664,7 +664,7 @@ protected:
     le_audio_devices_.push_back(leAudioDevice);
     addresses_.push_back(leAudioDevice->address_);
 
-    return std::move(leAudioDevice);
+    return leAudioDevice;
   }
 
   LeAudioDeviceGroup* GroupTheDevice(int group_id,

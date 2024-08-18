@@ -39,7 +39,7 @@ using namespace bluetooth;
 static int g_counter = 0;
 static std::unique_ptr<std::promise<void>> g_counter_promise = nullptr;
 
-void callback_batch(fixed_queue_t* queue, void* data) {
+void callback_batch(fixed_queue_t* queue, void* /* data */) {
   if (queue != nullptr) {
     fixed_queue_dequeue(queue);
   }

@@ -120,7 +120,7 @@ static tBTM_STATUS btm_pm_snd_md_req(uint16_t handle, uint8_t pm_id, int link_in
  *
  * Description      register or deregister with power manager
  *
- * Returns          BTM_SUCCESS if successful,
+ * Returns          tBTM_STATUS::BTM_SUCCESS if successful,
  *                  BTM_NO_RESOURCES if no room to hold registration
  *                  BTM_ILLEGAL_VALUE
  *
@@ -132,7 +132,7 @@ tBTM_STATUS BTM_PmRegister(uint8_t mask, uint8_t* p_pm_id, tBTM_PM_STATUS_CBACK*
       return BTM_ILLEGAL_VALUE;
     }
     pm_reg_db.mask = BTM_PM_REC_NOT_USED;
-    return BTM_SUCCESS;
+    return tBTM_STATUS::BTM_SUCCESS;
   }
 
   if (pm_reg_db.mask == BTM_PM_REC_NOT_USED) {
@@ -143,7 +143,7 @@ tBTM_STATUS BTM_PmRegister(uint8_t mask, uint8_t* p_pm_id, tBTM_PM_STATUS_CBACK*
     pm_reg_db.cback = p_cb;
     pm_reg_db.mask = mask;
     *p_pm_id = 0;
-    return BTM_SUCCESS;
+    return tBTM_STATUS::BTM_SUCCESS;
   }
 
   return BTM_NO_RESOURCES;
@@ -174,7 +174,7 @@ void BTM_PM_OnDisconnected(uint16_t handle) {
  * Description      store the mode in control block or
  *                  alter ACL connection behavior.
  *
- * Returns          BTM_SUCCESS if successful,
+ * Returns          tBTM_STATUS::BTM_SUCCESS if successful,
  *                  BTM_UNKNOWN_ADDR if bd addr is not active or bad
  *
  ******************************************************************************/
@@ -231,7 +231,7 @@ tBTM_STATUS BTM_SetPowerMode(uint8_t pm_id, const RawAddress& remote_bda,
               "Device is already in requested mode {}, interval: {}, max: {}, min: "
               "{}",
               p_mode->mode, p_cb->interval, p_mode->max, p_mode->min);
-      return BTM_SUCCESS;
+      return tBTM_STATUS::BTM_SUCCESS;
     }
   }
 
@@ -273,7 +273,7 @@ bool BTM_SetLinkPolicyActiveMode(const RawAddress& remote_bda) {
 
   switch (BTM_SetPowerMode(BTM_PM_SET_ONLY_ID, remote_bda, &settings)) {
     case BTM_CMD_STORED:
-    case BTM_SUCCESS:
+    case tBTM_STATUS::BTM_SUCCESS:
       return true;
     default:
       return false;
@@ -307,7 +307,7 @@ bool BTM_ReadPowerMode(const RawAddress& remote_bda, tBTM_PM_MODE* p_mode) {
  *                  min_loc_to - minimum local timeout
  *
  *
- * Returns          BTM_SUCCESS if the HCI command is issued successful,
+ * Returns          tBTM_STATUS::BTM_SUCCESS if the HCI command is issued successful,
  *                  BTM_UNKNOWN_ADDR if bd addr is not active or bad
  *                  BTM_CMD_STORED if the command is stored
  *
@@ -322,7 +322,7 @@ tBTM_STATUS BTM_SetSsrParams(const RawAddress& remote_bda, uint16_t max_lat, uin
 
   if (!bluetooth::shim::GetController()->SupportsSniffSubrating()) {
     log::info("No controller support for sniff subrating");
-    return BTM_SUCCESS;
+    return tBTM_STATUS::BTM_SUCCESS;
   }
 
   if (p_cb->state == BTM_PM_ST_ACTIVE || p_cb->state == BTM_PM_ST_SNIFF) {
@@ -331,7 +331,7 @@ tBTM_STATUS BTM_SetSsrParams(const RawAddress& remote_bda, uint16_t max_lat, uin
             "min_remote_timeout:0x{:04x} min_local_timeout:0x{:04x}",
             power_mode_state_text(p_cb->state), p_cb->state, max_lat, min_rmt_to, min_loc_to);
     send_sniff_subrating(p_cb->handle_, remote_bda, max_lat, min_rmt_to, min_loc_to);
-    return BTM_SUCCESS;
+    return tBTM_STATUS::BTM_SUCCESS;
   }
   log::info("pm_mode_db state: {}", p_cb->state);
   p_cb->max_lat = max_lat;
@@ -600,7 +600,7 @@ static tBTM_STATUS btm_pm_snd_md_req(uint16_t handle, uint8_t pm_id, int link_in
     return BTM_NO_RESOURCES;
   }
 
-  return BTM_CMD_STARTED;
+  return tBTM_STATUS::BTM_CMD_STARTED;
 }
 
 static void btm_pm_continue_pending_mode_changes() {

@@ -191,13 +191,14 @@ static void process_service_search(tCONN_CB* p_ccb, uint16_t trans_num, uint16_t
   p_req = sdpu_extract_uid_seq(p_req, param_len, &uid_seq);
 
   if ((!p_req) || (!uid_seq.num_uids)) {
-    sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_REQ_SYNTAX, SDP_TEXT_BAD_UUID_LIST);
+    sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_REQ_SYNTAX,
+                            SDP_TEXT_BAD_UUID_LIST);
     return;
   }
 
   /* Get the max replies we can send. Cap it at our max anyways. */
   if (p_req + sizeof(max_replies) + sizeof(uint8_t) > p_req_end) {
-    sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_REQ_SYNTAX,
+    sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_REQ_SYNTAX,
                             SDP_TEXT_BAD_MAX_RECORDS_LIST);
     return;
   }
@@ -220,18 +221,21 @@ static void process_service_search(tCONN_CB* p_ccb, uint16_t trans_num, uint16_t
 
   /* Check if this is a continuation request */
   if (p_req + 1 > p_req_end) {
-    sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE, SDP_TEXT_BAD_CONT_LEN);
+    sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_CONT_STATE,
+                            SDP_TEXT_BAD_CONT_LEN);
     return;
   }
   if (*p_req) {
     if (*p_req++ != SDP_CONTINUATION_LEN || (p_req + sizeof(cont_offset) > p_req_end)) {
-      sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE, SDP_TEXT_BAD_CONT_LEN);
+      sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_CONT_STATE,
+                              SDP_TEXT_BAD_CONT_LEN);
       return;
     }
     BE_STREAM_TO_UINT16(cont_offset, p_req);
 
     if (cont_offset != p_ccb->cont_offset || num_rsp_handles < cont_offset) {
-      sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE, SDP_TEXT_BAD_CONT_INX);
+      sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_CONT_STATE,
+                              SDP_TEXT_BAD_CONT_INX);
       return;
     }
 
@@ -325,7 +329,8 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num, uint16
   uint16_t attr_len;
 
   if (p_req + sizeof(rec_handle) + sizeof(max_list_len) > p_req_end) {
-    sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_SERV_REC_HDL, SDP_TEXT_BAD_HANDLE);
+    sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_SERV_REC_HDL,
+                            SDP_TEXT_BAD_HANDLE);
     return;
   }
 
@@ -344,7 +349,8 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num, uint16
   p_req = sdpu_extract_attr_seq(p_req, param_len, &attr_seq);
 
   if ((!p_req) || (!attr_seq.num_attr) || (p_req + sizeof(uint8_t) > p_req_end)) {
-    sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_REQ_SYNTAX, SDP_TEXT_BAD_ATTR_LIST);
+    sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_REQ_SYNTAX,
+                            SDP_TEXT_BAD_ATTR_LIST);
     return;
   }
 
@@ -353,12 +359,13 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num, uint16
   /* Find a record with the record handle */
   p_rec = sdp_db_find_record(rec_handle);
   if (!p_rec) {
-    sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_SERV_REC_HDL, SDP_TEXT_BAD_HANDLE);
+    sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_SERV_REC_HDL,
+                            SDP_TEXT_BAD_HANDLE);
     return;
   }
 
   if (max_list_len < 4) {
-    sdpu_build_n_send_error(p_ccb, trans_num, SDP_ILLEGAL_PARAMETER, NULL);
+    sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_ILLEGAL_PARAMETER, NULL);
     return;
   }
 
@@ -368,18 +375,21 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num, uint16
 
   /* Check if this is a continuation request */
   if (p_req + 1 > p_req_end) {
-    sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE, SDP_TEXT_BAD_CONT_LEN);
+    sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_CONT_STATE,
+                            SDP_TEXT_BAD_CONT_LEN);
     return;
   }
   if (*p_req) {
     if (*p_req++ != SDP_CONTINUATION_LEN || (p_req + sizeof(cont_offset) > p_req_end)) {
-      sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE, SDP_TEXT_BAD_CONT_LEN);
+      sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_CONT_STATE,
+                              SDP_TEXT_BAD_CONT_LEN);
       return;
     }
     BE_STREAM_TO_UINT16(cont_offset, p_req);
 
     if (cont_offset != p_ccb->cont_offset) {
-      sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE, SDP_TEXT_BAD_CONT_INX);
+      sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_CONT_STATE,
+                              SDP_TEXT_BAD_CONT_INX);
       return;
     }
     is_cont = true;
@@ -438,7 +448,8 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num, uint16
       if (p_ccb->cont_info.attr_offset) {
         if (attr_len < p_ccb->cont_info.attr_offset) {
           log::error("offset is bigger than attribute length");
-          sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE, SDP_TEXT_BAD_CONT_LEN);
+          sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_CONT_STATE,
+                                  SDP_TEXT_BAD_CONT_LEN);
           return;
         }
         p_rsp = sdpu_build_partial_attrib_entry(p_rsp, p_attr, rem_len,
@@ -454,7 +465,7 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num, uint16
       {
         if (attr_len >= SDP_MAX_ATTR_LEN) {
           log::error("SDP attr too big: max_list_len={},attr_len={}", max_list_len, attr_len);
-          sdpu_build_n_send_error(p_ccb, trans_num, SDP_NO_RESOURCES, NULL);
+          sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_NO_RESOURCES, NULL);
           return;
         }
 
@@ -588,7 +599,8 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
   p_req = sdpu_extract_uid_seq(p_req, param_len, &uid_seq);
 
   if ((!p_req) || (!uid_seq.num_uids) || (p_req + sizeof(uint16_t) > p_req_end)) {
-    sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_REQ_SYNTAX, SDP_TEXT_BAD_UUID_LIST);
+    sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_REQ_SYNTAX,
+                            SDP_TEXT_BAD_UUID_LIST);
     return;
   }
 
@@ -603,14 +615,15 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
   p_req = sdpu_extract_attr_seq(p_req, param_len, &attr_seq);
 
   if ((!p_req) || (!attr_seq.num_attr) || (p_req + sizeof(uint8_t) > p_req_end)) {
-    sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_REQ_SYNTAX, SDP_TEXT_BAD_ATTR_LIST);
+    sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_REQ_SYNTAX,
+                            SDP_TEXT_BAD_ATTR_LIST);
     return;
   }
 
   memcpy(&attr_seq_sav, &attr_seq, sizeof(tSDP_ATTR_SEQ));
 
   if (max_list_len < 4) {
-    sdpu_build_n_send_error(p_ccb, trans_num, SDP_ILLEGAL_PARAMETER, NULL);
+    sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_ILLEGAL_PARAMETER, NULL);
     return;
   }
 
@@ -620,18 +633,21 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
 
   /* Check if this is a continuation request */
   if (p_req + 1 > p_req_end) {
-    sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE, SDP_TEXT_BAD_CONT_LEN);
+    sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_CONT_STATE,
+                            SDP_TEXT_BAD_CONT_LEN);
     return;
   }
   if (*p_req) {
     if (*p_req++ != SDP_CONTINUATION_LEN || (p_req + sizeof(uint16_t) > p_req_end)) {
-      sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE, SDP_TEXT_BAD_CONT_LEN);
+      sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_CONT_STATE,
+                              SDP_TEXT_BAD_CONT_LEN);
       return;
     }
     BE_STREAM_TO_UINT16(cont_offset, p_req);
 
     if (cont_offset != p_ccb->cont_offset) {
-      sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE, SDP_TEXT_BAD_CONT_INX);
+      sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_CONT_STATE,
+                              SDP_TEXT_BAD_CONT_INX);
       return;
     }
     is_cont = true;
@@ -713,7 +729,7 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
         if (p_ccb->cont_info.attr_offset) {
           if (attr_len < p_ccb->cont_info.attr_offset) {
             log::error("offset is bigger than attribute length");
-            sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE,
+            sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_CONT_STATE,
                                     SDP_TEXT_BAD_CONT_LEN);
             return;
           }
@@ -731,7 +747,7 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
         {
           if (attr_len >= SDP_MAX_ATTR_LEN) {
             log::error("SDP attr too big: max_list_len={},attr_len={}", max_list_len, attr_len);
-            sdpu_build_n_send_error(p_ccb, trans_num, SDP_NO_RESOURCES, NULL);
+            sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_NO_RESOURCES, NULL);
             return;
           }
 
@@ -820,7 +836,7 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
   //
   // TODO(sharvil): rewrite SDP server.
   if (is_cont && len_to_send == 0) {
-    sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE, NULL);
+    sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_CONT_STATE, NULL);
     return;
   }
 
@@ -928,7 +944,8 @@ void sdp_server_handle_client_req(tCONN_CB* p_ccb, BT_HDR* p_msg) {
 
   if (p_req + sizeof(pdu_id) + sizeof(trans_num) > p_req_end) {
     trans_num = 0;
-    sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_REQ_SYNTAX, SDP_TEXT_BAD_HEADER);
+    sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_REQ_SYNTAX,
+                            SDP_TEXT_BAD_HEADER);
     return;
   }
 
@@ -939,14 +956,16 @@ void sdp_server_handle_client_req(tCONN_CB* p_ccb, BT_HDR* p_msg) {
   BE_STREAM_TO_UINT16(trans_num, p_req);
 
   if (p_req + sizeof(param_len) > p_req_end) {
-    sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_REQ_SYNTAX, SDP_TEXT_BAD_HEADER);
+    sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_REQ_SYNTAX,
+                            SDP_TEXT_BAD_HEADER);
     return;
   }
 
   BE_STREAM_TO_UINT16(param_len, p_req);
 
   if ((p_req + param_len) != p_req_end) {
-    sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_PDU_SIZE, SDP_TEXT_BAD_HEADER);
+    sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_PDU_SIZE,
+                            SDP_TEXT_BAD_HEADER);
     return;
   }
 
@@ -964,7 +983,8 @@ void sdp_server_handle_client_req(tCONN_CB* p_ccb, BT_HDR* p_msg) {
       break;
 
     default:
-      sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_REQ_SYNTAX, SDP_TEXT_BAD_PDU);
+      sdpu_build_n_send_error(p_ccb, trans_num, tSDP_STATUS::SDP_INVALID_REQ_SYNTAX,
+                              SDP_TEXT_BAD_PDU);
       log::warn("SDP - server got unknown PDU: 0x{:x}", pdu_id);
       break;
   }

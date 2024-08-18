@@ -29,6 +29,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.bluetooth.annotations.RequiresBluetoothConnectPermission;
 import android.content.AttributionSource;
@@ -444,6 +445,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
      * Create a BluetoothHapClient proxy object for interacting with the local Bluetooth Hearing
      * Access Profile (HAP) client.
      */
+    @SuppressLint("AndroidFrameworkRequiresPermission") // Consumer wrongly report permission
     BluetoothHapClient(Context context, BluetoothAdapter adapter) {
         mAdapter = adapter;
         mAttributionSource = mAdapter.getAttributionSource();
@@ -527,6 +529,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     @SystemApi
     @RequiresBluetoothConnectPermission
     @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
+    @SuppressLint("AndroidFrameworkRequiresPermission") // Consumer are fakely reporting permission
     public void registerCallback(
             @NonNull @CallbackExecutor Executor executor, @NonNull Callback callback) {
         mCallbackWrapper.registerCallback(mService, callback, executor);
@@ -548,6 +551,7 @@ public final class BluetoothHapClient implements BluetoothProfile, AutoCloseable
     @SystemApi
     @RequiresBluetoothConnectPermission
     @RequiresPermission(allOf = {BLUETOOTH_CONNECT, BLUETOOTH_PRIVILEGED})
+    @SuppressLint("AndroidFrameworkRequiresPermission") // Consumer are fakely reporting permission
     public void unregisterCallback(@NonNull Callback callback) {
         mCallbackWrapper.unregisterCallback(mService, callback);
     }

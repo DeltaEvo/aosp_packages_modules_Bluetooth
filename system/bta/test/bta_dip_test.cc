@@ -201,5 +201,5 @@ TEST_F(BtaDipTest, test_invalid_size_checks) {
 }
 
 TEST_F(BtaDipTest, test_bta_sdp_search_cback) {
-  bluetooth::testing::bta_sdp_search_cback(UUID_DIP, RawAddress::kEmpty, SDP_SUCCESS);
+  bluetooth::testing::bta_sdp_search_cback(UUID_DIP, RawAddress::kEmpty, tSDP_STATUS::SDP_SUCCESS);
 }

@@ -10,6 +10,7 @@ use dbus_crossroads::Crossroads;
 use dbus_projection::DisconnectWatcher;
 use dbus_tokio::connection;
 use log::LevelFilter;
+use log_panics;
 use manager_service::bluetooth_manager::BluetoothManager;
 use manager_service::powerd_suspend_manager::PowerdSuspendManager;
 use manager_service::{bluetooth_experimental_dbus, iface_bluetooth_manager};
@@ -49,6 +50,8 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
             process: "btmanagerd".into(),
             pid: 0,
         };
+
+        log_panics::init();
 
         let logger = syslog::unix(formatter).expect("could not connect to syslog");
         let _ = log::set_boxed_logger(Box::new(BasicLogger::new(logger)))

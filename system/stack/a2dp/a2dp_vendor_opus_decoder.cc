@@ -85,7 +85,7 @@ bool a2dp_vendor_opus_decoder_init(decoded_data_callback_t decode_callback) {
   return false;
 }
 
-void a2dp_vendor_opus_decoder_configure(const uint8_t* p_codec_info) { return; }
+void a2dp_vendor_opus_decoder_configure(const uint8_t* /* p_codec_info */) { return; }
 
 bool a2dp_vendor_opus_decoder_decode_packet(BT_HDR* p_buf) {
   uint32_t frameSize;

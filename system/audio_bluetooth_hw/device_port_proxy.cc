@@ -576,8 +576,7 @@ void BluetoothAudioPortAidl::UpdateSourceMetadata(const source_metadata_v7* sour
             static_cast<AudioUsage>(source_metadata->tracks[i].base.usage);
     hal_source_metadata.tracks[i].contentType =
             static_cast<AudioContentType>(source_metadata->tracks[i].base.content_type);
-    hal_source_metadata.tracks[i].tags =
-            std::move(CovertAudioTagFromV7(source_metadata->tracks[i].tags));
+    hal_source_metadata.tracks[i].tags = CovertAudioTagFromV7(source_metadata->tracks[i].tags);
   }
 
   BluetoothAudioSessionControl::UpdateSourceMetadata(session_type_, hal_source_metadata);
@@ -601,8 +600,7 @@ void BluetoothAudioPortAidl::UpdateSinkMetadata(const sink_metadata_v7* sink_met
     hal_sink_metadata.tracks[i].source =
             static_cast<AudioSource>(sink_metadata->tracks[i].base.source);
     hal_sink_metadata.tracks[i].gain = sink_metadata->tracks[i].base.gain;
-    hal_sink_metadata.tracks[i].tags =
-            std::move(CovertAudioTagFromV7(sink_metadata->tracks[i].tags));
+    hal_sink_metadata.tracks[i].tags = CovertAudioTagFromV7(sink_metadata->tracks[i].tags);
   }
 
   BluetoothAudioSessionControl::UpdateSinkMetadata(session_type_, hal_sink_metadata);

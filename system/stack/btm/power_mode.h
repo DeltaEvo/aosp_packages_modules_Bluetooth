@@ -209,7 +209,7 @@ inline void set_le_scan_mode_to_ctrl_state(uint32_t duty_cycle, tBTM_CONTRL_STAT
  *
  * Description      register or deregister with power manager
  *
- * Returns          BTM_SUCCESS if successful,
+ * Returns          tBTM_STATUS::BTM_SUCCESS if successful,
  *                  BTM_NO_RESOURCES if no room to hold registration
  *                  BTM_ILLEGAL_VALUE
  *
@@ -229,7 +229,7 @@ void BTM_PM_OnDisconnected(uint16_t handle);
  * Description      store the mode in control block or
  *                  alter ACL connection behavior.
  *
- * Returns          BTM_SUCCESS if successful,
+ * Returns          tBTM_STATUS::BTM_SUCCESS if successful,
  *                  BTM_UNKNOWN_ADDR if bd addr is not active or bad
  *
  ******************************************************************************/
@@ -250,7 +250,7 @@ bool BTM_SetLinkPolicyActiveMode(const RawAddress& remote_bda);
  *                  min_loc_to - minimum local timeout
  *
  *
- * Returns          BTM_SUCCESS if the HCI command is issued successful,
+ * Returns          tBTM_STATUS::BTM_SUCCESS if the HCI command is issued successful,
  *                  BTM_UNKNOWN_ADDR if bd addr is not active or bad
  *                  BTM_CMD_STORED if the command is stored
  *

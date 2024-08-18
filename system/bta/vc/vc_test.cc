@@ -29,10 +29,12 @@
 #include "mock_csis_client.h"
 #include "osi/test/alarm_mock.h"
 #include "stack/include/bt_uuid16.h"
+#include "stack/include/btm_status.h"
 #include "test/common/mock_functions.h"
 #include "types.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
+
 void btif_storage_add_volume_control(const RawAddress& addr, bool auto_conn) {}
 
 struct alarm_t {
@@ -482,10 +484,10 @@ protected:
                                             tBTM_BLE_SEC_ACT sec_act) -> tBTM_STATUS {
                       if (p_callback) {
                         p_callback(bd_addr, transport, p_ref_data,
-                                   success ? BTM_SUCCESS : BTM_FAILED_ON_SECURITY);
+                                   success ? tBTM_STATUS::BTM_SUCCESS : BTM_FAILED_ON_SECURITY);
                       }
                       GetEncryptionCompleteEvt(bd_addr);
-                      return BTM_SUCCESS;
+                      return tBTM_STATUS::BTM_SUCCESS;
                     }));
     EXPECT_CALL(btm_interface, SetEncryption(address, _, _, _, BTM_BLE_SEC_ENCRYPT)).Times(1);
   }
@@ -803,7 +805,7 @@ TEST_F(VolumeControlTest, test_service_discovery_completed_before_encryption) {
   ON_CALL(btm_interface, BTM_IsEncrypted(test_address, _)).WillByDefault(DoAll(Return(false)));
   ON_CALL(btm_interface, IsLinkKeyKnown(test_address, _)).WillByDefault(DoAll(Return(true)));
   ON_CALL(btm_interface, SetEncryption(test_address, _, _, _, _))
-          .WillByDefault(Return(BTM_SUCCESS));
+          .WillByDefault(Return(tBTM_STATUS::BTM_SUCCESS));
 
   EXPECT_CALL(*callbacks, OnConnectionState(ConnectionState::CONNECTED, test_address)).Times(0);
   uint16_t conn_id = 1;

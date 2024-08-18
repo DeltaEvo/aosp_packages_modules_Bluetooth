@@ -21,6 +21,7 @@
 #include <cstdint>
 
 #include "stack/include/bt_hdr.h"
+#include "stack/include/btm_status.h"
 #include "stack/l2cap/l2c_int.h"
 #include "test/common/mock_functions.h"
 #include "types/raw_address.h"
@@ -35,7 +36,7 @@ bool l2c_link_hci_disc_comp(uint16_t /* handle */, tHCI_REASON /* reason */) {
 }
 tBTM_STATUS l2cu_ConnectAclForSecurity(const RawAddress& /* bd_addr */) {
   inc_func_call_count(__func__);
-  return BTM_SUCCESS;
+  return tBTM_STATUS::BTM_SUCCESS;
 }
 tL2C_CCB* l2cu_get_next_channel_in_rr(tL2C_LCB* /* p_lcb */) {
   inc_func_call_count(__func__);

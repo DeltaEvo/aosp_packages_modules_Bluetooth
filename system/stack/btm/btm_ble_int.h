@@ -41,6 +41,7 @@ void btm_ble_free();
 void btm_ble_connected(const RawAddress& bda, uint16_t handle, uint8_t enc_mode, uint8_t role,
                        tBLE_ADDR_TYPE addr_type, bool addr_matched,
                        bool can_read_discoverable_characteristics);
+void btm_ble_connection_established(const RawAddress& bda);
 
 /* acceptlist function */
 void btm_update_scanner_filter_policy(tBTM_BLE_SFP scan_policy);

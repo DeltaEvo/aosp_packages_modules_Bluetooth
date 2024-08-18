@@ -24,10 +24,12 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <chrono>
+#include <chrono>  // NOLINT
 #include <csignal>
-#include <mutex>
+#include <mutex>  // NOLINT
 #include <queue>
+#include <utility>
+#include <vector>
 
 #include "common/init_flags.h"
 #include "hal/hci_hal.h"
@@ -71,8 +73,8 @@ constexpr uint16_t HCI_DEV_NONE = 0xffff;
 
 struct sockaddr_hci {
   sa_family_t hci_family;
-  unsigned short hci_dev;
-  unsigned short hci_channel;
+  uint16_t hci_dev;
+  uint16_t hci_channel;
 };
 
 struct mgmt_pkt {
@@ -145,13 +147,16 @@ int waitHciDev(int hci_interface) {
       if (n < 0) {
         bluetooth::log::error("Error reading control channel: {}", strerror(errno));
         break;
+      } else if (n == 0) { // unlikely to happen, just a safeguard.
+        bluetooth::log::error("Error reading control channel: EOF");
+        break;
       }
 
       if (ev.opcode == MGMT_EV_COMMAND_COMP) {
         struct mgmt_event_read_index* cc;
         int i;
 
-        cc = (struct mgmt_event_read_index*)ev.data;
+        cc = reinterpret_cast<struct mgmt_event_read_index*>(ev.data);
 
         if (cc->cc_opcode != MGMT_OP_INDEX_LIST) {
           continue;
@@ -168,9 +173,12 @@ int waitHciDev(int hci_interface) {
             }
           }
 
-          // Chipset might be lost. Wait for index added event.
-          bluetooth::log::error("HCI interface({}) not found in the MGMT lndex list",
-                                hci_interface);
+          if (ret != 0) {
+            // Chipset might be lost. Wait for index added event.
+            bluetooth::log::error(
+                    "MGMT index list returns {} HCI interfaces, but HCI interface({}) is not found",
+                    cc->num_intf, hci_interface);
+          }
         } else {
           // Unlikely event (probably developer error or driver shut down).
           bluetooth::log::error("Failed to read index list: status({})", cc->status);
@@ -382,7 +390,7 @@ private:
   bool controller_broken_ = false;
 
   void write_to_fd(HciPacket packet) {
-    // TODO: replace this with new queue when it's ready
+    // TODO(chromeos-bt-team@): replace this with new queue when it's ready
     hci_outgoing_queue_.emplace(packet);
     if (hci_outgoing_queue_.size() == 1) {
       hci_incoming_thread_.GetReactor()->ModifyRegistration(reactable_,
@@ -396,7 +404,8 @@ private:
       return;
     }
     auto packet_to_send = hci_outgoing_queue_.front();
-    auto bytes_written = write(sock_fd_, (void*)packet_to_send.data(), packet_to_send.size());
+    auto bytes_written =
+            write(sock_fd_, reinterpret_cast<void*>(packet_to_send.data()), packet_to_send.size());
     hci_outgoing_queue_.pop();
     if (bytes_written == -1) {
       log::error("Can't write to socket: {}", strerror(errno));

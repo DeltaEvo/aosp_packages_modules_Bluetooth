@@ -208,7 +208,7 @@ static void bta_hh_sdp_cback(const RawAddress& bd_addr, tSDP_STATUS result, uint
     return;
   }
 
-  if (result == SDP_SUCCESS) {
+  if (result == tSDP_STATUS::SDP_SUCCESS) {
     /* security is required for the connection, add attr_mask bit*/
     attr_mask |= HID_SEC_REQUIRED;
 
@@ -287,14 +287,14 @@ static void bta_hh_di_sdp_cback(const RawAddress& bd_addr, tSDP_RESULT result) {
    * HID devices do not set this. So for IOP purposes, we allow the connection
    * to go through and update the DI record to invalid DI entry.
    */
-  if (result == SDP_SUCCESS || result == SDP_NO_RECS_MATCH) {
-    if (result == SDP_SUCCESS &&
+  if (result == tSDP_STATUS::SDP_SUCCESS || result == tSDP_STATUS::SDP_NO_RECS_MATCH) {
+    if (result == tSDP_STATUS::SDP_SUCCESS &&
         get_legacy_stack_sdp_api()->device_id.SDP_GetNumDiRecords(p_cb->p_disc_db) != 0) {
       tSDP_DI_GET_RECORD di_rec;
 
       /* always update information with primary DI record */
       if (get_legacy_stack_sdp_api()->device_id.SDP_GetDiRecord(1, &di_rec, p_cb->p_disc_db) ==
-          SDP_SUCCESS) {
+          tSDP_STATUS::SDP_SUCCESS) {
         bta_hh_update_di_info(p_cb, di_rec.rec.vendor, di_rec.rec.product, di_rec.rec.version, 0,
                               0);
       }
@@ -350,7 +350,7 @@ static void bta_hh_start_sdp(tBTA_HH_DEV_CB* p_cb) {
   /* Do DI discovery first */
   if (get_legacy_stack_sdp_api()->device_id.SDP_DiDiscover(
               p_cb->link_spec.addrt.bda, p_cb->p_disc_db, p_bta_hh_cfg->sdp_db_size,
-              bta_hh_di_sdp_cback) == SDP_SUCCESS) {
+              bta_hh_di_sdp_cback) == tSDP_STATUS::SDP_SUCCESS) {
     // SDP search started successfully. Connection will be triggered at the end of successful SDP
     // search
   } else {

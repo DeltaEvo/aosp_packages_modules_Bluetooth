@@ -26,7 +26,6 @@ typedef uint8_t BD_NAME[BD_NAME_LEN + 1]; /* Device name */
 
 inline constexpr BD_NAME kBtmBdNameEmpty = {};
 constexpr size_t kBdNameLength = static_cast<size_t>(BD_NAME_LEN);
-constexpr uint8_t kBdNameDelim = (uint8_t)'\0';
 
 inline size_t bd_name_copy(BD_NAME bd_name_dest, const BD_NAME bd_name_src) {
   return strlcpy(reinterpret_cast<char*>(bd_name_dest), reinterpret_cast<const char*>(bd_name_src),

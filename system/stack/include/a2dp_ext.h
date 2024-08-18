@@ -41,7 +41,7 @@ public:
     return vendor_specific_parameters_;
   }
 
-  void setVendorSpecificParameters(std::vector<uint8_t> const& parameters) {}
+  void setVendorSpecificParameters(std::vector<uint8_t> const& /* parameters */) {}
 
   void setCodecConfig(btav_a2dp_codec_config_t codec_parameters,
                       uint8_t const codec_config[AVDT_CODEC_SIZE],

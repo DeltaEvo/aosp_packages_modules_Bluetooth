@@ -313,12 +313,6 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
      * @hide
      */
     @Override
-    @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                BLUETOOTH_CONNECT,
-                BLUETOOTH_PRIVILEGED,
-            })
     public int getConnectionState(@NonNull BluetoothDevice device) {
         throw new UnsupportedOperationException("LE Audio Broadcasts are not connection-oriented.");
     }
@@ -329,12 +323,6 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
      * @hide
      */
     @Override
-    @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                BLUETOOTH_CONNECT,
-                BLUETOOTH_PRIVILEGED,
-            })
     @NonNull
     public List<BluetoothDevice> getDevicesMatchingConnectionStates(@NonNull int[] states) {
         throw new UnsupportedOperationException("LE Audio Broadcasts are not connection-oriented.");
@@ -346,12 +334,6 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
      * @hide
      */
     @Override
-    @RequiresBluetoothConnectPermission
-    @RequiresPermission(
-            allOf = {
-                BLUETOOTH_CONNECT,
-                BLUETOOTH_PRIVILEGED,
-            })
     public @NonNull List<BluetoothDevice> getConnectedDevices() {
         throw new UnsupportedOperationException("LE Audio Broadcasts are not connection-oriented.");
     }
@@ -848,6 +830,7 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
 
     /** @hide */
     @Override
+    @SuppressLint("AndroidFrameworkRequiresPermission") // Unexposed re-entrant callback
     public void onServiceConnected(IBinder service) {
         mService = IBluetoothLeAudio.Stub.asInterface(service);
         // re-register the service-to-app callback

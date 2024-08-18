@@ -55,6 +55,7 @@
 #include "main/shim/entry.h"
 #include "main/shim/helpers.h"
 #include "main/shim/stack.h"
+#include "metrics/bluetooth_event.h"
 #include "os/handler.h"
 #include "osi/include/allocator.h"
 #include "stack/acl/acl.h"
@@ -1499,6 +1500,7 @@ void shim::legacy::Acl::OnConnectSuccess(
                       locally_initiated);
   log::debug("Connection successful classic remote:{} handle:{} initiator:{}", remote_address,
              handle, (locally_initiated) ? "local" : "remote");
+  metrics::LogAclCompletionEvent(remote_address, hci::ErrorCode::SUCCESS, locally_initiated);
   BTM_LogHistory(kBtmLogTag, ToRawAddress(remote_address), "Connection successful",
                  (locally_initiated) ? "classic Local initiated" : "classic Remote initiated");
 }
@@ -1521,6 +1523,7 @@ void shim::legacy::Acl::OnConnectFail(hci::Address address, hci::ErrorCode reaso
   TRY_POSTING_ON_MAIN(acl_interface_.connection.classic.on_failed, bd_addr,
                       ToLegacyHciErrorCode(reason), locally_initiated);
   log::warn("Connection failed classic remote:{} reason:{}", address, hci::ErrorCodeText(reason));
+  metrics::LogAclCompletionEvent(address, reason, locally_initiated);
   BTM_LogHistory(kBtmLogTag, ToRawAddress(address), "Connection failed",
                  base::StringPrintf("classic reason:%s", hci::ErrorCodeText(reason).c_str()));
 }

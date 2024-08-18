@@ -35,7 +35,6 @@
 #include "stack/include/btm_ble_sec_api_types.h"
 #include "stack/include/btm_sec_api_types.h"
 #include "stack/include/btm_status.h"
-#include "stack/include/l2cdefs.h"
 #include "types/ble_address_with_type.h"
 #include "types/raw_address.h"
 
@@ -54,9 +53,9 @@ namespace stack_btm_ble {
 // Params: const RawAddress& bd_addr, uint8_t res
 // Return: void
 struct BTM_BleConfirmReply {
-  std::function<void(const RawAddress& /* bd_addr */, uint8_t /* res */)> body{
-          [](const RawAddress& /* bd_addr */, uint8_t /* res */) {}};
-  void operator()(const RawAddress& bd_addr, uint8_t res) { body(bd_addr, res); }
+  std::function<void(const RawAddress& /* bd_addr */, tBTM_STATUS /* res */)> body{
+          [](const RawAddress& /* bd_addr */, tBTM_STATUS /* res */) {}};
+  void operator()(const RawAddress& bd_addr, tBTM_STATUS res) { body(bd_addr, res); }
 };
 extern struct BTM_BleConfirmReply BTM_BleConfirmReply;
 
@@ -90,10 +89,10 @@ extern struct BTM_BleLoadLocalKeys BTM_BleLoadLocalKeys;
 // Params: const RawAddress& bd_addr, uint8_t res, uint8_t len, uint8_t* p_data
 // Return: void
 struct BTM_BleOobDataReply {
-  std::function<void(const RawAddress& bd_addr, uint8_t res, uint8_t len, uint8_t* p_data)> body{
-          [](const RawAddress& /* bd_addr */, uint8_t /* res */, uint8_t /* len */,
-             uint8_t* /* p_data */) {}};
-  void operator()(const RawAddress& bd_addr, uint8_t res, uint8_t len, uint8_t* p_data) {
+  std::function<void(const RawAddress& bd_addr, tBTM_STATUS res, uint8_t len, uint8_t* p_data)>
+          body{[](const RawAddress& /* bd_addr */, tBTM_STATUS /* res */, uint8_t /* len */,
+                  uint8_t* /* p_data */) {}};
+  void operator()(const RawAddress& bd_addr, tBTM_STATUS res, uint8_t len, uint8_t* p_data) {
     body(bd_addr, res, len, p_data);
   }
 };
@@ -103,9 +102,9 @@ extern struct BTM_BleOobDataReply BTM_BleOobDataReply;
 // Params: const RawAddress& bd_addr, uint8_t res, uint32_t passkey
 // Return: void
 struct BTM_BlePasskeyReply {
-  std::function<void(const RawAddress& bd_addr, uint8_t res, uint32_t passkey)> body{
-          [](const RawAddress& /* bd_addr */, uint8_t /* res */, uint32_t /* passkey */) {}};
-  void operator()(const RawAddress& bd_addr, uint8_t res, uint32_t passkey) {
+  std::function<void(const RawAddress& bd_addr, tBTM_STATUS res, uint32_t passkey)> body{
+          [](const RawAddress& /* bd_addr */, tBTM_STATUS /* res */, uint32_t /* passkey */) {}};
+  void operator()(const RawAddress& bd_addr, tBTM_STATUS res, uint32_t passkey) {
     body(bd_addr, res, passkey);
   }
 };
@@ -271,15 +270,16 @@ extern struct BTM_SecAddBleKey BTM_SecAddBleKey;
 // Params: const RawAddress& bd_addr, uint8_t res
 // Return: void
 struct BTM_SecurityGrant {
-  std::function<void(const RawAddress& bd_addr, uint8_t res)> body{
-          [](const RawAddress& /* bd_addr */, uint8_t /* res */) {}};
-  void operator()(const RawAddress& bd_addr, uint8_t res) { body(bd_addr, res); }
+  std::function<void(const RawAddress& bd_addr, tBTM_STATUS res)> body{
+          [](const RawAddress& /* bd_addr */, tBTM_STATUS /* res */) {}};
+  void operator()(const RawAddress& bd_addr, tBTM_STATUS res) { body(bd_addr, res); }
 };
 extern struct BTM_SecurityGrant BTM_SecurityGrant;
 
 // Name: btm_ble_connected
 // Params: const RawAddress& bda, uint16_t handle, uint8_t enc_mode, uint8_t
-// role, tBLE_ADDR_TYPE addr_type, bool addr_matched Return: void
+// role, tBLE_ADDR_TYPE addr_type, bool addr_matched, bool can_read_discoverable_characteristics
+// Return: void
 struct btm_ble_connected {
   std::function<void(const RawAddress& bda, uint16_t handle, uint8_t enc_mode, uint8_t role,
                      tBLE_ADDR_TYPE addr_type, bool addr_matched,
@@ -295,6 +295,14 @@ struct btm_ble_connected {
   }
 };
 extern struct btm_ble_connected btm_ble_connected;
+
+// Name: btm_ble_connection_established
+// Params: const RawAddress& bda Return: void
+struct btm_ble_connection_established {
+  std::function<void(const RawAddress& bda)> body{[](const RawAddress& /* bda */) {}};
+  void operator()(const RawAddress& bda) { body(bda); }
+};
+extern struct btm_ble_connection_established btm_ble_connection_established;
 
 // Name: btm_ble_get_acl_remote_addr
 // Params: uint16_t hci_handle, RawAddress& conn_addr, tBLE_ADDR_TYPE*

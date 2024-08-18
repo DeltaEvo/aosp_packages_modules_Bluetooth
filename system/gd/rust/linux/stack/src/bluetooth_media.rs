@@ -2337,7 +2337,16 @@ impl BluetoothMedia {
                 // Ignore unless all profiles are cleared, where we need to do some clean up.
                 if !is_profile_cleared {
                     // Unbonded device is special, we need to reject the connection from them.
-                    if !self.is_bonded(&addr) {
+                    // However, it's rather tricky to distinguish between these two cases:
+                    // (1) the unbonded device tries to reconnect some of the profiles.
+                    // (2) we just unbond a device, so now the profiles are disconnected one-by-one.
+                    // In case of (2), we should not send async_disconnect too soon because doing so
+                    // might prevent on_bluetooth_audio_device_removed() from firing, since the conn
+                    // state is already "Disconnecting" in notify_critical_profile_disconnected.
+                    // Therefore to prevent it, we also check the state is still FullyConnected.
+                    if !self.is_bonded(&addr)
+                        && states.get(&addr).unwrap() != &DeviceConnectionStates::FullyConnected
+                    {
                         let tasks = self.fallback_tasks.clone();
                         let states = self.device_states.clone();
                         let txl = self.tx.clone();

@@ -16,7 +16,7 @@
 
 #include "os/system_properties.h"
 
-#include <mutex>
+#include <mutex>  // NOLINT
 #include <string>
 #include <unordered_map>
 
@@ -29,7 +29,7 @@ std::mutex properties_mutex;
 // Properties set along with some default values for Floss.
 std::unordered_map<std::string, std::string> properties = {
         {"bluetooth.profile.avrcp.target.enabled", "true"},
-};
+        {"bluetooth.gd.start_timeout", "12000"}};
 }  // namespace
 
 std::optional<std::string> GetSystemProperty(const std::string& property) {

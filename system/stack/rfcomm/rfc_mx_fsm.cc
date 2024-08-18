@@ -67,8 +67,8 @@ static void rfc_mx_conf_cnf(tRFC_MCB* p_mcb, uint16_t result);
 void rfc_mx_sm_execute(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_data) {
   log::assert_that(p_mcb != nullptr, "NULL mcb for event {}", event);
 
-  log::info("RFCOMM peer:{} event:{} state:{}", p_mcb->bd_addr, event,
-            rfcomm_mx_state_text(static_cast<tRFC_MX_STATE>(p_mcb->state)));
+  log::info("RFCOMM peer:{} event:{} state:{}", p_mcb->bd_addr, rfcomm_mx_event_text(event),
+            rfcomm_mx_state_text(p_mcb->state));
 
   switch (p_mcb->state) {
     case RFC_MX_STATE_IDLE:
@@ -100,7 +100,8 @@ void rfc_mx_sm_execute(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_data) {
       break;
 
     default:
-      log::error("Received unexpected event:{} in state:{}", event, p_mcb->state);
+      log::error("Received unexpected event:{} in state:{}", rfcomm_mx_event_text(event),
+                 rfcomm_mx_state_text(p_mcb->state));
   }
 }
 
@@ -160,10 +161,12 @@ void rfc_mx_sm_state_idle(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* /* p_data 
       return;
 
     default:
-      log::error("Mx error state {} event {}", p_mcb->state, event);
+      log::error("Mx error state {} event {}", rfcomm_mx_state_text(p_mcb->state),
+                 rfcomm_mx_event_text(event));
       return;
   }
-  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, p_mcb->state);
+  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", rfcomm_mx_event_text(event),
+               rfcomm_mx_state_text(p_mcb->state));
 }
 
 /*******************************************************************************
@@ -177,10 +180,10 @@ void rfc_mx_sm_state_idle(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* /* p_data 
  *
  ******************************************************************************/
 void rfc_mx_sm_state_wait_conn_cnf(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_data) {
-  log::verbose("evt {}", event);
   switch (event) {
     case RFC_MX_EVENT_START_REQ:
-      log::error("Mx error state {} event {}", p_mcb->state, event);
+      log::error("Mx error state:{} event:{}", rfcomm_mx_state_text(p_mcb->state),
+                 rfcomm_mx_event_text(event));
       return;
 
     /* There is some new timing so that Config Ind comes before security is
@@ -210,15 +213,15 @@ void rfc_mx_sm_state_wait_conn_cnf(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p
       if (!L2CA_DisconnectReq(p_mcb->lcid)) {
         log::warn("Unable to send L2CAP disconnect request peer:{} cid:{}", p_mcb->bd_addr,
                   p_mcb->lcid);
-      };
+      }
 
       /* we gave up outgoing connection request then try peer's request */
       if (p_mcb->pending_lcid) {
         uint16_t i;
         uint8_t handle;
 
-        log::verbose("RFCOMM MX retry as acceptor in collision case - evt:{} in state:{}", event,
-                     p_mcb->state);
+        log::verbose("RFCOMM MX retry as acceptor in collision case - evt:{} in state:{}",
+                     rfcomm_mx_event_text(event), rfcomm_mx_state_text(p_mcb->state));
 
         rfc_save_lcid_mcb(NULL, p_mcb->lcid);
         p_mcb->lcid = p_mcb->pending_lcid;
@@ -243,9 +246,11 @@ void rfc_mx_sm_state_wait_conn_cnf(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p
       }
       return;
     default:
-      log::error("Received unexpected event:{} in state:{}", event, p_mcb->state);
+      log::error("Received unexpected event:{} in state:{}", rfcomm_mx_event_text(event),
+                 rfcomm_mx_state_text(p_mcb->state));
   }
-  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, p_mcb->state);
+  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", rfcomm_mx_event_text(event),
+               rfcomm_mx_state_text(p_mcb->state));
 }
 
 /*******************************************************************************
@@ -259,7 +264,6 @@ void rfc_mx_sm_state_wait_conn_cnf(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p
  *
  ******************************************************************************/
 void rfc_mx_sm_state_configure(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_data) {
-  log::verbose("event {}", event);
   switch (event) {
     case RFC_MX_EVENT_START_REQ:
     case RFC_MX_EVENT_CONN_CNF:
@@ -286,14 +290,16 @@ void rfc_mx_sm_state_configure(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_dat
       if (!L2CA_DisconnectReq(p_mcb->lcid)) {
         log::warn("Unable to send L2CAP disconnect request peer:{} cid:{}", p_mcb->bd_addr,
                   p_mcb->lcid);
-      };
+      }
 
       PORT_StartCnf(p_mcb, RFCOMM_ERROR);
       return;
     default:
-      log::error("Received unexpected event:{} in state:{}", event, p_mcb->state);
+      log::error("Received unexpected event:{} in state:{}", rfcomm_mx_event_text(event),
+                 rfcomm_mx_state_text(p_mcb->state));
   }
-  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, p_mcb->state);
+  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", rfcomm_mx_event_text(event),
+               rfcomm_mx_state_text(p_mcb->state));
 }
 
 /*******************************************************************************
@@ -307,7 +313,6 @@ void rfc_mx_sm_state_configure(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_dat
  *
  ******************************************************************************/
 void rfc_mx_sm_sabme_wait_ua(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* /* p_data */) {
-  log::verbose("event {}", event);
   switch (event) {
     case RFC_MX_EVENT_START_REQ:
     case RFC_MX_EVENT_CONN_CNF:
@@ -350,14 +355,16 @@ void rfc_mx_sm_sabme_wait_ua(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* /* p_da
       if (!L2CA_DisconnectReq(p_mcb->lcid)) {
         log::warn("Unable to send L2CAP disconnect request peer:{} cid:{}", p_mcb->bd_addr,
                   p_mcb->lcid);
-      };
+      }
 
       PORT_StartCnf(p_mcb, RFCOMM_ERROR);
       return;
     default:
-      log::error("Received unexpected event:{} in state:{}", event, p_mcb->state);
+      log::error("Received unexpected event:{} in state:{}", rfcomm_mx_event_text(event),
+                 rfcomm_mx_state_text(p_mcb->state));
   }
-  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, p_mcb->state);
+  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", rfcomm_mx_event_text(event),
+               rfcomm_mx_state_text(p_mcb->state));
 }
 
 /*******************************************************************************
@@ -371,7 +378,6 @@ void rfc_mx_sm_sabme_wait_ua(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* /* p_da
  *
  ******************************************************************************/
 void rfc_mx_sm_state_wait_sabme(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_data) {
-  log::verbose("event {}", event);
   switch (event) {
     case RFC_MX_EVENT_DISC_IND:
       p_mcb->state = RFC_MX_STATE_IDLE;
@@ -379,8 +385,9 @@ void rfc_mx_sm_state_wait_sabme(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_da
       return;
 
     case RFC_MX_EVENT_SABME:
-      /* if we gave up outgoing connection request */
       if (p_mcb->pending_lcid) {
+        // Channel collision case - at this point we gave up as initiator
+        // and are trying again as acceptor
         p_mcb->pending_lcid = 0;
 
         rfc_send_ua(p_mcb, RFCOMM_MX_DLCI);
@@ -416,15 +423,17 @@ void rfc_mx_sm_state_wait_sabme(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_da
       if (!L2CA_DisconnectReq(p_mcb->lcid)) {
         log::warn("Unable to send L2CAP disconnect request peer:{} cid:{}", p_mcb->bd_addr,
                   p_mcb->lcid);
-      };
+      }
 
       PORT_CloseInd(p_mcb);
       return;
 
     default:
-      log::warn("RFCOMM MX ignored - evt:{} in state:{}", event, p_mcb->state);
+      log::warn("Received unexpected event:{} in state:{}", rfcomm_mx_event_text(event),
+                rfcomm_mx_state_text(p_mcb->state));
   }
-  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, p_mcb->state);
+  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", rfcomm_mx_event_text(event),
+               rfcomm_mx_state_text(p_mcb->state));
 }
 
 /*******************************************************************************
@@ -438,8 +447,6 @@ void rfc_mx_sm_state_wait_sabme(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_da
  *
  ******************************************************************************/
 void rfc_mx_sm_state_connected(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* /* p_data */) {
-  log::verbose("event {}", event);
-
   switch (event) {
     case RFC_MX_EVENT_TIMEOUT:
     case RFC_MX_EVENT_CLOSE_REQ:
@@ -461,15 +468,17 @@ void rfc_mx_sm_state_connected(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* /* p_
         if (!L2CA_DisconnectReq(p_mcb->lcid)) {
           log::warn("Unable to send L2CAP disconnect request peer:{} cid:{}", p_mcb->bd_addr,
                     p_mcb->lcid);
-        };
+        }
       }
       /* notify all ports that connection is gone */
       PORT_CloseInd(p_mcb);
       return;
     default:
-      log::error("Received unexpected event:{} in state:{}", event, p_mcb->state);
+      log::error("Received unexpected event:{} in state:{}", rfcomm_mx_event_text(event),
+                 rfcomm_mx_state_text(p_mcb->state));
   }
-  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, p_mcb->state);
+  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", rfcomm_mx_event_text(event),
+               rfcomm_mx_state_text(p_mcb->state));
 }
 
 /*******************************************************************************
@@ -484,8 +493,6 @@ void rfc_mx_sm_state_connected(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* /* p_
  ******************************************************************************/
 void rfc_mx_sm_state_disc_wait_ua(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_data) {
   BT_HDR* p_buf;
-
-  log::verbose("event {}", event);
   switch (event) {
     case RFC_MX_EVENT_UA:
     case RFC_MX_EVENT_DM:
@@ -493,7 +500,7 @@ void rfc_mx_sm_state_disc_wait_ua(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_
       if (!L2CA_DisconnectReq(p_mcb->lcid)) {
         log::warn("Unable to send L2CAP disconnect request peer:{} cid:{}", p_mcb->bd_addr,
                   p_mcb->lcid);
-      };
+      }
 
       if (p_mcb->restart_required) {
         /* Start Request was received while disconnecting.  Execute it again */
@@ -548,9 +555,11 @@ void rfc_mx_sm_state_disc_wait_ua(tRFC_MCB* p_mcb, tRFC_MX_EVENT event, void* p_
     case RFC_MX_EVENT_QOS_VIOLATION_IND:
       break;
     default:
-      log::error("Received unexpected event:{} in state:{}", event, p_mcb->state);
+      log::error("Received unexpected event:{} in state:{}", rfcomm_mx_event_text(event),
+                 rfcomm_mx_state_text(p_mcb->state));
   }
-  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", event, p_mcb->state);
+  log::verbose("RFCOMM MX ignored - evt:{} in state:{}", rfcomm_mx_event_text(event),
+               rfcomm_mx_state_text(p_mcb->state));
 }
 
 void rfc_on_l2cap_error(uint16_t lcid, uint16_t result) {
@@ -608,7 +617,7 @@ void rfc_on_l2cap_error(uint16_t lcid, uint16_t result) {
       if (!L2CA_DisconnectReq(p_mcb->lcid)) {
         log::warn("Unable to send L2CAP disconnect request peer:{} cid:{}", p_mcb->bd_addr,
                   p_mcb->lcid);
-      };
+      }
     }
     rfc_release_multiplexer_channel(p_mcb);
   }
@@ -632,9 +641,9 @@ static void rfc_mx_conf_cnf(tRFC_MCB* p_mcb, uint16_t /* result */) {
       rfc_timer_start(p_mcb, RFC_T1_TIMEOUT);
     } else {
       p_mcb->state = RFC_MX_STATE_WAIT_SABME;
-      rfc_timer_start(p_mcb, RFCOMM_CONN_TIMEOUT); /* - increased from T2=20 to CONN=120
-                                         to allow the user more than 10 sec to type in the
-                                         pin which can be e.g. 16 digits */
+      /* increased from T2=20 to CONN=120 to allow user more than 10 sec to type in
+       * the pin, which can be e.d. 16 digits */
+      rfc_timer_start(p_mcb, RFCOMM_CONN_TIMEOUT);
     }
   }
 }

@@ -215,6 +215,17 @@ public:
                                 player_id, media_id, bound_cb));
   }
 
+  void GetAddressedPlayer(GetAddressedPlayerCallback addressed_cb) override {
+    auto cb_lambda = [](GetAddressedPlayerCallback cb, uint16_t addressed_player) {
+      do_in_main_thread(base::BindOnce(cb, addressed_player));
+    };
+
+    auto bound_cb = base::Bind(cb_lambda, addressed_cb);
+
+    do_in_jni_thread(
+            base::Bind(&MediaInterface::GetAddressedPlayer, base::Unretained(wrapped_), bound_cb));
+  }
+
   void SetBrowsedPlayer(uint16_t player_id, SetBrowsedPlayerCallback browse_cb) override {
     auto cb_lambda = [](SetBrowsedPlayerCallback cb, bool success, std::string root_id,
                         uint32_t num_items) {
@@ -224,6 +235,17 @@ public:
     auto bound_cb = base::Bind(cb_lambda, browse_cb);
 
     do_in_jni_thread(base::Bind(&MediaInterface::SetBrowsedPlayer, base::Unretained(wrapped_),
+                                player_id, bound_cb));
+  }
+
+  void SetAddressedPlayer(uint16_t player_id, SetAddressedPlayerCallback addressed_cb) override {
+    auto cb_lambda = [](SetAddressedPlayerCallback cb, uint16_t new_player) {
+      do_in_main_thread(base::BindOnce(cb, new_player));
+    };
+
+    auto bound_cb = base::Bind(cb_lambda, addressed_cb);
+
+    do_in_jni_thread(base::Bind(&MediaInterface::SetAddressedPlayer, base::Unretained(wrapped_),
                                 player_id, bound_cb));
   }
 

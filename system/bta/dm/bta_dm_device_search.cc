@@ -43,6 +43,7 @@
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_inq.h"
 #include "stack/include/btm_log_history.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/main_thread.h"
 #include "stack/rnr/remote_name_request.h"
 #include "types/raw_address.h"
@@ -107,7 +108,7 @@ void bta_dm_disc_disable_search() {
  *
  ******************************************************************************/
 static void bta_dm_search_start(tBTA_DM_API_SEARCH& search) {
-  if (get_btm_client_interface().db.BTM_ClearInqDb(nullptr) != BTM_SUCCESS) {
+  if (get_btm_client_interface().db.BTM_ClearInqDb(nullptr) != tBTM_STATUS::BTM_SUCCESS) {
     log::warn("Unable to clear inquiry database for device discovery");
   }
   /* save search params */
@@ -115,7 +116,7 @@ static void bta_dm_search_start(tBTA_DM_API_SEARCH& search) {
 
   const tBTM_STATUS btm_status = BTM_StartInquiry(bta_dm_inq_results_cb, bta_dm_inq_cmpl_cb);
   switch (btm_status) {
-    case BTM_CMD_STARTED:
+    case tBTM_STATUS::BTM_CMD_STARTED:
       // Completion callback will be executed when controller inquiry
       // timer pops or is cancelled by the user
       break;
@@ -147,7 +148,8 @@ static void bta_dm_search_cancel() {
   /* If no Service Search going on then issue cancel remote name in case it is
      active */
   else if (!bta_dm_search_cb.name_discover_done) {
-    if (get_btm_client_interface().peer.BTM_CancelRemoteDeviceName() != BTM_CMD_STARTED) {
+    if (get_btm_client_interface().peer.BTM_CancelRemoteDeviceName() !=
+        tBTM_STATUS::BTM_CMD_STARTED) {
       log::warn("Unable to cancel RNR");
     }
     /* bta_dm_search_cmpl is called when receiving the remote name cancel evt */
@@ -247,7 +249,7 @@ static void bta_dm_remname_cback(const tBTM_REMOTE_DEV_NAME* p_remote_name) {
   log::info(
           "Remote name request complete peer:{} btm_status:{} hci_status:{} "
           "name[0]:{:c} length:{}",
-          p_remote_name->bd_addr, btm_status_text(p_remote_name->status),
+          p_remote_name->bd_addr, btm_status_text(p_remote_name->btm_status),
           hci_error_code_text(p_remote_name->hci_status), p_remote_name->remote_bd_name[0],
           strnlen((const char*)p_remote_name->remote_bd_name, BD_NAME_LEN));
 
@@ -298,11 +300,11 @@ static bool bta_dm_read_remote_device_name(const RawAddress& bd_addr, tBT_TRANSP
   btm_status = get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
           bta_dm_search_cb.peer_bdaddr, bta_dm_remname_cback, transport);
 
-  if (btm_status == BTM_CMD_STARTED) {
+  if (btm_status == tBTM_STATUS::BTM_CMD_STARTED) {
     log::verbose("BTM_ReadRemoteDeviceName is started");
 
     return true;
-  } else if (btm_status == BTM_BUSY) {
+  } else if (btm_status == tBTM_STATUS::BTM_BUSY) {
     log::verbose("BTM_ReadRemoteDeviceName is busy");
 
     return true;
@@ -433,7 +435,8 @@ static void bta_dm_search_cancel_notify() {
     case BTA_DM_SEARCH_ACTIVE:
     case BTA_DM_SEARCH_CANCELLING:
       if (!bta_dm_search_cb.name_discover_done) {
-        if (get_btm_client_interface().peer.BTM_CancelRemoteDeviceName() != BTM_CMD_STARTED) {
+        if (get_btm_client_interface().peer.BTM_CancelRemoteDeviceName() !=
+            tBTM_STATUS::BTM_CMD_STARTED) {
           log::warn("Unable to cancel RNR");
         }
       }
@@ -707,7 +710,7 @@ static void bta_dm_start_scan(uint8_t duration_sec) {
   tBTM_STATUS status = get_btm_client_interface().ble.BTM_BleObserve(
           true, duration_sec, bta_dm_observe_results_cb, bta_dm_observe_cmpl_cb);
 
-  if (status != BTM_CMD_STARTED) {
+  if (status != tBTM_STATUS::BTM_CMD_STARTED) {
     log::warn("BTM_BleObserve  failed. status {}", status);
     if (bta_dm_search_cb.p_csis_scan_cback) {
       tBTA_DM_SEARCH data{.observe_cmpl = {.num_resps = 0}};
@@ -718,7 +721,8 @@ static void bta_dm_start_scan(uint8_t duration_sec) {
 
 void bta_dm_ble_scan(bool start, uint8_t duration_sec) {
   if (!start) {
-    if (get_btm_client_interface().ble.BTM_BleObserve(false, 0, NULL, NULL) != BTM_CMD_STARTED) {
+    if (get_btm_client_interface().ble.BTM_BleObserve(false, 0, NULL, NULL) !=
+        tBTM_STATUS::BTM_CMD_STARTED) {
       log::warn("Unable to start ble observe");
     }
     return;

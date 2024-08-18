@@ -35,6 +35,7 @@
 #include "osi/include/osi.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/btm_status.h"
 #include "types/raw_address.h"
 
 using namespace bluetooth;
@@ -75,8 +76,8 @@ const tL2CAP_APPL_INFO avdt_l2c_appl = {avdt_l2c_connect_ind_cback,
  * Returns          void
  *
  ******************************************************************************/
-static void avdt_sec_check_complete_term(const RawAddress* bd_addr, tBT_TRANSPORT transport,
-                                         void* p_ref_data) {
+static void avdt_sec_check_complete_term(const RawAddress* bd_addr, tBT_TRANSPORT /* transport */,
+                                         void* /* p_ref_data */) {
   AvdtpCcb* p_ccb = NULL;
   AvdtpTransportChannel* p_tbl;
 
@@ -105,7 +106,7 @@ static void avdt_sec_check_complete_term(const RawAddress* bd_addr, tBT_TRANSPOR
  * Returns          void
  *
  ******************************************************************************/
-static void avdt_sec_check_complete_orig(const RawAddress* bd_addr, tBT_TRANSPORT transport,
+static void avdt_sec_check_complete_orig(const RawAddress* bd_addr, tBT_TRANSPORT /* transport */,
                                          void* /* p_ref_data */, tBTM_STATUS res) {
   AvdtpCcb* p_ccb = NULL;
   AvdtpTransportChannel* p_tbl;
@@ -119,7 +120,7 @@ static void avdt_sec_check_complete_orig(const RawAddress* bd_addr, tBT_TRANSPOR
     return;
   }
 
-  if (res == BTM_SUCCESS) {
+  if (res == tBTM_STATUS::BTM_SUCCESS) {
     /* set channel state */
     p_tbl->state = AVDT_AD_ST_CFG;
   } else {
@@ -138,7 +139,7 @@ static void avdt_sec_check_complete_orig(const RawAddress* bd_addr, tBT_TRANSPOR
  *
  ******************************************************************************/
 void avdt_l2c_connect_ind_cback(const RawAddress& bd_addr, uint16_t lcid, uint16_t /* psm */,
-                                uint8_t id) {
+                                uint8_t /* id */) {
   AvdtpCcb* p_ccb;
   AvdtpTransportChannel* p_tbl = NULL;
   uint16_t result;
@@ -223,7 +224,7 @@ void avdt_l2c_connect_ind_cback(const RawAddress& bd_addr, uint16_t lcid, uint16
   p_tbl->state = AVDT_AD_ST_CFG;
 }
 
-static void avdt_on_l2cap_error(uint16_t lcid, uint16_t result) { avdt_l2c_disconnect(lcid); }
+static void avdt_on_l2cap_error(uint16_t lcid, uint16_t /* result */) { avdt_l2c_disconnect(lcid); }
 
 /*******************************************************************************
  *
@@ -270,7 +271,7 @@ void avdt_l2c_connect_cfm_cback(uint16_t lcid, uint16_t result) {
 
             /* Assume security check is complete */
             avdt_sec_check_complete_orig(&p_ccb->peer_addr, BT_TRANSPORT_BR_EDR, nullptr,
-                                         BTM_SUCCESS);
+                                         tBTM_STATUS::BTM_SUCCESS);
           }
         }
       }
@@ -293,7 +294,7 @@ void avdt_l2c_connect_cfm_cback(uint16_t lcid, uint16_t result) {
  * Returns          void
  *
  ******************************************************************************/
-void avdt_l2c_config_cfm_cback(uint16_t lcid, uint16_t initiator, tL2CAP_CFG_INFO* p_cfg) {
+void avdt_l2c_config_cfm_cback(uint16_t lcid, uint16_t /* initiator */, tL2CAP_CFG_INFO* p_cfg) {
   avdt_l2c_config_ind_cback(lcid, p_cfg);
 
   AvdtpTransportChannel* p_tbl;

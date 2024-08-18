@@ -43,6 +43,7 @@
 #include "osi/include/properties.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/btm_client_interface.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/main_thread.h"
 #include "types/raw_address.h"
 
@@ -99,7 +100,8 @@ void bta_dm_init_pm(void) {
     bta_sys_sniff_register(bta_dm_sniff_cback);
 
     if (get_btm_client_interface().lifecycle.BTM_PmRegister((BTM_PM_REG_SET), &bta_dm_cb.pm_id,
-                                                            bta_dm_pm_btm_cback) != BTM_SUCCESS) {
+                                                            bta_dm_pm_btm_cback) !=
+        tBTM_STATUS::BTM_SUCCESS) {
       log::warn("Unable to initialize BTM power manager");
     };
   }
@@ -123,8 +125,8 @@ void bta_dm_init_pm(void) {
  *
  ******************************************************************************/
 void bta_dm_disable_pm(void) {
-  if (get_btm_client_interface().lifecycle.BTM_PmRegister(BTM_PM_DEREG, &bta_dm_cb.pm_id,
-                                                          bta_dm_pm_btm_cback) != BTM_SUCCESS) {
+  if (get_btm_client_interface().lifecycle.BTM_PmRegister(
+              BTM_PM_DEREG, &bta_dm_cb.pm_id, bta_dm_pm_btm_cback) != tBTM_STATUS::BTM_SUCCESS) {
     log::warn("Unable to terminate BTM power manager");
   }
 
@@ -552,7 +554,7 @@ static void bta_dm_pm_cback(tBTA_SYS_CONN_STATUS status, const tBTA_SYS_ID id, u
       if (status == BTA_SYS_SCO_OPEN) {
         log::verbose("SCO inactive, reset SSR to zero");
         if (get_btm_client_interface().link_policy.BTM_SetSsrParams(peer_addr, 0, 0, 0) !=
-            BTM_SUCCESS) {
+            tBTM_STATUS::BTM_SUCCESS) {
           log::warn("Unable to set link into sniff mode peer:{}", peer_addr);
         }
       } else if (status == BTA_SYS_SCO_CLOSE) {
@@ -761,7 +763,7 @@ static bool bta_dm_pm_park(const RawAddress& peer_addr) {
   if (mode != BTM_PM_MD_PARK) {
     tBTM_STATUS status = get_btm_client_interface().link_policy.BTM_SetPowerMode(
             bta_dm_cb.pm_id, peer_addr, &p_bta_dm_pm_md[BTA_DM_PM_PARK_IDX]);
-    if (status == BTM_CMD_STORED || status == BTM_CMD_STARTED) {
+    if (status == BTM_CMD_STORED || status == tBTM_STATUS::BTM_CMD_STARTED) {
       return true;
     }
     log::warn("Unable to set park power mode");
@@ -864,11 +866,11 @@ static void bta_dm_pm_sniff(tBTA_DM_PEER_DEVICE* p_peer_dev, uint8_t index) {
   }
   status = get_btm_client_interface().link_policy.BTM_SetPowerMode(
           bta_dm_cb.pm_id, p_peer_dev->peer_bdaddr, &pwr_md);
-  if (status == BTM_CMD_STORED || status == BTM_CMD_STARTED) {
+  if (status == BTM_CMD_STORED || status == tBTM_STATUS::BTM_CMD_STARTED) {
     p_peer_dev->reset_sniff_flags();
     p_peer_dev->set_sniff_command_sent();
-  } else if (status == BTM_SUCCESS) {
-    log::verbose("bta_dm_pm_sniff BTM_SetPowerMode() returns BTM_SUCCESS");
+  } else if (status == tBTM_STATUS::BTM_SUCCESS) {
+    log::verbose("bta_dm_pm_sniff BTM_SetPowerMode() returns tBTM_STATUS::BTM_SUCCESS");
     p_peer_dev->reset_sniff_flags();
   } else {
     log::error("Unable to set power mode peer:{} status:{}", p_peer_dev->peer_bdaddr,
@@ -954,7 +956,7 @@ static void bta_dm_pm_ssr(const RawAddress& peer_addr, const int ssr) {
     /* set the SSR parameters. */
     if (get_btm_client_interface().link_policy.BTM_SetSsrParams(
                 peer_addr, p_spec->max_lat, p_spec->min_rmt_to, p_spec->min_loc_to) !=
-        BTM_SUCCESS) {
+        tBTM_STATUS::BTM_SUCCESS) {
       log::warn("Unable to set link into sniff mode peer:{}", peer_addr);
     }
   }
@@ -981,10 +983,10 @@ void bta_dm_pm_active(const RawAddress& peer_addr) {
     case BTM_CMD_STORED:
       log::debug("Active power mode stored for execution later for remote:{}", peer_addr);
       break;
-    case BTM_CMD_STARTED:
+    case tBTM_STATUS::BTM_CMD_STARTED:
       log::debug("Active power mode started for remote:{}", peer_addr);
       break;
-    case BTM_SUCCESS:
+    case tBTM_STATUS::BTM_SUCCESS:
       log::debug("Active power mode already set for device:{}", peer_addr);
       break;
     default:

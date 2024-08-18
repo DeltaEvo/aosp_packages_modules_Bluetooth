@@ -26,6 +26,7 @@
 #include "osi/include/allocator.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_psm_types.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/l2c_api.h"
 #include "stack/include/l2cdefs.h"
 #include "stack/include/port_api.h"
@@ -200,7 +201,7 @@ public:
                 MultiplexingProtocolAccessRequest(peer_addr, BT_PSM_RFCOMM, false,
                                                   BTM_SEC_PROTO_RFCOMM, scn, NotNull(), NotNull()))
             .WillOnce(DoAll(SaveArg<5>(&security_callback), SaveArg<6>(&p_port),
-                            Return(BTM_SUCCESS)));
+                            Return(tBTM_STATUS::BTM_SUCCESS)));
     // sabm_channel_dlci should be freed by this method
     l2cap_appl_info_.pL2CA_DataInd_Cb(lcid, sabm_channel_dlci);
 
@@ -213,7 +214,7 @@ public:
     EXPECT_CALL(l2cap_interface_, DataWrite(lcid, BtHdrEqual(ua_channel_dlci)))
             .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
     ASSERT_TRUE(security_callback);
-    security_callback(peer_addr, BT_TRANSPORT_BR_EDR, p_port, BTM_SUCCESS);
+    security_callback(peer_addr, BT_TRANSPORT_BR_EDR, p_port, tBTM_STATUS::BTM_SUCCESS);
     osi_free(ua_channel_dlci);
 
     log::verbose("Step 4");
@@ -321,7 +322,7 @@ public:
                 MultiplexingProtocolAccessRequest(peer_addr, BT_PSM_RFCOMM, true,
                                                   BTM_SEC_PROTO_RFCOMM, scn, NotNull(), NotNull()))
             .WillOnce(DoAll(SaveArg<5>(&security_callback), SaveArg<6>(&p_port),
-                            Return(BTM_SUCCESS)));
+                            Return(tBTM_STATUS::BTM_SUCCESS)));
     l2cap_appl_info_.pL2CA_DataInd_Cb(lcid, uih_pn_channel_3_accept);
 
     log::verbose("Step 3");
@@ -331,7 +332,7 @@ public:
     EXPECT_CALL(l2cap_interface_, DataWrite(lcid, BtHdrEqual(sabm_channel_3)))
             .WillOnce(Return(tL2CAP_DW_RESULT::SUCCESS));
     ASSERT_TRUE(security_callback);
-    security_callback(peer_addr, BT_TRANSPORT_BR_EDR, p_port, BTM_SUCCESS);
+    security_callback(peer_addr, BT_TRANSPORT_BR_EDR, p_port, tBTM_STATUS::BTM_SUCCESS);
     osi_free(sabm_channel_3);
 
     log::verbose("Step 4");
@@ -737,8 +738,8 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
               MultiplexingProtocolAccessRequest(test_address, BT_PSM_RFCOMM, false,
                                                 BTM_SEC_PROTO_RFCOMM, test_server_scn, NotNull(),
                                                 NotNull()))
-          .WillOnce(
-                  DoAll(SaveArg<5>(&security_callback), SaveArg<6>(&p_port), Return(BTM_SUCCESS)));
+          .WillOnce(DoAll(SaveArg<5>(&security_callback), SaveArg<6>(&p_port),
+                          Return(tBTM_STATUS::BTM_SUCCESS)));
   l2cap_appl_info_.pL2CA_DataInd_Cb(new_lcid, sabm_server_scn);
 
   log::verbose("Step 10");
@@ -751,7 +752,7 @@ TEST_F(StackRfcommTest, DISABLED_TestConnectionCollision) {
   // Callback should come from server port instead, client port will timeout
   // in 20 seconds
   EXPECT_CALL(rfcomm_callback_, PortManagementCallback(PORT_SUCCESS, server_handle, 0));
-  security_callback(test_address, BT_TRANSPORT_BR_EDR, p_port, BTM_SUCCESS);
+  security_callback(test_address, BT_TRANSPORT_BR_EDR, p_port, tBTM_STATUS::BTM_SUCCESS);
   osi_free(ua_server_scn);
 
   log::verbose("Step 11");

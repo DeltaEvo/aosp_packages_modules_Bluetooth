@@ -77,14 +77,14 @@ const Octet16& BTM_GetDeviceDHK();
  * Description      This function is called to grant security process.
  *
  * Parameters       bd_addr - peer device bd address.
- *                  res     - result of the operation BTM_SUCCESS if success.
+ *                  res     - result of the operation tBTM_STATUS::BTM_SUCCESS if success.
  *                            Otherwise, BTM_REPEATED_ATTEMPTS is too many
  *                            attempts.
  *
  * Returns          None
  *
  ******************************************************************************/
-void BTM_SecurityGrant(const RawAddress& bd_addr, uint8_t res);
+void BTM_SecurityGrant(const RawAddress& bd_addr, tBTM_STATUS res);
 
 /*******************************************************************************
  *
@@ -101,7 +101,7 @@ void BTM_SecurityGrant(const RawAddress& bd_addr, uint8_t res);
  *                               BTM_MAX_PASSKEY_VAL(999999(0xF423F)).
  *
  ******************************************************************************/
-void BTM_BlePasskeyReply(const RawAddress& bd_addr, uint8_t res, uint32_t passkey);
+void BTM_BlePasskeyReply(const RawAddress& bd_addr, tBTM_STATUS res, uint32_t passkey);
 
 /*******************************************************************************
  *
@@ -112,10 +112,10 @@ void BTM_BlePasskeyReply(const RawAddress& bd_addr, uint8_t res, uint32_t passke
  *
  * Parameters:      bd_addr      - Address of the device with which numeric
  *                                 comparison was requested
- *                  res          - comparison result BTM_SUCCESS if success
+ *                  res          - comparison result tBTM_STATUS::BTM_SUCCESS if success
  *
  ******************************************************************************/
-void BTM_BleConfirmReply(const RawAddress& bd_addr, uint8_t res);
+void BTM_BleConfirmReply(const RawAddress& bd_addr, tBTM_STATUS res);
 
 /*******************************************************************************
  *
@@ -129,7 +129,7 @@ void BTM_BleConfirmReply(const RawAddress& bd_addr, uint8_t res);
  *                  p_data      - simple pairing Randomizer  C.
  *
  ******************************************************************************/
-void BTM_BleOobDataReply(const RawAddress& bd_addr, uint8_t res, uint8_t len, uint8_t* p_data);
+void BTM_BleOobDataReply(const RawAddress& bd_addr, tBTM_STATUS res, uint8_t len, uint8_t* p_data);
 
 /*******************************************************************************
  *

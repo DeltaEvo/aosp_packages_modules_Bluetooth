@@ -205,7 +205,7 @@ TEST_F(AvrcpConnectionHandlerTest, remoteDeviceConnectionTest) {
   // device connects.
   EXPECT_CALL(mock_avrcp_, OpenBrowse(1, AVCT_ACP)).Times(1);
 
-  if (com::android::bluetooth::flags::avrcp_connect_a2dp_delayed()) {
+  if (com::android::bluetooth::flags::avrcp_connect_a2dp_with_delay()) {
     // Set an expectation that SDP for audio will be performed
     EXPECT_CALL(mock_a2dp_, find_audio_sink_service(_, _)).Times(1);
   }
@@ -214,7 +214,7 @@ TEST_F(AvrcpConnectionHandlerTest, remoteDeviceConnectionTest) {
   conn_cb.ctrl_cback.Run(1, AVRC_OPEN_IND_EVT, 0, &RawAddress::kAny);
 
   // Run the SDP callback with status success
-  sdp_cb.Run(SDP_SUCCESS);
+  sdp_cb.Run(tSDP_STATUS::SDP_SUCCESS);
 
   // Check that a device was created
   ASSERT_TRUE(current_device_ != nullptr);
@@ -245,7 +245,7 @@ TEST_F(AvrcpConnectionHandlerTest, noAbsoluteVolumeTest) {
   tAVRC_FIND_CBACK sdp_cb;
   SetUpSdp(&sdp_cb, false, false);
 
-  if (com::android::bluetooth::flags::avrcp_connect_a2dp_delayed()) {
+  if (com::android::bluetooth::flags::avrcp_connect_a2dp_with_delay()) {
     // Set an expectation that SDP for audio will be performed
     EXPECT_CALL(mock_a2dp_, find_audio_sink_service(_, _)).Times(1);
   }
@@ -256,7 +256,7 @@ TEST_F(AvrcpConnectionHandlerTest, noAbsoluteVolumeTest) {
   conn_cb.ctrl_cback.Run(1, AVRC_OPEN_IND_EVT, 0, &RawAddress::kAny);
 
   // Run the SDP callback with status success
-  sdp_cb.Run(SDP_SUCCESS);
+  sdp_cb.Run(tSDP_STATUS::SDP_SUCCESS);
 
   // Check that a device was created
   ASSERT_TRUE(current_device_ != nullptr);
@@ -289,7 +289,7 @@ TEST_F(AvrcpConnectionHandlerTest, absoluteVolumeTest) {
   tAVRC_FIND_CBACK sdp_cb;
   SetUpSdp(&sdp_cb, false, true);
 
-  if (com::android::bluetooth::flags::avrcp_connect_a2dp_delayed()) {
+  if (com::android::bluetooth::flags::avrcp_connect_a2dp_with_delay()) {
     // Set an expectation that SDP for audio will be performed
     EXPECT_CALL(mock_a2dp_, find_audio_sink_service(_, _)).Times(1);
   }
@@ -298,7 +298,7 @@ TEST_F(AvrcpConnectionHandlerTest, absoluteVolumeTest) {
   conn_cb.ctrl_cback.Run(1, AVRC_OPEN_IND_EVT, 0, &RawAddress::kAny);
 
   // Run the SDP callback with status success
-  sdp_cb.Run(SDP_SUCCESS);
+  sdp_cb.Run(tSDP_STATUS::SDP_SUCCESS);
 
   // Check that a device was created
   ASSERT_TRUE(current_device_ != nullptr);
@@ -321,7 +321,7 @@ TEST_F(AvrcpConnectionHandlerTest, disconnectTest) {
                                             &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
 
-  if (com::android::bluetooth::flags::avrcp_connect_a2dp_delayed()) {
+  if (com::android::bluetooth::flags::avrcp_connect_a2dp_with_delay()) {
     // Set an expectation that SDP for audio will be performed
     EXPECT_CALL(mock_a2dp_, find_audio_sink_service(_, _)).Times(1);
   }
@@ -381,7 +381,7 @@ TEST_F(AvrcpConnectionHandlerTest, multipleRemoteDeviceConnectionTest) {
   current_device_.reset();
 
   // Run the SDP callback with status success
-  sdp_cb.Run(SDP_SUCCESS);
+  sdp_cb.Run(tSDP_STATUS::SDP_SUCCESS);
 
   // Set an Expectations that SDP will be performed again
   SetUpSdp(&sdp_cb, false, false);
@@ -398,7 +398,7 @@ TEST_F(AvrcpConnectionHandlerTest, multipleRemoteDeviceConnectionTest) {
   ASSERT_TRUE(current_device_ != nullptr);
 
   // Run the SDP callback with status success
-  sdp_cb.Run(SDP_SUCCESS);
+  sdp_cb.Run(tSDP_STATUS::SDP_SUCCESS);
 
   connection_handler_ = nullptr;
   ConnectionHandler::CleanUp();
@@ -452,7 +452,7 @@ TEST_F(AvrcpConnectionHandlerTest, connectToRemoteDeviceTest) {
           .WillOnce(DoAll(SetArgPointee<0>(1), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Complete SDP
-  sdp_cb.Run(SDP_SUCCESS);
+  sdp_cb.Run(tSDP_STATUS::SDP_SUCCESS);
 
   // Check that the callback was sent with us as the initiator
   ASSERT_EQ(conn_cb.conn, 0);
@@ -494,7 +494,7 @@ TEST_F(AvrcpConnectionHandlerTest, connectToBrowsableRemoteDeviceTest) {
           .WillOnce(DoAll(SetArgPointee<0>(1), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Complete SDP
-  sdp_cb.Run(SDP_SUCCESS);
+  sdp_cb.Run(tSDP_STATUS::SDP_SUCCESS);
 
   // Check that the callback was sent with us as the initiator
   ASSERT_EQ(conn_cb.conn, 0);
@@ -544,7 +544,7 @@ TEST_F(AvrcpConnectionHandlerTest, disconnectWhileDoingSdpTest) {
   conn_cb.ctrl_cback.Run(1, AVRC_CLOSE_IND_EVT, 0, &RawAddress::kAny);
 
   // Signal that SDP has completed
-  sdp_cb.Run(SDP_SUCCESS);
+  sdp_cb.Run(tSDP_STATUS::SDP_SUCCESS);
 
   connection_handler_ = nullptr;
   ConnectionHandler::CleanUp();
@@ -593,7 +593,7 @@ TEST_F(AvrcpConnectionHandlerTest, connectionCollisionTest) {
   EXPECT_CALL(mock_avrcp_, Close(_));
 
   // Run the SDP callback with status success
-  sdp_cb.Run(SDP_SUCCESS);
+  sdp_cb.Run(tSDP_STATUS::SDP_SUCCESS);
 
   connection_handler_ = nullptr;
   ConnectionHandler::CleanUp();

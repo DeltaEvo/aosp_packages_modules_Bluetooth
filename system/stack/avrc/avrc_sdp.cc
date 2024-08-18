@@ -154,7 +154,7 @@ uint16_t AVRC_FindService(uint16_t service_uuid, const RawAddress& bd_addr,
 
     if (!result) {
       log::error("Failed to init SDP for peer {}", bd_addr);
-      avrc_sdp_cback(bd_addr, SDP_GENERIC_ERROR);
+      avrc_sdp_cback(bd_addr, tSDP_STATUS::SDP_GENERIC_ERROR);
     }
   }
 

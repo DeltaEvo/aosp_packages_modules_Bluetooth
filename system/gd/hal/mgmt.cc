@@ -42,8 +42,8 @@ namespace hal {
 
 struct sockaddr_hci {
   sa_family_t hci_family;
-  unsigned short hci_dev;
-  unsigned short hci_channel;
+  uint16_t hci_dev;
+  uint16_t hci_channel;
 };
 
 constexpr static uint8_t BTPROTO_HCI = 1;
@@ -113,7 +113,7 @@ uint16_t Mgmt::get_vs_opcode(uint16_t vendor_specification) {
         log::error("Failed to call MGMT opcode 0x{:04x}, errno {}", ev.opcode, -errno);
         close(fd);
         return ret_opcode;
-      };
+      }
       break;
     } else if (ret < 0) {
       log::error("msft poll ret {} errno {}", ret, -errno);
@@ -139,6 +139,10 @@ uint16_t Mgmt::get_vs_opcode(uint16_t vendor_specification) {
         RETRY_ON_INTR(ret = read(fd, &cc_ev, sizeof(cc_ev)));
         if (ret < 0) {
           log::error("Failed to read mgmt socket: {}", -errno);
+          close(fd);
+          return ret_opcode;
+        } else if (ret == 0) { // unlikely to happen, just a safeguard.
+          log::error("Failed to read mgmt socket: EOF");
           close(fd);
           return ret_opcode;
         }
