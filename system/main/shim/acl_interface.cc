@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "main/shim/acl_legacy_interface.h"
+#include "main/shim/acl_interface.h"
 
 #include "stack/include/acl_hci_link_interface.h"
 #include "stack/include/ble_acl_interface.h"
@@ -36,7 +36,6 @@ static void on_le_subrate_change(uint16_t handle, uint16_t subrate_factor, uint1
 
 namespace bluetooth {
 namespace shim {
-namespace legacy {
 
 const acl_interface_t& GetAclInterface() {
   static acl_interface_t acl_interface{
@@ -89,6 +88,5 @@ const acl_interface_t& GetAclInterface() {
   return acl_interface;
 }
 
-}  // namespace legacy
 }  // namespace shim
 }  // namespace bluetooth

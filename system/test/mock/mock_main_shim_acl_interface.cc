@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "main/shim/acl_legacy_interface.h"
+#include "main/shim/acl_interface.h"
 
 namespace bluetooth {
 namespace shim {
