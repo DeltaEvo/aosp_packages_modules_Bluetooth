@@ -259,3 +259,10 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "non_wake_alarm_for_rpa_rotation"
+    namespace: "bluetooth"
+    description: "Use non-wake alarm for LE RPA rotation. go/non-wake-alarm-for-rpa-rotation"
+    bug: "360743527"
+}
