@@ -44,7 +44,7 @@
 #include "hci/le_scanning_manager_mock.h"
 #include "include/hardware/ble_scanner.h"
 #include "main/shim/acl.h"
-#include "main/shim/acl_legacy_interface.h"
+#include "main/shim/acl_interface.h"
 #include "main/shim/ble_scanner_interface_impl.h"
 #include "main/shim/dumpsys.h"
 #include "main/shim/helpers.h"
@@ -151,7 +151,7 @@ void mock_link_classic_on_read_remote_extended_features_complete(uint16_t handle
                                                                  uint8_t max_page_number,
                                                                  uint64_t features) {}
 
-shim::legacy::acl_interface_t acl_interface{
+shim::acl_interface_t acl_interface{
         .on_send_data_upwards = mock_on_send_data_upwards,
         .on_packets_completed = mock_on_packets_completed,
 
@@ -196,7 +196,7 @@ shim::legacy::acl_interface_t acl_interface{
         .link.le.on_read_remote_version_information_complete = nullptr,
 };
 
-const shim::legacy::acl_interface_t& GetMockAclInterface() { return acl_interface; }
+const shim::acl_interface_t& GetMockAclInterface() { return acl_interface; }
 
 struct hci_packet_parser_t;
 const hci_packet_parser_t* hci_packet_parser_get_interface() { return nullptr; }
@@ -368,13 +368,13 @@ protected:
   os::Handler* handler_{nullptr};
 
   // Convenience method to create ACL objects
-  std::unique_ptr<shim::legacy::Acl> MakeAcl() {
+  std::unique_ptr<shim::Acl> MakeAcl() {
     EXPECT_CALL(*test::mock_acl_manager_, RegisterCallbacks(_, _)).Times(1);
     EXPECT_CALL(*test::mock_acl_manager_, RegisterLeCallbacks(_, _)).Times(1);
     EXPECT_CALL(*test::mock_controller_, RegisterCompletedMonitorAclPacketsCallback(_)).Times(1);
     EXPECT_CALL(*test::mock_controller_, UnregisterCompletedMonitorAclPacketsCallback).Times(1);
-    return std::make_unique<shim::legacy::Acl>(handler_, GetMockAclInterface(),
-                                               kMaxLeAcceptlistSize, kMaxAddressResolutionSize);
+    return std::make_unique<shim::Acl>(handler_, GetMockAclInterface(), kMaxLeAcceptlistSize,
+                                       kMaxAddressResolutionSize);
   }
 };
 
@@ -430,7 +430,7 @@ protected:
 
     MainShimTest::TearDown();
   }
-  std::unique_ptr<shim::legacy::Acl> acl_;
+  std::unique_ptr<shim::Acl> acl_;
   MockClassicAclConnection* raw_connection_{nullptr};
 };
 

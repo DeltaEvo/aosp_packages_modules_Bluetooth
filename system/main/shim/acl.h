@@ -24,7 +24,7 @@
 #include "hci/address.h"
 #include "hci/address_with_type.h"
 #include "hci/class_of_device.h"
-#include "main/shim/acl_legacy_interface.h"
+#include "main/shim/acl_interface.h"
 #include "main/shim/link_connection_interface.h"
 #include "os/handler.h"
 #include "packet/raw_builder.h"
@@ -32,7 +32,6 @@
 
 namespace bluetooth {
 namespace shim {
-namespace legacy {
 
 class Acl : public hci::acl_manager::ConnectionCallbacks,
             public hci::acl_manager::LeConnectionCallbacks,
@@ -115,6 +114,5 @@ private:
   std::unique_ptr<impl> pimpl_;
 };
 
-}  // namespace legacy
 }  // namespace shim
 }  // namespace bluetooth

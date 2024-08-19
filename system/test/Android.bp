@@ -209,7 +209,7 @@ filegroup {
         "mock/mock_main_shim_BtifConfigInterface.cc",
         "mock/mock_main_shim_acl.cc",
         "mock/mock_main_shim_acl_api.cc",
-        "mock/mock_main_shim_acl_legacy_interface.cc",
+        "mock/mock_main_shim_acl_interface.cc",
         "mock/mock_main_shim_btm_api.cc",
         "mock/mock_main_shim_distance_measurement_manager.cc",
         "mock/mock_main_shim_hci_layer.cc",

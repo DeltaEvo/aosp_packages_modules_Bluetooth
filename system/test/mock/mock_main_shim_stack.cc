@@ -21,7 +21,7 @@ namespace bluetooth {
 namespace shim {
 
 namespace testing {
-legacy::Acl* acl_{nullptr};
+Acl* acl_{nullptr};
 Stack* instance_{nullptr};
 }  // namespace testing
 
@@ -41,7 +41,7 @@ StackManager* Stack::GetStackManager() { return nullptr; }
 
 const StackManager* Stack::GetStackManager() const { return nullptr; }
 
-legacy::Acl* Stack::GetAcl() { return testing::acl_; }
+Acl* Stack::GetAcl() { return testing::acl_; }
 
 os::Handler* Stack::GetHandler() { return stack_handler_; }
 

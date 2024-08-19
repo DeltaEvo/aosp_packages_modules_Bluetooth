@@ -28,11 +28,8 @@
 namespace bluetooth {
 namespace shim {
 
-class Btm;
-
-namespace legacy {
 class Acl;
-};  // namespace legacy
+class Btm;
 
 // GD shim stack, having modes corresponding to legacy stack
 class Stack {
@@ -55,7 +52,7 @@ public:
   StackManager* GetStackManager();
   const StackManager* GetStackManager() const;
 
-  legacy::Acl* GetAcl();
+  Acl* GetAcl();
 
   os::Handler* GetHandler();
 

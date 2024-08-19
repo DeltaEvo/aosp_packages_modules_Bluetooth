@@ -39,7 +39,7 @@
 #endif
 #include "hci/remote_name_request.h"
 #include "main/shim/acl.h"
-#include "main/shim/acl_legacy_interface.h"
+#include "main/shim/acl_interface.h"
 #include "main/shim/distance_measurement_manager.h"
 #include "main/shim/entry.h"
 #include "main/shim/hci_layer.h"
@@ -58,7 +58,7 @@ namespace shim {
 using ::bluetooth::common::StringFormat;
 
 struct Stack::impl {
-  legacy::Acl* acl_ = nullptr;
+  Acl* acl_ = nullptr;
 };
 
 Stack::Stack() { pimpl_ = std::make_shared<Stack::impl>(); }
@@ -102,9 +102,9 @@ void Stack::StartEverything() {
   log::assert_that(stack_manager_.GetInstance<shim::Dumpsys>() != nullptr,
                    "assert failed: stack_manager_.GetInstance<shim::Dumpsys>() != nullptr");
   if (stack_manager_.IsStarted<hci::Controller>()) {
-    pimpl_->acl_ = new legacy::Acl(stack_handler_, legacy::GetAclInterface(),
-                                   GetController()->GetLeFilterAcceptListSize(),
-                                   GetController()->GetLeResolvingListSize());
+    pimpl_->acl_ =
+            new Acl(stack_handler_, GetAclInterface(), GetController()->GetLeFilterAcceptListSize(),
+                    GetController()->GetLeResolvingListSize());
   } else {
     log::error("Unable to create shim ACL layer as Controller has not started");
   }
@@ -185,7 +185,7 @@ const StackManager* Stack::GetStackManager() const {
   return &stack_manager_;
 }
 
-legacy::Acl* Stack::GetAcl() {
+Acl* Stack::GetAcl() {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   log::assert_that(is_running_, "assert failed: is_running_");
   log::assert_that(pimpl_->acl_ != nullptr, "Acl shim layer has not been created");

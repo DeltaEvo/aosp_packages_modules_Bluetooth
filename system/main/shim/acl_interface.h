@@ -28,7 +28,6 @@
 
 namespace bluetooth {
 namespace shim {
-namespace legacy {
 
 typedef struct {
   void (*on_connected)(const RawAddress& bda, uint16_t handle, uint8_t enc_mode,
@@ -122,6 +121,5 @@ typedef struct {
 
 const acl_interface_t& GetAclInterface();
 
-}  // namespace legacy
 }  // namespace shim
 }  // namespace bluetooth
