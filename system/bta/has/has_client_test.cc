@@ -2196,6 +2196,300 @@ TEST_F(HasClientTest, test_select_group_preset_invalid_group) {
   HasClient::Get()->SelectActivePreset(unlucky_group, 6);
 }
 
+TEST_F(HasClientTest, test_select_preset_not_available) {
+  /* 1. Initial condition: HA containinig two presets:
+   *    a) with isAvailable set to 0b1
+   *    b) with isAvailable set to 0b0
+   * 2. HA is connected
+   * 3. Presets are read, preset a) is selected
+   * 4. Attempt of selecting preset b)
+   * 5. Preset b is not selected, operation aborts, event with error code is received
+   */
+  const RawAddress test_address = GetTestAddress(1);
+  uint16_t test_conn_id = GetTestConnId(test_address);
+
+  std::set<HasPreset, HasPreset::ComparatorDesc> presets = {{
+          HasPreset(1, HasPreset::kPropertyAvailable, "Universal"),
+          HasPreset(2, HasPreset::kPropertyWritable, "Preset2"),
+  }};
+
+  SetSampleDatabaseHasPresetsNtf(test_address,
+                                 bluetooth::has::kFeatureBitHearingAidTypeBanded |
+                                         bluetooth::has::kFeatureBitWritablePresets |
+                                         bluetooth::has::kFeatureBitDynamicPresets,
+                                 presets);
+
+  uint8_t active_preset_index = 0;
+  std::vector<PresetInfo> preset_details;
+
+  EXPECT_CALL(*callbacks, OnConnectionState(ConnectionState::CONNECTED, test_address));
+  EXPECT_CALL(*callbacks, OnPresetInfo(std::variant<RawAddress, int>(test_address),
+                                       PresetInfoReason::ALL_PRESET_INFO, _))
+          .Times(1)
+          .WillOnce(SaveArg<2>(&preset_details));
+  EXPECT_CALL(*callbacks, OnActivePresetSelected(_, _)).WillOnce(SaveArg<1>(&active_preset_index));
+  TestConnect(test_address);
+
+  ASSERT_TRUE(preset_details.size() > 1);
+  ASSERT_EQ(preset_details.front().preset_index, active_preset_index);
+
+  EXPECT_CALL(*callbacks, OnActivePresetSelectError(std::variant<RawAddress, int>(test_address),
+                                                    ErrorCode::OPERATION_NOT_POSSIBLE))
+          .Times(1);
+  EXPECT_CALL(*callbacks, OnActivePresetSelected(_, _)).Times(0);
+
+  HasClient::Get()->SelectActivePreset(test_address, preset_details[1].preset_index);
+}
+
+TEST_F(HasClientTest, test_select_group_preset_not_available) {
+  /* 1. Initial condition: 2 HAs  (non-binaural) containinig two presets:
+   *    a) with isAvailable set to 0b1
+   *    b) with isAvailable set to 0b0
+   * 2. HAs are connected
+   * 3. HAs are made into coordinated set
+   * 3. Presets are read on both HAs, preset a) is selected
+   * 4. Attempt of selecting preset b) for a group
+   * 5. Preset b) is not selected, operation aborts, event with error code is received
+   */
+  const RawAddress test_address1 = GetTestAddress(1);
+  const RawAddress test_address2 = GetTestAddress(2);
+
+  std::set<HasPreset, HasPreset::ComparatorDesc> presets = {{
+          HasPreset(1, HasPreset::kPropertyAvailable, "Universal"),
+          HasPreset(2, HasPreset::kPropertyWritable, "Preset2"),
+  }};
+
+  SetSampleDatabaseHasPresetsNtf(test_address1,
+                                 bluetooth::has::kFeatureBitHearingAidTypeBanded |
+                                         bluetooth::has::kFeatureBitWritablePresets |
+                                         bluetooth::has::kFeatureBitDynamicPresets,
+                                 presets);
+
+  SetSampleDatabaseHasPresetsNtf(test_address2,
+                                 bluetooth::has::kFeatureBitHearingAidTypeBanded |
+                                         bluetooth::has::kFeatureBitWritablePresets |
+                                         bluetooth::has::kFeatureBitDynamicPresets,
+                                 presets);
+
+  uint8_t active_preset_index1 = 0;
+  uint8_t active_preset_index2 = 0;
+  std::vector<PresetInfo> preset_details1;
+  std::vector<PresetInfo> preset_details2;
+
+  EXPECT_CALL(*callbacks, OnConnectionState(ConnectionState::CONNECTED, test_address1));
+  EXPECT_CALL(*callbacks, OnPresetInfo(std::variant<RawAddress, int>(test_address1),
+                                       PresetInfoReason::ALL_PRESET_INFO, _))
+          .Times(1)
+          .WillOnce(SaveArg<2>(&preset_details1));
+  EXPECT_CALL(*callbacks, OnActivePresetSelected(std::variant<RawAddress, int>(test_address1), _))
+          .WillOnce(SaveArg<1>(&active_preset_index1));
+
+  TestConnect(test_address1);
+
+  EXPECT_CALL(*callbacks, OnConnectionState(ConnectionState::CONNECTED, test_address2));
+  EXPECT_CALL(*callbacks, OnPresetInfo(std::variant<RawAddress, int>(test_address2),
+                                       PresetInfoReason::ALL_PRESET_INFO, _))
+          .Times(1)
+          .WillOnce(SaveArg<2>(&preset_details2));
+  EXPECT_CALL(*callbacks, OnActivePresetSelected(std::variant<RawAddress, int>(test_address2), _))
+          .WillOnce(SaveArg<1>(&active_preset_index2));
+
+  TestConnect(test_address2);
+
+  uint8_t group_id = 13;
+  ON_CALL(mock_csis_client_module_,
+          GetGroupId(test_address1, ::bluetooth::le_audio::uuid::kCapServiceUuid))
+          .WillByDefault(Return(group_id));
+  ON_CALL(mock_csis_client_module_,
+          GetGroupId(test_address2, ::bluetooth::le_audio::uuid::kCapServiceUuid))
+          .WillByDefault(Return(group_id));
+  ON_CALL(mock_csis_client_module_, GetDeviceList(group_id))
+          .WillByDefault(Return(std::vector<RawAddress>({{test_address1, test_address2}})));
+
+  ASSERT_TRUE(preset_details1.size() > 1);
+  ASSERT_TRUE(preset_details2.size() > 1);
+  ASSERT_EQ(preset_details1.front().preset_index, active_preset_index1);
+  ASSERT_EQ(preset_details2.front().preset_index, active_preset_index2);
+
+  EXPECT_CALL(*callbacks, OnActivePresetSelectError(_, ErrorCode::OPERATION_NOT_POSSIBLE)).Times(1);
+  EXPECT_CALL(*callbacks, OnActivePresetSelected(_, _)).Times(0);
+
+  HasClient::Get()->SelectActivePreset(group_id, preset_details1[1].preset_index);
+}
+
+TEST_F(HasClientTest, test_select_group_preset_not_available_binaural) {
+  /* 1. Initial condition: 2 HAs (binaural) containinig two presets sets:
+   *    set I
+   *        a) with isAvailable set to 0b1
+   *        b) with isAvailable set to 0b0
+   *    set II
+   *        a) with isAvailable set to 0b1
+   *        b) with isAvailable set to 0b1
+   *
+   * 2. HAs are connected
+   * 3. HAs are made into coordinated set
+   * 3. Presets are read on both HAs, preset a) is selected
+   * 4. Attempt of selecting preset b) for a group
+   * 5. Preset b) is not selected, operation aborts, event with error code is received
+   */
+  const RawAddress test_address1 = GetTestAddress(1);
+  const RawAddress test_address2 = GetTestAddress(2);
+
+  std::set<HasPreset, HasPreset::ComparatorDesc> presets1 = {{
+          HasPreset(1, HasPreset::kPropertyAvailable, "Universal"),
+          HasPreset(2, HasPreset::kPropertyWritable, "Preset2"),
+  }};
+
+  std::set<HasPreset, HasPreset::ComparatorDesc> presets2 = {{
+          HasPreset(1, HasPreset::kPropertyAvailable, "Universal"),
+          HasPreset(2, HasPreset::kPropertyAvailable | HasPreset::kPropertyWritable, "Preset2"),
+  }};
+
+  SetSampleDatabaseHasPresetsNtf(test_address1,
+                                 bluetooth::has::kFeatureBitHearingAidTypeBinaural |
+                                         bluetooth::has::kFeatureBitWritablePresets |
+                                         bluetooth::has::kFeatureBitDynamicPresets,
+                                 presets1);
+
+  SetSampleDatabaseHasPresetsNtf(test_address2,
+                                 bluetooth::has::kFeatureBitHearingAidTypeBinaural |
+                                         bluetooth::has::kFeatureBitWritablePresets |
+                                         bluetooth::has::kFeatureBitDynamicPresets,
+                                 presets2);
+
+  uint8_t active_preset_index1 = 0;
+  uint8_t active_preset_index2 = 0;
+  std::vector<PresetInfo> preset_details1;
+  std::vector<PresetInfo> preset_details2;
+
+  EXPECT_CALL(*callbacks, OnConnectionState(ConnectionState::CONNECTED, test_address1));
+  EXPECT_CALL(*callbacks, OnPresetInfo(std::variant<RawAddress, int>(test_address1),
+                                       PresetInfoReason::ALL_PRESET_INFO, _))
+          .Times(1)
+          .WillOnce(SaveArg<2>(&preset_details1));
+  EXPECT_CALL(*callbacks, OnActivePresetSelected(std::variant<RawAddress, int>(test_address1), _))
+          .WillOnce(SaveArg<1>(&active_preset_index1));
+
+  TestConnect(test_address1);
+
+  EXPECT_CALL(*callbacks, OnConnectionState(ConnectionState::CONNECTED, test_address2));
+  EXPECT_CALL(*callbacks, OnPresetInfo(std::variant<RawAddress, int>(test_address2),
+                                       PresetInfoReason::ALL_PRESET_INFO, _))
+          .Times(1)
+          .WillOnce(SaveArg<2>(&preset_details2));
+  EXPECT_CALL(*callbacks, OnActivePresetSelected(std::variant<RawAddress, int>(test_address2), _))
+          .WillOnce(SaveArg<1>(&active_preset_index2));
+
+  TestConnect(test_address2);
+
+  uint8_t group_id = 13;
+  ON_CALL(mock_csis_client_module_,
+          GetGroupId(test_address1, ::bluetooth::le_audio::uuid::kCapServiceUuid))
+          .WillByDefault(Return(group_id));
+  ON_CALL(mock_csis_client_module_,
+          GetGroupId(test_address2, ::bluetooth::le_audio::uuid::kCapServiceUuid))
+          .WillByDefault(Return(group_id));
+  ON_CALL(mock_csis_client_module_, GetDeviceList(group_id))
+          .WillByDefault(Return(std::vector<RawAddress>({{test_address1, test_address2}})));
+
+  ASSERT_TRUE(preset_details1.size() > 1);
+  ASSERT_TRUE(preset_details2.size() > 1);
+  ASSERT_EQ(preset_details1.front().preset_index, active_preset_index1);
+  ASSERT_EQ(preset_details2.front().preset_index, active_preset_index2);
+
+  EXPECT_CALL(*callbacks, OnActivePresetSelectError(_, ErrorCode::OPERATION_NOT_POSSIBLE)).Times(1);
+  EXPECT_CALL(*callbacks, OnActivePresetSelected(_, _)).Times(0);
+
+  HasClient::Get()->SelectActivePreset(group_id, preset_details1[1].preset_index);
+}
+
+TEST_F(HasClientTest, test_select_group_preset_not_available_binaural_independent) {
+  /* 1. Initial condition: 2 HAs (binaural) containinig two presets sets:
+   *    set I
+   *        a) with isAvailable set to 0b1
+   *        b) with isAvailable set to 0b0
+   *    set II
+   *        a) with isAvailable set to 0b1
+   *        b) with isAvailable set to 0b1
+   *    Both devices have independent presets set to 0b1
+   * 2. HAs are connected
+   * 3. HAs are made into coordinated set
+   * 3. Presets are read on both HAs, preset a) is selected
+   * 4. Attempt of selecting preset b) for a group
+   * 5. Preset b) is not selected, operation aborts, event with error code is received
+   */
+  const RawAddress test_address1 = GetTestAddress(1);
+  const RawAddress test_address2 = GetTestAddress(2);
+
+  std::set<HasPreset, HasPreset::ComparatorDesc> presets1 = {{
+          HasPreset(1, HasPreset::kPropertyAvailable, "Universal"),
+          HasPreset(2, HasPreset::kPropertyWritable, "Preset2"),
+  }};
+
+  std::set<HasPreset, HasPreset::ComparatorDesc> presets2 = {{
+          HasPreset(1, HasPreset::kPropertyAvailable, "Universal"),
+          HasPreset(2, HasPreset::kPropertyAvailable | HasPreset::kPropertyWritable, "Preset2"),
+  }};
+
+  SetSampleDatabaseHasPresetsNtf(test_address1,
+                                 bluetooth::has::kFeatureBitHearingAidTypeBinaural |
+                                         bluetooth::has::kFeatureBitWritablePresets |
+                                         bluetooth::has::kFeatureBitDynamicPresets |
+                                         bluetooth::has::kFeatureBitIndependentPresets,
+                                 presets1);
+
+  SetSampleDatabaseHasPresetsNtf(test_address2,
+                                 bluetooth::has::kFeatureBitHearingAidTypeBinaural |
+                                         bluetooth::has::kFeatureBitWritablePresets |
+                                         bluetooth::has::kFeatureBitDynamicPresets |
+                                         bluetooth::has::kFeatureBitIndependentPresets,
+                                 presets2);
+
+  uint8_t active_preset_index1 = 0;
+  uint8_t active_preset_index2 = 0;
+  std::vector<PresetInfo> preset_details1;
+  std::vector<PresetInfo> preset_details2;
+
+  EXPECT_CALL(*callbacks, OnConnectionState(ConnectionState::CONNECTED, test_address1));
+  EXPECT_CALL(*callbacks, OnPresetInfo(std::variant<RawAddress, int>(test_address1),
+                                       PresetInfoReason::ALL_PRESET_INFO, _))
+          .Times(1)
+          .WillOnce(SaveArg<2>(&preset_details1));
+  EXPECT_CALL(*callbacks, OnActivePresetSelected(std::variant<RawAddress, int>(test_address1), _))
+          .WillOnce(SaveArg<1>(&active_preset_index1));
+
+  TestConnect(test_address1);
+
+  EXPECT_CALL(*callbacks, OnConnectionState(ConnectionState::CONNECTED, test_address2));
+  EXPECT_CALL(*callbacks, OnPresetInfo(std::variant<RawAddress, int>(test_address2),
+                                       PresetInfoReason::ALL_PRESET_INFO, _))
+          .Times(1)
+          .WillOnce(SaveArg<2>(&preset_details2));
+  EXPECT_CALL(*callbacks, OnActivePresetSelected(std::variant<RawAddress, int>(test_address2), _))
+          .WillOnce(SaveArg<1>(&active_preset_index2));
+
+  TestConnect(test_address2);
+
+  uint8_t group_id = 13;
+  ON_CALL(mock_csis_client_module_,
+          GetGroupId(test_address1, ::bluetooth::le_audio::uuid::kCapServiceUuid))
+          .WillByDefault(Return(group_id));
+  ON_CALL(mock_csis_client_module_,
+          GetGroupId(test_address2, ::bluetooth::le_audio::uuid::kCapServiceUuid))
+          .WillByDefault(Return(group_id));
+  ON_CALL(mock_csis_client_module_, GetDeviceList(group_id))
+          .WillByDefault(Return(std::vector<RawAddress>({{test_address1, test_address2}})));
+
+  ASSERT_TRUE(preset_details1.size() > 1);
+  ASSERT_TRUE(preset_details2.size() > 1);
+  ASSERT_EQ(preset_details1.front().preset_index, active_preset_index1);
+  ASSERT_EQ(preset_details2.front().preset_index, active_preset_index2);
+
+  EXPECT_CALL(*callbacks, OnActivePresetSelected(_, _)).Times(1);
+
+  HasClient::Get()->SelectActivePreset(group_id, preset_details1[1].preset_index);
+}
+
 TEST_F(HasClientTest, test_select_group_preset_valid_no_preset_sync_supported) {
   /* None of these devices support preset syncing */
   const RawAddress test_address1 = GetTestAddress(1);

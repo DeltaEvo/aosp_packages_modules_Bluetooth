@@ -479,6 +479,63 @@ public:
             context);
   }
 
+  bool isPresetAvailable(HasCtpOp operation) {
+    auto csis_api = CsisClient::Get();
+    if (csis_api == nullptr) {
+      return false;
+    }
+
+    if (operation.IsGroupRequest()) {
+      auto group_id = operation.GetGroupId();
+      auto addresses = csis_api->GetDeviceList(group_id);
+
+      bool presetAvailableInAllDevices = true;
+      bool availablePresetFound = false;
+      bool isBinaural = false;
+      bool isIndependedPreset = true;
+
+      for (auto& addr : addresses) {
+        auto device = std::find_if(devices_.begin(), devices_.end(), HasDevice::MatchAddress(addr));
+        if (device == devices_.end()) {
+          return false;
+        }
+
+        isBinaural = !(device->GetFeatures() & 0x03);
+        isIndependedPreset = device->GetFeatures() & bluetooth::has::kFeatureBitIndependentPresets;
+
+        for (auto const& preset : device->has_presets) {
+          if (preset.GetIndex() == operation.index) {
+            auto isAvailable = preset.IsAvailable();
+            if (!isAvailable) {
+              presetAvailableInAllDevices = false;
+            } else {
+              availablePresetFound = true;
+            }
+          }
+        }
+      }
+
+      if (!isIndependedPreset && isBinaural) {
+        return presetAvailableInAllDevices;
+      } else {
+        return availablePresetFound;
+      }
+    } else {
+      auto device =
+              std::find_if(devices_.begin(), devices_.end(),
+                           HasDevice::MatchAddress(std::get<RawAddress>(operation.addr_or_group)));
+      if (device == devices_.end()) {
+        return false;
+      }
+      auto preset_info = device->GetPresetInfo(operation.index);
+      if (!preset_info.has_value()) {
+        log::info("Preset info index {} not found on device {}", operation.index, device->addr);
+        return false;
+      }
+      return preset_info->available;
+    }
+  }
+
   ErrorCode CpPresetIndexOperationWriteReq(HasDevice& device, HasCtpOp& operation) {
     log::debug("Operation: {}", operation);
 
@@ -499,6 +556,11 @@ public:
       return ErrorCode::INVALID_PRESET_INDEX;
     }
 
+    if (operation.opcode == PresetCtpOpcode::SET_ACTIVE_PRESET) {
+      if (!isPresetAvailable(operation)) {
+        return ErrorCode::OPERATION_NOT_POSSIBLE;
+      }
+    }
     auto context = HasGattOpContext(operation);
 
     /* Journal update */
