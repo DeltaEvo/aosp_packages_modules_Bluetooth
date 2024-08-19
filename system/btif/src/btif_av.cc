@@ -620,7 +620,7 @@ public:
    * @param reconf_ready_promise promise fulfilled when the reconfiguration done
    */
   bt_status_t SetPeerReconfigureStreamData(const RawAddress& peer_address,
-                                           std::vector<btav_a2dp_codec_config_t> codec_preferences,
+                                           const std::vector<btav_a2dp_codec_config_t>& codec_preferences,
                                            std::promise<void> reconf_ready_promise) {
     std::lock_guard<std::recursive_mutex> lock(btifavsource_peers_lock_);
 
