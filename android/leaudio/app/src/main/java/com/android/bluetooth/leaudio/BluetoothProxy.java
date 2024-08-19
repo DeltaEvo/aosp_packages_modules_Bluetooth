@@ -87,7 +87,9 @@ public class BluetoothProxy {
                             allLeAudioDevicesMutable.getValue().stream()
                                     .filter(
                                             state ->
-                                                    state.leAudioData.nodeStatusMutable.getValue()
+                                                    state.leAudioData != null
+                                                            && state.leAudioData.nodeStatusMutable
+                                                                            .getValue()
                                                                     != null
                                                             && state.leAudioData
                                                                     .nodeStatusMutable
@@ -661,7 +663,9 @@ public class BluetoothProxy {
                                     allLeAudioDevicesMutable.getValue().stream()
                                             .filter(
                                                     state ->
-                                                            state.leAudioData.nodeStatusMutable
+                                                            state.leAudioData != null
+                                                                    && state.leAudioData
+                                                                                    .nodeStatusMutable
                                                                                     .getValue()
                                                                             != null
                                                                     && state.leAudioData
@@ -733,7 +737,9 @@ public class BluetoothProxy {
                                     allLeAudioDevicesMutable.getValue().stream()
                                             .filter(
                                                     state ->
-                                                            state.leAudioData.nodeStatusMutable
+                                                            state.leAudioData != null
+                                                                    && state.leAudioData
+                                                                                    .nodeStatusMutable
                                                                                     .getValue()
                                                                             != null
                                                                     && state.leAudioData
