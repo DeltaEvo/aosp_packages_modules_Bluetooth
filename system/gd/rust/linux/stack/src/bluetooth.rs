@@ -2247,6 +2247,9 @@ impl IBluetooth for Bluetooth {
     }
 
     fn set_name(&self, name: String) -> bool {
+        if self.get_name() == name {
+            return true;
+        }
         self.intf.lock().unwrap().set_adapter_property(BluetoothProperty::BdName(name)) == 0
     }
 
