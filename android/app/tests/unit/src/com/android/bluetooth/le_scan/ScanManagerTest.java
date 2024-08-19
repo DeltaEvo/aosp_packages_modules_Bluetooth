@@ -2112,19 +2112,10 @@ public class ScanManagerTest {
         for (int i = 0; i < scanModeMap.size(); i++) {
             int phy = PHY_LE_ALL_SUPPORTED;
             int ScanMode = scanModeMap.keyAt(i);
-            boolean adapterServiceSupportsCoded = mAdapterService.isLeCodedPhySupported();
             int expectedScanMode = scanModeMap.get(ScanMode);
-            int expectedPhy;
+            int expectedPhy = PHY_LE_1M_MASK;
 
-            if (adapterServiceSupportsCoded) expectedPhy = PHY_LE_1M_MASK | PHY_LE_CODED_MASK;
-            else expectedPhy = PHY_LE_1M_MASK;
-
-            Log.d(
-                    TAG,
-                    "ScanMode: "
-                            + String.valueOf(ScanMode)
-                            + " expectedScanMode: "
-                            + String.valueOf(expectedScanMode));
+            Log.d(TAG, "ScanMode: " + ScanMode + " expectedScanMode: " + expectedScanMode);
 
             // Turn on screen
             sendMessageWaitForProcessed(createScreenOnOffMessage(true));

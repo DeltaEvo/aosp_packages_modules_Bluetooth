@@ -120,7 +120,7 @@ public class HapClientServiceTest {
         doReturn(mBinder).when(mFrameworkCallback).asBinder();
 
         /* Prepare CAS groups */
-        doReturn(Arrays.asList(0x02, 0x03)).when(mCsipService).getAllGroupIds(BluetoothUuid.CAP);
+        doReturn(List.of(0x02, 0x03)).when(mCsipService).getAllGroupIds(BluetoothUuid.CAP);
 
         int groupId2 = 0x02;
         Map groups2 =
@@ -130,16 +130,14 @@ public class HapClientServiceTest {
         Map groups3 =
                 Map.of(groupId3, ParcelUuid.fromString("00001853-0000-1000-8000-00805F9B34FB"));
 
-        doReturn(Arrays.asList(mDevice, mDevice2))
-                .when(mCsipService)
-                .getGroupDevicesOrdered(groupId2);
+        doReturn(List.of(mDevice, mDevice2)).when(mCsipService).getGroupDevicesOrdered(groupId2);
         doReturn(groups2).when(mCsipService).getGroupUuidMapByDevice(mDevice);
         doReturn(groups2).when(mCsipService).getGroupUuidMapByDevice(mDevice2);
 
-        doReturn(Arrays.asList(mDevice3)).when(mCsipService).getGroupDevicesOrdered(0x03);
+        doReturn(List.of(mDevice3)).when(mCsipService).getGroupDevicesOrdered(groupId3);
         doReturn(groups3).when(mCsipService).getGroupUuidMapByDevice(mDevice3);
 
-        doReturn(Arrays.asList(mDevice)).when(mCsipService).getGroupDevicesOrdered(0x01);
+        doReturn(List.of(mDevice)).when(mCsipService).getGroupDevicesOrdered(0x01);
 
         doReturn(BluetoothDevice.BOND_BONDED)
                 .when(mAdapterService)
@@ -593,9 +591,9 @@ public class HapClientServiceTest {
                 .when(mAdapterService)
                 .getRemoteUuids(any(BluetoothDevice.class));
         int test_group = 0x02;
-        for (BluetoothDevice device : mCsipService.getGroupDevicesOrdered(test_group)) {
-            testConnectingDevice(order, device);
-        }
+
+        testConnectingDevice(order, mDevice);
+        testConnectingDevice(order, mDevice2);
 
         int flags = 0x21;
         mNativeCallback.onFeaturesUpdate(getByteAddress(mDevice), flags);
@@ -901,7 +899,7 @@ public class HapClientServiceTest {
 
         // Inject some initial presets
         List<BluetoothHapPresetInfo> presets =
-                new ArrayList<BluetoothHapPresetInfo>(
+                new ArrayList<>(
                         Arrays.asList(
                                 new BluetoothHapPresetInfo.Builder(0x01, "One")
                                         .setAvailable(true)
