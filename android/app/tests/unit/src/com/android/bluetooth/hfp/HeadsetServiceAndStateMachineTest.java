@@ -879,53 +879,6 @@ public class HeadsetServiceAndStateMachineTest {
     }
 
     /**
-     * Test to verify the following behavior regarding AG initiated voice recognition in the
-     * successful scenario 1. AG starts voice recognition and notify the Bluetooth stack via {@link
-     * BluetoothHeadset#startVoiceRecognition(BluetoothDevice)} to indicate that voice recognition
-     * has started, BluetoothDevice is null in this case 2. AG send +BVRA:1 to current active HF 3.
-     * AG start SCO connection if SCO has not been started
-     *
-     * <p>Reference: Section 4.25, Page 64/144 of HFP 1.7.1 specification
-     */
-    @Test
-    public void testVoiceRecognition_SingleAgInitiatedSuccessNullInput() {
-        // Connect HF
-        BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
-        connectTestDevice(device);
-        // Make device active
-        assertThat(mHeadsetService.setActiveDevice(device)).isTrue();
-        mTestLooper.dispatchAll();
-        verify(mNativeInterface).setActiveDevice(device);
-        assertThat(mHeadsetService.getActiveDevice()).isEqualTo(device);
-        // Start voice recognition on null argument should go to active device
-        assertThat(mHeadsetService.startVoiceRecognition(null)).isTrue();
-        mTestLooper.dispatchAll();
-        verify(mNativeInterface).startVoiceRecognition(device);
-    }
-
-    /**
-     * Test to verify the following behavior regarding AG initiated voice recognition in the
-     * successful scenario 1. AG starts voice recognition and notify the Bluetooth stack via {@link
-     * BluetoothHeadset#startVoiceRecognition(BluetoothDevice)} to indicate that voice recognition
-     * has started, BluetoothDevice is null and active device is null 2. The call should fail
-     *
-     * <p>Reference: Section 4.25, Page 64/144 of HFP 1.7.1 specification
-     */
-    @Test
-    public void testVoiceRecognition_SingleAgInitiatedFailNullActiveDevice() {
-        // Connect HF
-        BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
-        connectTestDevice(device);
-        // Make device active
-        assertThat(mHeadsetService.setActiveDevice(null)).isTrue();
-        mTestLooper.dispatchAll();
-        assertThat(mHeadsetService.getActiveDevice()).isNull();
-        // Start voice recognition on null argument should fail
-        assertThat(mHeadsetService.startVoiceRecognition(null)).isFalse();
-        mTestLooper.dispatchAll();
-    }
-
-    /**
      * Test to verify the following behavior regarding AG stops voice recognition in the successful
      * scenario 1. AG stops voice recognition and notify the Bluetooth stack via {@link
      * BluetoothHeadset#stopVoiceRecognition(BluetoothDevice)} to indicate that voice recognition
