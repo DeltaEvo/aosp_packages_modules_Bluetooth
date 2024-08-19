@@ -45,3 +45,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "fix_le_evt_cancelling_sdp_discovery"
+    namespace: "bluetooth"
+    description: "Fix LE service discovery cancelling SDP discovery"
+    bug: "360936118"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
