@@ -136,31 +136,31 @@ public final class ScanFilter implements Parcelable {
     public void writeToParcel(Parcel dest, int flags) {
         dest.writeInt(mDeviceName == null ? 0 : 1);
         if (mDeviceName != null) {
-            dest.writeString(mDeviceName);
+            android.bluetooth.BluetoothUtils.writeStringToParcel(dest, mDeviceName);
         }
         dest.writeInt(mDeviceAddress == null ? 0 : 1);
         if (mDeviceAddress != null) {
-            dest.writeString(mDeviceAddress);
+            android.bluetooth.BluetoothUtils.writeStringToParcel(dest, mDeviceAddress);
         }
         dest.writeInt(mServiceUuid == null ? 0 : 1);
         if (mServiceUuid != null) {
-            dest.writeParcelable(mServiceUuid, flags);
+            mServiceUuid.writeToParcel(dest, flags);
             dest.writeInt(mServiceUuidMask == null ? 0 : 1);
             if (mServiceUuidMask != null) {
-                dest.writeParcelable(mServiceUuidMask, flags);
+                mServiceUuidMask.writeToParcel(dest, flags);
             }
         }
         dest.writeInt(mServiceSolicitationUuid == null ? 0 : 1);
         if (mServiceSolicitationUuid != null) {
-            dest.writeParcelable(mServiceSolicitationUuid, flags);
+            mServiceSolicitationUuid.writeToParcel(dest, flags);
             dest.writeInt(mServiceSolicitationUuidMask == null ? 0 : 1);
             if (mServiceSolicitationUuidMask != null) {
-                dest.writeParcelable(mServiceSolicitationUuidMask, flags);
+                mServiceSolicitationUuidMask.writeToParcel(dest, flags);
             }
         }
         dest.writeInt(mServiceDataUuid == null ? 0 : 1);
         if (mServiceDataUuid != null) {
-            dest.writeParcelable(mServiceDataUuid, flags);
+            mServiceDataUuid.writeToParcel(dest, flags);
             dest.writeInt(mServiceData == null ? 0 : 1);
             if (mServiceData != null) {
                 dest.writeInt(mServiceData.length);
@@ -237,28 +237,25 @@ public final class ScanFilter implements Parcelable {
                         address = in.readString();
                     }
                     if (in.readInt() == 1) {
-                        ParcelUuid uuid = in.readParcelable(ParcelUuid.class.getClassLoader());
+                        ParcelUuid uuid = ParcelUuid.CREATOR.createFromParcel(in);
                         builder.setServiceUuid(uuid);
                         if (in.readInt() == 1) {
-                            ParcelUuid uuidMask =
-                                    in.readParcelable(ParcelUuid.class.getClassLoader());
+                            ParcelUuid uuidMask = ParcelUuid.CREATOR.createFromParcel(in);
                             builder.setServiceUuid(uuid, uuidMask);
                         }
                     }
                     if (in.readInt() == 1) {
-                        ParcelUuid solicitationUuid =
-                                in.readParcelable(ParcelUuid.class.getClassLoader());
+                        ParcelUuid solicitationUuid = ParcelUuid.CREATOR.createFromParcel(in);
                         builder.setServiceSolicitationUuid(solicitationUuid);
                         if (in.readInt() == 1) {
                             ParcelUuid solicitationUuidMask =
-                                    in.readParcelable(ParcelUuid.class.getClassLoader());
+                                    ParcelUuid.CREATOR.createFromParcel(in);
                             builder.setServiceSolicitationUuid(
                                     solicitationUuid, solicitationUuidMask);
                         }
                     }
                     if (in.readInt() == 1) {
-                        ParcelUuid serviceDataUuid =
-                                in.readParcelable(ParcelUuid.class.getClassLoader());
+                        ParcelUuid serviceDataUuid = ParcelUuid.CREATOR.createFromParcel(in);
                         if (in.readInt() == 1) {
                             int serviceDataLength = in.readInt();
                             byte[] serviceData = new byte[serviceDataLength];

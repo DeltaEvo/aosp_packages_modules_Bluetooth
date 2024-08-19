@@ -192,9 +192,6 @@ public final class BluetoothMapClient implements BluetoothProfile, AutoCloseable
      */
     public static final int RESULT_CANCELED = 2;
 
-    /** @hide */
-    private static final int UPLOADING_FEATURE_BITMASK = 0x08;
-
     /*
      * UNREAD, READ, UNDELETED, DELETED are passed as parameters
      * to setMessageStatus to indicate the messages new state.

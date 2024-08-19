@@ -16,6 +16,8 @@
 
 package android.bluetooth;
 
+import static android.bluetooth.BluetoothUtils.formatSimple;
+
 import android.annotation.FlaggedApi;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -450,14 +452,14 @@ public final class BluetoothCodecConfig implements Parcelable {
         return ("{codecName:" + codecName)
                 + (",mCodecType:" + codecType)
                 + (",mCodecPriority:" + mCodecPriority)
-                + (",mSampleRate:" + String.format("0x%x", mSampleRate) + "(" + sampleRateStr + ")")
+                + (",mSampleRate:" + formatSimple("0x%x", mSampleRate) + "(" + sampleRateStr + ")")
                 + (",mBitsPerSample:"
-                        + String.format("0x%x", mBitsPerSample)
+                        + formatSimple("0x%x", mBitsPerSample)
                         + "("
                         + bitsPerSampleStr
                         + ")")
                 + (",mChannelMode:"
-                        + String.format("0x%x", mChannelMode)
+                        + formatSimple("0x%x", mChannelMode)
                         + "("
                         + channelModeStr
                         + ")")

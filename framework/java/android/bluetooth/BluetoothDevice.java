@@ -1539,7 +1539,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
 
     @Override
     public void writeToParcel(Parcel out, int flags) {
-        out.writeString(mAddress);
+        BluetoothUtils.writeStringToParcel(out, mAddress);
         out.writeInt(mAddressType);
     }
 

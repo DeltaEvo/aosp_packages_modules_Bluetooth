@@ -18,6 +18,8 @@ package android.bluetooth;
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 
+import static java.util.Objects.requireNonNull;
+
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -1491,7 +1493,7 @@ public final class BluetoothHeadsetClient implements BluetoothProfile, AutoClose
                 String operatorName,
                 int signalStrength,
                 boolean isRoaming) {
-            mDevice = device;
+            mDevice = requireNonNull(device);
             mIsServiceAvailable = isServiceAvailable;
             mOperatorName = operatorName;
             mSignalStrength = signalStrength;
@@ -1569,7 +1571,7 @@ public final class BluetoothHeadsetClient implements BluetoothProfile, AutoClose
                 new Parcelable.Creator<NetworkServiceState>() {
                     public NetworkServiceState createFromParcel(Parcel in) {
                         return new NetworkServiceState(
-                                (BluetoothDevice) in.readParcelable(null),
+                                BluetoothDevice.CREATOR.createFromParcel(in),
                                 in.readInt() == 1,
                                 in.readString(),
                                 in.readInt(),
@@ -1584,9 +1586,9 @@ public final class BluetoothHeadsetClient implements BluetoothProfile, AutoClose
         /** @hide */
         @Override
         public void writeToParcel(@NonNull Parcel out, int flags) {
-            out.writeParcelable(mDevice, 0);
+            mDevice.writeToParcel(out, flags);
             out.writeInt(mIsServiceAvailable ? 1 : 0);
-            out.writeString(mOperatorName);
+            BluetoothUtils.writeStringToParcel(out, mOperatorName);
             out.writeInt(mSignalStrength);
             out.writeInt(mIsRoaming ? 1 : 0);
         }
