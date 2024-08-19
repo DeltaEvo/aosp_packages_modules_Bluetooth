@@ -353,8 +353,9 @@ void btif_gattc_open_impl(int client_if, RawAddress address, tBLE_ADDR_TYPE addr
   }
 
   // Connect!
-  log::info("Transport={}, device type={}, address type ={}, phy={}", bt_transport_text(transport),
-            DeviceTypeText(device_type), addr_type, initiating_phys);
+  log::info("Transport={}, device type={}, address={}, address type={}, phy={}",
+            bt_transport_text(transport), DeviceTypeText(device_type),
+            address, addr_type, initiating_phys);
   tBTM_BLE_CONN_TYPE type = is_direct ? BTM_BLE_DIRECT_CONNECTION : BTM_BLE_BKG_CONNECT_ALLOW_LIST;
   BTA_GATTC_Open(client_if, address, addr_type, type, transport, opportunistic, initiating_phys);
 }
