@@ -1269,7 +1269,7 @@ public class LeAudioRecycleViewAdapter
                     (compoundButton, b) -> {
                         if (!compoundButton.isActivated()) return;
 
-                        if (bassInteractionListener != null) {
+                        if (hapInteractionListener != null) {
                             if (b)
                                 hapInteractionListener.onConnectClick(
                                         devices.get(ViewHolder.this.getAdapterPosition()));
