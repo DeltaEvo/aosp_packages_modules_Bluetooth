@@ -1069,13 +1069,11 @@ class BluetoothManagerService {
             if (isBluetoothPersistedStateOnBluetooth() || !isBleAppPresent()) {
                 Log.i(TAG, "continueFromBleOnState: Starting br edr");
                 // This triggers transition to STATE_ON
-                mAdapter.startBrEdr(mContext.getAttributionSource());
+                bleOnToOn();
                 setBluetoothPersistedState(BLUETOOTH_ON_BLUETOOTH);
             } else {
                 Log.i(TAG, "continueFromBleOnState: Staying in BLE_ON");
             }
-        } catch (RemoteException e) {
-            Log.e(TAG, "Unable to call onServiceUp", e);
         } finally {
             mAdapterLock.readLock().unlock();
         }
@@ -1907,7 +1905,7 @@ class BluetoothManagerService {
                             Log.i(TAG, "Already at BLE_ON State");
                         } else {
                             Log.w(TAG, "BT Enable in BLE_ON State, going to ON");
-                            mAdapter.startBrEdr(mContext.getAttributionSource());
+                            bleOnToOn();
                         }
                         break;
                     case STATE_BLE_TURNING_ON:
@@ -1921,8 +1919,6 @@ class BluetoothManagerService {
                 }
                 if (isHandled) return;
             }
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
         } finally {
             mAdapterLock.readLock().unlock();
         }
@@ -2033,6 +2029,19 @@ class BluetoothManagerService {
             mAdapter.onToBleOn(mContext.getAttributionSource());
         } catch (RemoteException e) {
             Log.e(TAG, "Unable to call onToBleOn()", e);
+        }
+    }
+
+    private void bleOnToOn() {
+        if (!mState.oneOf(STATE_BLE_ON)) {
+            Log.d(TAG, "bleOnToOn: Impossible transition from " + mState);
+            return;
+        }
+        Log.d(TAG, "bleOnToOn: sending request");
+        try {
+            mAdapter.bleOnToOn(mContext.getAttributionSource());
+        } catch (RemoteException e) {
+            Log.e(TAG, "Unable to call bleOnToOn()", e);
         }
     }
 
