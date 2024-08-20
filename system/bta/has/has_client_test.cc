@@ -1220,6 +1220,7 @@ TEST_F(HasClientTest, test_disconnect_connected) {
   TestConnect(test_address);
 
   EXPECT_CALL(*callbacks, OnConnectionState(ConnectionState::DISCONNECTED, test_address)).Times(1);
+  EXPECT_CALL(gatt_queue, Clean(1)).Times(1);
   TestDisconnect(test_address, 1);
 }
 
