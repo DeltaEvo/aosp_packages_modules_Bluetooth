@@ -31,6 +31,7 @@
 #include "hci/event_checkers.h"
 #include "hci/hci_layer.h"
 #include "hci/remote_name_request.h"
+#include "metrics/bluetooth_event.h"
 #include "os/metrics.h"
 
 namespace bluetooth {
@@ -257,6 +258,8 @@ public:
 
     client_handler_->CallOn(client_callbacks_, &ConnectionCallbacks::OnConnectRequest, address,
                             cod);
+
+    bluetooth::metrics::LogIncomingAclStartEvent(address);
 
     acl_scheduler_->RegisterPendingIncomingConnection(address);
 
